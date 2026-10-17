@@ -107,6 +107,7 @@ func (c *Client) publishLocked(method string, params json.RawMessage) {
 			continue
 		}
 		event := decodeEvent(method, params)
+		event.DecodeError = c.safeError(event.DecodeError)
 		select {
 		case s.events <- event:
 		default:

@@ -319,6 +319,9 @@ func TestCancellationDoesNotInterruptTurn(t *testing.T) {
 	result := make(chan error, 1)
 	go func() { _, err := f.c.StartTurn(ctx, startParams()); result <- err }()
 	waitTrace(t, f.trace, "turn/start")
+	// Establish a completed write, rather than only peer receipt, before
+	// testing cancellation of local waiting on a still-usable connection.
+	responseBarrier(t, f)
 	cancel()
 	subcancel()
 	callError(t, <-result, codex.OutcomeUnknown, context.Canceled)

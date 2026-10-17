@@ -29,14 +29,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket01-model-unit"
+          "ticket01-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket01-model-race",
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -207,14 +211,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket01-model-unit"
+          "ticket01-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket01-model-race",
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -241,14 +249,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket03-model-unit"
+          "ticket03-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket03-contract-mock"
+          "ticket03-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket03-model-race",
-          "ticket03-contract-race"
+          "ticket03-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -356,14 +368,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket03-model-unit"
+          "ticket03-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket03-contract-mock"
+          "ticket03-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket03-model-race",
-          "ticket03-contract-race"
+          "ticket03-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -1530,14 +1546,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket01-model-unit"
+          "ticket01-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket01-model-race",
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -2506,14 +2526,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -2591,14 +2615,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4503,14 +4531,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4537,14 +4569,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4571,14 +4607,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4632,14 +4672,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4771,14 +4815,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4805,14 +4853,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -4839,14 +4891,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -5366,14 +5422,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -5425,14 +5485,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -5536,14 +5600,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -5647,14 +5715,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -5720,14 +5792,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket02-model-unit"
+          "ticket02-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket02-contract-mock"
+          "ticket02-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket02-model-race",
-          "ticket02-contract-race"
+          "ticket02-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -5961,14 +6037,18 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       },
@@ -7087,10 +7167,12 @@
       "evidence": {
         "unit": [],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket05-remote-contract-race"
         ],
         "live": []
       },
@@ -7110,11 +7192,13 @@
         "unit": [],
         "mock": [
           "ticket01-contract-mock",
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket01-contract-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race"
         ],
         "live": []
       }
@@ -7129,11 +7213,13 @@
         "unit": [],
         "mock": [
           "ticket01-contract-mock",
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket01-contract-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race"
         ],
         "live": []
       }
@@ -7143,16 +7229,18 @@
       "support": "supported",
       "source_path": "codex-rs/app-server-protocol/src/rpc.rs",
       "source_line": 83,
-      "description": "Preserve error code, message, and optional data. RPC errors do not trigger automatic retry.",
+      "description": "Preserve error code, message, and optional data without retry. Remote security exception: reflected explicitly supplied bearer credentials are redacted from diagnostic message/data/raw errors; affected raw JSON may be re-encoded. Unaffected raw errors, native error code and correlation remain unchanged.",
       "evidence": {
         "unit": [],
         "mock": [
           "ticket01-contract-mock",
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket01-contract-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race"
         ],
         "live": []
       }
@@ -7219,53 +7307,69 @@
     },
     {
       "name": "websocket-text-message",
-      "support": "unsupported",
+      "support": "supported",
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 232,
-      "description": "Official WebSocket transport uses complete JSON text messages rather than a JSONL byte stream.",
+      "description": "NewRemote opens WS/WSS with explicit bearer-header authentication, verified TLS and fresh initialize/initialized. Exactly one JSON envelope per complete text message; no JSONL delimiter or batch. URL credentials/query/fragment, redirects, disabled TLS verification and ambient proxies are rejected/unused; non-loopback plaintext requires opt-in. Finite payload bounds and no reconnect/replay.",
       "evidence": {
         "unit": [],
-        "mock": [],
-        "race": [],
+        "mock": [
+          "ticket05-remote-contract-mock"
+        ],
+        "race": [
+          "ticket05-remote-contract-race"
+        ],
         "live": []
       }
     },
     {
       "name": "websocket-ping",
-      "support": "unsupported",
+      "support": "supported",
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 363,
-      "description": "Official server replies with a matching Pong payload using a bounded control queue.",
+      "description": "WebSocket library automatically replies to received Ping with its matching Pong payload while the SDK reader is active; no application heartbeat or ping API.",
       "evidence": {
         "unit": [],
-        "mock": [],
-        "race": [],
+        "mock": [
+          "ticket05-remote-contract-mock"
+        ],
+        "race": [
+          "ticket05-remote-contract-race"
+        ],
         "live": []
       }
     },
     {
       "name": "websocket-pong",
-      "support": "unsupported",
+      "support": "supported",
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 373,
-      "description": "Official server accepts Pong frames; this SDK has no WebSocket constructor yet.",
+      "description": "WebSocket control Pong is handled by the transport and never delivered as a JSON protocol event.",
       "evidence": {
         "unit": [],
-        "mock": [],
-        "race": [],
+        "mock": [
+          "ticket05-remote-contract-mock"
+        ],
+        "race": [
+          "ticket05-remote-contract-race"
+        ],
         "live": []
       }
     },
     {
       "name": "websocket-close",
-      "support": "unsupported",
+      "support": "supported",
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 374,
-      "description": "Official server exits its connection loop on Close; this SDK has no WebSocket constructor yet.",
+      "description": "Received Close terminates this connection. Client Close releases only its socket and pending work, without service shutdown, process termination, reconnect or replay.",
       "evidence": {
         "unit": [],
-        "mock": [],
-        "race": [],
+        "mock": [
+          "ticket05-remote-contract-mock"
+        ],
+        "race": [
+          "ticket05-remote-contract-race"
+        ],
         "live": []
       }
     },
@@ -7274,11 +7378,15 @@
       "support": "unsupported",
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 375,
-      "description": "Official server drops binary messages as unsupported. No SDK binary-message API.",
+      "description": "No binary protocol or binary-message API. Official server drops unsupported inbound binary messages; this SDK rejects received binary data with an explicit terminal ErrProtocol instead of silently discarding it.",
       "evidence": {
         "unit": [],
-        "mock": [],
-        "race": [],
+        "mock": [
+          "ticket05-remote-contract-mock"
+        ],
+        "race": [
+          "ticket05-remote-contract-race"
+        ],
         "live": []
       }
     },
@@ -7342,14 +7450,18 @@
       "description": "serverRequest/resolved matches native threadId and exact tagged requestId to an unanswered handle. Local Cancel and expiry send nothing; an admitted response cannot be retracted. No invented cancellation method or success inference.",
       "evidence": {
         "unit": [
-          "ticket04-model-unit"
+          "ticket04-model-unit",
+          "ticket05-model-unit"
         ],
         "mock": [
-          "ticket04-contract-mock"
+          "ticket04-contract-mock",
+          "ticket05-remote-contract-mock"
         ],
         "race": [
           "ticket04-model-race",
-          "ticket04-contract-race"
+          "ticket04-contract-race",
+          "ticket05-remote-contract-race",
+          "ticket05-model-race"
         ],
         "live": []
       }

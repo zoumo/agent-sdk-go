@@ -255,6 +255,9 @@ func TestResumeAndUnsubscribeCancellationEvidence(t *testing.T) {
 			result := make(chan error, 1)
 			go func() { result <- nativeOperation(f.c, method, ctx) }()
 			waitTrace(t, f.trace, method)
+			// Receipt alone can race the sender returning from Write. This
+			// later response proves the serialized first write has settled.
+			responseBarrier(t, f)
 			cancel()
 			callError(t, <-result, codex.OutcomeUnknown, context.Canceled)
 			var fresh string
@@ -265,7 +268,7 @@ func TestResumeAndUnsubscribeCancellationEvidence(t *testing.T) {
 				t.Fatal("late response not counted")
 			}
 			_ = f.c.Close()
-			assertMethods(t, f, "initialize", "initialized", method, "resume-release")
+			assertMethods(t, f, "initialize", "initialized", method, "echo", "resume-release")
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -8,7 +9,8 @@ import (
 )
 
 // Limits are per connection. Zero values select DefaultLimits. Negative values
-// are rejected. Incoming and outgoing frame limits exclude the newline.
+// are rejected. Incoming and outgoing frame limits bound JSON payload bytes, excluding
+// stdio delimiters and WebSocket frame headers.
 type Limits struct {
 	MaxFrameBytes   int
 	OutboundQueue   int
@@ -86,4 +88,22 @@ type DiagnosticSnapshot struct {
 	UnmatchedResponses uint64
 	Notifications      uint64
 	Tail               string
+}
+
+// RemoteOptions selects one explicitly authenticated WebSocket endpoint. URL
+// must use ws or wss and contain no user info, query, or fragment. BearerToken
+// must be supplied explicitly; it is sent only in the Authorization header.
+// TLSConfig is cloned and certificate verification cannot be disabled. Set
+// RootCAs to explicitly trust a private certificate authority. Do not mutate
+// referenced certificate/configuration data concurrently with construction.
+// No HTTP redirects, environment proxies, reconnects, or token refresh occur.
+type RemoteOptions struct {
+	URL         string
+	BearerToken string
+	Initialize  protocol.InitializeParams
+	Limits      Limits
+	TLSConfig   *tls.Config
+	// AllowInsecureWS permits unencrypted ws to non-loopback hosts. This can
+	// expose the bearer token and all protocol data; prefer wss instead.
+	AllowInsecureWS bool
 }

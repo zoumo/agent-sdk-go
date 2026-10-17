@@ -296,6 +296,20 @@
       "sha256": "dd48e868e7eb11c6ba9feed710f4bd48fc87e215a0c4212235a50ab3907743cb",
       "bytes": 208299,
       "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_start.rs"
+    },
+    {
+      "path": "codex-rs/websocket-auth/src/lib.rs",
+      "git_blob_sha": "5a062ffdcb89f6058d30d09639813f56c3738406",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/websocket-auth/src/lib.rs",
+      "bytes": 16547,
+      "sha256": "cf9da6b85fcb96c7429dabe06e690edbcee5aec5d84b04f6805385354bbd2fc7"
+    },
+    {
+      "path": "codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs",
+      "git_blob_sha": "235d669d62889964ac4750f5672853dab06b68c4",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs",
+      "bytes": 34455,
+      "sha256": "55dc2f077ba59ace68f15e1b1352e4ee9f7d81462b3860890ff1601728031935"
     }
   ],
   "derived_material": [

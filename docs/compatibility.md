@@ -9,6 +9,12 @@ this document, not a separate supported-version claim.
 - Official repository: [openai/codex](https://github.com/openai/codex).
 - Exact revision: [`d27764b82f7118f674371e6d6e76271d9d606edb`](https://github.com/openai/codex/tree/d27764b82f7118f674371e6d6e76271d9d606edb).
 - Workspace version label: `0.160.1`, verified in the pinned `codex-rs/Cargo.toml`.
+- Pinned experimental export archive SHA-256:
+  `63028565f715c584c2dad98163de85dcb03801f9a7c096f5ef07d4769a900984`.
+- Extracted experimental aggregate schema SHA-256:
+  `7243ba241962af92ca60581f1a81808ebda4212a800f8b205f54703bcfd508c5`.
+- Selected SDK schema snapshot SHA-256:
+  `6ded28b43afae0a5fa4f6b944458224f6286eacc51857e40425fcc8f9596778d`.
 - This target is not a version range. Other revisions, including other releases
   carrying similar version labels, have unknown compatibility.
 - Original source hashes, extraction details, and notices are recorded in
@@ -16,13 +22,17 @@ this document, not a separate supported-version claim.
 
 ## Current implementation
 
-The implemented slices own one explicitly selected local child process and expose
-stdio framing, the `initialize` / `initialized` handshake, typed `thread/start`,
+The implemented slices own one explicitly selected local child process or connect
+to one caller-selected remote WS/WSS endpoint. They expose transport-correct
+framing, the `initialize` / `initialized` handshake, typed `thread/start`,
 `thread/read`, `thread/resume`, `thread/unsubscribe`, `turn/start`, and
 `turn/interrupt`, raw `Call`, bounded local subscriptions, one-shot reverse-request
 answers, and bounded cleanup. Protocol models cover the complete selected
 experimental-schema definition closure, with omitted/null/value handling and
-unknown-field and unknown-union preservation.
+unknown-field and unknown-union preservation. The bindings are loss-preserving
+models, not full JSON Schema validators: not every native minimum/maximum or
+`additionalProperties` constraint is enforced, and unknown enum/union/extensions
+can be retained. A representable value is not a promise that a server accepts it.
 
 Thread/turn methods expose their complete selected parameter/result shapes.
 Interactive approvals and user input can now be answered explicitly. Other
@@ -65,7 +75,20 @@ inventing an approval or denial. Local cancel/expiry does not cancel server work
 Native resolution matches both requestId and thread identity; an answer already
 admitted wins over later local cancellation, expiry, or resolution.
 
-There is no WebSocket, Unix-socket, remote-control, embedded-runtime, turn runner,
+Remote clients use an explicit bearer header, verified TLS, bounded complete JSON
+text messages, and the same initialization, methods, subscriptions, and answer
+handles. They reject URL credentials/query/fragment, redirects, and disabled TLS
+verification. Non-loopback plaintext WS requires explicit opt-in. No reconnect,
+replay, token lookup/refresh, or remote process ownership is added. The official
+server drops unsupported inbound binary messages; this client instead fails its
+connection on received binary data, making the loss observable. Remote errors
+redact a peer-reflected bearer from diagnostic message/data/raw fields, including
+supported encoded echoes. This deliberate exception to raw error preservation
+replaces only affected diagnostic lexical values; unaffected bytes, duplicate
+members, native error codes, and correlation stay unchanged. Successful results and notification/request
+payloads remain caller-sensitive data, not a universal redaction facility.
+
+There is no Unix-socket, remote-control, embedded-runtime, turn runner,
 or login management in these slices. A generated type or a successful raw `Call`
 does not change an endpoint's support status. Unknown extensions are caller-managed and uncertified.
 
@@ -86,6 +109,10 @@ and two internal notifications; the exact Rust registry supplies those entries.
   confer support.
 
 Each inventory row keeps unit, fake-peer/mock, race, and live evidence separately.
+Ticket 05 passed final working-tree normal unit/mock, five-repeat normal, full
+race, vet, dependency, generation, and inventory checks; exact revision/scope is
+recorded in [evidence.json](protocol/evidence.json). Implementation status alone is
+not a test pass. Hosted CI is configured but was not run as part of this work.
 Empty evidence arrays mean no result has been recorded for that row. Evidence
 records and reproducible commands belong in [evidence.json](protocol/evidence.json).
 Official tests inspected as design references are described in
@@ -106,9 +133,10 @@ request resolution during interruption; it is not a success acknowledgment.
 Errors after possible dispatch
 carry outcome-unknown evidence and are never automatically replayed.
 
-Closing this client closes only its owned child connection, then bounds waiting
-and forceful termination. It does not send the managed daemon shutdown protocol
-or take ownership of an existing service. Arbitrary descendant process cleanup
+Closing a stdio client closes its owned child connection, then bounds waiting
+and forceful termination. Closing a remote client closes only its WebSocket
+connection. Neither sends the managed daemon shutdown protocol or takes ownership
+of an existing service. Arbitrary descendant process cleanup
 is not guaranteed. See the exported `Limits` and README for finite defaults.
 
 ## Live validation

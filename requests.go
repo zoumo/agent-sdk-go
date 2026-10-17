@@ -59,7 +59,7 @@ func (r Request) Data() (any, error) {
 		return nil, nil
 	}
 	if err := json.Unmarshal(r.state.params, data); err != nil {
-		return nil, &DecodeError{Method: r.state.method, Cause: err}
+		return nil, r.state.client.safeError(&DecodeError{Method: r.state.method, Cause: err})
 	}
 	return data, nil
 }
@@ -160,6 +160,9 @@ func (h AnswerHandle) answerError(dispatch DispatchState, cause error) error {
 		e.ID = h.state.id
 		e.Method = h.state.method
 	}
+	if h.state != nil {
+		return h.state.client.safeError(e)
+	}
 	return e
 }
 func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCError) error {
@@ -213,7 +216,7 @@ func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCErro
 	}
 	a := &answerAttempt{request: r, done: make(chan struct{})}
 	select {
-	case c.queue <- outbound{frame: append(frame, '\n'), ctx: ctx, answer: a}:
+	case c.queue <- outbound{frame: frame, ctx: ctx, answer: a}:
 		r.attempt = a
 		if r.timer != nil {
 			r.timer.Stop()
@@ -274,7 +277,7 @@ func (a *answerAttempt) finishLocked(cause error) {
 		if a.started {
 			dispatch = OutcomeUnknown
 		}
-		a.err = &AnswerError{Method: a.request.method, ID: a.request.id, Dispatch: dispatch, Cause: cause}
+		a.err = a.request.client.safeError(&AnswerError{Method: a.request.method, ID: a.request.id, Dispatch: dispatch, Cause: cause})
 		a.request.finishLocked(cause)
 	} else {
 		a.request.finishLocked(ErrRequestAnswered)

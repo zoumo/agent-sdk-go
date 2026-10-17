@@ -58,11 +58,76 @@ The constructor sends `initialize`, awaits its response, then writes `initialize
 before returning. `ServerInfo()` returns the native handshake result. Native
 thread, session, turn, and item identifiers are never fabricated.
 
+## Connect to an existing remote app-server
+
+Use the same client methods with an explicitly selected WS/WSS endpoint and a
+nonempty caller-supplied bearer token. Supply the token from your application;
+the SDK never discovers credentials, signs in, mints a token, or refreshes it.
+
+```go
+client, err := codex.NewRemote(ctx, codex.RemoteOptions{
+    URL:         "wss://codex.example.com/",
+    BearerToken: token, // supplied by your application; never put it in the URL
+    Initialize: protocol.InitializeParams{
+        ClientInfo: protocol.ClientInfo{Name: "my-client", Version: "0.1"},
+    },
+})
+if err != nil { return err }
+defer client.Close()
+
+started, err := client.StartThread(ctx, protocol.ThreadStartParams{
+    Ephemeral: protocol.Some(true),
+})
+if err != nil { return err }
+fmt.Println(started.Thread.ID)
+```
+
+`NewRemote` validates its options before dialing, then completes `initialize` and
+`initialized` before returning. Pass a deadline on `ctx` to bound startup; the
+configured call timeout bounds dialing plus initialization. `Limits` has the same
+finite defaults as stdio. Canceling the constructor context after success does not
+close the client; call `Close()` explicitly. Each complete WebSocket text message
+carries one JSON envelope, with no JSONL delimiter. The transport handles
+fragmentation. JSON batches, multiple envelopes in one message, and binary messages
+are unsupported; malformed or oversized messages terminate the connection explicitly.
+
+- Authentication uses only `Authorization: Bearer <token>`. URL user information,
+  query strings, and fragments are rejected. Redirects are never followed.
+  Tokens must have valid bearer-token syntax; whitespace/control characters are
+  rejected. No Origin header or environment-selected HTTP proxy is used.
+- WSS verifies the certificate and hostname. To trust a private CA, set
+  `TLSConfig: &tls.Config{RootCAs: trustedRoots}` using `crypto/tls` and a caller-built
+  `*x509.CertPool`. `InsecureSkipVerify` is rejected, and TLS versions below 1.2
+  are not enabled.
+- Plain `ws://` is allowed for `localhost` and numeric loopback addresses.
+  Before sending the bearer header, the connected TCP peer must also be loopback.
+  `AllowInsecureWS: true` explicitly permits other hosts, exposing the bearer token
+  and protocol traffic to the network. Prefer WSS or a secured loopback tunnel.
+- `ErrRemoteTransport` reports sanitized stage/status information, without URL,
+  token, response body, or peer-supplied close reason. Only safe underlying causes
+  such as context cancellation and EOF are retained. Remote error messages and
+  `RPCError.Message`, `Data`, and `Raw` also redact the explicitly supplied bearer
+  if reflected by the peer, including supported JSON/URL-encoded echoes.
+  Successful results, events, and request payloads remain caller-sensitive data;
+  the SDK is not a general logging redactor and cannot control server logs.
+
+There is no automatic reconnect or request replay. After a lost connection,
+inspect the operation's dispatch evidence, create a new initialized client, then
+explicitly resume the saved native thread ID if appropriate. An unknown outcome
+must be reconciled before repeating side-effecting work. Remote `Close` releases
+only this connection; it never shuts down or kills the remote service.
+
+The WSS example describes a caller-provided TLS endpoint; source inspection and
+synthetic TLS tests do not certify a production TLS proxy, bearer issuer, server
+configuration, or live account. See the [canonical evidence](docs/compatibility.md)
+and [transport provenance](docs/protocol/README.md). The
+[remote example](remote_example_test.go) compiles in tests and is never executed.
+
 ## Explicitly resume and detach a native thread
 
 Keep the native thread ID returned by the server. After closing the old client,
-construct a new client with `NewStdio` to perform a fresh handshake, then resume
-and read that exact ID. The SDK has no saved-session registry or reconnect loop.
+construct a new client with `NewStdio` or `NewRemote` for a fresh handshake, then
+resume and read that exact ID. The SDK has no saved-session registry or reconnect loop.
 
 ```go
 resumed, err := client.ResumeThread(ctx, protocol.ThreadResumeParams{
@@ -131,7 +196,11 @@ Required members are checked on decoding. Generated objects retain unrecognized
 members in `UnknownFields`; unions expose typed variants and an `Unknown` raw
 fallback. Raw JSON values never pass through float64. Unknown wire structure and
 values are preserved, although re-encoding may normalize whitespace/key order.
-See [generation provenance](docs/protocol/README.md) for the exact native fields.
+These loss-preserving bindings are not strict JSON Schema validators: native
+minimum/maximum and `additionalProperties` constraints are not all enforced, and
+unknown enum, union, and extension values can remain representable. The server
+remains responsible for accepting a request. See
+[generation provenance](docs/protocol/README.md) for the exact native fields.
 
 `Call(ctx, method, params, result)` is a raw extension escape hatch with the same
 bounds, exact correlation, and no-replay behavior. `nil` params omits the member;
@@ -259,17 +328,23 @@ an invented cancellation notification. `CallError` unwraps its cause and carries
 - `Responded`: the matching server error or an invalid typed result was received.
 
 Use `errors.Is` for context/transport causes and `errors.As` for `*RPCError`.
-`RPCError` retains its code, message, and raw optional data. A server error is not
-proof that no side effect occurred. Nothing is retried automatically. A canceled
+`RPCError` retains its code, message, and raw optional data, with a remote-security
+exception: a reflected bearer token is replaced in diagnostic messages, data,
+and raw error JSON. Unaffected raw errors stay byte-for-byte intact; redacted JSON
+replaces only affected lexical values, including reflected keys/numbers;
+unaffected bytes, duplicate members, and numeric lexemes remain intact. Native error codes and RPC
+correlation remain unchanged. Unsafe reflected custom error causes are scrubbed
+rather than exposed through `Unwrap`; public SDK sentinel classification remains.
+A server error is not proof that no side effect occurred. Nothing is retried automatically. A canceled
 blocked write terminates the connection to release the writer; other pending calls
 then fail with their own dispatch evidence. Late responses cannot satisfy new calls.
 
-## Bounds and process ownership
+## Bounds and connection ownership
 
 `DefaultLimits()` supplies finite per-connection defaults. Each zero field in
 `Limits` selects its default; negative values are rejected:
 
-- Incoming and outgoing frame payload: 8 MiB, excluding newline
+- Incoming and outgoing JSON payload: 8 MiB, excluding stdio newline or WS framing
 - Queued outbound frames: 32; pending calls: 128
 - Active local subscriptions: 32; queued events per subscriber: 128
 - Active reverse requests: 128; queued reverse requests: 32
@@ -277,7 +352,7 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 - Diagnostic tail: 64 KiB; all stderr content is replaced with redaction markers
 - Every call, including initialization: at most 30 seconds unless configured
 - A blocked write: 10 seconds
-- Shutdown: 2 seconds, split between graceful stdin EOF and forced-child reaping
+- Shutdown: 2 seconds; stdio splits this between graceful EOF and child reaping
 
 Earlier caller deadlines win. Resource admission fails with `ErrLimit` before
 sending where possible. An oversized outgoing frame is not sent; malformed or
@@ -288,9 +363,10 @@ frame size, and subscriber count, including independent typed payload copies; us
 smaller limits for large events or many observers. SDK decoding runs on the reader,
 but caller callbacks never do. Stderr is drained independently of the reader.
 
-`Close()` is concurrent-safe and idempotent. It closes stdin, waits for graceful
-exit, then kills and reaps only the owned child. It closes all owned pipe ends and
-settles pending calls and reverse-request handles. A child exit is detected even if an inherited output pipe
+`Close()` is concurrent-safe and idempotent. For stdio it closes stdin, waits for
+graceful exit, then kills and reaps only the owned child. For a remote client it
+closes only its WebSocket connection. Both settle pending calls, subscriptions,
+and reverse-request handles; stdio also closes all owned pipe ends. A child exit is detected even if an inherited output pipe
 remains open. It does not kill descendants, process groups, or an existing daemon.
 `Done()` signals connection termination; `Err()` gives the terminal cause. A rare
 OS failure to reap before the shutdown deadline returns `ErrShutdownTimeout`;
@@ -307,12 +383,18 @@ mise exec go@1.26.9 -- go vet ./...
 python3 docs/protocol/verify_inventory.py
 ```
 
-Tests launch only synthetic helper processes and never require an account or call
-a model. [Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
-[ticket 03](docs/evidence/ticket-03.md), and [ticket 04 evidence](docs/evidence/ticket-04.md)
-record tested scenarios.
+Tests use only synthetic helper processes, loopback WS peers, and local WSS peers
+with synthetic certificates and dummy tokens. They never require an account or
+call a model. The [CI workflow](.github/workflows/ci.yml) runs normal tests, race
+tests, vet, and inventory checks on pinned Go 1.26.9, with no service secrets or
+live-test step. Configuring CI is not evidence that a hosted CI run has passed.
+[Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
+[ticket 03](docs/evidence/ticket-03.md), [ticket 04](docs/evidence/ticket-04.md), and
+[ticket 05 evidence](docs/evidence/ticket-05.md) record scenarios and verification status.
 [Official testing patterns](docs/protocol/testing-patterns.md) distinguishes
 app-server harnesses from the TypeScript SDK's `codex exec` transport.
 
 Licensed under [Apache-2.0](LICENSE). See [NOTICE](NOTICE) for official protocol
-attribution. This is an independent SDK, not an OpenAI-maintained Go SDK.
+attribution and [dependency provenance](docs/protocol/README.md#licensing) for the
+WebSocket transport library. This is an independent SDK, not an OpenAI-maintained
+Go SDK.

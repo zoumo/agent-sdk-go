@@ -1,0 +1,48 @@
+{
+  "recorded_date": "2026-10-17",
+  "notes": [
+    "Dependency source attribution does not establish runtime compatibility or claim that upstream tests were executed.",
+    "The Go module is used only as an RFC 6455 transport dependency, not as a competing Codex SDK. Its license is preserved verbatim."
+  ],
+  "runtime_dependencies": [
+    {
+      "module": "github.com/coder/websocket",
+      "version": "v1.8.15",
+      "repository": "https://github.com/coder/websocket",
+      "revision": "9c8faadccd1b679e811a79ce506f8a10237251ad",
+      "release_url": "https://github.com/coder/websocket/releases/tag/v1.8.15",
+      "module_sum": "h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=",
+      "go_mod_sum": "h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=",
+      "license": "ISC",
+      "license_source_url": "https://github.com/coder/websocket/blob/9c8faadccd1b679e811a79ce506f8a10237251ad/LICENSE.txt",
+      "license_copy": "docs/protocol/third-party/coder-websocket-LICENSE.txt",
+      "license_sha256": "cc0975a5f6305145bdd7b41ce9479632fdac3870e6ac4281f28017f18c767c4e",
+      "use": "WebSocket upgrade, RFC 6455 framing, control frames, bounded reads/writes, and connection close; no protocol models or workflow policy."
+    }
+  ],
+  "ci_actions": [
+    {
+      "action": "actions/checkout",
+      "version": "v7.0.1",
+      "revision": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "source_url": "https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1"
+    },
+    {
+      "action": "actions/setup-go",
+      "version": "v7.0.0",
+      "revision": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+      "source_url": "https://github.com/actions/setup-go/commit/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"
+    }
+  ],
+  "standards_references": [
+    {
+      "document": "RFC 6455: The WebSocket Protocol",
+      "sections": [
+        "5.1",
+        "5.2"
+      ],
+      "source_url": "https://www.rfc-editor.org/rfc/rfc6455",
+      "use": "Independently implemented receive guard for server masking and canonical extended payload lengths. No code or prose copied into the implementation."
+    }
+  ]
+}

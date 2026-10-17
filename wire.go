@@ -49,6 +49,10 @@ func objectFields(raw []byte) (map[string]json.RawMessage, error) {
 	return out, nil
 }
 func (c *Client) readLoop() {
+	if c.remote != nil {
+		c.readRemote()
+		return
+	}
 	size := 64 << 10
 	if c.limits.MaxFrameBytes < size {
 		size = c.limits.MaxFrameBytes + 1

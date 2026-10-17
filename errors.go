@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrSubscriptionOverflow = errors.New("codex: subscription overflow; events lost")
+	ErrRemoteTransport      = errors.New("codex: remote transport failure")
 	ErrClosed               = errors.New("codex: connection closed")
 	ErrLimit                = errors.New("codex: resource limit reached")
 	ErrProtocol             = errors.New("codex: protocol error")
@@ -69,6 +70,8 @@ type RPCError struct {
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
 	// Raw retains the entire error object, including future unknown members.
+	// Remote errors redact reflected bearer credentials from Message, Data, and
+	// Raw. Otherwise the original native data and bytes are preserved.
 	Raw json.RawMessage `json:"-"`
 }
 

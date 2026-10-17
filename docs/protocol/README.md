@@ -52,7 +52,10 @@ from the official experimental archive's
 `scripts/generate_protocol.py`. The script verifies the upstream archive's exact
 Git blob before refreshing the snapshot. The snapshot and Go code are adaptations;
 they are not an upstream OpenAI Go SDK. The Go representation adds explicit
-optional values and raw unknown-field/variant preservation. Annotation-only schema
+optional values and raw unknown-field/variant preservation. It is not a strict
+JSON Schema validator: native minimum/maximum and `additionalProperties`
+constraints are not all enforced, and unknown enum/union/extensions are preserved
+where representable. Loss preservation is distinct from server acceptance. Annotation-only schema
 nodes, such as `outputSchema`, remain arbitrary JSON instead of an invented
 JSON-Schema model. The current closure has 154 definitions, generating 397 Go
 types and 744 synthetic model round-trip cases. Mixed string/object approval
@@ -95,6 +98,38 @@ method or cancellation notification. `turn/interrupt` is an explicit native
 turn action, while approval decisions such as `cancel` are response values.
 Neither should be invented or sent as a side effect of canceling a local wait.
 
+## Remote transport and authentication
+
+The exact pinned [WebSocket writer](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-transport/src/transport/websocket.rs#L290-L327)
+serializes each outgoing JSON envelope into one complete text message. Its
+[reader](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-transport/src/transport/websocket.rs#L331-L389)
+forwards a complete text message for JSON decoding, replies to Ping with the same
+Pong payload, accepts Pong, and exits on Close. Binary messages are unsupported:
+the server drops them, while this SDK terminates its connection with `ErrProtocol`
+rather than silently losing unexpected application data. The official
+[test client](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L906-L927)
+also rejects incoming binary. Newline-delimited stdio framing is not reused for WS.
+
+An independently authored streaming guard enforces the server masking and
+canonical length rules from [RFC 6455 sections 5.1–5.2](https://www.rfc-editor.org/rfc/rfc6455#section-5.1)
+before the transport library decodes messages. It rejects masked server frames,
+nonminimal extended lengths, and 64-bit lengths with their high bit set, including
+otherwise-valid JSON payloads. The dependency still owns fragmentation, control
+frames, and message limits. No RFC code or third-party implementation was copied.
+
+The [upgrade handler](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-transport/src/transport/websocket.rs#L89-L125)
+rejects browser Origin headers and invokes the pinned
+[bearer policy](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/websocket-auth/src/lib.rs#L286-L318).
+Capability-token and signed-bearer modes are server policy; this client forwards
+only the caller's explicit token in the Authorization header. It does not issue,
+refresh, validate claims for, or discover credentials. The native source checks
+authentication during upgrade, without promising post-upgrade expiry/revocation.
+
+Verified WSS, URL restrictions, no redirects or ambient HTTP proxy, and the
+non-loopback plaintext opt-in are SDK safety choices. They do not certify a live
+TLS terminator, account, token issuer, or server deployment. Each explicit new
+connection repeats initialization; no disconnect path reconnects or replays RPCs.
+
 ## Licensing
 
 Original SDK code is licensed under Apache-2.0. Derived official protocol names,
@@ -103,6 +138,15 @@ Codex under Apache-2.0. The root [LICENSE](../../LICENSE) contains that license,
 and root [NOTICE](../../NOTICE) preserves the upstream notice. No competing Go
 SDK implementation or test source is incorporated. Official tests were read;
 the Go tests are independently authored.
+
+The only non-standard-library runtime dependency is
+[`github.com/coder/websocket` v1.8.15](https://github.com/coder/websocket/releases/tag/v1.8.15),
+source commit `9c8faadccd1b679e811a79ce506f8a10237251ad`, under ISC. The unmodified
+[license notice](third-party/coder-websocket-LICENSE.txt) is included. Exact Go
+module checksums, license SHA-256, immutable source links, and CI action pins are
+recorded in [dependencies.json](dependencies.json); module checksums also remain
+in root `go.sum`. No transport-library test/source is copied into SDK code. This
+dependency provides WebSocket mechanics, not Codex models or a competing SDK.
 
 ## Rechecking this record
 

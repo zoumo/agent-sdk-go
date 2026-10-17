@@ -1,7 +1,7 @@
 {
   "protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb",
-  "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
-  "sdk_revision_note": "Ticket 04 source and tests passed uncached full normal/race suites, five normal repetitions, standalone model tests, vet, exact-source inventory, reproducible generation, and whitespace checks, then were committed unchanged at the recorded identifier. Normal tests, vet and exact-source inventory passed again after commit. This following evidence-only change records the exact revision; SDK source and tests are unchanged. Historical tickets retain their own revisions.",
+  "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+  "sdk_revision_note": "Ticket 05 final source and test tree passed uncached full normal/race suites, five normal repetitions, vet, module verification, exact-source inventory, reproducible generation, and whitespace checks, then was committed unchanged at the recorded identifier. This following documentation-only change records the exact tested implementation revision and adds README/CI/evidence/inventory documentation; SDK source and tests are unchanged. Hosted CI and live validation were not run. Historical tickets retain their exact tested revisions and results.",
   "toolchain": {
     "go": "1.26.9",
     "manager": "mise",
@@ -303,20 +303,283 @@
       ],
       "coverage": "Full exported-client and model suites under the race detector, including competing answer/reject/cancel, resolution, expiry, blocked writes, Close and stale connection handles. No live Codex executable.",
       "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac"
+    },
+    {
+      "id": "ticket05-remote-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "coverage": "Final working-tree normal run: 52 shared exported-client contract bodies through WS and synthetic-trust WSS; full single-connection P0 lifecycle and explicit native-ID resume; partial socket writes/admission/cancellation/Close; 13 security functions; coalesced valid-response/event prefix regression; compile-only remote example. No real Codex, credential, account, or model. Five repeated normal runs and the independently recorded full race run also passed.",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go",
+        "request_contract_test.go",
+        "remote_backpressure_test.go",
+        "remote_coalescing_test.go",
+        "remote_contract_test.go",
+        "remote_example_test.go",
+        "remote_security_test.go"
+      ],
+      "test_names": [
+        "TestRemoteBlockedWritesAndAnswers",
+        "TestRemoteQueuedAnswerAdmissionAndCancellation",
+        "TestRemoteCloseLeavesListenerAvailable",
+        "TestRemoteValidPrefixSurvivesMalformedFrame",
+        "TestRemotePublicContractParity",
+        "TestRemoteNativeWorkflow",
+        "TestRemoteSecurityExactBearerAndNoOrigin",
+        "TestRemoteSecurityTLSVerificationAndConfigIsolation",
+        "TestRemoteSecurityRejectsInvalidInputBeforeDial",
+        "TestRemoteSecurityRedirectsNeverForwardCredentials",
+        "TestRemoteSecurityReflectedHandshakeErrorsAreSafe",
+        "TestRemoteSecurityReflectedCloseReasonIsSafe",
+        "TestRemoteSecurityReflectedNativeRPCErrorsAreSafe",
+        "TestRemoteSecurityReflectedNumericDecodeErrorIsSafe",
+        "TestRemoteSecurityConstructionContext",
+        "TestRemoteSecurityStalledTLSHandshakeIsBounded",
+        "TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction",
+        "TestRemoteSecurityMalformedRawWebSocketFrames",
+        "TestRemoteSecurityWebSocketMessageFraming"
+      ],
+      "shared_contract_cases": [
+        "TestOwnedStdioLifecycle",
+        "TestIDExactness",
+        "TestCancellationAndLateResponse",
+        "TestRPCErrorNoReplay",
+        "TestConnectionLossIsUnknown",
+        "TestMalformedFrames",
+        "TestInitializeFailures",
+        "TestPendingAdmissionLimit",
+        "TestOutgoingFrameLimitAndDefaultCallTimeout",
+        "TestInvalidOptionsAndClosedCall",
+        "TestTurnEarlyEventsKeepResponseIdentity",
+        "TestNotificationRawAndDecodeErrors",
+        "TestSubscriptionOverflowIsolatedAndInspectable",
+        "TestSlowSubscriberNeverBlocksResponse",
+        "TestSubscriptionOwnsPayloadAndNoReplay",
+        "TestCancellationDoesNotInterruptTurn",
+        "TestTurnFailureNeverReplays",
+        "TestSubscriptionTerminalStatus",
+        "TestSubscriptionConcurrentLifecycle",
+        "TestSubscriptionAdmissionValidation",
+        "TestResumeAcrossIndependentConnections",
+        "TestResumeMismatchKeepsCorrelationAndNoFallback",
+        "TestResumeAndUnsubscribeFailureNeverReplay",
+        "TestResumeAndUnsubscribeCancellationEvidence",
+        "TestResumeAndUnsubscribeTimeoutAndClose",
+        "TestUnsubscribeNativeStatusAndLocalIndependence",
+        "TestResumeAndUnsubscribeConcurrentClose",
+        "TestResumeAndUnsubscribeNotSentLimits",
+        "TestResumeAndUnsubscribePendingAdmission",
+        "TestServerRequestIDsAndNativeReplyEnvelopes",
+        "TestServerRequestRawAndTypedCopies",
+        "TestStalledServerRequestsDoNotBlockCallsOrEvents",
+        "TestAnswerPreflightFailuresLeaveHandleUsable",
+        "TestServerRequestLocalCancellationAndExpiration",
+        "TestResolvedServerRequestUsesExactIDAndKeepsEvent",
+        "TestServerRequestCapacityFailureIsExplicit",
+        "TestServerRequestCloseInvalidatesAndUnblocks",
+        "TestConcurrentServerRequestAnswerIsOneShot",
+        "TestServerRequestDuplicateActiveIDTerminates",
+        "TestServerRequestLimitDefaultsAndValidation",
+        "TestEverySupportedServerRequestTypedNativeRoundTrip",
+        "TestMalformedOrUnrelatedResolutionKeepsHandle",
+        "TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose",
+        "TestZeroAnswerHandleFailsLocally",
+        "TestConcurrentAnswerAndCancelHaveOneWinner",
+        "TestMalformedServerRequestEnvelopeTerminates",
+        "TestConcurrentAnswerAndNativeResolutionHaveOneOutcome",
+        "TestReusedServerRequestIDDoesNotReviveOldHandle",
+        "TestExpiredBufferedRequestsRemainInspectableAfterClose",
+        "TestLegacyRequestResolutionUsesConversationIdentity",
+        "TestServerRequestsArrivingDuringInitializeAreRetained",
+        "TestServerRequestOverflowDuringInitializeCleansUp"
+      ],
+      "attempts": [
+        {
+          "result": "failed",
+          "command": "mise exec go@1.26.9 -- go test -count=5 ./...",
+          "detail": "A repeated normal run exposed a cancellation-test timing assumption and a constructor timeout-classification race. The tests now use a later echo barrier to establish a settled local write before late-response reuse. Dial failures now preserve safe deadline/cancellation evidence from errors.Is/net.Error even when HTTP transport timeout occurs before ctx.Err publication. Thirty focused repetitions and complete final normal/repeated-normal/race reruns subsequently passed."
+        },
+        {
+          "result": "passed",
+          "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+          "detail": "Full normal run passed in 17.179 seconds before read-only review found a coalesced-read prefix-loss issue in the new strict frame guard. The guard now returns the preceding valid response bytes and retains a sticky ErrProtocol for the invalid suffix. This earlier run is not the final changed-tree gate."
+        }
+      ],
+      "package_elapsed_seconds": 17.15,
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only."
+    },
+    {
+      "id": "ticket05-remote-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "coverage": "Final working-tree full race run: all stdio cases and 52 shared exported-client bodies through WS and synthetic-trust WSS, native workflow/resume, socket backpressure, 13 security functions, valid-prefix framing regression, and compile-only examples. Includes concurrent subscriptions, one-shot answers/cancellation/resolution, stale handles and bounded cleanup. Protocol model race results are separately recorded. No real Codex or credentials.",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go",
+        "request_contract_test.go",
+        "remote_backpressure_test.go",
+        "remote_coalescing_test.go",
+        "remote_contract_test.go",
+        "remote_example_test.go",
+        "remote_security_test.go"
+      ],
+      "test_names": [
+        "TestRemoteBlockedWritesAndAnswers",
+        "TestRemoteQueuedAnswerAdmissionAndCancellation",
+        "TestRemoteCloseLeavesListenerAvailable",
+        "TestRemoteValidPrefixSurvivesMalformedFrame",
+        "TestRemotePublicContractParity",
+        "TestRemoteNativeWorkflow",
+        "TestRemoteSecurityExactBearerAndNoOrigin",
+        "TestRemoteSecurityTLSVerificationAndConfigIsolation",
+        "TestRemoteSecurityRejectsInvalidInputBeforeDial",
+        "TestRemoteSecurityRedirectsNeverForwardCredentials",
+        "TestRemoteSecurityReflectedHandshakeErrorsAreSafe",
+        "TestRemoteSecurityReflectedCloseReasonIsSafe",
+        "TestRemoteSecurityReflectedNativeRPCErrorsAreSafe",
+        "TestRemoteSecurityReflectedNumericDecodeErrorIsSafe",
+        "TestRemoteSecurityConstructionContext",
+        "TestRemoteSecurityStalledTLSHandshakeIsBounded",
+        "TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction",
+        "TestRemoteSecurityMalformedRawWebSocketFrames",
+        "TestRemoteSecurityWebSocketMessageFraming"
+      ],
+      "shared_contract_cases": [
+        "TestOwnedStdioLifecycle",
+        "TestIDExactness",
+        "TestCancellationAndLateResponse",
+        "TestRPCErrorNoReplay",
+        "TestConnectionLossIsUnknown",
+        "TestMalformedFrames",
+        "TestInitializeFailures",
+        "TestPendingAdmissionLimit",
+        "TestOutgoingFrameLimitAndDefaultCallTimeout",
+        "TestInvalidOptionsAndClosedCall",
+        "TestTurnEarlyEventsKeepResponseIdentity",
+        "TestNotificationRawAndDecodeErrors",
+        "TestSubscriptionOverflowIsolatedAndInspectable",
+        "TestSlowSubscriberNeverBlocksResponse",
+        "TestSubscriptionOwnsPayloadAndNoReplay",
+        "TestCancellationDoesNotInterruptTurn",
+        "TestTurnFailureNeverReplays",
+        "TestSubscriptionTerminalStatus",
+        "TestSubscriptionConcurrentLifecycle",
+        "TestSubscriptionAdmissionValidation",
+        "TestResumeAcrossIndependentConnections",
+        "TestResumeMismatchKeepsCorrelationAndNoFallback",
+        "TestResumeAndUnsubscribeFailureNeverReplay",
+        "TestResumeAndUnsubscribeCancellationEvidence",
+        "TestResumeAndUnsubscribeTimeoutAndClose",
+        "TestUnsubscribeNativeStatusAndLocalIndependence",
+        "TestResumeAndUnsubscribeConcurrentClose",
+        "TestResumeAndUnsubscribeNotSentLimits",
+        "TestResumeAndUnsubscribePendingAdmission",
+        "TestServerRequestIDsAndNativeReplyEnvelopes",
+        "TestServerRequestRawAndTypedCopies",
+        "TestStalledServerRequestsDoNotBlockCallsOrEvents",
+        "TestAnswerPreflightFailuresLeaveHandleUsable",
+        "TestServerRequestLocalCancellationAndExpiration",
+        "TestResolvedServerRequestUsesExactIDAndKeepsEvent",
+        "TestServerRequestCapacityFailureIsExplicit",
+        "TestServerRequestCloseInvalidatesAndUnblocks",
+        "TestConcurrentServerRequestAnswerIsOneShot",
+        "TestServerRequestDuplicateActiveIDTerminates",
+        "TestServerRequestLimitDefaultsAndValidation",
+        "TestEverySupportedServerRequestTypedNativeRoundTrip",
+        "TestMalformedOrUnrelatedResolutionKeepsHandle",
+        "TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose",
+        "TestZeroAnswerHandleFailsLocally",
+        "TestConcurrentAnswerAndCancelHaveOneWinner",
+        "TestMalformedServerRequestEnvelopeTerminates",
+        "TestConcurrentAnswerAndNativeResolutionHaveOneOutcome",
+        "TestReusedServerRequestIDDoesNotReviveOldHandle",
+        "TestExpiredBufferedRequestsRemainInspectableAfterClose",
+        "TestLegacyRequestResolutionUsesConversationIdentity",
+        "TestServerRequestsArrivingDuringInitializeAreRetained",
+        "TestServerRequestOverflowDuringInitializeCleansUp"
+      ],
+      "attempts": [
+        {
+          "result": "passed",
+          "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+          "detail": "Full race run passed in 128.9 seconds before the subsequent repeated-normal failure led to cancellation-barrier and safe-timeout-classification changes. This earlier pass is not the final changed-tree gate."
+        }
+      ],
+      "package_elapsed_seconds": 128.342,
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only."
+    },
+    {
+      "id": "ticket05-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/requests_test.go",
+        "protocol/resume_test.go",
+        "protocol/schema_generated_test.go",
+        "protocol/turn_test.go"
+      ],
+      "coverage": "Protocol unit-package portion of the final full normal run: unchanged 744 generated model round trips and existing model tests for optional/null/unknown fields, native IDs, turn/resume, approval/input, and resolution shapes. No schema or generated type change in ticket 05; these are not complete JSON Schema validators. No server process or live compatibility claim.",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only.",
+      "package_elapsed_seconds": 0.071
+    },
+    {
+      "id": "ticket05-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/requests_test.go",
+        "protocol/resume_test.go",
+        "protocol/schema_generated_test.go",
+        "protocol/turn_test.go"
+      ],
+      "coverage": "Protocol unit-package portion of the final full race run: unchanged 744 generated model round trips and existing native model tests. No schema or generated type change in ticket 05; source fidelity is not full JSON Schema validation or live compatibility.",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only.",
+      "package_elapsed_seconds": 1.461
     }
   ],
   "verification_commands": [
     {
       "command": "mise exec go@1.26.9 -- go vet ./...",
-      "status": "passed"
+      "status": "passed",
+      "scope": "Final ticket 05 source/test tree committed unchanged at 86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f; chained after the successful five-repeat normal run, exit 0."
     },
     {
-      "command": "python3 docs/protocol/verify_inventory.py",
-      "status": "passed"
+      "command": "python3 docs/protocol/verify_inventory.py path/to/exact-official-source-bundle",
+      "status": "passed",
+      "scope": "Ticket 05 documentation documentation working tree; all 43 source files materialized with git show from exact official pin, then verified against preserved hashes, registries, and schema membership."
     },
     {
       "command": "git diff --check",
-      "status": "passed"
+      "status": "passed",
+      "scope": "Final ticket 05 documentation working tree."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go test -count=5 ./...",
+      "status": "passed",
+      "scope": "Final ticket 05 source/test tree committed unchanged at 86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f; exported-client package 85.144 seconds, protocol unit package 0.326 seconds, examples compiled. Earlier failed attempt and fixes retained in mock record."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go mod verify",
+      "status": "passed",
+      "scope": "Final ticket 05 dependency graph; exact module/version and sums recorded in dependencies.json and go.sum."
     }
-  ]
+  ],
+  "hosted_ci": {
+    "status": "not run",
+    "workflow": ".github/workflows/ci.yml",
+    "scope": "Go 1.26.9 normal tests, race tests, vet, dependency and inventory verification. No configured service secrets or live-model step. Workflow configuration is not execution evidence."
+  }
 }

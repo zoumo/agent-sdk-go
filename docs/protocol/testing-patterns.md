@@ -69,7 +69,8 @@ We did not invoke that gate or launch any real Codex binary.
 ## Application to this SDK
 
 The primary seam remains a separately compiled consumer of exported Go APIs
-against a scripted owned child process. It checks received frames, native IDs,
+against a scripted owned child process, plus loopback WS and synthetic-trust WSS
+variants. It checks received frames, native IDs,
 returned results/errors, process exit, and deadlines rather than private queues
 or maps. Unit model-fidelity tests supplement that seam. Race-detector results
 are recorded separately from fake-peer behavior and live compatibility.
@@ -159,3 +160,31 @@ model tests do not show that a real server emits a given request or accepts a
 particular answer. No official suite or real Codex binary was executed for this
 work; the existing TypeScript exec/Python app-server seam distinctions still
 apply.
+
+## Ticket 05: the same public contract over WS and WSS
+
+The pinned Rust [WebSocket suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L68-L110)
+initializes each connection independently and checks that equal request IDs on
+separate connections cannot receive each other's replies. Its
+[bearer cases](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L269-L299)
+reject missing/invalid tokens before a valid authenticated initialization.
+[Exact outgoing text messages](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L818-L824)
+and [control-frame handling](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L906-L927)
+are inspected as transport evidence. These tests launch the real Rust server
+against a mock model; none was executed during this SDK work.
+
+The Go suite independently applies these ideas at the existing external-package
+consumer seam. Transport-neutral scenarios are reused through loopback WS and
+local WSS bridges to the synthetic peer, without launching Codex. Process
+ownership and stderr scenarios remain stdio-specific. Remote-specific tests cover
+synthetic bearer headers, trusted/untrusted synthetic certificates, option
+validation, non-loopback plaintext policy, redirects, complete-message framing,
+control frames, bounded backpressure, and connection-only cleanup. Credentials
+are dummy test values, and local CA material never leaves the fixture.
+
+Normal/mock and race runs must be recorded separately in [evidence.json](evidence.json).
+Running the existing behavior over WSS establishes synthetic transport behavior,
+not production TLS deployment, bearer issuance, real Codex workflow, or paid model
+compatibility. The configured CI workflow uses no service secrets or live test
+step. A committed workflow is not a hosted CI pass; record a run URL and exact
+revision if CI is later executed.

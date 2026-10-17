@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/zoumo/codex-sdk-go/protocol"
 )
 
@@ -37,7 +38,8 @@ type outbound struct {
 	written chan error
 }
 
-// Client owns exactly one app-server child. It never replays requests. Calls are
+// Client owns one app-server connection and, for stdio only, its child process.
+// It never reconnects or replays requests. Calls are
 // safe concurrently; a context only cancels local waiting, never server execution.
 type Client struct {
 	mu            sync.Mutex
@@ -46,6 +48,8 @@ type Client struct {
 	stdin         *os.File
 	stdout        *os.File
 	stderr        *os.File
+	remote        *websocket.Conn
+	remoteToken   string
 	queue         chan outbound
 	pending       map[ID]*pendingCall
 	reverse       map[ID]*requestState
@@ -116,7 +120,8 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	inR.Close()
 	outW.Close()
 	errW.Close()
-	c := &Client{limits: limits, cmd: cmd, stdin: inW, stdout: outR, stderr: errR, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c := newClient(limits)
+	c.cmd, c.stdin, c.stdout, c.stderr = cmd, inW, outR, errR
 	go func() {
 		waitErr := cmd.Wait()
 		close(c.reaped)
@@ -139,8 +144,17 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	go func() { defer c.workers.Done(); c.writeLoop() }()
 	go func() { defer c.workers.Done(); c.drainStderr() }()
 	go c.cleanup()
+	return c.initialize(ctx, options.Initialize)
+}
+
+func newClient(limits Limits) *Client {
+	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+}
+
+func (c *Client) initialize(ctx context.Context, params protocol.InitializeParams) (*Client, error) {
 	var info protocol.InitializeResponse
-	if err = c.call(ctx, "initialize", options.Initialize, &info, true); err != nil {
+	err := c.call(ctx, "initialize", params, &info, true)
+	if err != nil {
 		c.fail(err)
 		_ = c.Close()
 		return nil, err
@@ -209,7 +223,7 @@ func (c *Client) Call(ctx context.Context, method string, params any, result any
 }
 func (c *Client) call(ctx context.Context, method string, params any, result any, initializing bool) error {
 	fail := func(id ID, dispatch DispatchState, err error) error {
-		return &CallError{Method: method, ID: id, Dispatch: dispatch, Cause: err}
+		return c.safeError(&CallError{Method: method, ID: id, Dispatch: dispatch, Cause: err})
 	}
 	if ctx == nil {
 		return fail(ID{}, NotSent, errors.New("codex: nil context"))
@@ -266,7 +280,7 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 	p := &pendingCall{id: id, method: method, ctx: ctx, done: make(chan struct{})}
 	c.pending[id] = p
 	select {
-	case c.queue <- outbound{frame: append(frame, '\n'), call: p, ctx: ctx}:
+	case c.queue <- outbound{frame: frame, call: p, ctx: ctx}:
 	default:
 		delete(c.pending, id)
 		c.mu.Unlock()
@@ -319,7 +333,7 @@ func (c *Client) notify(ctx context.Context, method string) error {
 		return c.Err()
 	case <-ctx.Done():
 		return ctx.Err()
-	case c.queue <- outbound{frame: append(frame, '\n'), ctx: ctx, written: written}:
+	case c.queue <- outbound{frame: frame, ctx: ctx, written: written}:
 	}
 	select {
 	case err := <-written:
@@ -377,12 +391,9 @@ func (c *Client) writeLoop() {
 					c.fail(ErrWriteTimeout)
 				}
 			})
-			n, err := c.stdin.Write(m.frame)
+			err := c.writeFrame(m.ctx, m.frame)
 			finished.Store(true)
 			timer.Stop()
-			if err == nil && n != len(m.frame) {
-				err = io.ErrShortWrite
-			}
 			c.mu.Lock()
 			if m.answer != nil {
 				m.answer.writing = false
@@ -408,11 +419,12 @@ func (c *Client) finishLocked(p *pendingCall, result json.RawMessage, err error)
 	}
 	delete(c.pending, p.id)
 	p.result = result
-	p.err = err
+	p.err = c.safeError(err)
 	p.finished = true
 	close(p.done)
 }
 func (c *Client) fail(cause error) {
+	cause = c.safeError(cause)
 	if cause == nil {
 		cause = ErrClosed
 	}
@@ -446,10 +458,18 @@ func (c *Client) fail(cause error) {
 	}
 	close(c.done)
 	c.mu.Unlock()
-	_ = c.stdin.Close()
+	if c.remote != nil {
+		_ = c.remote.CloseNow()
+	} else {
+		_ = c.stdin.Close()
+	}
 }
 func (c *Client) cleanup() {
 	<-c.done
+	if c.remote != nil {
+		c.finishCleanup()
+		return
+	}
 	deadline := time.NewTimer(c.limits.ShutdownTimeout)
 	defer deadline.Stop()
 	grace := time.NewTimer(c.limits.ShutdownTimeout / 2)
@@ -468,6 +488,9 @@ func (c *Client) cleanup() {
 	}
 	_ = c.stdout.Close()
 	_ = c.stderr.Close()
+	c.finishCleanup()
+}
+func (c *Client) finishCleanup() {
 	c.workers.Wait()
 	// Release queued frame payloads after the writer has exited.
 	for {
@@ -480,9 +503,10 @@ func (c *Client) cleanup() {
 	}
 }
 
-// Close is idempotent and bounded. It closes stdin, allows a bounded grace period,
-// then kills only the child it started and waits for reaping. It never sends a
-// protocol shutdown RPC or kills an unrelated process or process group.
+// Close is idempotent and bounded. A remote client closes only its socket. A
+// stdio client closes stdin, allows a bounded grace period, then kills only the
+// child it started and waits for reaping. It never sends a protocol shutdown RPC
+// or kills an unrelated process, process group, or remote server.
 func (c *Client) Close() error {
 	c.fail(ErrClosed)
 	<-c.cleaned

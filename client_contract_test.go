@@ -114,6 +114,14 @@ func TestFakeChild(t *testing.T) {
 			send(m.ID, startResult)
 		case "thread/read":
 			send(m.ID, `{"thread":`+threadJSON+`}`)
+		case "thread/resume":
+			var params protocol.ThreadResumeParams
+			if json.Unmarshal(m.Params, &params) != nil {
+				os.Exit(87)
+			}
+			send(m.ID, resumeResponseJSON(params.ThreadID))
+		case "thread/unsubscribe":
+			send(m.ID, `{"status":"unsubscribed"}`)
 		case "echo":
 			send(m.ID, string(m.Params))
 		case "rpc-error":
@@ -186,6 +194,9 @@ func startFake(t *testing.T, mode string, limits codex.Limits) fixture {
 }
 func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	t.Helper()
+	if remoteVariant(t) != "" {
+		return openRemoteFake(t, mode, limits)
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -299,6 +310,10 @@ func TestOwnedStdioLifecycle(t *testing.T) {
 }
 func assertReaped(t *testing.T, pidPath string) {
 	t.Helper()
+	// Remote fixtures own their own peers; the SDK must not reap them.
+	if pidPath == "" {
+		return
+	}
 	if runtime.GOOS == "windows" {
 		return
 	}
@@ -360,6 +375,8 @@ func TestCancellationAndLateResponse(t *testing.T) {
 	errch := make(chan error, 1)
 	go func() { errch <- f.c.Call(ctx, "defer", nil, nil) }()
 	waitTrace(t, f.trace, "defer")
+	// A second response proves the serialized writer settled the first frame.
+	responseBarrier(t, f)
 	cancel()
 	callError(t, <-errch, codex.OutcomeUnknown, context.Canceled)
 	var got string

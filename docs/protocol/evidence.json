@@ -1,7 +1,7 @@
 {
   "protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb",
-  "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
-  "sdk_revision_note": "The exact ticket 03 implementation commit was verified after committing with uncached normal/race tests, five normal repetitions, standalone model tests, vet and exact-source inventory checks. This following documentation-only commit records its revision; SDK source and tests are unchanged. Historical tickets retain their own revisions.",
+  "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
+  "sdk_revision_note": "Ticket 04 source and tests passed uncached full normal/race suites, five normal repetitions, standalone model tests, vet, exact-source inventory, reproducible generation, and whitespace checks, then were committed unchanged at the recorded identifier. Normal tests, vet and exact-source inventory passed again after commit. This following evidence-only change records the exact revision; SDK source and tests are unchanged. Historical tickets retain their own revisions.",
   "toolchain": {
     "go": "1.26.9",
     "manager": "mise",
@@ -220,6 +220,89 @@
       ],
       "coverage": "Full exported-client and model suites under race detector, including concurrent typed resume/unsubscribe and Close. No real Codex executable or live model.",
       "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95"
+    },
+    {
+      "id": "ticket04-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/requests_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "744 synthetic round trips over 154 exact upstream definitions; modern/legacy approvals, permissions, user-input and resolved notifications; exact signed-integer/string RequestID, invalid ID/raw escape rejection, all native decisions, unknown variants, omission/null/value fields and kind-tagged filesystem paths.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac"
+    },
+    {
+      "id": "ticket04-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/requests_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Complete native model suite under the Go race detector; source fidelity is not live server compatibility.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac"
+    },
+    {
+      "id": "ticket04-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "request_contract_test.go",
+        "requests_example_test.go"
+      ],
+      "coverage": "Public bounded Requests and opaque answer handles against an independent fake child; exact IDs and explicit result/error frames; native/raw ownership; duplicate/stale/cancel/expiry/resolution; competing answers; response/event progress under stalled consumption; queue/active exhaustion; safe prewrite reuse versus ambiguous writes; close without waiting for caller code. No automatic policy decision or retry.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
+      "test_names": [
+        "TestServerRequestIDsAndNativeReplyEnvelopes",
+        "TestServerRequestRawAndTypedCopies",
+        "TestStalledServerRequestsDoNotBlockCallsOrEvents",
+        "TestAnswerPreflightFailuresLeaveHandleUsable",
+        "TestServerRequestLocalCancellationAndExpiration",
+        "TestResolvedServerRequestUsesExactIDAndKeepsEvent",
+        "TestServerRequestCapacityFailureIsExplicit",
+        "TestServerRequestCloseInvalidatesAndUnblocks",
+        "TestConcurrentServerRequestAnswerIsOneShot",
+        "TestServerRequestDuplicateActiveIDTerminates",
+        "TestPartialServerRequestAnswerIsUnknownAndNeverReplayed",
+        "TestServerRequestLimitDefaultsAndValidation",
+        "TestEverySupportedServerRequestTypedNativeRoundTrip",
+        "TestMalformedOrUnrelatedResolutionKeepsHandle",
+        "TestServerRequestQueueAdmissionFailureIsReusable",
+        "TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose",
+        "TestZeroAnswerHandleFailsLocally",
+        "TestQueuedAnswerCancellationIsNotSentButConsumesHandle",
+        "TestConcurrentAnswerAndCancelHaveOneWinner",
+        "TestMalformedServerRequestEnvelopeTerminates",
+        "TestConcurrentAnswerAndNativeResolutionHaveOneOutcome",
+        "TestReusedServerRequestIDDoesNotReviveOldHandle",
+        "TestExpiredBufferedRequestsRemainInspectableAfterClose",
+        "TestLegacyRequestResolutionUsesConversationIdentity",
+        "TestServerRequestsArrivingDuringInitializeAreRetained",
+        "TestServerRequestOverflowDuringInitializeCleansUp"
+      ]
+    },
+    {
+      "id": "ticket04-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "request_contract_test.go",
+        "requests_example_test.go",
+        "protocol/protocol_test.go",
+        "protocol/requests_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Full exported-client and model suites under the race detector, including competing answer/reject/cancel, resolution, expiry, blocked writes, Close and stale connection handles. No live Codex executable.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac"
     }
   ],
   "verification_commands": [

@@ -137,9 +137,8 @@ See [generation provenance](docs/protocol/README.md) for the exact native fields
 bounds, exact correlation, and no-replay behavior. `nil` params omits the member;
 `json.RawMessage("null")` sends explicit null. A nil result discards the response.
 Calling an unwrapped method does not make it an officially supported SDK workflow.
-Incoming server requests still fail the connection explicitly. See the canonical
-compatibility record before enabling capabilities that require reverse-request
-answers.
+Incoming server requests have a separate bounded pull queue. Unknown methods
+remain caller-managed raw extensions; their reachability is not workflow certification.
 
 ## Observe and explicitly interrupt a turn
 
@@ -160,7 +159,8 @@ values with the original `Method` and raw JSON `Params`, plus optional typed
 `Data` and a separate `DecodeError`. Absent parameters remain nil; explicit null
 remains raw `null`. Each subscriber independently owns its raw and typed data.
 Typed payloads currently cover `turn/started`, `turn/completed`, `item/started`,
-`item/completed`, `item/agentMessage/delta`, and `error`. Other methods remain raw.
+`item/completed`, `item/agentMessage/delta`, `error`, and `serverRequest/resolved`.
+Other methods remain raw.
 Malformed supported payloads remain observable with `*DecodeError`; an invalid
 JSON envelope instead terminates the connection.
 
@@ -192,6 +192,63 @@ The acknowledgement is only an RPC response. It neither creates a completion
 event nor proves that execution stopped. There is no high-level turn runner,
 implicit interruption, or final-text aggregation.
 
+## Answer server requests explicitly
+
+`Requests()` is a single bounded pull queue, available immediately after startup.
+Each immutable `Request` exposes `ID()`, `Method()`, `Params()`, `Data()`, and
+`Handle()`. Integer `1` and string `"1"` remain different identities. `Params()`
+and `Data()` return fresh copies, so UI mutations cannot change an answer target.
+`Data()` decodes native command/file/permissions approvals, tool user input, and
+legacy command/patch approvals. Unknown methods return `nil, nil`; malformed known
+payloads return `*DecodeError` without losing their original raw bytes.
+
+Read requests concurrently with calls that might need an answer. Obtain the
+result from your application or user; the SDK supplies no default decision:
+
+```go
+request, ok := <-client.Requests()
+if !ok { return client.Err() }
+fmt.Println(request.ID(), request.Method(), string(request.Params()))
+
+// For example, read a caller-selected native JSON result from the terminal.
+var result json.RawMessage
+if err := json.NewDecoder(os.Stdin).Decode(&result); err != nil { return err }
+if err := request.Handle().Answer(ctx, result); err != nil { return err }
+```
+
+The [compiled example](requests_example_test.go) follows this pattern and is never
+executed by tests. Native response models such as
+`protocol.CommandExecutionRequestApprovalResponse` and
+`protocol.ToolRequestUserInputResponse` can be passed to `Answer` instead of raw
+JSON. `Reject(ctx, &RPCError{...})` sends exactly the caller-selected protocol error.
+`RPCError.Raw` is inbound diagnostic data and is not sent.
+
+A handle is opaque, bound to its original connection, and shared by copies.
+Only one answer or cancellation wins. `Done()` signals termination and `Err()`
+reports answered, locally canceled/expired, server-resolved, or connection failure.
+A successful `Answer` means its frame was written; it is not a peer acknowledgment
+or proof of execution. Competing/duplicate answers and stale handles fail locally.
+Once an answer is admitted to the outbound queue, it consumes the handle, including
+when a later timeout reports `NotSent`. Validation, pre-canceled context, oversized
+frame, and queue-admission failures leave an unanswered handle usable. Partial or
+ambiguous writes return `AnswerError` with `OutcomeUnknown` and cannot be replayed.
+
+`Cancel()` and the configured handle expiry abandon a prompt locally. They send
+no response or cancellation and do not stop server work. The native
+`serverRequest/resolved` notification invalidates an unanswered matching handle
+using both its exact `requestId` and native thread identity. It can follow an answer
+or interruption and does not establish success. The first admitted answer or
+terminal signal wins; resolution does not retract an already admitted response.
+There is no invented generic cancellation method.
+
+Slow consumers cannot block ordinary responses or notifications. Queue or active
+request exhaustion terminates the connection explicitly with
+`ErrRequestOverflow` (also `ErrLimit`), invalidating handles and pending calls;
+requests are never silently discarded or automatically denied. Buffered requests
+may already be expired/resolved when read. Check handle status before showing a
+prompt and use `Done()` to dismiss stale UI. Closing the client closes the request
+queue and invalidates every pending handle without waiting for consumer code.
+
 ## Cancellation and errors
 
 A context timeout cancels local waiting. It does not stop server execution or send
@@ -215,6 +272,8 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 - Incoming and outgoing frame payload: 8 MiB, excluding newline
 - Queued outbound frames: 32; pending calls: 128
 - Active local subscriptions: 32; queued events per subscriber: 128
+- Active reverse requests: 128; queued reverse requests: 32
+- Unanswered handle lifetime: 5 minutes (local expiry, no protocol cancellation)
 - Diagnostic tail: 64 KiB; all stderr content is replaced with redaction markers
 - Every call, including initialization: at most 30 seconds unless configured
 - A blocked write: 10 seconds
@@ -231,7 +290,7 @@ but caller callbacks never do. Stderr is drained independently of the reader.
 
 `Close()` is concurrent-safe and idempotent. It closes stdin, waits for graceful
 exit, then kills and reaps only the owned child. It closes all owned pipe ends and
-settles pending calls. A child exit is detected even if an inherited output pipe
+settles pending calls and reverse-request handles. A child exit is detected even if an inherited output pipe
 remains open. It does not kill descendants, process groups, or an existing daemon.
 `Done()` signals connection termination; `Err()` gives the terminal cause. A rare
 OS failure to reap before the shutdown deadline returns `ErrShutdownTimeout`;
@@ -250,7 +309,8 @@ python3 docs/protocol/verify_inventory.py
 
 Tests launch only synthetic helper processes and never require an account or call
 a model. [Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
-and [ticket 03 evidence](docs/evidence/ticket-03.md) record tested scenarios.
+[ticket 03](docs/evidence/ticket-03.md), and [ticket 04 evidence](docs/evidence/ticket-04.md)
+record tested scenarios.
 [Official testing patterns](docs/protocol/testing-patterns.md) distinguishes
 app-server harnesses from the TypeScript SDK's `codex exec` transport.
 

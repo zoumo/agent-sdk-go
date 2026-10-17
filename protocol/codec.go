@@ -249,7 +249,7 @@ func marshalUnion(unknown json.RawMessage, variants ...any) ([]byte, error) {
 	return json.Marshal(selected)
 }
 
-func inspectUnion(data []byte) (kind, tag string, fields map[string]json.RawMessage, err error) {
+func inspectUnion(data []byte, discriminator ...string) (kind, tag string, fields map[string]json.RawMessage, err error) {
 	if err = validateJSONDocument(data); err != nil {
 		return
 	}
@@ -262,14 +262,22 @@ func inspectUnion(data []byte) (kind, tag string, fields map[string]json.RawMess
 		kind = "string"
 	case '[':
 		kind = "array"
+	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		// The generated integer branch decodes directly into int64/uint64;
+		// floating point and overflowing values cannot change native IDs.
+		kind = "number"
 	case '{':
 		kind = "object"
 		if err = json.Unmarshal(data, &fields); err != nil {
 			return
 		}
-		if raw, found := fields["type"]; found {
+		key := "type"
+		if len(discriminator) > 0 {
+			key = discriminator[0]
+		}
+		if raw, found := fields[key]; found {
 			if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-				err = fmt.Errorf("protocol: null union type discriminator")
+				err = fmt.Errorf("protocol: null union %s discriminator", key)
 				return
 			}
 			err = json.Unmarshal(raw, &tag)

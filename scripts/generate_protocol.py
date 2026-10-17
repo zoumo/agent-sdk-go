@@ -25,7 +25,14 @@ ROOTS = ['InitializeParams', 'InitializeResponse', 'v2/ThreadStartParams',
          'v2/TurnInterruptParams', 'v2/TurnInterruptResponse',
          'v2/TurnStartedNotification', 'v2/TurnCompletedNotification',
          'v2/ItemStartedNotification', 'v2/ItemCompletedNotification',
-         'v2/AgentMessageDeltaNotification', 'v2/ErrorNotification']
+         'v2/AgentMessageDeltaNotification', 'v2/ErrorNotification',
+         'CommandExecutionRequestApprovalParams', 'CommandExecutionRequestApprovalResponse',
+         'FileChangeRequestApprovalParams', 'FileChangeRequestApprovalResponse',
+         'PermissionsRequestApprovalParams', 'PermissionsRequestApprovalResponse',
+         'ToolRequestUserInputParams', 'ToolRequestUserInputResponse',
+         'ApplyPatchApprovalParams', 'ApplyPatchApprovalResponse',
+         'ExecCommandApprovalParams', 'ExecCommandApprovalResponse',
+         'v2/ServerRequestResolvedNotification']
 SNAPSHOT = ROOT / 'protocol/schema.json'
 if len(sys.argv) > 1:
     raw = pathlib.Path(sys.argv[1]).read_bytes()
@@ -172,15 +179,31 @@ def object_type(name, node):
 def union_type(name, node):
     variants = node.get('oneOf', node.get('anyOf'))
     fields = []
+    string_variants = [branch for branch in variants if branch.get('type') == 'string']
+    object_variants = [branch for branch in variants if branch.get('type') == 'object']
+    tag_name = next((key for key in ('type', 'kind') if object_variants and all(
+        key in branch.get('required', []) and
+        len(branch.get('properties', {}).get(key, {}).get('enum', [])) == 1
+        for branch in object_variants)), 'type')
+    # Native approval unions interleave several string enum branches with object
+    # branches. They share one Go string variant, with the union of enum values.
+    string_seen = False
     for i, branch in enumerate(variants):
         typ = branch.get('type')
         if typ == 'string':
+            if string_seen:
+                continue
+            string_seen = True
             bname = name + 'Value'
-            if 'enum' in branch:
-                register(bname, branch)
+            if all('enum' in variant for variant in string_variants):
+                register(bname, branch if len(string_variants) == 1 else
+                         {'type': 'string', 'enum': list(dict.fromkeys(
+                             value for variant in string_variants for value in variant['enum']))})
             else:
                 bname = 'string'
             fields.append(('Value', bname, 'string', '', branch))
+        elif typ == 'integer':
+            fields.append(('Integer', type_of(branch, name + 'Integer'), 'number', '', branch))
         elif typ == 'array':
             bname = type_of(branch, name + 'Items')
             fields.append(('Items', bname, 'array', '', branch))
@@ -190,8 +213,8 @@ def union_type(name, node):
             if fname == 'Unknown':
                 fname = 'UnknownVariant'
             props = branch.get('properties', {})
-            if 'type' in props and len(props['type'].get('enum', [])) == 1:
-                fields.append((fname, bname, 'tag', props['type']['enum'][0], branch))
+            if tag_name in props and len(props[tag_name].get('enum', [])) == 1:
+                fields.append((fname, bname, 'tag', props[tag_name]['enum'][0], branch))
             else:
                 req = branch.get('required', [])
                 if len(req) != 1:
@@ -205,12 +228,20 @@ def union_type(name, node):
     for field, typ, *_ in fields:
         code += f'\t{field} *{typ}\n'
     code += '\t// Unknown preserves an unrecognized future variant as raw JSON.\n\tUnknown json.RawMessage\n}\n'
-    code += f'func (v {name}) MarshalJSON() ([]byte, error) {{\n\treturn marshalUnion(v.Unknown'
+    numeric = any(kind == 'number' for _, _, kind, _, _ in fields)
+    marshal = 'data, err := ' if numeric else 'return '
+    code += f'func (v {name}) MarshalJSON() ([]byte, error) {{\n\t{marshal}marshalUnion(v.Unknown'
     for field, *_ in fields:
         code += ', v.' + field
-    code += ')\n}\n'
+    code += ')\n'
+    if numeric:
+        # An integer union (notably native RequestId) must not use its raw escape
+        # hatch to emit floats, out-of-range integers, null, or unrelated kinds.
+        code += f'\tif err != nil {{ return nil, err }}\n\tvar checked {name}\n\tif err := checked.UnmarshalJSON(data); err != nil {{ return nil, err }}\n\treturn data, nil\n'
+    code += '}\n'
     code += f'func (v *{name}) UnmarshalJSON(data []byte) error {{\n'
-    code += f'\tvar out {name}\n\tkind, tag, fields, err := inspectUnion(data)\n\tif err != nil {{ return err }}\n\t_, _, _ = kind, tag, fields\n'
+    tag_arg = ', ' + json.dumps(tag_name) if tag_name != 'type' else ''
+    code += f'\tvar out {name}\n\tkind, tag, fields, err := inspectUnion(data{tag_arg})\n\tif err != nil {{ return err }}\n\t_, _, _ = kind, tag, fields\n'
     has_tag = any(k == 'tag' for _, _, k, _, _ in fields)
     allowed_kinds = sorted(set('object' if k in ('key', 'tag') else k for _, _, k, _, _ in fields))
     code += '\tif ' + ' && '.join('kind != ' + json.dumps(k) for k in allowed_kinds) + ' { return fmt.Errorf("protocol: invalid JSON kind for ' + name + '") }\n'
@@ -221,10 +252,10 @@ def union_type(name, node):
             code += '\t\tif fields[' + json.dumps(key) + '] != nil { matches++ }\n'
         code += '\t\tif matches > 1 || len(fields) == 0 { return fmt.Errorf("protocol: ambiguous or empty external union object") }\n\t}\n'
     for field, typ, kind, value, _ in fields:
-        cond = {'string': 'kind == "string"', 'array': 'kind == "array"', 'tag': 'kind == "object" && tag == ' + json.dumps(value), 'key': 'kind == "object" && fields[' + json.dumps(value) + '] != nil'}[kind]
+        cond = {'string': 'kind == "string"', 'number': 'kind == "number"', 'array': 'kind == "array"', 'tag': 'kind == "object" && tag == ' + json.dumps(value), 'key': 'kind == "object" && fields[' + json.dumps(value) + '] != nil'}[kind]
         code += f'\tif {cond} {{\n\t\tvar value {typ}\n\t\tif err := json.Unmarshal(data, &value); err != nil {{ return err }}\n\t\tout.{field} = &value\n\t\t*v = out\n\t\treturn nil\n\t}}\n'
     if has_tag:
-        code += '\tif kind == "object" && tag == "" { return fmt.Errorf("protocol: missing union type discriminator") }\n'
+        code += '\tif kind == "object" && tag == "" { return fmt.Errorf("protocol: missing union ' + tag_name + ' discriminator") }\n'
     code += '\tout.Unknown = append(json.RawMessage(nil), data...)\n\t*v = out\n\treturn nil\n}\n'
     return code
 

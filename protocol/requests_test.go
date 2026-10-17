@@ -1,0 +1,146 @@
+package protocol_test
+
+import (
+	"encoding/json"
+	"math"
+	"reflect"
+	"testing"
+
+	"github.com/zoumo/codex-sdk-go/protocol"
+)
+
+func TestServerRequestResolvedPreservesNativeIDKinds(t *testing.T) {
+	for _, raw := range []string{`"42"`, `42`, `""`, `0`, `-42`, `9007199254740993`, `9223372036854775807`, `-9223372036854775808`} {
+		t.Run(raw, func(t *testing.T) {
+			var resolved protocol.ServerRequestResolvedNotification
+			schemaRoundTrip(t, &resolved, `{"threadId":"thread-original","requestId":`+raw+`,"futureMember":{"exact":9007199254740993}}`)
+			if (resolved.RequestID.Value != nil) != (raw[0] == '"') ||
+				(resolved.RequestID.Integer != nil) != (raw[0] != '"') || len(resolved.RequestID.Unknown) != 0 {
+				t.Fatalf("wrong native ID variant: %#v", resolved.RequestID)
+			}
+		})
+	}
+	stringID := protocol.RequestID{Value: protocol.Ptr("42")}
+	integerID := protocol.RequestID{Integer: protocol.Ptr(int64(42))}
+	stringWire, err := json.Marshal(stringID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	integerWire, err := json.Marshal(integerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stringWire) != `"42"` || string(integerWire) != `42` {
+		t.Fatalf("equal-text string and integer IDs collapsed: %s / %s", stringWire, integerWire)
+	}
+	for _, n := range []int64{math.MinInt64, math.MaxInt64, 9007199254740993} {
+		wire, err := json.Marshal(protocol.RequestID{Integer: protocol.Ptr(n)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded protocol.RequestID
+		if err := json.Unmarshal(wire, &decoded); err != nil || decoded.Integer == nil || *decoded.Integer != n {
+			t.Fatalf("integer precision changed for %d: %#v, %v", n, decoded, err)
+		}
+	}
+}
+
+func TestRequestIDRejectsInvalidNativeValues(t *testing.T) {
+	for _, raw := range []string{`null`, `true`, `false`, `[]`, `{}`, `1.0`, `1e0`, `1.5`, `9223372036854775808`, `-9223372036854775809`, `"\ud800"`, `"\udc00"`} {
+		t.Run(raw, func(t *testing.T) {
+			original := protocol.RequestID{Value: protocol.Ptr("unchanged")}
+			decoded := original
+			if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
+				t.Fatalf("accepted invalid native request ID %s", raw)
+			}
+			if !reflect.DeepEqual(decoded, original) {
+				t.Fatal("failed decode modified target")
+			}
+			if _, err := json.Marshal(protocol.RequestID{Unknown: json.RawMessage(raw)}); err == nil {
+				t.Fatalf("raw escape hatch accepted invalid native request ID %s", raw)
+			}
+		})
+	}
+	for _, id := range []protocol.RequestID{
+		{},
+		{Value: protocol.Ptr("42"), Integer: protocol.Ptr(int64(42))},
+		{Integer: protocol.Ptr(int64(42)), Unknown: json.RawMessage(`42`)},
+	} {
+		if _, err := json.Marshal(id); err == nil {
+			t.Fatalf("accepted empty or ambiguous request ID: %#v", id)
+		}
+	}
+	for _, raw := range []string{`{"threadId":"t"}`, `{"requestId":42}`, `{"threadId":"t","requestId":null}`} {
+		var resolved protocol.ServerRequestResolvedNotification
+		if err := json.Unmarshal([]byte(raw), &resolved); err == nil {
+			t.Fatalf("accepted incomplete resolved notification %s", raw)
+		}
+	}
+}
+
+func TestApprovalNativeDecisionVariants(t *testing.T) {
+	for _, raw := range []string{
+		`"accept"`, `"acceptForSession"`, `"decline"`, `"cancel"`,
+		`{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["git","status"]}}`,
+		`{"applyNetworkPolicyAmendment":{"network_policy_amendment":{"action":"allow","host":"example.invalid"}}}`,
+	} {
+		t.Run("command/"+raw, func(t *testing.T) {
+			schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalResponse), `{"decision":`+raw+`}`)
+		})
+	}
+	for _, raw := range []string{`"accept"`, `"acceptForSession"`, `"decline"`, `"cancel"`} {
+		t.Run("file/"+raw, func(t *testing.T) {
+			schemaRoundTrip(t, new(protocol.FileChangeRequestApprovalResponse), `{"decision":`+raw+`}`)
+		})
+	}
+	for _, raw := range []string{
+		`"approved"`, `"approved_for_session"`, `"approved_mcp_policy_amendment"`, `"timed_out"`, `"abort"`,
+		`{"approved_execpolicy_amendment":{"proposed_execpolicy_amendment":["git","status"]}}`,
+		`{"network_policy_amendment":{"network_policy_amendment":{"action":"deny","host":"example.invalid"}}}`,
+		`{"denied":{"rejection":"Needs a narrower command"}}`,
+	} {
+		t.Run("legacy/"+raw, func(t *testing.T) {
+			schemaRoundTrip(t, new(protocol.ApplyPatchApprovalResponse), `{"decision":`+raw+`}`)
+			schemaRoundTrip(t, new(protocol.ExecCommandApprovalResponse), `{"decision":`+raw+`}`)
+		})
+	}
+	// Unknown decision values and fields retain the package's forward-compatible
+	// model policy. Runtime handling must still be chosen explicitly by callers.
+	schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalResponse), `{"decision":{"futureDecision":{"exact":9007199254740993}},"futureMember":false}`)
+}
+
+func TestApprovalAndInputOptionalNativeFields(t *testing.T) {
+	for _, raw := range []string{
+		`{"itemId":"item","threadId":"thread","turnId":"turn","startedAtMs":0}`,
+		`{"itemId":"item","threadId":"thread","turnId":"turn","startedAtMs":0,"approvalId":null,"command":null,"reason":null,"availableDecisions":[]}`,
+		`{"itemId":"item","threadId":"thread","turnId":"turn","startedAtMs":9007199254740993,"approvalId":"callback","kind":"writeStdin","command":"","futureMember":false}`,
+	} {
+		schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalParams), raw)
+	}
+	for _, raw := range []string{
+		`{"permissions":{}}`,
+		`{"permissions":{},"scope":"turn","strictAutoReview":false}`,
+		`{"permissions":{"network":{"enabled":true}},"scope":"session","strictAutoReview":null}`,
+	} {
+		schemaRoundTrip(t, new(protocol.PermissionsRequestApprovalResponse), raw)
+	}
+	schemaRoundTrip(t, new(protocol.ToolRequestUserInputParams), `{"itemId":"i","threadId":"t","turnId":"u","isBlocking":false,"autoResolutionMs":null,"questions":[{"id":"question-1","header":"Choose","question":"Which?","isOther":false,"isSecret":false,"options":null}]}`)
+	schemaRoundTrip(t, new(protocol.ToolRequestUserInputResponse), `{"answers":{"question-1":{"answers":["","arbitrary text"]},"question-2":{"answers":[]}},"futureMember":9007199254740993}`)
+}
+
+func TestPermissionSpecialPathUsesKindDiscriminator(t *testing.T) {
+	for _, raw := range []string{
+		`{"kind":"root"}`, `{"kind":"minimal"}`, `{"kind":"tmpdir"}`, `{"kind":"slash_tmp"}`,
+		`{"kind":"project_roots","subpath":null}`,
+		`{"kind":"unknown","path":"future-special","subpath":"relative"}`,
+		`{"kind":"future_kind","futureMember":9007199254740993}`,
+	} {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), raw)
+	}
+	for _, raw := range []string{`{}`, `{"type":"root"}`, `{"kind":null}`, `{"kind":42}`, `{"kind":"unknown"}`} {
+		var value protocol.FileSystemSpecialPath
+		if err := json.Unmarshal([]byte(raw), &value); err == nil {
+			t.Fatalf("accepted invalid native kind-discriminated path %s", raw)
+		}
+	}
+}

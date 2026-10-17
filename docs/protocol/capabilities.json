@@ -197,8 +197,8 @@
     {
       "kind": "client_request",
       "method": "thread/start",
-      "support": "partial",
-      "scope": "Complete selected experimental-schema request/result closure, including unknown fields and union variants; raw notification subscriptions are available, but interactive reverse-request answers are not.",
+      "support": "supported",
+      "scope": "Complete selected experimental-schema native request/result closure, including unknown fields and union variants; raw/typed event observation and explicit approval/user-input answers are available. Other capability-dependent workflows remain uncertified.",
       "source_variant": "ThreadStart",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 551,
@@ -232,7 +232,7 @@
       "kind": "client_request",
       "method": "thread/resume",
       "support": "partial",
-      "scope": "Complete experimental-schema params/results with strict supplied native-ID validation; no fallback creation, reconnect, replay, or SDK persistence. Native alternate-ID history/path workflows are intentionally rejected on mismatch. Interactive reverse-request answers remain unavailable.",
+      "scope": "Complete experimental-schema params/results with strict supplied native-ID validation; no fallback creation, reconnect, replay, or SDK persistence. Native alternate-ID history/path workflows are intentionally rejected on mismatch. Explicit approval/user-input answers are available; other capability-dependent workflows remain uncertified.",
       "source_variant": "ThreadResume",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 557,
@@ -1520,8 +1520,8 @@
     {
       "kind": "client_request",
       "method": "thread/read",
-      "support": "partial",
-      "scope": "Complete selected experimental-schema request/result closure, including unknown fields and union variants; raw notification subscriptions are available, but interactive reverse-request answers are not.",
+      "support": "supported",
+      "scope": "Complete selected experimental-schema native request/result closure, including unknown fields and union variants; raw/typed event observation and explicit approval/user-input answers are available. Other capability-dependent workflows remain uncertified.",
       "source_variant": "ThreadRead",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 846,
@@ -2496,8 +2496,8 @@
     {
       "kind": "client_request",
       "method": "turn/start",
-      "support": "partial",
-      "scope": "Native typed parameters and response, with explicit pre-start subscriptions. Early/stale/interleaved events never replace response identities. No replay or implicit interrupt. Reverse-request workflows remain unsupported.",
+      "support": "supported",
+      "scope": "Native typed parameters and response, with explicit pre-start subscriptions. Early/stale/interleaved events never replace response identities. No replay or implicit interrupt. Explicit approval/user-input answers are available; no automatic policy decisions or turn runner. Other capability-dependent workflows remain uncertified.",
       "source_variant": "TurnStart",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1032,
@@ -4493,8 +4493,8 @@
     {
       "kind": "server_request",
       "method": "item/commandExecution/requestApproval",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "supported",
+      "scope": "Complete pinned native params/results, immutable raw payload and exact tagged original ID; bounded pull reception and explicit one-shot result/error answers. No automatic approval, denial, or policy decision.",
       "source_variant": "CommandExecutionRequestApproval",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1765,
@@ -4502,9 +4502,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::CommandExecutionRequestApprovalParams",
@@ -4520,8 +4527,8 @@
     {
       "kind": "server_request",
       "method": "item/fileChange/requestApproval",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "supported",
+      "scope": "Complete pinned native params/results, immutable raw payload and exact tagged original ID; bounded pull reception and explicit one-shot result/error answers. No automatic approval, denial, or policy decision.",
       "source_variant": "FileChangeRequestApproval",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1772,
@@ -4529,9 +4536,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::FileChangeRequestApprovalParams",
@@ -4547,8 +4561,8 @@
     {
       "kind": "server_request",
       "method": "item/tool/requestUserInput",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "supported",
+      "scope": "Complete pinned native params/results, immutable raw payload and exact tagged original ID; bounded pull reception and explicit one-shot result/error answers. No automatic approval, denial, or policy decision.",
       "source_variant": "ToolRequestUserInput",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1778,
@@ -4556,9 +4570,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ToolRequestUserInputParams",
@@ -4574,8 +4595,8 @@
     {
       "kind": "server_request",
       "method": "mcpServer/elicitation/request",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "partial",
+      "scope": "Raw bounded Requests reception and caller-selected one-shot result/error responses only. No typed payload, dedicated endpoint workflow evidence, policy, or capability certification.",
       "source_variant": "McpServerElicitationRequest",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1784,
@@ -4601,8 +4622,8 @@
     {
       "kind": "server_request",
       "method": "item/permissions/requestApproval",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "supported",
+      "scope": "Complete pinned native params/results, immutable raw payload and exact tagged original ID; bounded pull reception and explicit one-shot result/error answers. No automatic approval, denial, or policy decision.",
       "source_variant": "PermissionsRequestApproval",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1790,
@@ -4610,9 +4631,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::PermissionsRequestApprovalParams",
@@ -4628,8 +4656,8 @@
     {
       "kind": "server_request",
       "method": "item/tool/call",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "partial",
+      "scope": "Raw bounded Requests reception and caller-selected one-shot result/error responses only. No typed payload, dedicated endpoint workflow evidence, policy, or capability certification.",
       "source_variant": "DynamicToolCall",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1796,
@@ -4655,8 +4683,8 @@
     {
       "kind": "server_request",
       "method": "account/chatgptAuthTokens/refresh",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "partial",
+      "scope": "Raw bounded Requests reception and caller-selected one-shot result/error responses only. No typed payload, dedicated endpoint workflow evidence, policy, or capability certification.",
       "source_variant": "ChatgptAuthTokensRefresh",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1801,
@@ -4682,8 +4710,8 @@
     {
       "kind": "server_request",
       "method": "attestation/generate",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "partial",
+      "scope": "Raw bounded Requests reception and caller-selected one-shot result/error responses only. No typed payload, dedicated endpoint workflow evidence, policy, or capability certification.",
       "source_variant": "AttestationGenerate",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1807,
@@ -4709,8 +4737,8 @@
     {
       "kind": "server_request",
       "method": "currentTime/read",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "partial",
+      "scope": "Raw bounded Requests reception and caller-selected one-shot result/error responses only. No typed payload, dedicated endpoint workflow evidence, policy, or capability certification.",
       "source_variant": "CurrentTimeRead",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1814,
@@ -4733,8 +4761,8 @@
     {
       "kind": "server_request",
       "method": "applyPatchApproval",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "supported",
+      "scope": "Complete pinned native params/results, immutable raw payload and exact tagged original ID; bounded pull reception and explicit one-shot result/error answers. No automatic approval, denial, or policy decision. Legacy schemas do not establish production server emission.",
       "source_variant": "ApplyPatchApproval",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1822,
@@ -4742,9 +4770,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v1::ApplyPatchApprovalParams",
@@ -4760,8 +4795,8 @@
     {
       "kind": "server_request",
       "method": "execCommandApproval",
-      "support": "unsupported",
-      "scope": "No answer-handle API; receiving a server request terminates this slice with an explicit unsupported-request error.",
+      "support": "supported",
+      "scope": "Complete pinned native params/results, immutable raw payload and exact tagged original ID; bounded pull reception and explicit one-shot result/error answers. No automatic approval, denial, or policy decision. Legacy schemas do not establish production server emission.",
       "source_variant": "ExecCommandApproval",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1828,
@@ -4769,9 +4804,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v1::ExecCommandApprovalParams",
@@ -5909,8 +5951,8 @@
     {
       "kind": "server_notification",
       "method": "serverRequest/resolved",
-      "support": "partial",
-      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
+      "support": "supported",
+      "scope": "Typed and raw notification delivery; invalidates an unanswered handle only for exact tagged requestId and native thread identity (threadId, or legacy conversationId). First answer admission or terminal signal wins. A resolution is not execution success; no generic cancel RPC is invented.",
       "source_variant": "ServerRequestResolved",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1976,
@@ -5918,9 +5960,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ServerRequestResolvedNotification",
@@ -7060,10 +7109,12 @@
       "evidence": {
         "unit": [],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket04-contract-mock"
         ],
         "race": [
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket04-contract-race"
         ],
         "live": []
       }
@@ -7077,10 +7128,12 @@
       "evidence": {
         "unit": [],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket04-contract-mock"
         ],
         "race": [
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket04-contract-race"
         ],
         "live": []
       }
@@ -7094,10 +7147,12 @@
       "evidence": {
         "unit": [],
         "mock": [
-          "ticket01-contract-mock"
+          "ticket01-contract-mock",
+          "ticket04-contract-mock"
         ],
         "race": [
-          "ticket01-contract-race"
+          "ticket01-contract-race",
+          "ticket04-contract-race"
         ],
         "live": []
       }
@@ -7281,14 +7336,21 @@
     },
     {
       "name": "server-request-resolution",
-      "support": "unsupported",
+      "support": "supported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1976,
-      "description": "serverRequest/resolved is a server notification, not a generic client-side cancellation method. No reverse-request handles in this slice.",
+      "description": "serverRequest/resolved matches native threadId and exact tagged requestId to an unanswered handle. Local Cancel and expiry send nothing; an admitted response cannot be retracted. No invented cancellation method or success inference.",
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket04-model-unit"
+        ],
+        "mock": [
+          "ticket04-contract-mock"
+        ],
+        "race": [
+          "ticket04-model-race",
+          "ticket04-contract-race"
+        ],
         "live": []
       }
     },
@@ -7336,7 +7398,7 @@
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 55,
-      "description": "Native flag exists, but answering attestation/generate is unsupported. Do not enable it for this slice.",
+      "description": "Native flag and raw attestation/generate request/answer transport exist, but no attestation implementation or certified workflow. Do not enable without a caller-provided compatible implementation.",
       "evidence": {
         "unit": [],
         "mock": [],
@@ -7349,7 +7411,7 @@
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 60,
-      "description": "Native capability fields exist, but interactive elicitation replies are unsupported.",
+      "description": "Native capability fields and raw request/answer transport exist, but typed elicitation and its interactive workflow are not certified.",
       "evidence": {
         "unit": [],
         "mock": [],

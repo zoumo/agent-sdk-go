@@ -128,3 +128,34 @@ method transcripts after errors, mismatches, confirmed dispatch cancellation,
 timeout, close, and connection loss. No upstream test suite was run or copied;
 real-server persistence, active-turn continuation, and live-model behavior remain
 unverified.
+
+## Ticket 04: server requests, answers, and resolution
+
+The Rust [command approval case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_start.rs#L3090-L3155)
+captures an incoming request's native ID, answers that ID with the native command
+decision, and checks the matching `serverRequest/resolved` before turn completion.
+The [file approval case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_start.rs#L3953-L4009)
+similarly requires resolution before file-item completion. The
+[user-input case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/request_user_input.rs#L124-L174)
+keeps question IDs in an answer map and checks thread, turn, item, blocking mode,
+and the unchanged native request ID. The
+[permissions case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/request_permissions.rs#L345-L418)
+returns native granted-permission profiles rather than an invented boolean
+approval. Its resolution matcher ignores other request IDs in the same thread.
+
+The [interrupt case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_interrupt.rs#L283-L328)
+interrupts a turn with an outstanding command approval, then checks resolution of
+that request before the interrupted terminal event. Therefore resolution is a
+lifecycle signal, not proof of a successful answer or approval. No generic
+request-cancellation frame is inferred from it.
+
+These source patterns inform independently authored Go fake-peer scenarios.
+Separately, `protocol/requests_test.go` checks exact signed-64-bit/string request
+IDs, equal-text IDs of different kinds, numeric range/fraction rejection, native
+modern and legacy decision shapes, permission-path `kind` discriminators,
+optional/null fields, and unknown-field preservation. The generated schema
+round trips exercise every included model and declared union branch. Those
+model tests do not show that a real server emits a given request or accepts a
+particular answer. No official suite or real Codex binary was executed for this
+work; the existing TypeScript exec/Python app-server seam distinctions still
+apply.

@@ -219,6 +219,83 @@
       "sha256": "8fb81cfcce42f9c1e63846c4f80dde67ed0040c3ec8c1ed5a8a2f694565ae022",
       "bytes": 17408,
       "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_unsubscribe.rs"
+    },
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/v2/item.rs",
+      "git_blob_sha": "04f68a3351c765d6c2be8d492b1a3cded43a22bb",
+      "sha256": "cf58812aafce8d213090d430b62585477351738b5a90354ed07be338cf9ad06d",
+      "bytes": 64865,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/item.rs"
+    },
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/v2/permissions.rs",
+      "git_blob_sha": "fd13791112ce3391801a7507d0ac9126b65ab46e",
+      "sha256": "fb60ae2f9babce22ca326b457c22b41e6fa24f71ad05429a8921074cc0ca5598",
+      "bytes": 28402,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/permissions.rs"
+    },
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/v2/notification.rs",
+      "git_blob_sha": "ca0e7753f3cb3c007e544b3507881b6cffeecacd",
+      "sha256": "c51b00e47732fe19e68110c42c4fe4212cc9bbbe20f252d6417e78a62b34afa7",
+      "bytes": 2473,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/notification.rs"
+    },
+    {
+      "path": "codex-rs/app-server/src/request_processors/thread_lifecycle.rs",
+      "git_blob_sha": "b0fa49b4babcc5802a9968ea26bc230add7cba17",
+      "sha256": "204a9b470a4ee86fbc7cdbc6737291a8dea678c562220153df4ccd57f4545ea4",
+      "bytes": 34305,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/request_processors/thread_lifecycle.rs"
+    },
+    {
+      "path": "codex-rs/app-server/src/thread_state.rs",
+      "git_blob_sha": "8cfbc00983aa042873cdd70c4b393dcb7d18cbe5",
+      "sha256": "a3f9d252d61c9a78c50db119c87796cec92a734971762c1ba013791af2556e33",
+      "bytes": 23440,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_state.rs"
+    },
+    {
+      "path": "codex-rs/app-server/src/bespoke_event_handling.rs",
+      "git_blob_sha": "d1b0ab89756d38579d0d976ee72a5ee80cc216f2",
+      "sha256": "32dc66a8a6d77412be5d6a9dc7db6d3383b7d0d8d54949de02503cade1774982",
+      "bytes": 155200,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/bespoke_event_handling.rs"
+    },
+    {
+      "path": "codex-rs/app-server/src/outgoing_message.rs",
+      "git_blob_sha": "961eccc2aad51cb17b3e9206ed95c34dab686c2e",
+      "sha256": "b16156e72d8a33a1087896bfd211b22094c3ef3e69a2331a7fed8c0530dd657a",
+      "bytes": 59336,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/outgoing_message.rs"
+    },
+    {
+      "path": "codex-rs/app-server/tests/suite/v2/request_permissions.rs",
+      "git_blob_sha": "fbd21f6c5a8dd7f20923f187495c8f3f5a8f0c18",
+      "sha256": "5f7b2fac6c1c80bb0bb34662bc833e37a8e1571db9021de726cbb1e05629fcf3",
+      "bytes": 17252,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/request_permissions.rs"
+    },
+    {
+      "path": "codex-rs/app-server/tests/suite/v2/request_user_input.rs",
+      "git_blob_sha": "bd52ef2fcb9c6339d27a8f7823bbc8e45ee421fb",
+      "sha256": "b9a89ddc91351fc7b6df69ce787f4b19ecf108c76291aad989c3e77dfc6e977e",
+      "bytes": 6382,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/request_user_input.rs"
+    },
+    {
+      "path": "codex-rs/app-server/tests/suite/v2/turn_interrupt.rs",
+      "git_blob_sha": "bdc17407781ac68a41d80ec1c78c780b16b447f7",
+      "sha256": "6b22552e82bd9bd9d94876bd0d533e2676795cc0aca513c27408eb2fa62dcdd5",
+      "bytes": 11179,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_interrupt.rs"
+    },
+    {
+      "path": "codex-rs/app-server/tests/suite/v2/turn_start.rs",
+      "git_blob_sha": "da6605b6d4b38796eab313dcdd7c54aa20230bf3",
+      "sha256": "dd48e868e7eb11c6ba9feed710f4bd48fc87e215a0c4212235a50ab3907743cb",
+      "bytes": 208299,
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_start.rs"
     }
   ],
   "derived_material": [
@@ -227,11 +304,11 @@
       "source_archive": "codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst",
       "archive_member": "json_schema[\"codex_app_server_protocol.schemas.json\"]",
       "extracted_aggregate_sha256": "7243ba241962af92ca60581f1a81808ebda4212a800f8b205f54703bcfd508c5",
-      "selection": "Transitive definition closure of the 20 exact roots listed in protocol/schema.json: initialization, thread start/read/resume/unsubscribe, turn start/interrupt, and six supported notifications.",
+      "selection": "Transitive definition closure of the 33 exact roots listed in protocol/schema.json: initialization, thread start/read/resume/unsubscribe, turn start/interrupt, six turn/item/error notifications, command/file/permissions approvals, tool user input, two legacy approvals, and serverRequest/resolved.",
       "generator": "scripts/generate_protocol.py",
       "output": "protocol/types_generated.go",
       "modifications": "Definitions extracted from upstream archive into a self-contained snapshot; Go bindings are independently generated and include unknown-field/union preservation and explicit optional values.",
-      "snapshot_sha256": "5cf0cfb3229b627d27994b808c4ad5b714d80bb6aca56b35159c1d6feeedf51a"
+      "snapshot_sha256": "6ded28b43afae0a5fa4f6b944458224f6286eacc51857e40425fcc8f9596778d"
     }
   ]
 }

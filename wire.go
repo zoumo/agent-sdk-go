@@ -99,20 +99,24 @@ func (c *Client) routeFrame(raw []byte) error {
 	errorRaw, hasError := f["error"]
 	if hasMethod {
 		var method string
-		if err = json.Unmarshal(methodRaw, &method); err != nil || method == "" {
+		if err = json.Unmarshal(methodRaw, &method); err != nil || method == "" || !validStringEscapes(methodRaw) {
 			return fmt.Errorf("%w: invalid method", ErrProtocol)
 		}
 		if hasResult || hasError {
 			return fmt.Errorf("%w: mixed request and response", ErrProtocol)
 		}
 		if hasID {
-			if _, err = ParseID(idRaw); err != nil {
+			id, err := ParseID(idRaw)
+			if err != nil {
 				return err
 			}
-			return fmt.Errorf("%w: %s", ErrUnsupportedRequest, method)
+			return c.receiveRequest(id, method, f["params"])
 		}
 		c.mu.Lock()
 		c.diag.Notifications = saturatingAdd(c.diag.Notifications, 1)
+		if method == "serverRequest/resolved" {
+			c.resolveRequestLocked(f["params"])
+		}
 		c.publishLocked(method, f["params"])
 		c.mu.Unlock()
 		return nil

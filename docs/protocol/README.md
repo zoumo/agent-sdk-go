@@ -40,7 +40,12 @@ membership flag is not an SDK support or server-runtime availability guarantee.
 `v2/TurnStart` and `v2/TurnInterrupt` parameter/response pairs, and six notification
 roots: `v2/TurnStartedNotification`, `v2/TurnCompletedNotification`,
 `v2/ItemStartedNotification`, `v2/ItemCompletedNotification`,
-`v2/AgentMessageDeltaNotification`, and `v2/ErrorNotification`, extracted
+`v2/AgentMessageDeltaNotification`, and `v2/ErrorNotification`. Ticket 04 adds
+the parameter/response roots for `CommandExecutionRequestApproval`,
+`FileChangeRequestApproval`, `PermissionsRequestApproval`,
+`ToolRequestUserInput`, `ApplyPatchApproval`, and `ExecCommandApproval`
+(all top-level schema definitions), plus
+`v2/ServerRequestResolvedNotification`. These 33 roots are extracted
 from the official experimental archive's
 `json_schema["codex_app_server_protocol.schemas.json"]` member.
 `protocol/types_generated.go` is independently generated from that snapshot by
@@ -49,13 +54,46 @@ Git blob before refreshing the snapshot. The snapshot and Go code are adaptation
 they are not an upstream OpenAI Go SDK. The Go representation adds explicit
 optional values and raw unknown-field/variant preservation. Annotation-only schema
 nodes, such as `outputSchema`, remain arbitrary JSON instead of an invented
-JSON-Schema model. The current closure has 117 definitions, generating 316 Go
-types and 581 synthetic model round-trip cases.
+JSON-Schema model. The current closure has 154 definitions, generating 397 Go
+types and 744 synthetic model round-trip cases. Mixed string/object approval
+decisions retain their native wire representations; permission-path variants
+retain their native `kind` discriminator. `RequestID` uses distinct string and
+signed 64-bit integer variants without passing numbers through floating point.
 
 The archive, extracted-aggregate checksum, paths, revision, Git blob IDs, and
 SHA-256 digests are in [sources.json](sources.json). SHA-256 values describe exact
 source bytes, without whitespace normalization. The stable schema is retained as
 an inspected source, not the source of the final generated bindings.
+
+## Server request resolution
+
+The pinned [request registry](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/common.rs#L1761-L1831)
+declares the four modern request methods `item/commandExecution/requestApproval`,
+`item/fileChange/requestApproval`, `item/permissions/requestApproval`, and
+`item/tool/requestUserInput`, plus deprecated `applyPatchApproval` and
+`execCommandApproval`. Model availability does not imply a feature is enabled
+by a server or that legacy methods are emitted by its current execution paths.
+
+The [resolved notification definition](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/notification.rs#L71-L77)
+contains only `threadId` and `requestId`. The [emitter](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L864-L888)
+sends the original native request ID to connections subscribed to that thread.
+The [response handlers](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/bespoke_event_handling.rs#L1632-L1684)
+emit resolution after their response wait finishes, including an error or an
+interrupted-turn transition, before applying the result. Thus `serverRequest/resolved`
+means that a pending server request has ceased to require an answer; it does not
+prove that the client approved it, that a command succeeded, or that a result was
+accepted. It has no native turn ID or resolution-reason member.
+
+Legacy approval parameters use `conversationId: ThreadId` in the
+[v1 definitions](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v1.rs#L141-L181).
+That field can provide thread identity for matching a received resolution, but
+source inspection did not find a current production sender/response handler for
+the legacy approval wire methods. Legacy resolution emission is not verified.
+
+The complete pinned method registries contain no generic request cancellation
+method or cancellation notification. `turn/interrupt` is an explicit native
+turn action, while approval decisions such as `cancel` are response values.
+Neither should be invented or sent as a side effect of canceling a local wait.
 
 ## Licensing
 

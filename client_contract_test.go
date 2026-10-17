@@ -63,6 +63,7 @@ func TestFakeChild(t *testing.T) {
 	var lateID json.RawMessage
 	turns := new(turnPeer)
 	threads := new(resumePeer)
+	requests := &requestPeer{transcript: transcript}
 	for scan.Scan() {
 		raw := append([]byte(nil), scan.Bytes()...)
 		_, _ = transcript.Write(append(raw, '\n'))
@@ -71,7 +72,7 @@ func TestFakeChild(t *testing.T) {
 		if json.Unmarshal(raw, &m) != nil {
 			os.Exit(81)
 		}
-		if threads.handle(mode, m, send) || turns.handle(mode, m, send) {
+		if requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
 			continue
 		}
 		switch m.Method {
@@ -401,14 +402,11 @@ func TestConnectionLossIsUnknown(t *testing.T) {
 	assertReaped(t, f.pid)
 }
 func TestMalformedFrames(t *testing.T) {
-	for _, method := range []string{"invalid-id", "null-id", "duplicate-id", "partial", "array", "trailing", "blank", "both", "bad-error", "oversized", "reverse"} {
+	for _, method := range []string{"invalid-id", "null-id", "duplicate-id", "partial", "array", "trailing", "blank", "both", "bad-error", "oversized"} {
 		t.Run(method, func(t *testing.T) {
 			f := startFake(t, "normal", codex.Limits{MaxFrameBytes: 4096})
 			err := f.c.Call(context.Background(), method, nil, nil)
 			cause := codex.ErrProtocol
-			if method == "reverse" {
-				cause = codex.ErrUnsupportedRequest
-			}
 			callError(t, err, codex.OutcomeUnknown, cause)
 			if method == "oversized" && !errors.Is(err, codex.ErrFrameTooLarge) {
 				t.Fatal(err)

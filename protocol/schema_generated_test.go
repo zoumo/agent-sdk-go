@@ -8,11 +8,98 @@ import (
 )
 
 func TestGeneratedSchemaRoundTrips(t *testing.T) {
+	t.Run("AdditionalPermissionProfile/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AdditionalPermissionProfile), "{}") })
+	t.Run("AdditionalPermissionProfile/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AdditionalPermissionProfile), "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ApplyPatchApprovalParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyPatchApprovalParams), "{\"callId\":\"synthetic-value\",\"conversationId\":\"synthetic-value\",\"fileChanges\":{\"sample\":{\"content\":\"synthetic-value\",\"type\":\"add\"}}}")
+	})
+	t.Run("ApplyPatchApprovalParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyPatchApprovalParams), "{\"callId\":\"synthetic-value\",\"conversationId\":\"synthetic-value\",\"fileChanges\":{\"sample\":{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"grantRoot\":\"synthetic-value\",\"reason\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ApplyPatchApprovalResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyPatchApprovalResponse), "{\"decision\":\"approved\"}")
+	})
+	t.Run("ApplyPatchApprovalResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyPatchApprovalResponse), "{\"decision\":\"approved\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("ClientInfo/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ClientInfo), "{\"name\":\"synthetic-value\",\"version\":\"synthetic-value\"}")
 	})
 	t.Run("ClientInfo/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ClientInfo), "{\"name\":\"synthetic-value\",\"title\":\"synthetic-value\",\"version\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("CommandExecutionApprovalDecision/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecision), "\"accept\"") })
+	t.Run("CommandExecutionApprovalDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecision), "\"acceptForSession\"")
+	})
+	t.Run("CommandExecutionApprovalDecision/2", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecision), "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("CommandExecutionApprovalDecision/3", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecision), "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("CommandExecutionApprovalDecision/4", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecision), "\"decline\"") })
+	t.Run("CommandExecutionApprovalDecision/5", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecision), "\"cancel\"") })
+	t.Run("CommandExecutionApprovalKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CommandExecutionApprovalKind), "\"command\"") })
+	t.Run("CommandExecutionRequestApprovalParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalParams), "{\"itemId\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("CommandExecutionRequestApprovalParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalParams), "{\"additionalPermissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalId\":\"synthetic-value\",\"availableDecisions\":[\"accept\"],\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"kind\":\"command\",\"networkApprovalContext\":{\"host\":\"synthetic-value\",\"protocol\":\"http\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"proposedExecpolicyAmendment\":[\"synthetic-value\"],\"proposedNetworkPolicyAmendments\":[{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("CommandExecutionRequestApprovalResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalResponse), "{\"decision\":\"accept\"}")
+	})
+	t.Run("CommandExecutionRequestApprovalResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionRequestApprovalResponse), "{\"decision\":\"accept\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ExecCommandApprovalParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ExecCommandApprovalParams), "{\"callId\":\"synthetic-value\",\"command\":[],\"conversationId\":\"synthetic-value\",\"cwd\":\"synthetic-value\",\"parsedCmd\":[]}")
+	})
+	t.Run("ExecCommandApprovalParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ExecCommandApprovalParams), "{\"approvalId\":\"synthetic-value\",\"callId\":\"synthetic-value\",\"command\":[\"synthetic-value\"],\"conversationId\":\"synthetic-value\",\"cwd\":\"synthetic-value\",\"parsedCmd\":[{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"reason\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ExecCommandApprovalResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ExecCommandApprovalResponse), "{\"decision\":\"approved\"}")
+	})
+	t.Run("ExecCommandApprovalResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ExecCommandApprovalResponse), "{\"decision\":\"approved\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileChange/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\"}")
+	})
+	t.Run("FileChange/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileChange/2", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChange), "{\"content\":\"synthetic-value\",\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileChange/3", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChange), "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"unified_diff\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileChangeApprovalDecision/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FileChangeApprovalDecision), "\"accept\"") })
+	t.Run("FileChangeApprovalDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChangeApprovalDecision), "\"acceptForSession\"")
+	})
+	t.Run("FileChangeApprovalDecision/2", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FileChangeApprovalDecision), "\"decline\"") })
+	t.Run("FileChangeApprovalDecision/3", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FileChangeApprovalDecision), "\"cancel\"") })
+	t.Run("FileChangeRequestApprovalParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChangeRequestApprovalParams), "{\"itemId\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("FileChangeRequestApprovalParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChangeRequestApprovalParams), "{\"grantRoot\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileChangeRequestApprovalResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChangeRequestApprovalResponse), "{\"decision\":\"accept\"}")
+	})
+	t.Run("FileChangeRequestApprovalResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileChangeRequestApprovalResponse), "{\"decision\":\"accept\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("GrantedPermissionProfile/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.GrantedPermissionProfile), "{}") })
+	t.Run("GrantedPermissionProfile/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.GrantedPermissionProfile), "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("InitializeCapabilities/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.InitializeCapabilities), "{}") })
 	t.Run("InitializeCapabilities/1", func(t *testing.T) {
@@ -30,6 +117,91 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("InitializeResponse/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.InitializeResponse), "{\"codexHome\":\"synthetic-value\",\"platformFamily\":\"synthetic-value\",\"platformOs\":\"synthetic-value\",\"userAgent\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("NetworkApprovalContext/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkApprovalContext), "{\"host\":\"synthetic-value\",\"protocol\":\"http\"}")
+	})
+	t.Run("NetworkApprovalContext/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkApprovalContext), "{\"host\":\"synthetic-value\",\"protocol\":\"http\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("NetworkPolicyAmendment/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkPolicyAmendment), "{\"action\":\"allow\",\"host\":\"synthetic-value\"}")
+	})
+	t.Run("NetworkPolicyAmendment/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkPolicyAmendment), "{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("NetworkPolicyRuleAction/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.NetworkPolicyRuleAction), "\"allow\"") })
+	t.Run("ParsedCommand/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
+	})
+	t.Run("ParsedCommand/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ParsedCommand/2", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"list_files\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ParsedCommand/3", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ParsedCommand/4", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("PermissionGrantScope/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.PermissionGrantScope), "\"turn\"") })
+	t.Run("PermissionsRequestApprovalParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.PermissionsRequestApprovalParams), "{\"cwd\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"permissions\":{},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("PermissionsRequestApprovalParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.PermissionsRequestApprovalParams), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"permissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("PermissionsRequestApprovalResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.PermissionsRequestApprovalResponse), "{\"permissions\":{}}")
+	})
+	t.Run("PermissionsRequestApprovalResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.PermissionsRequestApprovalResponse), "{\"permissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"scope\":\"turn\",\"strictAutoReview\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ReviewDecision/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReviewDecision), "\"approved\"") })
+	t.Run("ReviewDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ReviewDecision), "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ReviewDecision/2", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReviewDecision), "\"approved_for_session\"") })
+	t.Run("ReviewDecision/3", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ReviewDecision), "\"approved_mcp_policy_amendment\"")
+	})
+	t.Run("ReviewDecision/4", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ReviewDecision), "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ReviewDecision/5", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ReviewDecision), "{\"denied\":{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ReviewDecision/6", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReviewDecision), "\"timed_out\"") })
+	t.Run("ReviewDecision/7", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReviewDecision), "\"abort\"") })
+	t.Run("ToolRequestUserInputAnswer/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ToolRequestUserInputAnswer), "{\"answers\":[]}") })
+	t.Run("ToolRequestUserInputAnswer/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputAnswer), "{\"answers\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ToolRequestUserInputOption/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputOption), "{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\"}")
+	})
+	t.Run("ToolRequestUserInputOption/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputOption), "{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ToolRequestUserInputParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputParams), "{\"isBlocking\":false,\"itemId\":\"synthetic-value\",\"questions\":[],\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("ToolRequestUserInputParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputParams), "{\"autoResolutionMs\":7,\"isBlocking\":false,\"itemId\":\"synthetic-value\",\"questions\":[{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"question\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ToolRequestUserInputQuestion/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputQuestion), "{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"question\":\"synthetic-value\"}")
+	})
+	t.Run("ToolRequestUserInputQuestion/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputQuestion), "{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"question\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ToolRequestUserInputResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputResponse), "{\"answers\":{\"sample\":{\"answers\":[]}}}")
+	})
+	t.Run("ToolRequestUserInputResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ToolRequestUserInputResponse), "{\"answers\":{\"sample\":{\"answers\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("AbsolutePathBuf/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AbsolutePathBuf), "\"synthetic-value\"") })
 	t.Run("ActivePermissionProfile/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ActivePermissionProfile), "{\"id\":\"synthetic-value\"}")
@@ -44,6 +216,14 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.AdditionalContextEntry), "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("AdditionalContextKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AdditionalContextKind), "\"untrusted\"") })
+	t.Run("AdditionalFileSystemPermissions/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AdditionalFileSystemPermissions), "{}") })
+	t.Run("AdditionalFileSystemPermissions/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AdditionalFileSystemPermissions), "{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("AdditionalNetworkPermissions/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AdditionalNetworkPermissions), "{}") })
+	t.Run("AdditionalNetworkPermissions/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AdditionalNetworkPermissions), "{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("AgentMessageDelivery/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AgentMessageDelivery), "\"async\"") })
 	t.Run("AgentMessageDeltaNotification/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.AgentMessageDeltaNotification), "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
@@ -184,6 +364,44 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("ErrorNotification/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ErrorNotification), "{\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("FileSystemAccessMode/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FileSystemAccessMode), "\"read\"") })
+	t.Run("FileSystemPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\"}")
+	})
+	t.Run("FileSystemPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemPath/2", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemPath), "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemPath/3", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemPath), "{\"type\":\"special\",\"value\":{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSandboxEntry/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSandboxEntry), "{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\"}}")
+	})
+	t.Run("FileSystemSandboxEntry/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSandboxEntry), "{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPath/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"root\"}") })
+	t.Run("FileSystemSpecialPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPath/2", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"minimal\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPath/3", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"project_roots\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPath/4", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"tmpdir\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPath/5", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"slash_tmp\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPath/6", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPath), "{\"kind\":\"unknown\",\"path\":\"synthetic-value\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("FileUpdateChange/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.FileUpdateChange), "{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\"},\"path\":\"synthetic-value\"}")
 	})
@@ -304,6 +522,7 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.MultiAgentMode), "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("NetworkAccess/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.NetworkAccess), "\"restricted\"") })
+	t.Run("NetworkApprovalProtocol/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.NetworkApprovalProtocol), "\"http\"") })
 	t.Run("NonSteerableTurnKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.NonSteerableTurnKind), "\"review\"") })
 	t.Run("PatchApplyStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.PatchApplyStatus), "\"inProgress\"") })
 	t.Run("PatchChangeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.PatchChangeKind), "{\"type\":\"add\"}") })
@@ -335,6 +554,12 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("ReasoningSummary/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReasoningSummary), "\"auto\"") })
 	t.Run("ReasoningSummary/1", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReasoningSummary), "\"none\"") })
+	t.Run("RequestID/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.RequestID), "\"synthetic-value\"") })
+	t.Run("RequestID/1", func(t *testing.T) { schemaRoundTrip(t, new(protocol.RequestID), "7") })
+	t.Run("RequestPermissionProfile/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.RequestPermissionProfile), "{}") })
+	t.Run("RequestPermissionProfile/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.RequestPermissionProfile), "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("ResponseItem/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ResponseItem), "{\"content\":[],\"role\":\"synthetic-value\",\"type\":\"message\"}")
 	})
@@ -423,6 +648,12 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("SelectedCapabilityRoot/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.SelectedCapabilityRoot), "{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ServerRequestResolvedNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ServerRequestResolvedNotification), "{\"requestId\":\"synthetic-value\",\"threadId\":\"synthetic-value\"}")
+	})
+	t.Run("ServerRequestResolvedNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ServerRequestResolvedNotification), "{\"requestId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("SessionSource/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SessionSource), "\"cli\"") })
 	t.Run("SessionSource/1", func(t *testing.T) {
@@ -706,6 +937,82 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("WebSearchAction/4", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.WebSearchAction), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("CommandExecutionApprovalDecisionValue/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CommandExecutionApprovalDecisionValue), "\"accept\"")
+	})
+	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision), "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[]}}")
+	})
+	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision), "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision), "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}}")
+	})
+	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision), "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("AddFileChange/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AddFileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\"}")
+	})
+	t.Run("AddFileChange/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AddFileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("DeleteFileChange/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.DeleteFileChange), "{\"content\":\"synthetic-value\",\"type\":\"delete\"}")
+	})
+	t.Run("DeleteFileChange/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.DeleteFileChange), "{\"content\":\"synthetic-value\",\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("UpdateFileChange/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.UpdateFileChange), "{\"type\":\"update\",\"unified_diff\":\"synthetic-value\"}")
+	})
+	t.Run("UpdateFileChange/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.UpdateFileChange), "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"unified_diff\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ReadParsedCommand/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ReadParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
+	})
+	t.Run("ReadParsedCommand/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ReadParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ListFilesParsedCommand/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ListFilesParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"list_files\"}")
+	})
+	t.Run("ListFilesParsedCommand/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ListFilesParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"list_files\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("SearchParsedCommand/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SearchParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"search\"}")
+	})
+	t.Run("SearchParsedCommand/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SearchParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("UnknownParsedCommand/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.UnknownParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\"}")
+	})
+	t.Run("UnknownParsedCommand/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.UnknownParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ReviewDecisionValue/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReviewDecisionValue), "\"approved\"") })
+	t.Run("ApprovedExecpolicyAmendmentReviewDecision/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApprovedExecpolicyAmendmentReviewDecision), "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[]}}")
+	})
+	t.Run("ApprovedExecpolicyAmendmentReviewDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApprovedExecpolicyAmendmentReviewDecision), "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("NetworkPolicyAmendmentReviewDecision/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkPolicyAmendmentReviewDecision), "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}}")
+	})
+	t.Run("NetworkPolicyAmendmentReviewDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkPolicyAmendmentReviewDecision), "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("DeniedReviewDecision/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.DeniedReviewDecision), "{\"denied\":{\"rejection\":\"synthetic-value\"}}")
+	})
+	t.Run("DeniedReviewDecision/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.DeniedReviewDecision), "{\"denied\":{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("InputTextAgentMessageInputContent/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.InputTextAgentMessageInputContent), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
 	})
@@ -845,6 +1152,58 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("NamespaceDynamicToolSpec/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.NamespaceDynamicToolSpec), "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"namespace\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("PathFileSystemPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.PathFileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\"}")
+	})
+	t.Run("PathFileSystemPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.PathFileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("GlobPatternFileSystemPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.GlobPatternFileSystemPath), "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\"}")
+	})
+	t.Run("GlobPatternFileSystemPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.GlobPatternFileSystemPath), "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("SpecialFileSystemPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SpecialFileSystemPath), "{\"type\":\"special\",\"value\":{\"kind\":\"root\"}}")
+	})
+	t.Run("SpecialFileSystemPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SpecialFileSystemPath), "{\"type\":\"special\",\"value\":{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("RootFileSystemSpecialPath/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.RootFileSystemSpecialPath), "{\"kind\":\"root\"}") })
+	t.Run("RootFileSystemSpecialPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.RootFileSystemSpecialPath), "{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("MinimalFileSystemSpecialPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.MinimalFileSystemSpecialPath), "{\"kind\":\"minimal\"}")
+	})
+	t.Run("MinimalFileSystemSpecialPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.MinimalFileSystemSpecialPath), "{\"kind\":\"minimal\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("KindFileSystemSpecialPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.KindFileSystemSpecialPath), "{\"kind\":\"project_roots\"}")
+	})
+	t.Run("KindFileSystemSpecialPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.KindFileSystemSpecialPath), "{\"kind\":\"project_roots\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("TmpdirFileSystemSpecialPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TmpdirFileSystemSpecialPath), "{\"kind\":\"tmpdir\"}")
+	})
+	t.Run("TmpdirFileSystemSpecialPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TmpdirFileSystemSpecialPath), "{\"kind\":\"tmpdir\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("SlashTmpFileSystemSpecialPath/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SlashTmpFileSystemSpecialPath), "{\"kind\":\"slash_tmp\"}")
+	})
+	t.Run("SlashTmpFileSystemSpecialPath/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SlashTmpFileSystemSpecialPath), "{\"kind\":\"slash_tmp\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("FileSystemSpecialPathVariant5/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPathVariant5), "{\"kind\":\"unknown\",\"path\":\"synthetic-value\"}")
+	})
+	t.Run("FileSystemSpecialPathVariant5/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.FileSystemSpecialPathVariant5), "{\"kind\":\"unknown\",\"path\":\"synthetic-value\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("InputTextFunctionCallOutputContentItem/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.InputTextFunctionCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
@@ -1289,6 +1648,43 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("OtherWebSearchAction/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.OtherWebSearchAction), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment), "{\"execpolicy_amendment\":[]}")
+	})
+	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment), "{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}")
+	})
+	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("AddFileChangeType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AddFileChangeType), "\"add\"") })
+	t.Run("DeleteFileChangeType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.DeleteFileChangeType), "\"delete\"") })
+	t.Run("UpdateFileChangeType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.UpdateFileChangeType), "\"update\"") })
+	t.Run("ReadParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReadParsedCommandType), "\"read\"") })
+	t.Run("ListFilesParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ListFilesParsedCommandType), "\"list_files\"") })
+	t.Run("SearchParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SearchParsedCommandType), "\"search\"") })
+	t.Run("UnknownParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.UnknownParsedCommandType), "\"unknown\"") })
+	t.Run("ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment), "{\"proposed_execpolicy_amendment\":[]}")
+	})
+	t.Run("ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment), "{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}")
+	})
+	t.Run("NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("DeniedReviewDecisionDenied/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.DeniedReviewDecisionDenied), "{\"rejection\":\"synthetic-value\"}")
+	})
+	t.Run("DeniedReviewDecisionDenied/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.DeniedReviewDecisionDenied), "{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("InputTextAgentMessageInputContentType/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.InputTextAgentMessageInputContentType), "\"input_text\"")
 	})
@@ -1356,6 +1752,21 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("FunctionDynamicToolSpecType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FunctionDynamicToolSpecType), "\"function\"") })
 	t.Run("NamespaceDynamicToolSpecType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.NamespaceDynamicToolSpecType), "\"namespace\"") })
+	t.Run("PathFileSystemPathType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.PathFileSystemPathType), "\"path\"") })
+	t.Run("GlobPatternFileSystemPathType/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.GlobPatternFileSystemPathType), "\"glob_pattern\"")
+	})
+	t.Run("SpecialFileSystemPathType/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SpecialFileSystemPathType), "\"special\"") })
+	t.Run("RootFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.RootFileSystemSpecialPathKind), "\"root\"") })
+	t.Run("MinimalFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.MinimalFileSystemSpecialPathKind), "\"minimal\"") })
+	t.Run("KindFileSystemSpecialPathKind/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.KindFileSystemSpecialPathKind), "\"project_roots\"")
+	})
+	t.Run("TmpdirFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.TmpdirFileSystemSpecialPathKind), "\"tmpdir\"") })
+	t.Run("SlashTmpFileSystemSpecialPathKind/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.SlashTmpFileSystemSpecialPathKind), "\"slash_tmp\"")
+	})
+	t.Run("FileSystemSpecialPathVariant5Kind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.FileSystemSpecialPathVariant5Kind), "\"unknown\"") })
 	t.Run("InputTextFunctionCallOutputContentItemType/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.InputTextFunctionCallOutputContentItemType), "\"input_text\"")
 	})

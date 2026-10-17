@@ -32,6 +32,7 @@ type pendingCall struct {
 type outbound struct {
 	frame   []byte
 	call    *pendingCall
+	answer  *answerAttempt
 	ctx     context.Context
 	written chan error
 }
@@ -47,6 +48,8 @@ type Client struct {
 	stderr        *os.File
 	queue         chan outbound
 	pending       map[ID]*pendingCall
+	reverse       map[ID]*requestState
+	requests      chan Request
 	subscriptions map[*Subscription]struct{}
 	nextID        int64
 	ready         bool
@@ -113,7 +116,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	inR.Close()
 	outW.Close()
 	errW.Close()
-	c := &Client{limits: limits, cmd: cmd, stdin: inW, stdout: outR, stderr: errR, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c := &Client{limits: limits, cmd: cmd, stdin: inW, stdout: outR, stderr: errR, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 	go func() {
 		waitErr := cmd.Wait()
 		close(c.reaped)
@@ -339,6 +342,9 @@ func (c *Client) writeLoop() {
 				return
 			}
 			if err := m.ctx.Err(); err != nil {
+				if m.answer != nil {
+					m.answer.finishLocked(err)
+				}
 				if m.call != nil {
 					c.finishLocked(m.call, nil, &CallError{Method: m.call.method, ID: m.call.id, Dispatch: NotSent, Cause: err})
 				}
@@ -347,6 +353,14 @@ func (c *Client) writeLoop() {
 					m.written <- err
 				}
 				continue
+			}
+			if m.answer != nil {
+				if m.answer.finished {
+					c.mu.Unlock()
+					continue
+				}
+				m.answer.started = true
+				m.answer.writing = true
 			}
 			if m.call != nil {
 				if m.call.finished {
@@ -370,6 +384,10 @@ func (c *Client) writeLoop() {
 				err = io.ErrShortWrite
 			}
 			c.mu.Lock()
+			if m.answer != nil {
+				m.answer.writing = false
+				m.answer.finishLocked(err)
+			}
 			if m.call != nil {
 				m.call.writing = false
 			}
@@ -411,6 +429,14 @@ func (c *Client) fail(cause error) {
 		}
 		c.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: state, Cause: cause})
 	}
+	for _, r := range c.reverse {
+		if r.attempt != nil {
+			r.attempt.finishLocked(cause)
+		} else {
+			r.finishLocked(cause)
+		}
+	}
+	close(c.requests)
 	for s := range c.subscriptions {
 		terminal := cause
 		if cause == ErrClosed {

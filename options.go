@@ -16,6 +16,13 @@ type Limits struct {
 	Subscriptions   int
 	EventQueue      int
 	DiagnosticBytes int
+	// ActiveRequests bounds received server requests until a terminal state.
+	ActiveRequests int
+	// RequestQueue bounds queued server requests, including terminal unread ones.
+	RequestQueue int
+	// RequestTimeout locally expires unanswered handles; it sends no cancellation.
+	// Admitted answers instead use the caller context and CallTimeout.
+	RequestTimeout  time.Duration
 	CallTimeout     time.Duration
 	WriteTimeout    time.Duration
 	ShutdownTimeout time.Duration
@@ -25,6 +32,7 @@ func DefaultLimits() Limits {
 	return Limits{
 		MaxFrameBytes: 8 << 20, OutboundQueue: 32, PendingCalls: 128,
 		Subscriptions: 32, EventQueue: 128, DiagnosticBytes: 64 << 10,
+		ActiveRequests: 128, RequestQueue: 32, RequestTimeout: 5 * time.Minute,
 		CallTimeout: 30 * time.Second, WriteTimeout: 10 * time.Second,
 		ShutdownTimeout: 2 * time.Second,
 	}
@@ -34,7 +42,7 @@ func (l Limits) normalized() (Limits, error) {
 	ints := []struct {
 		v   *int
 		def int
-	}{{&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}}
+	}{{&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}, {&l.ActiveRequests, d.ActiveRequests}, {&l.RequestQueue, d.RequestQueue}}
 	for _, x := range ints {
 		if *x.v < 0 {
 			return l, fmt.Errorf("codex: limits must be nonnegative")
@@ -46,7 +54,7 @@ func (l Limits) normalized() (Limits, error) {
 	ds := []struct {
 		v   *time.Duration
 		def time.Duration
-	}{{&l.CallTimeout, d.CallTimeout}, {&l.WriteTimeout, d.WriteTimeout}, {&l.ShutdownTimeout, d.ShutdownTimeout}}
+	}{{&l.CallTimeout, d.CallTimeout}, {&l.WriteTimeout, d.WriteTimeout}, {&l.ShutdownTimeout, d.ShutdownTimeout}, {&l.RequestTimeout, d.RequestTimeout}}
 	for _, x := range ds {
 		if *x.v < 0 {
 			return l, fmt.Errorf("codex: timeouts must be nonnegative")

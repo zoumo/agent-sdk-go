@@ -19,14 +19,16 @@ this document, not a separate supported-version claim.
 The implemented slices own one explicitly selected local child process and expose
 stdio framing, the `initialize` / `initialized` handshake, typed `thread/start`,
 `thread/read`, `thread/resume`, `thread/unsubscribe`, `turn/start`, and
-`turn/interrupt`, raw `Call`, bounded local subscriptions, and bounded cleanup. Protocol models cover the complete selected
+`turn/interrupt`, raw `Call`, bounded local subscriptions, one-shot reverse-request
+answers, and bounded cleanup. Protocol models cover the complete selected
 experimental-schema definition closure, with omitted/null/value handling and
 unknown-field and unknown-union preservation.
 
-`thread/start`, `thread/read`, `thread/resume`, and `turn/start` remain **partial
-workflows** because interactive reverse requests cannot yet be answered. Such a request fails the
-connection with `ErrUnsupportedRequest`; the SDK does not invent approvals. Do not
-enable capabilities requiring attestation, elicitation, or dynamic-tool callbacks.
+Thread/turn methods expose their complete selected parameter/result shapes.
+Interactive approvals and user input can now be answered explicitly. Other
+capability-dependent workflows (attestation, elicitation, dynamic tools, accounts)
+remain caller-managed through raw extensions and are not certified by typed
+request support. Do not infer their support from reachability or generated fields.
 `turn/interrupt` exposes the native request and acknowledgement; it does not prove
 execution completion.
 
@@ -42,18 +44,30 @@ Two fake connections establish explicit reinitialization and unchanged native-ID
 handling, not real-server durable history or persistence compatibility.
 
 Subscriptions preserve all valid notifications as raw method and parameter JSON.
-Six methods also have typed payloads: `turn/started`, `turn/completed`,
-`item/started`, `item/completed`, `item/agentMessage/delta`, and `error`. Malformed
-known payloads retain their raw bytes with `DecodeError`. A subscriber's full queue
+Seven methods also have typed payloads: `turn/started`, `turn/completed`,
+`item/started`, `item/completed`, `item/agentMessage/delta`, `error`, and
+`serverRequest/resolved`. Malformed known payloads retain their raw bytes with `DecodeError`. A subscriber's full queue
 terminates only that stream with an inspectable loss cause outside its queue.
 There is no filtering, replay, native-ID replacement, or event-driven turn state.
 The remaining notification inventory rows are partial raw receive paths, with no
 per-method typed/workflow evidence unless explicitly recorded. Envelope emission
 timestamps are not exposed.
 
+Reverse requests expose immutable method/parameters/exact tagged IDs and opaque
+one-shot handles. Modern command/file/permissions approvals, user input, and two
+legacy approvals have complete typed payload/results; every other method remains
+raw. Legacy approval schemas are modeled, but the pinned modern production
+handlers do not establish those legacy workflows as live-supported. Legacy
+conversationId has the native ThreadId type and is used for resolution correlation
+if a matching notification is received. Queue/active-capacity exhaustion explicitly
+terminates the connection without
+inventing an approval or denial. Local cancel/expiry does not cancel server work.
+Native resolution matches both requestId and thread identity; an answer already
+admitted wins over later local cancellation, expiry, or resolution.
+
 There is no WebSocket, Unix-socket, remote-control, embedded-runtime, turn runner,
-reverse-request answer API, or login management in these slices. A generated type or a successful raw `Call` does not change an
-endpoint's support status. Unknown extensions are caller-managed and uncertified.
+or login management in these slices. A generated type or a successful raw `Call`
+does not change an endpoint's support status. Unknown extensions are caller-managed and uncertified.
 
 The inventory enumerates **170 client requests, 11 server requests, 85 server
 notifications, and 1 client notification**, including experimental, legacy, and
@@ -87,7 +101,9 @@ different identities. The SDK does not coerce IDs through floating point.
 A context cancels local waiting. It does not send a fictional generic cancellation
 notification and does not establish that the server stopped. `turn/interrupt`
 and `userVerification/cancel` are separate native methods, listed individually.
-`serverRequest/resolved` is a server notification. Errors after possible dispatch
+`serverRequest/resolved` is a server notification sent after answers or pending
+request resolution during interruption; it is not a success acknowledgment.
+Errors after possible dispatch
 carry outcome-unknown evidence and are never automatically replayed.
 
 Closing this client closes only its owned child connection, then bounds waiting

@@ -10,6 +10,46 @@ import (
 	"fmt"
 )
 
+type AdditionalPermissionProfile struct {
+	FileSystem Optional[AdditionalFileSystemPermissions] `json:"fileSystem" protocol:"nullable"`
+	// Partial overlay used for per-command permission requests.
+	Network Optional[AdditionalNetworkPermissions] `json:"network" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AdditionalPermissionProfile) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *AdditionalPermissionProfile) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ApplyPatchApprovalParams struct {
+	// Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent] and [codex_protocol::protocol::PatchApplyEndEvent].
+	CallID         string                `json:"callId" protocol:"required"`
+	ConversationID ThreadID              `json:"conversationId" protocol:"required"`
+	FileChanges    map[string]FileChange `json:"fileChanges" protocol:"required"`
+	// When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).
+	GrantRoot Optional[string] `json:"grantRoot" protocol:"nullable"`
+	// Optional explanatory reason (e.g. request for extra write access).
+	Reason Optional[string] `json:"reason" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ApplyPatchApprovalParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ApplyPatchApprovalParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ApplyPatchApprovalResponse struct {
+	Decision ReviewDecision `json:"decision" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ApplyPatchApprovalResponse) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ApplyPatchApprovalResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
 type ClientInfo struct {
 	Name    string           `json:"name" protocol:"required"`
 	Title   Optional[string] `json:"title" protocol:"nullable"`
@@ -20,6 +60,270 @@ type ClientInfo struct {
 
 func (v ClientInfo) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ClientInfo) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+// CommandExecutionApprovalDecision contains exactly one typed variant or Unknown.
+type CommandExecutionApprovalDecision struct {
+	Value                         *CommandExecutionApprovalDecisionValue
+	AcceptWithExecpolicyAmendment *AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision
+	ApplyNetworkPolicyAmendment   *ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v CommandExecutionApprovalDecision) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Value, v.AcceptWithExecpolicyAmendment, v.ApplyNetworkPolicyAmendment)
+}
+func (v *CommandExecutionApprovalDecision) UnmarshalJSON(data []byte) error {
+	var out CommandExecutionApprovalDecision
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" && kind != "string" {
+		return fmt.Errorf("protocol: invalid JSON kind for CommandExecutionApprovalDecision")
+	}
+	if kind == "object" {
+		matches := 0
+		if fields["acceptWithExecpolicyAmendment"] != nil {
+			matches++
+		}
+		if fields["applyNetworkPolicyAmendment"] != nil {
+			matches++
+		}
+		if matches > 1 || len(fields) == 0 {
+			return fmt.Errorf("protocol: ambiguous or empty external union object")
+		}
+	}
+	if kind == "string" {
+		var value CommandExecutionApprovalDecisionValue
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Value = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && fields["acceptWithExecpolicyAmendment"] != nil {
+		var value AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.AcceptWithExecpolicyAmendment = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && fields["applyNetworkPolicyAmendment"] != nil {
+		var value ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ApplyNetworkPolicyAmendment = &value
+		*v = out
+		return nil
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+// Distinguishes a command approval from input sent to an existing terminal.
+type CommandExecutionApprovalKind string
+
+const (
+	CommandExecutionApprovalKindCommand    CommandExecutionApprovalKind = "command"
+	CommandExecutionApprovalKindWriteStdin CommandExecutionApprovalKind = "writeStdin"
+)
+
+type CommandExecutionRequestApprovalParams struct {
+	// Optional additional permissions requested for this command.
+	AdditionalPermissions Optional[AdditionalPermissionProfile] `json:"additionalPermissions" protocol:"nullable"`
+	// Unique identifier for this specific approval callback.
+	//
+	// For regular shell/unified_exec approvals, this is null.
+	//
+	// For zsh-exec-bridge subcommand approvals, multiple callbacks can belong to one parent `itemId`, so `approvalId` is a distinct opaque callback id (a UUID) used to disambiguate routing. Stdin approvals also use a distinct callback id; inspect `kind` to distinguish them.
+	ApprovalID Optional[string] `json:"approvalId" protocol:"nullable"`
+	// Ordered list of decisions the client may present for this prompt.
+	AvailableDecisions Optional[[]CommandExecutionApprovalDecision] `json:"availableDecisions" protocol:"nullable"`
+	// The command to be executed.
+	Command Optional[string] `json:"command" protocol:"nullable"`
+	// Best-effort parsed command actions for friendly display.
+	CommandActions Optional[[]CommandAction] `json:"commandActions" protocol:"nullable"`
+	// The command's working directory.
+	Cwd Optional[LegacyAppPathString] `json:"cwd" protocol:"nullable"`
+	// Environment in which the command will run.
+	EnvironmentID Optional[string] `json:"environmentId" protocol:"nullable"`
+	ItemID        string           `json:"itemId" protocol:"required"`
+	// Kind of action under review. Defaults to `command` for older servers.
+	Kind Optional[CommandExecutionApprovalKind] `json:"kind" protocol:""`
+	// Optional context for a managed-network approval prompt.
+	NetworkApprovalContext Optional[NetworkApprovalContext] `json:"networkApprovalContext" protocol:"nullable"`
+	// Optional proposed execpolicy amendment to allow similar commands without prompting.
+	ProposedExecpolicyAmendment Optional[[]string] `json:"proposedExecpolicyAmendment" protocol:"nullable"`
+	// Optional proposed network policy amendments (allow/deny host) for future requests.
+	ProposedNetworkPolicyAmendments Optional[[]NetworkPolicyAmendment] `json:"proposedNetworkPolicyAmendments" protocol:"nullable"`
+	// Optional explanatory reason (e.g. request for network access).
+	Reason Optional[string] `json:"reason" protocol:"nullable"`
+	// Unix timestamp (in milliseconds) when this approval request started.
+	StartedAtMs int64  `json:"startedAtMs" protocol:"required"`
+	ThreadID    string `json:"threadId" protocol:"required"`
+	TurnID      string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CommandExecutionRequestApprovalParams) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *CommandExecutionRequestApprovalParams) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type CommandExecutionRequestApprovalResponse struct {
+	Decision CommandExecutionApprovalDecision `json:"decision" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CommandExecutionRequestApprovalResponse) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *CommandExecutionRequestApprovalResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ExecCommandApprovalParams struct {
+	// Identifier for this specific approval callback.
+	ApprovalID Optional[string] `json:"approvalId" protocol:"nullable"`
+	// Use to correlate this with [codex_protocol::protocol::ExecCommandBeginEvent] and [codex_protocol::protocol::ExecCommandEndEvent].
+	CallID         string           `json:"callId" protocol:"required"`
+	Command        []string         `json:"command" protocol:"required"`
+	ConversationID ThreadID         `json:"conversationId" protocol:"required"`
+	Cwd            string           `json:"cwd" protocol:"required"`
+	ParsedCmd      []ParsedCommand  `json:"parsedCmd" protocol:"required"`
+	Reason         Optional[string] `json:"reason" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ExecCommandApprovalParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ExecCommandApprovalParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ExecCommandApprovalResponse struct {
+	Decision ReviewDecision `json:"decision" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ExecCommandApprovalResponse) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ExecCommandApprovalResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// FileChange contains exactly one typed variant or Unknown.
+type FileChange struct {
+	Add    *AddFileChange
+	Delete *DeleteFileChange
+	Update *UpdateFileChange
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v FileChange) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Add, v.Delete, v.Update)
+}
+func (v *FileChange) UnmarshalJSON(data []byte) error {
+	var out FileChange
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for FileChange")
+	}
+	if kind == "object" && tag == "add" {
+		var value AddFileChange
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Add = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "delete" {
+		var value DeleteFileChange
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Delete = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "update" {
+		var value UpdateFileChange
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Update = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type FileChangeApprovalDecision string
+
+const (
+	FileChangeApprovalDecisionAccept           FileChangeApprovalDecision = "accept"
+	FileChangeApprovalDecisionAcceptForSession FileChangeApprovalDecision = "acceptForSession"
+	FileChangeApprovalDecisionDecline          FileChangeApprovalDecision = "decline"
+	FileChangeApprovalDecisionCancel           FileChangeApprovalDecision = "cancel"
+)
+
+type FileChangeRequestApprovalParams struct {
+	// [UNSTABLE] When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).
+	GrantRoot Optional[string] `json:"grantRoot" protocol:"nullable"`
+	ItemID    string           `json:"itemId" protocol:"required"`
+	// Optional explanatory reason (e.g. request for extra write access).
+	Reason Optional[string] `json:"reason" protocol:"nullable"`
+	// Unix timestamp (in milliseconds) when this approval request started.
+	StartedAtMs int64  `json:"startedAtMs" protocol:"required"`
+	ThreadID    string `json:"threadId" protocol:"required"`
+	TurnID      string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FileChangeRequestApprovalParams) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *FileChangeRequestApprovalParams) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type FileChangeRequestApprovalResponse struct {
+	Decision FileChangeApprovalDecision `json:"decision" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FileChangeRequestApprovalResponse) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *FileChangeRequestApprovalResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type GrantedPermissionProfile struct {
+	FileSystem Optional[AdditionalFileSystemPermissions] `json:"fileSystem" protocol:"nullable"`
+	Network    Optional[AdditionalNetworkPermissions]    `json:"network" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v GrantedPermissionProfile) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *GrantedPermissionProfile) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 // Client-declared capabilities negotiated during initialize.
 type InitializeCapabilities struct {
@@ -69,6 +373,292 @@ type InitializeResponse struct {
 func (v InitializeResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *InitializeResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type NetworkApprovalContext struct {
+	Host     string                  `json:"host" protocol:"required"`
+	Protocol NetworkApprovalProtocol `json:"protocol" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v NetworkApprovalContext) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *NetworkApprovalContext) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type NetworkPolicyAmendment struct {
+	Action NetworkPolicyRuleAction `json:"action" protocol:"required"`
+	Host   string                  `json:"host" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v NetworkPolicyAmendment) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *NetworkPolicyAmendment) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type NetworkPolicyRuleAction string
+
+const (
+	NetworkPolicyRuleActionAllow NetworkPolicyRuleAction = "allow"
+	NetworkPolicyRuleActionDeny  NetworkPolicyRuleAction = "deny"
+)
+
+// ParsedCommand contains exactly one typed variant or Unknown.
+type ParsedCommand struct {
+	Read           *ReadParsedCommand
+	ListFiles      *ListFilesParsedCommand
+	Search         *SearchParsedCommand
+	UnknownVariant *UnknownParsedCommand
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ParsedCommand) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Read, v.ListFiles, v.Search, v.UnknownVariant)
+}
+func (v *ParsedCommand) UnmarshalJSON(data []byte) error {
+	var out ParsedCommand
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ParsedCommand")
+	}
+	if kind == "object" && tag == "read" {
+		var value ReadParsedCommand
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Read = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "list_files" {
+		var value ListFilesParsedCommand
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ListFiles = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "search" {
+		var value SearchParsedCommand
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Search = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "unknown" {
+		var value UnknownParsedCommand
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.UnknownVariant = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type PermissionGrantScope string
+
+const (
+	PermissionGrantScopeTurn    PermissionGrantScope = "turn"
+	PermissionGrantScopeSession PermissionGrantScope = "session"
+)
+
+type PermissionsRequestApprovalParams struct {
+	Cwd           LegacyAppPathString      `json:"cwd" protocol:"required"`
+	EnvironmentID Optional[string]         `json:"environmentId" protocol:"nullable"`
+	ItemID        string                   `json:"itemId" protocol:"required"`
+	Permissions   RequestPermissionProfile `json:"permissions" protocol:"required"`
+	Reason        Optional[string]         `json:"reason" protocol:"nullable"`
+	// Unix timestamp (in milliseconds) when this approval request started.
+	StartedAtMs int64  `json:"startedAtMs" protocol:"required"`
+	ThreadID    string `json:"threadId" protocol:"required"`
+	TurnID      string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v PermissionsRequestApprovalParams) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *PermissionsRequestApprovalParams) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type PermissionsRequestApprovalResponse struct {
+	Permissions GrantedPermissionProfile       `json:"permissions" protocol:"required"`
+	Scope       Optional[PermissionGrantScope] `json:"scope" protocol:""`
+	// Review every subsequent command in this turn before normal sandboxed execution.
+	StrictAutoReview Optional[bool] `json:"strictAutoReview" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v PermissionsRequestApprovalResponse) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *PermissionsRequestApprovalResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// User's decision in response to an ExecApprovalRequest.
+// ReviewDecision contains exactly one typed variant or Unknown.
+type ReviewDecision struct {
+	Value                       *ReviewDecisionValue
+	ApprovedExecpolicyAmendment *ApprovedExecpolicyAmendmentReviewDecision
+	NetworkPolicyAmendment      *NetworkPolicyAmendmentReviewDecision
+	Denied                      *DeniedReviewDecision
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ReviewDecision) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Value, v.ApprovedExecpolicyAmendment, v.NetworkPolicyAmendment, v.Denied)
+}
+func (v *ReviewDecision) UnmarshalJSON(data []byte) error {
+	var out ReviewDecision
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" && kind != "string" {
+		return fmt.Errorf("protocol: invalid JSON kind for ReviewDecision")
+	}
+	if kind == "object" {
+		matches := 0
+		if fields["approved_execpolicy_amendment"] != nil {
+			matches++
+		}
+		if fields["network_policy_amendment"] != nil {
+			matches++
+		}
+		if fields["denied"] != nil {
+			matches++
+		}
+		if matches > 1 || len(fields) == 0 {
+			return fmt.Errorf("protocol: ambiguous or empty external union object")
+		}
+	}
+	if kind == "string" {
+		var value ReviewDecisionValue
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Value = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && fields["approved_execpolicy_amendment"] != nil {
+		var value ApprovedExecpolicyAmendmentReviewDecision
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ApprovedExecpolicyAmendment = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && fields["network_policy_amendment"] != nil {
+		var value NetworkPolicyAmendmentReviewDecision
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.NetworkPolicyAmendment = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && fields["denied"] != nil {
+		var value DeniedReviewDecision
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Denied = &value
+		*v = out
+		return nil
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+// EXPERIMENTAL. Captures a user's answer to a request_user_input question.
+type ToolRequestUserInputAnswer struct {
+	Answers []string `json:"answers" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolRequestUserInputAnswer) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolRequestUserInputAnswer) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// EXPERIMENTAL. Defines a single selectable option for request_user_input.
+type ToolRequestUserInputOption struct {
+	Description string `json:"description" protocol:"required"`
+	Label       string `json:"label" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolRequestUserInputOption) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolRequestUserInputOption) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// EXPERIMENTAL. Params sent with a request_user_input event.
+type ToolRequestUserInputParams struct {
+	// @deprecated Use `isBlocking` to decide whether the request should block.
+	AutoResolutionMs Optional[uint64]               `json:"autoResolutionMs" protocol:"nullable"`
+	IsBlocking       bool                           `json:"isBlocking" protocol:"required"`
+	ItemID           string                         `json:"itemId" protocol:"required"`
+	Questions        []ToolRequestUserInputQuestion `json:"questions" protocol:"required"`
+	ThreadID         string                         `json:"threadId" protocol:"required"`
+	TurnID           string                         `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolRequestUserInputParams) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolRequestUserInputParams) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// EXPERIMENTAL. Represents one request_user_input question and its required options.
+type ToolRequestUserInputQuestion struct {
+	Header   string                                 `json:"header" protocol:"required"`
+	ID       string                                 `json:"id" protocol:"required"`
+	IsOther  Optional[bool]                         `json:"isOther" protocol:""`
+	IsSecret Optional[bool]                         `json:"isSecret" protocol:""`
+	Options  Optional[[]ToolRequestUserInputOption] `json:"options" protocol:"nullable"`
+	Question string                                 `json:"question" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolRequestUserInputQuestion) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolRequestUserInputQuestion) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// EXPERIMENTAL. Response payload mapping question ids to answers.
+type ToolRequestUserInputResponse struct {
+	Answers map[string]ToolRequestUserInputAnswer `json:"answers" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolRequestUserInputResponse) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolRequestUserInputResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
 // A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).
 //
 // IMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.
@@ -102,6 +692,33 @@ const (
 	AdditionalContextKindUntrusted   AdditionalContextKind = "untrusted"
 	AdditionalContextKindApplication AdditionalContextKind = "application"
 )
+
+type AdditionalFileSystemPermissions struct {
+	Entries          Optional[[]FileSystemSandboxEntry] `json:"entries" protocol:"nullable"`
+	GlobScanMaxDepth Optional[uint64]                   `json:"globScanMaxDepth" protocol:"nullable"`
+	// This will be removed in favor of `entries`.
+	Read Optional[[]LegacyAppPathString] `json:"read" protocol:"nullable"`
+	// This will be removed in favor of `entries`.
+	Write Optional[[]LegacyAppPathString] `json:"write" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AdditionalFileSystemPermissions) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *AdditionalFileSystemPermissions) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type AdditionalNetworkPermissions struct {
+	Enabled Optional[bool] `json:"enabled" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AdditionalNetworkPermissions) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *AdditionalNetworkPermissions) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
 
 type AgentMessageDelivery string
 
@@ -788,6 +1405,168 @@ type ErrorNotification struct {
 func (v ErrorNotification) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ErrorNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type FileSystemAccessMode string
+
+const (
+	FileSystemAccessModeRead  FileSystemAccessMode = "read"
+	FileSystemAccessModeWrite FileSystemAccessMode = "write"
+	FileSystemAccessModeDeny  FileSystemAccessMode = "deny"
+)
+
+// FileSystemPath contains exactly one typed variant or Unknown.
+type FileSystemPath struct {
+	Path        *PathFileSystemPath
+	GlobPattern *GlobPatternFileSystemPath
+	Special     *SpecialFileSystemPath
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v FileSystemPath) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Path, v.GlobPattern, v.Special)
+}
+func (v *FileSystemPath) UnmarshalJSON(data []byte) error {
+	var out FileSystemPath
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for FileSystemPath")
+	}
+	if kind == "object" && tag == "path" {
+		var value PathFileSystemPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Path = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "glob_pattern" {
+		var value GlobPatternFileSystemPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.GlobPattern = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "special" {
+		var value SpecialFileSystemPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Special = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type FileSystemSandboxEntry struct {
+	Access FileSystemAccessMode `json:"access" protocol:"required"`
+	Path   FileSystemPath       `json:"path" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FileSystemSandboxEntry) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *FileSystemSandboxEntry) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+// FileSystemSpecialPath contains exactly one typed variant or Unknown.
+type FileSystemSpecialPath struct {
+	Root                          *RootFileSystemSpecialPath
+	Minimal                       *MinimalFileSystemSpecialPath
+	Kind                          *KindFileSystemSpecialPath
+	Tmpdir                        *TmpdirFileSystemSpecialPath
+	SlashTmp                      *SlashTmpFileSystemSpecialPath
+	FileSystemSpecialPathVariant5 *FileSystemSpecialPathVariant5
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v FileSystemSpecialPath) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Root, v.Minimal, v.Kind, v.Tmpdir, v.SlashTmp, v.FileSystemSpecialPathVariant5)
+}
+func (v *FileSystemSpecialPath) UnmarshalJSON(data []byte) error {
+	var out FileSystemSpecialPath
+	kind, tag, fields, err := inspectUnion(data, "kind")
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for FileSystemSpecialPath")
+	}
+	if kind == "object" && tag == "root" {
+		var value RootFileSystemSpecialPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Root = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "minimal" {
+		var value MinimalFileSystemSpecialPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Minimal = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "project_roots" {
+		var value KindFileSystemSpecialPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Kind = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "tmpdir" {
+		var value TmpdirFileSystemSpecialPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Tmpdir = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "slash_tmp" {
+		var value SlashTmpFileSystemSpecialPath
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.SlashTmp = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "unknown" {
+		var value FileSystemSpecialPathVariant5
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.FileSystemSpecialPathVariant5 = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union kind discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
 type FileUpdateChange struct {
 	Diff string          `json:"diff" protocol:"required"`
 	Kind PatchChangeKind `json:"kind" protocol:"required"`
@@ -1250,6 +2029,15 @@ const (
 	NetworkAccessEnabled    NetworkAccess = "enabled"
 )
 
+type NetworkApprovalProtocol string
+
+const (
+	NetworkApprovalProtocolHTTP      NetworkApprovalProtocol = "http"
+	NetworkApprovalProtocolHttps     NetworkApprovalProtocol = "https"
+	NetworkApprovalProtocolSocks5Tcp NetworkApprovalProtocol = "socks5Tcp"
+	NetworkApprovalProtocolSocks5Udp NetworkApprovalProtocol = "socks5Udp"
+)
+
 type NonSteerableTurnKind string
 
 const (
@@ -1428,6 +2216,68 @@ const (
 	ReasoningSummaryDetailed ReasoningSummary = "detailed"
 	ReasoningSummaryNone     ReasoningSummary = "none"
 )
+
+// RequestID contains exactly one typed variant or Unknown.
+type RequestID struct {
+	Value   *string
+	Integer *int64
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v RequestID) MarshalJSON() ([]byte, error) {
+	data, err := marshalUnion(v.Unknown, v.Value, v.Integer)
+	if err != nil {
+		return nil, err
+	}
+	var checked RequestID
+	if err := checked.UnmarshalJSON(data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+func (v *RequestID) UnmarshalJSON(data []byte) error {
+	var out RequestID
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "number" && kind != "string" {
+		return fmt.Errorf("protocol: invalid JSON kind for RequestID")
+	}
+	if kind == "string" {
+		var value string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Value = &value
+		*v = out
+		return nil
+	}
+	if kind == "number" {
+		var value int64
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Integer = &value
+		*v = out
+		return nil
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type RequestPermissionProfile struct {
+	FileSystem Optional[AdditionalFileSystemPermissions] `json:"fileSystem" protocol:"nullable"`
+	Network    Optional[AdditionalNetworkPermissions]    `json:"network" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v RequestPermissionProfile) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *RequestPermissionProfile) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 // ResponseItem contains exactly one typed variant or Unknown.
 type ResponseItem struct {
@@ -1780,6 +2630,18 @@ type SelectedCapabilityRoot struct {
 
 func (v SelectedCapabilityRoot) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *SelectedCapabilityRoot) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ServerRequestResolvedNotification struct {
+	RequestID RequestID `json:"requestId" protocol:"required"`
+	ThreadID  string    `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ServerRequestResolvedNotification) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ServerRequestResolvedNotification) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
 
 // SessionSource contains exactly one typed variant or Unknown.
 type SessionSource struct {
@@ -2966,6 +3828,166 @@ func (v *WebSearchAction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type CommandExecutionApprovalDecisionValue string
+
+const (
+	CommandExecutionApprovalDecisionValueAccept           CommandExecutionApprovalDecisionValue = "accept"
+	CommandExecutionApprovalDecisionValueAcceptForSession CommandExecutionApprovalDecisionValue = "acceptForSession"
+	CommandExecutionApprovalDecisionValueDecline          CommandExecutionApprovalDecisionValue = "decline"
+	CommandExecutionApprovalDecisionValueCancel           CommandExecutionApprovalDecisionValue = "cancel"
+)
+
+// User approved the command, and wants to apply the proposed execpolicy amendment so future matching commands can run without prompting.
+type AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision struct {
+	AcceptWithExecpolicyAmendment AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment `json:"acceptWithExecpolicyAmendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// User chose a persistent network policy rule (allow/deny) for this host.
+type ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision struct {
+	ApplyNetworkPolicyAmendment ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment `json:"applyNetworkPolicyAmendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type AddFileChange struct {
+	Content string            `json:"content" protocol:"required"`
+	Type    AddFileChangeType `json:"type" protocol:"required,const=add"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AddFileChange) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *AddFileChange) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type DeleteFileChange struct {
+	Content string               `json:"content" protocol:"required"`
+	Type    DeleteFileChangeType `json:"type" protocol:"required,const=delete"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v DeleteFileChange) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *DeleteFileChange) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type UpdateFileChange struct {
+	MovePath    Optional[string]     `json:"move_path" protocol:"nullable"`
+	Type        UpdateFileChangeType `json:"type" protocol:"required,const=update"`
+	UnifiedDiff string               `json:"unified_diff" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v UpdateFileChange) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *UpdateFileChange) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ReadParsedCommand struct {
+	Cmd  string `json:"cmd" protocol:"required"`
+	Name string `json:"name" protocol:"required"`
+	// (Best effort) Path to the file being read by the command. When possible, this is an absolute path, though when relative, it should be resolved against the `cwd`` that will be used to run the command to derive the absolute path.
+	Path string                `json:"path" protocol:"required"`
+	Type ReadParsedCommandType `json:"type" protocol:"required,const=read"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ReadParsedCommand) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ReadParsedCommand) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ListFilesParsedCommand struct {
+	Cmd  string                     `json:"cmd" protocol:"required"`
+	Path Optional[string]           `json:"path" protocol:"nullable"`
+	Type ListFilesParsedCommandType `json:"type" protocol:"required,const=list_files"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ListFilesParsedCommand) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ListFilesParsedCommand) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type SearchParsedCommand struct {
+	Cmd   string                  `json:"cmd" protocol:"required"`
+	Path  Optional[string]        `json:"path" protocol:"nullable"`
+	Query Optional[string]        `json:"query" protocol:"nullable"`
+	Type  SearchParsedCommandType `json:"type" protocol:"required,const=search"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v SearchParsedCommand) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *SearchParsedCommand) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type UnknownParsedCommand struct {
+	Cmd  string                   `json:"cmd" protocol:"required"`
+	Type UnknownParsedCommandType `json:"type" protocol:"required,const=unknown"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v UnknownParsedCommand) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *UnknownParsedCommand) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ReviewDecisionValue string
+
+const (
+	ReviewDecisionValueApproved                   ReviewDecisionValue = "approved"
+	ReviewDecisionValueApprovedForSession         ReviewDecisionValue = "approved_for_session"
+	ReviewDecisionValueApprovedMCPPolicyAmendment ReviewDecisionValue = "approved_mcp_policy_amendment"
+	ReviewDecisionValueTimedOut                   ReviewDecisionValue = "timed_out"
+	ReviewDecisionValueAbort                      ReviewDecisionValue = "abort"
+)
+
+// User has approved this command and wants to apply the proposed execpolicy amendment so future matching commands are permitted.
+type ApprovedExecpolicyAmendmentReviewDecision struct {
+	ApprovedExecpolicyAmendment ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment `json:"approved_execpolicy_amendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ApprovedExecpolicyAmendmentReviewDecision) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *ApprovedExecpolicyAmendmentReviewDecision) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// User chose to persist a network policy rule (allow/deny) for future requests to the same host.
+type NetworkPolicyAmendmentReviewDecision struct {
+	NetworkPolicyAmendment NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment `json:"network_policy_amendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v NetworkPolicyAmendmentReviewDecision) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *NetworkPolicyAmendmentReviewDecision) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// User has denied this command and the agent should not execute it, but it should continue the session and try something else.
+type DeniedReviewDecision struct {
+	Denied DeniedReviewDecisionDenied `json:"denied" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v DeniedReviewDecision) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *DeniedReviewDecision) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type InputTextAgentMessageInputContent struct {
 	Text string                                `json:"text" protocol:"required"`
 	Type InputTextAgentMessageInputContentType `json:"type" protocol:"required,const=input_text"`
@@ -3281,6 +4303,101 @@ type NamespaceDynamicToolSpec struct {
 
 func (v NamespaceDynamicToolSpec) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *NamespaceDynamicToolSpec) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type PathFileSystemPath struct {
+	Path LegacyAppPathString    `json:"path" protocol:"required"`
+	Type PathFileSystemPathType `json:"type" protocol:"required,const=path"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v PathFileSystemPath) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *PathFileSystemPath) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type GlobPatternFileSystemPath struct {
+	Pattern string                        `json:"pattern" protocol:"required"`
+	Type    GlobPatternFileSystemPathType `json:"type" protocol:"required,const=glob_pattern"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v GlobPatternFileSystemPath) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *GlobPatternFileSystemPath) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type SpecialFileSystemPath struct {
+	Type  SpecialFileSystemPathType `json:"type" protocol:"required,const=special"`
+	Value FileSystemSpecialPath     `json:"value" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v SpecialFileSystemPath) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *SpecialFileSystemPath) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type RootFileSystemSpecialPath struct {
+	Kind RootFileSystemSpecialPathKind `json:"kind" protocol:"required,const=root"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v RootFileSystemSpecialPath) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *RootFileSystemSpecialPath) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type MinimalFileSystemSpecialPath struct {
+	Kind MinimalFileSystemSpecialPathKind `json:"kind" protocol:"required,const=minimal"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v MinimalFileSystemSpecialPath) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *MinimalFileSystemSpecialPath) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type KindFileSystemSpecialPath struct {
+	Kind    KindFileSystemSpecialPathKind `json:"kind" protocol:"required,const=project_roots"`
+	Subpath Optional[LegacyAppPathString] `json:"subpath" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v KindFileSystemSpecialPath) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *KindFileSystemSpecialPath) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type TmpdirFileSystemSpecialPath struct {
+	Kind TmpdirFileSystemSpecialPathKind `json:"kind" protocol:"required,const=tmpdir"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TmpdirFileSystemSpecialPath) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *TmpdirFileSystemSpecialPath) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type SlashTmpFileSystemSpecialPath struct {
+	Kind SlashTmpFileSystemSpecialPathKind `json:"kind" protocol:"required,const=slash_tmp"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v SlashTmpFileSystemSpecialPath) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *SlashTmpFileSystemSpecialPath) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type FileSystemSpecialPathVariant5 struct {
+	Kind    FileSystemSpecialPathVariant5Kind `json:"kind" protocol:"required,const=unknown"`
+	Path    string                            `json:"path" protocol:"required"`
+	Subpath Optional[LegacyAppPathString]     `json:"subpath" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FileSystemSpecialPathVariant5) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *FileSystemSpecialPathVariant5) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
 
 type InputTextFunctionCallOutputContentItem struct {
 	Text string                                     `json:"text" protocol:"required"`
@@ -4309,6 +5426,111 @@ type OtherWebSearchAction struct {
 func (v OtherWebSearchAction) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *OtherWebSearchAction) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment struct {
+	ExecpolicyAmendment []string `json:"execpolicy_amendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment struct {
+	NetworkPolicyAmendment NetworkPolicyAmendment `json:"network_policy_amendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type AddFileChangeType string
+
+const (
+	AddFileChangeTypeAdd AddFileChangeType = "add"
+)
+
+type DeleteFileChangeType string
+
+const (
+	DeleteFileChangeTypeDelete DeleteFileChangeType = "delete"
+)
+
+type UpdateFileChangeType string
+
+const (
+	UpdateFileChangeTypeUpdate UpdateFileChangeType = "update"
+)
+
+type ReadParsedCommandType string
+
+const (
+	ReadParsedCommandTypeRead ReadParsedCommandType = "read"
+)
+
+type ListFilesParsedCommandType string
+
+const (
+	ListFilesParsedCommandTypeListFiles ListFilesParsedCommandType = "list_files"
+)
+
+type SearchParsedCommandType string
+
+const (
+	SearchParsedCommandTypeSearch SearchParsedCommandType = "search"
+)
+
+type UnknownParsedCommandType string
+
+const (
+	UnknownParsedCommandTypeUnknown UnknownParsedCommandType = "unknown"
+)
+
+type ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment struct {
+	ProposedExecpolicyAmendment []string `json:"proposed_execpolicy_amendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment struct {
+	NetworkPolicyAmendment NetworkPolicyAmendment `json:"network_policy_amendment" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type DeniedReviewDecisionDenied struct {
+	Rejection string `json:"rejection" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v DeniedReviewDecisionDenied) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *DeniedReviewDecisionDenied) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
 type InputTextAgentMessageInputContentType string
 
 const (
@@ -4489,6 +5711,60 @@ type NamespaceDynamicToolSpecType string
 
 const (
 	NamespaceDynamicToolSpecTypeNamespace NamespaceDynamicToolSpecType = "namespace"
+)
+
+type PathFileSystemPathType string
+
+const (
+	PathFileSystemPathTypePath PathFileSystemPathType = "path"
+)
+
+type GlobPatternFileSystemPathType string
+
+const (
+	GlobPatternFileSystemPathTypeGlobPattern GlobPatternFileSystemPathType = "glob_pattern"
+)
+
+type SpecialFileSystemPathType string
+
+const (
+	SpecialFileSystemPathTypeSpecial SpecialFileSystemPathType = "special"
+)
+
+type RootFileSystemSpecialPathKind string
+
+const (
+	RootFileSystemSpecialPathKindRoot RootFileSystemSpecialPathKind = "root"
+)
+
+type MinimalFileSystemSpecialPathKind string
+
+const (
+	MinimalFileSystemSpecialPathKindMinimal MinimalFileSystemSpecialPathKind = "minimal"
+)
+
+type KindFileSystemSpecialPathKind string
+
+const (
+	KindFileSystemSpecialPathKindProjectRoots KindFileSystemSpecialPathKind = "project_roots"
+)
+
+type TmpdirFileSystemSpecialPathKind string
+
+const (
+	TmpdirFileSystemSpecialPathKindTmpdir TmpdirFileSystemSpecialPathKind = "tmpdir"
+)
+
+type SlashTmpFileSystemSpecialPathKind string
+
+const (
+	SlashTmpFileSystemSpecialPathKindSlashTmp SlashTmpFileSystemSpecialPathKind = "slash_tmp"
+)
+
+type FileSystemSpecialPathVariant5Kind string
+
+const (
+	FileSystemSpecialPathVariant5KindUnknown FileSystemSpecialPathVariant5Kind = "unknown"
 )
 
 type InputTextFunctionCallOutputContentItemType string

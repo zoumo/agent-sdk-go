@@ -119,6 +119,8 @@ func decodeEvent(method string, params json.RawMessage) Event {
 	event := Event{Method: method, Params: append(json.RawMessage(nil), params...)}
 	var data any
 	switch method {
+	case "serverRequest/resolved":
+		data = new(protocol.ServerRequestResolvedNotification)
 	case "turn/started":
 		data = new(protocol.TurnStartedNotification)
 	case "turn/completed":

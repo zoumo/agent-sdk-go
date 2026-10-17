@@ -68,6 +68,12 @@ func runPermissionFixture(mode string, reader *bufio.Reader) {
 			switch command {
 			case "emit":
 				fixtureEmit(json.RawMessage(value))
+			case "block_write":
+				frame, keepGoing := permissionBlockedWire(reader, transcript, value)
+				if !keepGoing {
+					return
+				}
+				frames = append(frames, frame)
 			case "snapshot":
 				fixtureEmit(map[string]any{"type": "snapshot", "frames": frames})
 			case "disconnect":

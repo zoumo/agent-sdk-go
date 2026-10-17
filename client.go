@@ -333,9 +333,10 @@ func (c *Client) failLocked(err error) {
 		if c.terminal == nil || c.terminal == ErrUnexpectedEOF {
 			c.terminal = err
 		} else if (errors.Is(err, ErrProtocol) && !errors.Is(c.terminal, ErrProtocol)) ||
-			(errors.Is(err, ErrResourceLimit) && !errors.Is(c.terminal, ErrResourceLimit)) {
-			// Process exit can win the race with decoding its final stdout.
-			// Keep the more specific reader failure once those bytes are drained.
+			(errors.Is(err, ErrResourceLimit) && !errors.Is(c.terminal, ErrResourceLimit)) ||
+			(errors.Is(err, ErrPermissionWriteFailed) && !errors.Is(c.terminal, ErrPermissionWriteFailed)) {
+			// Shutdown can win the race with a final read or response write.
+			// Retain its more specific failure after that operation settles.
 			c.terminal = errors.Join(c.terminal, err)
 		}
 	}
@@ -488,17 +489,8 @@ func (c *Client) route(event Event) error {
 		}
 		return nil
 	}
-	if event.Type == "control_cancel_request" {
-		var cancel struct {
-			RequestID string `json:"request_id"`
-		}
-		if err := json.Unmarshal(event.Raw, &cancel); err != nil {
-			return err
-		}
-		if cancel.RequestID == "" {
-			return fmt.Errorf("control cancellation has no request_id")
-		}
-		if err := c.cancelPermission(cancel.RequestID); err != nil {
+	if event.Cancel != nil {
+		if err := c.cancelPermission(event.Cancel.RequestID); err != nil {
 			return err
 		}
 	}

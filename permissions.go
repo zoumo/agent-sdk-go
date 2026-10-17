@@ -110,6 +110,8 @@ func (p *PermissionRequest) Context() context.Context {
 // A call with an already-canceled ctx consumes nothing. Once reserved, a failed
 // attempt cannot be retried, even if its write outcome is unknown. Invalid
 // answers terminate the connection visibly, without granting permission.
+// ErrPermissionWriteFailed retains a failed attempt's cause after shutdown.
+// A terminal handle's rejection is a PermissionError with its original ID.
 // Cancellation cannot retract a write already authorized; such a race is
 // conservatively reported as ErrUnknownOutcome. Successful return establishes
 // only a complete local write, not execution or acceptance by the CLI.
@@ -120,8 +122,14 @@ func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer)
 	s := p.state
 	data, err := p.answerData(answer)
 	if err != nil {
-		failure := &PermissionError{RequestID: s.id, Err: err}
-		s.owner.fail(failure)
+		c := s.owner
+		c.mu.Lock()
+		if stateErr := c.permissionErrorLocked(s, permissionAnswering); stateErr != nil {
+			c.mu.Unlock()
+			return stateErr
+		}
+		failure := p.failAnswerLocked(err)
+		c.mu.Unlock()
 		return failure
 	}
 	return p.writeResponse(ctx, map[string]any{"subtype": "success", "request_id": s.id, "response": data})
@@ -160,6 +168,7 @@ func (p *PermissionRequest) writeResponse(ctx context.Context, response map[stri
 	writeCtx, cancelWrite := context.WithCancel(ctx)
 	stopRequest := context.AfterFunc(s.ctx, cancelWrite)
 	defer cancelWrite()
+	authorized := false
 	err := c.writeJSONChecked(writeCtx, map[string]any{
 		"type": "control_response", "response": response,
 	}, func() error {
@@ -171,6 +180,7 @@ func (p *PermissionRequest) writeResponse(ctx context.Context, response map[stri
 		// This is write authorization, serialized with cancellation and Close.
 		// The mutex is never held across the potentially blocking OS write.
 		s.status = permissionWriting
+		authorized = true
 		return nil
 	})
 	stopRequest()
@@ -180,19 +190,25 @@ func (p *PermissionRequest) writeResponse(ctx context.Context, response map[stri
 		err = &Error{Op: "permission answer", Err: c.permissionErrorLocked(s, permissionWriting), OutcomeUnknown: true}
 	}
 	if err != nil {
-		if s.status == permissionCancelled {
-			err = errors.Join(ErrPermissionCancelled, err)
-		}
-		if s.status == permissionClosed {
-			err = errors.Join(ErrClosed, err)
-		}
-		if s.status == permissionAnswering || s.status == permissionWriting {
-			s.status = permissionWriteFailed
-			delete(c.permissions, s.id)
-			s.cancel(err)
-			// A consumed, locally failed answer must not strand the CLI waiting
-			// forever for a response that can no longer be attempted.
-			c.failLocked(&PermissionError{RequestID: s.id, Err: err})
+		switch {
+		case s.status == permissionCancelled:
+			if authorized {
+				err = errors.Join(ErrPermissionCancelled, err)
+			} else {
+				// Another operation's terminal error may have an unknown outcome;
+				// this answer is known not to have reached write authorization.
+				err = ErrPermissionCancelled
+			}
+			err = &PermissionError{RequestID: s.id, Err: err}
+		case !authorized && (s.status == permissionClosed || c.closing || c.stopped):
+			err = &PermissionError{RequestID: s.id, Err: ErrClosed}
+		case authorized || s.status == permissionAnswering || s.status == permissionWriting:
+			// writeJSONChecked can already have closed the connection on error.
+			// Preserve the consumed attempt's failure instead of hiding it behind
+			// that global closed state. Nothing can reserve this handle again.
+			err = p.failAnswerLocked(err)
+		default:
+			err = &PermissionError{RequestID: s.id, Err: errors.Join(ErrClosed, err)}
 		}
 	} else {
 		s.status = permissionAnswered
@@ -201,6 +217,20 @@ func (p *PermissionRequest) writeResponse(ctx context.Context, response map[stri
 	}
 	c.mu.Unlock()
 	return err
+}
+
+// Called under owner.mu after the sole answer attempt has been consumed.
+func (p *PermissionRequest) failAnswerLocked(err error) error {
+	s := p.state
+	s.status = permissionWriteFailed
+	s.failure = err
+	delete(s.owner.permissions, s.id)
+	failure := &PermissionError{RequestID: s.id, Err: errors.Join(ErrPermissionWriteFailed, err)}
+	s.cancel(failure)
+	// A failed local attempt must not strand the CLI waiting for a response
+	// that cannot be retried. Terminal-ID history remains reserved.
+	s.owner.failLocked(failure)
+	return failure
 }
 
 func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any, error) {
@@ -248,6 +278,7 @@ type permissionState struct {
 	ctx                     context.Context
 	cancel                  context.CancelCauseFunc
 	status                  permissionStatus // guarded by owner.mu
+	failure                 error            // guarded by owner.mu; retained after shutdown
 }
 
 type incomingControl struct {
@@ -259,17 +290,23 @@ var connectionEpoch atomic.Uint64
 
 // Called only under c.mu, including the final writer authorization check.
 func (c *Client) permissionErrorLocked(s *permissionState, expected permissionStatus) error {
-	if s.owner != c || s.epoch != c.epoch {
-		return ErrPermissionStale
+	var err error
+	switch {
+	case s.owner != c || s.epoch != c.epoch:
+		err = ErrPermissionStale
+	case s.status == permissionCancelled:
+		err = ErrPermissionCancelled
+	case s.status == permissionWriteFailed:
+		err = errors.Join(ErrPermissionWriteFailed, s.failure)
+	case s.status == permissionAnswered:
+		err = ErrPermissionUsed
+	case s.status == permissionClosed || c.closing || c.stopped:
+		err = ErrClosed
+	case s.status != expected:
+		err = ErrPermissionUsed
 	}
-	if s.status == permissionCancelled {
-		return ErrPermissionCancelled
-	}
-	if s.status == permissionClosed || c.closing || c.stopped {
-		return ErrClosed
-	}
-	if s.status != expected {
-		return ErrPermissionUsed
+	if err != nil {
+		return &PermissionError{RequestID: s.id, Err: err}
 	}
 	return nil
 }

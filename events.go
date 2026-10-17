@@ -13,17 +13,18 @@ import (
 // views. Unknown message kinds, fields and content blocks remain in Raw.
 // Raw values belong to the caller and are never reused by the reader.
 type Event struct {
-	Type      string          `json:"type"`
-	Subtype   string          `json:"subtype,omitempty"`
-	SessionID string          `json:"session_id,omitempty"`
-	UUID      string          `json:"uuid,omitempty"`
-	Raw       json.RawMessage `json:"-"`
-	System    *SystemEvent    `json:"-"`
-	Assistant *Message        `json:"-"`
-	User      *Message        `json:"-"`
-	Result    *ResultEvent    `json:"-"`
-	Stream    *StreamEvent    `json:"-"`
-	Control   *ControlRequest `json:"-"`
+	Type      string                `json:"type"`
+	Subtype   string                `json:"subtype,omitempty"`
+	SessionID string                `json:"session_id,omitempty"`
+	UUID      string                `json:"uuid,omitempty"`
+	Raw       json.RawMessage       `json:"-"`
+	System    *SystemEvent          `json:"-"`
+	Assistant *Message              `json:"-"`
+	User      *Message              `json:"-"`
+	Result    *ResultEvent          `json:"-"`
+	Stream    *StreamEvent          `json:"-"`
+	Control   *ControlRequest       `json:"-"`
+	Cancel    *ControlCancelRequest `json:"-"`
 }
 
 // SystemEvent includes session initialization and other system notifications.
@@ -165,6 +166,15 @@ type ControlRequest struct {
 	Subtype   string          `json:"-"`
 }
 
+// ControlCancelRequest reports the CLI abandoning an incoming request. It is
+// observable even for an unknown or already completed request ID. Unknown
+// fields remain in Raw. Observing cancellation does not retract an OS write
+// that was already authorized.
+type ControlCancelRequest struct {
+	RequestID string          `json:"request_id"`
+	Raw       json.RawMessage `json:"-"`
+}
+
 func parseEvent(frame []byte) (Event, error) {
 	var event Event
 	if !utf8.Valid(frame) {
@@ -216,6 +226,13 @@ func parseEvent(frame []byte) (Event, error) {
 		if err == nil {
 			event.Stream.Delta = new(StreamDelta)
 			err = json.Unmarshal(event.Stream.Event, event.Stream.Delta)
+		}
+	case "control_cancel_request":
+		event.Cancel = new(ControlCancelRequest)
+		err = json.Unmarshal(frame, event.Cancel)
+		event.Cancel.Raw = event.Raw
+		if err == nil && event.Cancel.RequestID == "" {
+			err = fmt.Errorf("control cancellation has no request_id")
 		}
 	case "control_request":
 		event.Control = new(ControlRequest)

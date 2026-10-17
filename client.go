@@ -30,12 +30,15 @@ type Limits struct {
 }
 
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
-// child's entire environment; nil inherits os.Environ. WorkDir and Model are
-// passed literally, without a shell. Existing CLI settings still apply.
+// child's entire environment; nil inherits os.Environ. WorkDir, Model and
+// ResumeID are passed literally, without a shell. Existing CLI settings apply.
 type Options struct {
-	CLIPath           string
-	WorkDir           string
-	Model             string
+	CLIPath string
+	WorkDir string
+	Model   string
+	// ResumeID asks a fresh CLI process to resume its native session. It is
+	// passed literally; the SDK does not replay messages or restore pending work.
+	ResumeID          string
 	Env               []string
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
@@ -81,7 +84,7 @@ type pendingControl struct {
 	reply   chan controlReply
 }
 
-// Client owns one subprocess. Send, Close, Done and Err are concurrency-safe.
+// Client owns one subprocess. Its methods are concurrency-safe except Receive.
 // Receive is a single-consumer stream; callers must not call it concurrently.
 type Client struct {
 	opts                                Options
@@ -101,6 +104,7 @@ type Client struct {
 	processErr                          error
 	cleanupErr                          error
 	stderrTail                          []byte
+	sessionID                           string
 	pending                             map[string]pendingControl
 	nextID                              atomic.Uint64
 }
@@ -119,6 +123,11 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
+	}
+	if options.ResumeID != "" {
+		// The CLI takes an optional resume value. Binding it to the flag also
+		// prevents a dash-leading value from becoming a different CLI option.
+		args = append(args, "--resume="+options.ResumeID)
 	}
 	cmd := exec.Command(options.CLIPath, args...)
 	cmd.Dir, cmd.Env = options.WorkDir, options.Env
@@ -190,6 +199,29 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 // as unknown outcome and terminates this connection; it is never retried.
 func (c *Client) Send(ctx context.Context, text string) error {
 	return c.writeJSON(ctx, map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}, "parent_tool_use_id": nil, "session_id": ""})
+}
+
+// RequestedResumeID returns the value supplied in Options.ResumeID. It is a
+// request, not evidence that the CLI found or resumed that session.
+func (c *Client) RequestedResumeID() string { return c.opts.ResumeID }
+
+// SessionID returns the most recent nonempty native session ID observed in a
+// system or result frame. Before such a frame arrives it returns ("", false),
+// even when a resume ID was requested. The last observed ID remains available
+// after Close. Receive still exposes the original session fields and raw frame.
+func (c *Client) SessionID() (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sessionID, c.sessionID != ""
+}
+
+// Interrupt asks the CLI to interrupt active work and waits for the matching
+// control acknowledgment. Success is not a turn result or proof of tool rollback;
+// later results remain available through Receive. If cancellation or disconnect
+// occurs after writing, the outcome may be unknown. Nothing is resent or restored.
+func (c *Client) Interrupt(ctx context.Context) error {
+	_, err := c.control(ctx, "interrupt", map[string]any{"subtype": "interrupt"})
+	return err
 }
 
 // Receive returns accepted events in arrival order, then the terminal error (or
@@ -336,9 +368,18 @@ func (c *Client) writeJSON(ctx context.Context, value any) error {
 // control registers its waiter before writing. Keep this shared path for future
 // control operations so their correlation and teardown rules stay identical.
 func (c *Client) control(ctx context.Context, subtype string, request any) (json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	id := "go_" + strconv.FormatUint(c.nextID.Add(1), 10)
 	waiter := pendingControl{subtype: subtype, reply: make(chan controlReply, 1)}
 	c.mu.Lock()
+	select {
+	case <-c.done:
+		c.mu.Unlock()
+		return nil, c.operationError()
+	default:
+	}
 	if len(c.pending) >= c.opts.Limits.PendingControls {
 		c.mu.Unlock()
 		return nil, &ResourceLimitError{Resource: "pending controls", Limit: c.opts.Limits.PendingControls}
@@ -366,6 +407,11 @@ func (c *Client) control(ctx context.Context, subtype string, request any) (json
 }
 
 func (c *Client) route(event Event) error {
+	if (event.System != nil || event.Result != nil) && event.SessionID != "" {
+		c.mu.Lock()
+		c.sessionID = event.SessionID
+		c.mu.Unlock()
+	}
 	if event.Type == "control_response" {
 		var wire struct {
 			Response struct {

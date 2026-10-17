@@ -43,3 +43,24 @@ func ExampleOpen() {
 		} // Explicit defer closes the client; Result does not.
 	}
 }
+
+// This example compiles but does not run. The session must already exist in
+// your installed CLI's native storage; the SDK does not replay its history.
+func ExampleClient_RequestedResumeID() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	client, err := claude.Open(ctx, claude.Options{CLIPath: "claude", ResumeID: "previous-native-session-id"})
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	defer client.Close()
+	fmt.Println("Requested:", client.RequestedResumeID())
+	if id, observed := client.SessionID(); observed {
+		fmt.Println("Observed:", id)
+	}
+	if err := client.Interrupt(ctx); err != nil {
+		log.Print(err)
+	}
+	// Acknowledgment does not imply rollback. Receive still delivers turn results.
+}

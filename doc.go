@@ -10,4 +10,9 @@
 // clients. Receive has one consumer; canceling a Receive wait does not interrupt
 // a turn. The CLI's inherited settings and permissions still apply: denying
 // incoming permission requests is not a sandbox or a gate on every tool.
+//
+// ResumeID requests native CLI resume in a fresh process without replaying any
+// messages. SessionID reports only identity actually observed from the CLI.
+// Interrupt waits for its matched control acknowledgment, not a turn result or
+// tool rollback. No durable recovery or pending-interaction restoration is done.
 package claude

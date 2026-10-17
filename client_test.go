@@ -54,6 +54,8 @@ func runFixture(mode string) {
 		}
 	}
 	switch mode {
+	case "session_identity_at_initialize":
+		fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": "native-at-initialize"})
 	case "init_stderr":
 		fmt.Fprint(os.Stderr, strings.Repeat("diagnostic", 20000))
 	case "init_hang":
@@ -73,6 +75,10 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if strings.HasPrefix(mode, "session_") {
+		runSessionFixture(mode, reader)
+		return
+	}
 	if mode == "blocked_write" || mode == "closed_stdin" {
 		if mode == "closed_stdin" {
 			os.Stdin.Close()

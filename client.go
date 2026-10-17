@@ -21,6 +21,9 @@ import (
 // Limits bounds transport memory. Zero fields select defaults. A bound exceeded
 // by incoming traffic terminates the connection explicitly; frames are not
 // silently discarded and the stdout reader never waits for an event consumer.
+// Queue/count limits must be at most 65,536, except PermissionWorkers (1,024)
+// and PermissionHistory (1,048,576). FrameBytes is at most 64 MiB and StderrBytes
+// at most 16 MiB. Invalid configuration is rejected before starting a process.
 type Limits struct {
 	EventBuffer     int
 	FrameBytes      int
@@ -68,15 +71,18 @@ func (o *Options) defaults() error {
 		o.ShutdownTimeout = 3 * time.Second
 	}
 	for _, pair := range []struct {
-		v   *int
-		def int
+		name string
+		v    *int
+		def  int
+		max  int
 	}{
-		{&o.Limits.EventBuffer, 128}, {&o.Limits.FrameBytes, 4 << 20},
-		{&o.Limits.PendingControls, 32}, {&o.Limits.ControlBuffer, 32}, {&o.Limits.StderrBytes, 8192},
-		{&o.Limits.PendingPermissions, 128}, {&o.Limits.PermissionWorkers, 4}, {&o.Limits.PermissionHistory, 4096},
+		{"EventBuffer", &o.Limits.EventBuffer, 128, 65536}, {"FrameBytes", &o.Limits.FrameBytes, 4 << 20, 64 << 20},
+		{"PendingControls", &o.Limits.PendingControls, 32, 65536}, {"ControlBuffer", &o.Limits.ControlBuffer, 32, 65536},
+		{"StderrBytes", &o.Limits.StderrBytes, 8192, 16 << 20}, {"PendingPermissions", &o.Limits.PendingPermissions, 128, 65536},
+		{"PermissionWorkers", &o.Limits.PermissionWorkers, 4, 1024}, {"PermissionHistory", &o.Limits.PermissionHistory, 4096, 1 << 20},
 	} {
-		if *pair.v < 0 {
-			return fmt.Errorf("claude: limits must not be negative")
+		if *pair.v < 0 || *pair.v > pair.max {
+			return fmt.Errorf("claude: %s must be between 0 and %d", pair.name, pair.max)
 		}
 		if *pair.v == 0 {
 			*pair.v = pair.def
@@ -220,6 +226,14 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 // local write. A canceled or failed started write is conservatively classified
 // as unknown outcome and terminates this connection; it is never retried.
 func (c *Client) Send(ctx context.Context, text string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// A JSON string cannot be shorter than its original bytes. Reject obviously
+	// oversized caller input before encoding; escapes/envelope are checked below.
+	if len(text) > c.opts.Limits.FrameBytes {
+		return &ResourceLimitError{Resource: "outbound frame bytes", Limit: c.opts.Limits.FrameBytes}
+	}
 	return c.writeJSON(ctx, map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}, "parent_tool_use_id": nil, "session_id": ""})
 }
 
@@ -334,6 +348,7 @@ func (c *Client) failLocked(err error) {
 			c.terminal = err
 		} else if (errors.Is(err, ErrProtocol) && !errors.Is(c.terminal, ErrProtocol)) ||
 			(errors.Is(err, ErrResourceLimit) && !errors.Is(c.terminal, ErrResourceLimit)) ||
+			(errors.Is(err, ErrUnknownOutcome) && !errors.Is(c.terminal, ErrUnknownOutcome)) ||
 			(errors.Is(err, ErrPermissionWriteFailed) && !errors.Is(c.terminal, ErrPermissionWriteFailed)) {
 			// Shutdown can win the race with a final read or response write.
 			// Retain its more specific failure after that operation settles.
@@ -358,6 +373,24 @@ func (c *Client) writeJSON(ctx context.Context, value any) error {
 }
 
 func (c *Client) writeJSONChecked(ctx context.Context, value any, authorize func() error) error {
+	// Serialize encoding as well as writing: concurrent callers do not each
+	// retain an SDK-encoded frame while waiting for the writer.
+	select {
+	case c.writeGate <- struct{}{}:
+		defer func() { <-c.writeGate }()
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.done:
+		return ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-c.done:
+		return ErrClosed
+	default:
+	}
 	frame, err := json.Marshal(value)
 	if err != nil {
 		return &Error{Op: "encode", Err: err}
@@ -366,21 +399,8 @@ func (c *Client) writeJSONChecked(ctx context.Context, value any, authorize func
 		return &ResourceLimitError{Resource: "outbound frame bytes", Limit: c.opts.Limits.FrameBytes}
 	}
 	frame = append(frame, '\n')
-	select {
-	case c.writeGate <- struct{}{}:
-		defer func() { <-c.writeGate }()
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-c.done:
-		return c.operationError()
-	}
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	select {
-	case <-c.done:
-		return c.operationError()
-	default:
 	}
 	if authorize != nil {
 		if err := authorize(); err != nil {
@@ -423,7 +443,7 @@ func (c *Client) control(ctx context.Context, subtype string, request any) (json
 	select {
 	case <-c.done:
 		c.mu.Unlock()
-		return nil, c.operationError()
+		return nil, ErrClosed
 	default:
 	}
 	if len(c.pending) >= c.opts.Limits.PendingControls {
@@ -624,6 +644,11 @@ func (c *Client) respondControls() {
 }
 
 func awaitUntil(ch <-chan struct{}, until time.Time) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+	}
 	timer := time.NewTimer(max(time.Until(until), 0))
 	defer timer.Stop()
 	select {
@@ -673,12 +698,44 @@ func (c *Client) ownLifecycle() {
 			}
 		}
 	}
+	// A same-group descendant can close its inherited pipes yet keep running.
+	// Once the direct child has exited, finish any remaining group members even
+	// when all pipes were already drained. On other platforms this is a harmless
+	// Kill of the already-exited direct child, not a descendant-tree guarantee.
+	select {
+	case <-c.processDone:
+		_ = terminateProcess(c.cmd, true)
+	default:
+	}
 	_ = c.stdout.Close()
 	_ = c.stderr.Close()
 	// File.Close unblocks the pipe readers; do not return while they can mutate
 	// accepted-event ordering or the final stderr snapshot.
 	<-c.stdoutDone
 	<-c.stderrDone
+	// Closing stdin releases an active pipe write. Wait for that serialized
+	// writer to record its result before exposing the final diagnostics. Do not
+	// wait beyond the same shutdown budget or for arbitrary permission callbacks.
+	writerSettled := false
+	select {
+	case c.writeGate <- struct{}{}:
+		writerSettled = true
+	default:
+		timer := time.NewTimer(max(time.Until(start.Add(c.opts.ShutdownTimeout)), 0))
+		select {
+		case c.writeGate <- struct{}{}:
+			writerSettled = true
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
+	if writerSettled {
+		<-c.writeGate
+	} else {
+		c.mu.Lock()
+		c.cleanupErr = ErrShutdownTimeout
+		c.mu.Unlock()
+	}
 	c.mu.Lock()
 	if !c.closing && c.processErr != nil && !errors.Is(c.terminal, c.processErr) {
 		c.terminal = errors.Join(c.terminal, &Error{Op: "process", Err: c.processErr})

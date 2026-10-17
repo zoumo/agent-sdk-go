@@ -1,0 +1,38 @@
+name: Go checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.9'
+          cache: false
+      - name: Verify pinned compiler
+        run: |
+          go version
+          test "$(go env GOVERSION)" = go1.26.9
+      - name: Unit, subprocess, race, and vet checks (no live CLI)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdk-home" "$RUNNER_TEMP/sdk-cache"
+          for check in test race vet; do
+            case "$check" in
+              test) args=(test -count=1 -timeout 180s ./...) ;;
+              race) args=(test -race -count=1 -timeout 300s ./...) ;;
+              vet) args=(vet ./...) ;;
+            esac
+            env -i PATH="$PATH" HOME="$RUNNER_TEMP/sdk-home" \
+              GOCACHE="$RUNNER_TEMP/sdk-cache" GOTOOLCHAIN=local GOENV=off \
+              GOPROXY=off GOSUMDB=off \
+              GORACE=atexit_sleep_ms=0 go "${args[@]}"
+          done

@@ -466,7 +466,7 @@ func TestInterruptWaitersWakeOnTermination(t *testing.T) {
 					t.Fatalf("final diagnostic lost after %s: Close = %v, Err = %v", mode, err, c.Err())
 				}
 			}
-			if err := c.Interrupt(context.Background()); !errors.Is(err, want) {
+			if err := c.Interrupt(context.Background()); !errors.Is(err, claude.ErrClosed) || errors.Is(err, claude.ErrUnknownOutcome) {
 				t.Fatalf("interrupt after termination: %v", err)
 			}
 		})

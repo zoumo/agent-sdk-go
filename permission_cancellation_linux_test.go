@@ -241,3 +241,69 @@ func TestPermissionStartedWriteCanFinishBeforeCancellation(t *testing.T) {
 		t.Fatalf("completed answer was duplicated: %d", len(got))
 	}
 }
+
+func TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity(t *testing.T) {
+	c, _, gate, _ := permissionWireBarrier(t)
+	started := startBlockedPermissionWriter(t, c, "unused", nil)
+	sendCtx := &answerReservationContext{Context: context.Background(), reserved: make(chan struct{})}
+	queuedSend := make(chan error, 1)
+	go func() { queuedSend <- c.Send(sendCtx, "must never be written") }()
+	awaitSignal(t, sendCtx.reserved)
+	controlCtx := &answerReservationContext{Context: context.Background(), reserved: make(chan struct{})}
+	queuedControl := interruptAsync(c, controlCtx)
+	awaitSignal(t, controlCtx.reserved)
+	closeResults := make(chan error, 1)
+	go func() { closeResults <- c.Close() }()
+	for _, result := range []<-chan error{queuedSend, queuedControl} {
+		err := awaitPermissionError(t, result)
+		if !errors.Is(err, claude.ErrClosed) || errors.Is(err, claude.ErrUnknownOutcome) {
+			t.Fatalf("queued operation inherited ambiguity: %v", err)
+		}
+	}
+	if err := awaitPermissionError(t, started); !errors.Is(err, claude.ErrUnknownOutcome) {
+		t.Fatalf("started write outcome: %v", err)
+	}
+	releasePermissionWire(t, gate, 'x')
+	if err := awaitPermissionError(t, closeResults); !errors.Is(err, claude.ErrUnknownOutcome) {
+		t.Fatalf("Close lost started write failure: %v", err)
+	}
+	if !errors.Is(c.Err(), claude.ErrUnknownOutcome) {
+		t.Fatalf("Err lost original cause: %v", c.Err())
+	}
+}
+
+func TestAutomaticResponseQueueOverflowUnblocksStartedWriter(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "gate")
+	path := filepath.Join(dir, "stdin.ndjson")
+	if err := syscall.Mkfifo(fifo, 0600); err != nil {
+		t.Fatal(err)
+	}
+	gate, err := os.OpenFile(fifo, os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	c := openFixture(t, "permission_controls", func(o *claude.Options) {
+		o.Limits.ControlBuffer = 2
+		o.Limits.EventBuffer = 32
+		o.Env = append(o.Env, "CLAUDE_GO_WRITE_BARRIER="+fifo, "CLAUDE_GO_TRANSCRIPT="+path)
+	})
+	started := startBlockedPermissionWriter(t, c, "unused", nil)
+	releasePermissionWire(t, gate, 'r')
+	awaitDone(t, c)
+	if err := awaitPermissionError(t, started); !errors.Is(err, claude.ErrUnknownOutcome) {
+		t.Fatalf("blocked writer: %v", err)
+	}
+	var limit *claude.ResourceLimitError
+	if err := c.Close(); !errors.As(err, &limit) || limit.Resource != "incoming control queue" || limit.Limit != 2 {
+		t.Fatalf("response queue bound: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(`{"response":`)) {
+		t.Fatal("queued automatic reply reached blocked stdin")
+	}
+}

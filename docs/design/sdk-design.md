@@ -1,6 +1,6 @@
-# Claude Agent Go SDK: proposed P0 design
+# Claude Agent Go SDK: core design
 
-Status: Approved design for the initial experimental implementation. Date: 2026-10-17.
+Status: Implemented experimental core; live interoperability remains unverified. Date: 2026-10-17.
 
 ## Product boundary
 
@@ -8,7 +8,7 @@ A native Go thin client for a locally installed Claude Code CLI, intended module
 
 P0 means actual implemented public behavior, not placeholder APIs. Hook registration, SDK-hosted MCP, broad configuration parity, session forking, remote transports, and durable recovery are deferred. A result is a turn result, not proof the process or background work has finished.
 
-## Proposed public behavior
+## Public behavior
 
 Names below are design vocabulary; exact exported identifiers settle during implementation without weakening these contracts.
 
@@ -35,7 +35,7 @@ Serial writes retain full-frame boundaries. Background read/write errors, malfor
 
 One owner reaps the child. Close is idempotent and concurrency safe: cancel handles, close stdin, bounded drain/wait, terminate then kill if needed, close pipes and finish. Retain accepted events before terminal failure. POSIX child/process-group teardown is tested where supported; do not advertise durable process adoption or unverified platform-specific descendant guarantees. Handler code must respect context: Go cannot forcibly stop arbitrary user callbacks. SDK shutdown must not wait forever for a callback that ignores cancellation.
 
-## Highest proposed test seam
+## Public test seam
 
 Exercise only the exported client API against a scripted local subprocess acting as the CLI. The fixture observes argv/stdin and emits official-source-derived stdout frames; it can delay, close pipes, saturate output and spawn a descendant. Use no internal router assertions as acceptance criteria. A narrow internal process seam may assist deterministic fault injection, but public behavior remains the oracle. Fresh contexts read this design and their one ticket.
 

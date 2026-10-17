@@ -1,0 +1,13 @@
+Claude Agent SDK for Go
+Copyright 2026 Claude Agent SDK for Go contributors
+
+This is an independent implementation, not an Anthropic product or endorsement.
+The original Go implementation and tests are licensed under Apache-2.0.
+
+Protocol shapes and behavioral references were researched from the official
+anthropics/claude-agent-sdk-python project at commit
+f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab and the official Agent SDK overview.
+No official or competing SDK implementation or test source is redistributed
+or linked as a dependency. Source hashes and test provenance are recorded in
+docs/compatibility.md. Reference-source licenses do not replace or extend the
+license of the CLI or its services; those remain subject to their own terms.

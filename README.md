@@ -2,9 +2,9 @@
 
 An experimental, independent native Go client for a locally installed Claude Code CLI. No other Go SDK or language runtime is required by the client. Original code is licensed under Apache-2.0.
 
-**Implementation is in progress. This is not a P0 release or a production-ready SDK.** Live Claude CLI compatibility is unverified. The protocol baseline is the official Python SDK at [`f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab`](https://github.com/anthropics/claude-agent-sdk-python/tree/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab), which references CLI 2.1.302. Synthetic tests do not establish real runtime interoperability or official endorsement.
+**Experimental core implemented; not production-validated. Live Claude CLI compatibility: UNKNOWN.** See the [canonical compatibility matrix and complete official feature inventory](docs/compatibility.md) for implemented APIs, synthetic/race evidence, and unsupported features. The protocol baseline is the official Python SDK at [`f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab`](https://github.com/anthropics/claude-agent-sdk-python/tree/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab), which references CLI 2.1.302. Synthetic tests do not establish real runtime interoperability or official endorsement.
 
-## Implemented so far
+## Implemented core
 
 - Local process startup with literal argv, explicit CLI path/workdir/model, bounded and correlated initialization
 - Synchronous complete-frame `Send` and single-consumer `Receive`
@@ -16,7 +16,7 @@ An experimental, independent native Go client for a locally installed Claude Cod
 - Bounded event/control queues, frame sizes and stderr tails; explicit overflow and protocol errors
 - Independent `Done` and `Err`, retained accepted events, idempotent concurrent `Close`, and owned child reaping with bounded escalation
 
-Deeper overload/lifecycle hardening is the remaining P0 ticket. All five tickets and independent review are required before the first experimental release.
+The typed Go views are handwritten, with raw JSON preserving unknown exposed-event data; no automatic upstream type synchronization/code generation exists. Hooks, SDK-hosted MCP, full configuration parity, session-store helpers and dynamic model/permission controls are unsupported. A separately authorized [live compatibility checklist](docs/live-compatibility.md) is provided; it is never part of default tests or CI.
 
 ## Usage
 
@@ -59,13 +59,13 @@ func main() {
 }
 ```
 
-A successful `Send` means only that the full NDJSON frame was written. It is not proof of acceptance, execution, or exactly-once delivery. `errors.Is(err, claude.ErrUnknownOutcome)` marks ambiguous writes/control waits; the SDK never automatically retries them. Canceling an in-flight write closes the connection to unblock that write. Canceling a `Receive` wait leaves the session running.
+A successful `Send` means only that the full NDJSON frame was written. It is not proof of acceptance, execution, or exactly-once delivery. `errors.Is(err, claude.ErrUnknownOutcome)` marks ambiguous writes/control waits; the SDK never automatically retries them. Canceling an in-flight write closes the connection to unblock that write. Canceling a `Receive` wait leaves the session running. Queued writes rejected before starting return a caller-context error or `ErrClosed`, without inheriting another write’s unknown outcome; inspect `Client.Err` for the connection’s terminal cause.
 
 A result ends one turn, not the process. Always close the client. `Done` is independent of event-buffer capacity; drain `Receive` to obtain accepted events before its terminal error. `Err` exposes the latest known failure, while `Close` waits for cleanup and final diagnostics. `Error.Stderr` contains a bounded diagnostic tail that may be sensitive; the SDK never logs it automatically.
 
 Incoming `can_use_tool` requests are denied when no permission handler is configured. This is not a sandbox: CLI settings, previously granted permissions and operations that do not prompt still apply. An assistant `AskUserQuestion` content block is observable data and causes no synthetic reply.
 
-`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, 128 queued events, 4 MiB per frame, 32 pending outbound controls, 32 queued automatic responses, 32 queued permission-handler jobs, 128 unanswered incoming controls, 4 concurrent permission handlers, 4,096 distinct incoming control/cancellation IDs per connection, and an 8 KiB stderr tail. Request-ID history is never evicted; exhaustion terminates the connection rather than reviving stale requests. Zero-valued fields select defaults. Overflow terminates the connection visibly, retaining only already accepted events. POSIX process-group signaling is implemented; descendant teardown and other platform behavior are not yet comprehensively verified.
+`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, 128 queued events, 4 MiB per frame, 32 pending outbound controls, 32 queued automatic responses, 32 queued permission-handler jobs, 128 unanswered incoming controls, 4 concurrent permission handlers, 4,096 distinct incoming control/cancellation IDs per connection, and an 8 KiB stderr tail. Request-ID history is never evicted; exhaustion terminates the connection rather than reviving stale requests. Zero-valued fields select defaults. Incoming overflow terminates the connection visibly, retaining only already accepted events. Oversized local sends and excess pending outbound controls are rejected before writing and do not close the connection. Values above documented [validated resource ceilings](docs/compatibility.md#resource-and-shutdown-contract) are rejected before process startup. Linux subprocess/race tests verify direct-child reaping and process-group teardown, including descendants holding stdout and descendants that close their pipes. Other platform runtimes are unverified; non-POSIX builds kill only the direct child, and escaped process groups are outside the guarantee. Close never waits for arbitrary user callbacks that ignore cancellation.
 
 ## Native resume and interrupt
 
@@ -105,14 +105,14 @@ A real `can_use_tool` for `AskUserQuestion` uses this same API with caller-suppl
 Go is pinned to 1.26.9 in `mise.toml`. This module is standard-library-only.
 
 ```sh
-mise exec -- go version
-mise exec -- go test -timeout 60s ./...
-mise exec -- go test -race -timeout 120s ./...
-mise exec -- go vet ./...
+mise exec go@1.26.9 -- go version
+mise exec go@1.26.9 -- go test -count=1 -timeout 180s ./...
+mise exec go@1.26.9 -- go test -race -count=1 -timeout 300s ./...
+mise exec go@1.26.9 -- go vet ./...
 ```
 
-Tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, and POSIX child reaping. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The public examples are compiled, not executed.
+Tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, full event queues with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The public examples are compiled, not executed.
 
 Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
 
-See [the design](docs/design/sdk-design.md) for the full planned P0 contract and deferred scope.
+See the [compatibility inventory](docs/compatibility.md) for every official export, client method, option and wire-control boundary, and [the design](docs/design/sdk-design.md) for the implemented core contract and deferred scope. Source/test provenance is recorded there and in [NOTICE](NOTICE).

@@ -243,6 +243,9 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 		if input == nil {
 			input = p.state.input
 		}
+		if len(input) > p.state.owner.opts.Limits.FrameBytes {
+			return nil, &ResourceLimitError{Resource: "outbound frame bytes", Limit: p.state.owner.opts.Limits.FrameBytes}
+		}
 		input = bytes.TrimSpace(input)
 		if !utf8.Valid(input) || !json.Valid(input) || len(input) == 0 || input[0] != '{' {
 			return nil, ErrInvalidPermissionAnswer
@@ -251,6 +254,9 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 	case PermissionDeny:
 		if answer.UpdatedInput != nil || !utf8.ValidString(answer.Message) {
 			return nil, ErrInvalidPermissionAnswer
+		}
+		if len(answer.Message) > p.state.owner.opts.Limits.FrameBytes {
+			return nil, &ResourceLimitError{Resource: "outbound frame bytes", Limit: p.state.owner.opts.Limits.FrameBytes}
 		}
 		return map[string]any{"behavior": "deny", "message": answer.Message}, nil
 	default:

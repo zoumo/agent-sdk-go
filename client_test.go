@@ -37,6 +37,10 @@ func fixtureEmit(value any) {
 	}
 }
 func runFixture(mode string) {
+	if mode == "lifecycle_descendant" {
+		runLifecycleDescendant()
+		return
+	}
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadBytes('\n')
 	if err != nil {
@@ -75,6 +79,14 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if strings.HasPrefix(mode, "overload_") {
+		runOverloadFixture(mode, reader)
+		return
+	}
+	if strings.HasPrefix(mode, "lifecycle_") {
+		runLifecycleFixture(mode, reader)
+		return
+	}
 	if strings.HasPrefix(mode, "permission_") {
 		runPermissionFixture(mode, reader)
 		return

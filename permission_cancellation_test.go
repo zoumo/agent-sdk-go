@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,6 +50,12 @@ func permissionBlockedWire(reader *bufio.Reader, transcript *os.File, id string)
 		os.Exit(19)
 	}
 	switch action[0] {
+	case 'r':
+		for i := range 8 {
+			fixtureEmit(map[string]any{"type": "control_request", "request_id": fmt.Sprintf("unsupported-%d", i), "request": map[string]any{"subtype": "future_control"}})
+		}
+		_, _ = io.Copy(transcript, reader)
+		return nil, false
 	case 'q', 'c':
 		fixtureEmit(map[string]any{"type": "control_cancel_request", "request_id": id})
 		if action[0] == 'q' {

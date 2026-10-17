@@ -1,0 +1,101 @@
+{
+  "protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb",
+  "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
+  "sdk_revision_note": "The implementation commit identified here was verified after committing. The following documentation-only evidence commit records that exact revision; SDK source and tests are unchanged.",
+  "toolchain": {
+    "go": "1.26.9",
+    "manager": "mise",
+    "GOTOOLCHAIN": "local"
+  },
+  "live_validation": "not performed",
+  "records": [
+    {
+      "id": "ticket01-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "398 synthetic exported-model schema round trips; omitted/null/value; experimental start fields; known and unknown union variants; unknown object fields; malformed known payload rejection; atomic decoding and encoding validation. Synthetic fixtures, no server process."
+    },
+    {
+      "id": "ticket01-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Same model suite under Go race detector. No concurrent server compatibility claim."
+    },
+    {
+      "id": "ticket01-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test ./...",
+      "test_files": [
+        "client_contract_test.go"
+      ],
+      "test_names": [
+        "TestFakeChild",
+        "TestOwnedStdioLifecycle",
+        "TestIDExactness",
+        "TestCancellationAndLateResponse",
+        "TestRPCErrorNoReplay",
+        "TestConnectionLossIsUnknown",
+        "TestMalformedFrames",
+        "TestInitializeFailures",
+        "TestPendingAdmissionLimit",
+        "TestStderrAndUnknownNotifications",
+        "TestBlockedWriteAndConcurrentClose",
+        "TestCloseKillsOnlyOwnedChild",
+        "TestOwnedChildExitWithOpenOutput",
+        "TestOutgoingFrameLimitAndDefaultCallTimeout",
+        "TestOutboundAdmissionIsBounded",
+        "TestCancelBlockedWrite",
+        "TestInvalidOptionsAndClosedCall",
+        "TestExplicitCommandEnvironmentAndDirectory"
+      ],
+      "coverage": "Exported-package consumer against independently authored scripted child process: handshake order/native thread IDs, typed start/read, raw RPC, exact IDs, pre-write cancellation, post-dispatch unknown outcomes, late responses, no replay, malformed/oversized frames, reverse-request rejection, startup failure, admission limits, stderr draining, notification counting, bounded writes/close, child exit and reaping. TestFakeChild is fixture execution, not a scenario. No live Codex executable."
+    },
+    {
+      "id": "ticket01-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "protocol/protocol_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Entire exported contract and model suites pass under the race detector after the confirmed-dispatch test synchronization fix.",
+      "attempts": [
+        {
+          "result": "failed",
+          "detail": "TestCancelBlockedWrite observed not-sent/context deadline exceeded where outcome-unknown was expected. The short deadline could expire before dispatch under race instrumentation. A deterministic test synchronization fix and complete rerun are required."
+        },
+        {
+          "result": "passed",
+          "detail": "Replaced elapsed-time assumption with fake-peer acknowledgment of actual received request byte before cancellation; complete suite passes."
+        }
+      ]
+    }
+  ],
+  "verification_commands": [
+    {
+      "command": "mise exec go@1.26.9 -- go vet ./...",
+      "status": "passed"
+    },
+    {
+      "command": "python3 docs/protocol/verify_inventory.py",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ]
+}

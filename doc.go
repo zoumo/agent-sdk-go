@@ -1,0 +1,13 @@
+// Copyright 2026 Claude Agent SDK for Go contributors
+// SPDX-License-Identifier: Apache-2.0
+
+// Package claude provides an experimental native client for a local Claude Code
+// process. It does not bundle a CLI or manage accounts. Protocol fixtures target
+// an official SDK source revision; live CLI interoperability is unverified.
+//
+// A successful Send means that a complete frame was written, not that the CLI
+// accepted or executed it. A Result ends a turn, not the client. Always Close
+// clients. Receive has one consumer; canceling a Receive wait does not interrupt
+// a turn. The CLI's inherited settings and permissions still apply: denying
+// incoming permission requests is not a sandbox or a gate on every tool.
+package claude

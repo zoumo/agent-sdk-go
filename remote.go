@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 )
@@ -188,7 +189,10 @@ func (c *Client) readRemote() {
 		kind, raw, err := c.remote.Read(context.Background())
 		if err != nil {
 			var networkError net.Error
+			var closeError websocket.CloseError
 			switch {
+			case errors.As(err, &closeError) && !utf8.ValidString(closeError.Reason):
+				c.fail(fmt.Errorf("%w: invalid WebSocket close reason", ErrProtocol))
 			case errors.Is(err, websocket.ErrMessageTooBig):
 				c.fail(fmt.Errorf("%w: %w", ErrProtocol, ErrFrameTooLarge))
 			case websocket.CloseStatus(err) == websocket.StatusProtocolError || websocket.CloseStatus(err) == websocket.StatusInvalidFramePayloadData:

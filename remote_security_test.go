@@ -893,6 +893,8 @@ func TestRemoteSecurityMalformedRawWebSocketFrames(t *testing.T) {
 		{"nonminimal-127-length", nonminimal127},
 		{"invalid-utf8", []byte{0x81, 1, 0xff}},
 		{"invalid-close-code", []byte{0x88, 2, 0, 1}},
+		{"invalid-utf8-close-reason", []byte{0x88, 3, 3, 232, 0xff}},
+		{"one-byte-close-payload", []byte{0x88, 1, 0}},
 	}
 	for _, secure := range []bool{false, true} {
 		for _, tc := range cases {

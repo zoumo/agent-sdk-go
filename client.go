@@ -27,6 +27,14 @@ type Limits struct {
 	PendingControls int
 	ControlBuffer   int
 	StderrBytes     int
+	// PendingPermissions bounds unanswered incoming controls, including retained
+	// permission handles.
+	PendingPermissions int
+	// PermissionWorkers bounds concurrent handler calls, including blocked ones.
+	PermissionWorkers int
+	// PermissionHistory bounds distinct incoming control/cancellation IDs per client.
+	// IDs are never evicted, so a retired request cannot acquire a new responder.
+	PermissionHistory int
 }
 
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
@@ -43,6 +51,7 @@ type Options struct {
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
 	Limits            Limits
+	PermissionHandler PermissionHandler
 }
 
 func (o *Options) defaults() error {
@@ -64,6 +73,7 @@ func (o *Options) defaults() error {
 	}{
 		{&o.Limits.EventBuffer, 128}, {&o.Limits.FrameBytes, 4 << 20},
 		{&o.Limits.PendingControls, 32}, {&o.Limits.ControlBuffer, 32}, {&o.Limits.StderrBytes, 8192},
+		{&o.Limits.PendingPermissions, 128}, {&o.Limits.PermissionWorkers, 4}, {&o.Limits.PermissionHistory, 4096},
 	} {
 		if *pair.v < 0 {
 			return fmt.Errorf("claude: limits must not be negative")
@@ -91,7 +101,8 @@ type Client struct {
 	cmd                                 *exec.Cmd
 	stdin, stdout, stderr               *os.File
 	events                              chan Event
-	responses                           chan *ControlRequest
+	responses                           chan incomingControl
+	permissionJobs                      chan *PermissionRequest
 	writeGate                           chan struct{}
 	done                                chan struct{}
 	stop                                chan struct{}
@@ -101,12 +112,16 @@ type Client struct {
 	mu                                  sync.Mutex
 	terminal                            error
 	closing                             bool
+	stopped                             bool
 	processErr                          error
 	cleanupErr                          error
 	stderrTail                          []byte
 	sessionID                           string
 	pending                             map[string]pendingControl
 	nextID                              atomic.Uint64
+	epoch                               uint64
+	permissions                         map[string]*permissionState
+	permissionIDs                       map[string]struct{}
 }
 
 // Open starts and initializes a local process. ctx bounds startup, not the
@@ -163,12 +178,19 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	outputW.Close()
 	errorW.Close()
 	c := &Client{opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
-		events: make(chan Event, options.Limits.EventBuffer), responses: make(chan *ControlRequest, options.Limits.ControlBuffer),
+		events: make(chan Event, options.Limits.EventBuffer), responses: make(chan incomingControl, options.Limits.ControlBuffer),
+		permissionJobs: make(chan *PermissionRequest, options.Limits.ControlBuffer), epoch: connectionEpoch.Add(1),
+		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
 	go c.readStdout()
 	go c.readStderr()
 	go c.respondControls()
+	if options.PermissionHandler != nil {
+		for range options.Limits.PermissionWorkers {
+			go c.dispatchPermissions()
+		}
+	}
 	go func() { err := cmd.Wait(); c.mu.Lock(); c.processErr = err; c.mu.Unlock(); close(c.processDone) }()
 	go c.ownLifecycle()
 	initCtx, cancel := context.WithTimeout(ctx, options.InitializeTimeout)
@@ -302,6 +324,11 @@ func (c *Client) Close() error {
 }
 func (c *Client) fail(err error) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.failLocked(err)
+}
+
+func (c *Client) failLocked(err error) {
 	if err != nil {
 		if c.terminal == nil || c.terminal == ErrUnexpectedEOF {
 			c.terminal = err
@@ -312,11 +339,24 @@ func (c *Client) fail(err error) {
 			c.terminal = errors.Join(c.terminal, err)
 		}
 	}
-	c.mu.Unlock()
+	c.stopped = true
+	for id, permission := range c.permissions {
+		permission.status = permissionClosed
+		cause := err
+		if cause == nil {
+			cause = ErrClosed
+		}
+		permission.cancel(cause)
+		delete(c.permissions, id)
+	}
 	c.stopOnce.Do(func() { close(c.done); close(c.stop) })
 }
 
 func (c *Client) writeJSON(ctx context.Context, value any) error {
+	return c.writeJSONChecked(ctx, value, nil)
+}
+
+func (c *Client) writeJSONChecked(ctx context.Context, value any, authorize func() error) error {
 	frame, err := json.Marshal(value)
 	if err != nil {
 		return &Error{Op: "encode", Err: err}
@@ -340,6 +380,11 @@ func (c *Client) writeJSON(ctx context.Context, value any) error {
 	case <-c.done:
 		return c.operationError()
 	default:
+	}
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return err
+		}
 	}
 	// Closing a pipe unblocks an in-flight Write on supported Go platforms. There
 	// is no detached write goroutine that can later send after cancellation.
@@ -443,11 +488,48 @@ func (c *Client) route(event Event) error {
 		}
 		return nil
 	}
+	if event.Type == "control_cancel_request" {
+		var cancel struct {
+			RequestID string `json:"request_id"`
+		}
+		if err := json.Unmarshal(event.Raw, &cancel); err != nil {
+			return err
+		}
+		if cancel.RequestID == "" {
+			return fmt.Errorf("control cancellation has no request_id")
+		}
+		if err := c.cancelPermission(cancel.RequestID); err != nil {
+			return err
+		}
+	}
+	// This reader is the only event producer. A free slot cannot disappear
+	// before the final send, so a handler is never dispatched for an event
+	// already known to exceed capacity.
+	if len(c.events) == cap(c.events) {
+		return &ResourceLimitError{Resource: "event buffer", Limit: c.opts.Limits.EventBuffer}
+	}
 	if event.Control != nil {
-		select {
-		case c.responses <- event.Control:
-		default:
-			return &ResourceLimitError{Resource: "incoming control queue", Limit: c.opts.Limits.ControlBuffer}
+		permission, err := c.registerIncoming(event.Control)
+		if errors.Is(err, ErrClosed) {
+			c.events <- event
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		work := incomingControl{subtype: event.Control.Subtype, permission: permission}
+		if work.subtype == "can_use_tool" && c.opts.PermissionHandler != nil {
+			select {
+			case c.permissionJobs <- permission:
+			default:
+				return &ResourceLimitError{Resource: "permission handler queue", Limit: c.opts.Limits.ControlBuffer}
+			}
+		} else {
+			select {
+			case c.responses <- work:
+			default:
+				return &ResourceLimitError{Resource: "incoming control queue", Limit: c.opts.Limits.ControlBuffer}
+			}
 		}
 	}
 	select {
@@ -499,6 +581,9 @@ func (c *Client) readStdout() {
 			return
 		}
 		if err := c.route(event); err != nil {
+			if errors.Is(err, ErrClosed) {
+				return
+			}
 			if !errors.Is(err, ErrResourceLimit) {
 				err = fmt.Errorf("%w: %v", ErrProtocol, err)
 			}
@@ -529,24 +614,19 @@ func (c *Client) readStderr() {
 }
 
 // One bounded worker prevents incoming replies from blocking the stdout reader
-// or spawning an unbounded goroutine per request. Deferred handlers come later.
+// or spawning an unbounded goroutine per request. Human handlers have a
+// separate bounded pool, so they cannot strand unsupported-control responses.
 func (c *Client) respondControls() {
 	for {
 		select {
 		case <-c.done:
 			return
 		case request := <-c.responses:
-			response := map[string]any{"request_id": request.RequestID}
-			if request.Subtype == "can_use_tool" {
-				response["subtype"] = "success"
-				response["response"] = map[string]any{"behavior": "deny", "message": "No permission handler is configured"}
-			} else {
-				response["subtype"] = "error"
-				response["error"] = "Unsupported control request subtype: " + request.Subtype
+			if request.subtype == "can_use_tool" {
+				_ = request.permission.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "No permission handler is configured"})
+				continue
 			}
-			if err := c.writeJSON(context.Background(), map[string]any{"type": "control_response", "response": response}); err != nil {
-				return
-			}
+			_ = request.permission.answerUnsupported(context.Background(), request.subtype)
 		}
 	}
 }

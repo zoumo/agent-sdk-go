@@ -10,11 +10,12 @@ An experimental, independent native Go client for a locally installed Claude Cod
 - Synchronous complete-frame `Send` and single-consumer `Receive`
 - Explicit native resume, separate requested/observed session identity, and correlated `Interrupt` acknowledgments
 - Typed system, assistant, user, result, stream-delta, tool-use and tool-result views, with lossless raw JSON for unknown types, fields and blocks
-- Fail-closed `can_use_tool` replies, observable incoming control requests, and explicit error replies for unsupported controls
+- Deferred, single-use permission handles with original IDs/input/context, bounded asynchronous handlers, cancellation guards, and default deny
+- Observable incoming control requests and explicit error replies for unsupported controls
 - Bounded event/control queues, frame sizes and stderr tails; explicit overflow and protocol errors
 - Independent `Done` and `Err`, retained accepted events, idempotent concurrent `Close`, and owned child reaping with bounded escalation
 
-Deferred permission handles, per-request cancellation guards and deeper overload/lifecycle hardening are the remaining P0 tickets. All five tickets and independent review are required before the first experimental release.
+Broader per-request cancellation/race coverage and deeper overload/lifecycle hardening are the remaining P0 tickets. All five tickets and independent review are required before the first experimental release.
 
 ## Usage
 
@@ -61,9 +62,9 @@ A successful `Send` means only that the full NDJSON frame was written. It is not
 
 A result ends one turn, not the process. Always close the client. `Done` is independent of event-buffer capacity; drain `Receive` to obtain accepted events before its terminal error. `Err` exposes the latest known failure, while `Close` waits for cleanup and final diagnostics. `Error.Stderr` contains a bounded diagnostic tail that may be sensitive; the SDK never logs it automatically.
 
-Incoming `can_use_tool` requests are denied in this initial implementation. This is not a sandbox: CLI settings, previously granted permissions and operations that do not prompt still apply. An assistant `AskUserQuestion` content block is observable data and causes no synthetic reply.
+Incoming `can_use_tool` requests are denied when no permission handler is configured. This is not a sandbox: CLI settings, previously granted permissions and operations that do not prompt still apply. An assistant `AskUserQuestion` content block is observable data and causes no synthetic reply.
 
-`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, 128 queued events, 4 MiB per frame, 32 pending outbound controls, 32 queued incoming controls, and an 8 KiB stderr tail. Zero-valued fields select defaults. Overflow terminates the connection visibly, retaining only already accepted events. POSIX process-group signaling is implemented; descendant teardown and other platform behavior are not yet comprehensively verified.
+`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, 128 queued events, 4 MiB per frame, 32 pending outbound controls, 32 queued automatic responses, 32 queued permission-handler jobs, 128 unanswered incoming controls, 4 concurrent permission handlers, 4,096 distinct incoming control/cancellation IDs per connection, and an 8 KiB stderr tail. Request-ID history is never evicted; exhaustion terminates the connection rather than reviving stale requests. Zero-valued fields select defaults. Overflow terminates the connection visibly, retaining only already accepted events. POSIX process-group signaling is implemented; descendant teardown and other platform behavior are not yet comprehensively verified.
 
 ## Native resume and interrupt
 
@@ -74,6 +75,29 @@ To request resume, open a fresh process with `claude.Options{CLIPath: "claude", 
 `client.Interrupt(ctx)` sends an interrupt control request and waits for that request's acknowledgment. Concurrent interrupts have independent IDs; unknown, duplicate, and stale response IDs cannot complete another waiter. An explicit rejection returns `*claude.ControlError`. Success acknowledges the control only: it does not promise tool rollback, close the process, or consume a later turn result. Continue receiving events to observe the turn's outcome.
 
 Cancellation before a write starts emits no request. Cancellation while waiting after a completed write returns an unknown-outcome error and leaves the connection available; cancellation during the write can terminate the connection to unblock it. Disconnect and write failure wake pending controls. The SDK never retries an interrupt automatically.
+
+## Deferred permissions
+
+Configure `Options.PermissionHandler` to receive a `*PermissionRequest` for each real `can_use_tool` control. The handler can retain the handle and return, or wait for a human while unrelated events and controls keep moving. Handler return never answers the request. Calls run on a bounded worker pool; exhausted queues fail visibly. Handlers should watch `request.Context().Done()`. Close does not wait for callbacks that ignore cancellation.
+
+`RequestID()`, `ToolUseID()`, `ToolName()`, and `Epoch()` expose immutable identifiers. `Input()` returns a copy of the original input. `Raw()` returns a copy of the entire nested request, preserving permission suggestions, agent/display context and unknown fields. An epoch identifies a client instance within the current Go process; it is not a native session ID.
+
+Answer exactly once:
+
+```go
+err := request.Answer(ctx, claude.PermissionAnswer{
+    Behavior: claude.PermissionAllow, // nil UpdatedInput preserves original input
+})
+// Or provide UpdatedInput: json.RawMessage(`{"path":"approved.txt"}`).
+// An explicit {} replaces the input with an empty object.
+// To deny, use Behavior: claude.PermissionDeny, Message: "Not approved".
+```
+
+Only this handle can send its permission response, correlated to the original control request ID. Copying it does not create another authority. A second attempt returns `ErrPermissionUsed`. An already-canceled caller context consumes nothing; once an answer attempt is reserved, it cannot be retried. Failed reserved answers terminate the connection unless the CLI already canceled the request or the connection is closed. A handler panic or invalid answer produces an observable `PermissionError` and terminates the connection without granting permission. An earlier completed answer cannot be undone.
+
+A real `control_cancel_request` immediately cancels the matching handle context and prevents a response not yet authorized for writing. The raw cancellation event remains observable, including unknown IDs. `ErrPermissionCancelled` identifies rejected late answers; `context.Cause(request.Context())` identifies cancellation, completed use, or shutdown/failure. Cancellation concurrent with an already-authorized write cannot retract bytes and may return `ErrUnknownOutcome`. Closing invalidates pending handles; a new client has a new epoch, including when resuming a native session.
+
+A real `can_use_tool` for `AskUserQuestion` uses this same API with caller-supplied updated input. There is no automatic question-schema mapping. An assistant `tool_use` named `AskUserQuestion` remains only an event and never creates a responder or synthetic `tool_result`. These semantics are tested against synthetic source-derived frames; live CLI question behavior remains unverified.
 
 ## Development and verification
 
@@ -88,6 +112,6 @@ mise exec -- go vet ./...
 
 Tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, and POSIX child reaping. The public examples are compiled, not executed.
 
-Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
+Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
 
 See [the design](docs/design/sdk-design.md) for the full planned P0 contract and deferred scope.

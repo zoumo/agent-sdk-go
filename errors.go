@@ -8,12 +8,18 @@ import (
 )
 
 var (
-	ErrClosed          = errors.New("claude: client is closed")
-	ErrProtocol        = errors.New("claude: invalid protocol frame")
-	ErrResourceLimit   = errors.New("claude: resource limit exceeded")
-	ErrUnexpectedEOF   = errors.New("claude: unexpected end of stdout")
-	ErrShutdownTimeout = errors.New("claude: shutdown timed out")
-	ErrUnknownOutcome  = errors.New("claude: operation outcome is unknown")
+	ErrClosed                   = errors.New("claude: client is closed")
+	ErrProtocol                 = errors.New("claude: invalid protocol frame")
+	ErrResourceLimit            = errors.New("claude: resource limit exceeded")
+	ErrUnexpectedEOF            = errors.New("claude: unexpected end of stdout")
+	ErrShutdownTimeout          = errors.New("claude: shutdown timed out")
+	ErrUnknownOutcome           = errors.New("claude: operation outcome is unknown")
+	ErrInvalidPermissionRequest = errors.New("claude: invalid permission handle")
+	ErrInvalidPermissionAnswer  = errors.New("claude: invalid permission answer")
+	ErrPermissionUsed           = errors.New("claude: permission answer already attempted")
+	ErrPermissionCancelled      = errors.New("claude: permission request cancelled")
+	ErrPermissionStale          = errors.New("claude: permission handle belongs to another connection epoch")
+	ErrPermissionHandlerPanic   = errors.New("claude: permission handler panicked")
 )
 
 // Error describes an operation or terminal failure. Stderr is a bounded tail,
@@ -56,3 +62,16 @@ type ControlError struct{ RequestID, Subtype, Message string }
 func (e *ControlError) Error() string {
 	return fmt.Sprintf("claude: control %s (%s): %s", e.Subtype, e.RequestID, e.Message)
 }
+
+// PermissionError identifies a fail-closed handler or answer failure. RequestID
+// is the original incoming identifier. The client terminates on these failures;
+// already completed writes cannot be undone.
+type PermissionError struct {
+	RequestID string
+	Err       error
+}
+
+func (e *PermissionError) Error() string {
+	return fmt.Sprintf("claude: permission %s: %v", e.RequestID, e.Err)
+}
+func (e *PermissionError) Unwrap() error { return e.Err }

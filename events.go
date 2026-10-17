@@ -156,8 +156,9 @@ type StreamDelta struct {
 	ContentBlock json.RawMessage `json:"content_block"`
 }
 
-// ControlRequest is an observable incoming control request. In this initial
-// implementation can_use_tool is denied, and unsupported requests get an error.
+// ControlRequest is an observable incoming control request. Configured
+// PermissionHandlers separately receive the sole answerable permission handle;
+// this raw event is not an answer authority. Unsupported requests get an error.
 type ControlRequest struct {
 	RequestID string          `json:"request_id"`
 	Request   json.RawMessage `json:"request"`

@@ -75,6 +75,10 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if strings.HasPrefix(mode, "permission_") {
+		runPermissionFixture(mode, reader)
+		return
+	}
 	if strings.HasPrefix(mode, "session_") {
 		runSessionFixture(mode, reader)
 		return

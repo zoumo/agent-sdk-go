@@ -64,3 +64,42 @@ func ExampleClient_RequestedResumeID() {
 	}
 	// Acknowledgment does not imply rollback. Receive still delivers turn results.
 }
+
+// This example is compiled but never executed by tests. A real run requires a
+// configured CLI and can incur account usage. The application owns the human UI.
+func ExamplePermissionRequest_Answer() {
+	requests := make(chan *claude.PermissionRequest, 8)
+	client, err := claude.Open(context.Background(), claude.Options{
+		CLIPath: "claude",
+		PermissionHandler: func(request *claude.PermissionRequest) {
+			select {
+			case requests <- request: // Retain the handle for the application UI.
+			case <-request.Context().Done():
+			}
+		},
+	})
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := client.Send(ctx, "Read the requested project file."); err != nil {
+		log.Print(err)
+		return
+	}
+	// A real application concurrently drains Receive and displays requests.
+	select {
+	case request := <-requests:
+		fmt.Println(request.RequestID(), request.ToolName(), string(request.Input()))
+		if err := request.Answer(ctx, claude.PermissionAnswer{
+			Behavior: claude.PermissionDeny, Message: "The user declined this request",
+		}); err != nil {
+			log.Print(err)
+		}
+	case <-client.Done():
+		log.Print(client.Err())
+	case <-ctx.Done():
+	}
+}

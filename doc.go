@@ -15,4 +15,9 @@
 // messages. SessionID reports only identity actually observed from the CLI.
 // Interrupt waits for its matched control acknowledgment, not a turn result or
 // tool rollback. No durable recovery or pending-interaction restoration is done.
+//
+// PermissionHandler receives deferred single-use handles on bounded workers.
+// Returning from a handler never answers; PermissionRequest.Answer is the sole
+// authority. Request contexts cancel on completion, CLI cancellation or close.
+// Assistant tool-use events never create synthetic permission/tool responses.
 package claude

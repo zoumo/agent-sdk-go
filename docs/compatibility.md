@@ -141,8 +141,14 @@ is not guaranteed. See the exported `Limits` and README for finite defaults.
 
 ## Live validation
 
-**Not performed.** No real Codex binary, account, credentials, authenticated
-session, or live model execution was used to validate this SDK. Source inspection,
+**Attempted, blocked before initialization completed.** The final opt-in stdio
+smoke attempt used SDK revision `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c`
+and installed official Codex `0.159.2`. `NewStdio` returned
+`initialize (outcome-unknown): EOF`; no thread or model turn was dispatched.
+A separate zero-message startup diagnostic established that the installed CLI
+exited with a SQLite state-runtime initialization failure before protocol traffic.
+No request was replayed and no auth or permission workaround was attempted. See [final live attempt](evidence/final-live.md)
+for the exact scenario and limitations. Live model and durable-resume behavior
+remain unverified; no capability row is promoted to a live pass. Source inspection,
 synthetic child processes, loopback fixtures, and race-detector passes cannot be
-promoted to live evidence. Record an exact SDK revision, official revision/binary,
-scenario, command, and result before adding future live evidence.
+promoted to live evidence.

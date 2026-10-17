@@ -100,3 +100,31 @@ check one explicit interrupt and no implicit interrupt or start replay.
 These are original Go scenarios, not copied official tests or claims that the
 upstream suites were executed. The earlier documented Rust/TypeScript/Python
 transport distinctions and separate live-test boundary continue to apply.
+
+## Ticket 03: resume identity and detachment patterns
+
+The Rust [resume suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_resume.rs#L2809-L2843)
+checks metadata-only resume and unchanged native identity. Its
+[alternate-selector cases](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_resume.rs#L5987-L6107)
+show that native history/path selection can supersede a supplied ID. This SDK's
+typed wrapper deliberately rejects a returned-ID mismatch under its approved
+strict identity contract; that restriction is documented rather than attributed
+to the native protocol. The Rust
+[unsubscribe suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_unsubscribe.rs#L200)
+checks that detaching does not interrupt an active turn. The Go fake-peer tests
+assert absence of any outgoing interrupt and keep local observers independent;
+they do not prove that a real server continues executing a turn.
+
+The already-inspected [Python lifecycle cases](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/python/tests/test_app_server_lifecycle.py#L147-L184)
+resume a server-returned ID and compare it with the original. The Go test carries
+only that native string across two independently initialized fake peers. It does
+not reconstruct history or use SDK persistence. The TypeScript
+[resume argument assertions](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/typescript/tests/exec.test.ts#L76-L100)
+informed exact outbound-method/parameter checks, with no reuse of its different
+`codex exec` wire transport.
+
+All new Go scenarios are independently authored. They count complete outgoing
+method transcripts after errors, mismatches, confirmed dispatch cancellation,
+timeout, close, and connection loss. No upstream test suite was run or copied;
+real-server persistence, active-turn continuation, and live-model behavior remain
+unverified.

@@ -1,7 +1,7 @@
 {
   "protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb",
-  "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
-  "sdk_revision_note": "The exact ticket 02 implementation commit was verified after committing, including uncached normal and race runs. This following documentation-only commit records that revision; SDK source and tests are unchanged. Historical ticket 01 records retain their own revision.",
+  "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
+  "sdk_revision_note": "The exact ticket 03 implementation commit was verified after committing with uncached normal/race tests, five normal repetitions, standalone model tests, vet and exact-source inventory checks. This following documentation-only commit records its revision; SDK source and tests are unchanged. Historical tickets retain their own revisions.",
   "toolchain": {
     "go": "1.26.9",
     "manager": "mise",
@@ -151,6 +151,75 @@
       ],
       "coverage": "Full exported-client and model suites under race detector, including overlapping subscription registration/cancellation/close and mutable per-subscriber payload isolation.",
       "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed"
+    },
+    {
+      "id": "ticket03-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/turn_test.go",
+        "protocol/resume_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "581 synthetic model round trips over 117 exact upstream definitions; full resume/unsubscribe fields, omitted/null/value serviceTier, non-null excludeTurns, arbitrary history union preservation, native required fields and pagination bounds. No server process.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95"
+    },
+    {
+      "id": "ticket03-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/turn_test.go",
+        "protocol/resume_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Complete model suite under Go race detector; no live compatibility claim.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95"
+    },
+    {
+      "id": "ticket03-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go"
+      ],
+      "coverage": "Two independently initialized fake children; exact opaque native ID resume/read; strict mismatch with responded/correlation evidence; full params and native unsubscribe statuses; local observer independence; missing/internal errors, malformed results/envelopes and EOF; method counts prove no fallback/replay/reconnect; pre-dispatch and confirmed-dispatch cancellation, timeouts/close/late replies; validation/frame/pending admission and concurrent cleanup. No real server persistence claim.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
+      "test_names": [
+        "TestResumeAcrossIndependentConnections",
+        "TestResumeMismatchKeepsCorrelationAndNoFallback",
+        "TestResumeAndUnsubscribeFailureNeverReplay",
+        "TestResumeAndUnsubscribeCancellationEvidence",
+        "TestResumeAndUnsubscribeTimeoutAndClose",
+        "TestUnsubscribeNativeStatusAndLocalIndependence",
+        "TestResumeAndUnsubscribeConcurrentClose",
+        "TestResumeAndUnsubscribeNotSentLimits",
+        "TestResumeAndUnsubscribePendingAdmission"
+      ]
+    },
+    {
+      "id": "ticket03-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go",
+        "protocol/protocol_test.go",
+        "protocol/turn_test.go",
+        "protocol/resume_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Full exported-client and model suites under race detector, including concurrent typed resume/unsubscribe and Close. No real Codex executable or live model.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95"
     }
   ],
   "verification_commands": [

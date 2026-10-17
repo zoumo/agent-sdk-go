@@ -58,6 +58,62 @@ The constructor sends `initialize`, awaits its response, then writes `initialize
 before returning. `ServerInfo()` returns the native handshake result. Native
 thread, session, turn, and item identifiers are never fabricated.
 
+## Explicitly resume and detach a native thread
+
+Keep the native thread ID returned by the server. After closing the old client,
+construct a new client with `NewStdio` to perform a fresh handshake, then resume
+and read that exact ID. The SDK has no saved-session registry or reconnect loop.
+
+```go
+resumed, err := client.ResumeThread(ctx, protocol.ThreadResumeParams{
+    ThreadID: nativeThreadID,
+    // Omit ServiceTier to preserve the server's override.
+    // ServiceTier: protocol.Null[string](), // explicitly clear the override
+})
+if err != nil { return err }
+read, err := client.ReadThread(ctx, protocol.ThreadReadParams{
+    ThreadID: resumed.Thread.ID,
+    IncludeTurns: protocol.Some(true),
+})
+if err != nil { return err }
+fmt.Println(read.Thread.ID)
+detached, err := client.UnsubscribeThread(ctx, protocol.ThreadUnsubscribeParams{
+    ThreadID: resumed.Thread.ID,
+})
+if err != nil { return err }
+fmt.Println(detached.Status)
+```
+
+The compilable [resume-thread example](examples/resume-thread/main.go) takes an
+explicit executable and an already-known native thread ID. Tests compile it but
+do not run it. A real server must still have the thread; the fake-peer tests do
+not establish cross-process server persistence or resumability of ephemeral data.
+
+`ResumeThread` sends the supplied ID unchanged and checks `response.thread.id`.
+A mismatch returns `ErrProtocol` with `CallError.Dispatch == Responded` and the
+matching RPC ID. Missing/expired threads, RPC errors, timeouts, or lost connections
+never create a replacement thread or cause automatic replay.
+
+All native resume fields are exposed, including experimental fields. The native
+server can select another identity when `history` or `path` overrides `threadId`.
+This typed wrapper deliberately requires the returned ID to equal the supplied
+ID even in those cases; prefer ID-only resume. It does not undo server-side work
+if validation fails. The raw `Call` escape hatch leaves alternative-identity
+handling to the caller and does not certify those workflows.
+
+Resume `ServiceTier` distinguishes omission (keep the override), null (clear it),
+and a string (set it). `ExcludeTurns` can be omitted, false, or true, but not null.
+Other nullable fields preserve wire omission and null without claiming those
+states always mean different things to the server. Schema defaults are not
+silently inserted by the SDK.
+
+`UnsubscribeThread` returns the native `notLoaded`, `notSubscribed`, or
+`unsubscribed` status (and preserves future string values). This is server-side
+thread detachment, separate from closing a local `Subscription`. It does not
+close local observers, delete the thread, send an interrupt, or establish that an
+active turn stopped. Server notifications already in flight may still arrive.
+Closing a local subscription never sends `thread/unsubscribe`.
+
 ## Native values and extensions
 
 Models live in the public `protocol` package. `Optional[T]` preserves omission,
@@ -193,8 +249,8 @@ python3 docs/protocol/verify_inventory.py
 ```
 
 Tests launch only synthetic helper processes and never require an account or call
-a model. [Ticket 01](docs/evidence/ticket-01.md) and [ticket 02 evidence](docs/evidence/ticket-02.md)
-record tested scenarios.
+a model. [Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
+and [ticket 03 evidence](docs/evidence/ticket-03.md) record tested scenarios.
 [Official testing patterns](docs/protocol/testing-patterns.md) distinguishes
 app-server harnesses from the TypeScript SDK's `codex exec` transport.
 

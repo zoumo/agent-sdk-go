@@ -123,6 +123,53 @@ func (v *AgentMessageDeltaNotification) UnmarshalJSON(data []byte) error {
 	return unmarshalObject(data, v)
 }
 
+// AgentMessageInputContent contains exactly one typed variant or Unknown.
+type AgentMessageInputContent struct {
+	InputText        *InputTextAgentMessageInputContent
+	EncryptedContent *EncryptedContentAgentMessageInputContent
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v AgentMessageInputContent) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.InputText, v.EncryptedContent)
+}
+func (v *AgentMessageInputContent) UnmarshalJSON(data []byte) error {
+	var out AgentMessageInputContent
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for AgentMessageInputContent")
+	}
+	if kind == "object" && tag == "input_text" {
+		var value InputTextAgentMessageInputContent
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.InputText = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "encrypted_content" {
+		var value EncryptedContentAgentMessageInputContent
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.EncryptedContent = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
 type AgentPath = string
 
 // Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.
@@ -494,6 +541,83 @@ const (
 	CommandExecutionStatusDeclined   CommandExecutionStatus = "declined"
 )
 
+// Reasoning settings interpreted by the backend for the routed model.
+type ConfigurationReasoning struct {
+	Effort ReasoningEffort `json:"effort" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ConfigurationReasoning) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ConfigurationReasoning) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+// ContentItem contains exactly one typed variant or Unknown.
+type ContentItem struct {
+	InputText  *InputTextContentItem
+	InputImage *InputImageContentItem
+	InputAudio *InputAudioContentItem
+	OutputText *OutputTextContentItem
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ContentItem) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.InputText, v.InputImage, v.InputAudio, v.OutputText)
+}
+func (v *ContentItem) UnmarshalJSON(data []byte) error {
+	var out ContentItem
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ContentItem")
+	}
+	if kind == "object" && tag == "input_text" {
+		var value InputTextContentItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.InputText = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "input_image" {
+		var value InputImageContentItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.InputImage = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "input_audio" {
+		var value InputAudioContentItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.InputAudio = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "output_text" {
+		var value OutputTextContentItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.OutputText = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
 // Requested cyber treatment for a ChatGPT-authenticated Codex turn. Authorization and model-tier restrictions remain server-owned.
 type CyberAccessProgram string
 
@@ -854,6 +978,22 @@ func (v *ImageGenerationFailure) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Internal Responses API passthrough metadata copied into underlying chat messages.
+//
+// Responses API strongly types this payload. Do not modify it without first getting API approval and making the corresponding Responses API change.
+type InternalChatMessageMetadataPassthrough struct {
+	TurnID Optional[string] `json:"turn_id" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v InternalChatMessageMetadataPassthrough) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *InternalChatMessageMetadataPassthrough) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
 type ItemCompletedNotification struct {
 	// Unix timestamp (in milliseconds) when this item lifecycle completed.
 	CompletedAtMs int64      `json:"completedAtMs" protocol:"required"`
@@ -881,6 +1021,51 @@ func (v ItemStartedNotification) MarshalJSON() ([]byte, error)     { return mars
 func (v *ItemStartedNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 type LegacyAppPathString = string
+
+// LocalShellAction contains exactly one typed variant or Unknown.
+type LocalShellAction struct {
+	Exec *ExecLocalShellAction
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v LocalShellAction) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Exec)
+}
+func (v *LocalShellAction) UnmarshalJSON(data []byte) error {
+	var out LocalShellAction
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for LocalShellAction")
+	}
+	if kind == "object" && tag == "exec" {
+		var value ExecLocalShellAction
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Exec = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type LocalShellStatus string
+
+const (
+	LocalShellStatusCompleted  LocalShellStatus = "completed"
+	LocalShellStatusInProgress LocalShellStatus = "in_progress"
+	LocalShellStatusIncomplete LocalShellStatus = "incomplete"
+)
 
 type MCPAppDisplayMode string
 
@@ -1150,6 +1335,90 @@ const (
 // A non-empty reasoning effort value advertised by the model.
 type ReasoningEffort = string
 
+// ReasoningItemContent contains exactly one typed variant or Unknown.
+type ReasoningItemContent struct {
+	ReasoningText *ReasoningTextReasoningItemContent
+	Text          *TextReasoningItemContent
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ReasoningItemContent) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.ReasoningText, v.Text)
+}
+func (v *ReasoningItemContent) UnmarshalJSON(data []byte) error {
+	var out ReasoningItemContent
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ReasoningItemContent")
+	}
+	if kind == "object" && tag == "reasoning_text" {
+		var value ReasoningTextReasoningItemContent
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ReasoningText = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "text" {
+		var value TextReasoningItemContent
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Text = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+// ReasoningItemReasoningSummary contains exactly one typed variant or Unknown.
+type ReasoningItemReasoningSummary struct {
+	SummaryText *SummaryTextReasoningItemReasoningSummary
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ReasoningItemReasoningSummary) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.SummaryText)
+}
+func (v *ReasoningItemReasoningSummary) UnmarshalJSON(data []byte) error {
+	var out ReasoningItemReasoningSummary
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ReasoningItemReasoningSummary")
+	}
+	if kind == "object" && tag == "summary_text" {
+		var value SummaryTextReasoningItemReasoningSummary
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.SummaryText = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
 // A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries
 type ReasoningSummary string
 
@@ -1159,6 +1428,270 @@ const (
 	ReasoningSummaryDetailed ReasoningSummary = "detailed"
 	ReasoningSummaryNone     ReasoningSummary = "none"
 )
+
+// ResponseItem contains exactly one typed variant or Unknown.
+type ResponseItem struct {
+	Message              *MessageResponseItem
+	AgentMessage         *AgentMessageResponseItem
+	Reasoning            *ReasoningResponseItem
+	LocalShellCall       *LocalShellCallResponseItem
+	FunctionCall         *FunctionCallResponseItem
+	ToolSearchCall       *ToolSearchCallResponseItem
+	FunctionCallOutput   *FunctionCallOutputResponseItem
+	CustomToolCall       *CustomToolCallResponseItem
+	CustomToolCallOutput *CustomToolCallOutputResponseItem
+	ToolSearchOutput     *ToolSearchOutputResponseItem
+	WebSearchCall        *WebSearchCallResponseItem
+	ImageGenerationCall  *ImageGenerationCallResponseItem
+	Compaction           *CompactionResponseItem
+	ConfigurationUpdate  *ConfigurationUpdateResponseItem
+	CompactionTrigger    *CompactionTriggerResponseItem
+	ContextCompaction    *ContextCompactionResponseItem
+	Other                *OtherResponseItem
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ResponseItem) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Message, v.AgentMessage, v.Reasoning, v.LocalShellCall, v.FunctionCall, v.ToolSearchCall, v.FunctionCallOutput, v.CustomToolCall, v.CustomToolCallOutput, v.ToolSearchOutput, v.WebSearchCall, v.ImageGenerationCall, v.Compaction, v.ConfigurationUpdate, v.CompactionTrigger, v.ContextCompaction, v.Other)
+}
+func (v *ResponseItem) UnmarshalJSON(data []byte) error {
+	var out ResponseItem
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ResponseItem")
+	}
+	if kind == "object" && tag == "message" {
+		var value MessageResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Message = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "agent_message" {
+		var value AgentMessageResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.AgentMessage = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "reasoning" {
+		var value ReasoningResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Reasoning = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "local_shell_call" {
+		var value LocalShellCallResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.LocalShellCall = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "function_call" {
+		var value FunctionCallResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.FunctionCall = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "tool_search_call" {
+		var value ToolSearchCallResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ToolSearchCall = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "function_call_output" {
+		var value FunctionCallOutputResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.FunctionCallOutput = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "custom_tool_call" {
+		var value CustomToolCallResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.CustomToolCall = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "custom_tool_call_output" {
+		var value CustomToolCallOutputResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.CustomToolCallOutput = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "tool_search_output" {
+		var value ToolSearchOutputResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ToolSearchOutput = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "web_search_call" {
+		var value WebSearchCallResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.WebSearchCall = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "image_generation_call" {
+		var value ImageGenerationCallResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ImageGenerationCall = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "compaction" {
+		var value CompactionResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Compaction = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "configuration_update" {
+		var value ConfigurationUpdateResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ConfigurationUpdate = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "compaction_trigger" {
+		var value CompactionTriggerResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.CompactionTrigger = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "context_compaction" {
+		var value ContextCompactionResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ContextCompaction = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "other" {
+		var value OtherResponseItem
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Other = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+// ResponsesAPIWebSearchAction contains exactly one typed variant or Unknown.
+type ResponsesAPIWebSearchAction struct {
+	Search     *SearchResponsesAPIWebSearchAction
+	OpenPage   *OpenPageResponsesAPIWebSearchAction
+	FindInPage *FindInPageResponsesAPIWebSearchAction
+	Other      *OtherResponsesAPIWebSearchAction
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ResponsesAPIWebSearchAction) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Search, v.OpenPage, v.FindInPage, v.Other)
+}
+func (v *ResponsesAPIWebSearchAction) UnmarshalJSON(data []byte) error {
+	var out ResponsesAPIWebSearchAction
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ResponsesAPIWebSearchAction")
+	}
+	if kind == "object" && tag == "search" {
+		var value SearchResponsesAPIWebSearchAction
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Search = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "open_page" {
+		var value OpenPageResponsesAPIWebSearchAction
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.OpenPage = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "find_in_page" {
+		var value FindInPageResponsesAPIWebSearchAction
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.FindInPage = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "other" {
+		var value OtherResponsesAPIWebSearchAction
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Other = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
 
 type SandboxMode string
 
@@ -1325,6 +1858,13 @@ type Settings struct {
 
 func (v Settings) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *Settings) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type SortDirection string
+
+const (
+	SortDirectionAsc  SortDirection = "asc"
+	SortDirectionDesc SortDirection = "desc"
+)
 
 type SubAgentActivityKind string
 
@@ -1759,6 +2299,105 @@ type ThreadReadResponse struct {
 func (v ThreadReadResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ThreadReadResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type ThreadResumeInitialTurnsPageParams struct {
+	// How much item detail to include for each returned turn; defaults to summary.
+	ItemsView Optional[TurnItemsView] `json:"itemsView" protocol:"nullable"`
+	// Optional turn page size.
+	Limit Optional[uint32] `json:"limit" protocol:"nullable"`
+	// Optional turn pagination direction; defaults to descending.
+	SortDirection Optional[SortDirection] `json:"sortDirection" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadResumeInitialTurnsPageParams) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ThreadResumeInitialTurnsPageParams) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+// There are three ways to resume a thread: 1. By thread_id: load the thread from disk by thread_id and resume it. 2. By history: instantiate the thread from memory and resume it. 3. By path: load the thread from disk by path and resume it.
+//
+// For non-running threads, the precedence is: history > non-empty path > thread_id. If using history or a non-empty path for a non-running thread, the thread_id param will be ignored.
+//
+// If thread_id identifies a running thread, app-server rejoins that thread and treats a non-empty path as a consistency check against the active rollout path. Empty string path values are treated as absent.
+//
+// Prefer using thread_id whenever possible.
+type ThreadResumeParams struct {
+	ApprovalPolicy Optional[AskForApproval] `json:"approvalPolicy" protocol:"nullable"`
+	// Override where approval requests are routed for review on this thread and subsequent turns.
+	ApprovalsReviewer     Optional[ApprovalsReviewer]          `json:"approvalsReviewer" protocol:"nullable"`
+	BaseInstructions      Optional[string]                     `json:"baseInstructions" protocol:"nullable"`
+	Config                Optional[map[string]json.RawMessage] `json:"config" protocol:"nullable"`
+	Cwd                   Optional[string]                     `json:"cwd" protocol:"nullable"`
+	DeveloperInstructions Optional[string]                     `json:"developerInstructions" protocol:"nullable"`
+	// When true, return only thread metadata and live-resume state without populating `thread.turns`. This is useful when the client plans to call `thread/turns/list` immediately after resuming. Full-history hydration is deprecated for paginated threads; use this with `thread/turns/list` and `thread/items/list` instead.
+	ExcludeTurns Optional[bool] `json:"excludeTurns" protocol:""`
+	// [UNSTABLE] FOR CODEX CLOUD - DO NOT USE. If specified, the thread will be resumed with the provided history instead of loaded from disk.
+	History Optional[[]ResponseItem] `json:"history" protocol:"nullable"`
+	// When present, include a `thread/turns/list` page in the resume response so clients can bootstrap recent turns without a second request.
+	InitialTurnsPage Optional[ThreadResumeInitialTurnsPageParams] `json:"initialTurnsPage" protocol:"nullable"`
+	// Configuration overrides for the resumed thread, if any.
+	Model         Optional[string] `json:"model" protocol:"nullable"`
+	ModelProvider Optional[string] `json:"modelProvider" protocol:"nullable"`
+	// [UNSTABLE] Specify the rollout path to resume from. If specified for a non-running thread, the thread_id param will be ignored. If thread_id identifies a running thread, the path must match the active rollout path.
+	Path Optional[string] `json:"path" protocol:"nullable"`
+	// Named profile id for the resumed thread. Cannot be combined with `sandbox`.
+	Permissions Optional[string] `json:"permissions" protocol:"nullable"`
+	// @deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions.
+	Personality Optional[Personality] `json:"personality" protocol:"nullable"`
+	// Replace the thread's runtime workspace roots. Paths must be absolute.
+	RuntimeWorkspaceRoots Optional[[]AbsolutePathBuf] `json:"runtimeWorkspaceRoots" protocol:"nullable"`
+	Sandbox               Optional[SandboxMode]       `json:"sandbox" protocol:"nullable"`
+	ServiceTier           Optional[string]            `json:"serviceTier" protocol:"nullable"`
+	ThreadID              string                      `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadResumeParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadResumeParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadResumeResponse struct {
+	// Named or implicit built-in profile that produced the active permissions, when known.
+	ActivePermissionProfile Optional[ActivePermissionProfile] `json:"activePermissionProfile" protocol:"nullable"`
+	ApprovalPolicy          AskForApproval                    `json:"approvalPolicy" protocol:"required"`
+	// Reviewer currently used for approval requests on this thread.
+	ApprovalsReviewer ApprovalsReviewer `json:"approvalsReviewer" protocol:"required"`
+	// Effective collaboration mode. Absent when resuming from an older server.
+	CollaborationMode Optional[CollaborationMode] `json:"collaborationMode" protocol:"nullable"`
+	Cwd               AbsolutePathBuf             `json:"cwd" protocol:"required"`
+	// Saved list of disabled plugin IDs. Does not yet filter plugin capabilities.
+	DisabledPluginIDs Optional[[]string] `json:"disabledPluginIds" protocol:""`
+	// `thread/turns/list` page returned when requested by `initialTurnsPage`.
+	InitialTurnsPage Optional[TurnsPage] `json:"initialTurnsPage" protocol:"nullable"`
+	// Environment-native paths to instruction source files currently loaded for this thread.
+	InstructionSources Optional[[]LegacyAppPathString] `json:"instructionSources" protocol:""`
+	// Opaque cursor for hydrating paginated items backwards.
+	//
+	// Pass this as `cursor` to `thread/items/list` with `sortDirection: "desc"`. The first page includes the item identified by the cursor.
+	ItemsBackwardsCursor Optional[string] `json:"itemsBackwardsCursor" protocol:"nullable"`
+	Model                string           `json:"model" protocol:"required"`
+	ModelProvider        string           `json:"modelProvider" protocol:"required"`
+	// @deprecated Always `explicitRequestOnly`. Use `reasoningEffort` for Ultra behavior.
+	MultiAgentMode  Optional[MultiAgentMode]  `json:"multiAgentMode" protocol:""`
+	ReasoningEffort Optional[ReasoningEffort] `json:"reasoningEffort" protocol:"nullable"`
+	// Thread-scoped runtime workspace roots used to materialize `:workspace_roots`.
+	RuntimeWorkspaceRoots Optional[[]AbsolutePathBuf] `json:"runtimeWorkspaceRoots" protocol:""`
+	// Legacy sandbox policy retained for compatibility. Experimental clients should prefer `activePermissionProfile` for profile provenance.
+	Sandbox     SandboxPolicy    `json:"sandbox" protocol:"required"`
+	ServiceTier Optional[string] `json:"serviceTier" protocol:"nullable"`
+	Thread      Thread           `json:"thread" protocol:"required"`
+	// Opaque cursor for hydrating paginated turns backwards.
+	//
+	// Pass this as `cursor` to `thread/turns/list` with `sortDirection: "desc"`. The first page includes the turn identified by the cursor.
+	TurnsBackwardsCursor Optional[string] `json:"turnsBackwardsCursor" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadResumeResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadResumeResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 // An independently persisted, user-visible thread section.
 type ThreadSection struct {
 	// Optional appearance synchronized across clients.
@@ -1940,6 +2579,32 @@ func (v *ThreadStatus) UnmarshalJSON(data []byte) error {
 	*v = out
 	return nil
 }
+
+type ThreadUnsubscribeParams struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadUnsubscribeParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadUnsubscribeParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadUnsubscribeResponse struct {
+	Status ThreadUnsubscribeStatus `json:"status" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadUnsubscribeResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadUnsubscribeResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadUnsubscribeStatus string
+
+const (
+	ThreadUnsubscribeStatusNotLoaded     ThreadUnsubscribeStatus = "notLoaded"
+	ThreadUnsubscribeStatusNotSubscribed ThreadUnsubscribeStatus = "notSubscribed"
+	ThreadUnsubscribeStatusUnsubscribed  ThreadUnsubscribeStatus = "unsubscribed"
+)
 
 type Turn struct {
 	// Unix timestamp (in seconds) when the turn completed.
@@ -2126,6 +2791,17 @@ type TurnToolOutput struct {
 func (v TurnToolOutput) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *TurnToolOutput) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type TurnsPage struct {
+	BackwardsCursor Optional[string] `json:"backwardsCursor" protocol:"nullable"`
+	Data            []Turn           `json:"data" protocol:"required"`
+	NextCursor      Optional[string] `json:"nextCursor" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnsPage) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnsPage) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 // UserInput contains exactly one typed variant or Unknown.
 type UserInput struct {
 	Text       *TextUserInput
@@ -2290,6 +2966,32 @@ func (v *WebSearchAction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type InputTextAgentMessageInputContent struct {
+	Text string                                `json:"text" protocol:"required"`
+	Type InputTextAgentMessageInputContentType `json:"type" protocol:"required,const=input_text"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v InputTextAgentMessageInputContent) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *InputTextAgentMessageInputContent) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type EncryptedContentAgentMessageInputContent struct {
+	EncryptedContent string                                       `json:"encrypted_content" protocol:"required"`
+	Type             EncryptedContentAgentMessageInputContentType `json:"type" protocol:"required,const=encrypted_content"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v EncryptedContentAgentMessageInputContent) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *EncryptedContentAgentMessageInputContent) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
 type AskForApprovalValue string
 
 const (
@@ -2452,6 +3154,52 @@ type UnknownCommandAction struct {
 func (v UnknownCommandAction) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *UnknownCommandAction) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type InputTextContentItem struct {
+	Text string                   `json:"text" protocol:"required"`
+	Type InputTextContentItemType `json:"type" protocol:"required,const=input_text"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v InputTextContentItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *InputTextContentItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type InputImageContentItem struct {
+	Detail   Optional[ImageDetail]     `json:"detail" protocol:"nullable"`
+	FileID   Optional[string]          `json:"file_id" protocol:""`
+	ImageURL Optional[string]          `json:"image_url" protocol:""`
+	Type     InputImageContentItemType `json:"type" protocol:"required,const=input_image"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v InputImageContentItem) MarshalJSON() ([]byte, error) {
+	return marshalObject(v, []string{"image_url"}, []string{"file_id"})
+}
+func (v *InputImageContentItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v, []string{"image_url"}, []string{"file_id"})
+}
+
+type InputAudioContentItem struct {
+	AudioURL string                    `json:"audio_url" protocol:"required"`
+	Type     InputAudioContentItemType `json:"type" protocol:"required,const=input_audio"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v InputAudioContentItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *InputAudioContentItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type OutputTextContentItem struct {
+	Text string                    `json:"text" protocol:"required"`
+	Type OutputTextContentItemType `json:"type" protocol:"required,const=output_text"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v OutputTextContentItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *OutputTextContentItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type InputTextDynamicToolCallOutputContentItem struct {
 	Text string                                        `json:"text" protocol:"required"`
 	Type InputTextDynamicToolCallOutputContentItemType `json:"type" protocol:"required,const=inputText"`
@@ -2607,6 +3355,20 @@ func (v *UsageLimitExceededImageGenerationFailure) UnmarshalJSON(data []byte) er
 	return unmarshalObject(data, v)
 }
 
+type ExecLocalShellAction struct {
+	Command          []string                    `json:"command" protocol:"required"`
+	Env              Optional[map[string]string] `json:"env" protocol:"nullable"`
+	TimeoutMs        Optional[uint64]            `json:"timeout_ms" protocol:"nullable"`
+	Type             ExecLocalShellActionType    `json:"type" protocol:"required,const=exec"`
+	User             Optional[string]            `json:"user" protocol:"nullable"`
+	WorkingDirectory Optional[string]            `json:"working_directory" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ExecLocalShellAction) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ExecLocalShellAction) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type MultiAgentModeValue string
 
 const (
@@ -2650,6 +3412,340 @@ type UpdatePatchChangeKind struct {
 
 func (v UpdatePatchChangeKind) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *UpdatePatchChangeKind) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ReasoningTextReasoningItemContent struct {
+	Text string                                `json:"text" protocol:"required"`
+	Type ReasoningTextReasoningItemContentType `json:"type" protocol:"required,const=reasoning_text"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ReasoningTextReasoningItemContent) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ReasoningTextReasoningItemContent) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type TextReasoningItemContent struct {
+	Text string                       `json:"text" protocol:"required"`
+	Type TextReasoningItemContentType `json:"type" protocol:"required,const=text"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TextReasoningItemContent) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TextReasoningItemContent) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type SummaryTextReasoningItemReasoningSummary struct {
+	Text string                                       `json:"text" protocol:"required"`
+	Type SummaryTextReasoningItemReasoningSummaryType `json:"type" protocol:"required,const=summary_text"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v SummaryTextReasoningItemReasoningSummary) MarshalJSON() ([]byte, error) {
+	return marshalObject(v)
+}
+func (v *SummaryTextReasoningItemReasoningSummary) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type MessageResponseItem struct {
+	Content                                []ContentItem                                    `json:"content" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Phase                                  Optional[MessagePhase]                           `json:"phase" protocol:"nullable"`
+	Role                                   string                                           `json:"role" protocol:"required"`
+	Type                                   MessageResponseItemType                          `json:"type" protocol:"required,const=message"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v MessageResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *MessageResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type AgentMessageResponseItem struct {
+	Author                                 string                                           `json:"author" protocol:"required"`
+	Content                                []AgentMessageInputContent                       `json:"content" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Recipient                              string                                           `json:"recipient" protocol:"required"`
+	Type                                   AgentMessageResponseItemType                     `json:"type" protocol:"required,const=agent_message"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AgentMessageResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *AgentMessageResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ReasoningResponseItem struct {
+	Content                                Optional[[]ReasoningItemContent]                 `json:"content" protocol:"nullable"`
+	EncryptedContent                       Optional[string]                                 `json:"encrypted_content" protocol:"nullable"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Summary                                []ReasoningItemReasoningSummary                  `json:"summary" protocol:"required"`
+	Type                                   ReasoningResponseItemType                        `json:"type" protocol:"required,const=reasoning"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ReasoningResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ReasoningResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type LocalShellCallResponseItem struct {
+	Action LocalShellAction `json:"action" protocol:"required"`
+	// Set when using the Responses API.
+	CallID Optional[string] `json:"call_id" protocol:"nullable"`
+	// Legacy id field retained for compatibility with older payloads.
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Status                                 LocalShellStatus                                 `json:"status" protocol:"required"`
+	Type                                   LocalShellCallResponseItemType                   `json:"type" protocol:"required,const=local_shell_call"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v LocalShellCallResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *LocalShellCallResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type FunctionCallResponseItem struct {
+	Arguments                              string                                           `json:"arguments" protocol:"required"`
+	CallID                                 string                                           `json:"call_id" protocol:"required"`
+	EncryptedFunctionArgs                  Optional[[]string]                               `json:"encrypted_function_args" protocol:"nullable"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Name                                   string                                           `json:"name" protocol:"required"`
+	Namespace                              Optional[string]                                 `json:"namespace" protocol:"nullable"`
+	Type                                   FunctionCallResponseItemType                     `json:"type" protocol:"required,const=function_call"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FunctionCallResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *FunctionCallResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ToolSearchCallResponseItem struct {
+	Arguments                              json.RawMessage                                  `json:"arguments" protocol:"required,nullable"`
+	CallID                                 Optional[string]                                 `json:"call_id" protocol:"nullable"`
+	Execution                              string                                           `json:"execution" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Status                                 Optional[string]                                 `json:"status" protocol:"nullable"`
+	Type                                   ToolSearchCallResponseItemType                   `json:"type" protocol:"required,const=tool_search_call"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolSearchCallResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolSearchCallResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type FunctionCallOutputResponseItem struct {
+	CallID                                 Optional[string]                                 `json:"call_id" protocol:"nullable"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Name                                   Optional[string]                                 `json:"name" protocol:"nullable"`
+	Namespace                              Optional[string]                                 `json:"namespace" protocol:"nullable"`
+	Output                                 FunctionCallOutputBody                           `json:"output" protocol:"required"`
+	Type                                   FunctionCallOutputResponseItemType               `json:"type" protocol:"required,const=function_call_output"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FunctionCallOutputResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *FunctionCallOutputResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type CustomToolCallResponseItem struct {
+	CallID                                 string                                           `json:"call_id" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	Input                                  string                                           `json:"input" protocol:"required"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Name                                   string                                           `json:"name" protocol:"required"`
+	Namespace                              Optional[string]                                 `json:"namespace" protocol:"nullable"`
+	Status                                 Optional[string]                                 `json:"status" protocol:"nullable"`
+	Type                                   CustomToolCallResponseItemType                   `json:"type" protocol:"required,const=custom_tool_call"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CustomToolCallResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *CustomToolCallResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type CustomToolCallOutputResponseItem struct {
+	CallID                                 string                                           `json:"call_id" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Name                                   Optional[string]                                 `json:"name" protocol:"nullable"`
+	Output                                 FunctionCallOutputBody                           `json:"output" protocol:"required"`
+	Type                                   CustomToolCallOutputResponseItemType             `json:"type" protocol:"required,const=custom_tool_call_output"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CustomToolCallOutputResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *CustomToolCallOutputResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ToolSearchOutputResponseItem struct {
+	CallID                                 Optional[string]                                 `json:"call_id" protocol:"nullable"`
+	Execution                              string                                           `json:"execution" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Status                                 string                                           `json:"status" protocol:"required"`
+	Tools                                  []json.RawMessage                                `json:"tools" protocol:"required"`
+	Type                                   ToolSearchOutputResponseItemType                 `json:"type" protocol:"required,const=tool_search_output"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ToolSearchOutputResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ToolSearchOutputResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type WebSearchCallResponseItem struct {
+	Action                                 Optional[ResponsesAPIWebSearchAction]            `json:"action" protocol:"nullable"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Status                                 Optional[string]                                 `json:"status" protocol:"nullable"`
+	Type                                   WebSearchCallResponseItemType                    `json:"type" protocol:"required,const=web_search_call"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v WebSearchCallResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *WebSearchCallResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ImageGenerationCallResponseItem struct {
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Result                                 string                                           `json:"result" protocol:"required"`
+	RevisedPrompt                          Optional[string]                                 `json:"revised_prompt" protocol:"nullable"`
+	Status                                 string                                           `json:"status" protocol:"required"`
+	Type                                   ImageGenerationCallResponseItemType              `json:"type" protocol:"required,const=image_generation_call"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ImageGenerationCallResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ImageGenerationCallResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type CompactionResponseItem struct {
+	EncryptedContent                       string                                           `json:"encrypted_content" protocol:"required"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Type                                   CompactionResponseItemType                       `json:"type" protocol:"required,const=compaction"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CompactionResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *CompactionResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+// A durable input control interpreted by the backend at its position in history.
+type ConfigurationUpdateResponseItem struct {
+	Reasoning ConfigurationReasoning              `json:"reasoning" protocol:"required"`
+	Type      ConfigurationUpdateResponseItemType `json:"type" protocol:"required,const=configuration_update"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ConfigurationUpdateResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ConfigurationUpdateResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type CompactionTriggerResponseItem struct {
+	Type CompactionTriggerResponseItemType `json:"type" protocol:"required,const=compaction_trigger"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CompactionTriggerResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *CompactionTriggerResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ContextCompactionResponseItem struct {
+	EncryptedContent                       Optional[string]                                 `json:"encrypted_content" protocol:"nullable"`
+	ID                                     Optional[string]                                 `json:"id" protocol:"nullable"`
+	InternalChatMessageMetadataPassthrough Optional[InternalChatMessageMetadataPassthrough] `json:"internal_chat_message_metadata_passthrough" protocol:"nullable"`
+	Type                                   ContextCompactionResponseItemType                `json:"type" protocol:"required,const=context_compaction"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ContextCompactionResponseItem) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ContextCompactionResponseItem) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type OtherResponseItem struct {
+	Type OtherResponseItemType `json:"type" protocol:"required,const=other"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v OtherResponseItem) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *OtherResponseItem) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type SearchResponsesAPIWebSearchAction struct {
+	Queries Optional[[]string]                    `json:"queries" protocol:"nullable"`
+	Query   Optional[string]                      `json:"query" protocol:"nullable"`
+	Type    SearchResponsesAPIWebSearchActionType `json:"type" protocol:"required,const=search"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v SearchResponsesAPIWebSearchAction) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *SearchResponsesAPIWebSearchAction) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type OpenPageResponsesAPIWebSearchAction struct {
+	Type OpenPageResponsesAPIWebSearchActionType `json:"type" protocol:"required,const=open_page"`
+	URL  Optional[string]                        `json:"url" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v OpenPageResponsesAPIWebSearchAction) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *OpenPageResponsesAPIWebSearchAction) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type FindInPageResponsesAPIWebSearchAction struct {
+	Pattern Optional[string]                          `json:"pattern" protocol:"nullable"`
+	Type    FindInPageResponsesAPIWebSearchActionType `json:"type" protocol:"required,const=find_in_page"`
+	URL     Optional[string]                          `json:"url" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v FindInPageResponsesAPIWebSearchAction) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *FindInPageResponsesAPIWebSearchAction) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type OtherResponsesAPIWebSearchAction struct {
+	Type OtherResponsesAPIWebSearchActionType `json:"type" protocol:"required,const=other"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v OtherResponsesAPIWebSearchAction) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *OtherResponsesAPIWebSearchAction) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
 
 type DangerFullAccessSandboxPolicy struct {
 	Type DangerFullAccessSandboxPolicyType `json:"type" protocol:"required,const=dangerFullAccess"`
@@ -3213,6 +4309,18 @@ type OtherWebSearchAction struct {
 func (v OtherWebSearchAction) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *OtherWebSearchAction) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type InputTextAgentMessageInputContentType string
+
+const (
+	InputTextAgentMessageInputContentTypeInputText InputTextAgentMessageInputContentType = "input_text"
+)
+
+type EncryptedContentAgentMessageInputContentType string
+
+const (
+	EncryptedContentAgentMessageInputContentTypeEncryptedContent EncryptedContentAgentMessageInputContentType = "encrypted_content"
+)
+
 type GranularAskForApprovalGranular struct {
 	MCPElicitations    bool           `json:"mcp_elicitations" protocol:"required"`
 	RequestPermissions Optional[bool] `json:"request_permissions" protocol:""`
@@ -3323,6 +4431,30 @@ const (
 	UnknownCommandActionTypeUnknown UnknownCommandActionType = "unknown"
 )
 
+type InputTextContentItemType string
+
+const (
+	InputTextContentItemTypeInputText InputTextContentItemType = "input_text"
+)
+
+type InputImageContentItemType string
+
+const (
+	InputImageContentItemTypeInputImage InputImageContentItemType = "input_image"
+)
+
+type InputAudioContentItemType string
+
+const (
+	InputAudioContentItemTypeInputAudio InputAudioContentItemType = "input_audio"
+)
+
+type OutputTextContentItemType string
+
+const (
+	OutputTextContentItemTypeOutputText OutputTextContentItemType = "output_text"
+)
+
 type InputTextDynamicToolCallOutputContentItemType string
 
 const (
@@ -3389,6 +4521,12 @@ const (
 	UsageLimitExceededImageGenerationFailureTypeUsageLimitExceeded UsageLimitExceededImageGenerationFailureType = "usageLimitExceeded"
 )
 
+type ExecLocalShellActionType string
+
+const (
+	ExecLocalShellActionTypeExec ExecLocalShellActionType = "exec"
+)
+
 type AddPatchChangeKindType string
 
 const (
@@ -3405,6 +4543,150 @@ type UpdatePatchChangeKindType string
 
 const (
 	UpdatePatchChangeKindTypeUpdate UpdatePatchChangeKindType = "update"
+)
+
+type ReasoningTextReasoningItemContentType string
+
+const (
+	ReasoningTextReasoningItemContentTypeReasoningText ReasoningTextReasoningItemContentType = "reasoning_text"
+)
+
+type TextReasoningItemContentType string
+
+const (
+	TextReasoningItemContentTypeText TextReasoningItemContentType = "text"
+)
+
+type SummaryTextReasoningItemReasoningSummaryType string
+
+const (
+	SummaryTextReasoningItemReasoningSummaryTypeSummaryText SummaryTextReasoningItemReasoningSummaryType = "summary_text"
+)
+
+type MessageResponseItemType string
+
+const (
+	MessageResponseItemTypeMessage MessageResponseItemType = "message"
+)
+
+type AgentMessageResponseItemType string
+
+const (
+	AgentMessageResponseItemTypeAgentMessage AgentMessageResponseItemType = "agent_message"
+)
+
+type ReasoningResponseItemType string
+
+const (
+	ReasoningResponseItemTypeReasoning ReasoningResponseItemType = "reasoning"
+)
+
+type LocalShellCallResponseItemType string
+
+const (
+	LocalShellCallResponseItemTypeLocalShellCall LocalShellCallResponseItemType = "local_shell_call"
+)
+
+type FunctionCallResponseItemType string
+
+const (
+	FunctionCallResponseItemTypeFunctionCall FunctionCallResponseItemType = "function_call"
+)
+
+type ToolSearchCallResponseItemType string
+
+const (
+	ToolSearchCallResponseItemTypeToolSearchCall ToolSearchCallResponseItemType = "tool_search_call"
+)
+
+type FunctionCallOutputResponseItemType string
+
+const (
+	FunctionCallOutputResponseItemTypeFunctionCallOutput FunctionCallOutputResponseItemType = "function_call_output"
+)
+
+type CustomToolCallResponseItemType string
+
+const (
+	CustomToolCallResponseItemTypeCustomToolCall CustomToolCallResponseItemType = "custom_tool_call"
+)
+
+type CustomToolCallOutputResponseItemType string
+
+const (
+	CustomToolCallOutputResponseItemTypeCustomToolCallOutput CustomToolCallOutputResponseItemType = "custom_tool_call_output"
+)
+
+type ToolSearchOutputResponseItemType string
+
+const (
+	ToolSearchOutputResponseItemTypeToolSearchOutput ToolSearchOutputResponseItemType = "tool_search_output"
+)
+
+type WebSearchCallResponseItemType string
+
+const (
+	WebSearchCallResponseItemTypeWebSearchCall WebSearchCallResponseItemType = "web_search_call"
+)
+
+type ImageGenerationCallResponseItemType string
+
+const (
+	ImageGenerationCallResponseItemTypeImageGenerationCall ImageGenerationCallResponseItemType = "image_generation_call"
+)
+
+type CompactionResponseItemType string
+
+const (
+	CompactionResponseItemTypeCompaction CompactionResponseItemType = "compaction"
+)
+
+type ConfigurationUpdateResponseItemType string
+
+const (
+	ConfigurationUpdateResponseItemTypeConfigurationUpdate ConfigurationUpdateResponseItemType = "configuration_update"
+)
+
+type CompactionTriggerResponseItemType string
+
+const (
+	CompactionTriggerResponseItemTypeCompactionTrigger CompactionTriggerResponseItemType = "compaction_trigger"
+)
+
+type ContextCompactionResponseItemType string
+
+const (
+	ContextCompactionResponseItemTypeContextCompaction ContextCompactionResponseItemType = "context_compaction"
+)
+
+type OtherResponseItemType string
+
+const (
+	OtherResponseItemTypeOther OtherResponseItemType = "other"
+)
+
+type SearchResponsesAPIWebSearchActionType string
+
+const (
+	SearchResponsesAPIWebSearchActionTypeSearch SearchResponsesAPIWebSearchActionType = "search"
+)
+
+type OpenPageResponsesAPIWebSearchActionType string
+
+const (
+	OpenPageResponsesAPIWebSearchActionTypeOpenPage OpenPageResponsesAPIWebSearchActionType = "open_page"
+)
+
+type FindInPageResponsesAPIWebSearchActionType string
+
+const (
+	FindInPageResponsesAPIWebSearchActionTypeFindInPage FindInPageResponsesAPIWebSearchActionType = "find_in_page"
+)
+
+type OtherResponsesAPIWebSearchActionType string
+
+const (
+	OtherResponsesAPIWebSearchActionTypeOther OtherResponsesAPIWebSearchActionType = "other"
 )
 
 type DangerFullAccessSandboxPolicyType string

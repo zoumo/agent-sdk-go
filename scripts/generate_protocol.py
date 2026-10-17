@@ -19,6 +19,8 @@ BLOB = '0a35c5522fa525a5c2d6a2138c244c9d5b88815d'
 SOURCE = 'codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst'
 ROOTS = ['InitializeParams', 'InitializeResponse', 'v2/ThreadStartParams',
          'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',
+         'v2/ThreadResumeParams', 'v2/ThreadResumeResponse',
+         'v2/ThreadUnsubscribeParams', 'v2/ThreadUnsubscribeResponse',
          'v2/TurnStartParams', 'v2/TurnStartResponse',
          'v2/TurnInterruptParams', 'v2/TurnInterruptResponse',
          'v2/TurnStartedNotification', 'v2/TurnCompletedNotification',

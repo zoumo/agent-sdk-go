@@ -18,17 +18,28 @@ this document, not a separate supported-version claim.
 
 The implemented slices own one explicitly selected local child process and expose
 stdio framing, the `initialize` / `initialized` handshake, typed `thread/start`,
-`thread/read`, `turn/start`, and `turn/interrupt`, raw `Call`, bounded local
-subscriptions, and bounded cleanup. Protocol models cover the complete selected
+`thread/read`, `thread/resume`, `thread/unsubscribe`, `turn/start`, and
+`turn/interrupt`, raw `Call`, bounded local subscriptions, and bounded cleanup. Protocol models cover the complete selected
 experimental-schema definition closure, with omitted/null/value handling and
 unknown-field and unknown-union preservation.
 
-`thread/start`, `thread/read`, and `turn/start` remain **partial workflows** because
-interactive reverse requests cannot yet be answered. Such a request fails the
+`thread/start`, `thread/read`, `thread/resume`, and `turn/start` remain **partial
+workflows** because interactive reverse requests cannot yet be answered. Such a request fails the
 connection with `ErrUnsupportedRequest`; the SDK does not invent approvals. Do not
 enable capabilities requiring attestation, elicitation, or dynamic-tool callbacks.
 `turn/interrupt` exposes the native request and acknowledgement; it does not prove
 execution completion.
+
+`ResumeThread` strictly checks the supplied native thread ID against the returned
+ID, retaining correlation and responded-error evidence on mismatch. It never
+falls back to `thread/start`, replays a failed request, or reconnects. Native
+history/path selectors can deliberately return another identity; those native
+workflows are outside this typed wrapper's strict-ID contract even though their
+full parameter/result schemas are exposed. The raw escape hatch does not confer
+support. `UnsubscribeThread` sends one native request and returns its status; it
+is independent of local subscription cancellation and never sends an interrupt.
+Two fake connections establish explicit reinitialization and unchanged native-ID
+handling, not real-server durable history or persistence compatibility.
 
 Subscriptions preserve all valid notifications as raw method and parameter JSON.
 Six methods also have typed payloads: `turn/started`, `turn/completed`,
@@ -41,8 +52,7 @@ per-method typed/workflow evidence unless explicitly recorded. Envelope emission
 timestamps are not exposed.
 
 There is no WebSocket, Unix-socket, remote-control, embedded-runtime, turn runner,
-resume/unsubscribe wrapper, reverse-request answer API, or login management in
-these slices. A generated type or a successful raw `Call` does not change an
+reverse-request answer API, or login management in these slices. A generated type or a successful raw `Call` does not change an
 endpoint's support status. Unknown extensions are caller-managed and uncertified.
 
 The inventory enumerates **170 client requests, 11 server requests, 85 server

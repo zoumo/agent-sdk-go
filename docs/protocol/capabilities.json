@@ -231,8 +231,8 @@
     {
       "kind": "client_request",
       "method": "thread/resume",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "partial",
+      "scope": "Complete experimental-schema params/results with strict supplied native-ID validation; no fallback creation, reconnect, replay, or SDK persistence. Native alternate-ID history/path workflows are intentionally rejected on mismatch. Interactive reverse-request answers remain unavailable.",
       "source_variant": "ThreadResume",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 557,
@@ -240,9 +240,16 @@
       "field_experimental_gates": true,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket03-model-unit"
+        ],
+        "mock": [
+          "ticket03-contract-mock"
+        ],
+        "race": [
+          "ticket03-model-race",
+          "ticket03-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadResumeParams",
@@ -339,8 +346,8 @@
     {
       "kind": "client_request",
       "method": "thread/unsubscribe",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "One native server-side thread detachment request with exact caller ID and preserved native status/error. Independent of local Subscription.Close; never sends interruption or infers execution completion.",
       "source_variant": "ThreadUnsubscribe",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 579,
@@ -348,9 +355,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket03-model-unit"
+        ],
+        "mock": [
+          "ticket03-contract-mock"
+        ],
+        "race": [
+          "ticket03-model-race",
+          "ticket03-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadUnsubscribeParams",

@@ -62,6 +62,7 @@ func TestFakeChild(t *testing.T) {
 	}
 	var lateID json.RawMessage
 	turns := new(turnPeer)
+	threads := new(resumePeer)
 	for scan.Scan() {
 		raw := append([]byte(nil), scan.Bytes()...)
 		_, _ = transcript.Write(append(raw, '\n'))
@@ -70,7 +71,7 @@ func TestFakeChild(t *testing.T) {
 		if json.Unmarshal(raw, &m) != nil {
 			os.Exit(81)
 		}
-		if turns.handle(mode, m, send) {
+		if threads.handle(mode, m, send) || turns.handle(mode, m, send) {
 			continue
 		}
 		switch m.Method {

@@ -33,16 +33,23 @@ membership flag is not an SDK support or server-runtime availability guarantee.
 
 ## Generated material
 
-`protocol/schema.ticket01.json` is the unmodified definition closure of
+`protocol/schema.json` is the unmodified definition closure of
 `InitializeParams`, `InitializeResponse`, `v2/ThreadStartParams`,
-`v2/ThreadStartResponse`, `v2/ThreadReadParams`, and `v2/ThreadReadResponse`, extracted
+`v2/ThreadStartResponse`, `v2/ThreadReadParams`, `v2/ThreadReadResponse`, the
+`v2/TurnStart` and `v2/TurnInterrupt` parameter/response pairs, and six notification
+roots: `v2/TurnStartedNotification`, `v2/TurnCompletedNotification`,
+`v2/ItemStartedNotification`, `v2/ItemCompletedNotification`,
+`v2/AgentMessageDeltaNotification`, and `v2/ErrorNotification`, extracted
 from the official experimental archive's
 `json_schema["codex_app_server_protocol.schemas.json"]` member.
 `protocol/types_generated.go` is independently generated from that snapshot by
 `scripts/generate_protocol.py`. The script verifies the upstream archive's exact
 Git blob before refreshing the snapshot. The snapshot and Go code are adaptations;
 they are not an upstream OpenAI Go SDK. The Go representation adds explicit
-optional values and raw unknown-field/variant preservation.
+optional values and raw unknown-field/variant preservation. Annotation-only schema
+nodes, such as `outputSchema`, remain arbitrary JSON instead of an invented
+JSON-Schema model. The current closure has 99 definitions, generating 236 Go
+types and 431 synthetic model round-trip cases.
 
 The archive, extracted-aggregate checksum, paths, revision, Git blob IDs, and
 SHA-256 digests are in [sources.json](sources.json). SHA-256 values describe exact

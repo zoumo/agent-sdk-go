@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the ticket-01 native protocol closure from the pinned official schema.
+"""Generate the implemented native protocol closure from the pinned official schema.
 
 Usage: python3 scripts/generate_protocol.py [path/to/app-server-exports-experimental.json.zst]
 With an argument, verify the original Git blob and refresh the checked-in slice.
@@ -18,8 +18,13 @@ PIN = 'd27764b82f7118f674371e6d6e76271d9d606edb'
 BLOB = '0a35c5522fa525a5c2d6a2138c244c9d5b88815d'
 SOURCE = 'codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst'
 ROOTS = ['InitializeParams', 'InitializeResponse', 'v2/ThreadStartParams',
-         'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse']
-SNAPSHOT = ROOT / 'protocol/schema.ticket01.json'
+         'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',
+         'v2/TurnStartParams', 'v2/TurnStartResponse',
+         'v2/TurnInterruptParams', 'v2/TurnInterruptResponse',
+         'v2/TurnStartedNotification', 'v2/TurnCompletedNotification',
+         'v2/ItemStartedNotification', 'v2/ItemCompletedNotification',
+         'v2/AgentMessageDeltaNotification', 'v2/ErrorNotification']
+SNAPSHOT = ROOT / 'protocol/schema.json'
 if len(sys.argv) > 1:
     raw = pathlib.Path(sys.argv[1]).read_bytes()
     digest = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
@@ -64,8 +69,11 @@ def ident(value):
     return ''.join(INITIALISMS.get(w.lower(), w[0].upper() + w[1:]) for w in words)
 def comment(text):
     return '\n'.join('// ' + line for line in text.splitlines()) + '\n' if text else ''
+def opaque(node):
+    # Schema annotations alone do not restrict the JSON value (e.g. outputSchema).
+    return node is True or not (set(node) - {'description', 'title', 'default', 'deprecated', 'examples', '$comment'})
 def nullable(node):
-    if node is True:
+    if opaque(node):
         return False
     return ('null' in node.get('type', []) if isinstance(node.get('type'), list) else node.get('type') == 'null') or any(n.get('type') == 'null' for n in node.get('anyOf', []) if isinstance(n, dict))
 def nonnull(node):
@@ -101,7 +109,7 @@ def register(name, node):
 
 def type_of(node, hint):
     node = nonnull(node)
-    if node is True or not node:
+    if opaque(node):
         return 'json.RawMessage'
     if '$ref' in node:
         return ident(node['$ref'].split('/')[-1])
@@ -145,7 +153,7 @@ def object_type(name, node):
         flags = []
         if key in required:
             flags.append('required')
-        if nullable(prop) or prop is True:
+        if nullable(prop) or opaque(prop):
             flags.append('nullable')
         if isinstance(prop, dict) and len(prop.get('enum', [])) == 1:
             flags.append('const=' + prop['enum'][0])
@@ -253,7 +261,7 @@ print(f'Generated {len(output)} types from {len(snapshot["definitions"])} pinned
 # Exercise every exported model and union branch using synthetic schema-derived
 # values. This checks the public Go surface, not a live Codex session.
 def sample(node, full=False):
-    if node is True or not node:
+    if opaque(node):
         return {'opaque': 9007199254740993, 'nested': [None, False]}
     node = nonnull(node)
     if '$ref' in node:

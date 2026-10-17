@@ -81,9 +81,60 @@ See [generation provenance](docs/protocol/README.md) for the exact native fields
 bounds, exact correlation, and no-replay behavior. `nil` params omits the member;
 `json.RawMessage("null")` sends explicit null. A nil result discards the response.
 Calling an unwrapped method does not make it an officially supported SDK workflow.
-This slice counts and discards notifications; incoming server requests fail the
-connection explicitly. See the canonical compatibility record before enabling
-capabilities that require callbacks or event handling.
+Incoming server requests still fail the connection explicitly. See the canonical
+compatibility record before enabling capabilities that require reverse-request
+answers.
+
+## Observe and explicitly interrupt a turn
+
+`StartTurn(ctx, protocol.TurnStartParams)` and `InterruptTurn(ctx,
+protocol.TurnInterruptParams)` return native response types. Call `Subscribe(ctx)`
+first: a turn can emit events, including completion, before its start response.
+The response's turn ID remains authoritative for that response. The SDK does not
+filter, merge, accumulate, or reinterpret interleaved native thread/turn/item IDs.
+
+The compilable [observe-turn example](examples/observe-turn/main.go) registers
+before starting work, matches both native thread and turn IDs, and checks stream
+loss. It is compiled by tests, never run against a model. Running it yourself may
+use an authenticated account and consume model resources.
+
+A subscription is local observation, active when returned; it does not replay
+notifications received before registration. `Events()` supplies ordered `Event`
+values with the original `Method` and raw JSON `Params`, plus optional typed
+`Data` and a separate `DecodeError`. Absent parameters remain nil; explicit null
+remains raw `null`. Each subscriber independently owns its raw and typed data.
+Typed payloads currently cover `turn/started`, `turn/completed`, `item/started`,
+`item/completed`, `item/agentMessage/delta`, and `error`. Other methods remain raw.
+Malformed supported payloads remain observable with `*DecodeError`; an invalid
+JSON envelope instead terminates the connection.
+
+`Done()` closes immediately on subscription termination, independently of the
+bounded event queue. Accepted queued events remain readable after termination.
+After `Done`, inspect `Err()`:
+
+- nil: explicit subscription or normal client close
+- `context.Canceled` / `context.DeadlineExceeded`: local subscription cancellation
+- `*SubscriptionOverflowError` / `ErrSubscriptionOverflow`: the stream lost events
+- Another error: the underlying terminal connection failure
+
+A full queue terminates only that subscriber, without waiting for it or preventing
+RPC response routing. Check terminal status even when a queued completion is
+available; an incomplete stream is not evidence of a complete observation.
+`Close()` releases local observation without waiting for a consumer. Subscription
+cancellation does not call `thread/unsubscribe` or `turn/interrupt`.
+
+To request execution interruption explicitly, pass the exact native identities:
+
+```go
+_, err := client.InterruptTurn(ctx, protocol.TurnInterruptParams{
+    ThreadID: threadID,
+    TurnID: turnID,
+})
+```
+
+The acknowledgement is only an RPC response. It neither creates a completion
+event nor proves that execution stopped. There is no high-level turn runner,
+implicit interruption, or final-text aggregation.
 
 ## Cancellation and errors
 
@@ -107,6 +158,7 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 
 - Incoming and outgoing frame payload: 8 MiB, excluding newline
 - Queued outbound frames: 32; pending calls: 128
+- Active local subscriptions: 32; queued events per subscriber: 128
 - Diagnostic tail: 64 KiB; all stderr content is replaced with redaction markers
 - Every call, including initialization: at most 30 seconds unless configured
 - A blocked write: 10 seconds
@@ -116,7 +168,10 @@ Earlier caller deadlines win. Resource admission fails with `ErrLimit` before
 sending where possible. An oversized outgoing frame is not sent; malformed or
 oversized incoming frames terminate the connection with an explicit cause.
 Bounded diagnostic counters record unmatched responses and notifications without
-retaining payloads. Stderr is drained independently of the protocol reader.
+retaining diagnostic payloads. Subscription storage scales with queue capacity,
+frame size, and subscriber count, including independent typed payload copies; use
+smaller limits for large events or many observers. SDK decoding runs on the reader,
+but caller callbacks never do. Stderr is drained independently of the reader.
 
 `Close()` is concurrent-safe and idempotent. It closes stdin, waits for graceful
 exit, then kills and reaps only the owned child. It closes all owned pipe ends and
@@ -138,7 +193,8 @@ python3 docs/protocol/verify_inventory.py
 ```
 
 Tests launch only synthetic helper processes and never require an account or call
-a model. [Ticket 01 evidence](docs/evidence/ticket-01.md) records tested scenarios.
+a model. [Ticket 01](docs/evidence/ticket-01.md) and [ticket 02 evidence](docs/evidence/ticket-02.md)
+record tested scenarios.
 [Official testing patterns](docs/protocol/testing-patterns.md) distinguishes
 app-server harnesses from the TypeScript SDK's `codex exec` transport.
 

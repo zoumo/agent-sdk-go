@@ -16,23 +16,34 @@ this document, not a separate supported-version claim.
 
 ## Current implementation
 
-The first slice owns one explicitly selected local child process and implements
-stdio framing, the `initialize` / `initialized` handshake, typed `thread/start`
-and `thread/read`, raw `Call`, and bounded cleanup. Protocol models cover the full
-selected experimental-schema definition closure, with explicit omitted/null/value
-handling and preservation of unknown object fields and union variants.
+The implemented slices own one explicitly selected local child process and expose
+stdio framing, the `initialize` / `initialized` handshake, typed `thread/start`,
+`thread/read`, `turn/start`, and `turn/interrupt`, raw `Call`, bounded local
+subscriptions, and bounded cleanup. Protocol models cover the complete selected
+experimental-schema definition closure, with omitted/null/value handling and
+unknown-field and unknown-union preservation.
 
-`thread/start` and `thread/read` are **partial workflows**: their request/result
-bindings exist, but event subscription and reverse-request answers do not. Incoming
-notifications are counted and discarded. An incoming server request fails the
-connection with `ErrUnsupportedRequest`; the SDK never invents an approval or
-silently accepts work. Do not enable capabilities that require attestation,
-elicitation, or dynamic-tool callbacks in this slice.
+`thread/start`, `thread/read`, and `turn/start` remain **partial workflows** because
+interactive reverse requests cannot yet be answered. Such a request fails the
+connection with `ErrUnsupportedRequest`; the SDK does not invent approvals. Do not
+enable capabilities requiring attestation, elicitation, or dynamic-tool callbacks.
+`turn/interrupt` exposes the native request and acknowledgement; it does not prove
+execution completion.
+
+Subscriptions preserve all valid notifications as raw method and parameter JSON.
+Six methods also have typed payloads: `turn/started`, `turn/completed`,
+`item/started`, `item/completed`, `item/agentMessage/delta`, and `error`. Malformed
+known payloads retain their raw bytes with `DecodeError`. A subscriber's full queue
+terminates only that stream with an inspectable loss cause outside its queue.
+There is no filtering, replay, native-ID replacement, or event-driven turn state.
+The remaining notification inventory rows are partial raw receive paths, with no
+per-method typed/workflow evidence unless explicitly recorded. Envelope emission
+timestamps are not exposed.
 
 There is no WebSocket, Unix-socket, remote-control, embedded-runtime, turn runner,
-resume/unsubscribe wrapper, login management, or execution-interruption workflow
-in this slice. A generated data type or a successful raw `Call` does not change
-an endpoint's support status. Unknown extensions are caller-managed and uncertified.
+resume/unsubscribe wrapper, reverse-request answer API, or login management in
+these slices. A generated type or a successful raw `Call` does not change an
+endpoint's support status. Unknown extensions are caller-managed and uncertified.
 
 The inventory enumerates **170 client requests, 11 server requests, 85 server
 notifications, and 1 client notification**, including experimental, legacy, and

@@ -23,6 +23,9 @@ assert len({(r['kind'], r['method']) for r in inventory['methods']}) == len(inve
 assert len({r['name'] for r in inventory['controls']}) == len(inventory['controls'])
 for kind, count in inventory['counts'].items():
     assert sum(r['kind'] == kind for r in inventory['methods']) == count, kind
+for derived in provenance['derived_material']:
+    snapshot_path = ROOT / derived['path']
+    assert hashlib.sha256(snapshot_path.read_bytes()).hexdigest() == derived['snapshot_sha256'], 'derived snapshot mismatch'
 known_evidence = {r['id'] for r in evidence['records']}
 for row in records:
     assert row['support'] in inventory['status_definitions']

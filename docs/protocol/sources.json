@@ -209,15 +209,15 @@
   ],
   "derived_material": [
     {
-      "path": "protocol/schema.ticket01.json",
+      "path": "protocol/schema.json",
       "source_archive": "codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst",
       "archive_member": "json_schema[\"codex_app_server_protocol.schemas.json\"]",
       "extracted_aggregate_sha256": "7243ba241962af92ca60581f1a81808ebda4212a800f8b205f54703bcfd508c5",
-      "selection": "Transitive definition closure of InitializeParams, InitializeResponse, v2/ThreadStartParams, v2/ThreadStartResponse, v2/ThreadReadParams, v2/ThreadReadResponse",
+      "selection": "Transitive definition closure of the 16 exact roots listed in protocol/schema.json: initialization, thread start/read, turn start/interrupt, and six supported notifications.",
       "generator": "scripts/generate_protocol.py",
       "output": "protocol/types_generated.go",
       "modifications": "Definitions extracted from upstream archive into a self-contained snapshot; Go bindings are independently generated and include unknown-field/union preservation and explicit optional values.",
-      "snapshot_sha256": "62fe29144ec3c7ff16e341848c957e796279ddd1a7a4375b910b65a7d9da8d95"
+      "snapshot_sha256": "7b15c819250f2c26496c827c5b44c038769c35992939959fce8917d87117d7af"
     }
   ]
 }

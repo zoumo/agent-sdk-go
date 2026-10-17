@@ -77,3 +77,26 @@ are recorded separately from fake-peer behavior and live compatibility.
 Read the actual [evidence record](evidence.json) for executed Go commands and
 scenarios. Upstream patterns guide independently authored tests; upstream passing
 status, paid service behavior, and broader SDK functionality are not inherited.
+
+## Ticket 02: independently applied event-test patterns
+
+The new external-package tests keep the same fake-child boundary. The Rust
+helper's separate response/notification handling informed assertions that events
+cannot settle an outstanding RPC. The TypeScript fake child's independent stream
+and exit controls informed failure tests, without borrowing exec wire shapes.
+The Python async behavior suite's recorded registration/delegation sequence
+informed checks that subscription registration is effective before work begins;
+this SDK deliberately has no Python-style per-turn registration or waiting state.
+
+`TestTurnEarlyEventsKeepResponseIdentity` withholds the start response behind a
+second RPC until the caller has observed eight notifications, including stale and
+interleaved identities and immediate completion. This uses a deterministic barrier,
+not a sleep. `TestSubscriptionOverflowIsolatedAndInspectable` paces a healthy
+observer while another queue stays full; `TestSlowSubscriberNeverBlocksResponse`
+sends 4,096 notifications before a normal response. The separate terminal signal
+must remain observable before any full queue is drained. Exact request transcripts
+check one explicit interrupt and no implicit interrupt or start replay.
+
+These are original Go scenarios, not copied official tests or claims that the
+upstream suites were executed. The earlier documented Rust/TypeScript/Python
+transport distinctions and separate live-test boundary continue to apply.

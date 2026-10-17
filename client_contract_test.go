@@ -61,6 +61,7 @@ func TestFakeChild(t *testing.T) {
 		fmt.Fprintf(os.Stdout, "{\"id\":%s,\"result\":%s}\n", id, result)
 	}
 	var lateID json.RawMessage
+	turns := new(turnPeer)
 	for scan.Scan() {
 		raw := append([]byte(nil), scan.Bytes()...)
 		_, _ = transcript.Write(append(raw, '\n'))
@@ -68,6 +69,9 @@ func TestFakeChild(t *testing.T) {
 		var m fakeEnvelope
 		if json.Unmarshal(raw, &m) != nil {
 			os.Exit(81)
+		}
+		if turns.handle(mode, m, send) {
+			continue
 		}
 		switch m.Method {
 		case "initialize":

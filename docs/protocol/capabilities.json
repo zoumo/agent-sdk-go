@@ -198,7 +198,7 @@
       "kind": "client_request",
       "method": "thread/start",
       "support": "partial",
-      "scope": "Complete selected experimental-schema request/result closure, including unknown fields and union variants; notification delivery and interactive reverse requests are not exposed in this slice.",
+      "scope": "Complete selected experimental-schema request/result closure, including unknown fields and union variants; raw notification subscriptions are available, but interactive reverse-request answers are not.",
       "source_variant": "ThreadStart",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 551,
@@ -1507,7 +1507,7 @@
       "kind": "client_request",
       "method": "thread/read",
       "support": "partial",
-      "scope": "Complete selected experimental-schema request/result closure, including unknown fields and union variants; notification delivery and interactive reverse requests are not exposed in this slice.",
+      "scope": "Complete selected experimental-schema request/result closure, including unknown fields and union variants; raw notification subscriptions are available, but interactive reverse-request answers are not.",
       "source_variant": "ThreadRead",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 846,
@@ -2482,8 +2482,8 @@
     {
       "kind": "client_request",
       "method": "turn/start",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "partial",
+      "scope": "Native typed parameters and response, with explicit pre-start subscriptions. Early/stale/interleaved events never replace response identities. No replay or implicit interrupt. Reverse-request workflows remain unsupported.",
       "source_variant": "TurnStart",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1032,
@@ -2491,9 +2491,16 @@
       "field_experimental_gates": true,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::TurnStartParams",
@@ -2560,8 +2567,8 @@
     {
       "kind": "client_request",
       "method": "turn/interrupt",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "One explicit native typed request with caller-supplied thread/turn IDs and a native acknowledgement. The acknowledgement is not a completion event or proof that execution stopped.",
       "source_variant": "TurnInterrupt",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1050,
@@ -2569,9 +2576,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::TurnInterruptParams",
@@ -4759,8 +4773,8 @@
     {
       "kind": "server_notification",
       "method": "error",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "supported",
+      "scope": "Native typed and raw notification delivery, preserving unknown fields/variants and malformed payload bytes with a separate DecodeError. Ordered bounded local streams; overflow has an out-of-queue terminal cause. No implicit turn state.",
       "source_variant": "Error",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1918,
@@ -4768,9 +4782,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ErrorNotification",
@@ -4785,8 +4806,8 @@
     {
       "kind": "server_notification",
       "method": "thread/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1919,
@@ -4811,8 +4832,8 @@
     {
       "kind": "server_notification",
       "method": "thread/status/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadStatusChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1920,
@@ -4837,8 +4858,8 @@
     {
       "kind": "server_notification",
       "method": "thread/archived",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadArchived",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1921,
@@ -4863,8 +4884,8 @@
     {
       "kind": "server_notification",
       "method": "thread/deleted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadDeleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1922,
@@ -4889,8 +4910,8 @@
     {
       "kind": "server_notification",
       "method": "thread/unarchived",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadUnarchived",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1923,
@@ -4915,8 +4936,8 @@
     {
       "kind": "server_notification",
       "method": "thread/closed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadClosed",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1924,
@@ -4941,8 +4962,8 @@
     {
       "kind": "server_notification",
       "method": "thread/reverted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadReverted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1925,
@@ -4967,8 +4988,8 @@
     {
       "kind": "server_notification",
       "method": "skills/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "SkillsChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1926,
@@ -4993,8 +5014,8 @@
     {
       "kind": "server_notification",
       "method": "thread/name/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadNameUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1927,
@@ -5019,8 +5040,8 @@
     {
       "kind": "server_notification",
       "method": "thread/attachment/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadAttachmentUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1928,
@@ -5045,8 +5066,8 @@
     {
       "kind": "server_notification",
       "method": "thread/goal/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadGoalUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1929,
@@ -5071,8 +5092,8 @@
     {
       "kind": "server_notification",
       "method": "thread/goal/cleared",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadGoalCleared",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1930,
@@ -5097,8 +5118,8 @@
     {
       "kind": "server_notification",
       "method": "thread/queue/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadQueueChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1932,
@@ -5123,8 +5144,8 @@
     {
       "kind": "server_notification",
       "method": "project/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ProjectChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1934,
@@ -5149,8 +5170,8 @@
     {
       "kind": "server_notification",
       "method": "thread/project/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadProjectUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1936,
@@ -5175,8 +5196,8 @@
     {
       "kind": "server_notification",
       "method": "thread/environment/connected",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "EnvironmentConnected",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1938,
@@ -5201,8 +5222,8 @@
     {
       "kind": "server_notification",
       "method": "thread/environment/disconnected",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "EnvironmentDisconnected",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1940,
@@ -5227,8 +5248,8 @@
     {
       "kind": "server_notification",
       "method": "thread/settings/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadSettingsUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1942,
@@ -5253,8 +5274,8 @@
     {
       "kind": "server_notification",
       "method": "thread/tokenUsage/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadTokenUsageUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1943,
@@ -5279,8 +5300,8 @@
     {
       "kind": "server_notification",
       "method": "turn/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "supported",
+      "scope": "Native typed and raw notification delivery, preserving unknown fields/variants and malformed payload bytes with a separate DecodeError. Ordered bounded local streams; overflow has an out-of-queue terminal cause. No implicit turn state.",
       "source_variant": "TurnStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1944,
@@ -5288,9 +5309,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::TurnStartedNotification",
@@ -5305,8 +5333,8 @@
     {
       "kind": "server_notification",
       "method": "hook/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "HookStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1945,
@@ -5331,8 +5359,8 @@
     {
       "kind": "server_notification",
       "method": "turn/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "supported",
+      "scope": "Native typed and raw notification delivery, preserving unknown fields/variants and malformed payload bytes with a separate DecodeError. Ordered bounded local streams; overflow has an out-of-queue terminal cause. No implicit turn state.",
       "source_variant": "TurnCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1946,
@@ -5340,9 +5368,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::TurnCompletedNotification",
@@ -5357,8 +5392,8 @@
     {
       "kind": "server_notification",
       "method": "hook/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "HookCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1947,
@@ -5383,8 +5418,8 @@
     {
       "kind": "server_notification",
       "method": "turn/diff/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "TurnDiffUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1948,
@@ -5409,8 +5444,8 @@
     {
       "kind": "server_notification",
       "method": "turn/plan/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "TurnPlanUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1949,
@@ -5435,8 +5470,8 @@
     {
       "kind": "server_notification",
       "method": "item/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "supported",
+      "scope": "Native typed and raw notification delivery, preserving unknown fields/variants and malformed payload bytes with a separate DecodeError. Ordered bounded local streams; overflow has an out-of-queue terminal cause. No implicit turn state.",
       "source_variant": "ItemStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1950,
@@ -5444,9 +5479,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ItemStartedNotification",
@@ -5461,8 +5503,8 @@
     {
       "kind": "server_notification",
       "method": "item/autoApprovalReview/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ItemGuardianApprovalReviewStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1951,
@@ -5487,8 +5529,8 @@
     {
       "kind": "server_notification",
       "method": "item/autoApprovalReview/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ItemGuardianApprovalReviewCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1952,
@@ -5513,8 +5555,8 @@
     {
       "kind": "server_notification",
       "method": "autoApprovalReview/strictReviewRequired",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "StrictReviewRequired",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1954,
@@ -5539,8 +5581,8 @@
     {
       "kind": "server_notification",
       "method": "item/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "supported",
+      "scope": "Native typed and raw notification delivery, preserving unknown fields/variants and malformed payload bytes with a separate DecodeError. Ordered bounded local streams; overflow has an out-of-queue terminal cause. No implicit turn state.",
       "source_variant": "ItemCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1955,
@@ -5548,9 +5590,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ItemCompletedNotification",
@@ -5565,8 +5614,8 @@
     {
       "kind": "server_notification",
       "method": "rawResponseItem/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "RawResponseItemCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1957,
@@ -5585,8 +5634,8 @@
     {
       "kind": "server_notification",
       "method": "rawResponse/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "RawResponseCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1959,
@@ -5605,8 +5654,8 @@
     {
       "kind": "server_notification",
       "method": "item/agentMessage/delta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "supported",
+      "scope": "Native typed and raw notification delivery, preserving unknown fields/variants and malformed payload bytes with a separate DecodeError. Ordered bounded local streams; overflow has an out-of-queue terminal cause. No implicit turn state.",
       "source_variant": "AgentMessageDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1960,
@@ -5614,9 +5663,16 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "ticket02-model-unit"
+        ],
+        "mock": [
+          "ticket02-contract-mock"
+        ],
+        "race": [
+          "ticket02-model-race",
+          "ticket02-contract-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::AgentMessageDeltaNotification",
@@ -5631,8 +5687,8 @@
     {
       "kind": "server_notification",
       "method": "item/plan/delta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "PlanDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1962,
@@ -5657,8 +5713,8 @@
     {
       "kind": "server_notification",
       "method": "command/exec/outputDelta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "CommandExecOutputDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1964,
@@ -5683,8 +5739,8 @@
     {
       "kind": "server_notification",
       "method": "process/outputDelta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ProcessOutputDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1967,
@@ -5709,8 +5765,8 @@
     {
       "kind": "server_notification",
       "method": "process/exited",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ProcessExited",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1970,
@@ -5735,8 +5791,8 @@
     {
       "kind": "server_notification",
       "method": "item/commandExecution/outputDelta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "CommandExecutionOutputDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1971,
@@ -5761,8 +5817,8 @@
     {
       "kind": "server_notification",
       "method": "item/commandExecution/terminalInteraction",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "TerminalInteraction",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1972,
@@ -5787,8 +5843,8 @@
     {
       "kind": "server_notification",
       "method": "item/fileChange/outputDelta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "FileChangeOutputDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1974,
@@ -5813,8 +5869,8 @@
     {
       "kind": "server_notification",
       "method": "item/fileChange/patchUpdated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "FileChangePatchUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1975,
@@ -5839,8 +5895,8 @@
     {
       "kind": "server_notification",
       "method": "serverRequest/resolved",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ServerRequestResolved",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1976,
@@ -5865,8 +5921,8 @@
     {
       "kind": "server_notification",
       "method": "item/mcpToolCall/progress",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "McpToolCallProgress",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1977,
@@ -5891,8 +5947,8 @@
     {
       "kind": "server_notification",
       "method": "mcpServer/oauthLogin/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "McpServerOauthLoginCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1978,
@@ -5917,8 +5973,8 @@
     {
       "kind": "server_notification",
       "method": "mcpServer/startupStatus/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "McpServerStatusUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1979,
@@ -5943,8 +5999,8 @@
     {
       "kind": "server_notification",
       "method": "mcpServer/event/stream/notification",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "McpServerEventStream",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1981,
@@ -5969,8 +6025,8 @@
     {
       "kind": "server_notification",
       "method": "account/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "AccountUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1982,
@@ -5995,8 +6051,8 @@
     {
       "kind": "server_notification",
       "method": "account/gatewayOAuth/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "GatewayOAuthChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1983,
@@ -6021,8 +6077,8 @@
     {
       "kind": "server_notification",
       "method": "account/rateLimits/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "AccountRateLimitsUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1984,
@@ -6047,8 +6103,8 @@
     {
       "kind": "server_notification",
       "method": "app/list/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "AppListUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1985,
@@ -6073,8 +6129,8 @@
     {
       "kind": "server_notification",
       "method": "remoteControl/status/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "RemoteControlStatusChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1986,
@@ -6099,8 +6155,8 @@
     {
       "kind": "server_notification",
       "method": "externalAgentConfig/import/progress",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ExternalAgentConfigImportProgress",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1987,
@@ -6125,8 +6181,8 @@
     {
       "kind": "server_notification",
       "method": "externalAgentConfig/import/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ExternalAgentConfigImportCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1988,
@@ -6151,8 +6207,8 @@
     {
       "kind": "server_notification",
       "method": "fs/changed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "FsChanged",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1989,
@@ -6177,8 +6233,8 @@
     {
       "kind": "server_notification",
       "method": "item/reasoning/summaryTextDelta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ReasoningSummaryTextDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1990,
@@ -6203,8 +6259,8 @@
     {
       "kind": "server_notification",
       "method": "item/reasoning/summaryPartAdded",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ReasoningSummaryPartAdded",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1991,
@@ -6229,8 +6285,8 @@
     {
       "kind": "server_notification",
       "method": "item/reasoning/textDelta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ReasoningTextDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1992,
@@ -6255,8 +6311,8 @@
     {
       "kind": "server_notification",
       "method": "thread/compacted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ContextCompacted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1994,
@@ -6281,8 +6337,8 @@
     {
       "kind": "server_notification",
       "method": "model/rerouted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ModelRerouted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1995,
@@ -6307,8 +6363,8 @@
     {
       "kind": "server_notification",
       "method": "model/verification",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ModelVerification",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1996,
@@ -6333,8 +6389,8 @@
     {
       "kind": "server_notification",
       "method": "modelProvider/authRecoveryStarted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "AuthRecoveryStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1997,
@@ -6359,8 +6415,8 @@
     {
       "kind": "server_notification",
       "method": "modelProvider/authRecoveryCompleted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "AuthRecoveryCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1998,
@@ -6385,8 +6441,8 @@
     {
       "kind": "server_notification",
       "method": "turn/moderationMetadata",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "TurnModerationMetadata",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2000,
@@ -6411,8 +6467,8 @@
     {
       "kind": "server_notification",
       "method": "model/safetyBuffering/updated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ModelSafetyBufferingUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2001,
@@ -6437,8 +6493,8 @@
     {
       "kind": "server_notification",
       "method": "warning",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "Warning",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2002,
@@ -6463,8 +6519,8 @@
     {
       "kind": "server_notification",
       "method": "guardianWarning",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "GuardianWarning",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2003,
@@ -6489,8 +6545,8 @@
     {
       "kind": "server_notification",
       "method": "deprecationNotice",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "DeprecationNotice",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2004,
@@ -6515,8 +6571,8 @@
     {
       "kind": "server_notification",
       "method": "configWarning",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ConfigWarning",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2005,
@@ -6541,8 +6597,8 @@
     {
       "kind": "server_notification",
       "method": "fuzzyFileSearch/sessionUpdated",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "FuzzyFileSearchSessionUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2006,
@@ -6567,8 +6623,8 @@
     {
       "kind": "server_notification",
       "method": "fuzzyFileSearch/sessionCompleted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "FuzzyFileSearchSessionCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2007,
@@ -6593,8 +6649,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2009,
@@ -6619,8 +6675,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/itemAdded",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeItemAdded",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2011,
@@ -6645,8 +6701,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/item/started",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeItemStarted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2013,
@@ -6671,8 +6727,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/item/transcript/delta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeItemTranscriptDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2015,
@@ -6697,8 +6753,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/item/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeItemCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2017,
@@ -6723,8 +6779,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/transcript/delta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeTranscriptDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2019,
@@ -6749,8 +6805,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/transcript/done",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeTranscriptDone",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2021,
@@ -6775,8 +6831,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/outputAudio/delta",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeOutputAudioDelta",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2023,
@@ -6801,8 +6857,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/sdp",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeSdp",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2025,
@@ -6827,8 +6883,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/error",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeError",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2027,
@@ -6853,8 +6909,8 @@
     {
       "kind": "server_notification",
       "method": "thread/realtime/closed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "ThreadRealtimeClosed",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2029,
@@ -6879,8 +6935,8 @@
     {
       "kind": "server_notification",
       "method": "windows/worldWritableWarning",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "WindowsWorldWritableWarning",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2032,
@@ -6905,8 +6961,8 @@
     {
       "kind": "server_notification",
       "method": "windowsSandbox/setupCompleted",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "WindowsSandboxSetupCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2033,
@@ -6931,8 +6987,8 @@
     {
       "kind": "server_notification",
       "method": "account/login/completed",
-      "support": "unsupported",
-      "scope": "Notifications are counted and discarded; no subscription or notification payload API.",
+      "support": "partial",
+      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
       "source_variant": "AccountLoginCompleted",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2038,
@@ -7050,7 +7106,7 @@
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2048,
-      "description": "Optional server notification emission timestamp; no event delivery API in this slice.",
+      "description": "Optional server notification envelope emission timestamp; local Event exposes method and raw params, not envelope-level timestamps.",
       "evidence": {
         "unit": [],
         "mock": [],

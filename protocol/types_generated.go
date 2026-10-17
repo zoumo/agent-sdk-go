@@ -86,11 +86,42 @@ type ActivePermissionProfile struct {
 func (v ActivePermissionProfile) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ActivePermissionProfile) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type AdditionalContextEntry struct {
+	Kind  AdditionalContextKind `json:"kind" protocol:"required"`
+	Value string                `json:"value" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AdditionalContextEntry) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *AdditionalContextEntry) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type AdditionalContextKind string
+
+const (
+	AdditionalContextKindUntrusted   AdditionalContextKind = "untrusted"
+	AdditionalContextKindApplication AdditionalContextKind = "application"
+)
+
 type AgentMessageDelivery string
 
 const (
 	AgentMessageDeliveryAsync AgentMessageDelivery = "async"
 )
+
+type AgentMessageDeltaNotification struct {
+	Delta    string `json:"delta" protocol:"required"`
+	ItemID   string `json:"itemId" protocol:"required"`
+	ThreadID string `json:"threadId" protocol:"required"`
+	TurnID   string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v AgentMessageDeltaNotification) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *AgentMessageDeltaNotification) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
 
 type AgentPath = string
 
@@ -367,6 +398,17 @@ const (
 	CollabAgentToolCallStatusInterrupted CollabAgentToolCallStatus = "interrupted"
 )
 
+// Collaboration mode for a Codex session.
+type CollaborationMode struct {
+	Mode     ModeKind `json:"mode" protocol:"required"`
+	Settings Settings `json:"settings" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v CollaborationMode) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *CollaborationMode) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 // CommandAction contains exactly one typed variant or Unknown.
 type CommandAction struct {
 	Read           *ReadCommandAction
@@ -450,6 +492,15 @@ const (
 	CommandExecutionStatusCompleted  CommandExecutionStatus = "completed"
 	CommandExecutionStatusFailed     CommandExecutionStatus = "failed"
 	CommandExecutionStatusDeclined   CommandExecutionStatus = "declined"
+)
+
+// Requested cyber treatment for a ChatGPT-authenticated Codex turn. Authorization and model-tier restrictions remain server-owned.
+type CyberAccessProgram string
+
+const (
+	CyberAccessProgramStandard     CyberAccessProgram = "standard"
+	CyberAccessProgramDaybreakBlue CyberAccessProgram = "daybreakBlue"
+	CyberAccessProgramDaybreakRed  CyberAccessProgram = "daybreakRed"
 )
 
 // DynamicToolCallOutputContentItem contains exactly one typed variant or Unknown.
@@ -600,6 +651,18 @@ func (v *DynamicToolSpec) UnmarshalJSON(data []byte) error {
 	*v = out
 	return nil
 }
+
+type ErrorNotification struct {
+	Error     TurnError `json:"error" protocol:"required"`
+	ThreadID  string    `json:"threadId" protocol:"required"`
+	TurnID    string    `json:"turnId" protocol:"required"`
+	WillRetry bool      `json:"willRetry" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ErrorNotification) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ErrorNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 type FileUpdateChange struct {
 	Diff string          `json:"diff" protocol:"required"`
@@ -791,6 +854,32 @@ func (v *ImageGenerationFailure) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type ItemCompletedNotification struct {
+	// Unix timestamp (in milliseconds) when this item lifecycle completed.
+	CompletedAtMs int64      `json:"completedAtMs" protocol:"required"`
+	Item          ThreadItem `json:"item" protocol:"required"`
+	ThreadID      string     `json:"threadId" protocol:"required"`
+	TurnID        string     `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ItemCompletedNotification) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ItemCompletedNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ItemStartedNotification struct {
+	Item ThreadItem `json:"item" protocol:"required"`
+	// Unix timestamp (in milliseconds) when this item lifecycle started.
+	StartedAtMs int64  `json:"startedAtMs" protocol:"required"`
+	ThreadID    string `json:"threadId" protocol:"required"`
+	TurnID      string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ItemStartedNotification) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ItemStartedNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type LegacyAppPathString = string
 
 type MCPAppDisplayMode string
@@ -906,6 +995,14 @@ type MisalignmentSteer struct {
 
 func (v MisalignmentSteer) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *MisalignmentSteer) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+// Initial collaboration mode to use when the TUI starts.
+type ModeKind string
+
+const (
+	ModeKindPlan    ModeKind = "plan"
+	ModeKindDefault ModeKind = "default"
+)
 
 // Controls the effective multi-agent delegation instructions for a turn. `custom` means the configured mode hint defines the policy instead of a built-in policy.
 // MultiAgentMode contains exactly one typed variant or Unknown.
@@ -1052,6 +1149,16 @@ const (
 
 // A non-empty reasoning effort value advertised by the model.
 type ReasoningEffort = string
+
+// A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries
+type ReasoningSummary string
+
+const (
+	ReasoningSummaryAuto     ReasoningSummary = "auto"
+	ReasoningSummaryConcise  ReasoningSummary = "concise"
+	ReasoningSummaryDetailed ReasoningSummary = "detailed"
+	ReasoningSummaryNone     ReasoningSummary = "none"
+)
 
 type SandboxMode string
 
@@ -1206,6 +1313,18 @@ func (v *SessionSource) UnmarshalJSON(data []byte) error {
 	*v = out
 	return nil
 }
+
+// Settings for a collaboration mode.
+type Settings struct {
+	DeveloperInstructions Optional[string]          `json:"developer_instructions" protocol:"nullable"`
+	Model                 string                    `json:"model" protocol:"required"`
+	ReasoningEffort       Optional[ReasoningEffort] `json:"reasoning_effort" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v Settings) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *Settings) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 type SubAgentActivityKind string
 
@@ -1845,6 +1964,16 @@ type Turn struct {
 func (v Turn) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *Turn) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type TurnCompletedNotification struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	Turn     Turn   `json:"turn" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnCompletedNotification) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnCompletedNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type TurnEnvironmentParams struct {
 	Cwd           LegacyAppPathString `json:"cwd" protocol:"required"`
 	EnvironmentID string              `json:"environmentId" protocol:"required"`
@@ -1870,6 +1999,24 @@ type TurnError struct {
 func (v TurnError) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *TurnError) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type TurnInterruptParams struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	TurnID   string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnInterruptParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnInterruptParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type TurnInterruptResponse struct {
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnInterruptResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnInterruptResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type TurnItemsView string
 
 const (
@@ -1877,6 +2024,87 @@ const (
 	TurnItemsViewSummary   TurnItemsView = "summary"
 	TurnItemsViewFull      TurnItemsView = "full"
 )
+
+type TurnStartParams struct {
+	// Optional client-provided context fragments keyed by an opaque source identifier.
+	AdditionalContext Optional[map[string]AdditionalContextEntry] `json:"additionalContext" protocol:"nullable"`
+	// Override the approval policy for this turn and subsequent turns.
+	ApprovalPolicy Optional[AskForApproval] `json:"approvalPolicy" protocol:"nullable"`
+	// Override where approval requests are routed for review on this turn and subsequent turns.
+	ApprovalsReviewer   Optional[ApprovalsReviewer] `json:"approvalsReviewer" protocol:"nullable"`
+	ClientUserMessageID Optional[string]            `json:"clientUserMessageId" protocol:"nullable"`
+	// EXPERIMENTAL - Set a pre-set collaboration mode. Takes precedence over model, reasoning_effort, and developer instructions if set.
+	//
+	// For `collaboration_mode.settings.developer_instructions`, `null` means "use the built-in instructions for the selected mode".
+	CollaborationMode Optional[CollaborationMode] `json:"collaborationMode" protocol:"nullable"`
+	// Override the working directory for this turn and subsequent turns.
+	Cwd Optional[string] `json:"cwd" protocol:"nullable"`
+	// EXPERIMENTAL - Request a workspace-authorized cyber program for this turn. Omission preserves automatic behavior. This does not grant access.
+	CyberAccessProgram Optional[CyberAccessProgram] `json:"cyberAccessProgram" protocol:"nullable"`
+	// Replace this thread's disabled plugin IDs. Omitted/null preserves the list; [] clears it.
+	DisabledPluginIDs Optional[[]string] `json:"disabledPluginIds" protocol:"nullable"`
+	// Override the reasoning effort for this turn and subsequent turns.
+	Effort Optional[ReasoningEffort] `json:"effort" protocol:"nullable"`
+	// Optional environments for this turn and subsequent turns.
+	//
+	// Omitted uses the thread sticky environments. Empty disables environment access for this turn. Non-empty selects the first environment as the current turn environment for this turn.
+	Environments Optional[[]TurnEnvironmentParams] `json:"environments" protocol:"nullable"`
+	Input        []UserInput                       `json:"input" protocol:"required"`
+	// Override the model for this turn and subsequent turns.
+	Model Optional[string] `json:"model" protocol:"nullable"`
+	// @deprecated Ignored. Use `effort: "ultra"` for proactive multi-agent behavior.
+	MultiAgentMode Optional[MultiAgentMode] `json:"multiAgentMode" protocol:"nullable"`
+	// Optional JSON Schema used to constrain the final assistant message for this turn.
+	OutputSchema Optional[json.RawMessage] `json:"outputSchema" protocol:"nullable"`
+	// Select a named permissions profile id for this turn and subsequent turns. Cannot be combined with `sandboxPolicy`.
+	Permissions Optional[string] `json:"permissions" protocol:"nullable"`
+	// @deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions.
+	Personality Optional[Personality] `json:"personality" protocol:"nullable"`
+	// Optional metadata to enrich Codex's ResponsesAPI turn metadata.
+	//
+	// Entries are flattened into the JSON string sent as `client_metadata["x-codex-turn-metadata"]` on ResponsesAPI HTTP and websocket requests.
+	//
+	// They are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.
+	ResponsesapiClientMetadata Optional[map[string]string] `json:"responsesapiClientMetadata" protocol:"nullable"`
+	// Replace the thread's runtime workspace roots for this turn and subsequent turns. Paths must be absolute.
+	RuntimeWorkspaceRoots Optional[[]AbsolutePathBuf] `json:"runtimeWorkspaceRoots" protocol:"nullable"`
+	// Override the sandbox policy for this turn and subsequent turns.
+	SandboxPolicy Optional[SandboxPolicy] `json:"sandboxPolicy" protocol:"nullable"`
+	// Override the service tier for this turn and subsequent turns.
+	ServiceTier Optional[string] `json:"serviceTier" protocol:"nullable"`
+	// Override the service tier only when this request starts a new turn. Use "default" for standard speed. Omitted or null inherits the thread's tier. Does not change the thread's tier or a turn being steered.
+	ServiceTierForTurn Optional[string] `json:"serviceTierForTurn" protocol:"nullable"`
+	// Override the reasoning summary for this turn and subsequent turns.
+	Summary    Optional[ReasoningSummary] `json:"summary" protocol:"nullable"`
+	ThreadID   string                     `json:"threadId" protocol:"required"`
+	ToolOutput Optional[TurnToolOutput]   `json:"toolOutput" protocol:"nullable"`
+	// Optional source classification for the caller that starts this turn. Ignored when this request steers an already-active turn.
+	TurnTrigger Optional[string] `json:"turnTrigger" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnStartParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnStartParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type TurnStartResponse struct {
+	Turn Turn `json:"turn" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnStartResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnStartResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type TurnStartedNotification struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	Turn     Turn   `json:"turn" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnStartedNotification) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnStartedNotification) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 type TurnStatus string
 
@@ -1886,6 +2114,17 @@ const (
 	TurnStatusFailed      TurnStatus = "failed"
 	TurnStatusInProgress  TurnStatus = "inProgress"
 )
+
+type TurnToolOutput struct {
+	Name      string                 `json:"name" protocol:"required"`
+	Namespace Optional[string]       `json:"namespace" protocol:"nullable"`
+	Output    FunctionCallOutputBody `json:"output" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v TurnToolOutput) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *TurnToolOutput) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 // UserInput contains exactly one typed variant or Unknown.
 type UserInput struct {

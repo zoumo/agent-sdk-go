@@ -39,25 +39,26 @@ type outbound struct {
 // Client owns exactly one app-server child. It never replays requests. Calls are
 // safe concurrently; a context only cancels local waiting, never server execution.
 type Client struct {
-	mu         sync.Mutex
-	limits     Limits
-	cmd        *exec.Cmd
-	stdin      *os.File
-	stdout     *os.File
-	stderr     *os.File
-	queue      chan outbound
-	pending    map[ID]*pendingCall
-	nextID     int64
-	ready      bool
-	cause      error
-	done       chan struct{}
-	cleaned    chan struct{}
-	reaped     chan struct{}
-	readDone   chan struct{}
-	closeErr   error
-	serverInfo json.RawMessage
-	diag       DiagnosticSnapshot
-	workers    sync.WaitGroup
+	mu            sync.Mutex
+	limits        Limits
+	cmd           *exec.Cmd
+	stdin         *os.File
+	stdout        *os.File
+	stderr        *os.File
+	queue         chan outbound
+	pending       map[ID]*pendingCall
+	subscriptions map[*Subscription]struct{}
+	nextID        int64
+	ready         bool
+	cause         error
+	done          chan struct{}
+	cleaned       chan struct{}
+	reaped        chan struct{}
+	readDone      chan struct{}
+	closeErr      error
+	serverInfo    json.RawMessage
+	diag          DiagnosticSnapshot
+	workers       sync.WaitGroup
 }
 
 // NewStdio starts the explicitly selected executable, completes initialize then
@@ -112,7 +113,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	inR.Close()
 	outW.Close()
 	errW.Close()
-	c := &Client{limits: limits, cmd: cmd, stdin: inW, stdout: outR, stderr: errR, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c := &Client{limits: limits, cmd: cmd, stdin: inW, stdout: outR, stderr: errR, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 	go func() {
 		waitErr := cmd.Wait()
 		close(c.reaped)
@@ -178,6 +179,22 @@ func (c *Client) StartThread(ctx context.Context, p protocol.ThreadStartParams) 
 func (c *Client) ReadThread(ctx context.Context, p protocol.ThreadReadParams) (protocol.ThreadReadResponse, error) {
 	var r protocol.ThreadReadResponse
 	err := c.Call(ctx, "thread/read", p, &r)
+	return r, err
+}
+
+// StartTurn returns only the native response. Events, including early or stale
+// completions, never change its result. Subscribe before starting a turn.
+func (c *Client) StartTurn(ctx context.Context, p protocol.TurnStartParams) (protocol.TurnStartResponse, error) {
+	var r protocol.TurnStartResponse
+	err := c.Call(ctx, "turn/start", p, &r)
+	return r, err
+}
+
+// InterruptTurn explicitly requests interruption of the caller's native turn.
+// A successful acknowledgement is not evidence that execution has completed.
+func (c *Client) InterruptTurn(ctx context.Context, p protocol.TurnInterruptParams) (protocol.TurnInterruptResponse, error) {
+	var r protocol.TurnInterruptResponse
+	err := c.Call(ctx, "turn/interrupt", p, &r)
 	return r, err
 }
 
@@ -393,6 +410,13 @@ func (c *Client) fail(cause error) {
 			state = OutcomeUnknown
 		}
 		c.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: state, Cause: cause})
+	}
+	for s := range c.subscriptions {
+		terminal := cause
+		if cause == ErrClosed {
+			terminal = nil
+		}
+		s.finishLocked(terminal)
 	}
 	close(c.done)
 	c.mu.Unlock()

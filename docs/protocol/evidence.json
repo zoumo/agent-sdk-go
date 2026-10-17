@@ -1,7 +1,7 @@
 {
   "protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb",
-  "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
-  "sdk_revision_note": "The implementation commit identified here was verified after committing. The following documentation-only evidence commit records that exact revision; SDK source and tests are unchanged.",
+  "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
+  "sdk_revision_note": "The exact ticket 02 implementation commit was verified after committing, including uncached normal and race runs. This following documentation-only commit records that revision; SDK source and tests are unchanged. Historical ticket 01 records retain their own revision.",
   "toolchain": {
     "go": "1.26.9",
     "manager": "mise",
@@ -18,7 +18,8 @@
         "protocol/protocol_test.go",
         "protocol/schema_generated_test.go"
       ],
-      "coverage": "398 synthetic exported-model schema round trips; omitted/null/value; experimental start fields; known and unknown union variants; unknown object fields; malformed known payload rejection; atomic decoding and encoding validation. Synthetic fixtures, no server process."
+      "coverage": "398 synthetic exported-model schema round trips; omitted/null/value; experimental start fields; known and unknown union variants; unknown object fields; malformed known payload rejection; atomic decoding and encoding validation. Synthetic fixtures, no server process.",
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697"
     },
     {
       "id": "ticket01-model-race",
@@ -29,7 +30,8 @@
         "protocol/protocol_test.go",
         "protocol/schema_generated_test.go"
       ],
-      "coverage": "Same model suite under Go race detector. No concurrent server compatibility claim."
+      "coverage": "Same model suite under Go race detector. No concurrent server compatibility claim.",
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697"
     },
     {
       "id": "ticket01-contract-mock",
@@ -59,7 +61,8 @@
         "TestInvalidOptionsAndClosedCall",
         "TestExplicitCommandEnvironmentAndDirectory"
       ],
-      "coverage": "Exported-package consumer against independently authored scripted child process: handshake order/native thread IDs, typed start/read, raw RPC, exact IDs, pre-write cancellation, post-dispatch unknown outcomes, late responses, no replay, malformed/oversized frames, reverse-request rejection, startup failure, admission limits, stderr draining, notification counting, bounded writes/close, child exit and reaping. TestFakeChild is fixture execution, not a scenario. No live Codex executable."
+      "coverage": "Exported-package consumer against independently authored scripted child process: handshake order/native thread IDs, typed start/read, raw RPC, exact IDs, pre-write cancellation, post-dispatch unknown outcomes, late responses, no replay, malformed/oversized frames, reverse-request rejection, startup failure, admission limits, stderr draining, notification counting, bounded writes/close, child exit and reaping. TestFakeChild is fixture execution, not a scenario. No live Codex executable.",
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697"
     },
     {
       "id": "ticket01-contract-race",
@@ -81,7 +84,73 @@
           "result": "passed",
           "detail": "Replaced elapsed-time assumption with fake-peer acknowledgment of actual received request byte before cancellation; complete suite passes."
         }
-      ]
+      ],
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697"
+    },
+    {
+      "id": "ticket02-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/turn_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "431 synthetic exported-model round trips over the 99-definition selected closure, including native turn params/results and six notification payloads; arbitrary outputSchema omitted/null/value semantics; required event identities, timestamps, and payload fields. No server process.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed"
+    },
+    {
+      "id": "ticket02-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
+      "test_files": [
+        "protocol/protocol_test.go",
+        "protocol/turn_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Model fidelity suite under the Go race detector. No live compatibility claim.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed"
+    },
+    {
+      "id": "ticket02-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go"
+      ],
+      "test_names": [
+        "TestTurnEarlyEventsKeepResponseIdentity",
+        "TestNotificationRawAndDecodeErrors",
+        "TestSubscriptionOverflowIsolatedAndInspectable",
+        "TestSlowSubscriberNeverBlocksResponse",
+        "TestSubscriptionOwnsPayloadAndNoReplay",
+        "TestCancellationDoesNotInterruptTurn",
+        "TestTurnFailureNeverReplays",
+        "TestSubscriptionTerminalStatus",
+        "TestSubscriptionConcurrentLifecycle",
+        "TestSubscriptionAdmissionValidation"
+      ],
+      "coverage": "Exported client against an independently authored scripted owned child: withheld start response after eight early/stale/interleaved events; exact response/native identities; typed and raw malformed/unknown notification preservation; bounded subscriber admission and out-of-queue overflow cause; isolated healthy subscriber and 4096-event flood before an RPC response; independent mutable payload ownership; no replay; cancellation without implicit interruption; exactly one explicit interrupt acknowledgement; normal/error/EOF/cancel/full-queue terminal status and concurrent cleanup. No live Codex executable.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed"
+    },
+    {
+      "id": "ticket02-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "protocol/protocol_test.go",
+        "protocol/turn_test.go",
+        "protocol/schema_generated_test.go"
+      ],
+      "coverage": "Full exported-client and model suites under race detector, including overlapping subscription registration/cancellation/close and mutable per-subscriber payload isolation.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed"
     }
   ],
   "verification_commands": [

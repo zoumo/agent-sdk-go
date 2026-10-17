@@ -113,6 +113,7 @@ func (c *Client) routeFrame(raw []byte) error {
 		}
 		c.mu.Lock()
 		c.diag.Notifications = saturatingAdd(c.diag.Notifications, 1)
+		c.publishLocked(method, f["params"])
 		c.mu.Unlock()
 		return nil
 	}

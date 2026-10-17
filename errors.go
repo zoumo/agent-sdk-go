@@ -7,13 +7,14 @@ import (
 )
 
 var (
-	ErrClosed             = errors.New("codex: connection closed")
-	ErrLimit              = errors.New("codex: resource limit reached")
-	ErrProtocol           = errors.New("codex: protocol error")
-	ErrFrameTooLarge      = errors.New("codex: frame too large")
-	ErrWriteTimeout       = errors.New("codex: write timeout")
-	ErrShutdownTimeout    = errors.New("codex: owned process did not reap before shutdown timeout")
-	ErrUnsupportedRequest = errors.New("codex: server request unsupported by this SDK slice")
+	ErrSubscriptionOverflow = errors.New("codex: subscription overflow; events lost")
+	ErrClosed               = errors.New("codex: connection closed")
+	ErrLimit                = errors.New("codex: resource limit reached")
+	ErrProtocol             = errors.New("codex: protocol error")
+	ErrFrameTooLarge        = errors.New("codex: frame too large")
+	ErrWriteTimeout         = errors.New("codex: write timeout")
+	ErrShutdownTimeout      = errors.New("codex: owned process did not reap before shutdown timeout")
+	ErrUnsupportedRequest   = errors.New("codex: server request unsupported by this SDK slice")
 )
 
 // DispatchState reports delivery evidence, never whether server execution stopped.
@@ -49,3 +50,24 @@ type RPCError struct {
 }
 
 func (e *RPCError) Error() string { return fmt.Sprintf("codex RPC error %d: %s", e.Code, e.Message) }
+
+// SubscriptionOverflowError terminates one incomplete stream. Previously queued
+// events remain readable, but the event that exceeded Capacity was not accepted.
+type SubscriptionOverflowError struct{ Capacity int }
+
+func (e *SubscriptionOverflowError) Error() string {
+	return fmt.Sprintf("%v (capacity %d)", ErrSubscriptionOverflow, e.Capacity)
+}
+func (e *SubscriptionOverflowError) Unwrap() error { return ErrSubscriptionOverflow }
+
+// DecodeError reports a malformed supported notification payload. The Event
+// still retains the original method and Params, and the connection stays usable.
+type DecodeError struct {
+	Method string
+	Cause  error
+}
+
+func (e *DecodeError) Error() string {
+	return fmt.Sprintf("codex: decode %s notification: %v", e.Method, e.Cause)
+}
+func (e *DecodeError) Unwrap() error { return e.Cause }

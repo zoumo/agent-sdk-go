@@ -13,6 +13,8 @@ type Limits struct {
 	MaxFrameBytes   int
 	OutboundQueue   int
 	PendingCalls    int
+	Subscriptions   int
+	EventQueue      int
 	DiagnosticBytes int
 	CallTimeout     time.Duration
 	WriteTimeout    time.Duration
@@ -20,14 +22,19 @@ type Limits struct {
 }
 
 func DefaultLimits() Limits {
-	return Limits{8 << 20, 32, 128, 64 << 10, 30 * time.Second, 10 * time.Second, 2 * time.Second}
+	return Limits{
+		MaxFrameBytes: 8 << 20, OutboundQueue: 32, PendingCalls: 128,
+		Subscriptions: 32, EventQueue: 128, DiagnosticBytes: 64 << 10,
+		CallTimeout: 30 * time.Second, WriteTimeout: 10 * time.Second,
+		ShutdownTimeout: 2 * time.Second,
+	}
 }
 func (l Limits) normalized() (Limits, error) {
 	d := DefaultLimits()
 	ints := []struct {
 		v   *int
 		def int
-	}{{&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.DiagnosticBytes, d.DiagnosticBytes}}
+	}{{&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}}
 	for _, x := range ints {
 		if *x.v < 0 {
 			return l, fmt.Errorf("codex: limits must be nonnegative")

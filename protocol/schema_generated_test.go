@@ -37,7 +37,20 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("ActivePermissionProfile/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ActivePermissionProfile), "{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("AdditionalContextEntry/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AdditionalContextEntry), "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\"}")
+	})
+	t.Run("AdditionalContextEntry/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AdditionalContextEntry), "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("AdditionalContextKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AdditionalContextKind), "\"untrusted\"") })
 	t.Run("AgentMessageDelivery/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AgentMessageDelivery), "\"async\"") })
+	t.Run("AgentMessageDeltaNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AgentMessageDeltaNotification), "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("AgentMessageDeltaNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.AgentMessageDeltaNotification), "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("AgentPath/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AgentPath), "\"synthetic-value\"") })
 	t.Run("ApprovalsReviewer/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ApprovalsReviewer), "\"user\"") })
 	t.Run("AskForApproval/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.AskForApproval), "\"untrusted\"") })
@@ -83,6 +96,12 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("CollabAgentStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CollabAgentStatus), "\"pendingInit\"") })
 	t.Run("CollabAgentTool/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CollabAgentTool), "\"spawnAgent\"") })
 	t.Run("CollabAgentToolCallStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CollabAgentToolCallStatus), "\"inProgress\"") })
+	t.Run("CollaborationMode/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CollaborationMode), "{\"mode\":\"plan\",\"settings\":{\"model\":\"synthetic-value\"}}")
+	})
+	t.Run("CollaborationMode/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.CollaborationMode), "{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("CommandAction/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.CommandAction), "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
 	})
@@ -100,6 +119,7 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("CommandExecutionSource/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CommandExecutionSource), "\"agent\"") })
 	t.Run("CommandExecutionStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CommandExecutionStatus), "\"inProgress\"") })
+	t.Run("CyberAccessProgram/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.CyberAccessProgram), "\"standard\"") })
 	t.Run("DynamicToolCallOutputContentItem/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.DynamicToolCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"inputText\"}")
 	})
@@ -127,6 +147,12 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("DynamicToolSpec/2", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.DynamicToolSpec), "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"namespace\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ErrorNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ErrorNotification), "{\"error\":{\"message\":\"synthetic-value\"},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false}")
+	})
+	t.Run("ErrorNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ErrorNotification), "{\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("FileUpdateChange/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.FileUpdateChange), "{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\"},\"path\":\"synthetic-value\"}")
@@ -169,6 +195,18 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("ImageGenerationFailure/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.ImageGenerationFailure), "{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ItemCompletedNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ItemCompletedNotification), "{\"completedAtMs\":7,\"item\":{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("ItemCompletedNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ItemCompletedNotification), "{\"completedAtMs\":7,\"item\":{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("ItemStartedNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ItemStartedNotification), "{\"item\":{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("ItemStartedNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.ItemStartedNotification), "{\"item\":{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("LegacyAppPathString/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.LegacyAppPathString), "\"synthetic-value\"") })
 	t.Run("MCPAppDisplayMode/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.MCPAppDisplayMode), "\"inline\"") })
@@ -219,6 +257,7 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("MisalignmentSteer/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.MisalignmentSteer), "{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("ModeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ModeKind), "\"plan\"") })
 	t.Run("MultiAgentMode/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.MultiAgentMode), "\"explicitRequestOnly\"") })
 	t.Run("MultiAgentMode/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.MultiAgentMode), "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
@@ -238,6 +277,8 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("Personality/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.Personality), "\"none\"") })
 	t.Run("ReasoningEffort/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReasoningEffort), "\"synthetic-value\"") })
+	t.Run("ReasoningSummary/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReasoningSummary), "\"auto\"") })
+	t.Run("ReasoningSummary/1", func(t *testing.T) { schemaRoundTrip(t, new(protocol.ReasoningSummary), "\"none\"") })
 	t.Run("SandboxMode/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SandboxMode), "\"read-only\"") })
 	t.Run("SandboxPolicy/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SandboxPolicy), "{\"type\":\"dangerFullAccess\"}") })
 	t.Run("SandboxPolicy/1", func(t *testing.T) {
@@ -264,6 +305,10 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	})
 	t.Run("SessionSource/2", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.SessionSource), "{\"subAgent\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("Settings/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.Settings), "{\"model\":\"synthetic-value\"}") })
+	t.Run("Settings/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.Settings), "{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
 	t.Run("SubAgentActivityKind/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SubAgentActivityKind), "\"started\"") })
 	t.Run("SubAgentSource/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.SubAgentSource), "\"review\"") })
@@ -411,6 +456,12 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("Turn/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.Turn), "{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("TurnCompletedNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnCompletedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}")
+	})
+	t.Run("TurnCompletedNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnCompletedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("TurnEnvironmentParams/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.TurnEnvironmentParams), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\"}")
 	})
@@ -421,10 +472,44 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 	t.Run("TurnError/1", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.TurnError), "{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
 	})
+	t.Run("TurnInterruptParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnInterruptParams), "{\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
+	})
+	t.Run("TurnInterruptParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnInterruptParams), "{\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("TurnInterruptResponse/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.TurnInterruptResponse), "{}") })
+	t.Run("TurnInterruptResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnInterruptResponse), "{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("TurnItemsView/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.TurnItemsView), "\"notLoaded\"") })
 	t.Run("TurnItemsView/1", func(t *testing.T) { schemaRoundTrip(t, new(protocol.TurnItemsView), "\"summary\"") })
 	t.Run("TurnItemsView/2", func(t *testing.T) { schemaRoundTrip(t, new(protocol.TurnItemsView), "\"full\"") })
+	t.Run("TurnStartParams/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnStartParams), "{\"input\":[],\"threadId\":\"synthetic-value\"}")
+	})
+	t.Run("TurnStartParams/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnStartParams), "{\"additionalContext\":{\"sample\":{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"clientUserMessageId\":\"synthetic-value\",\"collaborationMode\":{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"cwd\":\"synthetic-value\",\"cyberAccessProgram\":\"standard\",\"disabledPluginIds\":[\"synthetic-value\"],\"effort\":\"synthetic-value\",\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"input\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"model\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"outputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"responsesapiClientMetadata\":{\"sample\":\"synthetic-value\"},\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandboxPolicy\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"serviceTierForTurn\":\"synthetic-value\",\"summary\":\"auto\",\"threadId\":\"synthetic-value\",\"toolOutput\":{\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"turnTrigger\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("TurnStartResponse/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnStartResponse), "{\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}")
+	})
+	t.Run("TurnStartResponse/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnStartResponse), "{\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
+	t.Run("TurnStartedNotification/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnStartedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}")
+	})
+	t.Run("TurnStartedNotification/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnStartedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("TurnStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(protocol.TurnStatus), "\"completed\"") })
+	t.Run("TurnToolOutput/0", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnToolOutput), "{\"name\":\"synthetic-value\",\"output\":\"synthetic-value\"}")
+	})
+	t.Run("TurnToolOutput/1", func(t *testing.T) {
+		schemaRoundTrip(t, new(protocol.TurnToolOutput), "{\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
+	})
 	t.Run("UserInput/0", func(t *testing.T) {
 		schemaRoundTrip(t, new(protocol.UserInput), "{\"text\":\"synthetic-value\",\"type\":\"text\"}")
 	})

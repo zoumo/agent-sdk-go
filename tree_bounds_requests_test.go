@@ -40,14 +40,14 @@ func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
 		t.Run(transport, func(t *testing.T) {
 			for _, tc := range []struct {
 				name     string
-				options  codex.TreeOptions
+				options  types.SubscriptionOptions
 				before   []string
 				incoming string
 			}{
-				{"relation", codex.TreeOptions{EventQueue: 2}, nil, treeFrame("thread/started", boundsRelation)},
-				{"receivers", codex.TreeOptions{EventQueue: 3}, nil, treeFrame("item/completed", treeSpawnParams("spawnAgent", "completed"))},
-				{"pending", codex.TreeOptions{EventQueue: 3}, []string{treeChildRaw}, treeFrame("thread/started", boundsRelation)},
-				{"unresolved", codex.TreeOptions{EventQueue: 2, PendingBytes: 1}, nil, treeChildRaw},
+				{"relation", types.SubscriptionOptions{EventQueue: 2}, nil, treeFrame("thread/started", boundsRelation)},
+				{"receivers", types.SubscriptionOptions{EventQueue: 3}, nil, treeFrame("item/completed", treeSpawnParams("spawnAgent", "completed"))},
+				{"pending", types.SubscriptionOptions{EventQueue: 3}, []string{treeChildRaw}, treeFrame("thread/started", boundsRelation)},
+				{"unresolved", types.SubscriptionOptions{EventQueue: 2, PendingBytes: 1}, nil, treeChildRaw},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					f := startFake(t, "request-normal", codex.Limits{})
@@ -66,9 +66,10 @@ func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
 						t.Fatal(s.Err())
 					}
 					count := 0
-					for e := range s.Events() {
+					for event := range s.Events() {
+						e := recordView(event)
 						count++
-						if e.Sequence != 1 || e.Reason != "best-effort-auto-attach-unverified" {
+						if e.Reason != "best-effort-auto-attach-unverified" {
 							t.Fatalf("partial fanout admitted: %+v", e)
 						}
 					}
@@ -84,14 +85,15 @@ func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
 
 func TestTreePendingDeadlineFanoutIsAtomic(t *testing.T) {
 	f := startFake(t, "request-normal", codex.Limits{})
-	s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{EventQueue: 2, PendingAge: 10 * time.Millisecond})
+	s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 2, PendingAge: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	emitRequests(t, f.c, treeChildRaw)
 	awaitTreeCause(t, s, codex.ErrSubscriptionOverflow)
 	count := 0
-	for e := range s.Events() {
+	for event := range s.Events() {
+		e := recordView(event)
 		count++
 		if e.Reason != "best-effort-auto-attach-unverified" {
 			t.Fatalf("partial expiry: %+v", e)
@@ -107,16 +109,16 @@ func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			slow, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{EventQueue: 3})
+			slow, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 3})
 			if err != nil {
 				t.Fatal(err)
 			}
-			healthy, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			healthy, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer healthy.Close()
-			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -205,7 +207,7 @@ func TestTreeObservationCancellationDoesNotCancelRequest(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			s, err := f.c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{EventQueue: 3})
+			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{EventQueue: 3})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -243,7 +245,7 @@ func TestTreeRequestTerminalAndEpochIsolation(t *testing.T) {
 						limits.RequestTimeout = 100 * time.Millisecond
 					}
 					old := startFake(t, "request-normal", limits)
-					s, err := old.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{EventQueue: 1})
+					s, err := old.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -268,14 +270,13 @@ func TestTreeRequestTerminalAndEpochIsolation(t *testing.T) {
 					}
 					awaitAnswer(t, r.Handle(), cause)
 					next := startFake(t, "request-normal", codex.Limits{})
-					other, err := next.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{EventQueue: 1})
+					other, err := next.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer other.Close()
-					if nextTree(t, s).Epoch == nextTree(t, other).Epoch {
-						t.Fatal("epoch reused")
-					}
+					nextTree(t, s)
+					nextTree(t, other)
 					emitRequests(t, next.c, requestFrame(`"reused"`, "item/tool/requestUserInput", childQuestion))
 					fresh := nextRequest(t, next.c)
 					answerError(t, r.Handle().Answer(context.Background(), nil), r, codex.NotSent, cause)
@@ -300,7 +301,7 @@ func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -320,11 +321,11 @@ func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
 			emitRequests(t, f.c, frames...)
 			for i, want := range frames {
 				e := nextTree(t, s)
-				source, scope := "child-1", "child"
+				source := "child-1"
 				if i >= 4 {
-					source, scope = "native-thread-42", "root"
+					source = "native-thread-42"
 				}
-				if e.Kind != codex.TreeNative || e.Native == nil || string(e.Raw) != want || e.Source.ThreadID != source || e.Scope != scope || e.UsageScope != "unknown" || e.Native.DecodeError != nil {
+				if e.Kind != nativeRecord || e.Native == nil || string(e.Raw) != want || e.Source.ThreadID != source || e.Native.DecodeError != nil {
 					t.Fatalf("source/content changed: %+v", e)
 				}
 				if i == 5 {
@@ -335,7 +336,8 @@ func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
 				}
 			}
 			select {
-			case e := <-s.Events():
+			case event := <-s.Events():
+				e := recordView(event)
 				t.Fatalf("synthesized result/usage: %+v", e)
 			default:
 			}
@@ -346,7 +348,7 @@ func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
 func TestTreeQueueCapacityOverflowIsRejected(t *testing.T) {
 	for _, inherited := range []bool{false, true} {
 		limits := codex.Limits{}
-		options := codex.TreeOptions{EventQueue: int(^uint(0) >> 1)}
+		options := types.SubscriptionOptions{EventQueue: int(^uint(0) >> 1)}
 		if inherited {
 			limits.EventQueue = options.EventQueue
 			options.EventQueue = 0

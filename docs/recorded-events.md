@@ -2,7 +2,7 @@
 
 The recording ticket starts from SDK and story-doc commit
 `d465677969cf968c6245e0adeaf7e32c42356913`, including the V2 Started creation
-fix. Only the public `StartThread` → `Subscribe(ctx, root, TreeOptions{})` →
+fix. Only the public `StartThread` → `Subscribe(ctx, root, types.SubscriptionOptions{})` →
 `StartTurn` flow is used. `Requests` and the original answer handle service
 reverse requests while the managed observation drains.
 

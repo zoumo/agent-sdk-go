@@ -721,7 +721,7 @@
         "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_contract_test.go",
         "tree_nested_test.go"
       ],
@@ -750,7 +750,7 @@
         "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_contract_test.go",
         "tree_nested_test.go"
       ],
@@ -781,7 +781,7 @@
       },
       "test_files": [
         "client.go",
-        "tree.go",
+        "subscription_management.go",
         "tree_contract_test.go",
         "tree_lifecycle_test.go"
       ],
@@ -813,7 +813,7 @@
       },
       "test_files": [
         "client.go",
-        "tree.go",
+        "subscription_management.go",
         "tree_contract_test.go",
         "tree_lifecycle_test.go"
       ],
@@ -842,7 +842,7 @@
         "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_bounds_requests_test.go"
       ],
       "test_names": [
@@ -874,7 +874,7 @@
         "tree_bounds_requests_test.go": "1656a7852d98db18c160858cb2b32708bac441705a205d5458901ff47a16eb70"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_bounds_requests_test.go"
       ],
       "test_names": [
@@ -906,7 +906,7 @@
         "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_bounds_requests_test.go"
       ],
       "test_names": [
@@ -942,16 +942,16 @@
         "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "client.go",
         "subscription.go",
         "tree_contract_test.go",
         "tree_nested_test.go",
         "tree_lifecycle_test.go",
         "tree_bounds_requests_test.go",
-        "examples/observe-tree-offline/main.go",
-        "examples/observe-tree-offline/main_test.go",
-        "examples/observe-tree-offline/expected.txt"
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
       ],
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
@@ -983,16 +983,16 @@
         "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "client.go",
         "subscription.go",
         "tree_contract_test.go",
         "tree_nested_test.go",
         "tree_lifecycle_test.go",
         "tree_bounds_requests_test.go",
-        "examples/observe-tree-offline/main.go",
-        "examples/observe-tree-offline/main_test.go",
-        "examples/observe-tree-offline/expected.txt"
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
       ],
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
@@ -1033,7 +1033,7 @@
         "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
       },
       "test_files": [
-        "examples/observe-tree-offline/main_test.go"
+        "examples/observe-subagents-offline/main_test.go"
       ],
       "coverage": "33 unchanged schema/generator roots; 154 definitions/397 types/744 round-trip cases; 170/11/85/1 registry plus 24 controls. Fixed-source E1 hashes/registry/schema separately verified using installed zstd CLI. No dependency download, model, real CLI, authentication or budget changes.",
       "report": "../evidence/subagent-05.md",
@@ -1067,7 +1067,7 @@
         "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_current_contract_test.go",
         "tree_contract_test.go",
         "tree_nested_test.go",
@@ -1079,9 +1079,9 @@
         "types/types_generated.go",
         "types/schema_generated_test.go",
         "scripts/generate_protocol.py",
-        "examples/observe-tree-offline/main.go",
-        "examples/observe-tree-offline/main_test.go",
-        "examples/observe-tree-offline/expected.txt"
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
       ],
       "sdk_package_seconds": 44.095,
       "platform": "Darwin arm64",
@@ -1118,7 +1118,7 @@
         "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
       },
       "test_files": [
-        "tree.go",
+        "subscription_management.go",
         "tree_current_contract_test.go",
         "tree_contract_test.go",
         "tree_nested_test.go",
@@ -1130,9 +1130,9 @@
         "types/types_generated.go",
         "types/schema_generated_test.go",
         "scripts/generate_protocol.py",
-        "examples/observe-tree-offline/main.go",
-        "examples/observe-tree-offline/main_test.go",
-        "examples/observe-tree-offline/expected.txt"
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
       ],
       "sdk_package_seconds": 220.345,
       "platform": "Darwin arm64",
@@ -1395,5 +1395,10 @@
     "report": "../evidence/subagent-v2-created.md",
     "revision_note": "Validated source hashes in subagent-v2-created-* records; final delivery SHA and hosted Linux/macOS CI verified in handoff. Native types/schema unchanged.",
     "live": "E3/E4 not run; no model/authentication changes."
+  },
+  "native_subscription_migration": {
+    "base": "885bf4de79c9bde75c342c807a9e3e45f098187c",
+    "report": "../evidence/native-subscription.md",
+    "note": "Historical source hash keys remain unchanged. test_files paths follow relocated current coverage; direct-native events replace the public Tree wrapper. Official generated native JSON and sanitized recordings are unchanged."
   }
 }

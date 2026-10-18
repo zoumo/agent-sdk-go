@@ -14,7 +14,7 @@ func TestTreeCurrentVersionMetadata(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -34,13 +34,13 @@ func TestTreeCurrentVersionMetadata(t *testing.T) {
 			emitRequests(t, f.c, frames...)
 			for i, want := range frames {
 				e := nextTree(t, s)
-				if e.Kind != codex.TreeNative || e.Native == nil || e.Native.DecodeError != nil || string(e.Raw) != want {
+				if e.Kind != nativeRecord || e.Native == nil || e.Native.DecodeError != nil || string(e.Raw) != want {
 					t.Fatalf("current wire changed: %+v", e)
 				}
 				switch i {
 				case 0:
 					n := e.Native.Data.(*types.TurnStartedNotification)
-					if got, ok := n.Turn.RootTurnID.Get(); !ok || got != "chain-root-turn" || e.Source.TurnID != "child-turn" || e.RootThreadID != "native-thread-42" {
+					if got, ok := n.Turn.RootTurnID.Get(); !ok || got != "chain-root-turn" || e.Source.TurnID != "child-turn" {
 						t.Fatal("turn chain conflated with thread membership")
 					}
 				case 1:
@@ -61,7 +61,7 @@ func TestTreeCurrentVersionMetadata(t *testing.T) {
 						t.Fatal("explicit null lost")
 					}
 				case 5:
-					if e.Source.ThreadID != "child-1" || e.Scope != "child" {
+					if e.Source.ThreadID != "child-1" {
 						t.Fatal("parent completion closed child observation")
 					}
 				}

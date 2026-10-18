@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zoumo/codex-sdk-go/types"
 	"os"
 	"strings"
 	"sync"
@@ -55,7 +56,7 @@ func TestTreeParentIdleChildActive(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-lifecycle", codex.Limits{})
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,22 +120,22 @@ func TestTreeCloseCancelSharedSource(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-lifecycle", codex.Limits{})
-			a, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{History: []json.RawMessage{json.RawMessage(`{"id":"child-1","parentThreadId":"native-thread-42"}`)}})
+			a, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{History: []json.RawMessage{json.RawMessage(`{"id":"child-1","parentThreadId":"native-thread-42"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := f.c.Subscribe(context.Background(), "child-1", codex.TreeOptions{})
+			b, err := f.c.Subscribe(context.Background(), "child-1", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer b.Close()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			canceled, err := f.c.Subscribe(ctx, "child-1", codex.TreeOptions{})
+			canceled, err := f.c.Subscribe(ctx, "child-1", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw, err := f.c.Subscribe(context.Background(), "child-1", codex.TreeOptions{})
+			raw, err := f.c.Subscribe(context.Background(), "child-1", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -166,7 +167,7 @@ func TestTreeCloseCancelSharedSource(t *testing.T) {
 			}
 			for i := 0; i < 8; i++ {
 				e := nextTree(t, b)
-				if e.Scope != "root" || string(e.Raw) != treeChildRaw {
+				if string(e.Raw) != treeChildRaw {
 					t.Fatal("shared source stopped")
 				}
 				if e := nextEvent(t, raw); string(e.Params) != treeChildParams {
@@ -188,7 +189,6 @@ func TestTreeCloseCancelSharedSource(t *testing.T) {
 func TestTreeDisconnectHistoryEpoch(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			var lastEpoch uint64
 			// Root history supplies successful historical spawn evidence; grandchild is
 			// intentionally before its parent. No native snapshot is replayed as live.
 			var spawn struct {
@@ -205,7 +205,7 @@ func TestTreeDisconnectHistoryEpoch(t *testing.T) {
 			}
 			for epoch := 0; epoch < 2; epoch++ {
 				f := startFake(t, "tree-history", codex.Limits{})
-				s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{History: history})
+				s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{History: history})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -213,26 +213,23 @@ func TestTreeDisconnectHistoryEpoch(t *testing.T) {
 				associated, created, terminals, gap := 0, 0, 0, false
 				discovered := 0
 				for _, e := range treeUntilDone(t, s) {
-					if e.Epoch == 0 || e.Epoch == lastEpoch {
-						t.Fatal("epoch reused")
-					}
 					if e.Reason == "history-recovery-gap" {
-						gap = e.State == "incomplete" && e.Provenance == "history"
+						gap = e.State == "incomplete"
 					}
-					if e.Kind == codex.TreeSubagentAssociated {
+					if e.Kind == associatedRecord {
 						if e.Source.ThreadID == "known-unlinked" {
 							discovered++
-							if e.Provenance != "live" || e.CreationConfirmed || e.Reason != "discovered" {
+							if e.Provenance != "live" || e.CreationConfirmed {
 								t.Fatal("unlinked historical entity recreated")
 							}
 							continue
 						}
 						associated++
-						if e.Provenance != "history" || e.Reason != "history" || e.CreationConfirmed || e.Evidence.Provenance != "history" {
+						if e.Provenance != "history" || e.CreationConfirmed || e.Evidence.Provenance != "history" {
 							t.Fatalf("false history creation %+v", e)
 						}
 					}
-					if e.Kind == codex.TreeSubagentCreated {
+					if e.Kind == createdRecord {
 						created++
 						if e.Source.ThreadID != "live-child" || e.Provenance != "live" {
 							t.Fatal("historical entity recreated")
@@ -258,14 +255,14 @@ func TestTreeDisconnectHistoryEpoch(t *testing.T) {
 				if s.Err() == nil {
 					t.Fatal("EOF treated as success")
 				}
-				remaining := []codex.TreeEvent{}
-				for e := range s.Events() {
+				remaining := []subscriptionRecord{}
+				for event := range s.Events() {
+					e := recordView(event)
 					remaining = append(remaining, e)
 				}
 				if len(remaining) != 2 || remaining[0].Native == nil || string(remaining[0].Raw) != treeChildRaw || remaining[1].State != "disconnected" || remaining[1].Reason != "permanent-gap" {
 					t.Fatalf("lost queued data or disconnect: %+v", remaining)
 				}
-				lastEpoch = remaining[1].Epoch
 				if err = s.Close(); err != nil || s.Err() == nil {
 					t.Fatal("close erased failure")
 				}
@@ -282,7 +279,7 @@ func TestTreeDisconnectHistoryEpoch(t *testing.T) {
 
 func TestTreeDisconnectFullQueueAndSeedBounds(t *testing.T) {
 	f := startFake(t, "tree-lifecycle", codex.Limits{})
-	for _, options := range []codex.TreeOptions{
+	for _, options := range []types.SubscriptionOptions{
 		{History: []json.RawMessage{json.RawMessage(`{"id":"child"}`)}, PendingBytes: 1},
 		{History: []json.RawMessage{json.RawMessage(`{"id":"a"}`), json.RawMessage(`{"id":"b"}`)}, MaxNodes: 1},
 		{History: []json.RawMessage{json.RawMessage(`{"thread":{"id":"wrong-envelope"}}`)}},
@@ -291,7 +288,7 @@ func TestTreeDisconnectFullQueueAndSeedBounds(t *testing.T) {
 			t.Fatal("invalid/unbounded seed admitted")
 		}
 	}
-	s, err := f.c.Subscribe(context.Background(), "child-1", codex.TreeOptions{EventQueue: 1})
+	s, err := f.c.Subscribe(context.Background(), "child-1", types.SubscriptionOptions{EventQueue: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

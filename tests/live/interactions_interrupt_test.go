@@ -77,7 +77,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 			}
 		}
 		t.Logf("scenario=%s native thread created read-only; inherited approval_policy=%s", sc.name, policy)
-		s, e := c.Subscribe(ctx, id, codex.TreeOptions{})
+		s, e := c.Subscribe(ctx, id, types.SubscriptionOptions{})
 		if e != nil {
 			t.Fatal("subscribe failed")
 		}
@@ -183,10 +183,10 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 				if !ok {
 					t.Fatal("event stream closed")
 				}
-				if ev.Kind != codex.TreeNative {
+				if ev.Raw == nil {
 					continue
 				}
-				native := ev.Native
+				native := ev
 				if native.DecodeError != nil {
 					t.Fatal("event loss/decode failure")
 				}

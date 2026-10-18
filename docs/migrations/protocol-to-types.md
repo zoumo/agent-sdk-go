@@ -34,7 +34,7 @@ also use `types`. Update reflection registries, type-name snapshots and persiste
 package-qualified identifiers that depended on the former name. Rebuild downstream
 consumers; the JSON wire representation is unchanged.
 
-The root `codex` package still owns `Event`, `TreeEvent`, connections and execution.
+The root `codex` package owns connections and execution. Direct subscription events and subscription data now live in `types`; see [subscription migration](../default-managed-migration.md).
 This change preserves CLI 0.162.1's pinned schema, 399 generated types and 750
 schema cases. Upstream protocol URLs, JSON tags, schema terminology and error
 messages remain unchanged.

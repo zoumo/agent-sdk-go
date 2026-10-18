@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zoumo/codex-sdk-go/types"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -91,7 +92,7 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 					options.TLSConfig = &tls.Config{RootCAs: roots}
 				}
 				c := securityOpen(t, options)
-				sub, err := c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+				sub, err := c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -109,7 +110,7 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 					t.Fatalf("terminal protocol cause lost: client=%v subscription=%v", c.Err(), sub.Err())
 				}
 				event, ok := <-sub.Events()
-				if !ok || event.Native.Method != "synthetic/valid-prefix" || !json.Valid(event.Native.Params) || string(event.Native.Params) != `{"value":1}` {
+				if !ok || event.Method != "synthetic/valid-prefix" || !json.Valid(event.Params) || string(event.Params) != `{"value":1}` {
 					t.Fatalf("valid notification preceding failure was lost: %+v open=%v", event, ok)
 				}
 				if gap := nextTree(t, sub); gap.Reason != "permanent-gap" {

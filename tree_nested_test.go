@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zoumo/codex-sdk-go/types"
 	"os"
 	"strings"
 	"testing"
@@ -76,12 +77,12 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-nested", codex.Limits{})
-			a, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			a, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer a.Close()
-			b, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			b, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,18 +96,15 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 			associated, created := map[string]int{}, map[string]int{}
 			parents := map[string]string{"child-1": "native-thread-42", "grand": "child-1", "orphan": "grand", "leaf": "orphan"}
 			grand, delta, terminal, conflicts, cycles, unknown, partial, unknownTerminal := 0, 0, 0, 0, 0, 0, 0, 0
-			for i, e := range events {
-				if e.Sequence != uint64(i+1) {
-					t.Fatal("sequence")
-				}
-				if e.Kind == codex.TreeSubagentAssociated || e.Kind == codex.TreeSubagentCreated {
+			for _, e := range events {
+				if e.Kind == associatedRecord || e.Kind == createdRecord {
 					if e.ParentThreadID != parents[e.Source.ThreadID] {
 						t.Fatalf("parent %+v", e)
 					}
 					if e.ParentThreadID != "native-thread-42" && associated[e.ParentThreadID]+created[e.ParentThreadID] == 0 {
 						t.Fatal("ancestor announced too late")
 					}
-					if e.Kind == codex.TreeSubagentAssociated {
+					if e.Kind == associatedRecord {
 						associated[e.Source.ThreadID]++
 					} else {
 						created[e.Source.ThreadID]++
@@ -127,8 +125,8 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 				if e.Native == nil {
 					continue
 				}
-				if e.Scope == "child" {
-					if associated[e.Source.ThreadID]+created[e.Source.ThreadID] == 0 || e.ParentThreadID != parents[e.Source.ThreadID] {
+				if e.Source.ThreadID != "native-thread-42" && e.Source.ThreadID != "" {
+					if associated[e.Source.ThreadID]+created[e.Source.ThreadID] == 0 {
 						t.Fatalf("native before relation: %+v", e)
 					}
 				}
@@ -173,7 +171,7 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 func TestTreePendingLimitsAndNoReplay(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			for _, options := range []codex.TreeOptions{
+			for _, options := range []types.SubscriptionOptions{
 				{PendingEvents: 1, PendingAge: 20 * time.Millisecond},
 				{PendingBytes: 1, PendingAge: 20 * time.Millisecond},
 				{PendingAge: 20 * time.Millisecond},
@@ -187,7 +185,7 @@ func TestTreePendingLimitsAndNoReplay(t *testing.T) {
 				count := 0
 				for count < 2 {
 					e := nextTree(t, s)
-					if e.Native != nil && e.Scope == "unresolved" {
+					if e.Native != nil && (e.Native.Method == "item/agentMessage/delta" || e.Native.Method == "future/late") {
 						count++
 						if len(e.Raw) == 0 {
 							t.Fatal("unresolved Raw lost")
@@ -215,7 +213,7 @@ func TestTreeDepthAndDedupBounds(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-nested", codex.Limits{})
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{MaxDepth: 1})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{MaxDepth: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -230,7 +228,7 @@ func TestTreeDepthAndDedupBounds(t *testing.T) {
 			}
 			// A tiny cache permits older terminal identities to be delivered again; it
 			// never trades bounded memory for a cross-epoch exactly-once claim.
-			s, err = f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{DedupEntries: 1})
+			s, err = f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{DedupEntries: 1})
 			if err != nil {
 				t.Fatal(err)
 			}

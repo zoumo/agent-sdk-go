@@ -2,9 +2,9 @@
 
 本文固定 **Codex CLI 0.162.1**，源码为 [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d)。以下是源码与离线假服务端合约支持的故事，不是真实录制；本票不运行模型。真实录制另票执行。[当前来源核对](evidence/subagent-05-current.md)、[兼容矩阵](subagent-compatibility.md)区分源码、离线与 live 证据。
 
-每个图是一种允许的顺序，不是跨线程全序。RPC result 只回答相同 `id` 的调用，可以晚于执行通知。模型工具结果进入模型上下文，不是客户端 RPC result。以下图中的「原生」通知通过 `TreeNative` 包装交付；「派生」是 SDK 记录，不是服务端 method。
+每个图是一种允许的顺序，不是跨线程全序。RPC result 只回答相同 `id` 的调用，可以晚于执行通知。模型工具结果进入模型上下文，不是客户端 RPC result。以下图中的「原生」通知直接通过 types.Event 交付；「派生」使用独立的 Data 类型，不是服务端 method。
 
-应用先取得原生根线程 ID，再调用 `Subscribe(ctx, rootID, TreeOptions{})`，返回后再 StartTurn。Events 返回 TreeEvent，初始派生记录为 `ObservationState(incomplete, best-effort-auto-attach-unverified)`。原生载荷在 `record.Native`，完整通知字节在 `record.Raw`；派生记录的 Native/Raw 为空。Kind/Origin 仅属于 SDK wrapper，未向原生 JSON 注入字段。通知不回放。
+应用先取得原生根线程 ID，再调用 `Subscribe(ctx, rootID, types.SubscriptionOptions{})`，返回后再 StartTurn。Events 返回 types.Event。原生 Method/Params/Data/DecodeError/Raw 直接可用；派生 Data 为 types.SubagentCreated、types.SubagentAssociated 或 types.ObservationState 的指针，Method 为空、Params/Raw 为 nil。原生类型和 JSON 不含 SDK 来源标记。通知不回放。
 
 | 身份 | 示例 | 客户端用途 |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ sequenceDiagram
 
 **结束依据：** cmd-1 的 completed item 和 status/exitCode 是该命令的结果；应用继续等 RT1 的 turn 终态。工具调用成功返回给模型与模型最终答案是不同边界。
 
-**客户端更新：** 为 cmd-1 显示运行状态，按 itemId 更新输出缓冲，用 completed item 校准最终快照与退出状态。`outputDelta` 当前在 SDK 中为 raw-only，读取 Native.Params；commandExecution 完成项可通过 `*types.ItemCompletedNotification` 的 union 读取。未知字段、类型保留 Raw/Params。
+**客户端更新：** 为 cmd-1 显示运行状态，按 itemId 更新输出缓冲，用 completed item 校准最终快照与退出状态。`outputDelta` 当前在 SDK 中为 raw-only，读取 event.Params；commandExecution 完成项可通过 `*types.ItemCompletedNotification` 的 union 读取。未知字段、类型保留 Raw/Params。
 
 **禁止推断：** 工具 item 完成不是 turn 完成，也不是所有子线程完成。命令无输出不能证明无执行或成功。不要把内部 Rust `ExecCommandEnd` 当作唯一客户端线协议 method；当前 v2 映射使用规范 item 生命周期。
 
@@ -149,14 +149,14 @@ sequenceDiagram
     Note over P,U: C2 可与这些事件交错，图不表示跨线程全序
 ```
 
-**原生与派生序列：** V1 成功实时 `spawnAgent` collab completed item 的 receiver IDs 可确认 Created；其他成功 collab 只证明 Associated。V2 使用成功解码的实时 `item/completed`，其活动 `kind=started`，从通知 threadId 和活动 agentThreadId 建立关系并确认 Created。固定源码在创建和接纳首次输入成功之后发布它；不依赖 `thread/started`。SDK 原样保留真实 `TreeEvidence.Activity`，不伪造成 collab。
+**原生与派生序列：** V1 成功实时 `spawnAgent` collab completed item 的 receiver IDs 可确认 Created；其他成功 collab 只证明 Associated。V2 使用成功解码的实时 `item/completed`，其活动 `kind=started`，从通知 threadId 和活动 agentThreadId 建立关系并确认 Created。固定源码在创建和接纳首次输入成功之后发布它；不依赖 `thread/started`。SDK 原样保留真实 `types.SubagentEvidence.Activity`，不伪造成 collab。
 
 ```json
 {"method":"item/completed","params":{"threadId":"R","turnId":"RT1","completedAtMs":3,"item":{"type":"subAgentActivity","id":"spawn-1","kind":"started","agentThreadId":"C1","agentPath":"/root/research","model":"selected-model","reasoningEffort":"high"}}}
 {"method":"item/agentMessage/delta","params":{"threadId":"C1","turnId":"CT1","itemId":"child-answer","delta":"子结果"}}
 ```
 
-对应 SDK 记录的关键值为 `Kind=SubagentCreated, Source.ThreadID=C1, ParentThreadID=R, RelationKey=C1`，Evidence.Source 是 `(R, RT1, spawn-1)`。原生 thread 父字段或 thread_spawn 来源也可证明 Associated。已知祖先关系先于已归属后代 Native；早到孙关系在祖先证实后按祖先顺序宣布。先 Associated 后可单独确认一次 Created，复用 RelationKey。
+对应 SDK 记录的关键值为 `Data=*types.SubagentCreated, ThreadID=C1, ParentThreadID=R`，Evidence.Source 是 `(R, RT1, spawn-1)`。原生 thread 父字段或 thread_spawn 来源也可证明 Associated。已知祖先关系先于已归属后代 Native；早到孙关系在祖先证实后按祖先顺序宣布。先 Associated 后可单独确认一次 Created，保留相同 ThreadID。
 
 V2 模型工具结果形如 `{"task_name":"/root/research","nickname":"Maple"}`；V1 为 `{"agent_id":"C1","nickname":"Maple"}`。前者路径不是线程 ID。这些文本不是客户端 RPC。
 
@@ -257,20 +257,20 @@ sequenceDiagram
     O-->>U: 可排空已接纳队列及 permanent-gap
     U->>N: 新 Client Subscribe(R, History)
     N-->>U: 派生 incomplete 与 history Associated
-    Note over U,N: 新 epoch 不填补旧 gap，不重放 Native 或 Created
+    Note over U,N: 新连接不填补旧 gap，不重放 Native 或 Created
 ```
 
-**原生与派生序列：** 不同 source 交错；不明确来源的通知有界等待，超限/到期发布 `ObservationState(incomplete, unresolved-source)` 并以 `Scope=unresolved` 交付原生记录。无 source 的通知为 unscoped，不证明树成员。相同无 ID 文本 delta 可以重复两次；窄范围 item 终态去重不是全局 exactly-once。后续建立关系不会重放已交付 Native。冲突、循环和资源限制有诊断或终止错误。
+**原生与派生序列：** 不同 source 交错；不明确来源的通知有界等待，超限/到期发布 `ObservationState(incomplete, unresolved-source)` ，诊断中的 UnresolvedThreadID 标识来源，随后原样交付原生通知。无 source 的通知也原样交付，不证明成员关系。相同无 ID 文本 delta 可以重复两次；窄范围 item 终态去重不是全局 exactly-once。后续建立关系不会重放已交付原生通知。冲突、循环和资源限制有诊断或终止错误。
 
 观察仍活动时，非预期断线使用预留槽交付 `ObservationState(disconnected, permanent-gap)`，Done/Events 关闭，Err 保留原始原因；已接纳记录可排空。队列满先终止的观察不再继续收事件。新观察从 incomplete 开始，History 只导入 Associated 与 history-recovery-gap，从不把快照当实时创建或 Native 重放。
 
 **结束依据：** Done/Err 是观察结束依据，不是工作成功/失败依据。单个慢订阅的 overflow/ErrLimit 只结束该观察，不阻塞连接、其他订阅或审批。Close/cancel 与断线保留第一终止原因。
 
-**客户端更新：** 显示永久缺口，保留各 epoch 的身份关联与来源，分别记录本地 Sequence。保存 Raw/Params 供未知协议和损坏载荷排查；不要用 Marshal(Data) 代替收到的原始字节。重连后显式合并应用快照，保持「状态未知」而非假装完整恢复。
+**客户端更新：** 显示永久缺口，由应用分别记录连接和本地接收顺序。保存 Raw/Params 供未知协议和损坏载荷排查；不要用 Marshal(Data) 代替收到的原始字节。重连后显式合并应用快照，保持「状态未知」而非假装完整恢复。
 
-**禁止推断：** Sequence 不是 provider cursor，Epoch 不是持久 provider 身份；新 epoch 相同原生 ID 不提供 exactly-once。缺失通知、静默、EOF 或新的历史关系不证明任务结束或旧缺口已修复。Unknown 原生保留不等于支持其他服务端版本。
+**禁止推断：** 本地接收顺序不是 provider cursor；新连接上的相同原生 ID 不提供 exactly-once。缺失通知、静默、EOF 或新的历史关系不证明任务结束或旧缺口已修复。Unknown 原生保留不等于支持其他服务端版本。
 
-依据：[有界与原子 fanout](../tree_bounds_requests_test.go)、[断线、历史与 epoch](../tree_lifecycle_test.go)、[Raw、未知、缺失/null 与独立所有权](../tree_contract_test.go)、[离线示例](../examples/observe-tree-offline/README.md)。
+依据：[有界与原子 fanout](../tree_bounds_requests_test.go)、[断线、历史与 epoch](../tree_lifecycle_test.go)、[Raw、未知、缺失/null 与独立所有权](../tree_contract_test.go)、[离线示例](../examples/observe-subagents-offline/README.md)。
 
 ## 用户主动停止与关闭的边界
 

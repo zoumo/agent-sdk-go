@@ -58,7 +58,6 @@ type Client struct {
 	reverse       map[ID]*requestState
 	requests      chan Request
 	subscriptions map[*Subscription]struct{}
-	epoch         uint64
 	nextID        int64
 	ready         bool
 	cause         error
@@ -152,7 +151,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), epoch: connectionEpoch.Add(1), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 }
 
 func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {

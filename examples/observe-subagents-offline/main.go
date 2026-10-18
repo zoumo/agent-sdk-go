@@ -37,7 +37,7 @@ func run(out io.Writer) error {
 	}
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{
 		Executable: executable, Args: []string{"--fixture"}, Env: []string{},
-		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "offline-tree", Version: "1"}},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "offline-subagents", Version: "1"}},
 	})
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func run(out io.Writer) error {
 	defer client.Close()
 	// Register before asking the fake peer to emit. PendingBytes forces the large
 	// unknown-source envelope to be released explicitly, without timer ordering.
-	live, err := client.Subscribe(ctx, "root", codex.TreeOptions{PendingBytes: 256})
+	live, err := client.Subscribe(ctx, "root", types.SubscriptionOptions{PendingBytes: 256})
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func run(out io.Writer) error {
 				return fmt.Errorf("early close: %v", live.Err())
 			}
 			printRecord(out, record)
-			if record.Native != nil && record.Native.Method == "fixture/end" {
+			if record.Method == "fixture/end" {
 				if err = live.Close(); err != nil {
 					return err
 				}
@@ -81,7 +81,7 @@ history:
 		return err
 	}
 	fmt.Fprintln(out, "closed: err=nil; connection usable")
-	seeded, err := client.Subscribe(ctx, "root", codex.TreeOptions{History: []json.RawMessage{
+	seeded, err := client.Subscribe(ctx, "root", types.SubscriptionOptions{History: []json.RawMessage{
 		json.RawMessage(`{"id":"child","parentThreadId":"root"}`),
 		json.RawMessage(`{"id":"grand","parentThreadId":"child"}`),
 	}})
@@ -98,14 +98,20 @@ history:
 	return seeded.Err()
 }
 
-func printRecord(out io.Writer, e codex.TreeEvent) {
-	switch {
-	case e.Native != nil:
-		fmt.Fprintf(out, "%d Native %s source=%s scope=%s\n", e.Sequence, e.Native.Method, e.Source.ThreadID, e.Scope)
-	case e.Kind == codex.TreeObservationState:
-		fmt.Fprintf(out, "%d %s %s %s\n", e.Sequence, e.Kind, e.State, e.Reason)
+func printRecord(out io.Writer, e types.Event) {
+	switch d := e.Data.(type) {
+	case *types.ObservationState:
+		fmt.Fprintf(out, "ObservationState %s %s\n", d.State, d.Reason)
+	case *types.SubagentCreated:
+		fmt.Fprintf(out, "SubagentCreated %s parent=%s provenance=%s\n", d.ThreadID, d.ParentThreadID, d.Evidence.Provenance)
+	case *types.SubagentAssociated:
+		fmt.Fprintf(out, "SubagentAssociated %s parent=%s provenance=%s\n", d.ThreadID, d.ParentThreadID, d.Evidence.Provenance)
 	default:
-		fmt.Fprintf(out, "%d %s %s parent=%s provenance=%s\n", e.Sequence, e.Kind, e.Source.ThreadID, e.ParentThreadID, e.Provenance)
+		var source struct {
+			ThreadID string `json:"threadId"`
+		}
+		_ = json.Unmarshal(e.Params, &source)
+		fmt.Fprintf(out, "%s thread=%s\n", e.Method, source.ThreadID)
 	}
 }
 

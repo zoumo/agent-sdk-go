@@ -91,17 +91,17 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 
 func subscribe(t *testing.T, c *codex.Client, ctx context.Context) *codex.Subscription {
 	t.Helper()
-	s, err := c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{PendingAge: 10 * time.Millisecond})
+	s, err := c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{PendingAge: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	if e := nextTree(t, s); e.Kind != codex.TreeObservationState {
+	if e := nextTree(t, s); e.Kind != stateRecord {
 		t.Fatal("missing initial observation state")
 	}
 	return s
 }
-func nextEvent(t *testing.T, s *codex.Subscription) codex.Event {
+func nextEvent(t *testing.T, s *codex.Subscription) types.Event {
 	t.Helper()
 	for {
 		select {
@@ -109,8 +109,8 @@ func nextEvent(t *testing.T, s *codex.Subscription) codex.Event {
 			if !ok {
 				t.Fatalf("events closed: %v", s.Err())
 			}
-			if e.Kind == codex.TreeNative {
-				return *e.Native
+			if e.Raw != nil {
+				return e
 			}
 		case <-time.After(3 * time.Second):
 			t.Fatal("event not delivered")
@@ -144,7 +144,7 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 	params.ParentTurnID = types.Some("causing-turn")
 	params.RootTurnID = types.Some("chain-root-turn")
 	go func() { r, err := f.c.StartTurn(context.Background(), params); result <- outcome{r, err} }()
-	var events []codex.Event
+	var events []types.Event
 	other := false
 	for i := 0; i < 8; i++ {
 		e := nextEvent(t, s)
@@ -209,7 +209,7 @@ func TestNotificationRawAndDecodeErrors(t *testing.T) {
 		`{"threadId":"x","turnId":"x","completedAtMs":1,"item":{"type":"agentMessage","id":"missing-text"}}`,
 		`{"threadId":"x","threadId":"y","turnId":"x","itemId":"x","delta":"duplicate"}`,
 	}
-	seen := make(map[string]codex.Event)
+	seen := make(map[string]types.Event)
 	for i := 0; i < len(expected)+2; i++ {
 		e := nextEvent(t, s)
 		if e.Method == "future/absent" {
@@ -266,7 +266,7 @@ func TestSubscriptionOverflowIsolatedAndInspectable(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{EventQueue: 1, Subscriptions: 2})
 	slow := subscribe(t, f.c, context.Background())
 	healthy := subscribe(t, f.c, context.Background())
-	if _, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{}); !errors.Is(err, codex.ErrLimit) {
+	if _, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{}); !errors.Is(err, codex.ErrLimit) {
 		t.Fatalf("subscriber limit: %v", err)
 	}
 	for i := 0; i < 4; i++ {
@@ -438,7 +438,7 @@ func TestSubscriptionTerminalStatus(t *testing.T) {
 			if method == "turn-oversized-envelope" && !errors.Is(s.Err(), codex.ErrFrameTooLarge) {
 				t.Fatal(s.Err())
 			}
-			if e := nextTree(t, s); e.Kind != codex.TreeObservationState || e.Reason != "permanent-gap" {
+			if e := nextTree(t, s); e.Kind != stateRecord || e.Reason != "permanent-gap" {
 				t.Fatalf("missing gap: %+v", e)
 			}
 			if _, ok := <-s.Events(); ok {
@@ -464,7 +464,7 @@ func TestSubscriptionTerminalStatus(t *testing.T) {
 		if _, ok := <-s.Events(); ok {
 			t.Fatal("events still open")
 		}
-		if _, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{}); !errors.Is(err, codex.ErrClosed) {
+		if _, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{}); !errors.Is(err, codex.ErrClosed) {
 			t.Fatal(err)
 		}
 	})
@@ -505,7 +505,7 @@ func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 		wg.Go(func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			s, err := f.c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				if !errors.Is(err, codex.ErrClosed) {
 					t.Error(err)
@@ -538,12 +538,12 @@ func TestSubscriptionAdmissionValidation(t *testing.T) {
 		}
 	}
 	f := startFake(t, "normal", codex.Limits{Subscriptions: 1})
-	if _, err := f.c.Subscribe(nil, "native-thread-42", codex.TreeOptions{}); err == nil {
+	if _, err := f.c.Subscribe(nil, "native-thread-42", types.SubscriptionOptions{}); err == nil {
 		t.Fatal("nil context accepted")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := f.c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{}); !errors.Is(err, context.Canceled) {
+	if _, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	s := subscribe(t, f.c, context.Background())

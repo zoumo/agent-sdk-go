@@ -175,9 +175,9 @@ identified by explicit native evidence. Successful live spawnAgent collab and
 live decoded V2 item/completed SubAgentActivity kind started confirm SDK-derived
 Created; successful non-spawn collab evidence is Associated. V2 derives parent
 from notification threadId and child from activity.agentThreadId, retaining the
-actual activity in TreeEvidence.Activity without requiring thread/started.
-SDK wrapper names are outside `types`; native Event and protocol generation
-remain unchanged. Native envelopes and parameter bytes are retained independently
+actual activity in types.SubagentEvidence.Activity without requiring thread/started.
+Subscriptions now deliver `types.Event` directly. SDK convenience data lives
+separately in `types/derived_events.go`; generated native JSON remains unchanged. Native envelopes and parameter bytes are retained independently
 for each observer. Request handles remain exclusively on `Client.Requests()`.
 
 Ticket 02 extends this API to recursive relations and bounded early-event
@@ -185,20 +185,20 @@ routing. Native Thread parent/source, completed collab and V2 Started evidence e
 edges; no path inference or child RPC is used. Conflicts retain the original
 parent and emit both accepted and rejected evidence; cycles emit diagnostics. Related ancestors
 precede buffered descendants. Associated can later receive one Created
-confirmation with its original supporting native identity and the same relation
-key. Entity identity remains distinct from each turn.
+confirmation with its original supporting native identity and the same child
+thread ID. Entity identity remains distinct from each turn.
 
 The initial derived state remains incomplete due to best-effort auto-attach and
 unverified runtime coverage. Unknown sources are buffered within configurable
 count/bytes/age bounds, then explicitly delivered as unresolved with an incomplete
 diagnostic. They are never replayed after later association. Source-less events
-remain unscoped. Deduplication only covers successfully decoded known-type terminal
+do not establish membership. Deduplication only covers successfully decoded known-type terminal
 item/completed identities scoped to thread/turn/method/item and this connection;
 cache eviction permits old replays. Identical deltas, unknown occurrence IDs and
 partial versus complete items are preserved. Graph, depth, queue, pending storage
 and identity cache are bounded independently.
 
-Ticket 03 adds explicit native Thread snapshots through `TreeOptions.History`.
+Ticket 03 adds explicit native Thread snapshots through `types.SubscriptionOptions.History`.
 Seeded parent/source, successful historical collab and V2 Started relations are history
 Associated only; they never create entities or replay notifications. Their evidence
 has history provenance and no notification method. Seeded entities cannot later
@@ -211,11 +211,11 @@ with no speculative resume or read/list fallback.
 
 Parent idle and child active can coexist. Root turn completion, child activity
 completion/interruption and entity lifetime are separate. Closing/canceling one
-observation leaves native and other tree observations intact, including another
+observation leaves other subscriptions intact, including another
 root sharing a child source. Unexpected disconnect appends a disconnected /
 permanent-gap record using a reserved terminal queue slot, preserves accepted
 records and the connection failure in Err, and never synthesizes work completion.
-Explicit new Clients have fresh epochs and occurrence caches; there is no seamless
+Explicit new Clients have fresh occurrence caches; there is no seamless
 recovery or exactly-once claim. No live/model validation was run.
 
 Pinned lifecycle source: [TurnComplete handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L186-L203)
@@ -254,13 +254,13 @@ Observation cancellation/Close does not invalidate a request; request cancellati
 expiry, native resolution and Client.Close retain the original handle semantics.
 Repeated request IDs on new Clients cannot reuse old answer authority. Parent
 final text, child deltas/thinking and each native usage payload keep their source
-and exact Raw; UsageScope stays unknown and no tree total is produced.
+and exact Raw; No usage total is produced.
 
 Ticket 04 bounds and original request authority: [offline evidence](evidence/subagent-04.md).
 
 Final per-capability contract, including raw-only representation, E1/E2 evidence
 and all five tickets: [managed subagent matrix](subagent-compatibility.md).
-Runnable model-free scenario: [offline tree example](../examples/observe-tree-offline/README.md).
+Runnable model-free scenario: [offline subagent example](../examples/observe-subagents-offline/README.md).
 Ticket 05 publication and final validation: [evidence](evidence/subagent-05.md).
 ACP subagent proposals remain drafts; no ACP wire or stable-standard compliance
 is claimed. No subagent E3/E4 test was run.

@@ -16,9 +16,9 @@ The [per-capability matrix](../subagent-compatibility.md) separates native
 availability, SDK implementation, pinned E1 source evidence, executed E2
 contracts and runtime limits across 17 capabilities. README, canonical
 compatibility, protocol provenance and method/control inventory point to the
-same boundaries. The [runnable example](../../examples/observe-tree-offline/README.md)
+same boundaries. The [runnable example](../../examples/observe-subagents-offline/README.md)
 starts only itself as a fake stdio peer with an empty environment. Its
-[complete stdout](../../examples/observe-tree-offline/expected.txt) is checked
+[complete stdout](../../examples/observe-subagents-offline/expected.txt) is checked
 byte for byte by TestOfflineTranscript through public Client APIs.
 
 The example covers root → child → grandchild, early child routing, explicit
@@ -77,7 +77,7 @@ mise exec -- go mod verify
 python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v
 python3 docs/protocol/verify_inventory.py
 mise exec -- bash scripts/check_generated.sh
-mise exec -- go run ./examples/observe-tree-offline
+mise exec -- go run ./examples/observe-subagents-offline
 git diff --check
 ```
 

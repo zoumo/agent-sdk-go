@@ -19,12 +19,12 @@ func TestTreeV2CreatedWithoutThreadStarted(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -36,13 +36,13 @@ func TestTreeV2CreatedWithoutThreadStarted(t *testing.T) {
 			events := treeUntilDone(t, s)
 			created, children, spawns := 0, 0, 0
 			for _, e := range events {
-				if e.Kind == codex.TreeSubagentCreated {
+				if e.Kind == createdRecord {
 					created++
-					if !e.CreationConfirmed || e.Source.ThreadID != "child-1" || e.ParentThreadID != "native-thread-42" || e.RelationKey != "child-1" || e.Evidence == nil || e.Evidence.Method != "item/completed" || e.Evidence.Source != (codex.TreeIdentity{ThreadID: "native-thread-42", TurnID: "parent-turn", ItemID: "v2-spawn"}) || e.Evidence.Tool != "" || len(e.Evidence.ReceiverThreadIDs) != 0 {
+					if !e.CreationConfirmed || e.Source.ThreadID != "child-1" || e.ParentThreadID != "native-thread-42" || e.Evidence == nil || e.Evidence.Method != "item/completed" || e.Evidence.Source != (types.EventIdentity{ThreadID: "native-thread-42", TurnID: "parent-turn", ItemID: "v2-spawn"}) || e.Evidence.Tool != "" || len(e.Evidence.ReceiverThreadIDs) != 0 {
 						t.Fatalf("V2 creation evidence: %+v", e)
 					}
 				}
-				if e.Kind == codex.TreeSubagentCreated {
+				if e.Kind == createdRecord {
 					a := e.Evidence.Activity
 					if a == nil || a.ID != "v2-spawn" || a.Kind != types.SubAgentActivityKindStarted || a.AgentThreadID != "child-1" || a.AgentPath != "/display/only" || string(a.UnknownFields["future"]) != "[null,9007199254740993]" {
 						t.Fatalf("missing actual activity: %+v", a)
@@ -53,7 +53,7 @@ func TestTreeV2CreatedWithoutThreadStarted(t *testing.T) {
 				}
 				if e.Native.Method == "item/agentMessage/delta" {
 					children++
-					if created != 1 || e.Scope != "child" || e.ParentThreadID != "native-thread-42" || string(e.Raw) != treeChildRaw || string(e.Native.Params) != treeChildParams {
+					if created != 1 || string(e.Raw) != treeChildRaw || string(e.Native.Params) != treeChildParams {
 						t.Fatalf("child not routed after creation: %+v", e)
 					}
 				}
@@ -99,7 +99,7 @@ func TestTreeV2HistorySuppressesCreation(t *testing.T) {
 				t.Fatal(err)
 			}
 			seed := json.RawMessage(`{"id":"native-thread-42","turns":[{"id":"old-turn","items":[` + string(n.Item) + `]}]}`)
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{History: []json.RawMessage{seed}})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{History: []json.RawMessage{seed}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -107,10 +107,10 @@ func TestTreeV2HistorySuppressesCreation(t *testing.T) {
 			emitRequests(t, f.c, treeFrame("item/completed", v2Activity("native-thread-42", "child-1", "history-spawn", "started")), treeChildRaw, treeFrame("future/done", `{"threadId":"native-thread-42"}`))
 			associated, children := 0, 0
 			for _, e := range treeUntilDone(t, s) {
-				if e.Kind == codex.TreeSubagentCreated {
+				if e.Kind == createdRecord {
 					t.Fatal("historical activity became creation")
 				}
-				if e.Kind == codex.TreeSubagentAssociated {
+				if e.Kind == associatedRecord {
 					associated++
 					if e.Provenance != "history" || e.CreationConfirmed || e.Evidence.Method != "" || e.Evidence.Activity == nil || e.Evidence.Source.TurnID != "old-turn" {
 						t.Fatalf("history evidence: %+v", e)
@@ -131,7 +131,7 @@ func TestTreeV2GraphOrderingAndConfirmation(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -150,17 +150,17 @@ func TestTreeV2GraphOrderingAndConfirmation(t *testing.T) {
 			associated, created, conflicts, cycles, grand := 0, 0, 0, 0, 0
 			for _, e := range treeUntilDone(t, s) {
 				switch e.Kind {
-				case codex.TreeSubagentAssociated:
+				case associatedRecord:
 					associated++
 					if e.Source.ThreadID != "child-1" || created != 0 {
 						t.Fatalf("ancestor association ordering: %+v", e)
 					}
-				case codex.TreeSubagentCreated:
+				case createdRecord:
 					created++
 					if associated != 1 {
 						t.Fatal("descendant preceded ancestor")
 					}
-					if e.Source.ThreadID == "child-1" && (e.RelationKey != "child-1" || e.Reason != "creation-confirmed") {
+					if e.Source.ThreadID == "child-1" && (e.Evidence.Activity.ID != "confirm" || e.Evidence.Activity.AgentThreadID != "child-1") {
 						t.Fatal("confirmation identity changed")
 					}
 				}
@@ -178,7 +178,7 @@ func TestTreeV2GraphOrderingAndConfirmation(t *testing.T) {
 				}
 				if e.Native != nil && e.Native.Method == "future/grand" {
 					grand++
-					if associated != 1 || created < 1 || e.Scope != "child" || e.ParentThreadID != "child-1" || e.Source.TurnID != "grand-turn" {
+					if associated != 1 || created < 1 || e.Source.TurnID != "grand-turn" {
 						t.Fatalf("nested pending routing: %+v", e)
 					}
 				}
@@ -220,26 +220,29 @@ func TestTreeV2NonCreationEvidence(t *testing.T) {
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					f := startFake(t, "request-normal", codex.Limits{})
-					s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{PendingEvents: 1})
+					s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{PendingEvents: 1})
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer s.Close()
 					frame := treeFrame(tc.method, tc.params)
 					emitRequests(t, f.c, frame, treeChildRaw, treeFrame("future/other", `{"threadId":"other"}`), treeFrame("future/done", `{"threadId":"native-thread-42"}`))
-					unresolved, forwarded := false, false
+					unresolved, forwarded, gap := false, false, false
 					for _, e := range treeUntilDone(t, s) {
-						if e.Kind == codex.TreeSubagentAssociated || e.Kind == codex.TreeSubagentCreated {
+						if e.Kind == associatedRecord || e.Kind == createdRecord {
 							t.Fatalf("non-creation established relation: %+v", e)
+						}
+						if e.Reason == "unresolved-source" && e.Source.ThreadID == "child-1" {
+							gap = true
 						}
 						if string(e.Raw) == frame {
 							forwarded = true
 						}
 						if string(e.Raw) == treeChildRaw {
-							unresolved = e.Scope == "unresolved"
+							unresolved = true
 						}
 					}
-					if !unresolved || !forwarded {
+					if !unresolved || !forwarded || !gap {
 						t.Fatalf("unresolved=%v forwarded=%v", unresolved, forwarded)
 					}
 				})

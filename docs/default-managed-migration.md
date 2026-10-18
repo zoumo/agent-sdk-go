@@ -1,40 +1,37 @@
-# Default managed subscriptions: breaking migration
+# Direct native subscription events: breaking migration
 
-Only Codex CLI **0.162.1**, pinned source `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`, is supported. Offline tests establish SDK behavior, not live routing coverage or compatibility with other server versions.
+Only CLI **0.162.1**, official source `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`, is supported. Offline validation establishes SDK behavior, not live descendant routing coverage.
 
-`Client.Subscribe(ctx, rootThreadID, TreeOptions{}) (*Subscription, error)` is now the only observation entry. Zero options enable managed root/descendant observation. The old `Subscribe(ctx)` connection broadcast, `SubscribeTree`, and `TreeSubscription` have been removed, without aliases or a raw/managed switch.
+`Client.Subscribe(ctx, rootID, types.SubscriptionOptions{})` returns `*codex.Subscription`. `Events()` returns `<-chan types.Event` directly. The public Tree wrapper, kinds, identity/evidence names and origin flags are removed without aliases or a mode switch. This is a delivery-shape change, not a rename of the wrapper.
 
-1. Obtain a native root thread ID from an existing thread or StartThread response. An empty root is invalid; a turn ID or V2 task path is not a thread ID.
-2. Register Subscribe before StartTurn. Registration is synchronous; notifications before registration (including thread/started during StartThread) are not replayed.
-3. Read `TreeEvent` records from Subscription.Events. Switch on Kind before inspecting Native. The initial record is ObservationState/incomplete, not a native notification.
-4. For TreeNative, use `record.Native.Method`, Params, Data and DecodeError. Assert concrete `types` notification pointers against Native.Data. `record.Raw` preserves the exact received envelope, excluding transport delimiters. Unknown methods, fields and union variants remain inspectable; absent Params differs from explicit null.
-5. Handle TreeSubagentCreated, TreeSubagentAssociated and TreeObservationState separately. Their names, Origin, identity and evidence are SDK wrapper metadata in [derived_events.go](../derived_events.go); they never modify native types, native JSON, or Event. Derived records have nil Native/Raw and no fabricated method.
-6. Continue after root idle or turn/completed if descendants or commands still matter. Each native thread/turn/item retains its own state and output. There is no tree-wide completion event, usage sum, or merged final answer.
-7. Answer permissions/questions only through Client.Requests and the original Request.Handle. Records cannot answer, and observation never approves automatically.
-8. Check Done/Err and drain accepted records. Close/context cancellation ends local observation only. Overflow or limits terminate this subscription independently; unexpected connection termination preserves the original cause and a reserved permanent-gap record while the observation is still active.
+1. Obtain a native thread ID through StartThread or ResumeThread. Subscribe synchronously before StartTurn; earlier notifications are not replayed.
+2. Read `event.Method`, `Params`, `Data`, `DecodeError`, and `Raw` directly. Native fields, unknown variants, absent/null distinctions and received envelope bytes are unchanged. `codex.Event` moves to `types.Event`.
+3. Switch on concrete `event.Data`: native notification pointers remain native. Convenience events are `*types.SubagentCreated`, `*types.SubagentAssociated`, or `*types.ObservationState`, defined separately in [types/derived_events.go](../types/derived_events.go). These have empty Method and nil Params/Raw, and never modify native structs or JSON.
+4. Inspect SubagentCreated/Associated's ThreadID, ParentThreadID and Evidence. `types.SubagentEvidence.Activity` retains the actual V2 creation item. Associated and history evidence never prove creation. Current V2 completed Started activity still confirms creation without thread/started.
+5. Relationship management and bounded child forwarding remain automatic and private. There is no per-native-event Scope, Sequence, Epoch, Origin or Native wrapper. An unresolved-source state names UnresolvedThreadID; the following native event does not prove membership. Applications may maintain their own relationships from convenience evidence.
+6. Answer approvals/questions only through Client.Requests and their original Handle. Keep draining events independently of UI decisions.
+7. Continue after parent completion when child/background work matters. No combined completion, answer or usage is synthesized.
+8. Inspect Done/Err and drain accepted events. Local Close/cancellation does not interrupt work or send unsubscribe. Overflow terminates only this subscription. Unexpected disconnect retains the original cause and a reserved permanent-gap state.
 
 ```go
-sub, err := client.Subscribe(ctx, rootID, codex.TreeOptions{})
+sub, err := client.Subscribe(ctx, rootID, types.SubscriptionOptions{})
 if err != nil { return err }
 defer sub.Close()
-// StartTurn only after registration; handle Requests independently.
-for record := range sub.Events() {
-    switch record.Kind {
-    case codex.TreeNative:
-        switch data := record.Native.Data.(type) {
-        case *types.ItemCompletedNotification:
-            _ = data // native item completion, not whole-tree completion
-        }
-        _ = record.Raw
-    case codex.TreeSubagentCreated, codex.TreeSubagentAssociated:
-        _ = record.Evidence
-    case codex.TreeObservationState:
-        _ = record.Reason
+for event := range sub.Events() {
+    switch data := event.Data.(type) {
+    case *types.ItemCompletedNotification:
+        _ = data.Item
+    case *types.SubagentCreated:
+        _ = data.Evidence.Activity
+    case *types.SubagentAssociated:
+        _ = data.ParentThreadID
+    case *types.ObservationState:
+        _ = data.Reason
     }
 }
 return sub.Err()
 ```
 
-Existing managed consumers only rename SubscribeTree to Subscribe and TreeSubscription to Subscription. Existing broadcast consumers must also select an explicit root and unwrap Native. Unknown source events use bounded unresolved/unscoped delivery; they must not be displayed as proven children. Sequence is subscription-local and Epoch process-local, neither a provider cursor. History imports relations only, never creation or native replay. Reconnect requires an explicit new Client and leaves a permanent gap. The SDK sends no additional child start/resume/turn/read/list/subscribe RPCs or connections; native auto-attach remains best-effort.
+SubscriptionOptions retains History and the same queue, depth, pending and deduplication bounds. History imports associations only; it causes no read/resume RPC and never replays native events. Reconnecting requires an explicit new Client and leaves a permanent gap. Native auto-attach remains best-effort at the pinned version. No extra child start/resume/turn/read/list/subscribe RPC or connection is introduced.
 
-The V2 Started prerequisite is main `0db0a97271cb881745dd33e735266253ab798ed9`, whose [offline CI 39105250983](https://github.com/zoumo/codex-sdk-go/actions/runs/39105250983) passed Linux and macOS. Its actual Activity evidence, no-thread/started routing and negative cases remain in [tree_v2_contract_test.go](../tree_v2_contract_test.go).
+See [compiling usage](../examples/observe-turn/main.go), [synthetic offline observation](../examples/observe-subagents-offline/main.go), [offline real transcript replay](../examples/replay-recorded/main.go), and [official API comparison](design/native-sdk-comparison.md).

@@ -41,7 +41,7 @@ func run() error {
 		return err
 	}
 	// Registration is active here. StartTurn may finish after completion arrives.
-	events, err := client.Subscribe(ctx, thread.Thread.ID, codex.TreeOptions{})
+	events, err := client.Subscribe(ctx, thread.Thread.ID, types.SubscriptionOptions{})
 	if err != nil {
 		return err
 	}
@@ -65,17 +65,19 @@ func run() error {
 			if err := events.Err(); err != nil {
 				return err
 			}
-			if event.Kind != codex.TreeNative {
-				fmt.Printf("%s %s %s\n", event.Kind, event.Source.ThreadID, event.Reason)
-				continue
-			}
-			native := event.Native
+			native := event
 			if native.DecodeError != nil {
 				return native.DecodeError
 			}
 			switch value := native.Data.(type) {
 			case *types.AgentMessageDeltaNotification:
-				fmt.Printf("[%s/%s/%s %s] %s", value.ThreadID, value.TurnID, value.ItemID, event.Scope, value.Delta)
+				fmt.Printf("[%s/%s/%s] %s", value.ThreadID, value.TurnID, value.ItemID, value.Delta)
+			case *types.SubagentCreated:
+				fmt.Printf("child %s created by %s\n", value.ThreadID, value.ParentThreadID)
+			case *types.SubagentAssociated:
+				fmt.Printf("child %s associated with %s\n", value.ThreadID, value.ParentThreadID)
+			case *types.ObservationState:
+				fmt.Printf("observation %s: %s\n", value.State, value.Reason)
 			case *types.TurnCompletedNotification:
 				fmt.Printf("\nthread %s turn %s: %s\n", value.ThreadID, value.Turn.ID, value.Turn.Status)
 				// Keep observing descendants and background work until the caller context ends.

@@ -170,14 +170,14 @@ inventory check, not a live protocol test. Public evidence records must name a
 committed SDK revision when available; a pre-commit working-tree result must say
 so instead of claiming the base commit contains the tested changes.
 
-## Managed tree representation
+## Automatic descendant observation
 
 The [managed subagent contract](../subagent-compatibility.md) uses existing native
 Thread/item types and raw-only thread/started, thread/status/changed, reasoning
 delta and token-usage notifications. No typed notification root was added for
 these methods. SDK-derived records stay outside protocol. The native schema
 closure, generator roots and provenance hashes remain unchanged; method-level
-raw evidence and the managed-tree control are recorded separately in the inventory.
+raw evidence and the internal descendant-management control are recorded separately in the inventory.
 
 ## Current installed-version target
 

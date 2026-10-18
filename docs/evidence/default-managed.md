@@ -9,7 +9,7 @@ This ticket implements the approved `.scratch/default-managed-events` spec and i
 - The V2 activity parser is unchanged apart from receiver type renaming. Tests retain actual Activity evidence, successful completed Started without thread/started, history suppression, malformed/non-creation cases, nesting and conflicts. Former broadcast comparisons now check independently owned managed streams and their scoped native records.
 - Original Requests/AnswerHandle remains the only answer authority. Parent completion leaves descendants observable; no automatic approvals, child RPCs, extra connections, merged answers or usage totals were added. Existing bounds, atomic fanout, overflow isolation, reserved disconnect gap and first-cause semantics remain.
 - [Migration](../default-managed-migration.md) documents the breaking root scope, initial state, no replay and close semantics. [Seven user stories](../event-sequences.md) explain actions, native/derived sequences, IDs, end criteria, state/output updates and forbidden inference, with seven Mermaid diagrams. CLI/source scope is 0.162.1 / 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d.
-- Examples and live harness consumers compile against the sole entry. The ordinary observer keeps consuming after root completion. CI now directly runs observe-tree-offline in addition to its byte-for-byte fixture test and publicconsumer.
+- Examples and live harness consumers compile against the sole entry. The ordinary observer keeps consuming after root completion. CI now directly runs observe-subagents-offline in addition to its byte-for-byte fixture test and publicconsumer.
 
 ## Validation
 
@@ -26,7 +26,7 @@ Local host: macOS arm64, pinned `go1.26.9`, `GOTOOLCHAIN=local GOPROXY=off GOSUM
 | Race | `mise exec -- go test -race -v -count=1 ./...` | PASS, exit 0; 3 live tests SKIPPED |
 | Vet | `mise exec -- go vet ./...` | PASS, exit 0 |
 | Public consumer | `mise exec -- go run ./examples/publicconsumer` | PASS, exit 0 |
-| Offline example | `mise exec -- go run ./examples/observe-tree-offline` | PASS, exit 0; output matches expected.txt in unit test |
+| Offline example | `mise exec -- go run ./examples/observe-subagents-offline` | PASS, exit 0; output matches expected.txt in unit test |
 | External consumer | `mise exec -- go run -mod=mod .` in independent temporary module | PASS, exit 0 |
 | Native/request invariants | `git diff --exit-code -- types requests.go` | Unchanged, exit 0 |
 | Working whitespace | `git diff --check` | PASS, exit 0 |

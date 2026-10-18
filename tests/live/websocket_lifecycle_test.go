@@ -241,7 +241,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		t.Logf("thread/read same native thread and %d completed native turn IDs; synthetic agent marker present in each", len(turnIDs))
 	}
 	observe := func(c *codex.Client, id, prompt string) string {
-		s, err := c.Subscribe(ctx, id, codex.TreeOptions{})
+		s, err := c.Subscribe(ctx, id, types.SubscriptionOptions{})
 		if err != nil {
 			t.Fatal("Subscribe failed")
 		}
@@ -276,10 +276,10 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 				if !ok || s.Err() != nil {
 					t.Fatal("event stream ended/lost")
 				}
-				if e.Kind != codex.TreeNative {
+				if e.Raw == nil {
 					continue
 				}
-				native := e.Native
+				native := e
 				if native.DecodeError != nil {
 					t.Fatalf("event decode failure method=%s", native.Method)
 				}

@@ -72,7 +72,7 @@ jobs:
       - name: Compile and run the offline public consumer
         run: go run ./examples/publicconsumer
       - name: Run the offline managed subscription example
-        run: go run ./examples/observe-tree-offline
+        run: go run ./examples/observe-subagents-offline
       - name: Replay real sanitized transcripts offline
         run: go run ./examples/replay-recorded
       - name: Race-detector tests (live tests visibly skip)

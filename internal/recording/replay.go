@@ -244,10 +244,10 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 }
 
 type Observation struct {
-	Sequence uint64              `json:"sequence"`
-	Kind     codex.TreeEventKind `json:"kind"`
-	Method   string              `json:"method,omitempty"`
-	ThreadID string              `json:"threadId,omitempty"`
+	Sequence uint64 `json:"sequence"`
+	Kind     string `json:"kind"`
+	Method   string `json:"method,omitempty"`
+	ThreadID string `json:"threadId,omitempty"`
 }
 type Result struct {
 	Observations []Observation `json:"observations"`
@@ -264,7 +264,7 @@ func Session(ctx context.Context, c *codex.Client, thread types.ThreadStartParam
 	if err != nil {
 		return result, err
 	}
-	sub, err := c.Subscribe(ctx, started.Thread.ID, codex.TreeOptions{EventQueue: 2048})
+	sub, err := c.Subscribe(ctx, started.Thread.ID, types.SubscriptionOptions{EventQueue: 2048})
 	if err != nil {
 		return result, err
 	}
@@ -295,32 +295,33 @@ func Session(ctx context.Context, c *codex.Client, thread types.ThreadStartParam
 			if !ok {
 				return result, errors.New("subscription closed early")
 			}
-			o := Observation{Sequence: e.Sequence, Kind: e.Kind, ThreadID: e.Source.ThreadID}
-			if e.Native != nil {
-				if e.Kind != codex.TreeNative || e.Origin != "native" || e.Provenance != "live" || e.Native.DecodeError != nil {
-					return result, errors.New("native wrapper/decode contract")
+			o := Observation{Sequence: uint64(len(result.Observations) + 1), Kind: "Native"}
+			if e.Raw != nil {
+				if e.DecodeError != nil {
+					return result, errors.New("native decode contract")
 				}
 				raw, parseErr := object(e.Raw)
-				if parseErr != nil || string(raw["method"]) != string(mustJSON(e.Native.Method)) || !equal(canonical(raw["params"]), canonical(e.Native.Params)) {
+				if parseErr != nil || string(raw["method"]) != string(mustJSON(e.Method)) || !equal(canonical(raw["params"]), canonical(e.Params)) {
 					return result, errors.New("Raw/Params contract")
 				}
 				var params map[string]json.RawMessage
-				_ = json.Unmarshal(e.Native.Params, &params)
-				if id := params["threadId"]; id != nil && string(id) != string(mustJSON(e.Source.ThreadID)) {
-					return result, errors.New("native thread identity contract")
-				}
-				switch e.Native.Method {
+				_ = json.Unmarshal(e.Params, &params)
+				_ = json.Unmarshal(params["threadId"], &o.ThreadID)
+				switch e.Method {
 				case "turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "serverRequest/resolved":
-					if e.Native.Data == nil {
+					if e.Data == nil {
 						return result, errors.New("missing typed native data")
 					}
 				}
-				o.Method = e.Native.Method
+				o.Method = e.Method
 				if o.Method == "turn/completed" {
 					result.Completed = true
 				}
-			} else if e.Kind != codex.TreeObservationState || e.Origin != "sdk-derived" || len(e.Raw) != 0 {
-				return result, errors.New("unexpected derived record in root-only story")
+			} else {
+				if _, ok := e.Data.(*types.ObservationState); !ok || e.Method != "" || e.Params != nil {
+					return result, errors.New("unexpected convenience event in root-only story")
+				}
+				o.Kind = "ObservationState"
 			}
 			result.Observations = append(result.Observations, o)
 		case <-ctx.Done():

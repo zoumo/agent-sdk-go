@@ -219,7 +219,7 @@ remain caller-managed raw extensions; their reachability is not workflow certifi
 ## Observe and explicitly interrupt a turn
 
 `StartTurn(ctx, types.TurnStartParams)` and `InterruptTurn(ctx,
-types.TurnInterruptParams)` return native response types. Call `Subscribe(ctx, rootThreadID, codex.TreeOptions{})`
+types.TurnInterruptParams)` return native response types. Call `Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})`
 first: a turn can emit events, including completion, before its start response.
 The response's turn ID remains authoritative for that response. The SDK does not
 merge, accumulate, or reinterpret native thread/turn/item IDs. The explicit root
@@ -233,11 +233,14 @@ It is compiled by tests, never run against a model. Running it yourself may
 use an authenticated account and consume model resources.
 
 A subscription is local observation, active when returned; it does not replay
-notifications received before registration. `Events()` supplies `TreeEvent` records. Check `Kind` first: `TreeNative`
-records carry an original `Event` in `Native`, with `Method`, raw JSON `Params`,
-optional typed `Data` and a separate `DecodeError`. Other kinds describe SDK
-relations or observation state and have no native payload or method. Absent parameters remain nil; explicit null
-remains raw `null`. Each subscriber independently owns its raw and typed data.
+notifications received before registration. `Events()` supplies `types.Event` directly,
+with `Method`, raw JSON `Params`, optional typed `Data`, `DecodeError`, and the
+exact notification envelope in `Raw`. SDK convenience events use separate concrete
+`Data` types: `*types.SubagentCreated`, `*types.SubagentAssociated`, and
+`*types.ObservationState`; their Method is empty and Params/Raw are nil. Switch
+on Data's concrete type. Native structs and JSON contain no SDK origin flags.
+Absent parameters remain nil; explicit null remains raw `null`. Each subscriber
+independently owns its raw and typed data.
 Typed payloads currently cover `turn/started`, `turn/completed`, `item/started`,
 `item/completed`, `item/agentMessage/delta`, `error`, and `serverRequest/resolved`.
 Other methods remain raw.
@@ -428,24 +431,31 @@ Read [事件时序（当前 0.162.1）](docs/event-sequences.md) for native/mode
 boundaries, interleaving, lifecycle and gap examples.
 
 See the [per-capability matrix](docs/subagent-compatibility.md) and the
-[runnable offline example](examples/observe-tree-offline/README.md), which starts
+[runnable offline example](examples/observe-subagents-offline/README.md), which starts
 only its own synthetic peer. Subagent E3/E4 tests were not run; ACP subagent
 proposals remain drafts and are not a stable protocol implemented by this SDK.
 
 Register before starting root work:
 
 ```go
-stream, err := client.Subscribe(ctx, rootThreadID, codex.TreeOptions{})
+stream, err := client.Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})
 if err != nil {
     return err
 }
 defer stream.Close()
 // Now start root work through the usual StartTurn API.
-for record := range stream.Events() {
-    // record.Kind distinguishes Native from SDK-derived relation/state records.
-    // record.Native retains Event.Params, Data and DecodeError unchanged.
-    // record.Raw retains the native notification envelope bytes.
-    _ = record
+for event := range stream.Events() {
+    switch data := event.Data.(type) {
+    case *types.AgentMessageDeltaNotification:
+        fmt.Print(data.Delta)
+    case *types.SubagentCreated:
+        fmt.Println(data.ThreadID, data.ParentThreadID, data.Evidence)
+    case *types.SubagentAssociated:
+        fmt.Println(data.ThreadID, data.ParentThreadID)
+    case *types.ObservationState:
+        fmt.Println(data.State, data.Reason)
+    }
+    // Unknown methods and fields remain inspectable in event.Params and event.Raw.
 }
 return stream.Err()
 ```
@@ -454,15 +464,15 @@ return stream.Err()
 receiver identities, or a live decoded `item/completed` SubAgentActivity with
 `kind=started` at the pinned 0.162.1 source. V2 uses notification `threadId` as
 parent and `agentThreadId` as child, without requiring `thread/started`.
-`TreeEvidence.Activity` retains the actual native item; it is not collab evidence.
+`types.SubagentEvidence.Activity` retains the actual native item; it is not collab evidence.
 Other activity kinds and `item/started` prove no relation or creation.
 Other successful collab calls can establish
 `SubagentAssociated`; association alone does not confirm creation. A later spawn
-confirmation uses the same relation key. Relations precede child notifications;
+confirmation refers to the same native thread ID. Relations precede child notifications;
 all native notifications that establish relations are also delivered. Repeated
 relations do not duplicate creation; identical text deltas remain separate events.
-Source thread/turn/item IDs, direct parent, provider, connection epoch and local
-sequence accompany delivery. Unknown fields, methods, explicit null and absent
+Native notifications retain their thread/turn/item IDs. Convenience events carry
+the child ID, direct parent and original supporting evidence. Unknown fields, methods, explicit null and absent
 parameters remain available. Each observer owns its buffers.
 
 Relations from completed collab items, V2 completed Started activity, native `Thread.parentThreadId`, and
@@ -471,24 +481,24 @@ Ancestors are announced before descendants and their buffered native events.
 `agentPath` never proves a parent. First confirmed parent wins; conflicting or
 cyclic evidence produces an incomplete observation diagnostic with the rejected
 evidence, without rebinding. `PreviousEvidence` retains the accepted edge on a
-conflict, and `TreeEvidence.ParentThreadID` identifies each proposed parent.
+conflict, and `types.SubagentEvidence.ParentThreadID` identifies each proposed parent.
 A later live spawn can independently confirm Created
-on the same relation key after Associated, once per entity across turns.
+for the same native thread after Associated, once per entity across turns.
 
 Events whose source is not yet related enter bounded pending storage. After a
-count, byte or age limit they are delivered with `Scope="unresolved"` and an
-`unresolved-source` incomplete diagnostic. This can include unrelated roots;
-only `Scope="child"` establishes tree membership. Later association does not
+count, byte or age limit they follow an `unresolved-source` incomplete diagnostic,
+whose UnresolvedThreadID identifies the source. This can include unrelated roots;
+only relationship evidence establishes descendant membership. Later association does not
 replay already delivered native records. Per-source pending order and exact Raw
 are retained. The initial observation remains incomplete because native attach is
 best-effort and runtime coverage is unverified, including unknown server versions.
 
 For explicit reconstruction on a new Client, pass caller-owned native Thread
-snapshots in `TreeOptions.History` (`[]json.RawMessage`, each a Thread object,
+snapshots in `types.SubscriptionOptions.History` (`[]json.RawMessage`, each a Thread object,
 not a thread/read response envelope). Only parent/source links and successful
 completed collab items and V2 Started activities in `turns[].items` establish
 relations. Seeded relations
-have `Provenance="history"`, `Reason="history"`, and never emit Created, even if
+have `Evidence.Provenance="history"` and never emit Created, even if
 later live evidence repeats their spawn. History does not replay native events,
 seed occurrence deduplication, or establish current execution state. A new live
 child can still emit Created. Seed count is bounded by MaxNodes and total snapshot
@@ -499,19 +509,16 @@ A seed emits `ObservationState(incomplete, history-recovery-gap)`: new-thread
 auto-attach does not prove attachment to old threads on a cold connection. The SDK
 never issues read/list/resume/start requests to fill this gap. Silence, lagged
 attach and missing history cannot establish completeness. Explicitly reconnecting
-requires a new Client and Subscribe, with a new process-local epoch and empty
-occurrence cache; identical native IDs can be delivered again. There is no replay
-cursor or cross-epoch exactly-once guarantee.
+requires a new Client and Subscribe, with an empty occurrence cache; identical native IDs can be delivered again. There is no replay
+cursor or cross-connection exactly-once guarantee.
 
 Native deduplication is deliberately narrow: successfully decoded known-type `item/completed`
-notifications use thread, turn, method and item identity within this connection
-epoch. The bounded FIFO identity cache can forget older entries. Other native
+notifications use thread, turn, method and item identity within this connection. The bounded FIFO identity cache can forget older entries. Other native
 events, including repeated identical deltas and started/complete snapshots, are
 preserved. An item ID alone never identifies an individual delta.
 
-Notifications without an identifiable source are preserved as `unscoped` and do
-not establish membership. `UsageScope` remains `unknown`; child text and usage are
-never combined with parent answers or usage.
+Notifications without an identifiable source are preserved and do not establish
+membership. Child text and usage are never combined with parent answers or usage.
 
 At pinned Codex 0.162.1, native server source automatically attempts to attach
 initialized connections to newly created threads, best-effort. The SDK uses
@@ -521,7 +528,7 @@ fake-peer validation, not real-server subagent validation. Older/unknown runtime
 remain unverified; the SDK does not probe them with execution RPCs. See
 [compatibility and evidence](docs/compatibility.md#managed-direct-child-observation-ticket-01).
 
-`TreeOptions.EventQueue` defaults to `Limits.EventQueue`; `MaxNodes` defaults to
+`types.SubscriptionOptions.EventQueue` defaults to `Limits.EventQueue`; `MaxNodes` defaults to
 4096 including the root and unresolved relation nodes; `MaxDepth` defaults to 32
 edges. `PendingEvents`, `PendingBytes`, `PendingAge` and `DedupEntries` default to
 128, 4 MiB (stored envelope plus params), 5 seconds and 8192. Zero selects defaults;
@@ -532,8 +539,7 @@ is accepted. Pending-expiry diagnostics and unresolved Native records use the sa
 admission rule. Earlier accepted records remain drainable; Done/Err do not need
 queue space. A reserved extra slot retains the disconnect diagnostic.
 Queue overflow terminates only that observer with `SubscriptionOverflowError`;
-graph/depth exhaustion ends it with `ErrLimit`. Each tree uses one shared admission
-slot. `Close` ends local observation without interrupting provider work. Parent
+graph/depth exhaustion ends it with `ErrLimit`. Each subscription uses one shared admission slot. `Close` ends local observation without interrupting provider work. Parent
 completion does not close it. Parent and child statuses are independent: parent
 idle may coexist with child active; child turn/activity completed or interrupted
 does not destroy the agent or prevent later turns. The SDK forwards native states
@@ -552,10 +558,11 @@ when EventQueue accepted records are unread. Close/cancel are idempotent, do not
 wait for consumers, preserve accepted records and the first terminal cause, and
 release only this local observation. The shared server attachment is never
 unsubscribed by observation teardown. Permission and question answers still go
-through original `Client.Requests()` handles, with no second answer authority in records.
-`Subscribe(ctx, rootThreadID, TreeOptions{})` is the sole subscription entry.
+through original `Client.Requests()` handles.
+`Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})` is the sole subscription entry.
 It always manages relations and descendant routing; there is no observation mode switch.
-See [breaking migration](docs/default-managed-migration.md).
+See [breaking migration](docs/default-managed-migration.md) and the
+[pinned official SDK comparison](docs/design/native-sdk-comparison.md).
 
 
 ### Recorded event replay

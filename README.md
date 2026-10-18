@@ -20,6 +20,7 @@ module import paths have no compatibility forwarding packages.
 - [Architecture](docs/architecture.md)
 - [Migration and source history](docs/migration.md)
 - [Offline validation](docs/testing.md)
+- [Recorded test data: Codex tools/questions, Claude authentication failure, and synthetic fixtures](docs/recordings.md)
 - [Shared user stories and native evidence](docs/stories/index.md)
 - [Shared terms](docs/glossary.md)
 - [Release preparation and consumer checks](docs/releasing.md)

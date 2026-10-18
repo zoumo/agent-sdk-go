@@ -1,5 +1,10 @@
 # Offline validation
 
+See the [recorded test data index](recordings.md) for direct links to native wire
+files, manifests, expected observations and ID maps. Real Codex tool/question
+captures and the Claude authentication-failure capture remain distinct from
+synthetic fixtures; real subagent recordings are still missing.
+
 Run from the repository root with the pinned compiler:
 
 ```sh

@@ -12,9 +12,17 @@ if [[ -d internal/lineage ]]; then
   fi
 fi
 for native in codex claude; do
+  # Deliberately omit -test: native data packages have standard-library-only
+  # production dependencies; assertion/suite libraries belong to tests.
   deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$native/types" | sed '/^$/d')
   test "$deps" = "github.com/zoumo/agent-sdk-go/$native/types"
 done
+# Test libraries must not leak into any native SDK's production dependency tree.
+production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/...)
+if [[ "$production_deps" == *github.com/stretchr/* ]]; then
+  echo "testify dependencies must remain test-only" >&2
+  exit 1
+fi
 python3 - <<'PY'
 import json, subprocess
 rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...'], text=True)

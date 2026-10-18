@@ -101,3 +101,55 @@ func TestSyntheticInflightReverseAndCancel(t *testing.T) {
 	require.Error(t, Replay(strings.NewReader(""), &bytes.Buffer{}, strings.NewReader(strings.Repeat("x", (2<<20)+1)), nil), "oversize capture accepted")
 	require.Error(t, Replay(strings.NewReader(strings.Repeat("x", (2<<20)+1)), &bytes.Buffer{}, bytes.NewReader(capture), nil), "oversize client accepted")
 }
+
+func TestControlIDsDoNotRewritePayload(t *testing.T) {
+	capture := `{"ordinal":1,"direction":"client","channel":"control","data":{"type":"control_request","request_id":"old","request":{"request_id":"literal","subtype":"initialize"}}}
+{"ordinal":2,"direction":"server","channel":"control","data":{"type":"control_response","response":{"request_id":"old","response":{"request_id":"old","text":"escaped \"request_id\": \"old\""}}}}
+`
+	for _, tc := range []struct {
+		name, payload string
+		fail          bool
+	}{
+		{"literal preserved", "literal", false},
+		{"payload mismatch rejected", "other", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := `{"type":"control_request","request_id":"dynamic","request":{"request_id":"` + tc.payload + `","subtype":"initialize"}}` + "\n"
+			var out bytes.Buffer
+			err := Replay(strings.NewReader(input), &out, strings.NewReader(capture), nil)
+			if tc.fail {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			var got map[string]any
+			require.NoError(t, json.Unmarshal(bytes.TrimSpace(out.Bytes()), &got))
+			response := got["response"].(map[string]any)
+			require.Equal(t, "dynamic", response["request_id"])
+			require.Equal(t, "old", response["response"].(map[string]any)["request_id"])
+		})
+	}
+}
+
+func TestReplayOutputBudgets(t *testing.T) {
+	t.Run("total bytes", func(t *testing.T) {
+		var output bytes.Buffer
+		writer := &budgetWriter{writer: &output, remaining: 10}
+		_, err := writer.Write([]byte("123456"))
+		require.NoError(t, err)
+		_, err = writer.Write([]byte("12345"))
+		require.Error(t, err)
+		require.Equal(t, "123456", output.String(), "excess bytes must not be emitted")
+	})
+	t.Run("expanded response", func(t *testing.T) {
+		request := Frame{Ordinal: 1, Direction: "client", Channel: "control", Data: json.RawMessage(`{"type":"control_request","request_id":"old","request":{"subtype":"initialize"}}`)}
+		response := Frame{Ordinal: 2, Direction: "server", Channel: "control", Data: json.RawMessage(`{"type":"control_response","response":{"request_id":"old","response":{"padding":"` + strings.Repeat("p", (1<<20)+100) + `"}}}`)}
+		var capture bytes.Buffer
+		require.NoError(t, json.NewEncoder(&capture).Encode(request))
+		require.NoError(t, json.NewEncoder(&capture).Encode(response))
+		input := `{"type":"control_request","request_id":"` + strings.Repeat("i", 1<<20) + `","request":{"subtype":"initialize"}}` + "\n"
+		var output bytes.Buffer
+		require.Error(t, Replay(strings.NewReader(input), &output, &capture, nil))
+		require.Empty(t, output.Bytes(), "oversize expanded frame must not be emitted")
+	})
+}

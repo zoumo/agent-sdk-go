@@ -1,5 +1,9 @@
 # Offline validation
 
+The [testing standards](standards/testing.md) define test organization and safety;
+this guide contains the commands and validation scope. Directory responsibilities
+are defined in the [layout standards](standards/code-layout.md).
+
 See the [recorded test data index](recordings.md) for direct links to native wire
 files, manifests, expected observations and ID maps. Real Codex tool/question
 captures and the Claude authentication-failure capture remain distinct from
@@ -55,3 +59,27 @@ External consumer CI runs on Linux/macOS for pushed `main` commits and manual
 workflow runs, targeting `github.sha`. PR offline checks remain separate because
 synthetic merge SHAs may not be retrievable as Go module versions. See
 [release readiness](releasing.md) for the required exact-commit CI evidence.
+
+## Testify migration scope
+
+The inventory covered all 61 original `*_test.go` files: 310 Test functions,
+four TestMain dispatch hooks, six Go Examples and 750 generated schema cases.
+All original test names remain represented. Fifty-five original test files were
+updated (including moved replay tests); six assertion-free files retain native
+Example, platform helper, view adapter or protocol-peer roles. Five new test
+files bring the total to 66.
+
+There are 15 sequential suites with 187 scenario methods across native client,
+permission, session, observation, replay, live opt-in, shared graph and story
+tests. Single-function cases use named tables. Native synctest, tight-deadline,
+concurrent stress and subprocess dispatch keep their testing structure; no
+existing deadline or expected result was relaxed. Workers return outcomes to
+the owning test goroutine. Go Examples and four TestMain hooks retain their Go
+toolchain contracts.
+
+The schema generator preserves the original 750 case names, types and JSON.
+The story suite preserves 28 native adapter leaf scenarios. Its private facts
+and acceptance methods live directly in `tests/stories/acceptance_test.go`;
+there is no separate testkit package. Testify v1.12.1 is a test dependency;
+both native types packages still have standard-library-only production trees,
+and SDK production imports cannot reach recording tools or fixture containers.

@@ -1,15 +1,14 @@
 # Architecture
 
-`github.com/zoumo/agent-sdk-go` is one Go module with one version. Native clients
-live in `codex/` and `claude/`; neither package imports the other. Pure protocol
-data lives independently in `codex/types` and `claude/types`, using only the
-standard library. There is no root Go client, nested module, or workspace file.
+The [architecture standards](standards/architecture.md) are the authoritative
+module, native protocol, answer-authority and dependency rules. The
+[layout standards](standards/code-layout.md) define the SDK/cmd/tools/testdata
+separation; [testing standards](standards/testing.md) define suite/table and
+worker-safety requirements. Humans and agents use the same standards.
 
-Native event decoding, process/transport ownership, identities, answering handles,
-request lifecycle and event caches belong to their native SDK. Unknown native
-data and explicit observation gaps retain their existing semantics. Relationship
-observations grant no authority to answer requests. No common answer state machine
-or public question interface is introduced.
+One module and version keep builds and releases coordinated while native SDKs
+retain their own protocols. Sharing confirmed relationship rules avoids two
+implementations of graph admission without coupling native event interpretation.
 
 Package documentation retains native protocol inventories, schema sources,
 compatibility boundaries and recorded fixture provenance. Shared operating and

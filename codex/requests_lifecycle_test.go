@@ -2,10 +2,11 @@ package codex
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // These tests route native frames through the real request lifecycle. Unlike
@@ -25,8 +26,9 @@ func TestRequestTerminalOrderingWithControlledTime(t *testing.T) {
 				r := receiveLifecycleRequest(t, c)
 				resolve := func() {
 					t.Helper()
-					if err := c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`)); err != nil {
-						t.Fatal(err)
+					{
+						err := c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`))
+						require.NoError(t, err, err)
 					}
 				}
 				if resolutionFirst {
@@ -42,9 +44,8 @@ func TestRequestTerminalOrderingWithControlledTime(t *testing.T) {
 				}
 				synctest.Wait()
 				checkLifecycleTerminal(t, r, want)
-				if len(c.reverse) != 0 || len(c.queue) != 0 {
-					t.Fatal("terminal request retained admission or emitted a response")
-				}
+				require.Empty(t, c.reverse, "terminal request retained admission")
+				require.Empty(t, c.queue, "terminal request emitted a response")
 			})
 		})
 	}
@@ -61,8 +62,9 @@ func TestTerminalRequestIDReuseWithControlledTime(t *testing.T) {
 				old := receiveLifecycleRequest(t, c)
 				if cause == ErrRequestResolved {
 					time.Sleep(time.Second / 2)
-					if err := c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`)); err != nil {
-						t.Fatal(err)
+					{
+						err := c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`))
+						require.NoError(t, err, err)
 					}
 				} else {
 					time.Sleep(time.Second)
@@ -76,24 +78,22 @@ func TestTerminalRequestIDReuseWithControlledTime(t *testing.T) {
 				// request still has lifetime left. Its stopped timer must not affect reuse.
 				time.Sleep(time.Second / 2)
 				synctest.Wait()
-				if fresh.Handle().Err() != nil {
-					t.Fatal("stale handle affected reused ID")
-				}
+				require.NoError(t, fresh.Handle().Err(), "stale handle affected reused ID")
 				select {
 				case <-fresh.Handle().Done():
-					t.Fatal("fresh request already closed")
+					require.FailNow(t, "test invariant", "fresh request already closed")
 				default:
 				}
-				if err := c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread"}}`)); !errors.Is(err, ErrProtocol) {
-					t.Fatalf("fresh active ID lost its admission: %v", err)
+				{
+					err := c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread"}}`))
+					require.ErrorIs(t, err, ErrProtocol, "fresh active ID lost its admission: %v", err)
 				}
-				if err := fresh.Handle().Cancel(); err != nil {
-					t.Fatal(err)
+				{
+					err := fresh.Handle().Cancel()
+					require.NoError(t, err, err)
 				}
 				checkLifecycleTerminal(t, fresh, ErrRequestCanceled)
-				if len(c.queue) != 0 {
-					t.Fatal("stale answer emitted a response")
-				}
+				require.Empty(t, c.queue, "stale answer emitted a response")
 			})
 		})
 	}
@@ -101,8 +101,9 @@ func TestTerminalRequestIDReuseWithControlledTime(t *testing.T) {
 
 func receiveLifecycleRequest(t *testing.T, c *Client) Request {
 	t.Helper()
-	if err := c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread"}}`)); err != nil {
-		t.Fatal(err)
+	{
+		err := c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread"}}`))
+		require.NoError(t, err, err)
 	}
 	return <-c.Requests()
 }
@@ -113,18 +114,22 @@ func checkLifecycleTerminal(t *testing.T, r Request, want error) {
 	select {
 	case <-h.Done():
 	default:
-		t.Fatal("terminal handle is still open")
+		require.FailNow(t, "test invariant", "terminal handle is still open")
 	}
-	if !errors.Is(h.Err(), want) || !errors.Is(h.Cancel(), want) {
-		t.Fatalf("terminal cause = %v, want %v", h.Err(), want)
-	}
-	for _, err := range []error{
-		h.Answer(context.Background(), "stale"),
-		h.Reject(context.Background(), &RPCError{Code: -1, Message: "stale"}),
+	require.ErrorIs(t, h.Err(), want, "terminal cause")
+	require.ErrorIs(t, h.Cancel(), want, "cancel must retain terminal cause")
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"answer", h.Answer(context.Background(), "stale")},
+		{"reject", h.Reject(context.Background(), &RPCError{Code: -1, Message: "stale"})},
 	} {
 		var ae *AnswerError
-		if !errors.As(err, &ae) || ae.Dispatch != NotSent || ae.ID != r.ID() || ae.Method != r.Method() || !errors.Is(err, want) {
-			t.Fatalf("late answer = %v, want NotSent with %v and original identity", err, want)
-		}
+		require.ErrorAs(t, tc.err, &ae, tc.name)
+		require.Equal(t, NotSent, ae.Dispatch, tc.name)
+		require.Equal(t, r.ID(), ae.ID, tc.name)
+		require.Equal(t, r.Method(), ae.Method, tc.name)
+		require.ErrorIs(t, tc.err, want, tc.name)
 	}
 }

@@ -3,7 +3,6 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 )
 
@@ -73,51 +73,38 @@ func handleNestedTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage
 	return true
 }
 
-func TestTreeNestedOrderingAndIdentity(t *testing.T) {
+func (obs *observationSuite) TestTreeNestedOrderingAndIdentity() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			f := startFake(t, "tree-nested", codex.Limits{})
+			f := obs.fixture(t, "tree-nested", codex.Limits{})
 			a, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer a.Close()
 			b, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer b.Close()
 			treeStart(t, f.c)
 			events := treeUntilDone(t, a)
 			others := treeUntilDone(t, b)
-			if len(events) != len(others) {
-				t.Fatal("independent consumers differ")
-			}
+			require.Equal(t, len(others), len(events), "independent consumers differ")
 			associated, created := map[string]int{}, map[string]int{}
 			parents := map[string]string{"child-1": "native-thread-42", "grand": "child-1", "orphan": "grand", "leaf": "orphan"}
 			grand, delta, terminal, conflicts, cycles, unknown, partial, unknownTerminal := 0, 0, 0, 0, 0, 0, 0, 0
 			for _, e := range events {
 				if e.Kind == associatedRecord || e.Kind == createdRecord {
-					if e.ParentThreadID != parents[e.Source.ThreadID] {
-						t.Fatalf("parent %+v", e)
-					}
-					if e.ParentThreadID != "native-thread-42" && associated[e.ParentThreadID]+created[e.ParentThreadID] == 0 {
-						t.Fatal("ancestor announced too late")
-					}
+					require.Equal(t, parents[e.Source.ThreadID], e.ParentThreadID, "parent %+v", e)
+					require.False(t, e.ParentThreadID != "native-thread-42" && associated[e.ParentThreadID]+created[e.ParentThreadID] == 0, "ancestor announced too late")
 					if e.Kind == associatedRecord {
 						associated[e.Source.ThreadID]++
 					} else {
 						created[e.Source.ThreadID]++
-						if e.Evidence.Source.ThreadID != e.ParentThreadID || e.Evidence.Source.TurnID == "" {
-							t.Fatalf("creation source lost: %+v", e)
-						}
+						require.False(t, e.Evidence.Source.ThreadID != e.ParentThreadID || e.Evidence.Source.TurnID == "", "creation source lost: %+v", e)
 					}
 				}
 				if e.Reason == "relation-conflict" {
 					conflicts++
-					if e.Evidence == nil || e.PreviousEvidence == nil || e.PreviousEvidence.ParentThreadID != "child-1" {
-						t.Fatal("conflict evidence lost")
-					}
+					require.False(t, e.Evidence == nil || e.PreviousEvidence == nil || e.PreviousEvidence.ParentThreadID != "child-1", "conflict evidence lost")
 				}
 				if e.Reason == "relation-cycle" {
 					cycles++
@@ -126,21 +113,15 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 					continue
 				}
 				if e.Source.ThreadID != "native-thread-42" && e.Source.ThreadID != "" {
-					if associated[e.Source.ThreadID]+created[e.Source.ThreadID] == 0 {
-						t.Fatalf("native before relation: %+v", e)
-					}
+					require.False(t, associated[e.Source.ThreadID]+created[e.Source.ThreadID] == 0, "native before relation: %+v", e)
 				}
 				switch e.Native.Method {
 				case "future/grand":
 					grand++
-					if !strings.Contains(string(e.Raw), fmt.Sprint(`"ordinal":`, grand)) {
-						t.Fatal("pending source order or Raw lost")
-					}
+					require.True(t, strings.Contains(string(e.Raw), fmt.Sprint(`"ordinal":`, grand)), "pending source order or Raw lost")
 				case "item/agentMessage/delta":
 					delta++
-					if string(e.Raw) != treeChildRaw {
-						t.Fatal("delta changed")
-					}
+					require.Equal(t, treeChildRaw, string(e.Raw), "delta changed")
 				case "item/completed":
 					if strings.Contains(string(e.Raw), "futureItem") {
 						unknownTerminal++
@@ -153,22 +134,17 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 						break
 					}
 					unknown++
-					if !strings.Contains(string(e.Raw), "future-kind") {
-						t.Fatal("unknown activity lost")
-					}
+					require.True(t, strings.Contains(string(e.Raw), "future-kind"), "unknown activity lost")
 				}
 			}
-			if associated["child-1"] != 1 || associated["grand"] != 1 || created["child-1"] != 1 || created["grand"] != 1 || created["leaf"] != 1 || grand != 2 || delta != 2 || terminal != 4 || conflicts != 1 || cycles != 1 || unknown != 1 || partial != 1 || unknownTerminal != 2 {
-				t.Fatalf("counts associated=%v created=%v grand=%d delta=%d terminal=%d conflicts=%d cycles=%d unknown=%d", associated, created, grand, delta, terminal, conflicts, cycles, unknown)
-			}
-			if len(trace(t, f.trace)) != 3 {
-				t.Fatal("extra child RPC")
-			}
+			require.False(t, associated["child-1"] != 1 || associated["grand"] != 1 || created["child-1"] != 1 || created["grand"] != 1 || created["leaf"] != 1 || grand != 2 || delta != 2 || terminal != 4 || conflicts != 1 || cycles != 1 || unknown != 1 || partial != 1 || unknownTerminal != 2, "counts associated=%v created=%v grand=%d delta=%d terminal=%d conflicts=%d cycles=%d unknown=%d", associated, created, grand, delta, terminal, conflicts, cycles, unknown)
+			require.Equal(t, 3, len(trace(t, f.trace)), "extra child RPC")
 		})
 	}
 }
 
-func TestTreePendingLimitsAndNoReplay(t *testing.T) {
+func (obs *observationSuite) TestTreePendingLimitsAndNoReplay() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			for _, options := range []types.SubscriptionOptions{
@@ -176,32 +152,25 @@ func TestTreePendingLimitsAndNoReplay(t *testing.T) {
 				{PendingBytes: 1, PendingAge: 20 * time.Millisecond},
 				{PendingAge: 20 * time.Millisecond},
 			} {
-				f := startFake(t, "tree-pending", codex.Limits{})
+				f := obs.fixture(t, "tree-pending", codex.Limits{})
 				s, err := f.c.Subscribe(context.Background(), "native-thread-42", options)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err, err)
 				treeStart(t, f.c)
 				count := 0
 				for count < 2 {
 					e := nextTree(t, s)
 					if e.Native != nil && (e.Native.Method == "item/agentMessage/delta" || e.Native.Method == "future/late") {
 						count++
-						if len(e.Raw) == 0 {
-							t.Fatal("unresolved Raw lost")
-						}
-						if e.Source.ThreadID == "child-1" && string(e.Raw) != treeChildRaw {
-							t.Fatal("changed unresolved Raw")
-						}
+						require.False(t, len(e.Raw) == 0, "unresolved Raw lost")
+						require.False(t, e.Source.ThreadID == "child-1" && string(e.Raw) != treeChildRaw, "changed unresolved Raw")
 					}
 				}
-				if err = f.c.Call(context.Background(), "tree-link", nil, nil); err != nil {
-					t.Fatal(err)
+				{
+					err = f.c.Call(context.Background(), "tree-link", nil, nil)
+					require.NoError(t, err, err)
 				}
 				for _, e := range treeUntilDone(t, s) {
-					if e.Native != nil && (e.Native.Method == "item/agentMessage/delta" || e.Native.Method == "future/late") {
-						t.Fatal("already delivered unresolved event replayed")
-					}
+					require.False(t, e.Native != nil && (e.Native.Method == "item/agentMessage/delta" || e.Native.Method == "future/late"), "already delivered unresolved event replayed")
 				}
 				s.Close()
 			}
@@ -209,29 +178,24 @@ func TestTreePendingLimitsAndNoReplay(t *testing.T) {
 	}
 }
 
-func TestTreeDepthAndDedupBounds(t *testing.T) {
+func (obs *observationSuite) TestTreeDepthAndDedupBounds() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			f := startFake(t, "tree-nested", codex.Limits{})
+			f := obs.fixture(t, "tree-nested", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{MaxDepth: 1})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			treeStart(t, f.c)
 			select {
 			case <-s.Done():
 			case <-time.After(time.Second):
-				t.Fatal("depth not bounded")
+				require.FailNow(t, "test invariant", "depth not bounded")
 			}
-			if !errors.Is(s.Err(), codex.ErrLimit) {
-				t.Fatal(s.Err())
-			}
+			require.ErrorIs(t, s.Err(), codex.ErrLimit, s.Err())
 			// A tiny cache permits older terminal identities to be delivered again; it
 			// never trades bounded memory for a cross-epoch exactly-once claim.
 			s, err = f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{DedupEntries: 1})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer s.Close()
 			treeStart(t, f.c)
 			terminals := 0
@@ -240,11 +204,10 @@ func TestTreeDepthAndDedupBounds(t *testing.T) {
 					terminals++
 				}
 			}
-			if terminals != 5 {
-				t.Fatalf("bounded identity eviction: %d", terminals)
-			}
-			if err = f.c.Call(context.Background(), "echo", true, nil); err != nil {
-				t.Fatal(err)
+			require.Equal(t, 5, terminals, "bounded identity eviction: %d", terminals)
+			{
+				err = f.c.Call(context.Background(), "echo", true, nil)
+				require.NoError(t, err, err)
 			}
 		})
 	}

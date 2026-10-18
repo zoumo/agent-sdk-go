@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -33,6 +33,8 @@ type blockedRemotePeer struct {
 // buffering; the SDK's write is released only by an explicit peer barrier, local
 // context cancellation, its write deadline, or Close. No private SDK state used.
 func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	t.Helper()
 	p := &blockedRemotePeer{prefix: make(chan struct{}), release: make(chan struct{}), done: make(chan struct{})}
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +133,7 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 	p.client, err = codex.NewRemote(context.Background(), options)
 	if err != nil {
 		server.Close()
-		t.Fatal(err)
+		require.FailNow(t, fmt.Sprint(err))
 	}
 	t.Cleanup(func() {
 		p.releaseOnce.Do(func() { close(p.release) })
@@ -140,11 +142,12 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 		select {
 		case <-p.done:
 		case <-time.After(3 * time.Second):
-			t.Error("peer connection did not close")
+			reportPeerError("peer connection did not close")
 		}
 	})
-	if err = p.client.Call(context.Background(), "gate", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err = p.client.Call(context.Background(), "gate", nil, nil)
+		require.NoError(t, err)
 	}
 	return p
 }
@@ -153,7 +156,7 @@ func awaitPrefix(t *testing.T, p *blockedRemotePeer) {
 	select {
 	case <-p.prefix:
 	case <-time.After(5 * time.Second):
-		t.Fatal("remote peer never observed message byte")
+		require.FailNow(t, "remote peer never observed message byte")
 	}
 }
 
@@ -181,8 +184,9 @@ func TestRemoteBlockedWritesAndAnswers(t *testing.T) {
 							}
 							awaitPrefix(t, p)
 							if operation == "answer" {
-								if err := request.Handle().Cancel(); !errors.Is(err, codex.ErrRequestAnswered) {
-									t.Fatalf("admitted answer cancel = %v", err)
+								{
+									err := request.Handle().Cancel()
+									require.ErrorIs(t, err, codex.ErrRequestAnswered, "admitted answer cancel = %v", err)
 								}
 							}
 							cause := codex.ErrWriteTimeout
@@ -192,8 +196,9 @@ func TestRemoteBlockedWritesAndAnswers(t *testing.T) {
 								cancel()
 							case "close":
 								cause = codex.ErrClosed
-								if err := p.client.Close(); err != nil {
-									t.Fatal(err)
+								{
+									err := p.client.Close()
+									require.NoError(t, err)
 								}
 							}
 							select {
@@ -204,24 +209,23 @@ func TestRemoteBlockedWritesAndAnswers(t *testing.T) {
 									callError(t, err, codex.OutcomeUnknown, cause)
 								}
 							case <-time.After(3 * time.Second):
-								t.Fatal("blocked writer survived terminal action")
+								require.FailNow(t, "blocked writer survived terminal action")
 							}
 							select {
 							case <-p.client.Done():
 							case <-time.After(time.Second):
-								t.Fatal("ambiguous blocked writer retained connection")
+								require.FailNow(t, "ambiguous blocked writer retained connection")
 							}
 							if operation == "answer" {
 								answerError(t, request.Handle().Answer(context.Background(), "retry"), request, codex.NotSent, nil)
 							}
-							if err := p.client.Close(); err != nil {
-								t.Fatal(err)
+							{
+								err := p.client.Close()
+								require.NoError(t, err)
 							}
 							p.releaseOnce.Do(func() { close(p.release) })
 							<-p.done
-							if p.answers.Load() != 0 || p.requests.Load() != 0 {
-								t.Fatal("partial frame completed or replayed")
-							}
+							require.False(t, p.answers.Load() != 0 || p.requests.Load() != 0, "partial frame completed or replayed")
 						})
 					}
 				})
@@ -256,12 +260,10 @@ func TestRemoteQueuedAnswerAdmissionAndCancellation(t *testing.T) {
 				select {
 				case result := <-results:
 					answerError(t, result.err, result.r, codex.NotSent, codex.ErrLimit)
-					if result.r.Handle().Err() != nil {
-						t.Fatal("pre-admission failure consumed handle")
-					}
+					require.NoError(t, result.r.Handle().Err(), "pre-admission failure consumed handle")
 					rejected = append(rejected, result.r)
 				case <-time.After(2 * time.Second):
-					t.Fatal("full queue blocked admission")
+					require.FailNow(t, "full queue blocked admission")
 				}
 			}
 			cancel()
@@ -270,36 +272,34 @@ func TestRemoteQueuedAnswerAdmissionAndCancellation(t *testing.T) {
 				answerError(t, result.err, result.r, codex.NotSent, context.Canceled)
 				answerError(t, result.r.Handle().Answer(context.Background(), "retry"), result.r, codex.NotSent, context.Canceled)
 			case <-time.After(time.Second):
-				t.Fatal("queued answer did not cancel")
+				require.FailNow(t, "queued answer did not cancel")
 			}
 			p.releaseOnce.Do(func() { close(p.release) })
 			select {
 			case err := <-writer:
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 			case <-time.After(10 * time.Second):
-				t.Fatal("released writer did not complete")
+				require.FailNow(t, "released writer did not complete")
 			}
 			for _, r := range rejected {
-				if err := r.Handle().Answer(context.Background(), "explicit retry after admission failure"); err != nil {
-					t.Fatal(err)
+				{
+					err := r.Handle().Answer(context.Background(), "explicit retry after admission failure")
+					require.NoError(t, err)
 				}
 			}
-			if err := p.client.Call(context.Background(), "barrier", nil, nil); err != nil {
-				t.Fatal(err)
+			{
+				err := p.client.Call(context.Background(), "barrier", nil, nil)
+				require.NoError(t, err)
 			}
-			if p.answers.Load() != 3 || p.requests.Load() != 2 {
-				t.Fatalf("requests=%d answers=%d", p.requests.Load(), p.answers.Load())
-			}
-			if p.client.Err() != nil {
-				t.Fatal("prewrite cancellation terminated connection")
-			}
+			require.False(t, p.answers.Load() != 3 || p.requests.Load() != 2, "requests=%d answers=%d", p.requests.Load(), p.answers.Load())
+			require.NoError(t, p.client.Err(), "prewrite cancellation terminated connection")
 		})
 	}
 }
 
 func TestRemoteCloseLeavesListenerAvailable(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	for _, transport := range []string{"ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			var connections atomic.Int64
@@ -340,22 +340,21 @@ func TestRemoteCloseLeavesListenerAvailable(t *testing.T) {
 			options.URL = "ws" + strings.TrimPrefix(server.URL, "http")
 			for i := 0; i < 2; i++ {
 				c, err := codex.NewRemote(context.Background(), options)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				var wg sync.WaitGroup
 				for range 8 {
 					wg.Go(func() {
-						if err := c.Close(); err != nil {
-							t.Error(err)
+						{
+							err := c.Close()
+							if err != nil {
+								reportPeerError("%v", err)
+							}
 						}
 					})
 				}
 				wg.Wait()
 			}
-			if connections.Load() != 2 {
-				t.Fatalf("unexpected connection count: %d", connections.Load())
-			}
+			require.EqualValues(t, 2, connections.Load(), "unexpected connection count: %d", connections.Load())
 		})
 	}
 }

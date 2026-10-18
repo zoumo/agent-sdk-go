@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -28,14 +29,13 @@ func awaitTreeCause(t *testing.T, s *codex.Subscription, cause error) {
 	select {
 	case <-s.Done():
 	case <-time.After(3 * time.Second):
-		t.Fatal("tree did not terminate")
+		require.FailNow(t, "test invariant", "tree did not terminate")
 	}
-	if !errors.Is(s.Err(), cause) {
-		t.Fatalf("tree cause: %v, want %v", s.Err(), cause)
-	}
+	require.ErrorIs(t, s.Err(), cause, "tree cause: %v, want %v", s.Err(), cause)
 }
 
-func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
+func (obs *observationSuite) TestTreeFanoutAdmissionIsAtomic() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			for _, tc := range []struct {
@@ -50,11 +50,9 @@ func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
 				{"unresolved", types.SubscriptionOptions{EventQueue: 2, PendingBytes: 1}, nil, treeChildRaw},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					f := startFake(t, "request-normal", codex.Limits{})
+					f := obs.fixture(t, "request-normal", codex.Limits{})
 					s, err := f.c.Subscribe(context.Background(), "native-thread-42", tc.options)
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err, err)
 					// Keep the initial accepted diagnostic queued: fanout has one slot too few.
 					if len(tc.before) > 0 {
 						emitRequests(t, f.c, tc.before...)
@@ -62,20 +60,14 @@ func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
 					emitRequests(t, f.c, tc.incoming)
 					awaitTreeCause(t, s, codex.ErrSubscriptionOverflow)
 					var overflow *codex.SubscriptionOverflowError
-					if !errors.As(s.Err(), &overflow) || overflow.Capacity != tc.options.EventQueue {
-						t.Fatal(s.Err())
-					}
+					require.False(t, !errors.As(s.Err(), &overflow) || overflow.Capacity != tc.options.EventQueue, s.Err())
 					count := 0
 					for event := range s.Events() {
 						e := recordView(event)
 						count++
-						if e.Reason != "best-effort-auto-attach-unverified" {
-							t.Fatalf("partial fanout admitted: %+v", e)
-						}
+						require.Equal(t, "best-effort-auto-attach-unverified", e.Reason, "partial fanout admitted: %+v", e)
 					}
-					if count != 1 {
-						t.Fatalf("accepted queue changed: %d", count)
-					}
+					require.Equal(t, 1, count, "accepted queue changed: %d", count)
 					responseBarrier(t, f)
 				})
 			}
@@ -83,45 +75,35 @@ func TestTreeFanoutAdmissionIsAtomic(t *testing.T) {
 	}
 }
 
-func TestTreePendingDeadlineFanoutIsAtomic(t *testing.T) {
-	f := startFake(t, "request-normal", codex.Limits{})
+func (obs *observationSuite) TestTreePendingDeadlineFanoutIsAtomic() {
+	t := obs.T()
+	f := obs.fixture(t, "request-normal", codex.Limits{})
 	s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 2, PendingAge: 10 * time.Millisecond})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, err)
 	emitRequests(t, f.c, treeChildRaw)
 	awaitTreeCause(t, s, codex.ErrSubscriptionOverflow)
 	count := 0
 	for event := range s.Events() {
 		e := recordView(event)
 		count++
-		if e.Reason != "best-effort-auto-attach-unverified" {
-			t.Fatalf("partial expiry: %+v", e)
-		}
+		require.Equal(t, "best-effort-auto-attach-unverified", e.Reason, "partial expiry: %+v", e)
 	}
-	if count != 1 {
-		t.Fatal(count)
-	}
+	require.Equal(t, 1, count, count)
 	responseBarrier(t, f)
 }
 
-func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
+func (obs *observationSuite) TestTreeFullQueuePreservesOriginalRequestAuthority() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
+			f := obs.fixture(t, "request-normal", codex.Limits{})
 			slow, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 3})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			healthy, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer healthy.Close()
 			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer raw.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation)) // fills slow's three slots
 			for _, tc := range []struct{ method, params, result string }{
@@ -130,20 +112,15 @@ func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
 			} {
 				emitRequests(t, f.c, requestFrame(`"child-request"`, tc.method, tc.params))
 				r := nextRequest(t, f.c)
-				if r.Method() != tc.method || string(r.Params()) != tc.params {
-					t.Fatalf("request retargeted: %s %s", r.Method(), r.Params())
-				}
+				require.False(t, r.Method() != tc.method || string(r.Params()) != tc.params, "request retargeted: %s %s", r.Method(), r.Params())
 				data, err := r.Data()
-				if err != nil || data == nil {
-					t.Fatalf("native request decode: %T %v", data, err)
-				}
-				if question, ok := data.(*types.ToolRequestUserInputParams); ok && (question.ThreadID != "child-1" || question.TurnID != "child-turn" || question.ItemID != "question-item" || len(question.Questions) != 1) {
-					t.Fatalf("question source changed: %+v", question)
+				require.False(t, err != nil || data == nil, "native request decode: %T %v", data, err)
+				{
+					question, ok := data.(*types.ToolRequestUserInputParams)
+					require.False(t, ok && (question.ThreadID != "child-1" || question.TurnID != "child-turn" || question.ItemID != "question-item" || len(question.Questions) != 1), "question source changed: %+v", question)
 				}
 				before := len(answerFrames(t, f.trace))
-				if before != 0 && tc.method == "item/commandExecution/requestApproval" {
-					t.Fatal("automatic response")
-				}
+				require.False(t, before != 0 && tc.method == "item/commandExecution/requestApproval", "automatic response")
 				var successes atomic.Int32
 				var wg sync.WaitGroup
 				for i := 0; i < 12; i++ {
@@ -156,18 +133,14 @@ func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
 					}()
 				}
 				wg.Wait()
-				if successes.Load() != 1 {
-					t.Fatalf("successful answers: %d", successes.Load())
-				}
+				require.Equal(t, int32(1), successes.Load(), "successful answers: %d", successes.Load())
 				answerError(t, r.Handle().Answer(context.Background(), nil), r, codex.NotSent, codex.ErrRequestAnswered)
 				responseBarrier(t, f)
 				frames := answerFrames(t, f.trace)
-				if len(frames) != before+1 || string(frames[len(frames)-1]["id"]) != `"child-request"` || string(frames[len(frames)-1]["result"]) != tc.result {
-					t.Fatalf("response changed: %v", frames)
-				}
+				require.False(t, len(frames) != before+1 || string(frames[len(frames)-1]["id"]) != `"child-request"` || string(frames[len(frames)-1]["result"]) != tc.result, "response changed: %v", frames)
 				select {
 				case <-slow.Done():
-					t.Fatalf("requests consumed event capacity: %v", slow.Err())
+					require.FailNowf(t, "test invariant", "requests consumed event capacity: %v", slow.Err())
 				default:
 				}
 			}
@@ -177,22 +150,16 @@ func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
 			for range slow.Events() {
 				queued++
 			}
-			if queued != 3 {
-				t.Fatalf("queue drain=%d", queued)
-			}
+			require.Equal(t, 3, queued, "queue drain=%d", queued)
 			events := treeUntilDone(t, healthy)
 			native := 0
 			for _, e := range events {
 				if e.Native != nil {
 					native++
-					if strings.Contains(e.Native.Method, "request") {
-						t.Fatal("second authority in tree")
-					}
+					require.False(t, strings.Contains(e.Native.Method, "request"), "second authority in tree")
 				}
 			}
-			if native != 3 {
-				t.Fatalf("healthy native count=%d", native)
-			}
+			require.Equal(t, 3, native, "healthy native count=%d", native)
 			for i := 0; i < 3; i++ {
 				nextEvent(t, raw)
 			}
@@ -201,16 +168,15 @@ func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
 	}
 }
 
-func TestTreeObservationCancellationDoesNotCancelRequest(t *testing.T) {
+func (obs *observationSuite) TestTreeObservationCancellationDoesNotCancelRequest() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
+			f := obs.fixture(t, "request-normal", codex.Limits{})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{EventQueue: 3})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation), requestFrame(`17`, "item/tool/requestUserInput", childQuestion))
 			r := nextRequest(t, f.c)
 			// Race cancellation, publication and repeated Close while the queue is full.
@@ -221,21 +187,19 @@ func TestTreeObservationCancellationDoesNotCancelRequest(t *testing.T) {
 			}
 			emitRequests(t, f.c, treeChildRaw)
 			wg.Wait()
-			if r.Handle().Err() != nil {
-				t.Fatal("observation invalidated request", r.Handle().Err())
-			}
-			if err := r.Handle().Answer(context.Background(), json.RawMessage(`{"answers":{}}`)); err != nil {
-				t.Fatal(err)
+			require.NoError(t, r.Handle().Err(), "observation invalidated request", r.Handle().Err())
+			{
+				err := r.Handle().Answer(context.Background(), json.RawMessage(`{"answers":{}}`))
+				require.NoError(t, err, err)
 			}
 			responseBarrier(t, f)
-			if len(answerFrames(t, f.trace)) != 1 {
-				t.Fatal("answer lost or duplicated")
-			}
+			require.Equal(t, 1, len(answerFrames(t, f.trace)), "answer lost or duplicated")
 		})
 	}
 }
 
-func TestTreeRequestTerminalAndEpochIsolation(t *testing.T) {
+func (obs *observationSuite) TestTreeRequestTerminalAndEpochIsolation() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			for _, terminal := range []string{"cancel", "expired", "resolved", "close"} {
@@ -244,18 +208,17 @@ func TestTreeRequestTerminalAndEpochIsolation(t *testing.T) {
 					if terminal == "expired" {
 						limits.RequestTimeout = 100 * time.Millisecond
 					}
-					old := startFake(t, "request-normal", limits)
+					old := obs.fixture(t, "request-normal", limits)
 					s, err := old.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err, err)
 					emitRequests(t, old.c, requestFrame(`"reused"`, "item/tool/requestUserInput", childQuestion))
 					r := nextRequest(t, old.c)
 					cause := codex.ErrRequestCanceled
 					switch terminal {
 					case "cancel":
-						if err := r.Handle().Cancel(); err != nil {
-							t.Fatal(err)
+						{
+							err := r.Handle().Cancel()
+							require.NoError(t, err, err)
 						}
 					case "expired":
 						cause = codex.ErrRequestExpired
@@ -264,32 +227,28 @@ func TestTreeRequestTerminalAndEpochIsolation(t *testing.T) {
 						emitRequests(t, old.c, treeFrame("serverRequest/resolved", `{"threadId":"child-1","requestId":"reused"}`))
 					case "close":
 						cause = codex.ErrClosed
-						if err := old.c.Close(); err != nil {
-							t.Fatal(err)
+						{
+							err := old.c.Close()
+							require.NoError(t, err, err)
 						}
 					}
 					awaitAnswer(t, r.Handle(), cause)
-					next := startFake(t, "request-normal", codex.Limits{})
+					next := obs.fixture(t, "request-normal", codex.Limits{})
 					other, err := next.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err, err)
 					defer other.Close()
 					nextTree(t, s)
 					nextTree(t, other)
 					emitRequests(t, next.c, requestFrame(`"reused"`, "item/tool/requestUserInput", childQuestion))
 					fresh := nextRequest(t, next.c)
 					answerError(t, r.Handle().Answer(context.Background(), nil), r, codex.NotSent, cause)
-					if fresh.Handle().Err() != nil {
-						t.Fatal("old handle invalidated fresh request")
-					}
-					if err := fresh.Handle().Answer(context.Background(), json.RawMessage(`{"answers":{}}`)); err != nil {
-						t.Fatal(err)
+					require.NoError(t, fresh.Handle().Err(), "old handle invalidated fresh request")
+					{
+						err := fresh.Handle().Answer(context.Background(), json.RawMessage(`{"answers":{}}`))
+						require.NoError(t, err, err)
 					}
 					responseBarrier(t, next)
-					if len(answerFrames(t, next.trace)) != 1 || len(answerFrames(t, old.trace)) != 0 {
-						t.Fatal("late answer crossed epoch")
-					}
+					require.False(t, len(answerFrames(t, next.trace)) != 1 || len(answerFrames(t, old.trace)) != 0, "late answer crossed epoch")
 					_ = s.Close()
 				})
 			}
@@ -297,14 +256,13 @@ func TestTreeRequestTerminalAndEpochIsolation(t *testing.T) {
 	}
 }
 
-func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
+func (obs *observationSuite) TestTreeTextThinkingAndUsageStayAtNativeSource() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
+			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation))
 			// Drain initial diagnostic, association, and its native notification.
@@ -325,27 +283,24 @@ func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
 				if i >= 4 {
 					source = "native-thread-42"
 				}
-				if e.Kind != nativeRecord || e.Native == nil || string(e.Raw) != want || e.Source.ThreadID != source || e.Native.DecodeError != nil {
-					t.Fatalf("source/content changed: %+v", e)
-				}
+				require.False(t, e.Kind != nativeRecord || e.Native == nil || string(e.Raw) != want || e.Source.ThreadID != source || e.Native.DecodeError != nil, "source/content changed: %+v", e)
 				if i == 5 {
 					item := e.Native.Data.(*types.ItemCompletedNotification)
-					if item.Item.AgentMessage.Text != "parent final only" {
-						t.Fatal("parent answer merged")
-					}
+					require.Equal(t, "parent final only", item.Item.AgentMessage.Text, "parent answer merged")
 				}
 			}
 			select {
 			case event := <-s.Events():
 				e := recordView(event)
-				t.Fatalf("synthesized result/usage: %+v", e)
+				require.FailNowf(t, "test invariant", "synthesized result/usage: %+v", e)
 			default:
 			}
 		})
 	}
 }
 
-func TestTreeQueueCapacityOverflowIsRejected(t *testing.T) {
+func (obs *observationSuite) TestTreeQueueCapacityOverflowIsRejected() {
+	t := obs.T()
 	for _, inherited := range []bool{false, true} {
 		limits := codex.Limits{}
 		options := types.SubscriptionOptions{EventQueue: int(^uint(0) >> 1)}
@@ -353,9 +308,10 @@ func TestTreeQueueCapacityOverflowIsRejected(t *testing.T) {
 			limits.EventQueue = options.EventQueue
 			options.EventQueue = 0
 		}
-		f := startFake(t, "request-normal", limits)
-		if s, err := f.c.Subscribe(context.Background(), "root", options); err == nil || s != nil {
-			t.Fatal("overflowing reserved capacity accepted")
+		f := obs.fixture(t, "request-normal", limits)
+		{
+			s, err := f.c.Subscribe(context.Background(), "root", options)
+			require.False(t, err == nil || s != nil, "overflowing reserved capacity accepted")
 		}
 	}
 }

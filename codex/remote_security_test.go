@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -77,32 +79,37 @@ func securityResponse(id json.RawMessage, result string) []byte {
 // securityServer performs a native initialize handshake, then runs the supplied
 // independent wire script. Every handler has a finite lifetime even on failure.
 func securityServer(t *testing.T, secure bool, script func(context.Context, *websocket.Conn, *http.Request) error) (*httptest.Server, codex.RemoteOptions) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	t.Helper()
 	s := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 		ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
 		if err != nil {
-			t.Errorf("accept independent peer: %v", err)
+			reportPeerError("accept independent peer: %v", err)
 			return
 		}
 		defer ws.CloseNow()
 		envelope, err := securityRead(ctx, ws)
 		if err != nil || envelope.Method != "initialize" || len(envelope.ID) == 0 {
-			t.Errorf("expected initialize: envelope=%+v error=%v", envelope, err)
+			reportPeerError("expected initialize: envelope=%+v error=%v", envelope, err)
 			return
 		}
 		if err = ws.Write(ctx, websocket.MessageText, securityResponse(envelope.ID, securityInitResult)); err != nil {
-			t.Errorf("reply to initialize: %v", err)
+			reportPeerError("reply to initialize: %v", err)
 			return
 		}
 		envelope, err = securityRead(ctx, ws)
 		if err != nil || envelope.Method != "initialized" || len(envelope.ID) != 0 {
-			t.Errorf("expected initialized notification: envelope=%+v error=%v", envelope, err)
+			reportPeerError("expected initialized notification: envelope=%+v error=%v", envelope, err)
 			return
 		}
-		if err = script(ctx, ws, r); err != nil {
-			t.Errorf("independent peer: %v", err)
+		{
+			err = script(ctx, ws, r)
+			if err != nil {
+				reportPeerError("independent peer: %v", err)
+			}
 		}
 	}))
 	s.Config.ErrorLog = log.New(io.Discard, "", 0)
@@ -134,16 +141,19 @@ func securityEcho(ctx context.Context, ws *websocket.Conn, _ *http.Request) erro
 }
 
 func securityOpen(t *testing.T, options codex.RemoteOptions) *codex.Client {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	c, err := codex.NewRemote(ctx, options)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := c.Close(); err != nil {
-			t.Errorf("close remote: %v", err)
+		{
+			err := c.Close()
+			if err != nil {
+				reportPeerError("close remote: %v", err)
+			}
 		}
 	})
 	return c
@@ -151,13 +161,9 @@ func securityOpen(t *testing.T, options codex.RemoteOptions) *codex.Client {
 
 func securityNoSecret(t *testing.T, err error) {
 	t.Helper()
-	if err == nil {
-		t.Fatal("expected failure")
-	}
+	require.Error(t, err, "expected failure")
 	for _, rendered := range []string{err.Error(), fmt.Sprintf("%+v", err), fmt.Sprintf("%#v", err)} {
-		if strings.Contains(rendered, securityToken) || strings.Contains(rendered, url.QueryEscape(securityToken)) {
-			t.Error("public error disclosed synthetic credential")
-		}
+		assert.False(t, strings.Contains(rendered, securityToken) || strings.Contains(rendered, url.QueryEscape(securityToken)), "public error disclosed synthetic credential")
 	}
 }
 
@@ -171,28 +177,25 @@ func TestRemoteSecurityExactBearerAndNoOrigin(t *testing.T) {
 			})
 			options.URL += "/app-server"
 			c := securityOpen(t, options)
-			if err := c.Call(context.Background(), "synthetic/echo", nil, nil); err != nil {
-				t.Fatal(err)
+			{
+				err := c.Call(context.Background(), "synthetic/echo", nil, nil)
+				require.NoError(t, err)
 			}
 			select {
 			case r := <-seen:
-				if got := r.Header.Values("Authorization"); !reflect.DeepEqual(got, []string{"Bearer " + securityToken}) {
-					t.Error("Authorization must contain exactly the supplied bearer token once")
+				{
+					got := r.Header.Values("Authorization")
+					assert.Equal(t, []string{"Bearer " + securityToken}, got, "Authorization must contain exactly the supplied bearer token once")
 				}
-				if _, present := r.Header["Origin"]; present {
-					t.Error("non-browser client must not send Origin")
+				{
+					_, present := r.Header["Origin"]
+					assert.False(t, present, "non-browser client must not send Origin")
 				}
-				if r.URL.Path != "/app-server" || r.URL.RawQuery != "" || r.Header.Get("Cookie") != "" {
-					t.Error("authentication leaked outside the explicit Authorization header")
-				}
-				if r.Header.Get("Sec-WebSocket-Extensions") != "" {
-					t.Error("bounded protocol transport must not negotiate compression")
-				}
-				if secure && (r.TLS == nil || r.TLS.Version < tls.VersionTLS12) {
-					t.Error("secure transport negotiated less than TLS 1.2")
-				}
+				assert.False(t, r.URL.Path != "/app-server" || r.URL.RawQuery != "" || r.Header.Get("Cookie") != "", "authentication leaked outside the explicit Authorization header")
+				assert.Equal(t, "", r.Header.Get("Sec-WebSocket-Extensions"), "bounded protocol transport must not negotiate compression")
+				assert.False(t, secure && (r.TLS == nil || r.TLS.Version < tls.VersionTLS12), "secure transport negotiated less than TLS 1.2")
 			case <-time.After(time.Second):
-				t.Fatal("peer did not observe completed initialization")
+				require.FailNow(t, "peer did not observe completed initialization")
 			}
 		})
 	}
@@ -206,12 +209,10 @@ func TestRemoteSecurityTLSVerificationAndConfigIsolation(t *testing.T) {
 		if c != nil {
 			_ = c.Close()
 		}
-		t.Fatal("self-signed peer was accepted without explicit trust")
+		require.FailNow(t, "self-signed peer was accepted without explicit trust")
 	} else {
 		securityNoSecret(t, err)
-		if !errors.Is(err, codex.ErrRemoteTransport) {
-			t.Fatalf("TLS rejection classification: %v", err)
-		}
+		require.ErrorIs(t, err, codex.ErrRemoteTransport, "TLS rejection classification: %v", err)
 	}
 	roots := options.TLSConfig.RootCAs
 	beforeRoots := roots.Clone()
@@ -221,12 +222,13 @@ func TestRemoteSecurityTLSVerificationAndConfigIsolation(t *testing.T) {
 	config := options.TLSConfig
 	before := config.Clone()
 	c := securityOpen(t, options)
-	if err := c.Call(context.Background(), "synthetic/echo", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Call(context.Background(), "synthetic/echo", nil, nil)
+		require.NoError(t, err)
 	}
-	if !reflect.DeepEqual(config, before) || config.RootCAs != roots || !roots.Equal(beforeRoots) {
-		t.Fatal("NewRemote mutated caller-owned TLS configuration or root pool")
-	}
+	assert.Equal(t, before, config, "NewRemote mutated caller-owned TLS configuration")
+	assert.Same(t, roots, config.RootCAs)
+	assert.True(t, roots.Equal(beforeRoots), "NewRemote mutated caller-owned root pool")
 }
 
 func TestRemoteSecurityRejectsInvalidInputBeforeDial(t *testing.T) {
@@ -300,23 +302,21 @@ func TestRemoteSecurityRejectsInvalidInputBeforeDial(t *testing.T) {
 			c, err := codex.NewRemote(context.Background(), options)
 			if c != nil {
 				_ = c.Close()
-				t.Fatal("invalid options created a client")
+				require.FailNow(t, "invalid options created a client")
 			}
 			securityNoSecret(t, err)
-			if requests.Load() != 0 || connections.Load() != 0 {
-				t.Fatal("invalid options dialed the peer")
-			}
+			require.False(t, requests.Load() != 0 || connections.Load() != 0, "invalid options dialed the peer")
 		})
 	}
 	defaults := reflect.ValueOf(codex.DefaultLimits())
 	for i := 0; i < defaults.NumField(); i++ {
-		if defaults.Field(i).Int() <= 0 {
-			t.Errorf("default %s is unbounded", defaults.Type().Field(i).Name)
-		}
+		assert.False(t, defaults.Field(i).Int() <= 0, "default %s is unbounded", defaults.Type().Field(i).Name)
 	}
 }
 
 func TestRemoteSecurityRedirectsNeverForwardCredentials(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	for _, crossOrigin := range []bool{false, true} {
 		for _, status := range []int{301, 302, 303, 307, 308} {
 			t.Run(fmt.Sprintf("cross-origin=%v/status=%d", crossOrigin, status), func(t *testing.T) {
@@ -334,8 +334,8 @@ func TestRemoteSecurityRedirectsNeverForwardCredentials(t *testing.T) {
 						return
 					}
 					initial.Add(1)
-					if r.Header.Get("Authorization") != "Bearer "+securityToken {
-						t.Error("initial peer did not receive explicit authentication")
+					if "Bearer "+securityToken != r.Header.Get("Authorization") {
+						reportPeerError("initial peer did not receive explicit authentication")
 					}
 					location := "/redirect-target"
 					if crossOrigin {
@@ -348,12 +348,10 @@ func TestRemoteSecurityRedirectsNeverForwardCredentials(t *testing.T) {
 				c, err := codex.NewRemote(context.Background(), securityOptions(securityEndpoint(source)))
 				if c != nil {
 					_ = c.Close()
-					t.Fatal("redirect unexpectedly created a client")
+					require.FailNow(t, "redirect unexpectedly created a client")
 				}
 				securityNoSecret(t, err)
-				if !errors.Is(err, codex.ErrRemoteTransport) || initial.Load() != 1 || target.Load() != 0 {
-					t.Fatalf("redirect must fail after one original request: initial=%d target=%d error=%v", initial.Load(), target.Load(), err)
-				}
+				require.False(t, !errors.Is(err, codex.ErrRemoteTransport) || initial.Load() != 1 || target.Load() != 0, "redirect must fail after one original request: initial=%d target=%d error=%v", initial.Load(), target.Load(), err)
 			})
 		}
 	}
@@ -378,12 +376,10 @@ func TestRemoteSecurityReflectedHandshakeErrorsAreSafe(t *testing.T) {
 			c, err := codex.NewRemote(context.Background(), securityOptions(securityEndpoint(s)))
 			if c != nil {
 				_ = c.Close()
-				t.Fatal("invalid handshake accepted")
+				require.FailNow(t, "invalid handshake accepted")
 			}
 			securityNoSecret(t, err)
-			if !errors.Is(err, codex.ErrRemoteTransport) {
-				t.Fatalf("unexpected classification: %v", err)
-			}
+			require.ErrorIs(t, err, codex.ErrRemoteTransport, "unexpected classification: %v", err)
 		})
 	}
 }
@@ -399,16 +395,14 @@ func TestRemoteSecurityReflectedCloseReasonIsSafe(t *testing.T) {
 	c := securityOpen(t, options)
 	err := c.Call(context.Background(), "synthetic/reflect-close", nil, nil)
 	securityNoSecret(t, err)
-	if !errors.Is(err, codex.ErrRemoteTransport) {
-		t.Fatalf("unexpected close classification: %v", err)
-	}
+	require.ErrorIs(t, err, codex.ErrRemoteTransport, "unexpected close classification: %v", err)
 	securityNoSecret(t, c.Err())
-	if strings.Contains(fmt.Sprintf("%+v", c.Diagnostics()), securityToken) {
-		t.Fatal("diagnostics disclosed close reason credential")
-	}
+	require.False(t, strings.Contains(fmt.Sprintf("%+v", c.Diagnostics()), securityToken), "diagnostics disclosed close reason credential")
 }
 
 func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	for _, secure := range []bool{false, true} {
 		for _, phase := range []string{"initialize", "call"} {
 			for _, encoding := range []string{"literal", "unicode-escaped", "url-encoded", "duplicate-values-literal", "duplicate-values-unicode", "duplicate-keys-unicode", "no-secret"} {
@@ -420,9 +414,7 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 						reflection = "public synthetic information"
 					}
 					quoted, err := json.Marshal("peer reflected Bearer " + reflection)
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err)
 					if strings.Contains(encoding, "unicode") {
 						quoted = bytes.ReplaceAll(quoted, []byte("synthetic"), []byte(`\u0073ynthetic`))
 					}
@@ -457,7 +449,7 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 						s := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 							ws, err := websocket.Accept(w, r, nil)
 							if err != nil {
-								t.Error(err)
+								reportPeerError("%v", err)
 								return
 							}
 							defer ws.CloseNow()
@@ -465,15 +457,18 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 							defer cancel()
 							envelope, err := securityRead(ctx, ws)
 							if err != nil || envelope.Method != "initialize" {
-								t.Errorf("expected initialize: %v", err)
+								reportPeerError("expected initialize: %v", err)
 								return
 							}
 							if err = respond(ctx, ws, envelope.ID); err != nil {
-								t.Error(err)
+								reportPeerError("%v", err)
 								return
 							}
-							if _, _, err = ws.Read(ctx); err == nil {
-								t.Error("client sent another envelope after failed initialization")
+							{
+								_, _, err = ws.Read(ctx)
+								if err == nil {
+									reportPeerError("client sent another envelope after failed initialization")
+								}
 							}
 						}))
 						if secure {
@@ -497,26 +492,20 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 						c, err = codex.NewRemote(context.Background(), options)
 						if c != nil {
 							_ = c.Close()
-							t.Fatal("failed initialize unexpectedly produced a client")
+							require.FailNow(t, "failed initialize unexpectedly produced a client")
 						}
 					}
 					securityNoSecret(t, err)
 					var rpc *codex.RPCError
 					var call *codex.CallError
-					if !errors.As(err, &rpc) || !errors.As(err, &call) || call.Dispatch != codex.Responded || rpc.Code != -32001 {
-						t.Fatalf("redaction lost native RPC error or dispatch evidence: %v", err)
-					}
+					require.False(t, !errors.As(err, &rpc) || !errors.As(err, &call) || call.Dispatch != codex.Responded || rpc.Code != -32001, "redaction lost native RPC error or dispatch evidence: %v", err)
 					wantID := codex.IntegerID(1)
 					if phase == "call" {
 						wantID = codex.IntegerID(2)
 					}
-					if call.ID != wantID {
-						t.Fatalf("native RPC error lost exact correlation: %v", call.ID)
-					}
+					require.Equal(t, wantID, call.ID, "native RPC error lost exact correlation: %v", call.ID)
 					for _, raw := range []json.RawMessage{rpc.Data, rpc.Raw} {
-						if !json.Valid(raw) {
-							t.Fatalf("redaction corrupted JSON: %s", raw)
-						}
+						require.True(t, json.Valid(raw), "redaction corrupted JSON: %s", raw)
 						// Scan every lexical token, including shadowed duplicate members.
 						// A map decode would miss secrets hidden in overwritten values.
 						decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -526,28 +515,22 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 							if err == io.EOF {
 								break
 							}
-							if err != nil {
-								t.Fatal(err)
-							}
+							require.NoError(t, err)
 							visible := fmt.Sprintf("%v", value)
-							if strings.Contains(visible, securityToken) || strings.Contains(visible, url.QueryEscape(securityToken)) {
-								t.Error("RPCError public JSON still contains reflected bearer token")
-							}
+							assert.False(t, strings.Contains(visible, securityToken) || strings.Contains(visible, url.QueryEscape(securityToken)), "RPCError public JSON still contains reflected bearer token")
 						}
 					}
-					if strings.Contains(rpc.Message, securityToken) || strings.Contains(rpc.Message, url.QueryEscape(securityToken)) {
-						t.Error("RPCError.Message still contains reflected bearer token")
-					}
+					assert.False(t, strings.Contains(rpc.Message, securityToken) || strings.Contains(rpc.Message, url.QueryEscape(securityToken)), "RPCError.Message still contains reflected bearer token")
 					var data, raw map[string]json.RawMessage
-					if err = json.Unmarshal(rpc.Data, &data); err != nil {
-						t.Fatal(err)
+					{
+						err = json.Unmarshal(rpc.Data, &data)
+						require.NoError(t, err)
 					}
-					if err = json.Unmarshal(rpc.Raw, &raw); err != nil {
-						t.Fatal(err)
+					{
+						err = json.Unmarshal(rpc.Raw, &raw)
+						require.NoError(t, err)
 					}
-					if string(data["safeLarge"]) != "9007199254740993" || string(data["safeText"]) != `"retain me"` || string(raw["safeMax"]) != "9223372036854775807" || len(raw["future"]) == 0 {
-						t.Fatal("redaction damaged unrelated native fields or exact numeric values")
-					}
+					require.False(t, string(data["safeLarge"]) != "9007199254740993" || string(data["safeText"]) != `"retain me"` || string(raw["safeMax"]) != "9223372036854775807" || len(raw["future"]) == 0, "redaction damaged unrelated native fields or exact numeric values")
 					if strings.HasPrefix(encoding, "duplicate-") {
 						for _, duplicateObject := range []json.RawMessage{data["duplicates"], raw["future"]} {
 							decoder := json.NewDecoder(bytes.NewReader(duplicateObject))
@@ -557,22 +540,17 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 								if err == io.EOF {
 									break
 								}
-								if err != nil {
-									t.Fatal(err)
-								}
+								require.NoError(t, err)
 								count++
 							}
-							if count != 6 { // Object delimiters plus both key/value pairs.
-								t.Error("redaction collapsed duplicate native members")
-							}
+							assert.Equal(t, 6, count, "redaction collapsed duplicate native members")
 						}
 					}
-					if encoding == "no-secret" && string(rpc.Raw) != rpcJSON {
-						t.Error("unaffected native error Raw bytes were modified")
-					}
+					assert.False(t, encoding == "no-secret" && string(rpc.Raw) != rpcJSON, "unaffected native error Raw bytes were modified")
 					if c != nil {
-						if err = c.Call(context.Background(), "synthetic/after-rpc-error", nil, nil); err != nil {
-							t.Fatalf("native error unnecessarily terminated connection: %v", err)
+						{
+							err = c.Call(context.Background(), "synthetic/after-rpc-error", nil, nil)
+							require.NoError(t, err, "native error unnecessarily terminated connection: %v", err)
 						}
 					}
 				})
@@ -602,22 +580,21 @@ func TestRemoteSecurityReflectedNumericDecodeErrorIsSafe(t *testing.T) {
 			c := securityOpen(t, options)
 			_, err := c.ReadThread(context.Background(), types.ThreadReadParams{ThreadID: "synthetic-thread"})
 			var call *codex.CallError
-			if !errors.Is(err, codex.ErrProtocol) || !errors.As(err, &call) || call.Dispatch != codex.Responded {
-				t.Fatalf("typed decode error lost protocol/response evidence: %v", err)
-			}
+			require.False(t, !errors.Is(err, codex.ErrProtocol) || !errors.As(err, &call) || call.Dispatch != codex.Responded, "typed decode error lost protocol/response evidence: %v", err)
 			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
-				if strings.Contains(fmt.Sprintf("%+v", cause), token) {
-					t.Error("public typed decode error or its cause disclosed reflected token")
-				}
+				assert.False(t, strings.Contains(fmt.Sprintf("%+v", cause), token), "public typed decode error or its cause disclosed reflected token")
 			}
-			if err = c.Call(context.Background(), "synthetic/after-decode-error", nil, nil); err != nil {
-				t.Fatalf("decode failure unnecessarily terminated connection: %v", err)
+			{
+				err = c.Call(context.Background(), "synthetic/after-decode-error", nil, nil)
+				require.NoError(t, err, "decode failure unnecessarily terminated connection: %v", err)
 			}
 		})
 	}
 }
 
 func TestRemoteSecurityConstructionContext(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	t.Run("already-canceled-or-expired", func(t *testing.T) {
 		var requests atomic.Int64
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1) }))
@@ -628,16 +605,10 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 		defer stop()
 		for _, ctx := range []context.Context{nil, canceled, expired} {
 			c, err := codex.NewRemote(ctx, securityOptions(securityEndpoint(s)))
-			if c != nil || err == nil {
-				t.Fatal("invalid construction context accepted")
-			}
-			if ctx != nil && !errors.Is(err, ctx.Err()) {
-				t.Fatalf("context cause lost: %v", err)
-			}
+			require.False(t, c != nil || err == nil, "invalid construction context accepted")
+			require.False(t, ctx != nil && !errors.Is(err, ctx.Err()), "context cause lost: %v", err)
 		}
-		if requests.Load() != 0 {
-			t.Fatal("pre-canceled context dialed the peer")
-		}
+		require.EqualValues(t, 0, requests.Load(), "pre-canceled context dialed the peer")
 	})
 	for _, phase := range []string{"http-handshake", "initialize"} {
 		for _, mode := range []string{"cancel", "deadline", "call-timeout"} {
@@ -656,7 +627,7 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 					}
 					ws, err := websocket.Accept(w, r, nil)
 					if err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					defer ws.CloseNow()
@@ -664,7 +635,7 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 					defer peerCancel()
 					envelope, err := securityRead(peerCtx, ws)
 					if err != nil || envelope.Method != "initialize" {
-						t.Errorf("stalled peer expected initialize: %v", err)
+						reportPeerError("stalled peer expected initialize: %v", err)
 						return
 					}
 					close(entered)
@@ -695,20 +666,18 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 				c, err := codex.NewRemote(ctx, options)
 				if c != nil {
 					_ = c.Close()
-					t.Fatal("stalled construction succeeded")
+					require.FailNow(t, "stalled construction succeeded")
 				}
-				if !errors.Is(err, want) || time.Since(start) > 2*time.Second {
-					t.Fatalf("construction was not promptly bounded by %v: %v", want, err)
-				}
+				require.False(t, !errors.Is(err, want) || time.Since(start) > 2*time.Second, "construction was not promptly bounded by %v: %v", want, err)
 				select {
 				case <-entered:
 				default:
-					t.Fatal("timeout did not exercise the intended network phase")
+					require.FailNow(t, "timeout did not exercise the intended network phase")
 				}
 				select {
 				case <-left:
 				case <-time.After(time.Second):
-					t.Fatal("failed construction left a live peer connection")
+					require.FailNow(t, "failed construction left a live peer connection")
 				}
 			})
 		}
@@ -718,29 +687,24 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		c, err := codex.NewRemote(ctx, options)
 		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		t.Cleanup(func() { _ = c.Close() })
 		for i := 0; i < 100; i++ {
 			callCtx, callCancel := context.WithCancel(context.Background())
 			err = c.Call(callCtx, "synthetic/still-open", nil, nil)
 			callCancel()
-			if err != nil {
-				t.Fatalf("completed construction/call context closed the established connection at call %d: %v", i, err)
-			}
+			require.NoError(t, err, "completed construction/call context closed the established connection at call %d: %v", i, err)
 		}
-		if err = c.Call(context.Background(), "synthetic/after-all-cancellations", nil, nil); err != nil {
-			t.Fatalf("canceling a completed call closed the shared transport: %v", err)
+		{
+			err = c.Call(context.Background(), "synthetic/after-all-cancellations", nil, nil)
+			require.NoError(t, err, "canceling a completed call closed the shared transport: %v", err)
 		}
 	})
 }
 
 func TestRemoteSecurityStalledTLSHandshakeIsBounded(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
 	accepted := make(chan struct{})
 	finished := make(chan struct{})
@@ -759,26 +723,24 @@ func TestRemoteSecurityStalledTLSHandshakeIsBounded(t *testing.T) {
 	options.Limits.CallTimeout = 150 * time.Millisecond
 	start := time.Now()
 	c, err := codex.NewRemote(context.Background(), options)
-	if c != nil || err == nil || time.Since(start) > 2*time.Second {
-		t.Fatalf("stalled TLS was not bounded: %v", err)
-	}
+	require.False(t, c != nil || err == nil || time.Since(start) > 2*time.Second, "stalled TLS was not bounded: %v", err)
 	securityNoSecret(t, err)
-	if !errors.Is(err, codex.ErrRemoteTransport) {
-		t.Fatalf("unexpected TLS timeout classification: %v", err)
-	}
+	require.ErrorIs(t, err, codex.ErrRemoteTransport, "unexpected TLS timeout classification: %v", err)
 	select {
 	case <-accepted:
 	default:
-		t.Fatal("test did not reach TLS handshake")
+		require.FailNow(t, "test did not reach TLS handshake")
 	}
 	select {
 	case <-finished:
 	case <-time.After(time.Second):
-		t.Fatal("TLS handshake failure did not close socket")
+		require.FailNow(t, "TLS handshake failure did not close socket")
 	}
 }
 
 func TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	for _, secure := range []bool{false, true} {
 		for _, mode := range []string{"cancel", "deadline", "call-timeout"} {
 			t.Run(fmt.Sprintf("tls=%v/%s", secure, mode), func(t *testing.T) {
@@ -787,7 +749,7 @@ func TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction(t *testing.
 				s := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					conn, buffer, err := w.(http.Hijacker).Hijack()
 					if err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					defer conn.Close()
@@ -798,7 +760,7 @@ func TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction(t *testing.
 						err = buffer.Flush()
 					}
 					if err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					close(entered)
@@ -840,16 +802,14 @@ func TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction(t *testing.
 				c, err := codex.NewRemote(ctx, options)
 				if c != nil {
 					_ = c.Close()
-					t.Fatal("malformed upgrade was accepted")
+					require.FailNow(t, "malformed upgrade was accepted")
 				}
 				securityNoSecret(t, err)
-				if !errors.Is(err, want) || !errors.Is(err, codex.ErrRemoteTransport) || time.Since(start) > time.Second {
-					t.Fatalf("held-open rejected upgrade exceeded construction bound or lost cause: %v", err)
-				}
+				require.False(t, !errors.Is(err, want) || !errors.Is(err, codex.ErrRemoteTransport) || time.Since(start) > time.Second, "held-open rejected upgrade exceeded construction bound or lost cause: %v", err)
 				select {
 				case <-entered:
 				default:
-					t.Fatal("test did not reach rejected upgrade-body cleanup")
+					require.FailNow(t, "test did not reach rejected upgrade-body cleanup")
 				}
 			})
 		}
@@ -868,6 +828,8 @@ func (w *securityCaptureWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func TestRemoteSecurityMalformedRawWebSocketFrames(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	// These payloads are valid native notifications after framing is decoded.
 	// Rejection must therefore come from the wire header, not invalid JSON.
 	notification := []byte(`{"method":"synthetic/raw-notification","params":{"value":1}}`)
@@ -903,7 +865,7 @@ func TestRemoteSecurityMalformedRawWebSocketFrames(t *testing.T) {
 					capture := &securityCaptureWriter{ResponseWriter: w}
 					ws, err := websocket.Accept(capture, r, nil)
 					if err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					defer ws.CloseNow()
@@ -911,27 +873,27 @@ func TestRemoteSecurityMalformedRawWebSocketFrames(t *testing.T) {
 					defer cancel()
 					envelope, err := securityRead(ctx, ws)
 					if err != nil || envelope.Method != "initialize" {
-						t.Errorf("expected initialize: %v", err)
+						reportPeerError("expected initialize: %v", err)
 						return
 					}
 					if err = ws.Write(ctx, websocket.MessageText, securityResponse(envelope.ID, securityInitResult)); err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					envelope, err = securityRead(ctx, ws)
 					if err != nil || envelope.Method != "initialized" {
-						t.Errorf("expected initialized: %v", err)
+						reportPeerError("expected initialized: %v", err)
 						return
 					}
 					if _, err = securityRead(ctx, ws); err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					// Use the captured server side of the real upgraded TCP/TLS
 					// socket to inject frames a conforming library will not emit.
 					_ = capture.conn.SetWriteDeadline(time.Now().Add(time.Second))
 					if _, err = capture.conn.Write(tc.frame); err != nil {
-						t.Error(err)
+						reportPeerError("%v", err)
 						return
 					}
 					_, _, _ = ws.Read(ctx)
@@ -950,17 +912,13 @@ func TestRemoteSecurityMalformedRawWebSocketFrames(t *testing.T) {
 				}
 				c := securityOpen(t, options)
 				err := c.Call(context.Background(), "synthetic/invalid-wire", nil, nil)
-				if !errors.Is(err, codex.ErrProtocol) {
-					t.Fatalf("malformed raw frame must terminate as protocol failure: %v", err)
-				}
+				require.ErrorIs(t, err, codex.ErrProtocol, "malformed raw frame must terminate as protocol failure: %v", err)
 				select {
 				case <-c.Done():
 				case <-time.After(time.Second):
-					t.Fatal("malformed raw frame did not terminate the client")
+					require.FailNow(t, "malformed raw frame did not terminate the client")
 				}
-				if !errors.Is(c.Err(), codex.ErrProtocol) {
-					t.Fatalf("terminal frame error lost protocol classification: %v", c.Err())
-				}
+				require.ErrorIs(t, c.Err(), codex.ErrProtocol, "terminal frame error lost protocol classification: %v", c.Err())
 			})
 		}
 	}
@@ -1057,35 +1015,26 @@ func TestRemoteSecurityWebSocketMessageFraming(t *testing.T) {
 			err := c.Call(context.Background(), "synthetic/framing", nil, &result)
 			valid := mode == "pretty-json" || mode == "fragmented-with-ping" || mode == "exact-limit"
 			if valid {
-				if err != nil || !result.OK {
-					t.Fatalf("valid WebSocket message rejected: result=%+v error=%v", result, err)
-				}
+				require.NoError(t, err)
+				require.False(t, !result.OK, "valid WebSocket message rejected: result=%+v error=%v", result, err)
 				if mode == "fragmented-with-ping" {
 					select {
 					case err := <-pingResult:
-						if err != nil {
-							t.Fatalf("ping was not answered with pong: %v", err)
-						}
+						require.NoError(t, err, "ping was not answered with pong: %v", err)
 					case <-time.After(time.Second):
-						t.Fatal("peer did not observe pong")
+						require.FailNow(t, "peer did not observe pong")
 					}
 				}
 				return
 			}
-			if !errors.Is(err, codex.ErrProtocol) {
-				t.Fatalf("invalid message was not a protocol failure: %v", err)
-			}
-			if (strings.Contains(mode, "oversized") || mode == "one-over-limit") && !errors.Is(err, codex.ErrFrameTooLarge) {
-				t.Fatalf("message overflow lost size classification: %v", err)
-			}
+			require.ErrorIs(t, err, codex.ErrProtocol, "invalid message was not a protocol failure: %v", err)
+			require.False(t, (strings.Contains(mode, "oversized") || mode == "one-over-limit") && !errors.Is(err, codex.ErrFrameTooLarge), "message overflow lost size classification: %v", err)
 			select {
 			case <-c.Done():
 			case <-time.After(time.Second):
-				t.Fatal("invalid message did not terminate the connection")
+				require.FailNow(t, "invalid message did not terminate the connection")
 			}
-			if !errors.Is(c.Err(), codex.ErrProtocol) {
-				t.Fatalf("terminal error lost protocol classification: %v", c.Err())
-			}
+			require.ErrorIs(t, c.Err(), codex.ErrProtocol, "terminal error lost protocol classification: %v", c.Err())
 		})
 	}
 }

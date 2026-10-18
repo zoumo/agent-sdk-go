@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
@@ -31,9 +33,7 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 				// tests. Start ready here so only the call consumes fake time.
 				c.ready = true
 				reader, writer, err := os.Pipe()
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				defer reader.Close()
 				c.stdin = writer
 				writerDone := make(chan struct{})
@@ -42,15 +42,15 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 				scan := bufio.NewScanner(reader)
 				readCall := func() ID {
 					t.Helper()
-					if !scan.Scan() {
-						t.Fatalf("missing dispatched call: %v", scan.Err())
-					}
+					require.True(t, scan.Scan(), "missing dispatched call: %v", scan.Err())
 					var frame struct {
 						ID     ID     `json:"id"`
 						Method string `json:"method"`
 					}
-					if err := json.Unmarshal(scan.Bytes(), &frame); err != nil || frame.Method != "wait" {
-						t.Fatalf("unexpected dispatched frame: %s (%v)", scan.Bytes(), err)
+					{
+						err := json.Unmarshal(scan.Bytes(), &frame)
+						require.NoError(t, err)
+						require.Equal(t, "wait", frame.Method, "unexpected dispatched frame: %s", scan.Bytes())
 					}
 					return frame.ID
 				}
@@ -69,7 +69,7 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 				synctest.Wait()
 				select {
 				case err := <-result:
-					t.Fatalf("call completed before deadline: %v", err)
+					require.FailNowf(t, "protocol scenario failed", "call completed before deadline: %v", err)
 				default:
 				}
 				time.Sleep(time.Nanosecond)
@@ -77,31 +77,35 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 				select {
 				case err := <-result:
 					var ce *CallError
-					if !errors.As(err, &ce) || ce.Method != "wait" || ce.ID != id || ce.Dispatch != OutcomeUnknown || !errors.Is(err, context.DeadlineExceeded) {
-						t.Fatalf("timeout lost dispatch/correlation: %v", err)
-					}
+					require.ErrorAs(t, err, &ce)
+					assert.Equal(t, "wait", ce.Method)
+					assert.Equal(t, id, ce.ID)
+					assert.Equal(t, OutcomeUnknown, ce.Dispatch)
+					assert.ErrorIs(t, err, context.DeadlineExceeded)
 				default:
-					t.Fatal("call survived its exact deadline")
+					require.FailNow(t, "call survived its exact deadline")
 				}
-				if time.Since(start) != tc.wantTimeout || len(c.pending) != 0 || len(c.queue) != 0 || c.Err() != nil {
-					t.Fatal("timeout changed timing, retained a call, replayed, or closed the connection")
-				}
+				assert.Equal(t, tc.wantTimeout, time.Since(start))
+				assert.Empty(t, c.pending)
+				assert.Empty(t, c.queue)
+				assert.NoError(t, c.Err())
 				// A late response cannot resurrect the expired call or satisfy a
 				// fresh call. Exercise real routing and the same writer again.
-				if err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":null}`, id))); err != nil {
-					t.Fatal(err)
+				{
+					err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":null}`, id)))
+					require.NoError(t, err)
 				}
 				go func() { result <- c.Call(context.Background(), "wait", nil, nil) }()
 				freshID := readCall()
 				synctest.Wait()
-				if freshID == id {
-					t.Fatal("expired call ID reused")
+				require.NotEqual(t, id, freshID, "expired call ID reused")
+				{
+					err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":null}`, freshID)))
+					require.NoError(t, err)
 				}
-				if err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":null}`, freshID))); err != nil {
-					t.Fatal(err)
-				}
-				if err := <-result; err != nil {
-					t.Fatalf("timeout damaged subsequent call: %v", err)
+				{
+					err := <-result
+					require.NoError(t, err, "timeout damaged subsequent call: %v", err)
 				}
 			})
 		})

@@ -4,20 +4,20 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 // Synthetic 0.162.1 native fields through public stdio/WS/WSS APIs. Turn-chain
 // identity and activity metadata do not create a thread or synthesize an answer.
-func TestTreeCurrentVersionMetadata(t *testing.T) {
+func (obs *observationSuite) TestTreeCurrentVersionMetadata() {
+	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
+			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation))
 			for i := 0; i < 3; i++ {
@@ -34,41 +34,35 @@ func TestTreeCurrentVersionMetadata(t *testing.T) {
 			emitRequests(t, f.c, frames...)
 			for i, want := range frames {
 				e := nextTree(t, s)
-				if e.Kind != nativeRecord || e.Native == nil || e.Native.DecodeError != nil || string(e.Raw) != want {
-					t.Fatalf("current wire changed: %+v", e)
-				}
+				require.False(t, e.Kind != nativeRecord || e.Native == nil || e.Native.DecodeError != nil || string(e.Raw) != want, "current wire changed: %+v", e)
 				switch i {
 				case 0:
 					n := e.Native.Data.(*types.TurnStartedNotification)
-					if got, ok := n.Turn.RootTurnID.Get(); !ok || got != "chain-root-turn" || e.Source.TurnID != "child-turn" {
-						t.Fatal("turn chain conflated with thread membership")
+					{
+						got, ok := n.Turn.RootTurnID.Get()
+						require.False(t, !ok || got != "chain-root-turn" || e.Source.TurnID != "child-turn", "turn chain conflated with thread membership")
 					}
 				case 1:
 					n := e.Native.Data.(*types.ItemStartedNotification).Item.SubAgentActivity
 					model, ok := n.Model.Get()
 					effort, known := n.ReasoningEffort.Get()
-					if !ok || model != "current-model" || !known || effort != "high" || string(n.UnknownFields["future"]) != "null" {
-						t.Fatal("current activity metadata lost")
-					}
+					require.False(t, !ok || model != "current-model" || !known || effort != "high" || string(n.UnknownFields["future"]) != "null", "current activity metadata lost")
 				case 2:
 					n := e.Native.Data.(*types.ItemCompletedNotification).Item.AgentMessage
-					if phase, ok := n.Phase.Get(); !ok || phase != types.MessagePhasePartialAnswer || n.Text != "partial parent answer" {
-						t.Fatal("partial answer reinterpreted")
+					{
+						phase, ok := n.Phase.Get()
+						require.False(t, !ok || phase != types.MessagePhasePartialAnswer || n.Text != "partial parent answer", "partial answer reinterpreted")
 					}
 				case 4:
 					n := e.Native.Data.(*types.TurnCompletedNotification)
-					if !n.Turn.RootTurnID.IsNull() {
-						t.Fatal("explicit null lost")
-					}
+					require.True(t, n.Turn.RootTurnID.IsNull(), "explicit null lost")
 				case 5:
-					if e.Source.ThreadID != "child-1" {
-						t.Fatal("parent completion closed child observation")
-					}
+					require.Equal(t, "child-1", e.Source.ThreadID, "parent completion closed child observation")
 				}
 			}
 			select {
 			case <-s.Done():
-				t.Fatal("activity/partial answer ended observation")
+				require.FailNow(t, "test invariant", "activity/partial answer ended observation")
 			default:
 			}
 		})

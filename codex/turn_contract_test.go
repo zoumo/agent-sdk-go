@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -92,12 +94,11 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 func subscribe(t *testing.T, c *codex.Client, ctx context.Context) *codex.Subscription {
 	t.Helper()
 	s, err := c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{PendingAge: 10 * time.Millisecond})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, err)
 	t.Cleanup(func() { _ = s.Close() })
-	if e := nextTree(t, s); e.Kind != stateRecord {
-		t.Fatal("missing initial observation state")
+	{
+		e := nextTree(t, s)
+		require.Equal(t, stateRecord, e.Kind, "missing initial observation state")
 	}
 	return s
 }
@@ -106,14 +107,12 @@ func nextEvent(t *testing.T, s *codex.Subscription) types.Event {
 	for {
 		select {
 		case e, ok := <-s.Events():
-			if !ok {
-				t.Fatalf("events closed: %v", s.Err())
-			}
+			require.True(t, ok, "events closed: %v", s.Err())
 			if e.Raw != nil {
 				return e
 			}
 		case <-time.After(3 * time.Second):
-			t.Fatal("event not delivered")
+			require.FailNow(t, "test invariant", "event not delivered")
 		}
 	}
 }
@@ -122,18 +121,17 @@ func awaitSubscription(t *testing.T, s *codex.Subscription, cause error) {
 	select {
 	case <-s.Done():
 	case <-time.After(3 * time.Second):
-		t.Fatal("subscription did not terminate")
+		require.FailNow(t, "test invariant", "subscription did not terminate")
 	}
-	if !errors.Is(s.Err(), cause) {
-		t.Fatalf("terminal error %v, want %v", s.Err(), cause)
-	}
+	require.ErrorIs(t, s.Err(), cause, "terminal error %v, want %v", s.Err(), cause)
 }
 func startParams() types.TurnStartParams {
 	return types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "synthetic input"})}}, ServiceTier: types.Null[string](), DisabledPluginIDs: types.Some([]string{}), OutputSchema: types.Some(json.RawMessage(`{"type":"string"}`))}
 }
 
-func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
-	f := startFake(t, "turn-early", codex.Limits{EventQueue: 16})
+func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
+	t := obs.T()
+	f := obs.fixture(t, "turn-early", codex.Limits{EventQueue: 16})
 	s := subscribe(t, f.c, context.Background())
 	type outcome struct {
 		r   types.TurnStartResponse
@@ -148,60 +146,47 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 	other := false
 	for i := 0; i < 8; i++ {
 		e := nextEvent(t, s)
-		if e.DecodeError != nil || e.Data == nil {
-			t.Fatalf("event %d: %#v", i, e)
-		}
+		require.False(t, e.DecodeError != nil || e.Data == nil, "event %d: %#v", i, e)
 		if v, ok := e.Data.(*types.TurnStartedNotification); ok && v.ThreadID == "other-thread" {
 			other = true
 			continue
 		}
 		events = append(events, e)
 	}
-	if events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || !other || events[2].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn" {
-		t.Fatal("interleaved native identities changed")
-	}
-	if events[4].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID != "native-item-7" {
-		t.Fatal("native item identity changed")
-	}
-	if string(events[5].Data.(*types.ItemCompletedNotification).Item.Unknown) != unknownItem {
-		t.Fatal("unknown native variant lost")
-	}
-	if events[6].Data.(*types.TurnCompletedNotification).Turn.ID != "native-turn-response" {
-		t.Fatal("early completion lost")
-	}
+	require.False(t, events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || !other || events[2].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn", "interleaved native identities changed")
+	require.Equal(t, "native-item-7", events[4].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID, "native item identity changed")
+	require.Equal(t, unknownItem, string(events[5].Data.(*types.ItemCompletedNotification).Item.Unknown), "unknown native variant lost")
+	require.Equal(t, "native-turn-response", events[6].Data.(*types.TurnCompletedNotification).Turn.ID, "early completion lost")
 	select {
 	case <-result:
-		t.Fatal("an event fabricated a start response")
+		require.FailNow(t, "test invariant", "an event fabricated a start response")
 	default:
 	}
-	if err := f.c.Call(context.Background(), "release-start", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "release-start", nil, nil)
+		require.NoError(t, err, err)
 	}
 	got := <-result
-	if got.err != nil || got.r.Turn.ID != "native-turn-response" || got.r.Turn.Status != types.TurnStatusInProgress {
-		t.Fatalf("response replaced by event: %+v %v", got.r, got.err)
-	}
+	require.False(t, got.err != nil || got.r.Turn.ID != "native-turn-response" || got.r.Turn.Status != types.TurnStatusInProgress, "response replaced by event: %+v %v", got.r, got.err)
 	var starts int
 	for _, m := range trace(t, f.trace) {
 		if m.Method == "turn/start" {
 			starts++
 			var p map[string]json.RawMessage
 			_ = json.Unmarshal(m.Params, &p)
-			if string(p["threadId"]) != `"native-thread-42"` || string(p["serviceTier"]) != "null" || string(p["disabledPluginIds"]) != "[]" || string(p["outputSchema"]) != `{"type":"string"}` || string(p["parentTurnId"]) != `"causing-turn"` || string(p["rootTurnId"]) != `"chain-root-turn"` {
-				t.Fatalf("native params changed: %s", m.Params)
-			}
+			require.False(t, string(p["threadId"]) != `"native-thread-42"` || string(p["serviceTier"]) != "null" || string(p["disabledPluginIds"]) != "[]" || string(p["outputSchema"]) != `{"type":"string"}` || string(p["parentTurnId"]) != `"causing-turn"` || string(p["rootTurnId"]) != `"chain-root-turn"`, "native params changed: %s", m.Params)
 		}
 	}
-	if starts != 1 {
-		t.Fatalf("sent turn/start %d times", starts)
-	}
+	require.Equal(t, 1, starts, "sent turn/start %d times", starts)
 }
 
-func TestNotificationRawAndDecodeErrors(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{EventQueue: 16})
+func (obs *observationSuite) TestNotificationRawAndDecodeErrors() {
+	t := obs.T()
+	f := obs.fixture(t, "normal", codex.Limits{EventQueue: 16})
 	s := subscribe(t, f.c, context.Background())
-	if err := f.c.Call(context.Background(), "turn-mixed", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "turn-mixed", nil, nil)
+		require.NoError(t, err, err)
 	}
 	expected := []string{
 		`{ "n" : 9007199254740993, "nested": [null, true] }`, `null`, ``,
@@ -234,122 +219,110 @@ func TestNotificationRawAndDecodeErrors(t *testing.T) {
 			key = "item-absent"
 		}
 		e, ok := seen[key]
-		if !ok || string(e.Params) != raw || e.Data != nil {
-			t.Fatalf("raw event %d: %#v", i, e)
-		}
+		require.False(t, !ok || string(e.Params) != raw || e.Data != nil, "raw event %d: %#v", i, e)
 		var de *codex.DecodeError
 		if i < 3 {
-			if e.DecodeError != nil {
-				t.Fatal("unknown method treated as malformed")
-			}
-		} else if !errors.As(e.DecodeError, &de) || de.Method != e.Method || errors.Unwrap(de) == nil {
-			t.Fatalf("missing decode cause: %#v", e)
+			require.NoError(t, e.DecodeError, "unknown method treated as malformed")
+		} else {
+			require.False(t, !errors.As(e.DecodeError, &de) || de.Method != e.Method || errors.Unwrap(de) == nil, "missing decode cause: %#v", e)
 		}
 	}
 	e := seen[`{"threadId":"native-thread-42","turnId":"native-turn-response","willRetry":false,"error":{"message":"synthetic error","codexErrorInfo":{"futureError":{"n":9007199254740993}}}}`]
 	native := e.Data.(*types.ErrorNotification)
 	info, ok := native.Error.CodexErrorInfo.Get()
-	if !ok || native.WillRetry || string(info.Unknown) != `{"futureError":{"n":9007199254740993}}` {
-		t.Fatalf("error data lost: %#v", e)
-	}
+	require.False(t, !ok || native.WillRetry || string(info.Unknown) != `{"futureError":{"n":9007199254740993}}`, "error data lost: %#v", e)
 	e = seen[turnDelta]
 	d := e.Data.(*types.AgentMessageDeltaNotification)
-	if d.ItemID != "native-item-7" || string(d.UnknownFields["future"]) != `{"x":9007199254740993}` {
-		t.Fatalf("valid event lost: %#v", e)
-	}
-	if s.Err() != nil || f.c.Err() != nil {
-		t.Fatal("bad payload terminated connection or stream")
-	}
+	require.False(t, d.ItemID != "native-item-7" || string(d.UnknownFields["future"]) != `{"x":9007199254740993}`, "valid event lost: %#v", e)
+	require.False(t, s.Err() != nil || f.c.Err() != nil, "bad payload terminated connection or stream")
 }
 
-func TestSubscriptionOverflowIsolatedAndInspectable(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{EventQueue: 1, Subscriptions: 2})
+func (obs *observationSuite) TestSubscriptionOverflowIsolatedAndInspectable() {
+	t := obs.T()
+	f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1, Subscriptions: 2})
 	slow := subscribe(t, f.c, context.Background())
 	healthy := subscribe(t, f.c, context.Background())
-	if _, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{}); !errors.Is(err, codex.ErrLimit) {
-		t.Fatalf("subscriber limit: %v", err)
+	{
+		_, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+		require.ErrorIs(t, err, codex.ErrLimit, "subscriber limit: %v", err)
 	}
 	for i := 0; i < 4; i++ {
-		if err := f.c.Call(context.Background(), "turn-emit", nil, nil); err != nil {
-			t.Fatal(err)
+		{
+			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
+			require.NoError(t, err, err)
 		}
-		if nextEvent(t, healthy).Method != "item/agentMessage/delta" {
-			t.Fatal("healthy stream reordered")
-		}
+		require.Equal(t, "item/agentMessage/delta", nextEvent(t, healthy).Method, "healthy stream reordered")
 	}
 	// The terminal state must be observable before reading the still-full queue.
 	awaitSubscription(t, slow, codex.ErrSubscriptionOverflow)
 	var overflow *codex.SubscriptionOverflowError
-	if !errors.As(slow.Err(), &overflow) || overflow.Capacity != 1 {
-		t.Fatalf("overflow not inspectable: %v", slow.Err())
-	}
-	if len(slow.Events()) != 1 {
-		t.Fatal("accepted event discarded")
-	}
+	require.False(t, !errors.As(slow.Err(), &overflow) || overflow.Capacity != 1, "overflow not inspectable: %v", slow.Err())
+	require.Equal(t, 1, len(slow.Events()), "accepted event discarded")
 	nextEvent(t, slow)
-	if _, ok := <-slow.Events(); ok {
-		t.Fatal("overflow stream continued after loss")
+	{
+		_, ok := <-slow.Events()
+		require.False(t, ok, "overflow stream continued after loss")
 	}
-	if healthy.Err() != nil {
-		t.Fatal(healthy.Err())
-	}
+	require.NoError(t, healthy.Err(), healthy.Err())
 	replacement := subscribe(t, f.c, context.Background())
-	if err := replacement.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := replacement.Close()
+		require.NoError(t, err, err)
 	}
 	awaitSubscription(t, replacement, nil)
 }
 
-func TestSlowSubscriberNeverBlocksResponse(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{EventQueue: 1})
+func (obs *observationSuite) TestSlowSubscriberNeverBlocksResponse() {
+	t := obs.T()
+	f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
 	s := subscribe(t, f.c, context.Background())
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	var answer string
-	if err := f.c.Call(ctx, "turn-flood", nil, &answer); err != nil || answer != "reader-still-routing" {
-		t.Fatalf("reader blocked: %s %v", answer, err)
+	{
+		err := f.c.Call(ctx, "turn-flood", nil, &answer)
+		require.False(t, err != nil || answer != "reader-still-routing", "reader blocked: %s %v", answer, err)
 	}
 	awaitSubscription(t, s, codex.ErrSubscriptionOverflow)
-	if f.c.Diagnostics().Notifications != 4096 {
-		t.Fatal("reader failed to consume complete flood")
-	}
+	require.Equal(t, uint64(4096), f.c.Diagnostics().Notifications, "reader failed to consume complete flood")
 }
 
-func TestSubscriptionOwnsPayloadAndNoReplay(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{})
-	if err := f.c.Call(context.Background(), "turn-emit", nil, nil); err != nil {
-		t.Fatal(err)
+func (obs *observationSuite) TestSubscriptionOwnsPayloadAndNoReplay() {
+	t := obs.T()
+	f := obs.fixture(t, "normal", codex.Limits{})
+	{
+		err := f.c.Call(context.Background(), "turn-emit", nil, nil)
+		require.NoError(t, err, err)
 	}
 	first := subscribe(t, f.c, context.Background())
 	second := subscribe(t, f.c, context.Background())
 	select {
 	case <-first.Events():
-		t.Fatal("replayed old notification")
+		require.FailNow(t, "test invariant", "replayed old notification")
 	default:
 	}
-	if err := f.c.Call(context.Background(), "turn-emit", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "turn-emit", nil, nil)
+		require.NoError(t, err, err)
 	}
 	a, b := nextEvent(t, first), nextEvent(t, second)
 	a.Params[0] = '!'
 	a.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"][0] = '!'
 	a.Data.(*types.AgentMessageDeltaNotification).ThreadID = "mutated"
-	if string(b.Params) != turnDelta || b.Data.(*types.AgentMessageDeltaNotification).ThreadID != "native-thread-42" || string(b.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"]) != `{"x":9007199254740993}` {
-		t.Fatal("subscriber buffers alias")
-	}
-	if err := f.c.Call(context.Background(), "turn-item", nil, nil); err != nil {
-		t.Fatal(err)
+	require.False(t, string(b.Params) != turnDelta || b.Data.(*types.AgentMessageDeltaNotification).ThreadID != "native-thread-42" || string(b.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"]) != `{"x":9007199254740993}`, "subscriber buffers alias")
+	{
+		err := f.c.Call(context.Background(), "turn-item", nil, nil)
+		require.NoError(t, err, err)
 	}
 	a, b = nextEvent(t, first), nextEvent(t, second)
 	a.Data.(*types.ItemCompletedNotification).Item.Unknown[0] = '!'
-	if string(b.Data.(*types.ItemCompletedNotification).Item.Unknown) != unknownItem {
-		t.Fatal("unknown union aliases")
-	}
+	require.Equal(t, unknownItem, string(b.Data.(*types.ItemCompletedNotification).Item.Unknown), "unknown union aliases")
 
 }
 
-func TestCancellationDoesNotInterruptTurn(t *testing.T) {
-	f := startFake(t, "turn-wait", codex.Limits{})
+func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
+	t := obs.T()
+	f := obs.fixture(t, "turn-wait", codex.Limits{})
 	subctx, subcancel := context.WithCancel(context.Background())
 	s := subscribe(t, f.c, subctx)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -365,42 +338,36 @@ func TestCancellationDoesNotInterruptTurn(t *testing.T) {
 	awaitSubscription(t, s, context.Canceled)
 	// This response is late for the canceled start. A barrier establishes that
 	// all writes/notifications before the explicit interrupt have been handled.
-	if err := f.c.Call(context.Background(), "release-start", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "release-start", nil, nil)
+		require.NoError(t, err, err)
 	}
 	for _, m := range trace(t, f.trace) {
-		if m.Method == "turn/interrupt" || strings.Contains(m.Method, "cancel") {
-			t.Fatalf("implicit cancellation sent: %s", m.Method)
-		}
+		require.False(t, m.Method == "turn/interrupt" || strings.Contains(m.Method, "cancel"), "implicit cancellation sent: %s", m.Method)
 	}
 	live := subscribe(t, f.c, context.Background())
 	ack, err := f.c.InterruptTurn(context.Background(), types.TurnInterruptParams{ThreadID: "native-thread-42", TurnID: "native-turn-response"})
-	if err != nil || string(ack.UnknownFields["futureAck"]) != "true" {
-		t.Fatalf("interrupt ack: %+v %v", ack, err)
-	}
+	require.False(t, err != nil || string(ack.UnknownFields["futureAck"]) != "true", "interrupt ack: %+v %v", ack, err)
 	select {
 	case e := <-live.Events():
-		t.Fatalf("ack fabricated execution event: %#v", e)
+		require.FailNowf(t, "test invariant", "ack fabricated execution event: %#v", e)
 	default:
 	}
 	count := 0
 	for _, m := range trace(t, f.trace) {
 		if m.Method == "turn/interrupt" {
 			count++
-			if string(m.Params) != `{"threadId":"native-thread-42","turnId":"native-turn-response"}` {
-				t.Fatalf("interrupt params: %s", m.Params)
-			}
+			require.Equal(t, `{"threadId":"native-thread-42","turnId":"native-turn-response"}`, string(m.Params), "interrupt params: %s", m.Params)
 		}
 	}
-	if count != 1 {
-		t.Fatalf("interrupt count: %d", count)
-	}
+	require.Equal(t, 1, count, "interrupt count: %d", count)
 }
 
-func TestTurnFailureNeverReplays(t *testing.T) {
+func (obs *observationSuite) TestTurnFailureNeverReplays() {
+	t := obs.T()
 	for _, mode := range []string{"turn-error", "turn-exit", "turn-invalid-response"} {
 		t.Run(mode, func(t *testing.T) {
-			f := startFake(t, mode, codex.Limits{})
+			f := obs.fixture(t, mode, codex.Limits{})
 			s := subscribe(t, f.c, context.Background())
 			_, err := f.c.StartTurn(context.Background(), startParams())
 			state := codex.Responded
@@ -411,9 +378,7 @@ func TestTurnFailureNeverReplays(t *testing.T) {
 			callError(t, err, state, nil)
 			if mode == "turn-error" {
 				var rpc *codex.RPCError
-				if !errors.As(err, &rpc) || rpc.Code != -32603 {
-					t.Fatal(err)
-				}
+				require.False(t, !errors.As(err, &rpc) || rpc.Code != -32603, err)
 			}
 			count := 0
 			for _, m := range trace(t, f.trace) {
@@ -421,79 +386,81 @@ func TestTurnFailureNeverReplays(t *testing.T) {
 					count++
 				}
 			}
-			if count != 1 {
-				t.Fatalf("turn/start replayed: %d", count)
-			}
+			require.Equal(t, 1, count, "turn/start replayed: %d", count)
 		})
 	}
 }
 
-func TestSubscriptionTerminalStatus(t *testing.T) {
+func (obs *observationSuite) TestSubscriptionTerminalStatus() {
+	t := obs.T()
 	for _, method := range []string{"turn-malformed-envelope", "turn-oversized-envelope"} {
 		t.Run(method, func(t *testing.T) {
-			f := startFake(t, "normal", codex.Limits{MaxFrameBytes: 4096})
+			f := obs.fixture(t, "normal", codex.Limits{MaxFrameBytes: 4096})
 			s := subscribe(t, f.c, context.Background())
 			callError(t, f.c.Call(context.Background(), method, nil, nil), codex.OutcomeUnknown, codex.ErrProtocol)
 			awaitSubscription(t, s, codex.ErrProtocol)
-			if method == "turn-oversized-envelope" && !errors.Is(s.Err(), codex.ErrFrameTooLarge) {
-				t.Fatal(s.Err())
+			require.False(t, method == "turn-oversized-envelope" && !errors.Is(s.Err(), codex.ErrFrameTooLarge), s.Err())
+			{
+				e := nextTree(t, s)
+				require.False(t, e.Kind != stateRecord || e.Reason != "permanent-gap", "missing gap: %+v", e)
 			}
-			if e := nextTree(t, s); e.Kind != stateRecord || e.Reason != "permanent-gap" {
-				t.Fatalf("missing gap: %+v", e)
-			}
-			if _, ok := <-s.Events(); ok {
-				t.Fatal("malformed envelope became event")
+			{
+				_, ok := <-s.Events()
+				require.False(t, ok, "malformed envelope became event")
 			}
 			_ = s.Close()
-			if !errors.Is(s.Err(), codex.ErrProtocol) {
-				t.Fatal("close replaced terminal cause")
-			}
+			require.ErrorIs(t, s.Err(), codex.ErrProtocol, "close replaced terminal cause")
 		})
 	}
 	t.Run("client-close", func(t *testing.T) {
-		f := startFake(t, "normal", codex.Limits{EventQueue: 1})
+		f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
 		s := subscribe(t, f.c, context.Background())
-		if err := f.c.Call(context.Background(), "turn-emit", nil, nil); err != nil {
-			t.Fatal(err)
+		{
+			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
+			require.NoError(t, err, err)
 		}
-		if err := f.c.Close(); err != nil {
-			t.Fatal(err)
+		{
+			err := f.c.Close()
+			require.NoError(t, err, err)
 		}
 		awaitSubscription(t, s, nil)
 		nextEvent(t, s)
-		if _, ok := <-s.Events(); ok {
-			t.Fatal("events still open")
+		{
+			_, ok := <-s.Events()
+			require.False(t, ok, "events still open")
 		}
-		if _, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{}); !errors.Is(err, codex.ErrClosed) {
-			t.Fatal(err)
+		{
+			_, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			require.ErrorIs(t, err, codex.ErrClosed, err)
 		}
 	})
 	t.Run("cancel-full", func(t *testing.T) {
-		f := startFake(t, "normal", codex.Limits{EventQueue: 1})
+		f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		s := subscribe(t, f.c, ctx)
-		if err := f.c.Call(context.Background(), "turn-emit", nil, nil); err != nil {
-			t.Fatal(err)
+		{
+			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
+			require.NoError(t, err, err)
 		}
 		cancel()
 		awaitSubscription(t, s, context.Canceled)
-		if len(s.Events()) != 1 {
-			t.Fatal("cancel discarded queued event")
-		}
+		require.Equal(t, 1, len(s.Events()), "cancel discarded queued event")
 		nextEvent(t, s)
-		if _, ok := <-s.Events(); ok {
-			t.Fatal("canceled events still open")
+		{
+			_, ok := <-s.Events()
+			require.False(t, ok, "canceled events still open")
 		}
 	})
 	t.Run("deadline", func(t *testing.T) {
-		f := startFake(t, "normal", codex.Limits{})
+		f := obs.fixture(t, "normal", codex.Limits{})
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
 		s := subscribe(t, f.c, ctx)
 		awaitSubscription(t, s, context.DeadlineExceeded)
-		if _, ok := <-s.Events(); ok {
-			t.Fatal("canceled events open")
+		{
+			_, ok := <-s.Events()
+			require.False(t, ok, "canceled events open")
 		}
 	})
 }
@@ -501,6 +468,7 @@ func TestSubscriptionTerminalStatus(t *testing.T) {
 func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{EventQueue: 2, Subscriptions: 128})
 	var wg sync.WaitGroup
+	failures := make(chan error, 64)
 	for i := 0; i < 64; i++ {
 		wg.Go(func() {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -508,7 +476,7 @@ func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{})
 			if err != nil {
 				if !errors.Is(err, codex.ErrClosed) {
-					t.Error(err)
+					failures <- err
 				}
 				return
 			}
@@ -521,30 +489,40 @@ func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 		})
 	}
 	for i := 0; i < 4; i++ {
-		if err := f.c.Call(context.Background(), "turn-emit", nil, nil); err != nil {
-			t.Fatal(err)
+		{
+			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
+			require.NoError(t, err, err)
 		}
 	}
-	if err := f.c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Close()
+		require.NoError(t, err, err)
 	}
 	wg.Wait()
+	close(failures)
+	for err := range failures {
+		assert.NoError(t, err)
+	}
 }
 
-func TestSubscriptionAdmissionValidation(t *testing.T) {
+func (obs *observationSuite) TestSubscriptionAdmissionValidation() {
+	t := obs.T()
 	for _, limits := range []codex.Limits{{Subscriptions: -1}, {EventQueue: -1}} {
-		if _, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "not-executed", Limits: limits}); err == nil {
-			t.Fatal("negative subscription limit accepted")
+		{
+			_, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "not-executed", Limits: limits})
+			require.False(t, err == nil, "negative subscription limit accepted")
 		}
 	}
-	f := startFake(t, "normal", codex.Limits{Subscriptions: 1})
-	if _, err := f.c.Subscribe(nil, "native-thread-42", types.SubscriptionOptions{}); err == nil {
-		t.Fatal("nil context accepted")
+	f := obs.fixture(t, "normal", codex.Limits{Subscriptions: 1})
+	{
+		_, err := f.c.Subscribe(nil, "native-thread-42", types.SubscriptionOptions{})
+		require.False(t, err == nil, "nil context accepted")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{}); !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
+	{
+		_, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{})
+		require.ErrorIs(t, err, context.Canceled, err)
 	}
 	s := subscribe(t, f.c, context.Background())
 	_ = s.Close()

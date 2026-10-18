@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -180,14 +182,17 @@ type fixture struct {
 }
 
 func startFake(t *testing.T, mode string, limits codex.Limits) fixture {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	t.Helper()
 	f, err := openFake(t, mode, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := f.c.Close(); err != nil {
-			t.Error(err)
+		{
+			err := f.c.Close()
+			if err != nil {
+				reportPeerError("%v", err)
+			}
 		}
 	})
 	return f
@@ -198,9 +203,7 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 		return openRemoteFake(t, mode, limits)
 	}
 	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	f := fixture{trace: filepath.Join(dir, "trace.jsonl"), pid: filepath.Join(dir, "pid")}
 	env := append(os.Environ(), "CODEX_SDK_HELPER="+mode, "CODEX_SDK_TRACE="+f.trace, "CODEX_SDK_PID="+f.pid)
@@ -212,16 +215,15 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 func trace(t *testing.T, path string) []fakeEnvelope {
 	t.Helper()
 	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var out []fakeEnvelope
 	scan := bufio.NewScanner(bytes.NewReader(b))
 	scan.Buffer(make([]byte, 4096), 32<<20)
 	for scan.Scan() {
 		var m fakeEnvelope
-		if err = json.Unmarshal(scan.Bytes(), &m); err != nil {
-			t.Fatal(err)
+		{
+			err = json.Unmarshal(scan.Bytes(), &m)
+			require.NoError(t, err)
 		}
 		out = append(out, m)
 	}
@@ -240,7 +242,7 @@ func waitTrace(t *testing.T, path, method string) {
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("did not receive %s", method)
+			require.FailNowf(t, "protocol scenario failed", "did not receive %s", method)
 		case <-tick.C:
 		}
 	}
@@ -248,64 +250,42 @@ func waitTrace(t *testing.T, path, method string) {
 func callError(t *testing.T, err error, state codex.DispatchState, cause error) {
 	t.Helper()
 	var ce *codex.CallError
-	if !errors.As(err, &ce) || ce.Dispatch != state {
-		t.Fatalf("got %v, want CallError %s", err, state)
-	}
-	if cause != nil && !errors.Is(err, cause) {
-		t.Fatalf("got %v, want cause %v", err, cause)
+	require.ErrorAs(t, err, &ce)
+	require.Equal(t, state, ce.Dispatch)
+	if cause != nil {
+		require.ErrorIs(t, err, cause)
 	}
 }
 
-func TestOwnedStdioLifecycle(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{})
-	if f.c.ServerInfo().UserAgent != "fake/only" {
-		t.Fatal("server info")
-	}
+func runOwnedStdioLifecycle(t *testing.T, f fixture) {
+	require.Equal(t, "fake/only", f.c.ServerInfo().UserAgent, "server info")
 	r, err := f.c.StartThread(context.Background(), types.ThreadStartParams{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.Thread.ID != "native-thread-42" || r.Thread.CreatedAt != 9007199254740993 {
-		t.Fatalf("native data changed: %+v", r.Thread)
-	}
+	require.NoError(t, err)
+	require.False(t, r.Thread.ID != "native-thread-42" || r.Thread.CreatedAt != 9007199254740993, "native data changed: %+v", r.Thread)
 	got, err := f.c.ReadThread(context.Background(), types.ThreadReadParams{ThreadID: r.Thread.ID, IncludeTurns: types.Some(true)})
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	require.Equal(t, r.Thread.ID, got.Thread.ID, "thread ID changed")
+	require.True(t, got.Thread.ProjectID.IsNull(), "required null was lost")
+	require.Equal(t, `{"large":9007199254740993}`, string(got.Thread.UnknownFields["future"]), "unknown field changed")
+	{
+		err = f.c.Close()
+		require.NoError(t, err)
 	}
-	if got.Thread.ID != r.Thread.ID {
-		t.Fatal("thread ID changed")
-	}
-	if !got.Thread.ProjectID.IsNull() {
-		t.Fatal("required null was lost")
-	}
-	if string(got.Thread.UnknownFields["future"]) != `{"large":9007199254740993}` {
-		t.Fatal("unknown field changed")
-	}
-	if err = f.c.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = f.c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err = f.c.Close()
+		require.NoError(t, err)
 	}
 	frames := trace(t, f.trace)
 	want := []string{"initialize", "initialized", "thread/start", "thread/read"}
-	if len(frames) != len(want) {
-		t.Fatalf("unexpected calls: %+v", frames)
-	}
+	require.Len(t, frames, len(want), "unexpected calls: %+v", frames)
 	for i, m := range frames {
-		if m.Method != want[i] {
-			t.Fatalf("order %v", frames)
-		}
+		require.Equal(t, want[i], m.Method, "order %v", frames)
 	}
 	b, _ := os.ReadFile(f.trace)
-	if bytes.Contains(b, []byte(`"jsonrpc"`)) {
-		t.Fatal("wrong JSON-RPC dialect")
-	}
+	require.False(t, bytes.Contains(b, []byte(`"jsonrpc"`)), "wrong JSON-RPC dialect")
 	var read map[string]any
 	_ = json.Unmarshal(frames[3].Params, &read)
-	if read["threadId"] != "native-thread-42" || read["includeTurns"] != true {
-		t.Fatal(string(frames[3].Params))
-	}
+	require.False(t, read["threadId"] != "native-thread-42" || read["includeTurns"] != true, string(frames[3].Params))
 	assertReaped(t, f.pid)
 }
 func assertReaped(t *testing.T, pidPath string) {
@@ -318,56 +298,51 @@ func assertReaped(t *testing.T, pidPath string) {
 		return
 	}
 	b, err := os.ReadFile(pidPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var pid int
 	_, _ = fmt.Sscan(string(b), &pid)
 	p, err := os.FindProcess(pid)
 	if err != nil {
 		return
 	}
-	if err = p.Signal(syscall.Signal(0)); err == nil {
-		t.Fatalf("owned child %d still exists", pid)
+	{
+		err = p.Signal(syscall.Signal(0))
+		require.Error(t, err, "owned child %d still exists", pid)
 	}
 }
 func TestIDExactness(t *testing.T) {
 	for _, wire := range []string{`1`, `"1"`, `9007199254740993`, `9223372036854775807`, `-9223372036854775808`, `"雪/with\\escape"`, `""`} {
-		id, err := codex.ParseID([]byte(wire))
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := json.Marshal(id)
-		if err != nil || string(got) != wire {
-			t.Fatalf("ID round trip %s -> %s: %v", wire, got, err)
-		}
+		t.Run("valid/"+wire, func(t *testing.T) {
+			id, err := codex.ParseID([]byte(wire))
+			require.NoError(t, err)
+			got, err := json.Marshal(id)
+			require.NoError(t, err)
+			assert.Equal(t, wire, string(got))
+		})
 	}
 	invalid := codex.StringID(string([]byte{0xff}))
-	if invalid.Valid() {
-		t.Fatal("invalid UTF-8 string ID considered valid")
+	require.False(t, invalid.Valid(), "invalid UTF-8 string ID considered valid")
+	{
+		_, err := json.Marshal(invalid)
+		require.ErrorIs(t, err, codex.ErrProtocol, "invalid UTF-8 ID silently changed")
 	}
-	if _, err := json.Marshal(invalid); !errors.Is(err, codex.ErrProtocol) {
-		t.Fatal("invalid UTF-8 ID silently changed")
-	}
-	if codex.IntegerID(1) == codex.StringID("1") {
-		t.Fatal("ID collision")
-	}
+	require.NotEqual(t, codex.StringID("1"), codex.IntegerID(1), "ID collision")
 	for _, wire := range []string{`null`, `1.0`, `1e0`, `true`, `{}`, `[]`, `9223372036854775808`, `01`, `"\ud800"`, `"\udc00"`, string([]byte{34, 255, 34}), ``} {
-		if _, err := codex.ParseID([]byte(wire)); err == nil {
-			t.Fatalf("accepted invalid ID %q", wire)
-		}
+		t.Run("invalid/"+wire, func(t *testing.T) {
+			_, err := codex.ParseID([]byte(wire))
+			assert.Error(t, err, "accepted invalid ID %q", wire)
+		})
 	}
 	f := startFake(t, "normal", codex.Limits{})
 	var got string
-	if err := f.c.Call(context.Background(), "collision", nil, &got); err != nil || got != "right" {
-		t.Fatalf("collision %q %v", got, err)
+	{
+		err := f.c.Call(context.Background(), "collision", nil, &got)
+		require.NoError(t, err)
+		require.False(t, got != "right", "collision %q %v", got, err)
 	}
-	if f.c.Diagnostics().UnmatchedResponses != 2 {
-		t.Fatal(f.c.Diagnostics())
-	}
+	require.EqualValues(t, 2, f.c.Diagnostics().UnmatchedResponses, f.c.Diagnostics())
 }
-func TestCancellationAndLateResponse(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{})
+func runCancellationAndLateResponse(t *testing.T, f fixture) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	callError(t, f.c.Call(canceled, "not-sent", nil, nil), codex.NotSent, context.Canceled)
@@ -380,26 +355,21 @@ func TestCancellationAndLateResponse(t *testing.T) {
 	cancel()
 	callError(t, <-errch, codex.OutcomeUnknown, context.Canceled)
 	var got string
-	if err := f.c.Call(context.Background(), "after-late", nil, &got); err != nil || got != "fresh" {
-		t.Fatalf("late %q %v", got, err)
+	{
+		err := f.c.Call(context.Background(), "after-late", nil, &got)
+		require.NoError(t, err)
+		require.False(t, got != "fresh", "late %q %v", got, err)
 	}
-	if f.c.Diagnostics().UnmatchedResponses != 1 {
-		t.Fatal(f.c.Diagnostics())
-	}
+	require.EqualValues(t, 1, f.c.Diagnostics().UnmatchedResponses, f.c.Diagnostics())
 	for _, m := range trace(t, f.trace) {
-		if m.Method == "not-sent" {
-			t.Fatal("canceled request sent")
-		}
+		require.NotEqual(t, "not-sent", m.Method, "canceled request sent")
 	}
 }
-func TestRPCErrorNoReplay(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{})
+func runRPCErrorNoReplay(t *testing.T, f fixture) {
 	err := f.c.Call(context.Background(), "rpc-error", nil, nil)
 	callError(t, err, codex.Responded, nil)
 	var re *codex.RPCError
-	if !errors.As(err, &re) || re.Code != -32001 || string(re.Data) != `{"large":9007199254740993}` || len(re.Raw) == 0 {
-		t.Fatal(err)
-	}
+	require.False(t, !errors.As(err, &re) || re.Code != -32001 || string(re.Data) != `{"large":9007199254740993}` || len(re.Raw) == 0, err)
 	_ = f.c.Close()
 	n := 0
 	for _, m := range trace(t, f.trace) {
@@ -407,12 +377,9 @@ func TestRPCErrorNoReplay(t *testing.T) {
 			n++
 		}
 	}
-	if n != 1 {
-		t.Fatalf("replayed %d times", n)
-	}
+	require.EqualValues(t, 1, n, "replayed %d times", n)
 }
-func TestConnectionLossIsUnknown(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{})
+func runConnectionLossIsUnknown(t *testing.T, f fixture) {
 	err := f.c.Call(context.Background(), "exit", nil, nil)
 	callError(t, err, codex.OutcomeUnknown, io.EOF)
 	_ = f.c.Close()
@@ -425,9 +392,7 @@ func TestMalformedFrames(t *testing.T) {
 			err := f.c.Call(context.Background(), method, nil, nil)
 			cause := codex.ErrProtocol
 			callError(t, err, codex.OutcomeUnknown, cause)
-			if method == "oversized" && !errors.Is(err, codex.ErrFrameTooLarge) {
-				t.Fatal(err)
-			}
+			require.False(t, method == "oversized" && !errors.Is(err, codex.ErrFrameTooLarge), err)
 		})
 	}
 }
@@ -437,11 +402,9 @@ func TestInitializeFailures(t *testing.T) {
 			f, err := openFake(t, mode, codex.Limits{ShutdownTimeout: 200 * time.Millisecond})
 			if err == nil {
 				_ = f.c.Close()
-				t.Fatal("initialize unexpectedly succeeded")
+				require.FailNow(t, "initialize unexpectedly succeeded")
 			}
-			if f.c != nil {
-				t.Fatal("failed constructor exposed client")
-			}
+			require.Nil(t, f.c, "failed constructor exposed client")
 			assertReaped(t, f.pid)
 		})
 	}
@@ -457,26 +420,31 @@ func TestPendingAdmissionLimit(t *testing.T) {
 }
 func TestStderrAndUnknownNotifications(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{DiagnosticBytes: 33})
-	if err := f.c.Call(context.Background(), "stderr", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "stderr", nil, nil)
+		require.NoError(t, err)
 	}
-	if err := f.c.Call(context.Background(), "notification", nil, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "notification", nil, nil)
+		require.NoError(t, err)
 	}
 	d := f.c.Diagnostics()
-	if d.StderrBytes == 0 || len(d.Tail) > 33 || strings.Contains(d.Tail, "secret") || d.Notifications != 1 {
-		t.Fatalf("unsafe diagnostics %+v", d)
-	}
+	require.False(t, d.StderrBytes == 0 || len(d.Tail) > 33 || strings.Contains(d.Tail, "secret") || d.Notifications != 1, "unsafe diagnostics %+v", d)
 }
 func TestBlockedWriteAndConcurrentClose(t *testing.T) {
+	reportPeerError := collectTransportPeerErrors(t)
+
 	f := startFake(t, "blocked", codex.Limits{WriteTimeout: 80 * time.Millisecond, ShutdownTimeout: 200 * time.Millisecond})
 	err := f.c.Call(context.Background(), "echo", strings.Repeat("x", 2<<20), nil)
 	callError(t, err, codex.OutcomeUnknown, codex.ErrWriteTimeout)
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
-			if err := f.c.Close(); err != nil {
-				t.Error(err)
+			{
+				err := f.c.Close()
+				if err != nil {
+					reportPeerError("%v", err)
+				}
 			}
 		})
 	}
@@ -487,9 +455,7 @@ func TestCloseKillsOnlyOwnedChild(t *testing.T) {
 	f := startFake(t, "ignore-eof", codex.Limits{ShutdownTimeout: 200 * time.Millisecond})
 	start := time.Now()
 	_ = f.c.Close()
-	if time.Since(start) > time.Second {
-		t.Fatal("Close exceeded bound")
-	}
+	require.False(t, time.Since(start) > time.Second, "Close exceeded bound")
 	assertReaped(t, f.pid)
 }
 func TestOwnedChildExitWithOpenOutput(t *testing.T) {
@@ -499,7 +465,7 @@ func TestOwnedChildExitWithOpenOutput(t *testing.T) {
 		select {
 		case <-f.c.Done():
 		case <-time.After(time.Second):
-			t.Fatal("retained child pipe masked exit")
+			require.FailNow(t, "retained child pipe masked exit")
 		}
 	}
 	assertReaped(t, f.pid)
@@ -510,13 +476,13 @@ func TestOutgoingFrameLimit(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{MaxFrameBytes: 4096})
 	callError(t, f.c.Call(context.Background(), "echo", strings.Repeat("x", 8192), nil), codex.NotSent, codex.ErrFrameTooLarge)
 	var result string
-	if err := f.c.Call(context.Background(), "echo", "still usable", &result); err != nil || result != "still usable" {
-		t.Fatalf("frame rejection damaged connection: result=%q error=%v", result, err)
+	{
+		err := f.c.Call(context.Background(), "echo", "still usable", &result)
+		require.NoError(t, err)
+		require.False(t, result != "still usable", "frame rejection damaged connection: result=%q error=%v", result, err)
 	}
 	for _, m := range trace(t, f.trace) {
-		if m.Method == "echo" && string(m.Params) != `"still usable"` {
-			t.Fatal("oversized request reached peer")
-		}
+		require.False(t, m.Method == "echo" && string(m.Params) != `"still usable"`, "oversized request reached peer")
 	}
 }
 
@@ -537,7 +503,7 @@ func TestOutboundAdmissionIsBounded(t *testing.T) {
 		case err := <-errs:
 			callError(t, err, codex.NotSent, codex.ErrLimit)
 		case <-time.After(2 * time.Second):
-			t.Fatal("unbounded admission")
+			require.FailNow(t, "unbounded admission")
 		}
 	}
 	cancel()
@@ -546,7 +512,7 @@ func TestOutboundAdmissionIsBounded(t *testing.T) {
 		select {
 		case <-errs:
 		case <-time.After(time.Second):
-			t.Fatal("pending writer survived close")
+			require.FailNow(t, "pending writer survived close")
 		}
 	}
 	assertReaped(t, f.pid)
@@ -570,7 +536,7 @@ func TestCancelBlockedWrite(t *testing.T) {
 		}
 		select {
 		case <-deadline.C:
-			t.Fatal("peer never received request byte")
+			require.FailNow(t, "peer never received request byte")
 		case <-tick.C:
 		}
 	}
@@ -579,18 +545,24 @@ func TestCancelBlockedWrite(t *testing.T) {
 	select {
 	case <-f.c.Done():
 	case <-time.After(time.Second):
-		t.Fatal("canceled write retained connection")
+		require.FailNow(t, "canceled write retained connection")
 	}
 	_ = f.c.Close()
 	assertReaped(t, f.pid)
 }
 
 func TestInvalidOptionsAndClosedCall(t *testing.T) {
-	if _, err := codex.NewStdio(context.Background(), codex.StdioOptions{}); err == nil {
-		t.Fatal("empty executable accepted")
-	}
-	if _, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "unused", Limits: codex.Limits{OutboundQueue: -1}}); err == nil {
-		t.Fatal("negative limit accepted")
+	for _, tc := range []struct {
+		name    string
+		options codex.StdioOptions
+	}{
+		{"empty executable", codex.StdioOptions{}},
+		{"negative limit", codex.StdioOptions{Executable: "unused", Limits: codex.Limits{OutboundQueue: -1}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := codex.NewStdio(context.Background(), tc.options)
+			assert.Error(t, err)
+		})
 	}
 	f := startFake(t, "normal", codex.Limits{})
 	_ = f.c.Close()
@@ -600,34 +572,27 @@ func TestInvalidOptionsAndClosedCall(t *testing.T) {
 func TestExplicitCommandEnvironmentAndDirectory(t *testing.T) {
 	t.Setenv("CODEX_SDK_PARENT_ONLY", "must-not-leak")
 	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	tracePath := filepath.Join(dir, "trace")
 	pidPath := filepath.Join(dir, "pid")
 	args := []string{"-test.run=^TestFakeChild$", "--", "spaces and ; $(not-a-shell)"}
 	c, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: exe, Args: args, Dir: dir, Env: []string{"CODEX_SDK_HELPER=normal", "CODEX_SDK_TRACE=" + tracePath, "CODEX_SDK_PID=" + pidPath, "CODEX_SDK_LITERAL=literal-$HOME"}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "explicit", Version: "1"}}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	raw, err := os.ReadFile(tracePath + ".process")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var got struct {
 		Args                    []string
 		Cwd, Literal, Inherited string
 	}
-	if err = json.Unmarshal(raw, &got); err != nil {
-		t.Fatal(err)
+	{
+		err = json.Unmarshal(raw, &got)
+		require.NoError(t, err)
 	}
 	expected, _ := json.Marshal(args)
 	actual, _ := json.Marshal(got.Args)
-	if !bytes.Equal(expected, actual) || !sameTestDirectory(t, got.Cwd, dir) || got.Literal != "literal-$HOME" || got.Inherited != "" {
-		t.Fatalf("command was transformed: %s", raw)
-	}
+	require.False(t, !bytes.Equal(expected, actual) || !sameTestDirectory(t, got.Cwd, dir) || got.Literal != "literal-$HOME" || got.Inherited != "", "command was transformed: %s", raw)
 }
 
 // sameTestDirectory compares filesystem identity: a child may report a physical
@@ -636,13 +601,9 @@ func TestExplicitCommandEnvironmentAndDirectory(t *testing.T) {
 func sameTestDirectory(t *testing.T, actual, expected string) bool {
 	t.Helper()
 	actualInfo, err := os.Stat(actual)
-	if err != nil {
-		t.Fatalf("stat actual cwd %q: %v", actual, err)
-	}
+	require.NoError(t, err, "stat actual cwd %q: %v", actual, err)
 	expectedInfo, err := os.Stat(expected)
-	if err != nil {
-		t.Fatalf("stat expected cwd %q: %v", expected, err)
-	}
+	require.NoError(t, err, "stat expected cwd %q: %v", expected, err)
 	return actualInfo.IsDir() && expectedInfo.IsDir() && os.SameFile(actualInfo, expectedInfo)
 }
 
@@ -652,13 +613,15 @@ func TestSameTestDirectory(t *testing.T) {
 	other := filepath.Join(root, "second", "cwd")
 	child := filepath.Join(dir, "child")
 	for _, path := range []string{dir, other, child} {
-		if err := os.MkdirAll(path, 0700); err != nil {
-			t.Fatal(err)
+		{
+			err := os.MkdirAll(path, 0700)
+			require.NoError(t, err)
 		}
 	}
 	alias := filepath.Join(root, "alias")
-	if err := os.Symlink(dir, alias); err != nil {
-		t.Fatal(err)
+	{
+		err := os.Symlink(dir, alias)
+		require.NoError(t, err)
 	}
 	for _, tt := range []struct {
 		name, actual string
@@ -670,8 +633,9 @@ func TestSameTestDirectory(t *testing.T) {
 		{"child directory", child, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := sameTestDirectory(t, tt.actual, dir); got != tt.want {
-				t.Fatalf("sameTestDirectory(%q, %q) = %v, want %v", tt.actual, dir, got, tt.want)
+			{
+				got := sameTestDirectory(t, tt.actual, dir)
+				require.Equal(t, tt.want, got, "sameTestDirectory(%q, %q) = %v, want %v", tt.actual, dir, got, tt.want)
 			}
 		})
 	}

@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -93,9 +95,7 @@ func assertMethods(t *testing.T, f fixture, want ...string) []fakeEnvelope {
 	for i, frame := range frames {
 		got[i] = frame.Method
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("outgoing methods = %q, want %q", got, want)
-	}
+	require.True(t, reflect.DeepEqual(got, want), "outgoing methods = %q, want %q", got, want)
 	return frames
 }
 func nativeOperation(c *codex.Client, method string, ctx context.Context) error {
@@ -107,67 +107,53 @@ func nativeOperation(c *codex.Client, method string, ctx context.Context) error 
 	return err
 }
 
-func TestResumeAcrossIndependentConnections(t *testing.T) {
-	first := startFake(t, "resume-normal", codex.Limits{})
+func (obs *observationSuite) TestResumeAcrossIndependentConnections() {
+	t := obs.T()
+	first := obs.fixture(t, "resume-normal", codex.Limits{})
 	started, err := first.c.StartThread(context.Background(), types.ThreadStartParams{Ephemeral: types.Some(false)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, err)
 	nativeID := started.Thread.ID
-	if nativeID != resumedNativeID {
-		t.Fatal("peer identity changed")
-	}
-	if err := first.c.Close(); err != nil {
-		t.Fatal(err)
+	require.Equal(t, resumedNativeID, nativeID, "peer identity changed")
+	{
+		err := first.c.Close()
+		require.NoError(t, err, err)
 	}
 	assertMethods(t, first, "initialize", "initialized", "thread/start")
 
 	// A new client performs its own explicit handshake. Only the native string is
 	// carried across; no SDK state, journal, persisted fixture, or replay is used.
-	second := startFake(t, "resume-normal", codex.Limits{})
+	second := obs.fixture(t, "resume-normal", codex.Limits{})
 	resumed, err := second.c.ResumeThread(context.Background(), types.ThreadResumeParams{
 		ThreadID: nativeID, ServiceTier: types.Null[string](), ExcludeTurns: types.Some(false),
 		Config: types.Some(map[string]json.RawMessage{}), Path: types.Some(""),
 		InitialTurnsPage: types.Some(types.ThreadResumeInitialTurnsPageParams{Limit: types.Some(uint32(0))}),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resumed.Thread.ID != nativeID || resumed.Thread.SessionID != started.Thread.SessionID || resumed.Thread.CreatedAt != 9007199254740993 {
-		t.Fatal("native result changed")
-	}
-	if !resumed.ServiceTier.IsNull() || resumed.CollaborationMode.IsSet() || string(resumed.UnknownFields["future"]) != "9007199254740993" || resumed.TurnsBackwardsCursor.ValueOr("") != "opaque:next" {
-		t.Fatal("resume result fields lost")
-	}
+	require.NoError(t, err, err)
+	require.False(t, resumed.Thread.ID != nativeID || resumed.Thread.SessionID != started.Thread.SessionID || resumed.Thread.CreatedAt != 9007199254740993, "native result changed")
+	require.False(t, !resumed.ServiceTier.IsNull() || resumed.CollaborationMode.IsSet() || string(resumed.UnknownFields["future"]) != "9007199254740993" || resumed.TurnsBackwardsCursor.ValueOr("") != "opaque:next", "resume result fields lost")
 	page, ok := resumed.InitialTurnsPage.Get()
-	if !ok || len(page.Data) != 0 || !page.NextCursor.IsNull() {
-		t.Fatal("native page lost")
-	}
+	require.False(t, !ok || len(page.Data) != 0 || !page.NextCursor.IsNull(), "native page lost")
 	read, err := second.c.ReadThread(context.Background(), types.ThreadReadParams{ThreadID: nativeID, IncludeTurns: types.Some(true)})
-	if err != nil || read.Thread.ID != nativeID {
-		t.Fatalf("read resumed thread: %v, %q", err, read.Thread.ID)
-	}
-	if err := second.c.Close(); err != nil {
-		t.Fatal(err)
+	require.False(t, err != nil || read.Thread.ID != nativeID, "read resumed thread: %v, %q", err, read.Thread.ID)
+	{
+		err := second.c.Close()
+		require.NoError(t, err, err)
 	}
 	frames := assertMethods(t, second, "initialize", "initialized", "thread/resume", "thread/read")
 	var params map[string]json.RawMessage
 	_ = json.Unmarshal(frames[2].Params, &params)
 	wantID, _ := json.Marshal(nativeID)
 	for key, want := range map[string]string{"threadId": string(wantID), "serviceTier": "null", "excludeTurns": "false", "config": "{}", "path": `""`, "initialTurnsPage": `{"limit":0}`} {
-		if string(params[key]) != want {
-			t.Fatalf("%s = %s, want %s", key, params[key], want)
-		}
+		require.Equal(t, want, string(params[key]), "%s = %s, want %s", key, params[key], want)
 	}
-	if len(params) != 6 {
-		t.Fatalf("unexpected fields: %s", frames[2].Params)
-	}
+	require.Equal(t, 6, len(params), "unexpected fields: %s", frames[2].Params)
 }
 
-func TestResumeMismatchKeepsCorrelationAndNoFallback(t *testing.T) {
+func (obs *observationSuite) TestResumeMismatchKeepsCorrelationAndNoFallback() {
+	t := obs.T()
 	for _, alternate := range []bool{false, true} {
 		t.Run(fmt.Sprint(alternate), func(t *testing.T) {
-			f := startFake(t, "resume-mismatch", codex.Limits{})
+			f := obs.fixture(t, "resume-mismatch", codex.Limits{})
 			params := types.ThreadResumeParams{ThreadID: resumedNativeID}
 			if alternate {
 				params.Path = types.Some("/synthetic/alternate-rollout")
@@ -175,37 +161,31 @@ func TestResumeMismatchKeepsCorrelationAndNoFallback(t *testing.T) {
 			}
 			result, err := f.c.ResumeThread(context.Background(), params)
 			callError(t, err, codex.Responded, codex.ErrProtocol)
-			if result.Thread.ID != "" {
-				t.Fatal("mismatched thread exposed as result")
-			}
+			require.Equal(t, "", result.Thread.ID, "mismatched thread exposed as result")
 			var ce *codex.CallError
 			_ = errors.As(err, &ce)
-			if ce.Method != "thread/resume" {
-				t.Fatal("error method lost")
-			}
+			require.Equal(t, "thread/resume", ce.Method, "error method lost")
 			var echoed string
-			if err := f.c.Call(context.Background(), "echo", "still-ready", &echoed); err != nil || echoed != "still-ready" {
-				t.Fatal("mismatched result poisoned connection", err)
+			{
+				err := f.c.Call(context.Background(), "echo", "still-ready", &echoed)
+				require.False(t, err != nil || echoed != "still-ready", "mismatched result poisoned connection", err)
 			}
 			_ = f.c.Close()
 			frames := assertMethods(t, f, "initialize", "initialized", "thread/resume", "echo")
 			expected, _ := json.Marshal(ce.ID)
-			if !reflect.DeepEqual([]byte(frames[2].ID), expected) {
-				t.Fatal("matching RPC ID lost")
-			}
+			require.True(t, reflect.DeepEqual([]byte(frames[2].ID), expected), "matching RPC ID lost")
 			raw, _ := json.Marshal(params)
-			if string(frames[2].Params) != string(raw) {
-				t.Fatal("native request was rewritten")
-			}
+			require.Equal(t, string(raw), string(frames[2].Params), "native request was rewritten")
 		})
 	}
 }
 
-func TestResumeAndUnsubscribeFailureNeverReplay(t *testing.T) {
+func (obs *observationSuite) TestResumeAndUnsubscribeFailureNeverReplay() {
+	t := obs.T()
 	for _, method := range []string{"thread/resume", "thread/unsubscribe"} {
 		for _, mode := range []string{"resume-error", "resume-missing", "resume-invalid", "resume-bad-envelope", "resume-exit"} {
 			t.Run(method+"/"+mode, func(t *testing.T) {
-				f := startFake(t, mode, codex.Limits{})
+				f := obs.fixture(t, mode, codex.Limits{})
 				err := nativeOperation(f.c, method, context.Background())
 				switch mode {
 				case "resume-error", "resume-missing":
@@ -215,9 +195,7 @@ func TestResumeAndUnsubscribeFailureNeverReplay(t *testing.T) {
 					if mode == "resume-missing" {
 						code = -32600
 					}
-					if !errors.As(err, &rpc) || rpc.Code != code || string(rpc.Data) != `{"native":9007199254740993}` {
-						t.Fatalf("native RPC error lost: %v", err)
-					}
+					require.False(t, !errors.As(err, &rpc) || rpc.Code != code || string(rpc.Data) != `{"native":9007199254740993}`, "native RPC error lost: %v", err)
 				case "resume-invalid":
 					callError(t, err, codex.Responded, codex.ErrProtocol)
 				case "resume-bad-envelope":
@@ -231,23 +209,22 @@ func TestResumeAndUnsubscribeFailureNeverReplay(t *testing.T) {
 				frames := assertMethods(t, f, "initialize", "initialized", method)
 				var params map[string]string
 				_ = json.Unmarshal(frames[2].Params, &params)
-				if params["threadId"] != resumedNativeID || len(params) != 1 {
-					t.Fatal("request identity changed")
-				}
+				require.False(t, params["threadId"] != resumedNativeID || len(params) != 1, "request identity changed")
 			})
 		}
 	}
 }
 
-func TestResumeAndUnsubscribeCancellationEvidence(t *testing.T) {
+func (obs *observationSuite) TestResumeAndUnsubscribeCancellationEvidence() {
+	t := obs.T()
 	for _, method := range []string{"thread/resume", "thread/unsubscribe"} {
 		t.Run(method, func(t *testing.T) {
-			f := startFake(t, "resume-wait", codex.Limits{})
+			f := obs.fixture(t, "resume-wait", codex.Limits{})
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			callError(t, nativeOperation(f.c, method, ctx), codex.NotSent, context.Canceled)
 			if err := nativeOperation(f.c, method, nil); err == nil {
-				t.Fatal("nil context accepted")
+				require.FailNow(t, "test invariant", "nil context accepted")
 			} else {
 				callError(t, err, codex.NotSent, nil)
 			}
@@ -261,23 +238,23 @@ func TestResumeAndUnsubscribeCancellationEvidence(t *testing.T) {
 			cancel()
 			callError(t, <-result, codex.OutcomeUnknown, context.Canceled)
 			var fresh string
-			if err := f.c.Call(context.Background(), "resume-release", nil, &fresh); err != nil || fresh != "fresh" {
-				t.Fatal("late result affected fresh call", err)
+			{
+				err := f.c.Call(context.Background(), "resume-release", nil, &fresh)
+				require.False(t, err != nil || fresh != "fresh", "late result affected fresh call", err)
 			}
-			if f.c.Diagnostics().UnmatchedResponses != 1 {
-				t.Fatal("late response not counted")
-			}
+			require.Equal(t, uint64(1), f.c.Diagnostics().UnmatchedResponses, "late response not counted")
 			_ = f.c.Close()
 			assertMethods(t, f, "initialize", "initialized", method, "echo", "resume-release")
 		})
 	}
 }
 
-func TestResumeAndUnsubscribeTimeoutAndClose(t *testing.T) {
+func (obs *observationSuite) TestResumeAndUnsubscribeTimeoutAndClose() {
+	t := obs.T()
 	for _, method := range []string{"thread/resume", "thread/unsubscribe"} {
 		for _, terminate := range []string{"deadline", "close"} {
 			t.Run(method+"/"+terminate, func(t *testing.T) {
-				f := startFake(t, "resume-wait", codex.Limits{})
+				f := obs.fixture(t, "resume-wait", codex.Limits{})
 				ctx := context.Background()
 				var cancel context.CancelFunc
 				if terminate == "deadline" {
@@ -290,8 +267,9 @@ func TestResumeAndUnsubscribeTimeoutAndClose(t *testing.T) {
 				cause := error(context.DeadlineExceeded)
 				if terminate == "close" {
 					cause = codex.ErrClosed
-					if err := f.c.Close(); err != nil {
-						t.Fatal(err)
+					{
+						err := f.c.Close()
+						require.NoError(t, err, err)
 					}
 				}
 				callError(t, <-result, codex.OutcomeUnknown, cause)
@@ -302,25 +280,26 @@ func TestResumeAndUnsubscribeTimeoutAndClose(t *testing.T) {
 	}
 }
 
-func TestUnsubscribeNativeStatusAndLocalIndependence(t *testing.T) {
+func (obs *observationSuite) TestUnsubscribeNativeStatusAndLocalIndependence() {
+	t := obs.T()
 	for _, status := range []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusNotLoaded, types.ThreadUnsubscribeStatusNotSubscribed, types.ThreadUnsubscribeStatusUnsubscribed, "futureStatus"} {
 		t.Run(string(status), func(t *testing.T) {
-			f := startFake(t, "resume-status-"+string(status), codex.Limits{})
+			f := obs.fixture(t, "resume-status-"+string(status), codex.Limits{})
 			s := subscribe(t, f.c, context.Background())
 			result, err := f.c.UnsubscribeThread(context.Background(), types.ThreadUnsubscribeParams{ThreadID: resumedNativeID})
-			if err != nil || result.Status != status || string(result.UnknownFields["future"]) != "null" {
-				t.Fatalf("native status lost: %+v %v", result, err)
-			}
+			require.False(t, err != nil || result.Status != status || string(result.UnknownFields["future"]) != "null", "native status lost: %+v %v", result, err)
 			select {
 			case <-s.Done():
-				t.Fatal("server unsubscribe closed local subscription")
+				require.FailNow(t, "test invariant", "server unsubscribe closed local subscription")
 			default:
 			}
-			if err := f.c.Call(context.Background(), "resume-event", nil, nil); err != nil {
-				t.Fatal(err)
+			{
+				err := f.c.Call(context.Background(), "resume-event", nil, nil)
+				require.NoError(t, err, err)
 			}
-			if e := nextEvent(t, s); e.Method != "future/afterUnsubscribe" {
-				t.Fatal("unrelated event was lost")
+			{
+				e := nextEvent(t, s)
+				require.Equal(t, "future/afterUnsubscribe", e.Method, "unrelated event was lost")
 			}
 			_ = s.Close()
 			awaitSubscription(t, s, nil)
@@ -333,6 +312,7 @@ func TestUnsubscribeNativeStatusAndLocalIndependence(t *testing.T) {
 func TestResumeAndUnsubscribeConcurrentClose(t *testing.T) {
 	f := startFake(t, "resume-normal", codex.Limits{})
 	var wg sync.WaitGroup
+	failures := make(chan error, 24)
 	for i := 0; i < 24; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -342,12 +322,16 @@ func TestResumeAndUnsubscribeConcurrentClose(t *testing.T) {
 				method = "thread/unsubscribe"
 			}
 			if err := nativeOperation(f.c, method, context.Background()); err != nil && !errors.Is(err, codex.ErrClosed) {
-				t.Errorf("unexpected concurrent error: %v", err)
+				failures <- err
 			}
 		}(i)
 	}
 	_ = f.c.Close()
 	wg.Wait()
+	close(failures)
+	for err := range failures {
+		assert.NoError(t, err, "unexpected concurrent error")
+	}
 	frames := trace(t, f.trace)
 	count := 0
 	for _, m := range frames {
@@ -356,17 +340,16 @@ func TestResumeAndUnsubscribeConcurrentClose(t *testing.T) {
 		case "thread/resume", "thread/unsubscribe":
 			count++
 		default:
-			t.Fatalf("unexpected method: %s", m.Method)
+			require.FailNowf(t, "test invariant", "unexpected method: %s", m.Method)
 		}
 	}
-	if count > 24 {
-		t.Fatal("requests replayed")
-	}
+	require.False(t, count > 24, "requests replayed")
 	callError(t, nativeOperation(f.c, "thread/resume", context.Background()), codex.NotSent, codex.ErrClosed)
 }
 
-func TestResumeAndUnsubscribeNotSentLimits(t *testing.T) {
-	f := startFake(t, "resume-normal", codex.Limits{MaxFrameBytes: 2048})
+func (obs *observationSuite) TestResumeAndUnsubscribeNotSentLimits() {
+	t := obs.T()
+	f := obs.fixture(t, "resume-normal", codex.Limits{MaxFrameBytes: 2048})
 	_, err := f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: resumedNativeID, ExcludeTurns: types.Null[bool]()})
 	callError(t, err, codex.NotSent, nil)
 	tooLarge := strings.Repeat("x", 4096)
@@ -376,15 +359,17 @@ func TestResumeAndUnsubscribeNotSentLimits(t *testing.T) {
 	callError(t, err, codex.NotSent, codex.ErrFrameTooLarge)
 	// An independent successful call proves validation/admission errors did not
 	// poison the connection; the transcript proves the failed methods sent nothing.
-	if err := f.c.Call(context.Background(), "echo", true, nil); err != nil {
-		t.Fatal(err)
+	{
+		err := f.c.Call(context.Background(), "echo", true, nil)
+		require.NoError(t, err, err)
 	}
 	_ = f.c.Close()
 	assertMethods(t, f, "initialize", "initialized", "echo")
 }
 
-func TestResumeAndUnsubscribePendingAdmission(t *testing.T) {
-	f := startFake(t, "resume-wait", codex.Limits{PendingCalls: 1})
+func (obs *observationSuite) TestResumeAndUnsubscribePendingAdmission() {
+	t := obs.T()
+	f := obs.fixture(t, "resume-wait", codex.Limits{PendingCalls: 1})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result := make(chan error, 1)

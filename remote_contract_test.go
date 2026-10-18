@@ -20,7 +20,7 @@ import (
 
 	"github.com/coder/websocket"
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func remoteVariant(t *testing.T) string {
@@ -149,7 +149,7 @@ func openRemoteFake(t *testing.T, mode string, limits codex.Limits) (fixture, er
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	f.c, err = codex.NewRemote(ctx, codex.RemoteOptions{URL: "ws" + strings.TrimPrefix(server.URL, "http"), BearerToken: "synthetic-contract-token", TLSConfig: tlsConfig, Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "contract-test", Version: "1"}}, Limits: limits})
+	f.c, err = codex.NewRemote(ctx, codex.RemoteOptions{URL: "ws" + strings.TrimPrefix(server.URL, "http"), BearerToken: "synthetic-contract-token", TLSConfig: tlsConfig, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "contract-test", Version: "1"}}, Limits: limits})
 	return f, err
 }
 
@@ -230,17 +230,17 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{EventQueue: 16})
 			ctx := context.Background()
-			started, err := f.c.StartThread(ctx, protocol.ThreadStartParams{})
+			started, err := f.c.StartThread(ctx, types.ThreadStartParams{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			read, err := f.c.ReadThread(ctx, protocol.ThreadReadParams{ThreadID: started.Thread.ID})
+			read, err := f.c.ReadThread(ctx, types.ThreadReadParams{ThreadID: started.Thread.ID})
 			if err != nil || read.Thread.ID != started.Thread.ID {
 				t.Fatalf("read native thread: %#v %v", read, err)
 			}
 			events := subscribe(t, f.c, ctx)
 			type outcome struct {
-				turn protocol.TurnStartResponse
+				turn types.TurnStartResponse
 				err  error
 			}
 			start := make(chan outcome, 1)
@@ -255,7 +255,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 			if turn.err != nil {
 				t.Fatal(turn.err)
 			}
-			if _, err := f.c.InterruptTurn(ctx, protocol.TurnInterruptParams{ThreadID: started.Thread.ID, TurnID: turn.turn.Turn.ID}); err != nil {
+			if _, err := f.c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: started.Thread.ID, TurnID: turn.turn.Turn.ID}); err != nil {
 				t.Fatal(err)
 			}
 			emitRequests(t, f.c, requestFrame(`"native-approval"`, "item/commandExecution/requestApproval", approvalParams))
@@ -264,7 +264,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 				t.Fatal(err)
 			}
 			responseBarrier(t, f)
-			detached, err := f.c.UnsubscribeThread(ctx, protocol.ThreadUnsubscribeParams{ThreadID: started.Thread.ID})
+			detached, err := f.c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: started.Thread.ID})
 			if err != nil || detached.Status != "unsubscribed" {
 				t.Fatalf("unsubscribe: %#v %v", detached, err)
 			}
@@ -282,7 +282,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 				}
 			}
 			next := startFake(t, "request-normal", codex.Limits{})
-			resumed, err := next.c.ResumeThread(ctx, protocol.ThreadResumeParams{ThreadID: started.Thread.ID})
+			resumed, err := next.c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: started.Thread.ID})
 			if err != nil || resumed.Thread.ID != started.Thread.ID {
 				t.Fatalf("resume: %#v %v", resumed, err)
 			}

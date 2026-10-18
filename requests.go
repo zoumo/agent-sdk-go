@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // Request is an immutable received server request. Accessors return independent
@@ -44,17 +44,17 @@ func (r Request) Data() (any, error) {
 	var data any
 	switch r.state.method {
 	case "item/commandExecution/requestApproval":
-		data = new(protocol.CommandExecutionRequestApprovalParams)
+		data = new(types.CommandExecutionRequestApprovalParams)
 	case "item/fileChange/requestApproval":
-		data = new(protocol.FileChangeRequestApprovalParams)
+		data = new(types.FileChangeRequestApprovalParams)
 	case "item/permissions/requestApproval":
-		data = new(protocol.PermissionsRequestApprovalParams)
+		data = new(types.PermissionsRequestApprovalParams)
 	case "item/tool/requestUserInput":
-		data = new(protocol.ToolRequestUserInputParams)
+		data = new(types.ToolRequestUserInputParams)
 	case "applyPatchApproval":
-		data = new(protocol.ApplyPatchApprovalParams)
+		data = new(types.ApplyPatchApprovalParams)
 	case "execCommandApproval":
-		data = new(protocol.ExecCommandApprovalParams)
+		data = new(types.ExecCommandApprovalParams)
 	default:
 		return nil, nil
 	}

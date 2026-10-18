@@ -1,4 +1,4 @@
-// Package protocol exposes native app-server parameters, results, and recursive
+// Package types exposes native app-server parameters, results, and recursive
 // model types from the exact official Codex revision recorded in the generated
 // source. Experimental fields are included; using them may require negotiating
 // experimentalApi during initialization.
@@ -19,4 +19,4 @@
 // gates remain server-enforced.
 //
 // These types are protocol bindings, not evidence of live-server compatibility.
-package protocol
+package types

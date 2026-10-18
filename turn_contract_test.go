@@ -13,7 +13,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 const nativeTurn = `{"id":"native-turn-response","items":[],"status":"inProgress","future":9007199254740993}`
@@ -122,21 +122,21 @@ func awaitSubscription(t *testing.T, s *codex.Subscription, cause error) {
 		t.Fatalf("terminal error %v, want %v", s.Err(), cause)
 	}
 }
-func startParams() protocol.TurnStartParams {
-	return protocol.TurnStartParams{ThreadID: "native-thread-42", Input: []protocol.UserInput{{Text: protocol.Ptr(protocol.TextUserInput{Text: "synthetic input"})}}, ServiceTier: protocol.Null[string](), DisabledPluginIDs: protocol.Some([]string{}), OutputSchema: protocol.Some(json.RawMessage(`{"type":"string"}`))}
+func startParams() types.TurnStartParams {
+	return types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "synthetic input"})}}, ServiceTier: types.Null[string](), DisabledPluginIDs: types.Some([]string{}), OutputSchema: types.Some(json.RawMessage(`{"type":"string"}`))}
 }
 
 func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 	f := startFake(t, "turn-early", codex.Limits{EventQueue: 16})
 	s := subscribe(t, f.c, context.Background())
 	type outcome struct {
-		r   protocol.TurnStartResponse
+		r   types.TurnStartResponse
 		err error
 	}
 	result := make(chan outcome, 1)
 	params := startParams()
-	params.ParentTurnID = protocol.Some("causing-turn")
-	params.RootTurnID = protocol.Some("chain-root-turn")
+	params.ParentTurnID = types.Some("causing-turn")
+	params.RootTurnID = types.Some("chain-root-turn")
 	go func() { r, err := f.c.StartTurn(context.Background(), params); result <- outcome{r, err} }()
 	var events []codex.Event
 	for i := 0; i < 8; i++ {
@@ -146,16 +146,16 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 		}
 		events = append(events, e)
 	}
-	if events[0].Data.(*protocol.TurnCompletedNotification).Turn.ID != "stale-turn" || events[1].Data.(*protocol.TurnStartedNotification).ThreadID != "other-thread" || events[3].Data.(*protocol.AgentMessageDeltaNotification).TurnID != "other-turn" {
+	if events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || events[1].Data.(*types.TurnStartedNotification).ThreadID != "other-thread" || events[3].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn" {
 		t.Fatal("interleaved native identities changed")
 	}
-	if events[5].Data.(*protocol.ItemStartedNotification).Item.AgentMessage.ID != "native-item-7" {
+	if events[5].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID != "native-item-7" {
 		t.Fatal("native item identity changed")
 	}
-	if string(events[6].Data.(*protocol.ItemCompletedNotification).Item.Unknown) != unknownItem {
+	if string(events[6].Data.(*types.ItemCompletedNotification).Item.Unknown) != unknownItem {
 		t.Fatal("unknown native variant lost")
 	}
-	if events[7].Data.(*protocol.TurnCompletedNotification).Turn.ID != "native-turn-response" {
+	if events[7].Data.(*types.TurnCompletedNotification).Turn.ID != "native-turn-response" {
 		t.Fatal("early completion lost")
 	}
 	select {
@@ -167,7 +167,7 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := <-result
-	if got.err != nil || got.r.Turn.ID != "native-turn-response" || got.r.Turn.Status != protocol.TurnStatusInProgress {
+	if got.err != nil || got.r.Turn.ID != "native-turn-response" || got.r.Turn.Status != types.TurnStatusInProgress {
 		t.Fatalf("response replaced by event: %+v %v", got.r, got.err)
 	}
 	var starts int
@@ -213,13 +213,13 @@ func TestNotificationRawAndDecodeErrors(t *testing.T) {
 		}
 	}
 	e := nextEvent(t, s)
-	native := e.Data.(*protocol.ErrorNotification)
+	native := e.Data.(*types.ErrorNotification)
 	info, ok := native.Error.CodexErrorInfo.Get()
 	if !ok || e.DecodeError != nil || native.WillRetry || string(info.Unknown) != `{"futureError":{"n":9007199254740993}}` {
 		t.Fatalf("error data lost: %#v", e)
 	}
 	e = nextEvent(t, s)
-	d := e.Data.(*protocol.AgentMessageDeltaNotification)
+	d := e.Data.(*types.AgentMessageDeltaNotification)
 	if e.DecodeError != nil || d.ItemID != "native-item-7" || string(d.UnknownFields["future"]) != `{"x":9007199254740993}` || string(e.Params) != turnDelta {
 		t.Fatalf("valid event lost: %#v", e)
 	}
@@ -298,17 +298,17 @@ func TestSubscriptionOwnsPayloadAndNoReplay(t *testing.T) {
 	}
 	a, b := nextEvent(t, first), nextEvent(t, second)
 	a.Params[0] = '!'
-	a.Data.(*protocol.AgentMessageDeltaNotification).UnknownFields["future"][0] = '!'
-	a.Data.(*protocol.AgentMessageDeltaNotification).ThreadID = "mutated"
-	if string(b.Params) != turnDelta || b.Data.(*protocol.AgentMessageDeltaNotification).ThreadID != "native-thread-42" || string(b.Data.(*protocol.AgentMessageDeltaNotification).UnknownFields["future"]) != `{"x":9007199254740993}` {
+	a.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"][0] = '!'
+	a.Data.(*types.AgentMessageDeltaNotification).ThreadID = "mutated"
+	if string(b.Params) != turnDelta || b.Data.(*types.AgentMessageDeltaNotification).ThreadID != "native-thread-42" || string(b.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"]) != `{"x":9007199254740993}` {
 		t.Fatal("subscriber buffers alias")
 	}
 	if err := f.c.Call(context.Background(), "turn-item", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	a, b = nextEvent(t, first), nextEvent(t, second)
-	a.Data.(*protocol.ItemCompletedNotification).Item.Unknown[0] = '!'
-	if string(b.Data.(*protocol.ItemCompletedNotification).Item.Unknown) != unknownItem {
+	a.Data.(*types.ItemCompletedNotification).Item.Unknown[0] = '!'
+	if string(b.Data.(*types.ItemCompletedNotification).Item.Unknown) != unknownItem {
 		t.Fatal("unknown union aliases")
 	}
 
@@ -340,7 +340,7 @@ func TestCancellationDoesNotInterruptTurn(t *testing.T) {
 		}
 	}
 	live := subscribe(t, f.c, context.Background())
-	ack, err := f.c.InterruptTurn(context.Background(), protocol.TurnInterruptParams{ThreadID: "native-thread-42", TurnID: "native-turn-response"})
+	ack, err := f.c.InterruptTurn(context.Background(), types.TurnInterruptParams{ThreadID: "native-thread-42", TurnID: "native-turn-response"})
 	if err != nil || string(ack.UnknownFields["futureAck"]) != "true" {
 		t.Fatalf("interrupt ack: %+v %v", ack, err)
 	}

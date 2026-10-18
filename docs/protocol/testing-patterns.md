@@ -151,7 +151,7 @@ lifecycle signal, not proof of a successful answer or approval. No generic
 request-cancellation frame is inferred from it.
 
 These source patterns inform independently authored Go fake-peer scenarios.
-Separately, `protocol/requests_test.go` checks exact signed-64-bit/string request
+Separately, `types/requests_test.go` checks exact signed-64-bit/string request
 IDs, equal-text IDs of different kinds, numeric range/fraction rejection, native
 modern and legacy decision shapes, permission-path `kind` discriminators,
 optional/null fields, and unknown-field preservation. The generated schema

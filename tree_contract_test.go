@@ -12,7 +12,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 const treeChildParams = `{ "threadId" : "child-1", "turnId":"child-turn", "itemId":"child-item", "delta":"child text", "future":[null,9007199254740993] }`
@@ -90,7 +90,7 @@ func treeUntilDone(t *testing.T, s *codex.TreeSubscription) []codex.TreeEvent {
 }
 func treeStart(t *testing.T, c *codex.Client) {
 	t.Helper()
-	_, err := c.StartTurn(context.Background(), protocol.TurnStartParams{ThreadID: "native-thread-42", Input: []protocol.UserInput{}})
+	_, err := c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestTreeLiveChildStream(t *testing.T) {
 					if created != 2 || e.ParentThreadID != "native-thread-42" || e.Source.ThreadID != "child-1" || e.Source.TurnID != "child-turn" || e.Source.ItemID != "child-item" || e.Scope != "child" || string(e.Raw) != treeChildRaw || string(e.Native.Params) != treeChildParams {
 						t.Fatalf("child native: %+v", e)
 					}
-					data := e.Native.Data.(*protocol.AgentMessageDeltaNotification)
+					data := e.Native.Data.(*types.AgentMessageDeltaNotification)
 					if string(data.UnknownFields["future"]) != "[null,9007199254740993]" {
 						t.Fatal("lost unknown fields")
 					}
@@ -164,7 +164,7 @@ func TestTreeLiveChildStream(t *testing.T) {
 					e.Native.Params[0] = '!'
 					data.Delta = "changed"
 					other := others[i]
-					if string(other.Raw) != treeChildRaw || string(other.Native.Params) != treeChildParams || other.Native.Data.(*protocol.AgentMessageDeltaNotification).Delta != "child text" {
+					if string(other.Raw) != treeChildRaw || string(other.Native.Params) != treeChildParams || other.Native.Data.(*types.AgentMessageDeltaNotification).Delta != "child text" {
 						t.Fatal("tree buffers shared")
 					}
 				}

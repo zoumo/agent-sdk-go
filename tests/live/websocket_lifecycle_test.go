@@ -18,7 +18,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // This opt-in spends at most two turn/start attempts and never retries a write.
@@ -157,7 +157,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	}
 	t.Log("owned child has exactly one TCP listener on 127.0.0.1; temporary token mode 0600")
 	badCtx, badCancel := context.WithTimeout(ctx, 5*time.Second)
-	bad, badErr := codex.NewRemote(badCtx, codex.RemoteOptions{URL: endpoint, BearerToken: "invalid-ticket03-token", Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "sdk-mac-live-ticket03-rejected", Version: "1"}}})
+	bad, badErr := codex.NewRemote(badCtx, codex.RemoteOptions{URL: endpoint, BearerToken: "invalid-ticket03-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket03-rejected", Version: "1"}}})
 	badCancel()
 	if bad != nil {
 		_ = bad.Close()
@@ -175,7 +175,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
 		defer stop()
 		c, err := codex.NewRemote(initCtx, codex.RemoteOptions{URL: endpoint, BearerToken: token,
-			Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "sdk-mac-live-ticket03", Version: "1"}}})
+			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket03", Version: "1"}}})
 		if err != nil {
 			t.Fatalf("initialize failed (no raw error logged): %T", err)
 		}
@@ -217,7 +217,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		}
 	}
 	history := func(c *codex.Client, id string, turnIDs []string) {
-		r, err := c.ReadThread(ctx, protocol.ThreadReadParams{ThreadID: id, IncludeTurns: protocol.Some(true)})
+		r, err := c.ReadThread(ctx, types.ThreadReadParams{ThreadID: id, IncludeTurns: types.Some(true)})
 		if err != nil {
 			t.Fatalf("thread/read failed: %T", err)
 		}
@@ -225,7 +225,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 			t.Fatal("history identity/count mismatch")
 		}
 		for i, turn := range r.Thread.Turns {
-			if turn.ID != turnIDs[i] || turn.Status != protocol.TurnStatusCompleted {
+			if turn.ID != turnIDs[i] || turn.Status != types.TurnStatusCompleted {
 				t.Fatal("history turn identity/status mismatch")
 			}
 			found := false
@@ -247,7 +247,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		}
 		defer s.Close()
 		attempts.Add(1)
-		started, err := c.StartTurn(ctx, protocol.TurnStartParams{ThreadID: id, Input: []protocol.UserInput{{Text: protocol.Ptr(protocol.TextUserInput{Text: prompt})}}})
+		started, err := c.StartTurn(ctx, types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}})
 		if err != nil {
 			var ce *codex.CallError
 			if errors.As(err, &ce) {
@@ -267,7 +267,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 			select {
 			case <-timer.C:
 				interruptCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
-				_, _ = c.InterruptTurn(interruptCtx, protocol.TurnInterruptParams{ThreadID: id, TurnID: started.Turn.ID})
+				_, _ = c.InterruptTurn(interruptCtx, types.TurnInterruptParams{ThreadID: id, TurnID: started.Turn.ID})
 				stop()
 				t.Fatal("turn observation timeout; one explicit interrupt attempted, no replay")
 			case <-s.Done():
@@ -280,25 +280,25 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 					t.Fatalf("event decode failure method=%s", e.Method)
 				}
 				switch v := e.Data.(type) {
-				case *protocol.TurnStartedNotification:
+				case *types.TurnStartedNotification:
 					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
 						turnStarted = true
 						t.Log("matched turn/started")
 					}
-				case *protocol.AgentMessageDeltaNotification:
+				case *types.AgentMessageDeltaNotification:
 					if v.ThreadID == id && v.TurnID == started.Turn.ID {
 						delta.WriteString(v.Delta)
 					}
-				case *protocol.ItemCompletedNotification:
+				case *types.ItemCompletedNotification:
 					if v.ThreadID == id && v.TurnID == started.Turn.ID && v.Item.AgentMessage != nil {
 						agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_MAC_WS_OK"
 						t.Log("matched item/completed agentMessage")
 					}
-				case *protocol.ErrorNotification:
+				case *types.ErrorNotification:
 					t.Fatal("native error notification received; raw payload withheld")
-				case *protocol.TurnCompletedNotification:
+				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						if v.Turn.Status != protocol.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_WS_OK" || unexpected.Load() != 0 {
+						if v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_WS_OK" || unexpected.Load() != 0 {
 							t.Fatal("completion/content/interaction assertion failed")
 						}
 						if err := s.Close(); err != nil {
@@ -320,7 +320,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		}
 	}
 	c := open()
-	thread, err := c.StartThread(ctx, protocol.ThreadStartParams{Cwd: protocol.Some(cwd), Ephemeral: protocol.Some(false), Sandbox: protocol.Some(protocol.SandboxModeReadOnly)})
+	thread, err := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Ephemeral: types.Some(false), Sandbox: types.Some(types.SandboxModeReadOnly)})
 	if err != nil {
 		t.Fatalf("thread/start failed; no replay: %T", err)
 	}
@@ -342,7 +342,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	c = open()
 	t.Log("same owned listener accepted fresh authenticated initialize after first Close")
 	history(c, id, []string{first})
-	resumed, err := c.ResumeThread(ctx, protocol.ThreadResumeParams{ThreadID: id})
+	resumed, err := c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})
 	if err != nil {
 		t.Fatalf("thread/resume failed; no replacement or replay: %T", err)
 	}
@@ -352,11 +352,11 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	t.Log("new connection thread/resume returned same native thread A")
 	second := observe(c, id, "Do not use tools or access files. Return exactly the marker from your previous assistant reply, with no additional text.")
 	history(c, id, []string{first, second})
-	detached, err := c.UnsubscribeThread(ctx, protocol.ThreadUnsubscribeParams{ThreadID: id})
+	detached, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
 	if err != nil {
 		t.Fatalf("native unsubscribe failed: %T", err)
 	}
-	if detached.Status != protocol.ThreadUnsubscribeStatusUnsubscribed {
+	if detached.Status != types.ThreadUnsubscribeStatusUnsubscribed {
 		t.Fatal("native unsubscribe unexpected status")
 	}
 	t.Log("thread/unsubscribe status=unsubscribed")

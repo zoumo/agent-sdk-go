@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 type pendingCall struct {
@@ -153,8 +153,8 @@ func newClient(limits Limits) *Client {
 	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), trees: make(map[*TreeSubscription]struct{}), epoch: connectionEpoch.Add(1), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 }
 
-func (c *Client) initialize(ctx context.Context, params protocol.InitializeParams) (*Client, error) {
-	var info protocol.InitializeResponse
+func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {
+	var info types.InitializeResponse
 	err := c.call(ctx, "initialize", params, &info, true)
 	if err != nil {
 		c.fail(err)
@@ -185,34 +185,34 @@ func (c *Client) initialize(ctx context.Context, params protocol.InitializeParam
 	return c, nil
 }
 
-func (c *Client) ServerInfo() protocol.InitializeResponse {
-	var v protocol.InitializeResponse
+func (c *Client) ServerInfo() types.InitializeResponse {
+	var v types.InitializeResponse
 	_ = json.Unmarshal(c.serverInfo, &v)
 	return v
 }
-func (c *Client) StartThread(ctx context.Context, p protocol.ThreadStartParams) (protocol.ThreadStartResponse, error) {
-	var r protocol.ThreadStartResponse
+func (c *Client) StartThread(ctx context.Context, p types.ThreadStartParams) (types.ThreadStartResponse, error) {
+	var r types.ThreadStartResponse
 	err := c.Call(ctx, "thread/start", p, &r)
 	return r, err
 }
-func (c *Client) ReadThread(ctx context.Context, p protocol.ThreadReadParams) (protocol.ThreadReadResponse, error) {
-	var r protocol.ThreadReadResponse
+func (c *Client) ReadThread(ctx context.Context, p types.ThreadReadParams) (types.ThreadReadResponse, error) {
+	var r types.ThreadReadResponse
 	err := c.Call(ctx, "thread/read", p, &r)
 	return r, err
 }
 
 // StartTurn returns only the native response. Events, including early or stale
 // completions, never change its result. Subscribe before starting a turn.
-func (c *Client) StartTurn(ctx context.Context, p protocol.TurnStartParams) (protocol.TurnStartResponse, error) {
-	var r protocol.TurnStartResponse
+func (c *Client) StartTurn(ctx context.Context, p types.TurnStartParams) (types.TurnStartResponse, error) {
+	var r types.TurnStartResponse
 	err := c.Call(ctx, "turn/start", p, &r)
 	return r, err
 }
 
 // InterruptTurn explicitly requests interruption of the caller's native turn.
 // A successful acknowledgement is not evidence that execution has completed.
-func (c *Client) InterruptTurn(ctx context.Context, p protocol.TurnInterruptParams) (protocol.TurnInterruptResponse, error) {
-	var r protocol.TurnInterruptResponse
+func (c *Client) InterruptTurn(ctx context.Context, p types.TurnInterruptParams) (types.TurnInterruptResponse, error) {
+	var r types.TurnInterruptResponse
 	err := c.Call(ctx, "turn/interrupt", p, &r)
 	return r, err
 }

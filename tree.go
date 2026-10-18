@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 var connectionEpoch atomic.Uint64
@@ -557,7 +557,7 @@ func (t *TreeSubscription) seedLocked(snapshot json.RawMessage) {
 			if t.closed {
 				return
 			}
-			var decoded protocol.ThreadItem
+			var decoded types.ThreadItem
 			if json.Unmarshal(item, &decoded) == nil && decoded.CollabAgentToolCall != nil {
 				f, _ := objectFields(item)
 				var itemID string
@@ -600,15 +600,15 @@ func (t *TreeSubscription) discoverLocked(native Event, source TreeIdentity) {
 		}
 		return
 	}
-	n, ok := native.Data.(*protocol.ItemCompletedNotification)
+	n, ok := native.Data.(*types.ItemCompletedNotification)
 	if native.DecodeError != nil || !ok || n.Item.CollabAgentToolCall == nil {
 		return
 	}
 	t.collabLocked(n.Item.CollabAgentToolCall, source)
 }
 
-func (t *TreeSubscription) collabLocked(item *protocol.CollabAgentToolCallThreadItem, source TreeIdentity) {
-	if item.Status != protocol.CollabAgentToolCallStatusCompleted || item.SenderThreadID != source.ThreadID {
+func (t *TreeSubscription) collabLocked(item *types.CollabAgentToolCallThreadItem, source TreeIdentity) {
+	if item.Status != types.CollabAgentToolCallStatusCompleted || item.SenderThreadID != source.ThreadID {
 		return
 	}
 	for _, child := range item.ReceiverThreadIDs {
@@ -616,7 +616,7 @@ func (t *TreeSubscription) collabLocked(item *protocol.CollabAgentToolCallThread
 			return
 		}
 		evidence := TreeEvidence{Method: "item/completed", Source: source, Tool: string(item.Tool), ReceiverThreadIDs: append([]string(nil), item.ReceiverThreadIDs...)}
-		t.relationLocked(child, item.SenderThreadID, evidence, item.Tool == protocol.CollabAgentToolSpawnAgent)
+		t.relationLocked(child, item.SenderThreadID, evidence, item.Tool == types.CollabAgentToolSpawnAgent)
 	}
 }
 
@@ -629,7 +629,7 @@ func (t *TreeSubscription) deliverLocked(method string, params json.RawMessage, 
 	native.DecodeError = t.client.safeError(native.DecodeError)
 	// Only a successfully decoded terminal item has a reliable occurrence identity
 	// in this pinned protocol. Item IDs identify entities, never delta occurrences.
-	terminal, terminalOK := native.Data.(*protocol.ItemCompletedNotification)
+	terminal, terminalOK := native.Data.(*types.ItemCompletedNotification)
 	if method == "item/completed" && terminalOK && len(terminal.Item.Unknown) == 0 && native.DecodeError == nil && source.ThreadID != "" && source.TurnID != "" && source.ItemID != "" {
 		keyBytes, _ := json.Marshal([]string{source.ThreadID, source.TurnID, method, source.ItemID})
 		key := string(keyBytes) // epoch is implicit in this connection-owned cache

@@ -15,8 +15,8 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "398 synthetic exported-model schema round trips; omitted/null/value; experimental start fields; known and unknown union variants; unknown object fields; malformed known payload rejection; atomic decoding and encoding validation. Synthetic fixtures, no server process.",
       "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
@@ -28,8 +28,8 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -race ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Same model suite under Go race detector. No concurrent server compatibility claim.",
       "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
@@ -74,8 +74,8 @@
       "command": "mise exec go@1.26.9 -- go test -race ./...",
       "test_files": [
         "client_contract_test.go",
-        "protocol/protocol_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Entire exported contract and model suites pass under the race detector after the confirmed-dispatch test synchronization fix.",
       "attempts": [
@@ -97,9 +97,9 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/turn_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "431 synthetic exported-model round trips over the 99-definition selected closure, including native turn params/results and six notification payloads; arbitrary outputSchema omitted/null/value semantics; required event identities, timestamps, and payload fields. No server process.",
       "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
@@ -111,9 +111,9 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/turn_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Model fidelity suite under the Go race detector. No live compatibility claim.",
       "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
@@ -152,9 +152,9 @@
       "test_files": [
         "client_contract_test.go",
         "turn_contract_test.go",
-        "protocol/protocol_test.go",
-        "protocol/turn_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Full exported-client and model suites under race detector, including overlapping subscription registration/cancellation/close and mutable per-subscriber payload isolation.",
       "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
@@ -166,10 +166,10 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/turn_test.go",
-        "protocol/resume_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "581 synthetic model round trips over 117 exact upstream definitions; full resume/unsubscribe fields, omitted/null/value serviceTier, non-null excludeTurns, arbitrary history union preservation, native required fields and pagination bounds. No server process.",
       "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
@@ -181,10 +181,10 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/turn_test.go",
-        "protocol/resume_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Complete model suite under Go race detector; no live compatibility claim.",
       "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
@@ -224,10 +224,10 @@
         "client_contract_test.go",
         "turn_contract_test.go",
         "resume_contract_test.go",
-        "protocol/protocol_test.go",
-        "protocol/turn_test.go",
-        "protocol/resume_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Full exported-client and model suites under race detector, including concurrent typed resume/unsubscribe and Close. No real Codex executable or live model.",
       "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
@@ -239,9 +239,9 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/requests_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "744 synthetic round trips over 154 exact upstream definitions; modern/legacy approvals, permissions, user-input and resolved notifications; exact signed-integer/string RequestID, invalid ID/raw escape rejection, all native decisions, unknown variants, omission/null/value fields and kind-tagged filesystem paths.",
       "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
@@ -253,9 +253,9 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/requests_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Complete native model suite under the Go race detector; source fidelity is not live server compatibility.",
       "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
@@ -312,9 +312,9 @@
         "client_contract_test.go",
         "request_contract_test.go",
         "requests_example_test.go",
-        "protocol/protocol_test.go",
-        "protocol/requests_test.go",
-        "protocol/schema_generated_test.go"
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/schema_generated_test.go"
       ],
       "coverage": "Full exported-client and model suites under the race detector, including competing answer/reject/cancel, resolution, expiry, blocked writes, Close and stale connection handles. No live Codex executable.",
       "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
@@ -539,11 +539,11 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/requests_test.go",
-        "protocol/resume_test.go",
-        "protocol/schema_generated_test.go",
-        "protocol/turn_test.go"
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go",
+        "types/turn_test.go"
       ],
       "coverage": "Protocol unit-package portion of the final full normal run: unchanged 744 generated model round trips and existing model tests for optional/null/unknown fields, native IDs, turn/resume, approval/input, and resolution shapes. No schema or generated type change in ticket 05; these are not complete JSON Schema validators. No server process or live compatibility claim.",
       "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
@@ -557,11 +557,11 @@
       "status": "passed",
       "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
       "test_files": [
-        "protocol/protocol_test.go",
-        "protocol/requests_test.go",
-        "protocol/resume_test.go",
-        "protocol/schema_generated_test.go",
-        "protocol/turn_test.go"
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go",
+        "types/turn_test.go"
       ],
       "coverage": "Protocol unit-package portion of the final full race run: unchanged 744 generated model round trips and existing native model tests. No schema or generated type change in ticket 05; source fidelity is not full JSON Schema validation or live compatibility.",
       "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
@@ -1074,10 +1074,10 @@
         "tree_lifecycle_test.go",
         "tree_bounds_requests_test.go",
         "turn_contract_test.go",
-        "protocol/current_test.go",
-        "protocol/schema.json",
-        "protocol/types_generated.go",
-        "protocol/schema_generated_test.go",
+        "types/current_test.go",
+        "types/schema.json",
+        "types/types_generated.go",
+        "types/schema_generated_test.go",
         "scripts/generate_protocol.py",
         "examples/observe-tree-offline/main.go",
         "examples/observe-tree-offline/main_test.go",
@@ -1125,10 +1125,10 @@
         "tree_lifecycle_test.go",
         "tree_bounds_requests_test.go",
         "turn_contract_test.go",
-        "protocol/current_test.go",
-        "protocol/schema.json",
-        "protocol/types_generated.go",
-        "protocol/schema_generated_test.go",
+        "types/current_test.go",
+        "types/schema.json",
+        "types/types_generated.go",
+        "types/schema_generated_test.go",
         "scripts/generate_protocol.py",
         "examples/observe-tree-offline/main.go",
         "examples/observe-tree-offline/main_test.go",
@@ -1169,8 +1169,8 @@
         "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
       },
       "test_files": [
-        "protocol/current_test.go",
-        "protocol/schema_generated_test.go",
+        "types/current_test.go",
+        "types/schema_generated_test.go",
         "tree_current_contract_test.go",
         "turn_contract_test.go"
       ],

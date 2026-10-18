@@ -18,7 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 type blockedRemotePeer struct {
@@ -116,7 +116,7 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 			}
 		}
 	}))
-	options := codex.RemoteOptions{BearerToken: "synthetic-block-token", Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "backpressure-test", Version: "1"}}, Limits: limits}
+	options := codex.RemoteOptions{BearerToken: "synthetic-block-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "backpressure-test", Version: "1"}}, Limits: limits}
 	options.Limits.MaxFrameBytes = 32 << 20
 	if remoteVariant(t) == "wss" {
 		server.StartTLS()
@@ -327,7 +327,7 @@ func TestRemoteCloseLeavesListenerAvailable(t *testing.T) {
 					}
 				}
 			}))
-			options := codex.RemoteOptions{BearerToken: "synthetic-reconnect-token", Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "independent-connections", Version: "1"}}}
+			options := codex.RemoteOptions{BearerToken: "synthetic-reconnect-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "independent-connections", Version: "1"}}}
 			if transport == "wss" {
 				server.StartTLS()
 				roots := x509.NewCertPool()

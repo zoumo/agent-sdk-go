@@ -12,7 +12,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func main() {
@@ -37,7 +37,7 @@ func run(out io.Writer) error {
 	}
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{
 		Executable: executable, Args: []string{"--fixture"}, Env: []string{},
-		Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "offline-tree", Version: "1"}},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "offline-tree", Version: "1"}},
 	})
 	if err != nil {
 		return err

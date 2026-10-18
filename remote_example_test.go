@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // This example is compiled, not executed; the endpoint and token are placeholders.
@@ -14,13 +14,13 @@ func ExampleNewRemote() {
 	client, err := codex.NewRemote(ctx, codex.RemoteOptions{
 		URL:         "wss://codex.example.com/",
 		BearerToken: "caller-supplied-token",
-		Initialize:  protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "my-client", Version: "0.1"}},
+		Initialize:  types.InitializeParams{ClientInfo: types.ClientInfo{Name: "my-client", Version: "0.1"}},
 	})
 	if err != nil {
 		return
 	}
 	defer client.Close()
-	started, err := client.StartThread(ctx, protocol.ThreadStartParams{Ephemeral: protocol.Some(true)})
+	started, err := client.StartThread(ctx, types.ThreadStartParams{Ephemeral: types.Some(true)})
 	if err != nil {
 		return
 	}

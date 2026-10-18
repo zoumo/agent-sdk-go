@@ -25,7 +25,7 @@ import (
 
 	"github.com/coder/websocket"
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // These peers are independently authored, external-package fixtures. They use
@@ -41,7 +41,7 @@ type securityEnvelope struct {
 func securityOptions(endpoint string) codex.RemoteOptions {
 	return codex.RemoteOptions{
 		URL: endpoint, BearerToken: securityToken,
-		Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "security-test", Version: "1"}},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "security-test", Version: "1"}},
 		Limits:     codex.Limits{CallTimeout: 2 * time.Second, WriteTimeout: time.Second, ShutdownTimeout: time.Second},
 	}
 }
@@ -600,7 +600,7 @@ func TestRemoteSecurityReflectedNumericDecodeErrorIsSafe(t *testing.T) {
 			})
 			options.BearerToken = token
 			c := securityOpen(t, options)
-			_, err := c.ReadThread(context.Background(), protocol.ThreadReadParams{ThreadID: "synthetic-thread"})
+			_, err := c.ReadThread(context.Background(), types.ThreadReadParams{ThreadID: "synthetic-thread"})
 			var call *codex.CallError
 			if !errors.Is(err, codex.ErrProtocol) || !errors.As(err, &call) || call.Dispatch != codex.Responded {
 				t.Fatalf("typed decode error lost protocol/response evidence: %v", err)

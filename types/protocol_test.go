@@ -1,4 +1,4 @@
-package protocol_test
+package types_test
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func decodedJSON(t *testing.T, data []byte) any {
@@ -36,17 +36,17 @@ func schemaRoundTrip(t *testing.T, target any, raw string) {
 }
 
 func TestOptionalOmittedNullAndZero(t *testing.T) {
-	var omitted protocol.ThreadStartParams
+	var omitted types.ThreadStartParams
 	for _, tt := range []struct {
 		name  string
-		value protocol.ThreadStartParams
+		value types.ThreadStartParams
 		want  string
 	}{
 		{"omitted", omitted, `{}`},
-		{"null", protocol.ThreadStartParams{ServiceTier: protocol.Null[string]()}, `{"serviceTier":null}`},
-		{"empty", protocol.ThreadStartParams{ServiceTier: protocol.Some("")}, `{"serviceTier":""}`},
-		{"false", protocol.ThreadStartParams{Ephemeral: protocol.Some(false)}, `{"ephemeral":false}`},
-		{"empty array", protocol.ThreadStartParams{Environments: protocol.Some([]protocol.TurnEnvironmentParams{})}, `{"environments":[]}`},
+		{"null", types.ThreadStartParams{ServiceTier: types.Null[string]()}, `{"serviceTier":null}`},
+		{"empty", types.ThreadStartParams{ServiceTier: types.Some("")}, `{"serviceTier":""}`},
+		{"false", types.ThreadStartParams{Ephemeral: types.Some(false)}, `{"ephemeral":false}`},
+		{"empty array", types.ThreadStartParams{Environments: types.Some([]types.TurnEnvironmentParams{})}, `{"environments":[]}`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := json.Marshal(tt.value)
@@ -56,7 +56,7 @@ func TestOptionalOmittedNullAndZero(t *testing.T) {
 			if string(got) != tt.want {
 				t.Fatalf("got %s, want %s", got, tt.want)
 			}
-			var round protocol.ThreadStartParams
+			var round types.ThreadStartParams
 			if err := json.Unmarshal(got, &round); err != nil {
 				t.Fatal(err)
 			}
@@ -71,25 +71,25 @@ func TestOptionalOmittedNullAndZero(t *testing.T) {
 	if got := omitted.ServiceTier.ValueOr("fallback"); got != "fallback" {
 		t.Fatal(got)
 	}
-	if got, ok := protocol.Some(false).Get(); !ok || got {
+	if got, ok := types.Some(false).Get(); !ok || got {
 		t.Fatal("present false lost")
 	}
 }
 
 func TestCompleteExperimentalStartFields(t *testing.T) {
-	params := protocol.ThreadStartParams{
-		AllowProviderModelFallback: protocol.Some(false),
-		RuntimeWorkspaceRoots:      protocol.Some([]protocol.AbsolutePathBuf{"/synthetic"}),
-		Permissions:                protocol.Some("workspace"),
-		HistoryMode:                protocol.Some(protocol.ThreadHistoryModePaginated),
-		ProjectID:                  protocol.Null[string](),
-		DaybreakEnabled:            protocol.Some(false),
-		Environments:               protocol.Some([]protocol.TurnEnvironmentParams{{Cwd: "/synthetic", EnvironmentID: "environment-1"}}),
-		DynamicTools:               protocol.Some([]protocol.DynamicToolSpec{{Function: &protocol.FunctionDynamicToolSpec{Name: "test", Description: "synthetic tool", InputSchema: json.RawMessage(`{"type":"object"}`)}}}),
-		SelectedCapabilityRoots:    protocol.Some([]protocol.SelectedCapabilityRoot{}),
-		MockExperimentalField:      protocol.Some("synthetic"),
-		ExperimentalRawEvents:      protocol.Some(false),
-		MultiAgentMode:             protocol.Some(protocol.MultiAgentMode{Value: protocol.Ptr(protocol.MultiAgentModeValueExplicitRequestOnly)}),
+	params := types.ThreadStartParams{
+		AllowProviderModelFallback: types.Some(false),
+		RuntimeWorkspaceRoots:      types.Some([]types.AbsolutePathBuf{"/synthetic"}),
+		Permissions:                types.Some("workspace"),
+		HistoryMode:                types.Some(types.ThreadHistoryModePaginated),
+		ProjectID:                  types.Null[string](),
+		DaybreakEnabled:            types.Some(false),
+		Environments:               types.Some([]types.TurnEnvironmentParams{{Cwd: "/synthetic", EnvironmentID: "environment-1"}}),
+		DynamicTools:               types.Some([]types.DynamicToolSpec{{Function: &types.FunctionDynamicToolSpec{Name: "test", Description: "synthetic tool", InputSchema: json.RawMessage(`{"type":"object"}`)}}}),
+		SelectedCapabilityRoots:    types.Some([]types.SelectedCapabilityRoot{}),
+		MockExperimentalField:      types.Some("synthetic"),
+		ExperimentalRawEvents:      types.Some(false),
+		MultiAgentMode:             types.Some(types.MultiAgentMode{Value: types.Ptr(types.MultiAgentModeValueExplicitRequestOnly)}),
 	}
 	encoded, err := json.Marshal(params)
 	if err != nil {
@@ -104,12 +104,12 @@ func TestCompleteExperimentalStartFields(t *testing.T) {
 			t.Errorf("missing native field %s", key)
 		}
 	}
-	schemaRoundTrip(t, new(protocol.ThreadStartParams), string(encoded))
+	schemaRoundTrip(t, new(types.ThreadStartParams), string(encoded))
 }
 
 func TestKnownAndFutureUnionVariants(t *testing.T) {
 	raw := `{"type":"agentMessage","id":"native-item","text":"answer","phase":"final_answer","future":{"large":9007199254740993},"memoryCitation":null}`
-	var item protocol.ThreadItem
+	var item types.ThreadItem
 	schemaRoundTrip(t, &item, raw)
 	if item.AgentMessage == nil || item.AgentMessage.ID != "native-item" || item.AgentMessage.Text != "answer" {
 		t.Fatal("missing typed agent message")
@@ -125,7 +125,7 @@ func TestKnownAndFutureUnionVariants(t *testing.T) {
 	if item.AgentMessage != nil || string(item.Unknown) != future {
 		t.Fatal("union replacement or fallback failed")
 	}
-	created := protocol.ThreadItem{AgentMessage: &protocol.AgentMessageThreadItem{ID: "native", Text: "test"}}
+	created := types.ThreadItem{AgentMessage: &types.AgentMessageThreadItem{ID: "native", Text: "test"}}
 	encoded, err := json.Marshal(created)
 	if err != nil {
 		t.Fatal(err)
@@ -140,19 +140,19 @@ func TestMalformedKnownDataRejected(t *testing.T) {
 		name, raw string
 		target    func() any
 	}{
-		{"missing required", `{}`, func() any { return new(protocol.InitializeParams) }},
-		{"null scalar", `{"threadId":null}`, func() any { return new(protocol.ThreadReadParams) }},
-		{"null optional nonnullable", `{"threadId":"id","includeTurns":null}`, func() any { return new(protocol.ThreadReadParams) }},
-		{"wrong scalar", `{"threadId":23}`, func() any { return new(protocol.ThreadReadParams) }},
-		{"known variant missing text", `{"type":"agentMessage","id":"item"}`, func() any { return new(protocol.ThreadItem) }},
-		{"known variant wrong text", `{"type":"agentMessage","id":"item","text":2}`, func() any { return new(protocol.ThreadItem) }},
-		{"missing discriminator", `{"id":"item"}`, func() any { return new(protocol.ThreadItem) }},
-		{"null discriminator", `{"type":null}`, func() any { return new(protocol.ThreadItem) }},
-		{"null scalar array element", `{"runtimeWorkspaceRoots":[null]}`, func() any { return new(protocol.ThreadStartParams) }},
-		{"image missing source", `{"type":"image"}`, func() any { return new(protocol.UserInput) }},
-		{"image null source", `{"type":"image","url":null}`, func() any { return new(protocol.UserInput) }},
-		{"null object", `null`, func() any { return new(protocol.ThreadStartParams) }},
-		{"null union", `null`, func() any { return new(protocol.ThreadItem) }},
+		{"missing required", `{}`, func() any { return new(types.InitializeParams) }},
+		{"null scalar", `{"threadId":null}`, func() any { return new(types.ThreadReadParams) }},
+		{"null optional nonnullable", `{"threadId":"id","includeTurns":null}`, func() any { return new(types.ThreadReadParams) }},
+		{"wrong scalar", `{"threadId":23}`, func() any { return new(types.ThreadReadParams) }},
+		{"known variant missing text", `{"type":"agentMessage","id":"item"}`, func() any { return new(types.ThreadItem) }},
+		{"known variant wrong text", `{"type":"agentMessage","id":"item","text":2}`, func() any { return new(types.ThreadItem) }},
+		{"missing discriminator", `{"id":"item"}`, func() any { return new(types.ThreadItem) }},
+		{"null discriminator", `{"type":null}`, func() any { return new(types.ThreadItem) }},
+		{"null scalar array element", `{"runtimeWorkspaceRoots":[null]}`, func() any { return new(types.ThreadStartParams) }},
+		{"image missing source", `{"type":"image"}`, func() any { return new(types.UserInput) }},
+		{"image null source", `{"type":"image","url":null}`, func() any { return new(types.UserInput) }},
+		{"null object", `null`, func() any { return new(types.ThreadStartParams) }},
+		{"null union", `null`, func() any { return new(types.ThreadItem) }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := json.Unmarshal([]byte(tt.raw), tt.target()); err == nil {
@@ -163,32 +163,32 @@ func TestMalformedKnownDataRejected(t *testing.T) {
 }
 
 func TestAtomicDecodeAndEncodingValidation(t *testing.T) {
-	p := protocol.ThreadReadParams{ThreadID: "original", IncludeTurns: protocol.Some(true)}
+	p := types.ThreadReadParams{ThreadID: "original", IncludeTurns: types.Some(true)}
 	if err := json.Unmarshal([]byte(`{"threadId":"replacement","includeTurns":"wrong"}`), &p); err == nil {
 		t.Fatal("expected error")
 	}
 	if p.ThreadID != "original" || !p.IncludeTurns.ValueOr(false) {
 		t.Fatal("failed decode modified receiver")
 	}
-	if _, err := json.Marshal(protocol.ThreadReadParams{ThreadID: "id", IncludeTurns: protocol.Null[bool]()}); err == nil {
+	if _, err := json.Marshal(types.ThreadReadParams{ThreadID: "id", IncludeTurns: types.Null[bool]()}); err == nil {
 		t.Fatal("null nonnullable value encoded")
 	}
-	if _, err := json.Marshal(protocol.ThreadItem{}); err == nil {
+	if _, err := json.Marshal(types.ThreadItem{}); err == nil {
 		t.Fatal("empty union encoded")
 	}
-	if _, err := json.Marshal(protocol.ThreadItem{Unknown: json.RawMessage(`{}`), AgentMessage: &protocol.AgentMessageThreadItem{}}); err == nil {
+	if _, err := json.Marshal(types.ThreadItem{Unknown: json.RawMessage(`{}`), AgentMessage: &types.AgentMessageThreadItem{}}); err == nil {
 		t.Fatal("ambiguous union encoded")
 	}
-	if _, err := json.Marshal(protocol.ThreadReadParams{ThreadID: "id", UnknownFields: map[string]json.RawMessage{"threadId": json.RawMessage(`"override"`)}}); err == nil {
+	if _, err := json.Marshal(types.ThreadReadParams{ThreadID: "id", UnknownFields: map[string]json.RawMessage{"threadId": json.RawMessage(`"override"`)}}); err == nil {
 		t.Fatal("unknown field overwrote known member")
 	}
 }
 
 func ExampleOptional() {
-	params := protocol.ThreadStartParams{
-		Model:       protocol.Some("configured-model"),
-		ServiceTier: protocol.Null[string](),
-		Ephemeral:   protocol.Some(false),
+	params := types.ThreadStartParams{
+		Model:       types.Some("configured-model"),
+		ServiceTier: types.Null[string](),
+		Ephemeral:   types.Some(false),
 	}
 	_, _ = json.Marshal(params)
 	// The model and false value are present, serviceTier is null, and every
@@ -205,7 +205,7 @@ func TestRejectLossyJSONDecoding(t *testing.T) {
 		`{"threadId":"\ud800\u0041"}`,
 		"{\"threadId\":\"" + string([]byte{0xff}) + "\"}",
 	} {
-		var params protocol.ThreadReadParams
+		var params types.ThreadReadParams
 		if err := json.Unmarshal([]byte(raw), &params); err == nil {
 			t.Errorf("lossy decoding accepted for %q", raw)
 		}
@@ -215,19 +215,19 @@ func TestRejectLossyJSONDecoding(t *testing.T) {
 		`{"threadId":"literal \\ud800 text"}`,
 		`{"threadId":"unicode-😀"}`,
 	} {
-		schemaRoundTrip(t, new(protocol.ThreadReadParams), raw)
+		schemaRoundTrip(t, new(types.ThreadReadParams), raw)
 	}
 }
 
 func TestRejectLossyJSONEncoding(t *testing.T) {
 	invalid := string([]byte{0xff})
 	for _, value := range []any{
-		protocol.ThreadReadParams{ThreadID: invalid},
-		protocol.ThreadStartParams{Model: protocol.Some(invalid)},
-		protocol.ThreadStartParams{Config: protocol.Some(map[string]json.RawMessage{invalid: json.RawMessage(`null`)})},
-		protocol.ThreadStartParams{UnknownFields: map[string]json.RawMessage{"future": json.RawMessage(`{"a":1,"a":2}`)}},
-		protocol.ThreadItem{Unknown: json.RawMessage(`{"type":"future","id":"\ud800"}`)},
-		protocol.SessionSource{Value: protocol.Ptr(protocol.SessionSourceValue(invalid))},
+		types.ThreadReadParams{ThreadID: invalid},
+		types.ThreadStartParams{Model: types.Some(invalid)},
+		types.ThreadStartParams{Config: types.Some(map[string]json.RawMessage{invalid: json.RawMessage(`null`)})},
+		types.ThreadStartParams{UnknownFields: map[string]json.RawMessage{"future": json.RawMessage(`{"a":1,"a":2}`)}},
+		types.ThreadItem{Unknown: json.RawMessage(`{"type":"future","id":"\ud800"}`)},
+		types.SessionSource{Value: types.Ptr(types.SessionSourceValue(invalid))},
 	} {
 		if _, err := json.Marshal(value); err == nil {
 			t.Errorf("lossy JSON encoding accepted for %T", value)

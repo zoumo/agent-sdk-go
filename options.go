@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // Limits are per connection. Zero values select DefaultLimits. Negative values
@@ -77,7 +77,7 @@ type StdioOptions struct {
 	Args       []string
 	Env        []string
 	Dir        string
-	Initialize protocol.InitializeParams
+	Initialize types.InitializeParams
 	Limits     Limits
 }
 
@@ -100,7 +100,7 @@ type DiagnosticSnapshot struct {
 type RemoteOptions struct {
 	URL         string
 	BearerToken string
-	Initialize  protocol.InitializeParams
+	Initialize  types.InitializeParams
 	Limits      Limits
 	TLSConfig   *tls.Config
 	// AllowInsecureWS permits unencrypted ws to non-loopback hosts. This can

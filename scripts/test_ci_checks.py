@@ -93,8 +93,8 @@ class CIGates(unittest.TestCase):
 
     def test_generation_reproduces_and_rejects_committed_drift(self):
         paths = ["scripts/generate_protocol.py", "scripts/check_generated.sh",
-                 "protocol/schema.json", "protocol/types_generated.go",
-                 "protocol/schema_generated_test.go"]
+                 "types/schema.json", "types/types_generated.go",
+                 "types/schema_generated_test.go"]
         for rel in paths:
             dest = self.repo / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -103,7 +103,7 @@ class CIGates(unittest.TestCase):
         result = self.run_cmd("bash", "scripts/check_generated.sh")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         # Commit the drift: generation must change HEAD's file and fail git diff.
-        for rel in ["protocol/types_generated.go", "protocol/schema_generated_test.go"]:
+        for rel in ["types/types_generated.go", "types/schema_generated_test.go"]:
             with self.subTest(output=rel):
                 target = self.repo / rel
                 target.write_text(target.read_text() + "// committed drift\n")

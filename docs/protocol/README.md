@@ -33,7 +33,7 @@ membership flag is not an SDK support or server-runtime availability guarantee.
 
 ## Generated material
 
-`protocol/schema.json` is the unmodified definition closure of
+`types/schema.json` is the unmodified definition closure of
 `InitializeParams`, `InitializeResponse`, `v2/ThreadStartParams`,
 `v2/ThreadStartResponse`, `v2/ThreadReadParams`, `v2/ThreadReadResponse`, the
 `v2/ThreadResume` and `v2/ThreadUnsubscribe` parameter/response pairs, the
@@ -48,7 +48,7 @@ the parameter/response roots for `CommandExecutionRequestApproval`,
 `v2/ServerRequestResolvedNotification`. These 33 roots are extracted
 from the official experimental archive's
 `json_schema["codex_app_server_protocol.schemas.json"]` member.
-`protocol/types_generated.go` is independently generated from that snapshot by
+`types/types_generated.go` is independently generated from that snapshot by
 `scripts/generate_protocol.py`. The script verifies the upstream archive's exact
 Git blob before refreshing the snapshot. The snapshot and Go code are adaptations;
 they are not an upstream OpenAI Go SDK. The Go representation adds explicit

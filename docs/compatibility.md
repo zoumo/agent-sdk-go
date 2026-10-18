@@ -173,7 +173,7 @@ evidence history; no subagent live validation is claimed.
 `Client.SubscribeTree` adds a local, bounded stream for a root and direct children
 identified by successful completed collab items. Only successful live spawnAgent
 confirms SDK-derived Created; successful non-spawn collab evidence is Associated.
-SDK wrapper names are outside `protocol`; native Event and protocol generation
+SDK wrapper names are outside `types`; native Event and protocol generation
 remain unchanged. Native envelopes and parameter bytes are retained independently
 for each observer. Request handles remain exclusively on `Client.Requests()`.
 

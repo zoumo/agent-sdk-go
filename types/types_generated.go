@@ -3,7 +3,7 @@
 // Upstream Git blob: eef430182091bfc6f120c98dda3a3246771de8d1
 // Upstream license: Apache-2.0; see NOTICE.
 
-package protocol
+package types
 
 import (
 	"encoding/json"

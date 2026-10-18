@@ -14,7 +14,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // Deliberately opaque, including whitespace and Unicode. Only the fake peer
@@ -63,7 +63,7 @@ func (p *resumePeer) handle(mode string, m fakeEnvelope, send func(json.RawMessa
 				}
 				send(m.ID, `{"status":`+fmt.Sprintf("%q", status)+`,"future":null}`)
 			} else {
-				var params protocol.ThreadResumeParams
+				var params types.ThreadResumeParams
 				if json.Unmarshal(m.Params, &params) != nil {
 					os.Exit(87)
 				}
@@ -100,16 +100,16 @@ func assertMethods(t *testing.T, f fixture, want ...string) []fakeEnvelope {
 }
 func nativeOperation(c *codex.Client, method string, ctx context.Context) error {
 	if method == "thread/resume" {
-		_, err := c.ResumeThread(ctx, protocol.ThreadResumeParams{ThreadID: resumedNativeID})
+		_, err := c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: resumedNativeID})
 		return err
 	}
-	_, err := c.UnsubscribeThread(ctx, protocol.ThreadUnsubscribeParams{ThreadID: resumedNativeID})
+	_, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: resumedNativeID})
 	return err
 }
 
 func TestResumeAcrossIndependentConnections(t *testing.T) {
 	first := startFake(t, "resume-normal", codex.Limits{})
-	started, err := first.c.StartThread(context.Background(), protocol.ThreadStartParams{Ephemeral: protocol.Some(false)})
+	started, err := first.c.StartThread(context.Background(), types.ThreadStartParams{Ephemeral: types.Some(false)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,10 +125,10 @@ func TestResumeAcrossIndependentConnections(t *testing.T) {
 	// A new client performs its own explicit handshake. Only the native string is
 	// carried across; no SDK state, journal, persisted fixture, or replay is used.
 	second := startFake(t, "resume-normal", codex.Limits{})
-	resumed, err := second.c.ResumeThread(context.Background(), protocol.ThreadResumeParams{
-		ThreadID: nativeID, ServiceTier: protocol.Null[string](), ExcludeTurns: protocol.Some(false),
-		Config: protocol.Some(map[string]json.RawMessage{}), Path: protocol.Some(""),
-		InitialTurnsPage: protocol.Some(protocol.ThreadResumeInitialTurnsPageParams{Limit: protocol.Some(uint32(0))}),
+	resumed, err := second.c.ResumeThread(context.Background(), types.ThreadResumeParams{
+		ThreadID: nativeID, ServiceTier: types.Null[string](), ExcludeTurns: types.Some(false),
+		Config: types.Some(map[string]json.RawMessage{}), Path: types.Some(""),
+		InitialTurnsPage: types.Some(types.ThreadResumeInitialTurnsPageParams{Limit: types.Some(uint32(0))}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestResumeAcrossIndependentConnections(t *testing.T) {
 	if !ok || len(page.Data) != 0 || !page.NextCursor.IsNull() {
 		t.Fatal("native page lost")
 	}
-	read, err := second.c.ReadThread(context.Background(), protocol.ThreadReadParams{ThreadID: nativeID, IncludeTurns: protocol.Some(true)})
+	read, err := second.c.ReadThread(context.Background(), types.ThreadReadParams{ThreadID: nativeID, IncludeTurns: types.Some(true)})
 	if err != nil || read.Thread.ID != nativeID {
 		t.Fatalf("read resumed thread: %v, %q", err, read.Thread.ID)
 	}
@@ -168,10 +168,10 @@ func TestResumeMismatchKeepsCorrelationAndNoFallback(t *testing.T) {
 	for _, alternate := range []bool{false, true} {
 		t.Run(fmt.Sprint(alternate), func(t *testing.T) {
 			f := startFake(t, "resume-mismatch", codex.Limits{})
-			params := protocol.ThreadResumeParams{ThreadID: resumedNativeID}
+			params := types.ThreadResumeParams{ThreadID: resumedNativeID}
 			if alternate {
-				params.Path = protocol.Some("/synthetic/alternate-rollout")
-				params.History = protocol.Some([]protocol.ResponseItem{})
+				params.Path = types.Some("/synthetic/alternate-rollout")
+				params.History = types.Some([]types.ResponseItem{})
 			}
 			result, err := f.c.ResumeThread(context.Background(), params)
 			callError(t, err, codex.Responded, codex.ErrProtocol)
@@ -303,11 +303,11 @@ func TestResumeAndUnsubscribeTimeoutAndClose(t *testing.T) {
 }
 
 func TestUnsubscribeNativeStatusAndLocalIndependence(t *testing.T) {
-	for _, status := range []protocol.ThreadUnsubscribeStatus{protocol.ThreadUnsubscribeStatusNotLoaded, protocol.ThreadUnsubscribeStatusNotSubscribed, protocol.ThreadUnsubscribeStatusUnsubscribed, "futureStatus"} {
+	for _, status := range []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusNotLoaded, types.ThreadUnsubscribeStatusNotSubscribed, types.ThreadUnsubscribeStatusUnsubscribed, "futureStatus"} {
 		t.Run(string(status), func(t *testing.T) {
 			f := startFake(t, "resume-status-"+string(status), codex.Limits{})
 			s := subscribe(t, f.c, context.Background())
-			result, err := f.c.UnsubscribeThread(context.Background(), protocol.ThreadUnsubscribeParams{ThreadID: resumedNativeID})
+			result, err := f.c.UnsubscribeThread(context.Background(), types.ThreadUnsubscribeParams{ThreadID: resumedNativeID})
 			if err != nil || result.Status != status || string(result.UnknownFields["future"]) != "null" {
 				t.Fatalf("native status lost: %+v %v", result, err)
 			}
@@ -367,12 +367,12 @@ func TestResumeAndUnsubscribeConcurrentClose(t *testing.T) {
 
 func TestResumeAndUnsubscribeNotSentLimits(t *testing.T) {
 	f := startFake(t, "resume-normal", codex.Limits{MaxFrameBytes: 2048})
-	_, err := f.c.ResumeThread(context.Background(), protocol.ThreadResumeParams{ThreadID: resumedNativeID, ExcludeTurns: protocol.Null[bool]()})
+	_, err := f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: resumedNativeID, ExcludeTurns: types.Null[bool]()})
 	callError(t, err, codex.NotSent, nil)
 	tooLarge := strings.Repeat("x", 4096)
-	_, err = f.c.ResumeThread(context.Background(), protocol.ThreadResumeParams{ThreadID: tooLarge})
+	_, err = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: tooLarge})
 	callError(t, err, codex.NotSent, codex.ErrFrameTooLarge)
-	_, err = f.c.UnsubscribeThread(context.Background(), protocol.ThreadUnsubscribeParams{ThreadID: tooLarge})
+	_, err = f.c.UnsubscribeThread(context.Background(), types.ThreadUnsubscribeParams{ThreadID: tooLarge})
 	callError(t, err, codex.NotSent, codex.ErrFrameTooLarge)
 	// An independent successful call proves validation/admission errors did not
 	// poison the connection; the transcript proves the failed methods sent nothing.

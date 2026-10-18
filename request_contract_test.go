@@ -15,7 +15,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // The independent fake peer accepts literal wire frames as strings so it can
@@ -261,7 +261,7 @@ func TestServerRequestRawAndTypedCopies(t *testing.T) {
 		t.Fatal("native method or payload changed")
 	}
 	data, err := r.Data()
-	p, ok := data.(*protocol.CommandExecutionRequestApprovalParams)
+	p, ok := data.(*types.CommandExecutionRequestApprovalParams)
 	if err != nil || !ok || p.ThreadID != "native-thread-42" || p.ItemID != "native-item-9" || p.StartedAtMs != 9007199254740993 || !p.ApprovalID.IsNull() || p.Command.ValueOr("missing") != "" || string(p.UnknownFields["future"]) != `{"large":9007199254740993}` {
 		t.Fatalf("typed request lost fields: %#v %v", data, err)
 	}
@@ -270,7 +270,7 @@ func TestServerRequestRawAndTypedCopies(t *testing.T) {
 	bytes := r.Params()
 	bytes[0] = '['
 	fresh, err := r.Data()
-	if err != nil || fresh.(*protocol.CommandExecutionRequestApprovalParams).ThreadID != "native-thread-42" || string(fresh.(*protocol.CommandExecutionRequestApprovalParams).UnknownFields["future"]) != `{"large":9007199254740993}` || string(r.Params()) != approvalParams {
+	if err != nil || fresh.(*types.CommandExecutionRequestApprovalParams).ThreadID != "native-thread-42" || string(fresh.(*types.CommandExecutionRequestApprovalParams).UnknownFields["future"]) != `{"large":9007199254740993}` || string(r.Params()) != approvalParams {
 		t.Fatal("caller mutation reached immutable request")
 	}
 	bad := nextRequest(t, f.c)
@@ -598,12 +598,12 @@ func TestEverySupportedServerRequestTypedNativeRoundTrip(t *testing.T) {
 		method, params, result   string
 		paramsType, responseType any
 	}{
-		{"item/commandExecution/requestApproval", approvalParams, `{"decision":"decline","future":null}`, new(protocol.CommandExecutionRequestApprovalParams), new(protocol.CommandExecutionRequestApprovalResponse)},
-		{"item/fileChange/requestApproval", `{"threadId":"native-thread-42","turnId":"t","itemId":"f","startedAtMs":9007199254740993,"reason":null,"grantRoot":"","future":null}`, `{"decision":"cancel","future":null}`, new(protocol.FileChangeRequestApprovalParams), new(protocol.FileChangeRequestApprovalResponse)},
-		{"item/permissions/requestApproval", `{"threadId":"native-thread-42","turnId":"t","itemId":"p","cwd":"/synthetic","startedAtMs":9007199254740993,"permissions":{},"reason":null,"environmentId":null,"future":null}`, `{"permissions":{},"scope":"turn","strictAutoReview":false,"future":null}`, new(protocol.PermissionsRequestApprovalParams), new(protocol.PermissionsRequestApprovalResponse)},
-		{"item/tool/requestUserInput", `{"threadId":"native-thread-42","turnId":"t","itemId":"i","isBlocking":false,"questions":[{"id":"q","header":"H","question":"Choose","isOther":false,"isSecret":false,"options":[]}],"autoResolutionMs":null,"future":null}`, `{"answers":{"q":{"answers":["caller choice"],"future":null}},"future":null}`, new(protocol.ToolRequestUserInputParams), new(protocol.ToolRequestUserInputResponse)},
-		{"applyPatchApproval", `{"callId":"patch","conversationId":"native-conversation","fileChanges":{"synthetic":{"type":"add","content":"caller text"}},"reason":null,"grantRoot":"","future":null}`, `{"decision":"denied","future":null}`, new(protocol.ApplyPatchApprovalParams), new(protocol.ApplyPatchApprovalResponse)},
-		{"execCommandApproval", `{"callId":"exec","conversationId":"native-conversation","command":[],"cwd":"/synthetic","parsedCmd":[],"approvalId":null,"reason":"","future":null}`, `{"decision":"abort","future":null}`, new(protocol.ExecCommandApprovalParams), new(protocol.ExecCommandApprovalResponse)},
+		{"item/commandExecution/requestApproval", approvalParams, `{"decision":"decline","future":null}`, new(types.CommandExecutionRequestApprovalParams), new(types.CommandExecutionRequestApprovalResponse)},
+		{"item/fileChange/requestApproval", `{"threadId":"native-thread-42","turnId":"t","itemId":"f","startedAtMs":9007199254740993,"reason":null,"grantRoot":"","future":null}`, `{"decision":"cancel","future":null}`, new(types.FileChangeRequestApprovalParams), new(types.FileChangeRequestApprovalResponse)},
+		{"item/permissions/requestApproval", `{"threadId":"native-thread-42","turnId":"t","itemId":"p","cwd":"/synthetic","startedAtMs":9007199254740993,"permissions":{},"reason":null,"environmentId":null,"future":null}`, `{"permissions":{},"scope":"turn","strictAutoReview":false,"future":null}`, new(types.PermissionsRequestApprovalParams), new(types.PermissionsRequestApprovalResponse)},
+		{"item/tool/requestUserInput", `{"threadId":"native-thread-42","turnId":"t","itemId":"i","isBlocking":false,"questions":[{"id":"q","header":"H","question":"Choose","isOther":false,"isSecret":false,"options":[]}],"autoResolutionMs":null,"future":null}`, `{"answers":{"q":{"answers":["caller choice"],"future":null}},"future":null}`, new(types.ToolRequestUserInputParams), new(types.ToolRequestUserInputResponse)},
+		{"applyPatchApproval", `{"callId":"patch","conversationId":"native-conversation","fileChanges":{"synthetic":{"type":"add","content":"caller text"}},"reason":null,"grantRoot":"","future":null}`, `{"decision":"denied","future":null}`, new(types.ApplyPatchApprovalParams), new(types.ApplyPatchApprovalResponse)},
+		{"execCommandApproval", `{"callId":"exec","conversationId":"native-conversation","command":[],"cwd":"/synthetic","parsedCmd":[],"approvalId":null,"reason":"","future":null}`, `{"decision":"abort","future":null}`, new(types.ExecCommandApprovalParams), new(types.ExecCommandApprovalResponse)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.method, func(t *testing.T) {

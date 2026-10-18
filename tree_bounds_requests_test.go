@@ -12,7 +12,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // Original synthetic frames use the existing public request-frames transport seam.
@@ -135,7 +135,7 @@ func TestTreeFullQueuePreservesOriginalRequestAuthority(t *testing.T) {
 				if err != nil || data == nil {
 					t.Fatalf("native request decode: %T %v", data, err)
 				}
-				if question, ok := data.(*protocol.ToolRequestUserInputParams); ok && (question.ThreadID != "child-1" || question.TurnID != "child-turn" || question.ItemID != "question-item" || len(question.Questions) != 1) {
+				if question, ok := data.(*types.ToolRequestUserInputParams); ok && (question.ThreadID != "child-1" || question.TurnID != "child-turn" || question.ItemID != "question-item" || len(question.Questions) != 1) {
 					t.Fatalf("question source changed: %+v", question)
 				}
 				before := len(answerFrames(t, f.trace))
@@ -328,7 +328,7 @@ func TestTreeTextThinkingAndUsageStayAtNativeSource(t *testing.T) {
 					t.Fatalf("source/content changed: %+v", e)
 				}
 				if i == 5 {
-					item := e.Native.Data.(*protocol.ItemCompletedNotification)
+					item := e.Native.Data.(*types.ItemCompletedNotification)
 					if item.Item.AgentMessage.Text != "parent final only" {
 						t.Fatal("parent answer merged")
 					}

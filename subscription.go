@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // Event preserves a notification's method and parameter JSON as received.
@@ -124,19 +124,19 @@ func decodeEvent(method string, params json.RawMessage) Event {
 	var data any
 	switch method {
 	case "serverRequest/resolved":
-		data = new(protocol.ServerRequestResolvedNotification)
+		data = new(types.ServerRequestResolvedNotification)
 	case "turn/started":
-		data = new(protocol.TurnStartedNotification)
+		data = new(types.TurnStartedNotification)
 	case "turn/completed":
-		data = new(protocol.TurnCompletedNotification)
+		data = new(types.TurnCompletedNotification)
 	case "item/started":
-		data = new(protocol.ItemStartedNotification)
+		data = new(types.ItemStartedNotification)
 	case "item/completed":
-		data = new(protocol.ItemCompletedNotification)
+		data = new(types.ItemCompletedNotification)
 	case "item/agentMessage/delta":
-		data = new(protocol.AgentMessageDeltaNotification)
+		data = new(types.AgentMessageDeltaNotification)
 	case "error":
-		data = new(protocol.ErrorNotification)
+		data = new(types.ErrorNotification)
 	default:
 		return event
 	}

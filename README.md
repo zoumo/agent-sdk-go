@@ -2,6 +2,9 @@
 
 A native Go client for the Codex app-server protocol.
 
+Native data lives in `github.com/zoumo/codex-sdk-go/types`. Existing callers should
+read the [package migration guide](docs/migrations/protocol-to-types.md).
+
 **Start with [compatibility and the complete official capability inventory](docs/compatibility.md).**
 The protocol target is official **0.162.1** at one exact commit. The
 [Mac live report](docs/evidence/mac-live-summary.md) records limited real CLI
@@ -24,7 +27,7 @@ import (
     "log"
 
     codex "github.com/zoumo/codex-sdk-go"
-    "github.com/zoumo/codex-sdk-go/protocol"
+    "github.com/zoumo/codex-sdk-go/types"
 )
 
 func main() {
@@ -32,20 +35,20 @@ func main() {
     client, err := codex.NewStdio(ctx, codex.StdioOptions{
         Executable: "/path/you/selected/codex",
         Args:       []string{"app-server"},
-        Initialize: protocol.InitializeParams{
-            ClientInfo: protocol.ClientInfo{Name: "my-client", Version: "0.1"},
+        Initialize: types.InitializeParams{
+            ClientInfo: types.ClientInfo{Name: "my-client", Version: "0.1"},
         },
     })
     if err != nil { log.Fatal(err) }
     defer client.Close()
 
-    started, err := client.StartThread(ctx, protocol.ThreadStartParams{
-        Ephemeral: protocol.Some(true),
+    started, err := client.StartThread(ctx, types.ThreadStartParams{
+        Ephemeral: types.Some(true),
     })
     if err != nil { log.Fatal(err) }
-    read, err := client.ReadThread(ctx, protocol.ThreadReadParams{
+    read, err := client.ReadThread(ctx, types.ThreadReadParams{
         ThreadID: started.Thread.ID,
-        IncludeTurns: protocol.Some(true),
+        IncludeTurns: types.Some(true),
     })
     if err != nil { log.Fatal(err) }
     fmt.Println(read.Thread.ID)
@@ -72,15 +75,15 @@ the SDK never discovers credentials, signs in, mints a token, or refreshes it.
 client, err := codex.NewRemote(ctx, codex.RemoteOptions{
     URL:         "wss://codex.example.com/",
     BearerToken: token, // supplied by your application; never put it in the URL
-    Initialize: protocol.InitializeParams{
-        ClientInfo: protocol.ClientInfo{Name: "my-client", Version: "0.1"},
+    Initialize: types.InitializeParams{
+        ClientInfo: types.ClientInfo{Name: "my-client", Version: "0.1"},
     },
 })
 if err != nil { return err }
 defer client.Close()
 
-started, err := client.StartThread(ctx, protocol.ThreadStartParams{
-    Ephemeral: protocol.Some(true),
+started, err := client.StartThread(ctx, types.ThreadStartParams{
+    Ephemeral: types.Some(true),
 })
 if err != nil { return err }
 fmt.Println(started.Thread.ID)
@@ -134,19 +137,19 @@ construct a new client with `NewStdio` or `NewRemote` for a fresh handshake, the
 resume and read that exact ID. The SDK has no saved-session registry or reconnect loop.
 
 ```go
-resumed, err := client.ResumeThread(ctx, protocol.ThreadResumeParams{
+resumed, err := client.ResumeThread(ctx, types.ThreadResumeParams{
     ThreadID: nativeThreadID,
     // Omit ServiceTier to preserve the server's override.
-    // ServiceTier: protocol.Null[string](), // explicitly clear the override
+    // ServiceTier: types.Null[string](), // explicitly clear the override
 })
 if err != nil { return err }
-read, err := client.ReadThread(ctx, protocol.ThreadReadParams{
+read, err := client.ReadThread(ctx, types.ThreadReadParams{
     ThreadID: resumed.Thread.ID,
-    IncludeTurns: protocol.Some(true),
+    IncludeTurns: types.Some(true),
 })
 if err != nil { return err }
 fmt.Println(read.Thread.ID)
-detached, err := client.UnsubscribeThread(ctx, protocol.ThreadUnsubscribeParams{
+detached, err := client.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{
     ThreadID: resumed.Thread.ID,
 })
 if err != nil { return err }
@@ -185,14 +188,14 @@ Closing a local subscription never sends `thread/unsubscribe`.
 
 ## Native values and extensions
 
-Models live in the public `protocol` package. `Optional[T]` preserves omission,
+Models live in the public `types` package. `Optional[T]` preserves omission,
 explicit null, and present values, including false, zero, and an empty list:
 
 ```go
-params := protocol.ThreadStartParams{
-    Model: protocol.Some("caller-selected-model"),
-    ServiceTier: protocol.Null[string](),
-    Ephemeral: protocol.Some(false),
+params := types.ThreadStartParams{
+    Model: types.Some("caller-selected-model"),
+    ServiceTier: types.Null[string](),
+    Ephemeral: types.Some(false),
 }
 ```
 
@@ -215,8 +218,8 @@ remain caller-managed raw extensions; their reachability is not workflow certifi
 
 ## Observe and explicitly interrupt a turn
 
-`StartTurn(ctx, protocol.TurnStartParams)` and `InterruptTurn(ctx,
-protocol.TurnInterruptParams)` return native response types. Call `Subscribe(ctx)`
+`StartTurn(ctx, types.TurnStartParams)` and `InterruptTurn(ctx,
+types.TurnInterruptParams)` return native response types. Call `Subscribe(ctx)`
 first: a turn can emit events, including completion, before its start response.
 The response's turn ID remains authoritative for that response. The SDK does not
 filter, merge, accumulate, or reinterpret interleaved native thread/turn/item IDs.
@@ -255,7 +258,7 @@ cancellation does not call `thread/unsubscribe` or `turn/interrupt`.
 To request execution interruption explicitly, pass the exact native identities:
 
 ```go
-_, err := client.InterruptTurn(ctx, protocol.TurnInterruptParams{
+_, err := client.InterruptTurn(ctx, types.TurnInterruptParams{
     ThreadID: threadID,
     TurnID: turnID,
 })
@@ -291,8 +294,8 @@ if err := request.Handle().Answer(ctx, result); err != nil { return err }
 
 The [compiled example](requests_example_test.go) follows this pattern and is never
 executed by tests. Native response models such as
-`protocol.CommandExecutionRequestApprovalResponse` and
-`protocol.ToolRequestUserInputResponse` can be passed to `Answer` instead of raw
+`types.CommandExecutionRequestApprovalResponse` and
+`types.ToolRequestUserInputResponse` can be passed to `Answer` instead of raw
 JSON. `Reject(ctx, &RPCError{...})` sends exactly the caller-selected protocol error.
 `RPCError.Raw` is inbound diagnostic data and is not sent.
 

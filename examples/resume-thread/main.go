@@ -10,7 +10,7 @@ import (
 	"os"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func main() {
@@ -26,22 +26,22 @@ func run() error {
 	ctx := context.Background()
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{
 		Executable: os.Args[1], Args: []string{"app-server"},
-		Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "resume-example", Version: "0.1"}},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "resume-example", Version: "0.1"}},
 	})
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	resumed, err := client.ResumeThread(ctx, protocol.ThreadResumeParams{ThreadID: os.Args[2]})
+	resumed, err := client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: os.Args[2]})
 	if err != nil {
 		return err
 	}
-	read, err := client.ReadThread(ctx, protocol.ThreadReadParams{ThreadID: resumed.Thread.ID, IncludeTurns: protocol.Some(true)})
+	read, err := client.ReadThread(ctx, types.ThreadReadParams{ThreadID: resumed.Thread.ID, IncludeTurns: types.Some(true)})
 	if err != nil {
 		return err
 	}
 	fmt.Println(read.Thread.ID)
-	detached, err := client.UnsubscribeThread(ctx, protocol.ThreadUnsubscribeParams{ThreadID: resumed.Thread.ID})
+	detached, err := client.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: resumed.Thread.ID})
 	if err != nil {
 		return err
 	}

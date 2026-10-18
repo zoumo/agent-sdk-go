@@ -1,10 +1,10 @@
-package protocol_test
+package types_test
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func TestTurnOutputSchemaArbitraryJSON(t *testing.T) {
@@ -12,7 +12,7 @@ func TestTurnOutputSchemaArbitraryJSON(t *testing.T) {
 	// it accepts arbitrary JSON rather than an invented typed schema object.
 	for _, value := range []string{`null`, `false`, `7`, `"value"`, `[]`, `{"type":"object","future":9007199254740993}`} {
 		raw := `{"threadId":"thread","input":[],"outputSchema":` + value + `}`
-		var p protocol.TurnStartParams
+		var p types.TurnStartParams
 		if err := json.Unmarshal([]byte(raw), &p); err != nil {
 			t.Fatal(err)
 		}
@@ -36,7 +36,7 @@ func TestTurnOutputSchemaArbitraryJSON(t *testing.T) {
 			t.Fatalf("round trip: %s", encoded)
 		}
 	}
-	encoded, err := json.Marshal(protocol.TurnStartParams{ThreadID: "thread"})
+	encoded, err := json.Marshal(types.TurnStartParams{ThreadID: "thread"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +55,11 @@ func TestTurnNotificationRequiredNativeFields(t *testing.T) {
 		name, raw string
 		value     any
 	}{
-		{"turn-completed", `{"threadId":"x","turn":{"id":"x","items":[]}}`, new(protocol.TurnCompletedNotification)},
-		{"item-started", `{"threadId":"x","turnId":"x","item":{"type":"future"}}`, new(protocol.ItemStartedNotification)},
-		{"item-completed", `{"threadId":"x","turnId":"x","completedAtMs":null,"item":{"type":"future"}}`, new(protocol.ItemCompletedNotification)},
-		{"delta", `{"threadId":"x","turnId":"x","itemId":"x","delta":null}`, new(protocol.AgentMessageDeltaNotification)},
-		{"error", `{"threadId":"x","turnId":"x","error":{"message":"x"}}`, new(protocol.ErrorNotification)},
+		{"turn-completed", `{"threadId":"x","turn":{"id":"x","items":[]}}`, new(types.TurnCompletedNotification)},
+		{"item-started", `{"threadId":"x","turnId":"x","item":{"type":"future"}}`, new(types.ItemStartedNotification)},
+		{"item-completed", `{"threadId":"x","turnId":"x","completedAtMs":null,"item":{"type":"future"}}`, new(types.ItemCompletedNotification)},
+		{"delta", `{"threadId":"x","turnId":"x","itemId":"x","delta":null}`, new(types.AgentMessageDeltaNotification)},
+		{"error", `{"threadId":"x","turnId":"x","error":{"message":"x"}}`, new(types.ErrorNotification)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := json.Unmarshal([]byte(tc.raw), tc.value); err == nil {

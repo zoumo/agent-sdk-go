@@ -10,7 +10,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func main() {
@@ -27,16 +27,16 @@ func run() error {
 	defer cancel()
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{
 		Executable: os.Args[1], Args: []string{"app-server"},
-		Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "observe-turn", Version: "0.1"}},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "observe-turn", Version: "0.1"}},
 	})
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	thread, err := client.StartThread(ctx, protocol.ThreadStartParams{
-		Ephemeral:      protocol.Some(true),
-		Sandbox:        protocol.Some(protocol.SandboxModeReadOnly),
-		ApprovalPolicy: protocol.Some(protocol.AskForApproval{Value: protocol.Ptr(protocol.AskForApprovalValueNever)}),
+	thread, err := client.StartThread(ctx, types.ThreadStartParams{
+		Ephemeral:      types.Some(true),
+		Sandbox:        types.Some(types.SandboxModeReadOnly),
+		ApprovalPolicy: types.Some(types.AskForApproval{Value: types.Ptr(types.AskForApprovalValueNever)}),
 	})
 	if err != nil {
 		return err
@@ -47,9 +47,9 @@ func run() error {
 		return err
 	}
 	defer events.Close()
-	started, err := client.StartTurn(ctx, protocol.TurnStartParams{
+	started, err := client.StartTurn(ctx, types.TurnStartParams{
 		ThreadID: thread.Thread.ID,
-		Input:    []protocol.UserInput{{Text: protocol.Ptr(protocol.TextUserInput{Text: "Say hello briefly."})}},
+		Input:    []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}},
 	})
 	if err != nil {
 		return err
@@ -70,11 +70,11 @@ func run() error {
 				return event.DecodeError
 			}
 			switch value := event.Data.(type) {
-			case *protocol.AgentMessageDeltaNotification:
+			case *types.AgentMessageDeltaNotification:
 				if value.ThreadID == thread.Thread.ID && value.TurnID == started.Turn.ID {
 					fmt.Print(value.Delta)
 				}
-			case *protocol.TurnCompletedNotification:
+			case *types.TurnCompletedNotification:
 				if value.ThreadID == thread.Thread.ID && value.Turn.ID == started.Turn.ID {
 					fmt.Printf("\nturn %s: %s\n", value.Turn.ID, value.Turn.Status)
 					return events.Err()
@@ -84,7 +84,7 @@ func run() error {
 		}
 	}
 	// An explicit interruption would be a separate client.InterruptTurn(ctx,
-	// protocol.TurnInterruptParams{ThreadID: thread.Thread.ID, TurnID: started.Turn.ID}).
+	// types.TurnInterruptParams{ThreadID: thread.Thread.ID, TurnID: started.Turn.ID}).
 	// Its acknowledgement does not replace waiting for native turn/completed.
 }
 func subscriptionEnd(events *codex.Subscription) error {

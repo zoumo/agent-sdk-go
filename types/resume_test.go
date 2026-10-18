@@ -1,4 +1,4 @@
-package protocol_test
+package types_test
 
 import (
 	"bytes"
@@ -6,27 +6,27 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 func TestResumeOptionalNativeSemantics(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		tier    protocol.Optional[string]
-		exclude protocol.Optional[bool]
+		tier    types.Optional[string]
+		exclude types.Optional[bool]
 		want    string
 	}{
-		{"omitted", protocol.Optional[string]{}, protocol.Optional[bool]{}, `{"threadId":"native"}`},
-		{"clear", protocol.Null[string](), protocol.Some(false), `{"excludeTurns":false,"serviceTier":null,"threadId":"native"}`},
-		{"override", protocol.Some("fast"), protocol.Some(true), `{"excludeTurns":true,"serviceTier":"fast","threadId":"native"}`},
+		{"omitted", types.Optional[string]{}, types.Optional[bool]{}, `{"threadId":"native"}`},
+		{"clear", types.Null[string](), types.Some(false), `{"excludeTurns":false,"serviceTier":null,"threadId":"native"}`},
+		{"override", types.Some("fast"), types.Some(true), `{"excludeTurns":true,"serviceTier":"fast","threadId":"native"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			p := protocol.ThreadResumeParams{ThreadID: "native", ServiceTier: tc.tier, ExcludeTurns: tc.exclude}
+			p := types.ThreadResumeParams{ThreadID: "native", ServiceTier: tc.tier, ExcludeTurns: tc.exclude}
 			raw, err := json.Marshal(p)
 			if err != nil || string(raw) != tc.want {
 				t.Fatalf("wire %s: %v", raw, err)
 			}
-			var decoded protocol.ThreadResumeParams
+			var decoded types.ThreadResumeParams
 			if err := json.Unmarshal(raw, &decoded); err != nil {
 				t.Fatal(err)
 			}
@@ -35,14 +35,14 @@ func TestResumeOptionalNativeSemantics(t *testing.T) {
 			}
 		})
 	}
-	if _, err := json.Marshal(protocol.ThreadResumeParams{ThreadID: "native", ExcludeTurns: protocol.Null[bool]()}); err == nil {
+	if _, err := json.Marshal(types.ThreadResumeParams{ThreadID: "native", ExcludeTurns: types.Null[bool]()}); err == nil {
 		t.Fatal("non-null bool encoded as null")
 	}
 }
 
 func TestResumeFullExperimentalFields(t *testing.T) {
 	raw := `{"threadId":"native","approvalPolicy":"never","approvalsReviewer":"user","baseInstructions":"","config":{},"cwd":"/synthetic","developerInstructions":null,"excludeTurns":false,"history":[{"type":"futureResponseItem","value":9007199254740993}],"initialTurnsPage":{"limit":0,"sortDirection":"asc","itemsView":"full"},"model":"mock","modelProvider":null,"path":"","permissions":null,"personality":null,"runtimeWorkspaceRoots":[],"sandbox":"read-only","serviceTier":null,"future":{"raw":9007199254740993}}`
-	var p protocol.ThreadResumeParams
+	var p types.ThreadResumeParams
 	if err := json.Unmarshal([]byte(raw), &p); err != nil {
 		t.Fatal(err)
 	}
@@ -77,15 +77,15 @@ func TestResumeAndUnsubscribeRequiredFields(t *testing.T) {
 		name, raw string
 		target    any
 	}{
-		{"resume missing ID", `{}`, new(protocol.ThreadResumeParams)},
-		{"resume null ID", `{"threadId":null}`, new(protocol.ThreadResumeParams)},
-		{"exclude null", `{"threadId":"native","excludeTurns":null}`, new(protocol.ThreadResumeParams)},
-		{"negative page limit", `{"threadId":"native","initialTurnsPage":{"limit":-1}}`, new(protocol.ThreadResumeParams)},
-		{"unsubscribe missing ID", `{}`, new(protocol.ThreadUnsubscribeParams)},
-		{"unsubscribe null ID", `{"threadId":null}`, new(protocol.ThreadUnsubscribeParams)},
-		{"unsubscribe missing status", `{}`, new(protocol.ThreadUnsubscribeResponse)},
-		{"unsubscribe null status", `{"status":null}`, new(protocol.ThreadUnsubscribeResponse)},
-		{"resume incomplete result", `{"thread":{"id":"native"}}`, new(protocol.ThreadResumeResponse)},
+		{"resume missing ID", `{}`, new(types.ThreadResumeParams)},
+		{"resume null ID", `{"threadId":null}`, new(types.ThreadResumeParams)},
+		{"exclude null", `{"threadId":"native","excludeTurns":null}`, new(types.ThreadResumeParams)},
+		{"negative page limit", `{"threadId":"native","initialTurnsPage":{"limit":-1}}`, new(types.ThreadResumeParams)},
+		{"unsubscribe missing ID", `{}`, new(types.ThreadUnsubscribeParams)},
+		{"unsubscribe null ID", `{"threadId":null}`, new(types.ThreadUnsubscribeParams)},
+		{"unsubscribe missing status", `{}`, new(types.ThreadUnsubscribeResponse)},
+		{"unsubscribe null status", `{"status":null}`, new(types.ThreadUnsubscribeResponse)},
+		{"resume incomplete result", `{"thread":{"id":"native"}}`, new(types.ThreadResumeResponse)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := json.Unmarshal([]byte(tc.raw), tc.target); err == nil {

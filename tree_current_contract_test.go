@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // Synthetic 0.162.1 native fields through public stdio/WS/WSS APIs. Turn-chain
@@ -39,24 +39,24 @@ func TestTreeCurrentVersionMetadata(t *testing.T) {
 				}
 				switch i {
 				case 0:
-					n := e.Native.Data.(*protocol.TurnStartedNotification)
+					n := e.Native.Data.(*types.TurnStartedNotification)
 					if got, ok := n.Turn.RootTurnID.Get(); !ok || got != "chain-root-turn" || e.Source.TurnID != "child-turn" || e.RootThreadID != "native-thread-42" {
 						t.Fatal("turn chain conflated with thread membership")
 					}
 				case 1:
-					n := e.Native.Data.(*protocol.ItemStartedNotification).Item.SubAgentActivity
+					n := e.Native.Data.(*types.ItemStartedNotification).Item.SubAgentActivity
 					model, ok := n.Model.Get()
 					effort, known := n.ReasoningEffort.Get()
 					if !ok || model != "current-model" || !known || effort != "high" || string(n.UnknownFields["future"]) != "null" {
 						t.Fatal("current activity metadata lost")
 					}
 				case 2:
-					n := e.Native.Data.(*protocol.ItemCompletedNotification).Item.AgentMessage
-					if phase, ok := n.Phase.Get(); !ok || phase != protocol.MessagePhasePartialAnswer || n.Text != "partial parent answer" {
+					n := e.Native.Data.(*types.ItemCompletedNotification).Item.AgentMessage
+					if phase, ok := n.Phase.Get(); !ok || phase != types.MessagePhasePartialAnswer || n.Text != "partial parent answer" {
 						t.Fatal("partial answer reinterpreted")
 					}
 				case 4:
-					n := e.Native.Data.(*protocol.TurnCompletedNotification)
+					n := e.Native.Data.(*types.TurnCompletedNotification)
 					if !n.Turn.RootTurnID.IsNull() {
 						t.Fatal("explicit null lost")
 					}

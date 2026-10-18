@@ -19,7 +19,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 const initResult = `{"userAgent":"fake/only","codexHome":"/synthetic-home","platformFamily":"unix","platformOs":"linux","future":null}`
@@ -115,7 +115,7 @@ func TestFakeChild(t *testing.T) {
 		case "thread/read":
 			send(m.ID, `{"thread":`+threadJSON+`}`)
 		case "thread/resume":
-			var params protocol.ThreadResumeParams
+			var params types.ThreadResumeParams
 			if json.Unmarshal(m.Params, &params) != nil {
 				os.Exit(87)
 			}
@@ -206,7 +206,7 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	env := append(os.Environ(), "CODEX_SDK_HELPER="+mode, "CODEX_SDK_TRACE="+f.trace, "CODEX_SDK_PID="+f.pid)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	f.c, err = codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: env, Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "contract-test", Version: "1"}}, Limits: limits})
+	f.c, err = codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: env, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "contract-test", Version: "1"}}, Limits: limits})
 	return f, err
 }
 func trace(t *testing.T, path string) []fakeEnvelope {
@@ -261,14 +261,14 @@ func TestOwnedStdioLifecycle(t *testing.T) {
 	if f.c.ServerInfo().UserAgent != "fake/only" {
 		t.Fatal("server info")
 	}
-	r, err := f.c.StartThread(context.Background(), protocol.ThreadStartParams{})
+	r, err := f.c.StartThread(context.Background(), types.ThreadStartParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r.Thread.ID != "native-thread-42" || r.Thread.CreatedAt != 9007199254740993 {
 		t.Fatalf("native data changed: %+v", r.Thread)
 	}
-	got, err := f.c.ReadThread(context.Background(), protocol.ThreadReadParams{ThreadID: r.Thread.ID, IncludeTurns: protocol.Some(true)})
+	got, err := f.c.ReadThread(context.Background(), types.ThreadReadParams{ThreadID: r.Thread.ID, IncludeTurns: types.Some(true)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -607,7 +607,7 @@ func TestExplicitCommandEnvironmentAndDirectory(t *testing.T) {
 	tracePath := filepath.Join(dir, "trace")
 	pidPath := filepath.Join(dir, "pid")
 	args := []string{"-test.run=^TestFakeChild$", "--", "spaces and ; $(not-a-shell)"}
-	c, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: exe, Args: args, Dir: dir, Env: []string{"CODEX_SDK_HELPER=normal", "CODEX_SDK_TRACE=" + tracePath, "CODEX_SDK_PID=" + pidPath, "CODEX_SDK_LITERAL=literal-$HOME"}, Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "explicit", Version: "1"}}})
+	c, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: exe, Args: args, Dir: dir, Env: []string{"CODEX_SDK_HELPER=normal", "CODEX_SDK_TRACE=" + tracePath, "CODEX_SDK_PID=" + pidPath, "CODEX_SDK_LITERAL=literal-$HOME"}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "explicit", Version: "1"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

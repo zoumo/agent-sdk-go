@@ -10,7 +10,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/codex-sdk-go"
-	"github.com/zoumo/codex-sdk-go/protocol"
+	"github.com/zoumo/codex-sdk-go/types"
 )
 
 // This independent opt-in spends at most five attempts, with no write replay.
@@ -31,7 +31,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 	}()
 	cwd := t.TempDir()
 	initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
-	c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd, Initialize: protocol.InitializeParams{ClientInfo: protocol.ClientInfo{Name: "sdk-mac-live-ticket02", Version: "1"}, Capabilities: protocol.Some(protocol.InitializeCapabilities{ExperimentalAPI: protocol.Some(true)})}})
+	c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket02", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
 	stop()
 	if err != nil {
 		t.Fatalf("initialize failed: %T; payload withheld", err)
@@ -62,7 +62,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 			t.Log("scenario=user-input environment-blocked: plan mode not advertised; no turn dispatched")
 			continue
 		}
-		th, e := c.StartThread(ctx, protocol.ThreadStartParams{Cwd: protocol.Some(cwd), Sandbox: protocol.Some(protocol.SandboxModeReadOnly), Ephemeral: protocol.Some(true)})
+		th, e := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Sandbox: types.Some(types.SandboxModeReadOnly), Ephemeral: types.Some(true)})
 		if e != nil {
 			t.Fatalf("thread/start failed: %T", e)
 		}
@@ -71,7 +71,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 			t.Fatal("identity/read-only sandbox assertion failed")
 		}
 		policy := "other"
-		for _, v := range []protocol.AskForApprovalValue{protocol.AskForApprovalValueNever, protocol.AskForApprovalValueOnRequest, protocol.AskForApprovalValueUntrusted} {
+		for _, v := range []types.AskForApprovalValue{types.AskForApprovalValueNever, types.AskForApprovalValueOnRequest, types.AskForApprovalValueUntrusted} {
 			if th.ApprovalPolicy.Value != nil && *th.ApprovalPolicy.Value == v {
 				policy = string(v)
 			}
@@ -81,12 +81,12 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 		if e != nil {
 			t.Fatal("subscribe failed")
 		}
-		p := protocol.TurnStartParams{ThreadID: id, Input: []protocol.UserInput{{Text: protocol.Ptr(protocol.TextUserInput{Text: sc.prompt})}}}
+		p := types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: sc.prompt})}}}
 		if sc.name == "user-input" {
-			p.CollaborationMode = protocol.Some(protocol.CollaborationMode{Mode: protocol.ModeKindPlan, Settings: protocol.Settings{Model: th.Model, DeveloperInstructions: protocol.Null[string](), ReasoningEffort: protocol.Null[protocol.ReasoningEffort]()}})
+			p.CollaborationMode = types.Some(types.CollaborationMode{Mode: types.ModeKindPlan, Settings: types.Settings{Model: th.Model, DeveloperInstructions: types.Null[string](), ReasoningEffort: types.Null[types.ReasoningEffort]()}})
 		}
 		type result struct {
-			v protocol.TurnStartResponse
+			v types.TurnStartResponse
 			e error
 		}
 		starts := make(chan result, 1)
@@ -129,26 +129,26 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 				matched := false
 				var answer any
 				switch v := d.(type) {
-				case *protocol.CommandExecutionRequestApprovalParams:
+				case *types.CommandExecutionRequestApprovalParams:
 					matched = v.ThreadID == id && v.TurnID == turn
 					// Approvals are declined: this test never expands read-only rights.
-					answer = protocol.CommandExecutionRequestApprovalResponse{Decision: protocol.CommandExecutionApprovalDecision{Value: protocol.Ptr(protocol.CommandExecutionApprovalDecisionValueDecline)}}
+					answer = types.CommandExecutionRequestApprovalResponse{Decision: types.CommandExecutionApprovalDecision{Value: types.Ptr(types.CommandExecutionApprovalDecisionValueDecline)}}
 					if matched && sc.name == "command" {
 						targets++
 					}
-				case *protocol.FileChangeRequestApprovalParams:
+				case *types.FileChangeRequestApprovalParams:
 					matched = v.ThreadID == id && v.TurnID == turn
-					answer = protocol.FileChangeRequestApprovalResponse{Decision: protocol.FileChangeApprovalDecisionDecline}
+					answer = types.FileChangeRequestApprovalResponse{Decision: types.FileChangeApprovalDecisionDecline}
 					if matched && sc.name == "file" {
 						targets++
 					}
-				case *protocol.PermissionsRequestApprovalParams:
+				case *types.PermissionsRequestApprovalParams:
 					matched = v.ThreadID == id && v.TurnID == turn
-					answer = protocol.PermissionsRequestApprovalResponse{Permissions: protocol.GrantedPermissionProfile{}, Scope: protocol.Some(protocol.PermissionGrantScopeTurn)}
+					answer = types.PermissionsRequestApprovalResponse{Permissions: types.GrantedPermissionProfile{}, Scope: types.Some(types.PermissionGrantScopeTurn)}
 					if matched && sc.name == "permissions" {
 						targets++
 					}
-				case *protocol.ToolRequestUserInputParams:
+				case *types.ToolRequestUserInputParams:
 					matched = v.ThreadID == id && v.TurnID == turn && sc.name == "user-input" && len(v.Questions) == 1
 					if matched {
 						q := v.Questions[0]
@@ -159,7 +159,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 						}
 						matched = len(opts) == 2 && labels["BLUE"] && labels["RED"] && !q.IsSecret.ValueOr(false)
 						if matched {
-							answer = protocol.ToolRequestUserInputResponse{Answers: map[string]protocol.ToolRequestUserInputAnswer{q.ID: {Answers: []string{"BLUE"}}}}
+							answer = types.ToolRequestUserInputResponse{Answers: map[string]types.ToolRequestUserInputAnswer{q.ID: {Answers: []string{"BLUE"}}}}
 							targets++
 						}
 					}
@@ -184,7 +184,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 					t.Fatal("event loss/decode failure")
 				}
 				switch v := ev.Data.(type) {
-				case *protocol.TurnStartedNotification:
+				case *types.TurnStartedNotification:
 					if v.ThreadID == id {
 						if turn != "" && turn != v.Turn.ID {
 							t.Fatal("turn identity mismatch")
@@ -192,22 +192,22 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 						turn = v.Turn.ID
 						t.Logf("scenario=%s matched turn/started", sc.name)
 					}
-				case *protocol.ItemStartedNotification:
+				case *types.ItemStartedNotification:
 					if v.ThreadID == id && v.TurnID == turn && sc.name == "interrupt" && v.Item.CommandExecution != nil && v.Item.CommandExecution.Command == "sleep 20" && !interruptSent {
 						itemID = v.Item.CommandExecution.ID
 						interruptSent = true
-						_, e := c.InterruptTurn(ctx, protocol.TurnInterruptParams{ThreadID: id, TurnID: turn})
+						_, e := c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: id, TurnID: turn})
 						if e != nil {
 							t.Fatalf("interrupt failed; no replay: %T", e)
 						}
 						ack = true
 						t.Log("scenario=interrupt active sleep item observed; exact native turn interrupt ack")
 					}
-				case *protocol.ItemCompletedNotification:
+				case *types.ItemCompletedNotification:
 					if v.ThreadID == id && v.TurnID == turn {
 						if cmd := v.Item.CommandExecution; cmd != nil {
 							commandEffect = commandEffect || (sc.name == "command" && strings.TrimSpace(cmd.AggregatedOutput.ValueOr("")) == "SDK_T02_COMMAND" && cmd.ExitCode.ValueOr(-1) == 0)
-							itemStopped = itemStopped || (itemID != "" && cmd.ID == itemID && cmd.Status != protocol.CommandExecutionStatusInProgress)
+							itemStopped = itemStopped || (itemID != "" && cmd.ID == itemID && cmd.Status != types.CommandExecutionStatusInProgress)
 							t.Logf("scenario=%s matched item/completed command status=%s", sc.name, cmd.Status)
 						}
 						if msg := v.Item.AgentMessage; msg != nil {
@@ -217,16 +217,16 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 							t.Logf("scenario=%s matched item/completed fileChange", sc.name)
 						}
 					}
-				case *protocol.ServerRequestResolvedNotification:
+				case *types.ServerRequestResolvedNotification:
 					raw, _ := json.Marshal(v.RequestID)
 					rid, e := codex.ParseID(raw)
 					if e == nil && v.ThreadID == id && seen[rid] {
 						resolved++
 						t.Logf("scenario=%s matched serverRequest/resolved exact tagged ID", sc.name)
 					}
-				case *protocol.ErrorNotification:
+				case *types.ErrorNotification:
 					t.Fatalf("%s native error event; payload withheld", sc.name)
-				case *protocol.TurnCompletedNotification:
+				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == turn {
 						status = string(v.Turn.Status)
 						t.Logf("scenario=%s matched turn/completed status=%s", sc.name, status)
@@ -236,7 +236,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 				t.Fatalf("subscription ended early: %T", s.Err())
 			case <-timer.C:
 				if turn != "" && !interruptSent {
-					_, _ = c.InterruptTurn(ctx, protocol.TurnInterruptParams{ThreadID: id, TurnID: turn})
+					_, _ = c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: id, TurnID: turn})
 				}
 				t.Fatal("turn timed out; at most one interrupt; termination unconfirmed")
 			case <-ctx.Done():

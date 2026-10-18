@@ -416,8 +416,9 @@ harnesses use a real CLI/account/model only when explicitly enabled. Keep
 unset or `0` for offline checks. Each requires the value `1` plus an explicit
 `CODEX_E2E_CLI` executable to opt in. `RUN_REAL_CODEX_TESTS` is not a harness
 switch. The completed historical validation budget is 9/9; it grants no reruns.
-Real E2E tests refuse CI. The WebSocket harness requires Unix process groups
-and `ps`/`lsof` on `PATH`; missing inspection tools cause a pre-start skip.
+Real E2E tests refuse CI. The WebSocket harness uses Go networking and the
+server process handle; Unix process groups remain required for bounded cleanup.
+It does not inspect process-tree listener ownership or additional listeners.
 
 The [CI workflow](../.github/workflows/ci.yml) runs uncached normal and race suites,
 vet, module verification, inventory, changed-whitespace checks, and reproducible

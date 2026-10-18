@@ -30,9 +30,10 @@ macOS. Every example compiles with `go test ./...`.
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
 interaction/interrupt scenarios and WebSocket authentication/lifecycle. Its
-WebSocket harness requires Unix process groups and `ps`/`lsof` on `PATH` for
-owned-process and listener inspection. Missing tools cause an explicit skip
-before CLI startup; authentication and listener assertions remain intact. Claude currently has
+WebSocket harness requires Unix process groups for bounded server cleanup.
+It checks authentication, reconnection and client/server lifecycle through the
+SDK, Go networking and the server process handle. It does not inspect process-tree
+listener ownership or assert the absence of additional listeners. Claude currently has
 only an initialization/shutdown transport integration probe: it sends no model
 turn and does not establish complete agent E2E coverage. Moving this probe does
 not add missing real model, tool, question, resume/interrupt or subagent coverage.

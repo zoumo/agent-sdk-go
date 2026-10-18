@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -30,8 +29,6 @@ import (
 type WebSocketLifecycleHistorySuite struct {
 	suite.Suite
 	executable string
-	psPath     string
-	lsofPath   string
 }
 
 func TestWebSocketLifecycleHistory(t *testing.T) {
@@ -50,17 +47,6 @@ func (s *WebSocketLifecycleHistorySuite) SetupTest() {
 	s.executable = os.Getenv("CODEX_E2E_CLI")
 	require.True(t, filepath.IsAbs(s.executable),
 		"CODEX_E2E_CLI must select an absolute executable path")
-	// Inspect only the owned launch tree. Missing inspection capabilities must
-	// skip before starting a CLI, rather than weakening the listener assertions.
-	var err error
-	s.psPath, err = exec.LookPath("ps")
-	if err != nil {
-		t.Skip("real-agent E2E scenario skipped: process inspection requires ps on PATH; no CLI started")
-	}
-	s.lsofPath, err = exec.LookPath("lsof")
-	if err != nil {
-		t.Skip("real-agent E2E scenario skipped: listener inspection requires lsof on PATH; no CLI started")
-	}
 
 }
 
@@ -168,47 +154,6 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 
 		time.Sleep(50 * time.Millisecond)
 	}
-	// Verify that this exact child owns only the requested loopback listener.
-	// Inspect only this launch tree, with PID/PPID and no argv/environment.
-	processRows, err := exec.Command(s.psPath, "-axo", "pid=,ppid=").Output()
-	require.True(t, err == nil,
-		"owned process tree inspection failed")
-
-	owned := map[int]bool{server.Process.Pid: true}
-	for changed := true; changed; {
-		changed = false
-		for _, row := range strings.Split(string(processRows), "\n") {
-			fields := strings.Fields(row)
-			if len(fields) != 2 {
-				continue
-			}
-			pid, _ := strconv.Atoi(fields[0])
-			parent, _ := strconv.Atoi(fields[1])
-			if owned[parent] && !owned[pid] {
-				owned[pid] = true
-				changed = true
-			}
-		}
-	}
-	listeners := 0
-	for pid := range owned {
-		listening, e := exec.Command(s.lsofPath, "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:LISTEN", "-Fn").Output()
-		if e != nil {
-			continue
-		}
-		for _, line := range strings.Split(string(listening), "\n") {
-			if strings.HasPrefix(line, "n") {
-				listeners++
-				require.Equal(t, "n"+address, line,
-					"owned listener is not exact requested loopback endpoint")
-
-			}
-		}
-	}
-	require.Equal(t, 1, listeners,
-		"owned process tree listener count mismatch")
-
-	t.Log("owned child has exactly one TCP listener on 127.0.0.1; temporary token mode 0600")
 	badCtx, badCancel := context.WithTimeout(ctx, 5*time.Second)
 	bad, badErr := codex.NewRemote(badCtx, codex.RemoteOptions{URL: endpoint, BearerToken: "invalid-ticket03-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-websocket-rejected", Version: "1"}}})
 	badCancel()

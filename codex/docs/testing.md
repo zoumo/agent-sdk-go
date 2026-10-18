@@ -93,9 +93,11 @@ The three [`tests/e2e`](../tests/e2e) harnesses require their own
 `CODEX_E2E_WEBSOCKET=1` switch and an explicit `CODEX_E2E_CLI` executable. `RUN_REAL_CODEX_TESTS` is not a harness
 switch. Their historical 9/9 model-attempt budget is exhausted and grants no
 reruns. The independent recorder requires `SDK_REAL_AGENT_E2E=1` and refuses CI.
-Real-agent scenarios refuse a nonempty `CI`. WebSocket process/listener inspection
-uses `ps` and `lsof` resolved from `PATH`, with an explicit pre-start skip if
-either is unavailable. Unix process groups are required.
+Real-agent scenarios refuse a nonempty `CI`. WebSocket authentication,
+reconnection and client/server lifecycle checks use the SDK, Go networking and
+the server process handle. Unix process groups are still required for bounded
+server cleanup. Process-tree listener ownership and additional listeners are
+not inspected.
 Neither mechanism is enabled by default checks. Current coverage and untriggered
 scenarios are listed in [compatibility](compatibility.md#live-validation).
 

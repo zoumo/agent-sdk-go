@@ -90,7 +90,7 @@ func (t *managedTree) observeCreation(r relationshipRecord, e Event) error {
 			}
 			call.request, call.requestHash = true, hash
 			ownership, ok := t.tools[treeKey{e.SessionID, b.ToolUse.ID}]
-			call.owner = ownership.owner
+			call.owner = ownership
 			if call.result && call.resultOwner != call.owner {
 				call.rejected = true
 			}
@@ -187,11 +187,11 @@ func (t *managedTree) observeCreation(r relationshipRecord, e Event) error {
 			continue
 		}
 		n := t.nodes[treeKey{k.session, "task:" + call.task}]
-		if n == nil || n.created || n.identity.TaskID != call.task || n.tool != k.id || (n.identity.AgentID != "" && n.identity.AgentID != call.task) {
+		if n == nil || n.created || n.identity.TaskID != call.task || n.identity.ToolUseID != k.id || (n.identity.AgentID != "" && n.identity.AgentID != call.task) {
 			continue
 		}
 		ownership, ok := t.tools[k]
-		if !ok || ownership.owner != call.owner {
+		if !ok || ownership != call.owner {
 			continue
 		}
 		parent, scope := t.parent(n)

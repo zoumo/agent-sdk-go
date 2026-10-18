@@ -47,7 +47,6 @@ type treeNode struct {
 	parent          *treeNode
 	rootParent      bool
 	parentTask      string
-	tool            string
 	evidence        string
 	currentRun      string
 	announced       bool
@@ -55,7 +54,6 @@ type treeNode struct {
 	publishedParent *SubagentIdentity
 	publishedScope  string
 }
-type treeTool struct{ owner *treeNode }
 type treeHeld struct {
 	record   relationshipRecord
 	deadline time.Time
@@ -70,7 +68,7 @@ type managedTree struct {
 	options       SubagentOptions
 	nodes         map[treeKey]*treeNode
 	order         []*treeNode
-	tools         map[treeKey]treeTool
+	tools         map[treeKey]*treeNode // present nil = observed root owner; absent = unknown
 	nonAgents     map[treeKey]struct{}
 	nonAgentTools map[treeKey]struct{}
 	seen          map[treeEventKey]struct{}
@@ -126,7 +124,7 @@ func newManagedTree(options Options) (*managedTree, error) {
 			return nil, fmt.Errorf("claude: history requires session and task IDs")
 		}
 	}
-	t := &managedTree{options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]treeTool), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
+	t := &managedTree{options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]*treeNode), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
 	t.creation.disabled = options.ResumeID != "" || len(treeOptions.History) > 0
 	t.creation.calls = make(map[treeKey]*treeCreationCall)
 	if err := t.seed(treeOptions.History); err != nil {
@@ -634,10 +632,9 @@ func (t *managedTree) route(r *relationshipRecord, e Event) error {
 			n.identity.TaskID = task
 		}
 		if tool != "" {
-			if n.tool != "" && n.tool != tool && (run == "" || n.currentRun != "" && run <= n.currentRun) {
+			if n.identity.ToolUseID != "" && n.identity.ToolUseID != tool && (run == "" || n.currentRun != "" && run <= n.currentRun) {
 				t.diagnostic(e.SessionID, "tool-reference-conflict")
 			} else {
-				n.tool = tool
 				n.identity.ToolUseID = tool
 			}
 			// Add a tool alias only with observed task/message mapping, never a tool name.
@@ -754,8 +751,7 @@ func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 	if a.identity.TaskID == "" {
 		a.identity.TaskID = b.identity.TaskID
 	}
-	if a.tool == "" {
-		a.tool = b.tool
+	if a.identity.ToolUseID == "" {
 		a.identity.ToolUseID = b.identity.ToolUseID
 	}
 	if a.parentTask == "" {
@@ -772,9 +768,9 @@ func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 			t.nodes[k] = a
 		}
 	}
-	for k, o := range t.tools {
-		if o.owner == b {
-			t.tools[k] = treeTool{a}
+	for k, owner := range t.tools {
+		if owner == b {
+			t.tools[k] = a
 		}
 	}
 	for i, n := range t.order {
@@ -810,7 +806,7 @@ func (t *managedTree) observeTools(e Event, owner *treeNode) error {
 		}
 		k := treeKey{e.SessionID, b.ToolUse.ID}
 		if old, ok := t.tools[k]; ok {
-			if old.owner != owner {
+			if old != owner {
 				t.diagnostic(e.SessionID, "tool-owner-conflict")
 			}
 			continue
@@ -818,7 +814,7 @@ func (t *managedTree) observeTools(e Event, owner *treeNode) error {
 		if err := t.reserve(); err != nil {
 			return err
 		}
-		t.tools[k] = treeTool{owner}
+		t.tools[k] = owner
 	}
 	if err := t.resolve(e.SessionID); err != nil {
 		return err
@@ -842,12 +838,12 @@ func (t *managedTree) resolve(session string) error {
 		if n.parentTask != "" && !known {
 			continue
 		}
-		if o, ok := t.tools[treeKey{session, n.tool}]; ok && n.tool != "" {
-			if known && (o.owner != candidate || o.owner == nil) {
+		if owner, ok := t.tools[treeKey{session, n.identity.ToolUseID}]; ok && n.identity.ToolUseID != "" {
+			if known && (owner != candidate || owner == nil) {
 				t.diagnostic(session, "parent-conflict")
 				continue
 			}
-			candidate, root, known = o.owner, o.owner == nil, true
+			candidate, root, known = owner, owner == nil, true
 		}
 		if !known {
 			continue
@@ -925,7 +921,7 @@ func (t *managedTree) announce(session string) {
 			a.Evidence += "+parent-task-id"
 		}
 		if n.parent != nil || n.rootParent {
-			if n.tool != "" {
+			if n.identity.ToolUseID != "" {
 				a.Evidence += "+observed-tool-owner"
 			}
 		}

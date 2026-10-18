@@ -415,6 +415,11 @@ Go SDK.
 
 ### Observe a root and its live descendants
 
+See the [per-capability matrix](docs/subagent-compatibility.md) and the
+[runnable offline example](examples/observe-tree-offline/README.md), which starts
+only its own synthetic peer. Subagent E3/E4 tests were not run; ACP subagent
+proposals remain drafts and are not a stable protocol implemented by this SDK.
+
 Register before starting root work:
 
 ```go

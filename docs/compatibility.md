@@ -165,6 +165,10 @@ No version range, live CLI 0.160.1 pass or complete-protocol certification is cl
 
 ## Managed direct-child observation (ticket 01)
 
+The current [per-capability contract](subagent-compatibility.md) covers the full
+five-ticket recursive API. The sections below preserve its implementation and
+evidence history; no subagent live validation is claimed.
+
 `Client.SubscribeTree` adds a local, bounded stream for a root and direct children
 identified by successful completed collab items. Only successful live spawnAgent
 confirms SDK-derived Created; successful non-spawn collab evidence is Associated.
@@ -249,3 +253,10 @@ final text, child deltas/thinking and each native usage payload keep their sourc
 and exact Raw; UsageScope stays unknown and no tree total is produced.
 
 Ticket 04 bounds and original request authority: [offline evidence](evidence/subagent-04.md).
+
+Final per-capability contract, including raw-only representation, E1/E2 evidence
+and all five tickets: [managed subagent matrix](subagent-compatibility.md).
+Runnable model-free scenario: [offline tree example](../examples/observe-tree-offline/README.md).
+Ticket 05 publication and final validation: [evidence](evidence/subagent-05.md).
+ACP subagent proposals remain drafts; no ACP wire or stable-standard compliance
+is claimed. No subagent E3/E4 test was run.

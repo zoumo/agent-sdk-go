@@ -310,6 +310,41 @@
       "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs",
       "bytes": 34455,
       "sha256": "55dc2f077ba59ace68f15e1b1352e4ee9f7d81462b3860890ff1601728031935"
+    },
+    {
+      "path": "codex-rs/app-server/src/lib.rs",
+      "git_blob_sha": "d1a622ca8cc94ab626e8e377333c9d875cd18451",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/lib.rs",
+      "bytes": 65841,
+      "sha256": "1591686b49c80c062d2b1ce48e03eb7c95bb872cc57b41e0ecc016ceb42fd6f2"
+    },
+    {
+      "path": "codex-rs/app-server/src/request_processors/thread_processor.rs",
+      "git_blob_sha": "289cb63953662eb5fba00222ec49432dd976b944",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/request_processors/thread_processor.rs",
+      "bytes": 251617,
+      "sha256": "786c0549e5c1b57421e03472f3b8c3519090849fb8401163f3da5cc2c55b66be"
+    },
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/v2/thread.rs",
+      "git_blob_sha": "2e166d5506b10996e2da286feb6082d6b8711340",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/thread.rs",
+      "bytes": 78367,
+      "sha256": "d5e626a8f3bade6865a6274642a607124bea49cf3ebdbc202f70e8d2a976dafb"
+    },
+    {
+      "path": "codex-rs/app-server/src/thread_status.rs",
+      "git_blob_sha": "c627db4b7f0e8fc43f1ea8c1a3af9b224f3f15a6",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_status.rs",
+      "bytes": 29161,
+      "sha256": "7948ede1c98af3467d8a1b1ec4cd3fe5487574b0789dfc4fac10987e6f1238f1"
+    },
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs",
+      "git_blob_sha": "5f5bcce4bc581c904edf5c89cb672afd02649ee8",
+      "source_url": "https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs#L204-L271",
+      "bytes": 18384,
+      "sha256": "9a8efb37ada6e50008e42cca74e71679a7d9e9a98b2f5c59be0504f8bf37a8db"
     }
   ],
   "derived_material": [

@@ -885,6 +885,121 @@
       "revision_note": "Focused final-fixture race rerun after adding native contentIndex and complete token counters; final explicit/inherited capacity check included. Exact delivered source/test hashes. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
       "report": "../evidence/subagent-04.md",
       "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race-final-fixtures.log"
+    },
+    {
+      "id": "subagent05-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+      "tested_at_utc": "2026-10-18T05:40:21.675309+00:00",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "tree.go",
+        "client.go",
+        "subscription.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go",
+        "tree_lifecycle_test.go",
+        "tree_bounds_requests_test.go",
+        "examples/observe-tree-offline/main.go",
+        "examples/observe-tree-offline/main_test.go",
+        "examples/observe-tree-offline/expected.txt"
+      ],
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "coverage": "Full offline suite including all four tree fixture contracts and runnable example transcript; original synthetic stdio/loopback WS/WSS. Full queue/request authority, lifecycle/history/permanent-gap, nested ordering/narrow dedup and source-separated text/thinking/usage. All three live tests visibly SKIP; no E3/E4.",
+      "revision_note": "Pre-commit working tree on the stated base; production code unchanged in ticket05, new example identified by hashes. Initial concurrent normal run failed one existing WS flood 3-second deadline; concurrent race failed existing blocked-writer prefix waits. Final serial full reruns and focused normal repetition passed without changing code or deadline. Hosted exact-delivery SHA/run checked separately in handoff.",
+      "report": "../evidence/subagent-05.md",
+      "sdk_package_seconds": 46.415,
+      "additional_command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=3 -run '^TestRemotePublicContractParity$/(ws|wss)/TestSlowSubscriberNeverBlocksResponse$' ."
+    },
+    {
+      "id": "subagent05-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+      "tested_at_utc": "2026-10-18T05:40:21.675309+00:00",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "tree.go",
+        "client.go",
+        "subscription.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go",
+        "tree_lifecycle_test.go",
+        "tree_bounds_requests_test.go",
+        "examples/observe-tree-offline/main.go",
+        "examples/observe-tree-offline/main_test.go",
+        "examples/observe-tree-offline/expected.txt"
+      ],
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "coverage": "Full offline suite including all four tree fixture contracts and runnable example transcript; original synthetic stdio/loopback WS/WSS. Full queue/request authority, lifecycle/history/permanent-gap, nested ordering/narrow dedup and source-separated text/thinking/usage. All three live tests visibly SKIP; no E3/E4.",
+      "revision_note": "Pre-commit working tree on the stated base; production code unchanged in ticket05, new example identified by hashes. Initial concurrent normal run failed one existing WS flood 3-second deadline; concurrent race failed existing blocked-writer prefix waits. Final serial full reruns and focused normal repetition passed without changing code or deadline. Hosted exact-delivery SHA/run checked separately in handoff.",
+      "report": "../evidence/subagent-05.md",
+      "sdk_package_seconds": 218.265
+    },
+    {
+      "id": "subagent05-offline-gates",
+      "kind": "unit",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "See commands below and ../evidence/subagent-05.md",
+      "commands": [
+        "mise exec -- go vet ./...",
+        "mise exec -- go mod download",
+        "mise exec -- go mod verify",
+        "python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v",
+        "python3 docs/protocol/verify_inventory.py",
+        "mise exec -- bash scripts/check_generated.sh",
+        "mise exec -- go run ./examples/observe-tree-offline",
+        "git diff --check"
+      ],
+      "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+      "tested_at_utc": "2026-10-18T05:40:21.675309+00:00",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "examples/observe-tree-offline/main_test.go"
+      ],
+      "coverage": "33 unchanged schema/generator roots; 154 definitions/397 types/744 round-trip cases; 170/11/85/1 registry plus 24 controls. Fixed-source E1 hashes/registry/schema separately verified using installed zstd CLI. No dependency download, model, real CLI, authentication or budget changes.",
+      "report": "../evidence/subagent-05.md"
     }
   ],
   "verification_commands": [
@@ -1011,5 +1126,12 @@
     "file_approval": "untriggered; no file-effect pass",
     "permissions_approval": "untriggered; no expansion",
     "turn_interrupt": "untriggered; guard unmatched, RPC not dispatched, no interrupted terminal or stopped-process pass"
+  },
+  "subagent_validation": {
+    "evidence_level": "E1/E2 only",
+    "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+    "revision_note": "Ticket05 pre-commit working tree; hashes in subagent05-* records. Delivery SHA/hosted CI independently returned in handoff.",
+    "report": "../subagent-compatibility.md",
+    "live": "E3/E4 not run; earlier general SDK live evidence does not validate subagents."
   }
 }

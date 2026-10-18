@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"math"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -36,11 +35,13 @@ func (s *QueueSuite) TestContracts() {
 		}},
 		{"zero value and nil payload", func(t *testing.T) {
 			var q Queue[*int]
+
+			t.Cleanup(func() { _ = q.Abort(nil) })
 			assert.Equal(t, Stats{}, q.Stats())
 			require.NoError(t, q.Push(nil, 4))
 			require.Equal(t, 1, q.Stats().Items)
 			assert.EqualValues(t, 4, q.Stats().Bytes)
-			assert.Positive(t, q.Stats().OldestAge)
+			assert.Zero(t, q.Stats().OldestAge)
 			_, err := q.Pop(nil)
 			require.ErrorIs(t, err, ErrNilContext)
 			assert.Equal(t, 1, q.Stats().Items)
@@ -51,6 +52,8 @@ func (s *QueueSuite) TestContracts() {
 		}},
 		{"close drains first cause", func(t *testing.T) {
 			var q Queue[int]
+
+			t.Cleanup(func() { _ = q.Abort(nil) })
 			terminal := errors.New("connection lost")
 			require.NoError(t, q.PushBatch([]Item[int]{{1, 3}, {2, 5}}))
 			require.NoError(t, q.Close(terminal))
@@ -68,6 +71,8 @@ func (s *QueueSuite) TestContracts() {
 		}},
 		{"abort releases drain and preserves cause", func(t *testing.T) {
 			var q Queue[int]
+
+			t.Cleanup(func() { _ = q.Abort(nil) })
 			terminal := errors.New("first failure")
 			require.NoError(t, q.Push(1, 6))
 			require.NoError(t, q.Close(terminal))
@@ -75,11 +80,13 @@ func (s *QueueSuite) TestContracts() {
 			_, err := q.Pop(context.Background())
 			assert.ErrorIs(t, err, terminal)
 			assert.Equal(t, Stats{Closed: true}, q.Stats())
-			assert.Nil(t, q.ring)
+			assert.Nil(t, q.pending)
 		}},
 		{"nil terminal causes", func(t *testing.T) {
 			for _, abort := range []bool{false, true} {
 				var q Queue[int]
+
+				t.Cleanup(func() { _ = q.Abort(nil) })
 				if abort {
 					require.NoError(t, q.Abort(nil))
 				} else {
@@ -91,6 +98,8 @@ func (s *QueueSuite) TestContracts() {
 		}},
 		{"cancel does not consume", func(t *testing.T) {
 			var q Queue[int]
+
+			t.Cleanup(func() { _ = q.Abort(nil) })
 			require.NoError(t, q.Push(42, 3))
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
@@ -117,6 +126,8 @@ func (s *QueueSuite) TestContracts() {
 				{[]Item[int]{{1, math.MaxInt64}, {2, 1}}, ErrSizeOverflow},
 			} {
 				var q Queue[int]
+
+				t.Cleanup(func() { _ = q.Abort(nil) })
 				require.NoError(t, q.Push(0, 1))
 				require.ErrorIs(t, q.PushBatch(invalid.items), invalid.err)
 				assert.Equal(t, 1, q.Stats().Items)
@@ -126,6 +137,8 @@ func (s *QueueSuite) TestContracts() {
 				assert.Zero(t, got)
 			}
 			var q Queue[int]
+
+			t.Cleanup(func() { _ = q.Abort(nil) })
 			require.NoError(t, q.Push(1, math.MaxInt64))
 			require.ErrorIs(t, q.Push(2, 1), ErrSizeOverflow)
 			assert.EqualValues(t, math.MaxInt64, q.Stats().Bytes)
@@ -139,6 +152,8 @@ func (s *QueueSuite) TestSlowConsumerAndLargeBatch() {
 	t := s.T()
 	for _, batch := range []bool{false, true} {
 		var q Queue[int]
+
+		t.Cleanup(func() { _ = q.Abort(nil) })
 		const count = 100000
 		if batch {
 			items := make([]Item[int], count)
@@ -161,7 +176,7 @@ func (s *QueueSuite) TestSlowConsumerAndLargeBatch() {
 		}
 		_, err := q.Pop(context.Background())
 		assert.ErrorIs(t, err, io.EOF)
-		assert.Nil(t, q.ring)
+		assert.Nil(t, q.pending)
 	}
 }
 
@@ -169,6 +184,8 @@ func (s *QueueSuite) TestConcurrentProducers() {
 	t := s.T()
 	type value struct{ producer, index int }
 	var q Queue[value]
+
+	t.Cleanup(func() { _ = q.Abort(nil) })
 	const producers = 8
 	const count = 2000
 	start := make(chan struct{})
@@ -213,6 +230,8 @@ func (s *QueueSuite) TestBatchCloseRace() {
 	t := s.T()
 	for range 100 {
 		var q Queue[int]
+
+		t.Cleanup(func() { _ = q.Abort(nil) })
 		start := make(chan struct{})
 		results := make(chan error, 2)
 		var workers sync.WaitGroup
@@ -255,8 +274,11 @@ func (s *QueueSuite) TestBatchCloseRace() {
 }
 
 func (s *QueueSuite) TestWaitersWake() {
+	t := s.T()
 	for _, abort := range []bool{false, true} {
 		var q Queue[int]
+
+		t.Cleanup(func() { _ = q.Abort(nil) })
 		const count = 10
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		results := make(chan error, count)
@@ -274,6 +296,8 @@ func (s *QueueSuite) TestWaitersWake() {
 		cancel()
 	}
 	var q Queue[int]
+
+	t.Cleanup(func() { _ = q.Abort(nil) })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	got := make(chan int, 1)
@@ -283,27 +307,97 @@ func (s *QueueSuite) TestWaitersWake() {
 }
 
 func (s *QueueSuite) TestStorageReleasesReferences() {
+	t := s.T()
 	var q Queue[*int]
-	first, second := 1, 2
-	s.Require().NoError(q.Push(&first, 1))
-	s.Require().NoError(q.Push(&second, 1))
-	ring := q.ring
-	_, err := q.Pop(context.Background())
-	s.Require().NoError(err)
-	// Inspect the upstream backing slice without unsafe: the popped interface
-	// must be nil while the still-pending slot remains referenced.
-	backing := reflect.ValueOf(ring).Elem().FieldByName("buf")
-	s.True(backing.Index(0).IsNil())
-	s.False(backing.Index(1).IsNil())
-	_, err = q.Pop(context.Background())
-	s.Require().NoError(err)
-	s.True(backing.Index(1).IsNil())
-	s.Nil(q.ring)
-	for range 10000 {
-		s.Require().NoError(q.Push(&first, 1))
+	t.Cleanup(func() { _ = q.Abort(nil) })
+	first, second, third := 1, 2, 3
+	input := []Item[*int]{{&first, 1}, {&second, 2}, {&third, 3}}
+	require.NoError(t, q.PushBatch(input))
+	input[1].Value = nil // accepted envelope must be an independent copy
+	got, err := q.Pop(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, &first, got)
+	backing := q.pending[:cap(q.pending)]
+	require.Len(t, backing, 2)
+	assert.Same(t, &second, backing[0].Value)
+	got, err = q.Pop(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, &second, got)
+	assert.Nil(t, backing[0].Value)
+	assert.Zero(t, backing[0].Bytes)
+	require.NoError(t, q.Abort(nil))
+	assert.Nil(t, backing[1].Value)
+	assert.Zero(t, backing[1].Bytes)
+	assert.Nil(t, q.pending)
+	assert.Equal(t, Stats{Closed: true}, q.Stats())
+	select {
+	case <-q.ownerDone:
+	default:
+		t.Fatal("owner still running after abort")
 	}
-	s.Greater(q.ring.Cap(), 64)
-	s.NoError(q.Abort(nil))
-	s.Nil(q.ring)
-	s.Equal(Stats{Closed: true}, q.Stats())
+	select {
+	case _, ok := <-q.ch.Out():
+		assert.False(t, ok)
+	default:
+		t.Fatal("ChannX still running after abort")
+	}
+}
+
+func (s *QueueSuite) TestAbortBurstAndConcurrentLifecycle() {
+	t := s.T()
+	for range 20 {
+		var q Queue[int]
+		t.Cleanup(func() { _ = q.Abort(nil) })
+		for i := range 1000 {
+			require.NoError(t, q.Push(i, 1))
+		}
+		var workers sync.WaitGroup
+		results := make(chan error, 8)
+		for i := range 8 {
+			workers.Go(func() {
+				if i%2 == 0 {
+					results <- q.Close(nil)
+				} else {
+					results <- q.Abort(nil)
+				}
+			})
+		}
+		workers.Wait()
+		close(results)
+		for err := range results {
+			require.NoError(t, err)
+		}
+		assert.Equal(t, Stats{Closed: true}, q.Stats())
+		select {
+		case <-q.ownerDone:
+		default:
+			t.Fatal("owner still running")
+		}
+		select {
+		case _, ok := <-q.ch.Out():
+			assert.False(t, ok)
+		default:
+			t.Fatal("ChannX manager still running")
+		}
+	}
+}
+
+func (s *QueueSuite) TestCancellationAtAdmissionKeepsValue() {
+	t := s.T()
+	for i := range 1000 {
+		var q Queue[int]
+		ctx, cancel := context.WithCancel(context.Background())
+		result := make(chan error, 1)
+		go func() { result <- q.Push(i, 1); cancel() }()
+		got, err := q.Pop(ctx)
+		require.NoError(t, <-result)
+		if err != nil {
+			require.ErrorIs(t, err, context.Canceled)
+			got, err = q.Pop(context.Background())
+			require.NoError(t, err)
+		}
+		assert.Equal(t, i, got)
+		assert.Zero(t, q.Stats().Items)
+		require.NoError(t, q.Abort(nil))
+	}
 }

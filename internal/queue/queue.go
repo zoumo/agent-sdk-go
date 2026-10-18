@@ -1,5 +1,5 @@
-// Package queue provides a concurrent, dynamically growing FIFO. Each Queue owns
-// its storage; it has no protocol knowledge and starts no goroutines.
+// Package queue adapts ChannX to typed event streams, with atomic admission and
+// explicit drain/abort lifecycle. Each Queue owns one ChannX instance.
 package queue
 
 import (
@@ -28,7 +28,8 @@ type Item[T any] struct {
 	Bytes int64
 }
 
-// Stats describes values still pending in the queue, excluding popped values.
+// Stats describes pending values, excluding popped values. OldestAge is always
+// zero: ChannX does not expose the oldest buffered envelope.
 type Stats struct {
 	Items     int
 	Bytes     int64
@@ -36,31 +37,70 @@ type Stats struct {
 	Closed    bool
 }
 
-type entry[T any] struct {
-	value    T
-	bytes    int64
-	admitted time.Time
+type command[T any] struct {
+	items []Item[T]
+	close bool
+	ack   chan struct{}
 }
 
-// Queue is a FIFO whose zero value is ready for use. It must not be copied after
-// first use. Growth is bounded only by available memory; it is not persistent.
-// Concurrent producers are ordered by admission under the queue mutex.
+// Queue is a dynamically growing event FIFO whose zero value is ready for use.
+// It must not be copied after first use. Growth is limited by available memory;
+// delivery is not persistent. Admission is serialized, and Pop calls share one
+// cancellable consumer token. Only the owner goroutine writes to or closes the
+// underlying ChannX. Callers must Close and drain, or Abort, when finished.
 type Queue[T any] struct {
-	mu      sync.Mutex
-	ring    *chanx.SelfAdaptiveRingBuffer
-	changed chan struct{}
-	bytes   int64
-	closed  bool
-	cause   error
+	mu        sync.Mutex
+	ch        *chanx.ChannX
+	commands  chan command[T]
+	ownerDone chan struct{}
+	token     chan struct{}
+	abort     chan struct{}
+	aborted   chan struct{}
+	abortOnce sync.Once
+	pending   []Item[T] // only the current envelope; protected by token
+	items     int
+	bytes     int64
+	closed    bool
+	cause     error
 }
 
-// Push admits one value without waiting for a consumer.
+func (q *Queue[T]) initLocked() {
+	if q.ch != nil {
+		return
+	}
+	q.ch = chanx.New(chanx.MaxBufferSize(0), chanx.InChanSize(0), chanx.OutChanSzie(0))
+	q.commands = make(chan command[T])
+	q.ownerDone = make(chan struct{})
+	q.token = make(chan struct{}, 1)
+	q.token <- struct{}{}
+	q.abort = make(chan struct{})
+	q.aborted = make(chan struct{})
+	go q.own()
+}
+
+// own is the sole writer and lifecycle owner of ChannX. Its command channel is
+// an unbuffered rendezvous, not another event backlog. It never takes q.mu.
+func (q *Queue[T]) own() {
+	defer close(q.ownerDone)
+	for {
+		cmd := <-q.commands
+		if cmd.close {
+			q.ch.Close()
+			close(cmd.ack)
+			return
+		}
+		q.ch.In() <- cmd.items
+		close(cmd.ack)
+	}
+}
+
+// Push admits one value without waiting for an event consumer.
 func (q *Queue[T]) Push(value T, bytes int64) error {
 	return q.PushBatch([]Item[T]{{Value: value, Bytes: bytes}})
 }
 
-// PushBatch admits all items contiguously or rejects the entire batch. Validation
-// failures and closure never partially admit a batch. No callbacks run here.
+// PushBatch admits all items as one envelope, contiguously, or rejects the entire
+// batch. Its acknowledgement waits for ChannX admission, never consumer drain.
 func (q *Queue[T]) PushBatch(items []Item[T]) error {
 	if q == nil {
 		return ErrNil
@@ -83,24 +123,20 @@ func (q *Queue[T]) PushBatch(items []Item[T]) error {
 	if len(items) == 0 {
 		return nil
 	}
-	if q.ring == nil {
-		q.ring = chanx.NewSelfAdptiveRingBuffer(64, 0)
-	}
-	now := time.Now()
-	for _, item := range items {
-		// With maxSize=0 the upstream ring grows instead of rejecting admission.
-		if !q.ring.Put(entry[T]{value: item.Value, bytes: item.Bytes, admitted: now}) {
-			panic("queue: unbounded ring rejected admission")
-		}
-	}
+	q.initLocked()
+	// Copy the envelope so callers retain no write access to accepted slots.
+	accepted := append([]Item[T](nil), items...)
+	q.items += len(accepted)
 	q.bytes = total
-	q.signalLocked()
+	ack := make(chan struct{})
+	q.commands <- command[T]{items: accepted, ack: ack}
+	<-ack
 	return nil
 }
 
 // Pop waits for a value or terminal cause. Cancellation cancels only this wait;
-// it never removes a value. A canceled context takes precedence over pending
-// values when observed under the mutex before removal. Nil contexts are invalid.
+// even an envelope fetched concurrently with cancellation remains available to
+// the next Pop. Nil contexts are invalid.
 func (q *Queue[T]) Pop(ctx context.Context) (T, error) {
 	var zero T
 	if q == nil {
@@ -110,85 +146,127 @@ func (q *Queue[T]) Pop(ctx context.Context) (T, error) {
 		return zero, ErrNilContext
 	}
 	q.mu.Lock()
-	for {
-		if err := ctx.Err(); err != nil {
-			q.mu.Unlock()
-			return zero, err
-		}
-		if q.ring != nil {
-			raw, ok := q.ring.Pop()
-			if ok {
-				item := raw.(entry[T])
-				q.bytes -= item.bytes
-				// Pop clears the upstream slot. Release even a grown backing array when
-				// empty instead of retaining the peak allocation for a future burst.
-				if q.ring.IsEmpty() {
-					q.ring = nil
-				}
-				q.mu.Unlock()
-				return item.value, nil
-			}
-		}
-		if q.closed {
-			err := q.cause
-			q.mu.Unlock()
-			return zero, err
-		}
-		if q.changed == nil {
-			q.changed = make(chan struct{})
-		}
-		changed := q.changed
+	if err := ctx.Err(); err != nil {
 		q.mu.Unlock()
-		select {
-		case <-changed:
-		case <-ctx.Done():
-		}
-		q.mu.Lock()
+		return zero, err
 	}
+	q.initLocked()
+	q.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	case <-q.abort:
+		return zero, q.terminal()
+	case <-q.token:
+	}
+	defer func() { q.token <- struct{}{} }()
+	// Check before receiving an envelope; repeat under the lock before removing
+	// an item, since cancellation or abort may race with the channel receive.
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	select {
+	case <-q.abort:
+		return zero, q.terminal()
+	default:
+	}
+	if len(q.pending) == 0 {
+		select {
+		case <-ctx.Done():
+			return zero, ctx.Err()
+		case <-q.abort:
+			return zero, q.terminal()
+		case raw, ok := <-q.ch.Out():
+			if !ok {
+				return zero, q.terminal()
+			}
+			q.pending = raw.([]Item[T])
+		}
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	select {
+	case <-q.abort:
+		return zero, q.cause
+	default:
+	}
+	item := q.pending[0]
+	q.pending[0] = Item[T]{}
+	q.pending = q.pending[1:]
+	if len(q.pending) == 0 {
+		q.pending = nil
+	}
+	q.items--
+	q.bytes -= item.Bytes
+	return item.Value, nil
 }
 
-// Close rejects further pushes, wakes waiters, and lets accepted values drain.
-// The first terminal cause is preserved; a nil cause becomes io.EOF.
+func (q *Queue[T]) terminal() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.cause
+}
+
+// Close rejects further admission and requests the owner to close ChannX after
+// all acknowledged pushes. It does not wait for consumer drain. The first cause
+// is preserved; a nil cause becomes io.EOF. Drain or Abort to release resources.
 func (q *Queue[T]) Close(cause error) error {
 	if q == nil {
 		return ErrNil
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.closeLocked(cause)
-	return nil
-}
-
-// Abort closes the queue and drops all pending values. After an earlier Close,
-// it discards the remaining drain contents while preserving that Close's cause.
-func (q *Queue[T]) Abort(cause error) error {
-	if q == nil {
-		return ErrNil
-	}
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.ring = nil
-	q.bytes = 0
+	q.initLocked()
 	q.closeLocked(cause)
 	return nil
 }
 
 func (q *Queue[T]) closeLocked(cause error) {
-	if !q.closed {
-		q.closed = true
-		if cause == nil {
-			cause = io.EOF
-		}
-		q.cause = cause
+	if q.closed {
+		return
 	}
-	q.signalLocked()
+	q.closed = true
+	if cause == nil {
+		cause = io.EOF
+	}
+	q.cause = cause
+	ack := make(chan struct{})
+	q.commands <- command[T]{close: true, ack: ack}
+	<-ack
 }
 
-func (q *Queue[T]) signalLocked() {
-	if q.changed != nil {
-		close(q.changed)
-		q.changed = nil
+// Abort wakes waiting Pops, closes admission through the owner, and discards
+// pending envelopes until ChannX terminates. It is O(backlog), independent of an
+// external consumer, and preserves an earlier Close's cause.
+func (q *Queue[T]) Abort(cause error) error {
+	if q == nil {
+		return ErrNil
 	}
+	q.abortOnce.Do(func() {
+		q.mu.Lock()
+		q.initLocked()
+		close(q.abort)
+		q.closeLocked(cause)
+		q.mu.Unlock()
+		<-q.token
+		clear(q.pending)
+		q.pending = nil
+		for raw := range q.ch.Out() {
+			clear(raw.([]Item[T]))
+		}
+		<-q.ownerDone
+		q.mu.Lock()
+		q.items = 0
+		q.bytes = 0
+		q.mu.Unlock()
+		q.token <- struct{}{}
+		close(q.aborted)
+	})
+	<-q.aborted
+	return nil
 }
 
 // Stats returns a concurrent snapshot. A nil queue is closed and empty.
@@ -198,12 +276,5 @@ func (q *Queue[T]) Stats() Stats {
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	stats := Stats{Bytes: q.bytes, Closed: q.closed}
-	if q.ring != nil {
-		stats.Items = q.ring.Len()
-		if raw, ok := q.ring.Peek(); ok {
-			stats.OldestAge = time.Since(raw.(entry[T]).admitted)
-		}
-	}
-	return stats
+	return Stats{Items: q.items, Bytes: q.bytes, Closed: q.closed}
 }

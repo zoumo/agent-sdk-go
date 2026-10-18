@@ -16,7 +16,7 @@ var connectionEpoch atomic.Uint64
 // negative values are invalid. PendingAge limits association waiting, not work.
 type TreeOptions struct {
 	// History contains caller-supplied native Thread snapshots (not RPC envelopes).
-	// Only lineage and completed collab relations are imported, never native events,
+	// Only lineage, completed collab and V2 Started relations are imported, never native events,
 	// execution state or creation. Total bytes are bounded by PendingBytes and
 	// snapshot count by MaxNodes. The SDK performs no history/read/resume RPC.
 	History       []json.RawMessage
@@ -58,6 +58,8 @@ type TreeEvidence struct {
 	Source            TreeIdentity
 	Tool              string
 	ReceiverThreadIDs []string
+	// Activity retains the native V2 creation item; Tool/receivers remain collab-only.
+	Activity *types.SubAgentActivityThreadItem
 }
 
 // TreeEvent wraps an independently owned native Event or an SDK-derived record.
@@ -67,7 +69,8 @@ type TreeEvidence struct {
 // Client connection within this process, not a durable provider identity.
 // Scope is "root", "child", "unresolved", "unscoped", or "observation". Unscoped events do
 // not establish membership. UsageScope is "unknown"; no usage is aggregated.
-// Created confirms creation only via a live successful spawnAgent completed item.
+// Created confirms creation via a live successful spawnAgent completed item or
+// a live completed SubAgentActivity item of kind started at the pinned version.
 // Associated alone never confirms creation. Neither kind grants request authority.
 type TreeEvent struct {
 	Kind              TreeEventKind
@@ -315,6 +318,16 @@ func (t *TreeSubscription) enqueueLocked(e TreeEvent) {
 		}
 		copy := *e
 		copy.ReceiverThreadIDs = append([]string(nil), e.ReceiverThreadIDs...)
+		if e.Activity != nil {
+			activity := *e.Activity
+			if e.Activity.UnknownFields != nil {
+				activity.UnknownFields = make(map[string]json.RawMessage, len(e.Activity.UnknownFields))
+				for key, raw := range e.Activity.UnknownFields {
+					activity.UnknownFields[key] = append(json.RawMessage(nil), raw...)
+				}
+			}
+			copy.Activity = &activity
+		}
 		return &copy
 	}
 	e.Evidence = cloneEvidence(e.Evidence)
@@ -558,11 +571,17 @@ func (t *TreeSubscription) seedLocked(snapshot json.RawMessage) {
 				return
 			}
 			var decoded types.ThreadItem
-			if json.Unmarshal(item, &decoded) == nil && decoded.CollabAgentToolCall != nil {
+			if json.Unmarshal(item, &decoded) == nil {
 				f, _ := objectFields(item)
 				var itemID string
 				_ = json.Unmarshal(f["id"], &itemID)
-				t.collabLocked(decoded.CollabAgentToolCall, TreeIdentity{ThreadID: threadID, TurnID: turnID, ItemID: itemID})
+				source := TreeIdentity{ThreadID: threadID, TurnID: turnID, ItemID: itemID}
+				if decoded.CollabAgentToolCall != nil {
+					t.collabLocked(decoded.CollabAgentToolCall, source)
+				}
+				if decoded.SubAgentActivity != nil {
+					t.activityLocked(decoded.SubAgentActivity, source)
+				}
 			}
 		}
 	}
@@ -601,10 +620,26 @@ func (t *TreeSubscription) discoverLocked(native Event, source TreeIdentity) {
 		return
 	}
 	n, ok := native.Data.(*types.ItemCompletedNotification)
-	if native.DecodeError != nil || !ok || n.Item.CollabAgentToolCall == nil {
+	if native.DecodeError != nil || !ok {
 		return
 	}
-	t.collabLocked(n.Item.CollabAgentToolCall, source)
+	if n.Item.CollabAgentToolCall != nil {
+		t.collabLocked(n.Item.CollabAgentToolCall, source)
+	}
+	if n.Item.SubAgentActivity != nil {
+		t.activityLocked(n.Item.SubAgentActivity, source)
+	}
+}
+
+func (t *TreeSubscription) activityLocked(activity *types.SubAgentActivityThreadItem, source TreeIdentity) {
+	// At the pinned source, V2 Started follows successful spawn and initial input
+	// admission. Other activities prove neither creation nor a parent relation.
+	// History uses the same edge parser; relationLocked suppresses creation.
+	if activity.Kind != types.SubAgentActivityKindStarted || source.ThreadID == "" || source.TurnID == "" || source.ItemID == "" || source.ItemID != activity.ID {
+		return
+	}
+	evidence := TreeEvidence{Method: "item/completed", Source: source, Activity: activity}
+	t.relationLocked(activity.AgentThreadID, source.ThreadID, evidence, true)
 }
 
 func (t *TreeSubscription) collabLocked(item *types.CollabAgentToolCallThreadItem, source TreeIdentity) {

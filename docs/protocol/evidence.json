@@ -1199,6 +1199,59 @@
       ],
       "coverage": "Six CI gate self-tests include current generator reproducibility and negative committed drift. Source bytes/registry/schema matched exact official pin; all 65 blobs independently matched official Git tree. Six Chinese Mermaid figures rendered and visually checked; 16 JSON lines parsed; local links and STC style checked. No model/auth/CLI upgrade.",
       "report": "../evidence/subagent-05-current.md"
+    },
+    {
+      "id": "subagent-v2-created-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "GOPROXY=off GOSUMDB=off GOMAXPROCS=2 RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 mise exec -- go test -v -p=1 -count=1 ./...",
+      "test_files": [
+        "tree_v2_contract_test.go"
+      ],
+      "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "source_sha256": {
+        "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
+        "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
+      },
+      "report": "../evidence/subagent-v2-created.md",
+      "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
+      "log_sha256": "54ec2a8a7657899b1caf8a8cea4a8829a5e0454185a83ac7c60a02c4d83ae107"
+    },
+    {
+      "id": "subagent-v2-created-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec -- go test -run '^TestTreeV2' -count=1 .",
+      "test_files": [
+        "tree_v2_contract_test.go"
+      ],
+      "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "source_sha256": {
+        "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
+        "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
+      },
+      "report": "../evidence/subagent-v2-created.md",
+      "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run."
+    },
+    {
+      "id": "subagent-v2-created-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "GOPROXY=off GOSUMDB=off GOMAXPROCS=2 mise exec -- go test -race -p=1 -count=1 ./...",
+      "test_files": [
+        "tree_v2_contract_test.go"
+      ],
+      "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "source_sha256": {
+        "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
+        "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
+      },
+      "report": "../evidence/subagent-v2-created.md",
+      "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
+      "log_sha256": "4cf3cae1d279421eb4074d59a4db1032818add6c040ac9544f148c14efcd4f70"
     }
   ],
   "verification_commands": [
@@ -1336,5 +1389,11 @@
     "url": "https://github.com/zoumo/codex-sdk-go/actions/runs/39088440655",
     "verified_updated_at": "2026-10-18T02:02:02Z",
     "scope": "Independently read back completed/success. Offline only. Final documentation delivery CI must be checked at its own exact HEAD and is returned in handoff."
+  },
+  "subagent_v2_creation": {
+    "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+    "report": "../evidence/subagent-v2-created.md",
+    "revision_note": "Validated source hashes in subagent-v2-created-* records; final delivery SHA and hosted Linux/macOS CI verified in handoff. Native types/schema unchanged.",
+    "live": "E3/E4 not run; no model/authentication changes."
   }
 }

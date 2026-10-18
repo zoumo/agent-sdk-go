@@ -133,7 +133,7 @@ SDK 不代替模型调用这些工具。
 ## 关系通知、Created 和乱序暂存
 
 SDK 只用明确证据建立父子关系。
-原生父线程字段、thread_spawn 来源和成功 collab 项提供证据。
+原生父线程字段、thread_spawn 来源、成功 collab 项和 V2 completed Started 活动提供证据。
 SDK 在子 Native 前发布已经证实的关系。
 SDK 先宣布祖先，再释放已经归属的后代记录。
 冲突保留已接纳的父关系并报告 incomplete。
@@ -146,7 +146,7 @@ sequenceDiagram
     participant A as 应用
     S-->>T: 原生 child delta，关系尚未知
     T->>T: 有界暂存
-    S-->>T: 原生父关系或成功 collab 项
+    S-->>T: 原生父关系、成功 collab 或 V2 completed Started
     T-->>A: 派生 Associated 或 Created
     T-->>A: 已归属的 child Native
     T-->>A: 建立关系的原生通知
@@ -157,18 +157,24 @@ sequenceDiagram
 它们取决于暂存记录和建立关系的通知。
 已先交付的原生记录不会重排。
 
-`Created` 只采用实时成功的 `spawnAgent` collab 完成项。
+`Created` 采用实时成功的 `spawnAgent` collab 完成项，
+或成功解码的实时 `item/completed`，其 `SubAgentActivity.kind=started`。
 失败 spawn 和非 spawn collab 不能证明新建。
 已有 Associated 可收到一次 Created 确认。
 两条记录复用 `RelationKey`。
 历史 seed 只产生 Associated。
 
-**当前 V2 限制：**V2 spawn 把 collab 项送给 analytics。
-V2 向执行事件流发布 `SubAgentActivity.started`。
-SDK 不能据此声称实体新建。
-有原生谱系时，SDK 发布 Associated。
-缺少谱系时，子流可能保持 unresolved。
-这里没有宣称 V2 必定收到 Created。
+V2 spawn 把 collab 项送给 analytics，并向执行事件流发布 Started 活动。
+固定源码在创建子线程并接纳首次输入成功后才发布 Started。
+因此 SDK 从实时 completed Started 建立父子关系并确认 Created。
+该路径不依赖 `thread/started`；原生自动附着本身不会发布这个通知。
+SDK 保留实际活动证据，不把它改写成 collab 工具。
+`item/started`、Interacted、Interrupted 和 Completed 都不能证明新建或父关系。
+历史 Started 只导入 Associated；后续重复实时通知也不会将其变为 Created。
+原生自动附着仍为 best-effort，漏通知或断线仍可能留下缺口。
+
+源码依据：[成功 spawn 后的 Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239)、[创建线程](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L767-L839)、[接纳首次输入](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L923-L959)、[官方无 collab 测试](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593)。
+这些是源码证据；本轮没有运行官方测试。
 
 V2 活动通知形状：
 
@@ -177,6 +183,7 @@ V2 活动通知形状：
 ```
 
 活动通知的 `threadId` 标识发布活动的父线程。
+SDK 以它为 parent，以 `agentThreadId` 为 child，并保留父 turn/item ID。
 `agentThreadId` 标识活动对象。
 应用不能合并这 2 个身份。
 
@@ -198,7 +205,7 @@ SDK 将原始 Native 标为 `Scope=unresolved`。
 相同文本 delta 仍可连续出现 2 次。
 窄范围的终态 item 去重不提供全局 exactly-once。
 
-依据：[树实现](../tree.go)、[乱序与去重测试](../tree_nested_test.go)、[当前模式 metadata 测试](../tree_current_contract_test.go)。
+依据：[树实现](../tree.go)、[乱序与去重测试](../tree_nested_test.go)、[当前模式 metadata 测试](../tree_current_contract_test.go)、[V2 创建回归](../tree_v2_contract_test.go)。
 
 ## 父子状态独立，wait 不关闭父 turn
 

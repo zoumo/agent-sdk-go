@@ -171,14 +171,17 @@ five-ticket recursive API. The sections below preserve its implementation and
 evidence history; no subagent live validation is claimed.
 
 `Client.SubscribeTree` adds a local, bounded stream for a root and direct children
-identified by successful completed collab items. Only successful live spawnAgent
-confirms SDK-derived Created; successful non-spawn collab evidence is Associated.
+identified by explicit native evidence. Successful live spawnAgent collab and
+live decoded V2 item/completed SubAgentActivity kind started confirm SDK-derived
+Created; successful non-spawn collab evidence is Associated. V2 derives parent
+from notification threadId and child from activity.agentThreadId, retaining the
+actual activity in TreeEvidence.Activity without requiring thread/started.
 SDK wrapper names are outside `types`; native Event and protocol generation
 remain unchanged. Native envelopes and parameter bytes are retained independently
 for each observer. Request handles remain exclusively on `Client.Requests()`.
 
 Ticket 02 extends this API to recursive relations and bounded early-event
-routing. Native Thread parent/source and completed collab evidence establish
+routing. Native Thread parent/source, completed collab and V2 Started evidence establish
 edges; no path inference or child RPC is used. Conflicts retain the original
 parent and emit both accepted and rejected evidence; cycles emit diagnostics. Related ancestors
 precede buffered descendants. Associated can later receive one Created
@@ -196,7 +199,7 @@ partial versus complete items are preserved. Graph, depth, queue, pending storag
 and identity cache are bounded independently.
 
 Ticket 03 adds explicit native Thread snapshots through `TreeOptions.History`.
-Seeded parent/source and successful historical collab relations are history
+Seeded parent/source, successful historical collab and V2 Started relations are history
 Associated only; they never create entities or replay notifications. Their evidence
 has history provenance and no notification method. Seeded entities cannot later
 be reclassified as newly created. New live children can still be Created. Snapshot
@@ -227,7 +230,7 @@ source facts do not promise cross-thread order or successful result arrival firs
 | Capability | Native availability / source evidence (E1) | SDK implementation | Offline evidence (E2) | Live evidence |
 | --- | --- | --- | --- | --- |
 | New-thread notification routing | Pinned [server lib.rs lines 1291–1319](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
-| Independent creation / association | Pinned [collab item schema](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1131) | Derived Created or Associated precedes child native events | Success, failure, resume and repeated receiver cases | Not run |
+| Independent creation / association | V2 [successful spawn / Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239) and pinned [collab item schema](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1131) | Derived Created or Associated precedes child native events | V1 success/failure/resume/repeated receivers; TestTreeV2CreatedWithoutThreadStarted, TestTreeV2GraphOrderingAndConfirmation, TestTreeV2HistorySuppressesCreation, TestTreeV2NonCreationEvidence | Not run |
 | Native compatibility and isolation | Existing raw/typed notification transport | Recursive membership and bounded unresolved routing, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
 | History and disconnect boundaries | Native snapshots expose lineage; new-thread attach is distinct from cold recovery | History-only Associated; disconnected/permanent-gap; explicit new epochs, zero recovery RPCs | Seed/live distinction, repeated IDs across epochs, full-queue EOF, close/cancel shared-source race | Not run |
 | Bounded local observation | Existing SDK subscription limits | Independent queue, shared admission cap, graph-node bound, idempotent local close | Slow observer isolation, node/admission bounds, concurrent close; Go race suite | Not run |
@@ -268,4 +271,7 @@ See the [current-version follow-up](evidence/subagent-05-current.md) for the
 actual schema changes, local binary identity and current E1/E2 validation.
 
 [事件时序](event-sequences.md) explains the current V1/V2 spawn and wait modes.
-V2 activity Started alone cannot prove creation; native lineage yields Associated.
+V2 live decoded completed Started proves creation; other activity kinds and
+item/started prove neither creation nor parentage. Historical Started yields
+Associated only. [Correction evidence](evidence/subagent-v2-created.md) records
+the fixed-source reasoning and public regression coverage.

@@ -447,7 +447,12 @@ return stream.Err()
 ```
 
 `SubagentCreated` requires a live successful `spawnAgent` completed item with
-receiver identities. Other successful collab calls can establish
+receiver identities, or a live decoded `item/completed` SubAgentActivity with
+`kind=started` at the pinned 0.162.1 source. V2 uses notification `threadId` as
+parent and `agentThreadId` as child, without requiring `thread/started`.
+`TreeEvidence.Activity` retains the actual native item; it is not collab evidence.
+Other activity kinds and `item/started` prove no relation or creation.
+Other successful collab calls can establish
 `SubagentAssociated`; association alone does not confirm creation. A later spawn
 confirmation uses the same relation key. Relations precede child notifications;
 all native notifications that establish relations are also delivered. Repeated
@@ -456,7 +461,7 @@ Source thread/turn/item IDs, direct parent, provider, connection epoch and local
 sequence accompany delivery. Unknown fields, methods, explicit null and absent
 parameters remain available. Each observer owns its buffers.
 
-Relations from completed collab items, native `Thread.parentThreadId`, and
+Relations from completed collab items, V2 completed Started activity, native `Thread.parentThreadId`, and
 `source.subAgent.thread_spawn.parent_thread_id` recursively establish descendants.
 Ancestors are announced before descendants and their buffered native events.
 `agentPath` never proves a parent. First confirmed parent wins; conflicting or
@@ -477,7 +482,8 @@ best-effort and runtime coverage is unverified, including unknown server version
 For explicit reconstruction on a new Client, pass caller-owned native Thread
 snapshots in `TreeOptions.History` (`[]json.RawMessage`, each a Thread object,
 not a thread/read response envelope). Only parent/source links and successful
-completed collab items in `turns[].items` establish relations. Seeded relations
+completed collab items and V2 Started activities in `turns[].items` establish
+relations. Seeded relations
 have `Provenance="history"`, `Reason="history"`, and never emit Created, even if
 later live evidence repeats their spawn. History does not replay native events,
 seed occurrence deduplication, or establish current execution state. A new live

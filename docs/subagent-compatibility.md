@@ -29,15 +29,15 @@ workflow. E1 source keys link to immutable official code below.
 
 | Capability | Native availability / E1 | SDK implementation | Executed E2 contract | Limits / unverified runtime |
 | --- | --- | --- | --- | --- |
-| Current creation | C: current V1 completed collab item, spawnAgent and receiver IDs | SDK-derived SubagentCreated once per live entity, supporting thread/turn/item evidence retained | TestTreeLiveChildStream; TestTreeFailedSpawnAndResumeAreNotCreated | Current V2 emits activity Started rather than observable collab completion; lineage yields Associated, never Created from Started. Failed/non-spawn calls cannot prove creation; E3/E4 not run |
-| Association | T/C: native parent, thread_spawn source and successful completed collab evidence | Associated precedes child Native; later live spawn confirms same relation key once | TestTreeNestedOrderingAndIdentity | First accepted parent retained; conflicts/cycles diagnostic; agentPath is display only |
+| Current creation | C/V: V1 completed spawnAgent collab; V2 live decoded item/completed SubAgentActivity kind started | SDK-derived SubagentCreated once per live entity; actual activity or collab evidence and thread/turn/item retained | TestTreeLiveChildStream; TestTreeV2CreatedWithoutThreadStarted; TestTreeV2NonCreationEvidence | V2 needs no thread/started; other activity kinds and item/started prove no creation/relation. Auto-attach best-effort; E3/E4 not run |
+| Association | T/C/V: native parent, thread_spawn source, successful completed collab and V2 completed Started evidence | Associated precedes child Native; later live spawn confirms same relation key once | TestTreeNestedOrderingAndIdentity; TestTreeV2GraphOrderingAndConfirmation | First accepted parent retained; conflicts/cycles diagnostic; agentPath is display only |
 | Text / thinking | N/I: native message and reasoning notifications/items | Raw/Params retained at native source; message delta and item payloads typed where implemented | TestTreeTextThinkingAndUsageStayAtNativeSource; TestTreeLiveChildStream | Reasoning deltas can remain raw-only; no guarantee of provider thinking emission |
 | Tools / extensions | C/I/N: native tool items, unknown methods and fields | Original events, native IDs, UnknownFields/unknown unions, null/absence and DecodeError retained | TestTreeLiveChildStream; TestTreeNestedOrderingAndIdentity | Unknown methods have no invented typed payload; malformed lineage cannot establish membership |
 | Nested stream / attach | A/T: new-thread attach and parent/source lineage | Recursive existing-connection routing; zero child read/list/resume/start/subscribe RPC or added connection | TestTreeNestedOrderingAndIdentity; transport traces in tree contracts | New-thread best-effort attach does not imply cold-thread coverage; no generic cross-version fallback |
 | Deduplication | I: terminal item identity, no general occurrence cursor | Relationships once; known decoded item/completed keyed by epoch/thread/turn/method/item | TestTreeNestedOrderingAndIdentity; TestTreeDepthAndDedupBounds | No-ID deltas and unknown items preserved; FIFO cache eviction allows old replay; no cross-epoch exactly-once |
 | Parent / child status | L: per-thread status and native turn/activity boundaries | Independent raw status and typed turn/item events; parent completion leaves observation open | TestTreeParentIdleChildActive | Idle differs from turn/completed; neither means all children finished; activity end does not delete agent |
 | Terminal / future work | L/I: native completed/interrupted states | Forwarded unchanged with native turn IDs; future run of same entity remains observable | TestTreeParentIdleChildActive; TestTreeNestedOrderingAndIdentity | Silence, waiting, timeout, cancel, EOF or parent final answer never imply child success |
-| History / explicit recovery | T/C: native Thread snapshots expose lineage | Caller-supplied History seeds Associated only, no notification replay, no inferred current state | TestTreeDisconnectHistoryEpoch; TestTreeDisconnectFullQueueAndSeedBounds | Historical spawn never Created, even if repeated live; seed emits history-recovery-gap; no automatic resume |
+| History / explicit recovery | T/C/V: native Thread snapshots expose lineage | Caller-supplied History seeds Associated only, no notification replay, no inferred current state | TestTreeDisconnectHistoryEpoch; TestTreeDisconnectFullQueueAndSeedBounds; TestTreeV2HistorySuppressesCreation | Historical spawn never Created, even if repeated live; seed emits history-recovery-gap; no automatic resume |
 | Disconnect / reconnect | A: lag can skip resync, no verified replay cursor | Disconnected/permanent-gap reserved record, original Err; explicit new Client gives fresh process-local epoch | TestTreeDisconnectHistoryEpoch; TestTreeDisconnectFullQueueAndSeedBounds | No reconnect loop, replay, guaranteed cold attach, gap filling or seamless recovery |
 | Unresolved / unscoped | N/T: source can be missing or relation unknown | Bounded waiting then explicit incomplete/unresolved Native; no-source remains unscoped | TestTreePendingLimitsAndNoReplay; TestTreePendingDeadlineFanoutIsAtomic | Unresolved may belong to another root; later relation never replays delivered Native |
 | Backpressure / bounds | Existing Go bounded transport; no server completeness guarantee | Atomic per-notification fanout, finite queue/graph/depth/pending/cache, observer-local failure | TestTreeFanoutAdmissionIsAtomic; TestTreeBoundsAndLocalClose; TestTreeAdmissionAndNodeBound | Overflow terminates observer; previously admitted records remain readable; control routing does not wait on consumer |
@@ -52,6 +52,9 @@ workflow. E1 source keys link to immutable official code below.
 - **A**: [new-thread attach / lag without resync](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319)
   and [best-effort per-connection listener](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_processor.rs#L3607-L3639).
 - **C/I**: [collab tool and native item definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs).
+- **V**: [V2 successful spawn / Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239),
+  [canonical activity pair](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2.rs#L45-L54),
+  and [official completed Started child-ID test, no collab](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593).
 - **T**: [native Thread definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs#L204-L271).
 - **N/R**: [notification / reverse-request registry](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs).
 - **L**: [TurnComplete handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L186-L203)
@@ -108,6 +111,11 @@ No old-version negotiation or compatibility branch is maintained.
 
 Current V1/V2 are feature modes in 0.162.1, not older-version compatibility.
 V2 spawn tracks its collab item in analytics and emits SubAgentActivity Started
-to the execution stream. Under the evidence contract, that activity alone cannot
-produce Created. Native lineage can establish Associated. See the event-sequence
-document for the two different model-tool results and wait semantics.
+to the execution stream after successful child creation and initial-input admission.
+A live decoded item/completed Started proves creation and a direct edge from the
+notification threadId (parent) to activity.agentThreadId (child), without
+thread/started. TreeEvidence.Activity retains the native item, including unknown
+fields; Tool and ReceiverThreadIDs stay collab-only. Interacted, Interrupted,
+Completed and item/started establish no edge. Historical Started seeds Associated
+only. See [V2 correction evidence](evidence/subagent-v2-created.md) and the
+event-sequence document for model-tool results, wait semantics and remaining gaps.

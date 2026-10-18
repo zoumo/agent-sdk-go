@@ -50,6 +50,10 @@ archive/aggregate/snapshot hashes and method source lines were refreshed togethe
 Historical evidence records retain schema_protocol_commit and do not become
 current-schema test passes just because the target changed.
 
+**Historical conclusion corrected:** the V2 limitation in the following paragraph
+was corrected by [the V2 creation follow-up](subagent-v2-created.md). The paragraph
+records the earlier implementation, not the current API contract.
+
 Current V2 spawn sends collab details to analytics and emits activity Started
 to the execution stream. Started alone never confirms Created under this SDK
 contract; native lineage can establish Associated. This current-mode limitation

@@ -30,10 +30,10 @@ jobs:
       GOENV: 'off'
       GORACE: 'atexit_sleep_ms=0'
       GOMAXPROCS: '2'
-      RUN_MAC_STDIO_LIVE: '0'
-      RUN_MAC_INTERACTIONS_LIVE: '0'
-      RUN_MAC_WEBSOCKET_LIVE: '0'
-      CLAUDE_GO_LIVE: '0'
+      CODEX_E2E_STDIO: '0'
+      CODEX_E2E_INTERACTIONS: '0'
+      CODEX_E2E_WEBSOCKET: '0'
+      CLAUDE_E2E: '0'
       SDK_REAL_AGENT_E2E: '0'
     steps:
       - name: Check out complete imported history

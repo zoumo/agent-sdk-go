@@ -234,7 +234,7 @@ and 6475. These are E1 declaration evidence, not live interoperability tests.
 The fixtures in `tree_lineage_test.go` are original synthetic peers through
 Open/Send/Receive (E2); no upstream implementation was copied.
 
-Offline validation uses Go 1.26.9 through mise, `CLAUDE_GO_LIVE=0`,
+Offline validation uses Go 1.26.9 through mise, `CLAUDE_E2E=0`,
 `GOPROXY=off`, `GOSUMDB=off`, `GOTOOLCHAIN=local`, `GOENV=off`, and a temporary
 GOCACHE. Commands: `go test -count=1 -timeout 180s ./...`,
 `go test -race -count=1 -timeout 300s ./...`, and `go vet ./...`.

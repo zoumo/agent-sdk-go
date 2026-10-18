@@ -14,25 +14,25 @@ import (
 	claude "github.com/zoumo/agent-sdk-go/claude"
 )
 
-// TestLiveCLIInitialization is an opt-in real process startup check, not a
+// TestCLIInitialization is an opt-in real process startup check, not a
 // model turn or the full manual compatibility checklist. Never enable in CI.
-func TestLiveCLIInitialization(t *testing.T) {
-	switch os.Getenv("CLAUDE_GO_LIVE") {
+func TestCLIInitialization(t *testing.T) {
+	switch os.Getenv("CLAUDE_E2E") {
 	case "", "0":
-		t.Skip("LIVE SKIPPED: CLAUDE_GO_LIVE=0 (default); no real Agent/CLI or model calls")
+		t.Skip("E2E SKIPPED: CLAUDE_E2E=0 (default); no real Agent/CLI or model calls")
 	case "1":
-		require.EqualValues(t, "", os.Getenv("CI"), "live CLI initialization is forbidden in CI")
+		require.EqualValues(t, "", os.Getenv("CI"), "real CLI initialization is forbidden in CI")
 	default:
-		require.FailNow(t, "verification failed", "CLAUDE_GO_LIVE must be 0 or 1")
+		require.FailNow(t, "verification failed", "CLAUDE_E2E must be 0 or 1")
 	}
-	path := os.Getenv("CLAUDE_GO_LIVE_CLI")
-	require.True(t, filepath.IsAbs(path), "CLAUDE_GO_LIVE=1 requires an explicit absolute CLAUDE_GO_LIVE_CLI path")
+	path := os.Getenv("CLAUDE_E2E_CLI")
+	require.True(t, filepath.IsAbs(path), "CLAUDE_E2E=1 requires an explicit absolute CLAUDE_E2E_CLI path")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	client, err := claude.Open(ctx, claude.Options{CLIPath: path, WorkDir: t.TempDir()})
-	require.True(t, err == nil, "live CLI initialization failed (diagnostics withheld; inspect privately)")
+	require.True(t, err == nil, "real CLI initialization failed (diagnostics withheld; inspect privately)")
 	{
 		err := client.Close()
-		require.True(t, err == nil, "live CLI shutdown failed (diagnostics withheld; inspect privately)")
+		require.True(t, err == nil, "real CLI shutdown failed (diagnostics withheld; inspect privately)")
 	}
 }

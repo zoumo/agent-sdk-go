@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -23,20 +24,21 @@ type StdioInteractionsInterruptSuite struct {
 }
 
 func TestStdioInteractionsInterrupt(t *testing.T) {
-	if os.Getenv("RUN_MAC_INTERACTIONS_LIVE") != "1" {
-		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_INTERACTIONS_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	if os.Getenv("CODEX_E2E_INTERACTIONS") != "1" {
+		t.Skip("real-agent E2E scenario skipped: set CODEX_E2E_INTERACTIONS=1 and CODEX_E2E_CLI to opt in; offline pass is not real-agent evidence")
 	}
+	require.Empty(t, os.Getenv("CI"), "real-agent E2E tests are forbidden in CI")
 	suite.Run(t, new(StdioInteractionsInterruptSuite))
 }
 
 func (s *StdioInteractionsInterruptSuite) SetupTest() {
 	t := s.T()
-	if os.Getenv("RUN_MAC_INTERACTIONS_LIVE") != "1" {
-		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_INTERACTIONS_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	if os.Getenv("CODEX_E2E_INTERACTIONS") != "1" {
+		t.Skip("real-agent E2E scenario skipped: set CODEX_E2E_INTERACTIONS=1 and CODEX_E2E_CLI to opt in; offline pass is not real-agent evidence")
 	}
-	s.executable = os.Getenv("MAC_LIVE_CODEX")
-	require.False(t, s.executable == "",
-		"explicit executable required")
+	s.executable = os.Getenv("CODEX_E2E_CLI")
+	require.True(t, filepath.IsAbs(s.executable),
+		"absolute CODEX_E2E_CLI path required")
 
 }
 
@@ -51,7 +53,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 	}()
 	cwd := t.TempDir()
 	initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
-	c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket02", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
+	c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-interactions", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
 	stop()
 	require.True(t, err == nil,
 		"initialize failed: %T; payload withheld", err)

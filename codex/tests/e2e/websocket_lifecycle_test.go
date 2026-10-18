@@ -30,23 +30,37 @@ import (
 type WebSocketLifecycleHistorySuite struct {
 	suite.Suite
 	executable string
+	psPath     string
+	lsofPath   string
 }
 
 func TestWebSocketLifecycleHistory(t *testing.T) {
-	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
-		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	if os.Getenv("CODEX_E2E_WEBSOCKET") != "1" {
+		t.Skip("real-agent E2E scenario skipped: set CODEX_E2E_WEBSOCKET=1 and CODEX_E2E_CLI to opt in; offline pass is not real-agent evidence")
 	}
+	require.Empty(t, os.Getenv("CI"), "real-agent E2E tests are forbidden in CI")
 	suite.Run(t, new(WebSocketLifecycleHistorySuite))
 }
 
 func (s *WebSocketLifecycleHistorySuite) SetupTest() {
 	t := s.T()
-	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
-		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	if os.Getenv("CODEX_E2E_WEBSOCKET") != "1" {
+		t.Skip("real-agent E2E scenario skipped: set CODEX_E2E_WEBSOCKET=1 and CODEX_E2E_CLI to opt in; offline pass is not real-agent evidence")
 	}
-	s.executable = os.Getenv("MAC_LIVE_CODEX")
-	require.False(t, s.executable == "",
-		"MAC_LIVE_CODEX must select an explicit executable")
+	s.executable = os.Getenv("CODEX_E2E_CLI")
+	require.True(t, filepath.IsAbs(s.executable),
+		"CODEX_E2E_CLI must select an absolute executable path")
+	// Inspect only the owned launch tree. Missing inspection capabilities must
+	// skip before starting a CLI, rather than weakening the listener assertions.
+	var err error
+	s.psPath, err = exec.LookPath("ps")
+	if err != nil {
+		t.Skip("real-agent E2E scenario skipped: process inspection requires ps on PATH; no CLI started")
+	}
+	s.lsofPath, err = exec.LookPath("lsof")
+	if err != nil {
+		t.Skip("real-agent E2E scenario skipped: listener inspection requires lsof on PATH; no CLI started")
+	}
 
 }
 
@@ -156,7 +170,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 	}
 	// Verify that this exact child owns only the requested loopback listener.
 	// Inspect only this launch tree, with PID/PPID and no argv/environment.
-	processRows, err := exec.Command("/bin/ps", "-axo", "pid=,ppid=").Output()
+	processRows, err := exec.Command(s.psPath, "-axo", "pid=,ppid=").Output()
 	require.True(t, err == nil,
 		"owned process tree inspection failed")
 
@@ -178,7 +192,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 	}
 	listeners := 0
 	for pid := range owned {
-		listening, e := exec.Command("/usr/sbin/lsof", "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:LISTEN", "-Fn").Output()
+		listening, e := exec.Command(s.lsofPath, "-nP", "-a", "-p", strconv.Itoa(pid), "-iTCP", "-sTCP:LISTEN", "-Fn").Output()
 		if e != nil {
 			continue
 		}
@@ -196,7 +210,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 
 	t.Log("owned child has exactly one TCP listener on 127.0.0.1; temporary token mode 0600")
 	badCtx, badCancel := context.WithTimeout(ctx, 5*time.Second)
-	bad, badErr := codex.NewRemote(badCtx, codex.RemoteOptions{URL: endpoint, BearerToken: "invalid-ticket03-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket03-rejected", Version: "1"}}})
+	bad, badErr := codex.NewRemote(badCtx, codex.RemoteOptions{URL: endpoint, BearerToken: "invalid-ticket03-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-websocket-rejected", Version: "1"}}})
 	badCancel()
 	if bad != nil {
 		_ = bad.Close()
@@ -214,7 +228,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 		initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
 		defer stop()
 		c, err := codex.NewRemote(initCtx, codex.RemoteOptions{URL: endpoint, BearerToken: token,
-			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket03", Version: "1"}}})
+			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-websocket", Version: "1"}}})
 		require.True(t, err == nil,
 			"initialize failed (no raw error logged): %T", err)
 		require.False(t, c.ServerInfo().UserAgent == "",
@@ -267,7 +281,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 
 			found := false
 			for _, item := range turn.Items {
-				if item.AgentMessage != nil && strings.TrimSpace(item.AgentMessage.Text) == "SDK_MAC_WS_OK" {
+				if item.AgentMessage != nil && strings.TrimSpace(item.AgentMessage.Text) == "SDK_E2E_WS_OK" {
 					found = true
 				}
 			}
@@ -332,14 +346,14 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 					}
 				case *types.ItemCompletedNotification:
 					if v.ThreadID == id && v.TurnID == started.Turn.ID && v.Item.AgentMessage != nil {
-						agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_MAC_WS_OK"
+						agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_E2E_WS_OK"
 						t.Log("matched item/completed agentMessage")
 					}
 				case *types.ErrorNotification:
 					require.FailNow(t, "native error notification received; raw payload withheld")
 				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_WS_OK" || unexpected.Load() != 0,
+						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_E2E_WS_OK" || unexpected.Load() != 0,
 							"completion/content/interaction assertion failed")
 						{
 
@@ -373,7 +387,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 		"empty thread ID")
 
 	t.Log("thread/start persistent native thread A created in empty temporary cwd; read-only sandbox")
-	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_MAC_WS_OK and nothing else.")
+	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_E2E_WS_OK and nothing else.")
 	history(c, id, []string{first})
 	closeClient(c)
 	select {

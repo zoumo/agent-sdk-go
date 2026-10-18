@@ -77,7 +77,7 @@ SDK_REAL_AGENT_E2E=1 python3 codex/scripts/record_real.py --record \
 
 Requires Python 3.11+, an absolute approved CLI 0.162.1, existing login and a new
 private session directory. Missing opt-in/configuration refuses to start. Any
-nonempty `CI` refuses even with opt-in. Old `RUN_MAC_*_LIVE` switches do not enable
+nonempty `CI` refuses even with opt-in. The `CODEX_E2E_*` harness switches do not enable
 this tool. S1/S2 each run once, including failed startup; no automatic retry or
 extra turn is available. Per-scene capture is capped at 2 MiB protocol/control and
 256 KiB stderr; each scene has a 120-second deadline, the invocation has a

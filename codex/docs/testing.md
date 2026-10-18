@@ -12,7 +12,7 @@ From the native `codex/` directory, keep all live switches disabled:
 
 ```sh
 export GOTOOLCHAIN=local
-export RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0
+export CODEX_E2E_STDIO=0 CODEX_E2E_INTERACTIONS=0 CODEX_E2E_WEBSOCKET=0
 export SDK_REAL_AGENT_E2E=0
 mise exec -- go mod download
 mise exec -- go mod verify
@@ -89,9 +89,13 @@ Toolchain changes remain explicit maintenance.
 ## Real-agent E2E boundaries
 
 The three [`tests/e2e`](../tests/e2e) harnesses require their own
-`RUN_MAC_*_LIVE=1` switch and an explicit `MAC_LIVE_CODEX` executable. `RUN_REAL_CODEX_TESTS` is not a harness
+`CODEX_E2E_STDIO=1`, `CODEX_E2E_INTERACTIONS=1` or
+`CODEX_E2E_WEBSOCKET=1` switch and an explicit `CODEX_E2E_CLI` executable. `RUN_REAL_CODEX_TESTS` is not a harness
 switch. Their historical 9/9 model-attempt budget is exhausted and grants no
 reruns. The independent recorder requires `SDK_REAL_AGENT_E2E=1` and refuses CI.
+Real-agent scenarios refuse a nonempty `CI`. WebSocket process/listener inspection
+uses `ps` and `lsof` resolved from `PATH`, with an explicit pre-start skip if
+either is unavailable. Unix process groups are required.
 Neither mechanism is enabled by default checks. Current coverage and untriggered
 scenarios are listed in [compatibility](compatibility.md#live-validation).
 

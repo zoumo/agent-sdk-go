@@ -2,8 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off
-export RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0
-export CLAUDE_GO_LIVE=0 SDK_REAL_AGENT_E2E=0
+export CODEX_E2E_STDIO=0 CODEX_E2E_INTERACTIONS=0 CODEX_E2E_WEBSOCKET=0
+export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
 bash scripts/check-boundaries.sh

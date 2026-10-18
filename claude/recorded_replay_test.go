@@ -27,7 +27,7 @@ func (s *recordedObservationSuite) TestRecordedAuthenticationFailureReplay() {
 		require.NoError(t, err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("CLAUDE_GO_LIVE", "0")
+	t.Setenv("CLAUDE_E2E", "0")
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	marker := filepath.Join(dir, "consumed")

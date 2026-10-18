@@ -9,8 +9,8 @@ The published sample is a **real CLI authentication failure**, not model-generat
 ## Offline use
 
 ```sh
-CLAUDE_GO_LIVE=0 SDK_REAL_AGENT_E2E=0 go test -count=1 -timeout 180s ./...
-CLAUDE_GO_LIVE=0 SDK_REAL_AGENT_E2E=0 go run ./examples/recorded-replay
+CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0 go test -count=1 -timeout 180s ./...
+CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0 go run ./examples/recorded-replay
 python3 scripts/check-transcripts.py
 ```
 
@@ -60,7 +60,7 @@ establishes neither story's successful path.
 
 ## Explicit recording/E2E entry point
 
-The manual `claude/cmd/record` is separate from all tests/examples and has no CI invocation. It refuses any nonempty `CI`, requires both `--mode record|e2e` and `SDK_REAL_AGENT_E2E=1`, an absolute approved CLI path, an absolute new private directory and an absolute durable `--session-ledger`. Reuse one ledger for the authorized recording session: each supported S1/S2 story is reserved exactly once before startup, with no retry, resume or extra turn; S3 is not implemented. Guard refusal is tested offline. The legacy `CLAUDE_GO_LIVE` smoke flag cannot enable it.
+The manual `claude/cmd/record` is separate from all tests/examples and has no CI invocation. It refuses any nonempty `CI`, requires both `--mode record|e2e` and `SDK_REAL_AGENT_E2E=1`, an absolute approved CLI path, an absolute new private directory and an absolute durable `--session-ledger`. Reuse one ledger for the authorized recording session: each supported S1/S2 story is reserved exactly once before startup, with no retry, resume or extra turn; S3 is not implemented. Guard refusal is tested offline. The initialization probe’s `CLAUDE_E2E` flag cannot enable it.
 
 From the repository root, inspect the flags without starting a real agent:
 

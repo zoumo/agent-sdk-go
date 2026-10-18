@@ -331,7 +331,7 @@ sequenceDiagram
 
 ## 可执行离线故事与后续真实验证
 
-运行 `mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go run ./examples/subagents-offline`。
+运行 `mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_E2E=0 go run ./examples/subagents-offline`。
 [原创合成示例](../examples/subagents-offline/main.go)实际输出 13 条 Native、2 条 Created，覆盖前台孙任务、
 后台晚确认、父 result 后子文本、patch-only killed 和显式 Close。它证明 SDK 的处理逻辑，不能证明真实 CLI 发射顺序。
 

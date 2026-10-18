@@ -74,8 +74,8 @@ an arbitrary installed CLI emits it or accepts the option.
 Run from the native `claude/` directory, without a Claude installation or account:
 
 ```sh
-mise exec go@1.26.9 -- env GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go run ./examples/subagents-offline
-mise exec go@1.26.9 -- env GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go test -count=1 ./examples/subagents-offline
+mise exec go@1.26.9 -- env GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off CLAUDE_E2E=0 go run ./examples/subagents-offline
+mise exec go@1.26.9 -- env GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off CLAUDE_E2E=0 go test -count=1 ./examples/subagents-offline
 ```
 
 [The example](../examples/subagents-offline/main.go) re-executes itself as an

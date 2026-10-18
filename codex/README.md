@@ -412,15 +412,17 @@ python3 docs/protocol/verify_inventory.py
 Default tests use synthetic helper processes, loopback WS peers, and local WSS
 peers with synthetic certificates and dummy tokens. The opt-in [`tests/e2e`](tests/e2e)
 harnesses use a real CLI/account/model only when explicitly enabled. Keep
-`RUN_MAC_STDIO_LIVE`, `RUN_MAC_INTERACTIONS_LIVE`, and `RUN_MAC_WEBSOCKET_LIVE`
+`CODEX_E2E_STDIO`, `CODEX_E2E_INTERACTIONS`, and `CODEX_E2E_WEBSOCKET`
 unset or `0` for offline checks. Each requires the value `1` plus an explicit
-`MAC_LIVE_CODEX` executable to opt in. `RUN_REAL_CODEX_TESTS` is not a harness
-switch. The completed Mac budget is 9/9; do not rerun live tests within it.
+`CODEX_E2E_CLI` executable to opt in. `RUN_REAL_CODEX_TESTS` is not a harness
+switch. The completed historical validation budget is 9/9; it grants no reruns.
+Real E2E tests refuse CI. The WebSocket harness requires Unix process groups
+and `ps`/`lsof` on `PATH`; missing inspection tools cause a pre-start skip.
 
 The [CI workflow](../.github/workflows/ci.yml) runs uncached normal and race suites,
 vet, module verification, inventory, changed-whitespace checks, and reproducible
 schema generation on Ubuntu 24.04 and macOS 15, using Go 1.26.9 and Python 3.13.13.
-All three live switches are explicitly `0`; verbose output and job summaries
+All three E2E switches are explicitly `0`; verbose output and job summaries
 identify real scenarios as **SKIPPED**, not live passes. Pushes to `main`, PRs,
 and manual dispatch run with read-only repository permissions and no service
 secrets. See [testing and CI](docs/testing.md) for all offline commands, comparison

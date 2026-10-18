@@ -14,7 +14,7 @@ After pushing a commit, run `bash scripts/check-managed-consumer.sh COMMIT_OR_VE
 with dependency network access to compile an independent consumer downloaded from
 the new module. This uses neither `replace` nor `go.work` and never calls Open.
 
-`CLAUDE_GO_LIVE=0` and `SDK_REAL_AGENT_E2E=0` disable real agent/model tests in CI.
+`CLAUDE_E2E=0` and `SDK_REAL_AGENT_E2E=0` disable real agent/model tests in CI.
 The initialization/shutdown probe in
 [`tests/e2e/initialization_test.go`](../tests/e2e/initialization_test.go) remains opt-in
 and refuses execution when `CI` is nonempty. A skip or initialization-only pass cannot upgrade the

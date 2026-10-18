@@ -193,7 +193,7 @@ A self-contained example uses only a local synthetic peer (no installed CLI or
 model):
 
 ```sh
-mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go run ./examples/subagents-offline
+mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_E2E=0 go run ./examples/subagents-offline
 ```
 
 It prints source/parent/run records through a single Open/Receive consumer, continues

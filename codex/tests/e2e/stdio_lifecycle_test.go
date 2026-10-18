@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,20 +24,21 @@ type StdioLifecycleHistorySuite struct {
 }
 
 func TestStdioLifecycleHistory(t *testing.T) {
-	if os.Getenv("RUN_MAC_STDIO_LIVE") != "1" {
-		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	if os.Getenv("CODEX_E2E_STDIO") != "1" {
+		t.Skip("real-agent E2E scenario skipped: set CODEX_E2E_STDIO=1 and CODEX_E2E_CLI to opt in; offline pass is not real-agent evidence")
 	}
+	require.Empty(t, os.Getenv("CI"), "real-agent E2E tests are forbidden in CI")
 	suite.Run(t, new(StdioLifecycleHistorySuite))
 }
 
 func (s *StdioLifecycleHistorySuite) SetupTest() {
 	t := s.T()
-	if os.Getenv("RUN_MAC_STDIO_LIVE") != "1" {
-		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	if os.Getenv("CODEX_E2E_STDIO") != "1" {
+		t.Skip("real-agent E2E scenario skipped: set CODEX_E2E_STDIO=1 and CODEX_E2E_CLI to opt in; offline pass is not real-agent evidence")
 	}
-	s.executable = os.Getenv("MAC_LIVE_CODEX")
-	require.False(t, s.executable == "",
-		"MAC_LIVE_CODEX must select an explicit executable")
+	s.executable = os.Getenv("CODEX_E2E_CLI")
+	require.True(t, filepath.IsAbs(s.executable),
+		"CODEX_E2E_CLI must select an absolute executable path")
 
 }
 
@@ -54,7 +56,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 		initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
 		defer stop()
 		c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd,
-			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket01", Version: "1"}}})
+			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-stdio", Version: "1"}}})
 		require.True(t, err == nil,
 			"initialize failed (no raw error logged): %T", err)
 
@@ -105,7 +107,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 
 			found := false
 			for _, item := range turn.Items {
-				if item.AgentMessage != nil && strings.TrimSpace(item.AgentMessage.Text) == "SDK_MAC_LIVE_OK" {
+				if item.AgentMessage != nil && strings.TrimSpace(item.AgentMessage.Text) == "SDK_E2E_STDIO_OK" {
 					found = true
 				}
 			}
@@ -170,14 +172,14 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 					}
 				case *types.ItemCompletedNotification:
 					if v.ThreadID == id && v.TurnID == started.Turn.ID && v.Item.AgentMessage != nil {
-						agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_MAC_LIVE_OK"
+						agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_E2E_STDIO_OK"
 						t.Log("matched item/completed agentMessage")
 					}
 				case *types.ErrorNotification:
 					require.FailNow(t, "native error notification received; raw payload withheld")
 				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_LIVE_OK" || unexpected.Load() != 0,
+						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_E2E_STDIO_OK" || unexpected.Load() != 0,
 							"completion/content/interaction assertion failed")
 						{
 
@@ -211,7 +213,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 		"empty thread ID")
 
 	t.Log("thread/start persistent native thread A created in empty temporary cwd; read-only sandbox")
-	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_MAC_LIVE_OK and nothing else.")
+	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_E2E_STDIO_OK and nothing else.")
 	history(c, id, []string{first})
 	closeClient(c)
 	c = open()

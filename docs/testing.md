@@ -30,16 +30,20 @@ macOS. Every example compiles with `go test ./...`.
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
 interaction/interrupt scenarios and WebSocket authentication/lifecycle. Its
-WebSocket harness uses macOS-specific listener inspection. Claude currently has
+WebSocket harness requires Unix process groups and `ps`/`lsof` on `PATH` for
+owned-process and listener inspection. Missing tools cause an explicit skip
+before CLI startup; authentication and listener assertions remain intact. Claude currently has
 only an initialization/shutdown transport integration probe: it sends no model
 turn and does not establish complete agent E2E coverage. Moving this probe does
 not add missing real model, tool, question, resume/interrupt or subagent coverage.
 
-The existing environment names retain `LIVE`; the directory name does not enable
-execution. Real CLI/agent tests are disabled through `RUN_MAC_STDIO_LIVE=0`,
-`RUN_MAC_INTERACTIONS_LIVE=0`, `RUN_MAC_WEBSOCKET_LIVE=0`, `CLAUDE_GO_LIVE=0`,
-and `SDK_REAL_AGENT_E2E=0`. Neither these checks nor recorded replay invokes a real
-agent/model. Native successful subagent interoperability remains unverified;
+Each SDK has independent E2E switches; the directory name does not enable
+execution. The former Mac-specific variable names are no longer supported.
+Real CLI/agent tests are disabled through `CODEX_E2E_STDIO=0`,
+`CODEX_E2E_INTERACTIONS=0`, `CODEX_E2E_WEBSOCKET=0`, `CLAUDE_E2E=0`,
+and `SDK_REAL_AGENT_E2E=0`. Codex requires `CODEX_E2E_CLI` and Claude requires
+`CLAUDE_E2E_CLI` to select the executable. Each selected test requires its switch
+to equal `1` and refuses a nonempty `CI`. Offline validation and recorded replay invoke no real agent/model. Native successful subagent interoperability remains unverified;
 see each package's compatibility and recording documentation for precise evidence.
 
 ## External consumers

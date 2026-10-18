@@ -272,6 +272,10 @@ func TestTreePermissionUsesOriginalHandleAfterParentResult(t *testing.T) {
 	if wire.Wire.Response.RequestID != "child-question" {
 		t.Fatal(string(reply.Native.Raw))
 	}
+	ds, killed := treeFrame(t, c, `{"type":"system","subtype":"task_updated","session_id":"root","task_id":"child","run_id":"1","patch":{"status":"killed"}}`)
+	if !killed.RunTerminal || killed.RunStatus != "killed" || !treeHas(ds, "ObservationState", "native-task-terminal") {
+		t.Fatal(ds, killed)
+	}
 }
 
 func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {

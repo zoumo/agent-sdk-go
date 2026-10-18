@@ -4,18 +4,22 @@ package claude
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 )
 
 // TreeOptions bounds graph entries, lineage depth and native identity history.
-// Zero selects defaults (4096 entries, 32 levels, 8192 dedup identities).
+// Zero selects defaults (4096 entries, 32 levels, 8192 dedup identities/runs).
 // Exhaustion fails visibly; identities are never evicted and mistaken as new.
 type TreeOptions struct {
 	MaxNodes        int
 	MaxDepth        int
 	MaxDedupEntries int
+	MaxRuns         int
+	// History contains caller-verified local-agent associations, not replay frames.
+	History []TreeSeed
 }
 
 // TreeIdentity preserves distinct native identity namespaces. Empty fields mean
@@ -55,10 +59,32 @@ type TreeRecord struct {
 	// without run_id remains legacy-unknown; it never inherits CurrentRunID.
 	CurrentRunID string `json:"current_run_id,omitempty"`
 	RunScope     string `json:"run_scope,omitempty"`
-	Stale        bool   `json:"stale,omitempty"`
+	// RunStatus is the observed ledger status for Source.RunID (or the explicit
+	// legacy-unknown bucket). Terminal is sticky, not a claim of agent deletion.
+	RunStatus          string `json:"run_status,omitempty"`
+	RunTerminal        bool   `json:"run_terminal,omitempty"`
+	RunBackgrounded    *bool  `json:"run_backgrounded,omitempty"`
+	CurrentRunStatus   string `json:"current_run_status,omitempty"`
+	CurrentRunTerminal bool   `json:"current_run_terminal,omitempty"`
+	Stale              bool   `json:"stale,omitempty"`
 	// PreviousAssociationID redirects a previously unresolved node to Source.
 	PreviousAssociationID string `json:"previous_association_id,omitempty"`
 	Native                *Event `json:"native,omitempty"`
+}
+
+// TreeSeed asserts a previously verified local-agent task in a native session.
+// It discovers identity only; it does not execute/resume work or replay requests.
+type TreeSeed struct {
+	SessionID    string
+	TaskID       string
+	ParentTaskID string
+}
+
+type treeRunKey struct{ session, task, run string }
+type treeRun struct {
+	status     string
+	terminal   bool
+	background *bool
 }
 
 type treeKey struct{ session, id string }
@@ -91,6 +117,8 @@ type TreeClient struct {
 	nonAgents     map[treeKey]struct{}
 	nonAgentTools map[treeKey]struct{}
 	seen          map[treeEventKey]struct{}
+	runs          map[treeRunKey]treeRun
+	currentRuns   map[treeKey]string
 	pending       []TreeRecord // bounded graph fanout plus the accepted native frame
 	sequence      uint64
 	startup       bool
@@ -109,6 +137,7 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 		{"MaxNodes", &treeOptions.MaxNodes, 4096, 65536},
 		{"MaxDepth", &treeOptions.MaxDepth, 32, 256},
 		{"MaxDedupEntries", &treeOptions.MaxDedupEntries, 8192, 131072},
+		{"MaxRuns", &treeOptions.MaxRuns, 8192, 131072},
 	} {
 		if *bound.value < 0 || *bound.value > bound.ceiling {
 			return nil, fmt.Errorf("claude: %s must be between 0 and %d", bound.name, bound.ceiling)
@@ -117,12 +146,28 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 			*bound.value = bound.fallback
 		}
 	}
+	if len(treeOptions.History) > treeOptions.MaxNodes {
+		return nil, fmt.Errorf("claude: history exceeds MaxNodes")
+	}
+	for _, seed := range treeOptions.History {
+		if seed.SessionID == "" || seed.TaskID == "" {
+			return nil, fmt.Errorf("claude: history requires session and task IDs")
+		}
+	}
 	options.ForwardSubagentText = true
 	c, err := Open(ctx, options)
 	if err != nil {
 		return nil, err
 	}
-	return &TreeClient{client: c, options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]treeTool), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true}, nil
+	t := &TreeClient{client: c, options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]treeTool), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
+	if err := t.seed(treeOptions.History); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	if options.ResumeID != "" || len(treeOptions.History) > 0 {
+		t.diagnostic("", "history-gap")
+	}
+	return t, nil
 }
 
 func (t *TreeClient) Send(ctx context.Context, text string) error { return t.client.Send(ctx, text) }
@@ -194,6 +239,9 @@ nextEvent:
 		return t.failRecord(r, identityErr)
 	}
 	if err := t.route(&r, e); err != nil {
+		return t.failRecord(r, err)
+	}
+	if err := t.trackRun(&r, e); err != nil {
 		return t.failRecord(r, err)
 	}
 	t.pending = append(t.pending, r)
@@ -284,7 +332,11 @@ func (t *TreeClient) route(r *TreeRecord, e Event) error {
 	// Delayed native runs may be observed, but must not rewrite entity metadata,
 	// parent relations, tool aliases or the current run of newer work.
 	if sys := e.System; isTreeTaskEvent(e) && sys.RunID != nil && *sys.RunID != "" {
-		if n := t.nodes[treeKey{e.SessionID, "task:" + sys.TaskID}]; n != nil && n.currentRun != "" && *sys.RunID < n.currentRun {
+		n := t.nodes[treeKey{e.SessionID, "task:" + sys.TaskID}]
+		if n != nil && t.currentRuns[treeKey{e.SessionID, sys.TaskID}] > n.currentRun {
+			n.currentRun = t.currentRuns[treeKey{e.SessionID, sys.TaskID}]
+		}
+		if n != nil && n.currentRun != "" && *sys.RunID < n.currentRun {
 			r.Source = n.identity
 			r.Source.RunID = *sys.RunID
 			r.CurrentRunID = n.currentRun
@@ -488,6 +540,9 @@ func (t *TreeClient) route(r *TreeRecord, e Event) error {
 		}
 		// Entity state follows only comparable native run IDs. Missing IDs never
 		// overwrite a modern current run or acquire a fabricated run identity.
+		if known := t.currentRuns[treeKey{e.SessionID, task}]; known > n.currentRun {
+			n.currentRun = known
+		}
 		newRun := run != "" && (n.currentRun == "" || run > n.currentRun)
 		if newRun {
 			n.currentRun = run
@@ -780,9 +835,137 @@ func (t *TreeClient) failRecord(native TreeRecord, err error) (TreeRecord, error
 		if limit.Resource == "tree dedup identities" {
 			r.Reason = "dedup-limit"
 		}
+		if limit.Resource == "tree runs" {
+			r.Reason = "run-limit"
+		}
 		if limit.Resource == "tree lineage depth" {
 			r.Reason = "depth-limit"
 		}
 	}
 	return t.deliver(r)
+}
+
+// seed uses the existing graph rules but never treats a snapshot as live creation.
+func (t *TreeClient) seed(seeds []TreeSeed) error {
+	for _, seed := range seeds {
+		key := treeKey{seed.SessionID, "task:" + seed.TaskID}
+		if n := t.nodes[key]; n != nil {
+			if n.parentTask != seed.ParentTaskID {
+				t.diagnostic(seed.SessionID, "parent-conflict")
+			}
+			continue
+		}
+		if err := t.reserve(); err != nil {
+			return err
+		}
+		n := &treeNode{identity: TreeIdentity{SessionID: seed.SessionID, TaskID: seed.TaskID, AssociationID: key.id}, parentTask: seed.ParentTaskID, evidence: "caller-verified-history"}
+		t.nodes[key] = n
+		t.order = append(t.order, n)
+	}
+	sessions := make(map[string]bool)
+	for _, seed := range seeds {
+		if sessions[seed.SessionID] {
+			continue
+		}
+		sessions[seed.SessionID] = true
+		if err := t.resolve(seed.SessionID); err != nil {
+			return err
+		}
+		t.announce(seed.SessionID)
+	}
+	for i := range t.pending {
+		t.pending[i].Provenance = "history"
+		if t.pending[i].Kind == "SubagentAssociated" {
+			t.pending[i].Reason = "history"
+		}
+	}
+	// Do not retain caller-owned slices after initialization.
+	t.options.History = nil
+	return nil
+}
+
+func (t *TreeClient) trackRun(r *TreeRecord, e Event) error {
+	if !isTreeTaskEvent(e) || e.System.TaskID == "" || e.SessionID == "" {
+		return nil
+	}
+	sys := e.System
+	run := ""
+	if sys.RunID != nil {
+		run = *sys.RunID
+	}
+	key := treeRunKey{e.SessionID, sys.TaskID, run}
+	state, exists := t.runs[key]
+	if !exists && len(t.runs) >= t.options.MaxRuns {
+		return &ResourceLimitError{Resource: "tree runs", Limit: t.options.MaxRuns}
+	}
+	status := ""
+	terminal := false
+	var background *bool
+	switch e.Subtype {
+	case "task_started":
+		status, background = "running", sys.IsBackgrounded
+	case "task_updated":
+		var patch struct {
+			Status     string `json:"status"`
+			Background *bool  `json:"is_backgrounded"`
+		}
+		// Future/non-string patch statuses remain Raw and never imply completion.
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(sys.Patch, &fields) == nil {
+			_ = json.Unmarshal(fields["status"], &patch.Status)
+			_ = json.Unmarshal(fields["is_backgrounded"], &patch.Background)
+		}
+		status, background = patch.Status, patch.Background
+		terminal = status == "completed" || status == "failed" || status == "killed"
+	case "task_notification":
+		status = sys.Status
+		terminal = status == "completed" || status == "failed" || status == "stopped"
+	}
+	becameTerminal := terminal && !state.terminal
+	// A delayed edge cannot reopen a finished run or rewrite killed to stopped.
+	if !state.terminal {
+		if status != "" {
+			state.status = status
+		}
+		state.terminal = terminal
+	}
+	if background != nil {
+		b := *background
+		state.background = &b
+	}
+	t.runs[key] = state
+	entity := treeKey{e.SessionID, sys.TaskID}
+	current := t.currentRuns[entity]
+	if run > current {
+		current = run
+		t.currentRuns[entity] = run
+	}
+	r.Source.TaskID, r.Source.RunID = sys.TaskID, run
+	r.CurrentRunID = current
+	r.RunScope = "legacy-unknown"
+	if run != "" {
+		r.RunScope = "native"
+		r.Stale = run < current
+	}
+	r.RunStatus, r.RunTerminal = state.status, state.terminal
+	if state.background != nil {
+		b := *state.background
+		r.RunBackgrounded = &b
+	}
+	if current != "" {
+		newest := t.runs[treeRunKey{e.SessionID, sys.TaskID, current}]
+		r.CurrentRunStatus, r.CurrentRunTerminal = newest.status, newest.terminal
+	}
+	if becameTerminal {
+		d := *r
+		d.Kind, d.Origin, d.Native = "ObservationState", "sdk-derived", nil
+		d.State, d.Reason = "run-terminal", "native-task-terminal"
+		d.Parent = copyTreeParent(r.Parent)
+		if r.RunBackgrounded != nil {
+			b := *r.RunBackgrounded
+			d.RunBackgrounded = &b
+		}
+		t.pending = append(t.pending, d)
+	}
+	return nil
 }

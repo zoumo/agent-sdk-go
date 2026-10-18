@@ -71,6 +71,13 @@ type SystemEvent struct {
 	Patch             json.RawMessage `json:"patch,omitempty"`
 	CompactMetadata   json.RawMessage `json:"compact_metadata,omitempty"`
 
+	// State is the native session_state_changed state, not inferred from result.
+	// Known states are idle, running and requires_action; future values survive.
+	State *string `json:"state,omitempty"`
+	// Tasks is a REPLACE level snapshot for background_tasks_changed. Keep each
+	// entry raw to preserve unknown members and absent/null/value distinctions.
+	Tasks []json.RawMessage `json:"tasks,omitempty"`
+
 	Fields    map[string]FieldState `json:"-"`
 	Subtype   string                `json:"subtype"`
 	SessionID string                `json:"session_id"`

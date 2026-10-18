@@ -38,7 +38,45 @@ Source file hashes below refer to exact file bytes from that commit. Paths are r
 
 ## Implemented Go behavior and test evidence
 
-Verified on 2026-10-17 with Go 1.26.9 on Linux/amd64. “PASS” below refers only to original synthetic subprocess fixtures. Public examples compile but do not run. Other platforms have not been runtime-validated.
+### Independent data package
+
+The canonical definitions for existing events, messages, content blocks,
+results, stream views, raw incoming controls/cancellations, permission answers,
+permission behaviors, and resource limits live in
+`github.com/zoumo/claude-agent-sdk-go/types`. Usage remains `json.RawMessage`;
+this extraction introduces no message fields or permission features.
+`types.ParseEvent` owns the existing frame decoder; the runtime delegates to
+that same implementation. `Content` and `ContentBlock` retain their existing
+`UnmarshalJSON` methods. This move does not add JSON marshaling guarantees or
+change unknown-field retention.
+
+The root aliases these types and permission constants. Compile-time tests cover
+cross-package event/answer method signatures, content literals, and original
+keyed `Options`/`Limits` literals. Named-type reflection now reports the
+canonical `types` package; `reflect.Type.PkgPath`, `%T`, and similar formatted
+type names may change and are not promised compatible.
+
+`types.Options` is the callback-free startup configuration. The root's
+`OptionsFromTypes` and `Options.Types` explicitly copy its fields without
+embedding, defaulting, validation, or cloning `Env`. The root `Options` keeps
+its old field layout and callback. Nil versus empty environments remain
+distinct. `PermissionRequest`, `PermissionHandler`, error types/sentinels,
+process state, locks, registries, queues, and callback execution remain in the
+runtime package; `types` has no root import and only standard-library
+dependencies. `Open` retains all existing defaults and resource checks.
+
+`types/events_test.go` exercises the independently imported decoder, raw byte
+ownership, unknown shapes, malformed existing shapes, and content codecs.
+`types_compatibility_test.go` verifies aliases, configuration conversion, and
+an existing isolated subprocess through the adapter. The full existing suite
+continues to cover cancellation, single-use answers, error propagation,
+literal arguments, limits, and unknown write outcomes. CI also checks the
+data package's dependency boundary. These are synthetic checks, with no real
+CLI, account, or Mac validation.
+
+### Runtime behavior
+
+Verified on 2026-10-18 with Go 1.26.9 on Linux/amd64. “PASS” below refers only to original synthetic subprocess fixtures. Public examples compile but do not run. Other platforms have not been runtime-validated.
 
 | Go behavior / public API | Implemented | Mock-tested | Race-tested | Real CLI-tested | Evidence (test file: cases) |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +102,7 @@ Verified on 2026-10-17 with Go 1.26.9 on Linux/amd64. “PASS” below refers on
 | Process-group descendants, including stdout holders and closed pipes | POSIX group implementation | PASS (Linux) | PASS (Linux) | UNKNOWN | `lifecycle_unix_test.go`: `TestProcessGroupTeardownAndDescendantHoldingStdout` (parent alive, parent exited, descendant closed pipes) |
 | Close does not wait for handlers ignoring cancellation | Yes | PASS | PASS | UNKNOWN | `overload_test.go`: `TestShutdownDoesNotWaitForIgnoringCallback`; `permissions_test.go`: `TestPermissionWorkerBoundAndCloseDoNotWaitForUserCode` |
 
-Raw preservation covers frames exposed by `Receive` and permission metadata. Correlated `control_response` frames are consumed internally, including initialization metadata; there is no generic raw-control or server-info API. Typed views intentionally cover only the fields in `events.go`. These Go P0 views are handwritten. There is no automatic upstream type synchronization or generated binding layer. The official inventory below was mechanically enumerated from the pinned Python AST and then manually classified; this is an audit of that revision, not a generated API or a future drift guarantee.
+Raw preservation covers frames exposed by `Receive` and permission metadata. Correlated `control_response` frames are consumed internally, including initialization metadata; there is no generic raw-control or server-info API. Typed views intentionally cover only the fields in `types/events.go`. These Go P0 views are handwritten. There is no automatic upstream type synchronization or generated binding layer. The official inventory below was mechanically enumerated from the pinned Python AST and then manually classified; this is an audit of that revision, not a generated API or a future drift guarantee.
 
 A process exit can wake `Done`, pending controls and permission contexts before stdout finishes decoding its final bytes. Those immediate causes describe the earliest known failure; `Close`, terminal `Receive`, and `Err` after cleanup retain a later, more specific protocol/resource error and exit diagnostics. New or queued writes rejected before starting return `ErrClosed` (or their caller-context error) without inheriting another operation's `ErrUnknownOutcome`. Inspect `Client.Err` separately for that connection's cause.
 

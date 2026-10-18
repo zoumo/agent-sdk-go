@@ -21,6 +21,12 @@ jobs:
         run: |
           go version
           test "$(go env GOVERSION)" = go1.26.9
+      - name: Verify independent data package
+        shell: bash
+        run: |
+          deps=$(GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off \
+            go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./types | sed '/^$/d')
+          test "$deps" = github.com/zoumo/claude-agent-sdk-go/types
       - name: Unit, subprocess, race, and vet checks (no live CLI)
         shell: bash
         run: |

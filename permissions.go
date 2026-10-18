@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"sync/atomic"
 	"unicode/utf8"
+
+	"github.com/zoumo/claude-agent-sdk-go/types"
 )
 
 // PermissionHandler receives only real can_use_tool control requests, on a
@@ -20,23 +22,15 @@ import (
 // The CLI may auto-approve operations before this handler; it is not a sandbox.
 type PermissionHandler func(*PermissionRequest)
 
-// PermissionBehavior selects the only two supported permission decisions.
-type PermissionBehavior string
+// PermissionBehavior and PermissionAnswer are canonical pure data in types.
+type PermissionBehavior = types.PermissionBehavior
+
+type PermissionAnswer = types.PermissionAnswer
 
 const (
-	PermissionAllow PermissionBehavior = "allow"
-	PermissionDeny  PermissionBehavior = "deny"
+	PermissionAllow = types.PermissionAllow
+	PermissionDeny  = types.PermissionDeny
 )
-
-// PermissionAnswer is a single permission decision. Allow uses the original
-// input when UpdatedInput is nil; a non-nil value must be a JSON object ({} is
-// an explicit replacement). Deny sends Message verbatim and rejects UpdatedInput.
-// Message is only valid for deny. Permission persistence is not supported.
-type PermissionAnswer struct {
-	Behavior     PermissionBehavior
-	UpdatedInput json.RawMessage
-	Message      string
-}
 
 // PermissionRequest is a connection-local, single-use answer authority. Its
 // metadata is immutable; byte accessors return copies. Copying the handle does

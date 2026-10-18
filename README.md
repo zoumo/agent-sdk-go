@@ -100,6 +100,43 @@ A real `control_cancel_request` immediately cancels the matching handle context 
 
 A real `can_use_tool` for `AskUserQuestion` uses this same API with caller-supplied updated input. There is no automatic question-schema mapping. An assistant `tool_use` named `AskUserQuestion` remains only an event and never creates a responder or synthetic `tool_result`. These semantics are tested against synthetic source-derived frames; live CLI question behavior remains unverified.
 
+## Data types and compatible imports
+
+Pure data and the existing JSON decoders now live in
+`github.com/zoumo/claude-agent-sdk-go/types`. Import that package alone to inspect
+frames with `types.ParseEvent`, build content/permission answers, or store CLI
+configuration without depending on the process client. It uses only the Go
+standard library. Message fields and JSON behavior are unchanged by this move;
+usage and unknown data remain raw JSON.
+
+The root package aliases the moved event/content/result/control types,
+`PermissionBehavior`, `PermissionAnswer`, and `Limits`, including the existing
+permission constants. Old literals, method sets, and assignments to/from the
+new import continue to compile. The canonical named types now belong to
+`types`: reflection `PkgPath` and type-name formatting (including `%T`) can
+change. Those strings are not a compatibility guarantee.
+
+`claude.Options` retains its original fields, so existing keyed literals still
+work. `PermissionRequest` is a connection-bound answer handle, and
+`PermissionHandler` accepts that handle; both remain in the root package.
+`types.Options` contains only the callback-free startup fields. Adapt it
+explicitly, then attach a handler if needed:
+
+```go
+config := types.Options{CLIPath: "claude", Limits: types.Limits{EventBuffer: 64}}
+options := claude.OptionsFromTypes(config)
+options.PermissionHandler = func(request *claude.PermissionRequest) {
+    // Retain or answer the real request using the existing permission API.
+}
+// Pass options to claude.Open(ctx, options).
+// options.Types() returns the callback-free configuration again.
+```
+
+Conversions preserve fields, including nil versus empty `Env`, and share its
+backing slice just like an ordinary struct copy. Defaults and validation still
+run in `Open`. Runtime errors, process ownership, locks, permission registries,
+queues, and callback execution stay in the root implementation.
+
 ## Development and verification
 
 Go is pinned to 1.26.9 in `mise.toml`. This module is standard-library-only.
@@ -109,6 +146,7 @@ mise exec go@1.26.9 -- go version
 mise exec go@1.26.9 -- go test -count=1 -timeout 180s ./...
 mise exec go@1.26.9 -- go test -race -count=1 -timeout 300s ./...
 mise exec go@1.26.9 -- go vet ./...
+mise exec go@1.26.9 -- go list -deps ./types
 ```
 
 Tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, full event queues with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The public examples are compiled, not executed.

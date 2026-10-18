@@ -20,4 +20,9 @@
 // Returning from a handler never answers; PermissionRequest.Answer is the sole
 // authority. Request contexts cancel on completion, CLI cancellation or close.
 // Assistant tool-use events never create synthetic permission/tool responses.
+//
+// Pure data and existing JSON codecs have canonical definitions in the types
+// subpackage. Root aliases preserve source compatibility, while reflected and
+// formatted named-type paths may change. Options retains its callback and
+// original fields; OptionsFromTypes adapts callback-free types.Options.
 package claude

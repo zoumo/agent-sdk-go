@@ -26,11 +26,16 @@ func ExampleOpen() {
 		return
 	}
 	for {
-		event, err := client.Receive(ctx)
+		record, err := client.Receive(ctx)
 		if err != nil {
 			log.Print(err)
 			return
 		}
+		if record.Kind != "Native" {
+			// Handle relationship and observation records in the application UI.
+			continue
+		}
+		event := record.Native
 		if event.Assistant != nil {
 			for _, block := range event.Assistant.Content.Blocks {
 				if block.Text != nil {
@@ -38,9 +43,9 @@ func ExampleOpen() {
 				}
 			}
 		}
-		if event.Result != nil {
+		if record.Scope == "root" && event.Result != nil {
 			return
-		} // Explicit defer closes the client; Result does not.
+		} // This application stops at the root result; background work may still run.
 	}
 }
 

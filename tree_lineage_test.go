@@ -15,7 +15,7 @@ import (
 )
 
 // Read through the sent native frame and inspect the public derived records.
-func treeFrame(t *testing.T, c *claude.TreeClient, frame string) ([]claude.TreeRecord, claude.TreeRecord) {
+func treeFrame(t *testing.T, c *claude.Client, frame string) ([]claude.TreeRecord, claude.TreeRecord) {
 	t.Helper()
 	treeEmit(t, c, frame)
 	var derived []claude.TreeRecord
@@ -193,7 +193,7 @@ func TestTreeLineageConflictsDoNotRebind(t *testing.T) {
 }
 func TestTreeAdditionalBounds(t *testing.T) {
 	for _, opts := range []claude.TreeOptions{{MaxDepth: -1}, {MaxDepth: 257}, {MaxDedupEntries: -1}, {MaxDedupEntries: 131073}} {
-		if c, err := claude.OpenTree(context.Background(), fixtureOptions(t, "tree"), opts); err == nil {
+		if c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), opts); err == nil {
 			c.Close()
 			t.Fatal("invalid bounds", opts)
 		}
@@ -204,7 +204,7 @@ func TestTreeAdditionalBounds(t *testing.T) {
 			if mode == "dedup" {
 				opts = claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxDedupEntries: 1}
 			}
-			c, err := claude.OpenTree(context.Background(), fixtureOptions(t, "tree"), opts)
+			c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), opts)
 			if err != nil {
 				t.Fatal(err)
 			}

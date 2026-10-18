@@ -47,14 +47,19 @@ func main() {
         return
     }
     for {
-        event, err := client.Receive(ctx)
+        record, err := client.Receive(ctx)
         if err != nil { log.Print(err); return }
+        if record.Kind != "Native" {
+            // Handle relationship and observation records.
+            continue
+        }
+        event := record.Native
         if event.Assistant != nil {
             for _, block := range event.Assistant.Content.Blocks {
-                if block.Text != nil { fmt.Println(block.Text.Text) }
+                if block.Text != nil { fmt.Printf("[%s] %s\n", record.Scope, block.Text.Text) }
             }
         }
-        if event.Result != nil { return }
+        if record.Scope == "root" && event.Result != nil { return } // App stop policy; children may still run.
     }
 }
 ```
@@ -163,7 +168,7 @@ See [type source and license review](docs/type-sources.md) for pinned references
 
 ### Subagent forwarding
 
-`OpenTree` owns one native stream and enables `forwardSubagentText` during
+`Open` owns one native stream and enables `forwardSubagentText` during
 initialization. It exposes lossless native frames and explicitly marked SDK
 association/observation records. Forwarding support remains unverified until
 there is runtime evidence. **SubagentCreated is conditionally implemented for
@@ -182,10 +187,21 @@ model):
 mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go run ./examples/subagents-offline
 ```
 
-It prints source/parent/run records through a single OpenTree consumer, continues
+It prints source/parent/run records through a single Open/Receive consumer, continues
 after the parent result, observes patch-only terminals and explicitly closes.
 Session-state events need a native opt-in on applicable CLIs; background task
 snapshots replace a process-local set and do not prove termination. See the
 [offline validation evidence](docs/evidence/subagent-ticket05.md).
 
 中文事件时序说明：[前台/后台任务、子流、审批和结束边界](docs/event-sequences.md)。
+
+### Default managed API migration
+
+`Open` returns `*Client`; `Receive` now returns `TreeRecord`. Check `Kind`, then
+read native fields through `record.Native`. The first record is an unverified
+observation state. `Options.Tree` only sets resource/history bounds. `OpenTree`,
+`TreeClient` and both SDK `ForwardSubagentText` option fields have been removed;
+forwarding is always requested. Native `Event.Origin` remains the official
+`*MessageOrigin` object; the wrapper Origin string is separate. See the
+[complete migration](docs/default-managed-migration.md) and independent
+[derived definitions](derived_events.go). `Options.Types()` omits runtime-only Tree.

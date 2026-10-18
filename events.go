@@ -5,6 +5,8 @@ package claude
 import "github.com/zoumo/claude-agent-sdk-go/types"
 
 // Event and its views retain their canonical definitions and JSON codecs in types.
+// SDK-derived records live separately in derived_events.go; Event.Origin remains
+// the official *MessageOrigin object, never the TreeRecord wrapper origin.
 // These aliases preserve source compatibility and type identity across imports.
 type (
 	FieldState             = types.FieldState

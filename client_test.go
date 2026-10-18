@@ -219,7 +219,7 @@ func receive(t *testing.T, c *claude.Client) claude.Event {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	event, err := c.Receive(ctx)
+	event, err := nextNative(c, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +422,7 @@ func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			_, err := c.Receive(ctx)
+			_, err := nextNative(c, ctx)
 			target := claude.ErrProtocol
 			if mode == "oversize" {
 				target = claude.ErrResourceLimit
@@ -435,7 +435,7 @@ func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
 	}
 	c := openFixture(t, "invalid_type")
 	send(t, c, "go")
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	if !errors.Is(err, claude.ErrProtocol) {
 		t.Fatalf("invalid type = %v", err)
 	}
@@ -456,7 +456,7 @@ func TestOverflowIsTerminalAndDoneDoesNotNeedConsumer(t *testing.T) {
 			t.Fatalf("got %d want %d", v.Seq, i)
 		}
 	}
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	if !errors.Is(err, claude.ErrResourceLimit) {
 		t.Fatalf("Receive = %v", err)
 	}
@@ -468,7 +468,7 @@ func TestExitErrorFollowsLastEventWithBoundedDiagnostics(t *testing.T) {
 	if event := receive(t, c); event.Result == nil || event.Result.Result != "last" {
 		t.Fatal("last result lost")
 	}
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	if err == nil {
 		t.Fatal("exit error lost")
 	}
@@ -482,7 +482,7 @@ func TestUnexpectedEOFAfterAcceptedEvent(t *testing.T) {
 	c := openFixture(t, "eof")
 	send(t, c, "go")
 	receive(t, c)
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	if !errors.Is(err, claude.ErrUnexpectedEOF) {
 		t.Fatalf("EOF = %v", err)
 	}
@@ -524,7 +524,7 @@ func TestReceiveCancellationDoesNotCancelSession(t *testing.T) {
 	c := openFixture(t, "echo")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := c.Receive(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := nextNative(c, ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Receive = %v", err)
 	}
 	select {
@@ -599,7 +599,7 @@ func TestConcurrentSendPreservesFrames(t *testing.T) {
 func TestConcurrentCloseAndReceiveWake(t *testing.T) {
 	c := openFixture(t, "echo")
 	result := make(chan error, 1)
-	go func() { _, err := c.Receive(context.Background()); result <- err }()
+	go func() { _, err := nextNative(c, context.Background()); result <- err }()
 	var wg sync.WaitGroup
 	for range 12 {
 		wg.Add(1)
@@ -631,7 +631,7 @@ func TestCloseRetainsBufferedEvents(t *testing.T) {
 	if e := receive(t, c); !bytes.Contains(e.Raw, []byte("retained")) {
 		t.Fatalf("lost echo: %s", e.Raw)
 	}
-	if _, err := c.Receive(context.Background()); !errors.Is(err, io.EOF) {
+	if _, err := nextNative(c, context.Background()); !errors.Is(err, io.EOF) {
 		t.Fatalf("Receive = %v", err)
 	}
 }
@@ -668,7 +668,7 @@ func TestOversizeFrameFailsBeforeNewline(t *testing.T) {
 func TestInvalidUTF8IsProtocolError(t *testing.T) {
 	c := openFixture(t, "invalid_utf8")
 	send(t, c, "go")
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	if !errors.Is(err, claude.ErrProtocol) {
 		t.Fatalf("Receive = %v", err)
 	}
@@ -684,8 +684,21 @@ func TestCloseAfterDoneRetainsFinalProtocolError(t *testing.T) {
 	if e := receive(t, c); e.Type != "accepted" {
 		t.Fatal("accepted event lost")
 	}
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	if !errors.Is(err, claude.ErrProtocol) {
 		t.Fatalf("Receive = %v", err)
+	}
+}
+
+// nextNative is deliberately test-only: native contract tests skip SDK records.
+func nextNative(c *claude.Client, ctx context.Context) (claude.Event, error) {
+	for {
+		record, err := c.Receive(ctx)
+		if err != nil {
+			return claude.Event{}, err
+		}
+		if record.Kind == "Native" {
+			return *record.Native, nil
+		}
 	}
 }

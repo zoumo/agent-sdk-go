@@ -6,17 +6,19 @@ See the [per-capability compatibility matrix](subagent-compatibility.md),
 conditional for exact CLI 2.1.258, the current installed version. `--version`
 inspection and static source review do not constitute live subagent validation.
 
-`Options.ForwardSubagentText` and `types.Options.ForwardSubagentText` default to
-false. `OptionsFromTypes` and `Options.Types` preserve the value. True adds
-`forwardSubagentText: true` to the native initialize request; false omits it.
-There is no new CLI flag, child process, subscription, hook, or automatic resume.
-Ordinary `Open` / `Client.Receive` retain their native event interface.
+`Open` always requests `forwardSubagentText: true` at initialize and returns
+`*Client`. `Client.Receive` returns `TreeRecord`, with no raw/managed choice.
+`Options.Tree` configures bounds/history only; zero values still manage the stream.
+There is no extra CLI flag, child process, subscription, hook, or automatic resume.
+See the [breaking migration](default-managed-migration.md) and
+[user-story sequences](event-sequences.md).
 
 ```go
-client, err := claude.OpenTree(ctx, claude.Options{
+client, err := claude.Open(ctx, claude.Options{
     CLIPath: "claude",
     PermissionHandler: handler, // original PermissionRequest; no second responder
-}, claude.TreeOptions{})
+    Tree: claude.TreeOptions{},
+})
 if err != nil {
     return err
 }
@@ -43,12 +45,11 @@ for {
 }
 ```
 
-`TreeClient` owns its private ordinary Client and is its only Receive consumer.
-It adds no background reader. Send, Interrupt, SessionID, RequestedResumeID,
-Done, Err and Close delegate to the owned client. Receive requires one caller;
-other methods retain the client's concurrency contract. A receive context only
-bounds that call. Close owns process shutdown; root result does not close the
-stream or stop permission handling.
+`Client` owns one process and private managed state, the sole native dequeue
+consumer. It adds no background reader. Send, Interrupt, SessionID,
+RequestedResumeID, Done, Err and Close retain their lifecycle/concurrency contract.
+Receive requires one caller; its context bounds that call. Close owns process
+shutdown; root result or idle does not close observation or stop permissions.
 
 Every wrapper contains provider, process epoch, local delivery sequence,
 live-arrival provenance, root/source identity, scope and unknown usage scope.
@@ -58,7 +59,11 @@ native `agent_id` / `subagent_type`; the existing Raw/Fields codec preserves
 absent, null and typed edits. These fields remain absent where the CLI omits
 them; the SDK does not synthesize them into native messages.
 
-SDK records carry `origin: sdk-derived`; Native carries `origin: native`.
+The SDK envelope carries `origin: sdk-derived` for derived records and
+`origin: native` for Native records. These are wrapper strings, not native fields.
+`Native.Origin` and `Native.Result.Origin` remain official `*MessageOrigin` objects,
+with absent/null/unknown members preserved. Definitions are in `derived_events.go`;
+derived records have no Native payload and never fabricate native type/subtype.
 Sequence is a local arrival/delivery order, not a server cursor.
 `SubagentCreated` is independently derived, never a renamed association.
 The observer never reports complete forwarding.
@@ -73,7 +78,7 @@ version strings retain observation/Raw but cannot establish Created. This does
 not assert a minimum version or support for every version after 2.1.77.
 
 A single root `system/init` must identify that exact version, a nonempty stable
-session and the builtin tools. OpenTree must own a fresh process: explicit
+session and the builtin tools. Open must own a fresh process: explicit
 ResumeID or any History seed disables creation for the entire observation.
 Replay, repeated init (even UUID-deduplicated), a session change or a graph
 identity/parent/tool conflict disables further creation claims for the epoch.
@@ -198,7 +203,7 @@ source are E1 evidence, not proof of installed CLI behavior.
 | History association seed / explicit resume | History provenance and permanent gap; no replay or creation (E2) | No live history recovery claim |
 | Timed unresolved buffering, atomic bounded fanout and request isolation | Implemented; public API synthetic peers, full-queue control replies, pending-work invalidation, original question handles and close races (E2) | Unverified |
 
-Initialize rejection fails OpenTree. A successful acknowledgment does not prove
+Initialize rejection fails Open. A successful acknowledgment does not prove
 the CLI honors forwarding, so the first wrapper always reports
 `ObservationState(unverified, forwarding-not-confirmed)`. Missing source attribution
 waits within the bounds below, then remains explicitly unresolved; unknown unowned
@@ -232,7 +237,7 @@ Its task declarations specify same-task run ordering and stable task identity
 across resume (lines 6145–6271); assistant/user task mapping is at lines 3702
 and 6475. These are E1 declaration evidence, not live interoperability tests.
 All new fixtures in `tree_lineage_test.go` are original synthetic peers through
-OpenTree/Send/Receive (E2); no upstream implementation was copied.
+Open/Send/Receive (E2); no upstream implementation was copied.
 
 Offline validation uses Go 1.26.9 through mise, `CLAUDE_GO_LIVE=0`,
 `GOPROXY=off`, `GOSUMDB=off`, `GOTOOLCHAIN=local`, `GOENV=off`, and a temporary
@@ -255,7 +260,7 @@ Keep these independent dimensions in the UI and application state:
 | Task patch / notification terminal | One identified run ended with the explicit native status | Agent entity deletion, transcript deletion, or closure of the observation |
 | `Interrupt` acknowledgment | Provider acknowledged an interrupt request | Per-task terminal status, rollback, or deletion |
 | `Receive(ctx)` cancellation | That receive wait ended | Process shutdown or cancellation of provider work |
-| `TreeClient.Close` | Shut down the owned process and invalidate its request handles, using Client's bounded cleanup | A provider-side delete, successful background completion, or retention policy |
+| `Client.Close` | Shut down the owned process and invalidate its request handles, using Client's bounded cleanup | A provider-side delete, successful background completion, or retention policy |
 
 The fixed official TS 0.3.302 `sdk.d.ts` (same SHA256 above), lines 5999–6007,
 defines `system/session_state_changed` and describes idle as the turn-over signal
@@ -270,7 +275,7 @@ task and never deletes an agent identity.
 The [official Python SystemMessage reference](https://code.claude.com/docs/en/agent-sdk/python#systemmessage)
 (accessed 2026-10-18) documents the emission opt-in
 `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS=1` and receiving beyond result. Callers can
-request it with `Options.Env` using the existing environment contract; OpenTree
+request it with `Options.Env` using the existing environment contract; Open
 does not change this environment setting or assert installed CLI support. The
 Python `data.state` accessor is its wrapper shape; the fixed TS stream-json wire
 field is top-level `state`. No new Go control protocol is introduced.
@@ -322,7 +327,7 @@ anything. Live task evidence can enrich the same association later.
 
 Explicit ResumeID and/or history seeds emit incomplete/history-gap: earlier
 transcript and request outcomes have not been recovered. RequestedResumeID is
-still a request, not proof that the CLI resumed it. A new OpenTree has a new epoch,
+still a request, not proof that the CLI resumed it. A new Open has a new epoch,
 a fresh run/dedup ledger and no reusable old request handles. Disconnect/EOF emits
 incomplete/stream-ended followed by the original client error; explicit Close
 emits closed/client-closed followed by EOF. Neither path invents run success.
@@ -362,7 +367,7 @@ Control requests/cancellations bypass association waiting; the sole answer autho
 is still the original PermissionRequest delivered by the existing worker pool.
 Wrapper/metadata copies have no answer method or authority.
 
-The association wait starts when Tree.Receive accepts a frame. It advances only
+The association wait starts when Client.Receive accepts a frame. It advances only
 local attribution, never a task lifecycle. Expiration produces
 `ObservationState(incomplete, unresolved-source)` followed by the unchanged Native
 with `Scope: unresolved` / `Reason: unresolved-source`. Later evidence enriches the
@@ -380,7 +385,7 @@ cannot fit, none of that input's staged derived records is published. Instead a
 fixed diagnostic plus a single reserved raw frame reports incomplete/fanout-limit
 and unresolved attribution. The graph is frozen after a failed fanout; remaining
 accepted transport frames drain with unresolved scope. Historical seed fanout
-exhaustion fails OpenTree and closes its owned client. Emergency storage is constant
+exhaustion fails Open before spawning its process. Emergency storage is constant
 (one reserved input plus one released held frame), independent of the full fanout
 queue, so diagnostics cannot be hidden by a full queue. Done and Err expose
 terminal failure without draining Receive.

@@ -11,6 +11,8 @@ import (
 
 // Event retains the complete JSON frame (excluding its newline) alongside typed
 // views. Unknown message kinds, fields and content blocks remain in Raw.
+// Origin is the native MessageOrigin object. SDK-derived records and provenance
+// are defined in the root package and never added to this native JSON schema.
 // Raw values belong to the caller and are never reused by the reader.
 type Event struct {
 	// AgentID is the native envelope identity, not a session or tool-use ID.

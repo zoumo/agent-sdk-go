@@ -33,64 +33,6 @@ type TreeOptions struct {
 	History []TreeSeed
 }
 
-// TreeIdentity preserves distinct native identity namespaces. Empty fields mean
-// unknown, never an inferred session/agent/tool identity. ToolUseID can identify
-// an unresolved parent tool reference without identifying its owning agent.
-type TreeIdentity struct {
-	// AssociationID is a session/epoch-scoped SDK key, stable through enrichment.
-	AssociationID string `json:"association_id,omitempty"`
-	RunID         string `json:"run_id,omitempty"`
-	SessionID     string `json:"session_id,omitempty"`
-	AgentID       string `json:"agent_id,omitempty"`
-	TaskID        string `json:"task_id,omitempty"`
-	ToolUseID     string `json:"tool_use_id,omitempty"`
-}
-
-// TreeRecord is an SDK envelope, never a native protocol event. Kind is Native,
-// SubagentAssociated, SubagentCreated or ObservationState. Created confirms
-// creation under the fixed contract described in docs/subagent-events.md. Native retains
-// the original Event and Raw bytes. Sequence is local delivery order, not a
-// replay cursor. UsageScope remains unknown; no aggregate usage is calculated.
-type TreeRecord struct {
-	Kind       string        `json:"kind"`
-	Origin     string        `json:"origin"` // native or sdk-derived
-	Provider   string        `json:"provider"`
-	Epoch      uint64        `json:"epoch"`
-	Sequence   uint64        `json:"sequence"`
-	Provenance string        `json:"provenance"` // live arrival, not proof of live creation
-	Root       TreeIdentity  `json:"root"`
-	Source     TreeIdentity  `json:"source"`
-	Parent     *TreeIdentity `json:"parent,omitempty"`
-	Scope      string        `json:"scope"` // root, child, unresolved, unscoped
-	Evidence   string        `json:"evidence,omitempty"`
-	Reason     string        `json:"reason,omitempty"`
-	State      string        `json:"state,omitempty"`
-	UsageScope string        `json:"usage_scope"`
-	// CurrentRunID is the newest observed native run for this entity. A frame
-	// without run_id remains legacy-unknown; it never inherits CurrentRunID.
-	CurrentRunID string `json:"current_run_id,omitempty"`
-	RunScope     string `json:"run_scope,omitempty"`
-	// RunStatus is the observed ledger status for Source.RunID (or the explicit
-	// legacy-unknown bucket). Terminal is sticky, not a claim of agent deletion.
-	RunStatus          string `json:"run_status,omitempty"`
-	RunTerminal        bool   `json:"run_terminal,omitempty"`
-	RunBackgrounded    *bool  `json:"run_backgrounded,omitempty"`
-	CurrentRunStatus   string `json:"current_run_status,omitempty"`
-	CurrentRunTerminal bool   `json:"current_run_terminal,omitempty"`
-	Stale              bool   `json:"stale,omitempty"`
-	// PreviousAssociationID redirects a previously unresolved node to Source.
-	PreviousAssociationID string `json:"previous_association_id,omitempty"`
-	Native                *Event `json:"native,omitempty"`
-}
-
-// TreeSeed asserts a previously verified local-agent task in a native session.
-// It discovers identity only; it does not execute/resume work or replay requests.
-type TreeSeed struct {
-	SessionID    string
-	TaskID       string
-	ParentTaskID string
-}
-
 type treeRunKey struct{ session, task, run string }
 type treeRun struct {
 	status     string
@@ -120,11 +62,9 @@ type treeHeld struct {
 }
 type treeEventKey struct{ session, agent, task, tool, run, boundary, kind, subtype, uuid string }
 
-// TreeClient owns a private Client and its sole Receive consumer. Like Client,
-// methods are concurrency-safe except Receive, which requires one caller.
-// It adds no reader goroutine, child process, subscription, resume or turn.
-// PermissionHandler receives the original sole answerable request handle.
-type TreeClient struct {
+// managedTree is the Client-owned sole native dequeue consumer. It adds no reader
+// goroutine, process, resume or turn and never answers permission requests.
+type managedTree struct {
 	creation      treeCreation
 	client        *Client
 	options       TreeOptions
@@ -148,10 +88,9 @@ type TreeClient struct {
 	end           error
 }
 
-// OpenTree enables native forwarding before initialize. A rejected initialize
-// fails OpenTree; an accepted initialize still cannot verify that the installed
-// CLI honors forwarding. The first record reports unverified, never complete.
-func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*TreeClient, error) {
+// newManagedTree validates and seeds state before a process is started.
+func newManagedTree(options Options) (*managedTree, error) {
+	treeOptions := options.Tree
 	for _, bound := range []struct {
 		name              string
 		value             *int
@@ -187,53 +126,39 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 			return nil, fmt.Errorf("claude: history requires session and task IDs")
 		}
 	}
-	options.ForwardSubagentText = true
-	c, err := Open(ctx, options)
-	if err != nil {
-		return nil, err
-	}
-	t := &TreeClient{client: c, options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]treeTool), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
+	t := &managedTree{options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]treeTool), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
 	t.creation.disabled = options.ResumeID != "" || len(treeOptions.History) > 0
 	t.creation.calls = make(map[treeKey]*treeCreationCall)
 	if err := t.seed(treeOptions.History); err != nil {
-		_ = c.Close()
 		return nil, err
 	}
 	if options.ResumeID != "" || len(treeOptions.History) > 0 {
 		t.diagnostic("", "history-gap")
 	}
 	if t.fanoutErr != nil {
-		_ = c.Close()
 		return nil, t.fanoutErr
 	}
 	return t, nil
 }
 
-func (t *TreeClient) Send(ctx context.Context, text string) error { return t.client.Send(ctx, text) }
-func (t *TreeClient) Interrupt(ctx context.Context) error         { return t.client.Interrupt(ctx) }
-func (t *TreeClient) SessionID() (string, bool)                   { return t.client.SessionID() }
-func (t *TreeClient) RequestedResumeID() string                   { return t.client.RequestedResumeID() }
-func (t *TreeClient) Close() error                                { return t.client.Close() }
-func (t *TreeClient) Done() <-chan struct{}                       { return t.client.Done() }
-func (t *TreeClient) Err() error                                  { return t.client.Err() }
-
-func (t *TreeClient) record(kind string, root TreeIdentity) TreeRecord {
-	return TreeRecord{Kind: kind, Origin: "sdk-derived", Provider: "claude", Epoch: t.client.epoch, Provenance: "live", Root: root, Scope: "unscoped", UsageScope: "unknown"}
+func (t *managedTree) record(kind string, root TreeIdentity) TreeRecord {
+	return TreeRecord{Kind: kind, Origin: "sdk-derived", Provider: "claude", Provenance: "live", Root: root, Scope: "unscoped", UsageScope: "unknown"}
 }
-func (t *TreeClient) deliver(r TreeRecord) (TreeRecord, error) {
+func (t *managedTree) deliver(r TreeRecord) (TreeRecord, error) {
 	t.sequence++
 	r.Sequence = t.sequence
+	r.Epoch = t.client.epoch
 	return r, nil
 }
 
-// Receive emits associations before attributed Native records. Unresolved native
+// receive emits associations before attributed Native records. Unresolved native
 // frames wait within configured bounds, while control requests remain immediately
 // observable and their original handles are dispatched independently by Client.
 // Canceling this wait leaves both the held frames and permission service intact.
-func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
+func (t *managedTree) receive(ctx context.Context) (TreeRecord, error) {
 	if t.startup {
 		t.startup = false
-		session, _ := t.SessionID()
+		session, _ := t.client.SessionID()
 		r := t.record("ObservationState", TreeIdentity{SessionID: session})
 		r.State, r.Reason = "unverified", "forwarding-not-confirmed"
 		return t.deliver(r)
@@ -268,7 +193,7 @@ func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 		if len(t.held) > 0 {
 			waitCtx, cancel = context.WithDeadline(ctx, t.held[0].deadline)
 		}
-		e, err := t.client.Receive(waitCtx)
+		e, err := t.client.receiveNative(waitCtx)
 		cancel()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -281,7 +206,7 @@ func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 				return TreeRecord{}, err
 			}
 			t.end = err
-			session, _ := t.SessionID()
+			session, _ := t.client.SessionID()
 			r := t.record("ObservationState", TreeIdentity{SessionID: session})
 			r.State, r.Reason = "incomplete", "stream-ended"
 			if errors.Is(err, io.EOF) {
@@ -355,7 +280,7 @@ func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 }
 
 // stage never lets one input's derived fanout grow beyond its positive bound.
-func (t *TreeClient) stage(r TreeRecord) {
+func (t *managedTree) stage(r TreeRecord) {
 	if len(t.pending) >= t.options.MaxPendingRecords {
 		t.fanoutErr = &ResourceLimitError{Resource: "tree pending records", Limit: t.options.MaxPendingRecords}
 		return
@@ -366,7 +291,7 @@ func (t *TreeClient) stage(r TreeRecord) {
 // releaseHeld selects the first releasable frame, so an unrelated unresolved
 // source cannot make a newer frame overtake a resolved source's held frames.
 // Later evidence only enriches undelivered attribution; Native is never replayed.
-func (t *TreeClient) releaseHeld() (TreeRecord, bool) {
+func (t *managedTree) releaseHeld() (TreeRecord, bool) {
 	for i, h := range t.held {
 		r := h.record
 		if !t.halted && t.end == nil {
@@ -412,7 +337,7 @@ func (t *TreeClient) releaseHeld() (TreeRecord, bool) {
 // UUID identity is taken from the native frame, never from an enriched node:
 // enrichment cannot make a retransmission look new. Unknown event contracts and
 // sessionless frames are not deduplicated. Epoch is implicit in this owned map.
-func (t *TreeClient) duplicate(e Event) (bool, error) {
+func (t *managedTree) duplicate(e Event) (bool, error) {
 	if e.SessionID == "" || e.UUID == "" {
 		return false, nil
 	}
@@ -466,16 +391,16 @@ func (t *TreeClient) duplicate(e Event) (bool, error) {
 	return false, nil
 }
 
-func (t *TreeClient) entries() int {
+func (t *managedTree) entries() int {
 	return len(t.nodes) + len(t.tools) + len(t.nonAgents) + len(t.nonAgentTools)
 }
-func (t *TreeClient) reserve() error {
+func (t *managedTree) reserve() error {
 	if t.entries() >= t.options.MaxNodes {
 		return &ResourceLimitError{Resource: "tree association entries", Limit: t.options.MaxNodes}
 	}
 	return nil
 }
-func (t *TreeClient) diagnostic(session, reason string) {
+func (t *managedTree) diagnostic(session, reason string) {
 	// Conflicting graph evidence cannot support a later creation claim.
 	if strings.Contains(reason, "conflict") || reason == "lineage-cycle" {
 		t.creation.disabled = true
@@ -521,7 +446,7 @@ func isTreeRootEvent(e Event) bool {
 	return false
 }
 
-func (t *TreeClient) route(r *TreeRecord, e Event) error {
+func (t *managedTree) route(r *TreeRecord, e Event) error {
 	// Delayed native runs may be observed, but must not rewrite entity metadata,
 	// parent relations, tool aliases or the current run of newer work.
 	if sys := e.System; isTreeTaskEvent(e) && sys.RunID != nil && *sys.RunID != "" {
@@ -784,7 +709,7 @@ func (t *TreeClient) route(r *TreeRecord, e Event) error {
 
 // merge requires a verified message/task/tool mapping. Conflicting native
 // identities or ancestry are diagnostics, never silent rebindings.
-func (t *TreeClient) merge(a, b *treeNode, session string) (*treeNode, bool) {
+func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 	conflict := a.identity.AgentID != "" && b.identity.AgentID != "" && a.identity.AgentID != b.identity.AgentID || a.identity.TaskID != "" && b.identity.TaskID != "" && a.identity.TaskID != b.identity.TaskID || a.parentTask != "" && b.parentTask != "" && a.parentTask != b.parentTask
 	if (a.parent != nil || a.rootParent) && (b.parent != nil || b.rootParent) && (a.parent != b.parent || a.rootParent != b.rootParent) {
 		conflict = true
@@ -878,7 +803,7 @@ func (t *TreeClient) merge(a, b *treeNode, session string) (*treeNode, bool) {
 	return a, true
 }
 
-func (t *TreeClient) observeTools(e Event, owner *treeNode) error {
+func (t *managedTree) observeTools(e Event, owner *treeNode) error {
 	for _, b := range e.Assistant.Content.Blocks {
 		if b.ToolUse == nil || b.ToolUse.ID == "" {
 			continue
@@ -901,7 +826,7 @@ func (t *TreeClient) observeTools(e Event, owner *treeNode) error {
 	t.announce(e.SessionID)
 	return nil
 }
-func (t *TreeClient) resolve(session string) error {
+func (t *managedTree) resolve(session string) error {
 	for _, n := range t.order {
 		if n.identity.SessionID != session {
 			continue
@@ -959,7 +884,7 @@ func (t *TreeClient) resolve(session string) error {
 	}
 	return nil
 }
-func (t *TreeClient) parent(n *treeNode) (*TreeIdentity, string) {
+func (t *managedTree) parent(n *treeNode) (*TreeIdentity, string) {
 	if n.rootParent {
 		return &TreeIdentity{SessionID: n.identity.SessionID}, "child"
 	}
@@ -979,7 +904,7 @@ func (t *TreeClient) parent(n *treeNode) (*TreeIdentity, string) {
 	}
 	return nil, "unresolved"
 }
-func (t *TreeClient) announce(session string) {
+func (t *managedTree) announce(session string) {
 	visited := make(map[*treeNode]bool)
 	var emit func(*treeNode)
 	emit = func(n *treeNode) {
@@ -1028,7 +953,7 @@ func copyTreeParent(p *TreeIdentity) *TreeIdentity {
 	return &copy
 }
 
-func (t *TreeClient) failRecord(native TreeRecord, err error) (TreeRecord, error) {
+func (t *managedTree) failRecord(native TreeRecord, err error) (TreeRecord, error) {
 	t.client.fail(err)
 	t.halted = true
 	// No partial association fanout escapes. The connection is terminal, so
@@ -1090,7 +1015,7 @@ func treeFrameIdentity(e Event) TreeIdentity {
 }
 
 // seed uses the existing graph rules but never treats a snapshot as live creation.
-func (t *TreeClient) seed(seeds []TreeSeed) error {
+func (t *managedTree) seed(seeds []TreeSeed) error {
 	for _, seed := range seeds {
 		key := treeKey{seed.SessionID, "task:" + seed.TaskID}
 		if n := t.nodes[key]; n != nil {
@@ -1128,7 +1053,7 @@ func (t *TreeClient) seed(seeds []TreeSeed) error {
 	return nil
 }
 
-func (t *TreeClient) trackRun(r *TreeRecord, e Event) error {
+func (t *managedTree) trackRun(r *TreeRecord, e Event) error {
 	if !isTreeTaskEvent(e) || e.System.TaskID == "" || e.SessionID == "" {
 		return nil
 	}

@@ -18,13 +18,13 @@ import (
 	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
-func openBoundedTree(t *testing.T, bounds claude.TreeOptions, configure ...func(*claude.Options)) *claude.TreeClient {
+func openBoundedTree(t *testing.T, bounds claude.TreeOptions, configure ...func(*claude.Options)) *claude.Client {
 	t.Helper()
 	opts := fixtureOptions(t, "tree")
 	for _, f := range configure {
 		f(&opts)
 	}
-	c, err := claude.OpenTree(context.Background(), opts, bounds)
+	c, err := openWithTree(context.Background(), opts, bounds)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestTreeAtomicFanoutAndHistoryBounds(t *testing.T) {
 		})
 	}
 	opts := fixtureOptions(t, "tree")
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxPendingRecords: 1, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}})
+	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxPendingRecords: 1, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}})
 	if c != nil || !errors.Is(err, claude.ErrResourceLimit) {
 		t.Fatal(c, err)
 	}
@@ -199,7 +199,7 @@ func TestTreeNewBoundsRejectBeforeStartup(t *testing.T) {
 		opts := fixtureOptions(t, "tree")
 		capture := filepath.Join(opts.WorkDir, "capture")
 		opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-		c, err := claude.OpenTree(context.Background(), opts, bounds)
+		c, err := openWithTree(context.Background(), opts, bounds)
 		if c != nil || err == nil {
 			t.Fatal(bounds, c, err)
 		}
@@ -404,7 +404,7 @@ func TestTreeTransportOverflowWakesPendingInterruptAndQuestion(t *testing.T) {
 	opts := fixtureOptions(t, "overload_controls")
 	opts.Limits.EventBuffer = 3
 	opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{})
+	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

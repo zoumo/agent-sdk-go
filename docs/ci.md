@@ -16,6 +16,9 @@ Both `ubuntu-latest` and `macos-latest` use exactly Go 1.26.9. Each job checks:
   `go test -count=1 -timeout 180s ./...`.
 - The same suite under `go test -race -count=1 -timeout 300s ./...`, then
   `go vet ./...`.
+- Run `go run ./examples/subagents-offline` against its own synthetic peer.
+- Compile a temporary independent public consumer through
+  `bash scripts/check-managed-consumer.sh`; it never executes Open.
 
 The event range is PR base to merge commit, or push `before` to current commit.
 Manual dispatch defaults to the checked commit's first parent. An initial push

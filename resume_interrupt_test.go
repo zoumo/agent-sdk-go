@@ -512,7 +512,7 @@ func TestInterruptResponseCancellationAndCloseRaces(t *testing.T) {
 			t.Fatalf("closed client accepted a new interrupt: %v", err)
 		}
 		for {
-			_, err := c.Receive(context.Background())
+			_, err := nextNative(c, context.Background())
 			if errors.Is(err, io.EOF) {
 				break
 			}

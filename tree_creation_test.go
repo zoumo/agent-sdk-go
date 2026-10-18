@@ -44,7 +44,7 @@ func creationResult(tool, agent, status string) string {
 
 // A sentinel lets each test assert the absence of delayed Created without
 // timing guesses, while checking every original native byte in arrival order.
-func creationFrames(t *testing.T, c *claude.TreeClient, frames ...string) []claude.TreeRecord {
+func creationFrames(t *testing.T, c *claude.Client, frames ...string) []claude.TreeRecord {
 	t.Helper()
 	var got []claude.TreeRecord
 	for _, frame := range frames {
@@ -208,7 +208,7 @@ func TestTreeCreatedHistoryAndRootResume(t *testing.T) {
 			} else {
 				opts.ResumeID = "s"
 			}
-			c, err := claude.OpenTree(context.Background(), opts, bounds)
+			c, err := openWithTree(context.Background(), opts, bounds)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -245,7 +245,7 @@ func TestTreeCreatedNestedParallelAndEntityDedup(t *testing.T) {
 }
 func TestTreeCreationEvidenceBound(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxCreationEntries: 1})
+	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxCreationEntries: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestTreeCreatedSurvivesAliasMerge(t *testing.T) {
 }
 func TestTreeCreatedUUIDCapacityDoesNotEvictEntity(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxDedupEntries: 1})
+	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxDedupEntries: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

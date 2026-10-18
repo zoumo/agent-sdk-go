@@ -15,7 +15,7 @@ import (
 
 // Function signatures require identical types, not merely convertible structs.
 var (
-	_ func(context.Context) (types.Event, error)          = (*claude.Client)(nil).Receive
+	_ func(context.Context) (claude.TreeRecord, error)    = (*claude.Client)(nil).Receive
 	_ func(context.Context, types.PermissionAnswer) error = (*claude.PermissionRequest)(nil).Answer
 	_ types.Event                                         = claude.Event{
 		System: &types.SystemEvent{},
@@ -51,6 +51,7 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 		t.Fatalf("configuration changed: %#v", o)
 	}
 	o.PermissionHandler = func(*claude.PermissionRequest) {}
+	o.Tree = claude.TreeOptions{MaxNodes: 7, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}}}
 	if !reflect.DeepEqual(o.Types(), config) {
 		t.Fatal("callback affected pure configuration")
 	}

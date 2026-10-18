@@ -47,12 +47,12 @@ func run(output io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	tree, err := claude.OpenTree(ctx, claude.Options{
+	tree, err := claude.Open(ctx, claude.Options{
 		CLIPath: executable,
 		WorkDir: dir,
 		// Replacement environment: no account configuration is inherited.
 		Env: []string{"HOME=" + dir, peerEnvironment + "=1", "GORACE=atexit_sleep_ms=0"},
-	}, claude.TreeOptions{})
+	})
 	if err != nil {
 		return err
 	}

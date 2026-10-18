@@ -117,7 +117,7 @@ func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
 func TestTreeHistorySeedAndFreshEpoch(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
 	opts.ResumeID = "s"
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b", ParentTaskID: "a"}}})
+	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b", ParentTaskID: "a"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestTreeHistorySeedAndFreshEpoch(t *testing.T) {
 }
 
 func TestTreeRunLedgerBound(t *testing.T) {
-	c, err := claude.OpenTree(context.Background(), fixtureOptions(t, "tree"), claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxRuns: 1})
+	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxRuns: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ This is the canonical compatibility statement for this Go SDK. It is a deliberat
 The [per-capability subagent matrix](subagent-compatibility.md) is the detailed
 subagent compatibility statement: native availability, SDK implementation,
 pinned versions, E1/E2 evidence and foreground/background/nested/legacy limits.
-OpenTree owns one stream with automatic initialize-time forwarding, lossless
+Open owns one stream with automatic initialize-time forwarding, lossless
 Native and SDK-derived Associated/Created/ObservationState records. **Created is
 conditional for exact CLI 2.1.258**, verified locally by `--version`; see the fixed
 foreground/corroborated-result rules in the subagent matrix. Version inspection
@@ -197,7 +197,7 @@ These are CLI-wire operations, not local session-file utilities. The runtime sou
 
 | Operation | Go support | Boundary |
 | --- | --- | --- |
-| `initialize` | Implemented, matched request/response | Matched handshake and optional forwardSubagentText; OpenTree enables it automatically. No hook/agent/skills registration or prompt snapshot |
+| `initialize` | Implemented, matched request/response | Matched handshake with forwardSubagentText:true always requested. No hook/agent/skills registration or prompt snapshot |
 | `interrupt` | Implemented, matched request/response | Acknowledgment is not rollback and does not replace a later turn result |
 | `can_use_tool` | Implemented, deferred handle | Original ID and input retained; allow/updated input or deny; no updated-permission rules or deny-interrupt shortcut |
 | `control_cancel_request` | Implemented | Observable request ID; invalidates handles; no durable cross-process cancellation journal |
@@ -274,7 +274,7 @@ Every one of the 49 fields of the pinned `ClaudeAgentOptions` is listed. An equi
 | `user` | Unsupported |
 | `include_partial_messages` | Always enabled with --include-partial-messages; no disable option |
 | `include_hook_events` | Unsupported |
-| `forward_subagent_text` | Implemented as Options.ForwardSubagentText; OpenTree enables it before initialize. E1/E2 only, live unverified; see [subagent matrix](subagent-compatibility.md) |
+| `forward_subagent_text` | Always requested by Open before initialize; no selection option. E1/E2 only, live unverified; see [subagent matrix](subagent-compatibility.md) |
 | `verbatim_prompts` | Unsupported |
 | `fork_session` | Unsupported |
 | `resume_session_at` | Unsupported |

@@ -165,7 +165,7 @@ func TestOverloadWakesInterruptAndPermissionWithRetainedOrder(t *testing.T) {
 			t.Fatalf("accepted order: %s", e.Raw)
 		}
 	}
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	var limit *claude.ResourceLimitError
 	if !errors.As(err, &limit) || limit.Resource != "event buffer" || limit.Limit != 3 {
 		t.Fatalf("terminal: %v", err)
@@ -227,7 +227,7 @@ func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 					t.Fatalf("retained order: %s", e.Raw)
 				}
 			}
-			if _, err := c.Receive(context.Background()); err == nil {
+			if _, err := nextNative(c, context.Background()); err == nil {
 				t.Fatal("missing terminal error")
 			}
 			assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), "waiting", claude.ErrClosed)

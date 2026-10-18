@@ -215,7 +215,7 @@ func TestPermissionCancelOverflowInvalidatesOtherHandles(t *testing.T) {
 	if receive(t, c).Type != "accepted-before-overflow" {
 		t.Fatal("accepted output lost")
 	}
-	_, err := c.Receive(context.Background())
+	_, err := nextNative(c, context.Background())
 	var limit *claude.ResourceLimitError
 	if !errors.Is(err, claude.ErrResourceLimit) || !errors.As(err, &limit) || limit.Resource != "event buffer" {
 		t.Fatalf("overflow was not terminal: %v", err)

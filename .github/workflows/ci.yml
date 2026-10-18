@@ -54,18 +54,26 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/sdk-home" "$RUNNER_TEMP/sdk-cache"
-          for check in live-status test race vet; do
+          for check in live-status test race vet example; do
             case "$check" in
               live-status) args=(test -v -count=1 -run '^TestLiveCLIInitialization$' ./...) ;;
               test) args=(test -count=1 -timeout 180s ./...) ;;
               race) args=(test -race -count=1 -timeout 300s ./...) ;;
               vet) args=(vet ./...) ;;
+              example) args=(run ./examples/subagents-offline) ;;
             esac
             env -i PATH="$PATH" HOME="$RUNNER_TEMP/sdk-home" \
               GOCACHE="$RUNNER_TEMP/sdk-cache" GOTOOLCHAIN=local GOENV=off \
               GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 \
               GORACE=atexit_sleep_ms=0 go "${args[@]}"
           done
+      - name: Compile independent managed consumer (offline)
+        shell: bash
+        run: |
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/sdk-home" \
+            GOCACHE="$RUNNER_TEMP/sdk-cache" GOTOOLCHAIN=local GOENV=off \
+            GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 \
+            bash scripts/check-managed-consumer.sh
       - name: Report live coverage boundary
         if: always()
         shell: bash

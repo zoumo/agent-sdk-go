@@ -26,7 +26,7 @@ type treeCreationCall struct {
 	foreground              bool
 }
 
-func (t *TreeClient) creationCall(k treeKey) (*treeCreationCall, error) {
+func (t *managedTree) creationCall(k treeKey) (*treeCreationCall, error) {
 	if c := t.creation.calls[k]; c != nil {
 		return c, nil
 	}
@@ -38,7 +38,7 @@ func (t *TreeClient) creationCall(k treeKey) (*treeCreationCall, error) {
 	return c, nil
 }
 
-func (t *TreeClient) observeCreation(r TreeRecord, e Event) error {
+func (t *managedTree) observeCreation(r TreeRecord, e Event) error {
 	c := &t.creation
 	if e.IsReplay != nil && *e.IsReplay {
 		c.disabled = true

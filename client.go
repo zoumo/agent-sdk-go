@@ -33,14 +33,13 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
-	// ForwardSubagentText requests native child text forwarding at initialize.
-	// False omits the option; acknowledgment does not prove CLI support.
-	ForwardSubagentText bool
-	Env                 []string
-	InitializeTimeout   time.Duration
-	ShutdownTimeout     time.Duration
-	Limits              Limits
-	PermissionHandler   PermissionHandler
+	// Tree configures bounded relationship observation and history; management is always on.
+	Tree              TreeOptions
+	Env               []string
+	InitializeTimeout time.Duration
+	ShutdownTimeout   time.Duration
+	Limits            Limits
+	PermissionHandler PermissionHandler
 }
 
 func (o *Options) defaults() error {
@@ -89,6 +88,7 @@ type pendingControl struct {
 // Client owns one subprocess. Its methods are concurrency-safe except Receive.
 // Receive is a single-consumer stream; callers must not call it concurrently.
 type Client struct {
+	tree                                *managedTree
 	opts                                Options
 	cmd                                 *exec.Cmd
 	stdin, stdout, stderr               *os.File
@@ -127,6 +127,12 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	if err := options.defaults(); err != nil {
 		return nil, err
 	}
+	tree, err := newManagedTree(options)
+	if err != nil {
+		return nil, err
+	}
+	// History has already been consumed into bounded private state.
+	options.Tree = tree.options
 	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
@@ -169,12 +175,13 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &Client{opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
+	c := &Client{tree: tree, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
 		events: make(chan Event, options.Limits.EventBuffer), responses: make(chan incomingControl, options.Limits.ControlBuffer),
 		permissionJobs: make(chan *PermissionRequest, options.Limits.ControlBuffer), epoch: connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
+	tree.client = c
 	go c.readStdout()
 	go c.readStderr()
 	go c.respondControls()
@@ -187,10 +194,7 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	go c.ownLifecycle()
 	initCtx, cancel := context.WithTimeout(ctx, options.InitializeTimeout)
 	defer cancel()
-	initialize := map[string]any{"subtype": "initialize", "hooks": nil}
-	if options.ForwardSubagentText {
-		initialize["forwardSubagentText"] = true
-	}
+	initialize := map[string]any{"subtype": "initialize", "hooks": nil, "forwardSubagentText": true}
 	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
 		c.fail(&Error{Op: "initialize", Err: err})
 		_ = c.Close()
@@ -250,9 +254,17 @@ func (c *Client) Interrupt(ctx context.Context) error {
 	return err
 }
 
-// Receive returns accepted events in arrival order, then the terminal error (or
-// io.EOF after an ordinary Close). Canceling ctx only cancels this receive wait.
-func (c *Client) Receive(ctx context.Context) (Event, error) {
+// Receive returns native events and SDK-derived relationship/observation records.
+// The first record reports unverified forwarding. A root result or idle does not
+// end observation. Canceling ctx cancels only this wait; call Close to release the process.
+func (c *Client) Receive(ctx context.Context) (TreeRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return TreeRecord{}, err
+	}
+	return c.tree.receive(ctx)
+}
+
+func (c *Client) receiveNative(ctx context.Context) (Event, error) {
 	select {
 	case event, ok := <-c.events:
 		if ok {

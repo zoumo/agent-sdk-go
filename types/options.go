@@ -36,12 +36,9 @@ type Options struct {
 	Model   string
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
-	ResumeID string
-	// ForwardSubagentText requests native child text forwarding at initialize.
-	// False omits the option; acknowledgment does not prove CLI support.
-	ForwardSubagentText bool
-	Env                 []string
-	InitializeTimeout   time.Duration
-	ShutdownTimeout     time.Duration
-	Limits              Limits
+	ResumeID          string
+	Env               []string
+	InitializeTimeout time.Duration
+	ShutdownTimeout   time.Duration
+	Limits            Limits
 }

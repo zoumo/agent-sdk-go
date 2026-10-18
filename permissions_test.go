@@ -598,7 +598,7 @@ func TestPermissionLateValidControlDoesNotMakeCloseProtocolError(t *testing.T) {
 	if event := receive(t, c); event.Control == nil || event.Control.RequestID != "late" {
 		t.Fatalf("late control was not retained: %s", event.Raw)
 	}
-	if _, err := c.Receive(context.Background()); !errors.Is(err, io.EOF) {
+	if _, err := nextNative(c, context.Background()); !errors.Is(err, io.EOF) {
 		t.Fatalf("shutdown stream end: %v", err)
 	}
 }

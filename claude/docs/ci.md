@@ -15,8 +15,9 @@ with dependency network access to compile an independent consumer downloaded fro
 the new module. This uses neither `replace` nor `go.work` and never calls Open.
 
 `CLAUDE_GO_LIVE=0` and `SDK_REAL_AGENT_E2E=0` disable real agent/model tests in CI.
-The live initialization probe remains opt-in and refuses execution when `CI` is
-nonempty. A skip or initialization-only pass cannot upgrade the
+The initialization/shutdown probe in
+[`tests/e2e/initialization_test.go`](../tests/e2e/initialization_test.go) remains opt-in
+and refuses execution when `CI` is nonempty. A skip or initialization-only pass cannot upgrade the
 [full native live compatibility checklist](live-compatibility.md).
 
 Actions use pinned commits, read-only repository permissions, no persisted checkout

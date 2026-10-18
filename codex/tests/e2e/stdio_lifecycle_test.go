@@ -1,4 +1,4 @@
-package live_test
+package e2e_test
 
 import (
 	"context"
@@ -24,7 +24,7 @@ type StdioLifecycleHistorySuite struct {
 
 func TestStdioLifecycleHistory(t *testing.T) {
 	if os.Getenv("RUN_MAC_STDIO_LIVE") != "1" {
-		t.Skip("live scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
 	suite.Run(t, new(StdioLifecycleHistorySuite))
 }
@@ -32,7 +32,7 @@ func TestStdioLifecycleHistory(t *testing.T) {
 func (s *StdioLifecycleHistorySuite) SetupTest() {
 	t := s.T()
 	if os.Getenv("RUN_MAC_STDIO_LIVE") != "1" {
-		t.Skip("live scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
 	s.executable = os.Getenv("MAC_LIVE_CODEX")
 	require.False(t, s.executable == "",

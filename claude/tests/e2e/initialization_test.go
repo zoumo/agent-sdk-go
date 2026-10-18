@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude
+package e2e_test
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	claude "github.com/zoumo/agent-sdk-go/claude"
 )
 
 // TestLiveCLIInitialization is an opt-in real process startup check, not a
@@ -27,7 +29,7 @@ func TestLiveCLIInitialization(t *testing.T) {
 	require.True(t, filepath.IsAbs(path), "CLAUDE_GO_LIVE=1 requires an explicit absolute CLAUDE_GO_LIVE_CLI path")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := Open(ctx, Options{CLIPath: path, WorkDir: t.TempDir()})
+	client, err := claude.Open(ctx, claude.Options{CLIPath: path, WorkDir: t.TempDir()})
 	require.True(t, err == nil, "live CLI initialization failed (diagnostics withheld; inspect privately)")
 	{
 		err := client.Close()

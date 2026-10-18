@@ -10,6 +10,7 @@ Both native SDKs use the same separation of responsibilities:
 | `codex/tools/replay`, `claude/tools/replay` | Importable native capture/safety primitives, fixture reading and offline replay helpers used by commands, SDK tests and replay examples |
 | `codex/testdata/recordings/real-sanitized`, `claude/testdata/recordings/real-sanitized` | Sanitized real captures and their manifests, expected observations, ID maps and transport metadata |
 | Each native `testdata/synthetic-faults` | Clearly identified synthetic protocol/fault data |
+| `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
 | Each native `examples` | Genuine SDK usage and offline usage demonstrations |
 | `tests/consumers/codex-public` | Pure public API/import-boundary consumer, not an SDK usage demonstration |
 | `tests/stories` | Shared story suite, native test adapters and synthetic protocol peers |

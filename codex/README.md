@@ -410,7 +410,7 @@ python3 docs/protocol/verify_inventory.py
 ```
 
 Default tests use synthetic helper processes, loopback WS peers, and local WSS
-peers with synthetic certificates and dummy tokens. The opt-in `tests/live`
+peers with synthetic certificates and dummy tokens. The opt-in [`tests/e2e`](tests/e2e)
 harnesses use a real CLI/account/model only when explicitly enabled. Keep
 `RUN_MAC_STDIO_LIVE`, `RUN_MAC_INTERACTIONS_LIVE`, and `RUN_MAC_WEBSOCKET_LIVE`
 unset or `0` for offline checks. Each requires the value `1` plus an explicit

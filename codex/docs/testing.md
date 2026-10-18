@@ -86,11 +86,14 @@ Actions are pinned by immutable SHA in the workflow; weekly Dependabot updates
 require review of official release/tag correspondence and runner requirements.
 Toolchain changes remain explicit maintenance.
 
-## Live boundaries
+## Real-agent E2E boundaries
 
-The three `tests/live` harnesses require their own `RUN_MAC_*_LIVE=1` switch and
-an explicit `MAC_LIVE_CODEX` executable. `RUN_REAL_CODEX_TESTS` is not a harness
+The three [`tests/e2e`](../tests/e2e) harnesses require their own
+`RUN_MAC_*_LIVE=1` switch and an explicit `MAC_LIVE_CODEX` executable. `RUN_REAL_CODEX_TESTS` is not a harness
 switch. Their historical 9/9 model-attempt budget is exhausted and grants no
 reruns. The independent recorder requires `SDK_REAL_AGENT_E2E=1` and refuses CI.
 Neither mechanism is enabled by default checks. Current coverage and untriggered
 scenarios are listed in [compatibility](compatibility.md#live-validation).
+
+Historical commands in the protocol evidence ledger retain their original paths;
+they describe past runs, not current invocations.

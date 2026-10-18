@@ -27,7 +27,16 @@ all runnable offline examples. Validation uses `GOMAXPROCS=2`, package schedulin
 per-subprocess race-detector exit sleeps. CI runs the same checks, race and vet on Linux and
 macOS. Every example compiles with `go test ./...`.
 
-Live tests are disabled through `RUN_MAC_STDIO_LIVE=0`,
+Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
+[`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
+interaction/interrupt scenarios and WebSocket authentication/lifecycle. Its
+WebSocket harness uses macOS-specific listener inspection. Claude currently has
+only an initialization/shutdown transport integration probe: it sends no model
+turn and does not establish complete agent E2E coverage. Moving this probe does
+not add missing real model, tool, question, resume/interrupt or subagent coverage.
+
+The existing environment names retain `LIVE`; the directory name does not enable
+execution. Real CLI/agent tests are disabled through `RUN_MAC_STDIO_LIVE=0`,
 `RUN_MAC_INTERACTIONS_LIVE=0`, `RUN_MAC_WEBSOCKET_LIVE=0`, `CLAUDE_GO_LIVE=0`,
 and `SDK_REAL_AGENT_E2E=0`. Neither these checks nor recorded replay invokes a real
 agent/model. Native successful subagent interoperability remains unverified;

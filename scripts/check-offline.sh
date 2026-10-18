@@ -14,6 +14,7 @@ python3 codex/docs/protocol/verify_inventory.py
 python3 -m unittest discover -s codex/scripts -p 'test_recording_sanitize.py' -v
 python3 codex/scripts/check_recordings.py
 python3 claude/scripts/check-transcripts.py
+# ./... includes both native tests/e2e packages; real CLI/agent tests skip.
 go test -p=1 -count=1 -timeout 180s ./...
 # The pure public API/configuration consumer is a validation check, not an SDK demo.
 go run ./tests/consumers/codex-public

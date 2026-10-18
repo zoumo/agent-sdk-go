@@ -26,6 +26,9 @@ scope are maintained in the [testing guide](../testing.md).
   or synchronization need; suite does not implement a fake agent or replay peer.
 - Change the generator for generated tests, then regenerate and verify. Preserve
   every schema case and its native type/data; do not hand-edit only the output.
+- Keep explicitly enabled real CLI/agent checks under each native `tests/e2e`.
+  Retain opt-in gates and default skips. Document initialization/transport-only
+  probes accurately; the directory name does not prove full model/task coverage.
 - Keep capability, source inspection, offline/synthetic tests and real recording
   evidence separate. A skipped live check is not a live pass. Default tests and
   CI do not run real agents or collect recordings.

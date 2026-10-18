@@ -1,4 +1,4 @@
-package live_test
+package e2e_test
 
 import (
 	"context"
@@ -34,7 +34,7 @@ type WebSocketLifecycleHistorySuite struct {
 
 func TestWebSocketLifecycleHistory(t *testing.T) {
 	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
-		t.Skip("live scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
 	suite.Run(t, new(WebSocketLifecycleHistorySuite))
 }
@@ -42,7 +42,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 func (s *WebSocketLifecycleHistorySuite) SetupTest() {
 	t := s.T()
 	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
-		t.Skip("live scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+		t.Skip("real-agent E2E scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
 	s.executable = os.Getenv("MAC_LIVE_CODEX")
 	require.False(t, s.executable == "",

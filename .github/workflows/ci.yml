@@ -65,7 +65,7 @@ jobs:
           mise exec -- bash claude/scripts/check-changes.sh "$BASE_SHA" "$HEAD_SHA"
       - name: Native schemas, inventories, types, recordings, unit tests and examples
         run: mise exec -- bash scripts/check-offline.sh
-      - name: Race tests (live tests visibly skip)
+      - name: Race tests (real-agent E2E tests visibly skip)
         env:
           GOPROXY: 'off'
           GOSUMDB: 'off'

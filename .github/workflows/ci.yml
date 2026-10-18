@@ -1,0 +1,87 @@
+name: Offline SDK checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-checks-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Offline (${{ matrix.os }}, Go 1.26.9)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: local
+      GOENV: 'off'
+      GORACE: 'atexit_sleep_ms=0'
+      GOMAXPROCS: '2'
+      RUN_MAC_STDIO_LIVE: '0'
+      RUN_MAC_INTERACTIONS_LIVE: '0'
+      RUN_MAC_WEBSOCKET_LIVE: '0'
+      CLAUDE_GO_LIVE: '0'
+      SDK_REAL_AGENT_E2E: '0'
+    steps:
+      - name: Check out complete imported history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the mise-managed pinned compiler
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - name: Install the pinned generator interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13.13'
+          check-latest: false
+      - name: Verify compiler, source ancestry and dependencies
+        run: |
+          test "$(mise exec -- go env GOVERSION)" = go1.26.9
+          git merge-base --is-ancestor 0719539580dce97726aba7ddb56c7c6ae0c24362 HEAD
+          git merge-base --is-ancestor 72041470958a0d9f2f8e6ff5c0086a66ef193745 HEAD
+          mise exec -- go mod download
+          mise exec -- go mod verify
+          git diff --exit-code -- go.mod go.sum
+      - name: Check committed whitespace and Go formatting
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python3 codex/scripts/check_whitespace.py
+          mise exec -- bash claude/scripts/check-changes.sh "$BASE_SHA" "$HEAD_SHA"
+      - name: Native schemas, inventories, types, recordings, unit tests and examples
+        run: mise exec -- bash scripts/check-offline.sh
+      - name: Race tests (live tests visibly skip)
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+        run: mise exec -- go test -race -p=1 -v -count=1 -timeout 300s ./...
+      - name: Vet
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+        run: mise exec -- go vet ./...
+      - name: Report validation boundary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Offline validation only
+          Linux/macOS native unit/subprocess contracts, schemas/inventories, data-package
+          independence, sanitization, recorded replays, examples, race and vet are separate gates.
+          All real agent/model tests are **SKIPPED**. Historical live results retain their
+          original scope; successful current native subagent interoperability is unverified.
+          SUMMARY

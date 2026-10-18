@@ -1,0 +1,12 @@
+agent-sdk-go incorporates the following native SDKs with their original history.
+
+Codex: https://github.com/zoumo/codex-sdk-go
+Source main: 0719539580dce97726aba7ddb56c7c6ae0c24362
+See codex/LICENSE and codex/NOTICE for original attribution and upstream protocol provenance.
+
+Claude: https://github.com/zoumo/claude-agent-sdk-go
+Source main: 72041470958a0d9f2f8e6ff5c0086a66ef193745
+See claude/LICENSE and claude/NOTICE for original attribution and upstream protocol provenance.
+
+Recorded fixtures retain their original manifests and sanitization provenance.
+Import paths were migrated; historical evidence records describe source-repository runs.

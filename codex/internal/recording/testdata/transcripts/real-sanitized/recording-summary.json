@@ -1,0 +1,38 @@
+{
+  "roots": 2,
+  "children": 0,
+  "milliseconds": 51457,
+  "stories": [
+    {
+      "story": "s1",
+      "attempted": true,
+      "exit": 0,
+      "milliseconds": 30229,
+      "children": 0
+    },
+    {
+      "story": "s2",
+      "attempted": true,
+      "exit": 0,
+      "milliseconds": 21223,
+      "children": 0
+    }
+  ],
+  "schemaVersion": 1,
+  "provenance": "real-sanitized-capture-summary",
+  "sdkBaseCommit": "d465677969cf968c6245e0adeaf7e32c42356913",
+  "scenarioLimit": 3,
+  "activityLimitSeconds": 480,
+  "noAdditionalSceneRetries": true,
+  "s3": {
+    "attempted": false,
+    "status": "not-covered",
+    "reason": "cumulative child count/depth enforcement not established"
+  },
+  "costUSD": null,
+  "nativeUsageTotals": {
+    "s1": 27980,
+    "s2": 18372
+  },
+  "privacy": "raw, account, hook payload, private config and environment excluded"
+}

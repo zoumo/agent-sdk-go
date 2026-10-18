@@ -1,0 +1,16 @@
+Codex Go SDK
+Copyright 2026 codex-sdk-go contributors
+
+This repository includes protocol schema material and independently generated
+bindings derived from OpenAI Codex, licensed under Apache License 2.0.
+Source revision: d27764b82f7118f674371e6d6e76271d9d606edb.
+Source paths, checksums, and modifications: docs/protocol/sources.json.
+
+Upstream NOTICE follows verbatim:
+
+OpenAI Codex
+Copyright 2025 OpenAI
+
+This project includes code derived from [Ratatui](https://github.com/ratatui/ratatui), licensed under the MIT license.
+Copyright (c) 2016-2022 Florian Dehau
+Copyright (c) 2023-2025 The Ratatui Developers

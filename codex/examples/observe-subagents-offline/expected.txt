@@ -1,0 +1,16 @@
+live:
+ObservationState incomplete best-effort-auto-attach-unverified
+SubagentCreated child parent=root provenance=live
+item/completed thread=root
+SubagentCreated grand parent=child provenance=live
+item/agentMessage/delta thread=grand
+item/completed thread=child
+ObservationState incomplete unresolved-source
+fixture/unknown thread=unrelated
+fixture/end thread=root
+closed: err=nil; connection usable
+history:
+ObservationState incomplete best-effort-auto-attach-unverified
+ObservationState incomplete history-recovery-gap
+SubagentAssociated child parent=root provenance=history
+SubagentAssociated grand parent=child provenance=history

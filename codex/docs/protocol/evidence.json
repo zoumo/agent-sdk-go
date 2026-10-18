@@ -1,0 +1,1404 @@
+{
+  "protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+  "tested_sdk_commit": "1f11440e157cf7b31ab89cdde85d540542950ada",
+  "sdk_revision_note": "Current source/test files were validated in the pre-commit working tree on c0d7201 and committed unchanged at 1f11440e157cf7b31ab89cdde85d540542950ada; hashes and exact commands are in subagent05-current-* records. The active schema target is installed CLI 0.162.1. Historical Mac/source evidence retains its original SDK and schema revisions and does not validate this refresh or managed subagents. The final evidence-only delivery is checked by CI at its own exact SHA and reported in handoff; no new live workflow was run.",
+  "toolchain": {
+    "go": "1.26.9",
+    "manager": "mise",
+    "GOTOOLCHAIN": "local"
+  },
+  "live_validation": "Historical partial CLI 0.162.1 coverage at original SDK/schema bases; current bindings and managed subagents have no E3/E4 pass. See ../compatibility.md#live-validation and ../recorded-events.md.",
+  "records": [
+    {
+      "id": "ticket01-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "398 synthetic exported-model schema round trips; omitted/null/value; experimental start fields; known and unknown union variants; unknown object fields; malformed known payload rejection; atomic decoding and encoding validation. Synthetic fixtures, no server process.",
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket01-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Same model suite under Go race detector. No concurrent server compatibility claim.",
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket01-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test ./...",
+      "test_files": [
+        "client_contract_test.go"
+      ],
+      "test_names": [
+        "TestFakeChild",
+        "TestOwnedStdioLifecycle",
+        "TestIDExactness",
+        "TestCancellationAndLateResponse",
+        "TestRPCErrorNoReplay",
+        "TestConnectionLossIsUnknown",
+        "TestMalformedFrames",
+        "TestInitializeFailures",
+        "TestPendingAdmissionLimit",
+        "TestStderrAndUnknownNotifications",
+        "TestBlockedWriteAndConcurrentClose",
+        "TestCloseKillsOnlyOwnedChild",
+        "TestOwnedChildExitWithOpenOutput",
+        "TestOutgoingFrameLimitAndDefaultCallTimeout",
+        "TestOutboundAdmissionIsBounded",
+        "TestCancelBlockedWrite",
+        "TestInvalidOptionsAndClosedCall",
+        "TestExplicitCommandEnvironmentAndDirectory"
+      ],
+      "coverage": "Exported-package consumer against independently authored scripted child process: handshake order/native thread IDs, typed start/read, raw RPC, exact IDs, pre-write cancellation, post-dispatch unknown outcomes, late responses, no replay, malformed/oversized frames, reverse-request rejection, startup failure, admission limits, stderr draining, notification counting, bounded writes/close, child exit and reaping. TestFakeChild is fixture execution, not a scenario. No live Codex executable.",
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket01-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "types/protocol_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Entire exported contract and model suites pass under the race detector after the confirmed-dispatch test synchronization fix.",
+      "attempts": [
+        {
+          "result": "failed",
+          "detail": "TestCancelBlockedWrite observed not-sent/context deadline exceeded where outcome-unknown was expected. The short deadline could expire before dispatch under race instrumentation. A deterministic test synchronization fix and complete rerun are required."
+        },
+        {
+          "result": "passed",
+          "detail": "Replaced elapsed-time assumption with fake-peer acknowledgment of actual received request byte before cancellation; complete suite passes."
+        }
+      ],
+      "tested_sdk_commit": "b4870601497ccadce9e11563c8512f2b16f9c697",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket02-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "431 synthetic exported-model round trips over the 99-definition selected closure, including native turn params/results and six notification payloads; arbitrary outputSchema omitted/null/value semantics; required event identities, timestamps, and payload fields. No server process.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket02-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Model fidelity suite under the Go race detector. No live compatibility claim.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket02-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go"
+      ],
+      "test_names": [
+        "TestTurnEarlyEventsKeepResponseIdentity",
+        "TestNotificationRawAndDecodeErrors",
+        "TestSubscriptionOverflowIsolatedAndInspectable",
+        "TestSlowSubscriberNeverBlocksResponse",
+        "TestSubscriptionOwnsPayloadAndNoReplay",
+        "TestCancellationDoesNotInterruptTurn",
+        "TestTurnFailureNeverReplays",
+        "TestSubscriptionTerminalStatus",
+        "TestSubscriptionConcurrentLifecycle",
+        "TestSubscriptionAdmissionValidation"
+      ],
+      "coverage": "Exported client against an independently authored scripted owned child: withheld start response after eight early/stale/interleaved events; exact response/native identities; typed and raw malformed/unknown notification preservation; bounded subscriber admission and out-of-queue overflow cause; isolated healthy subscriber and 4096-event flood before an RPC response; independent mutable payload ownership; no replay; cancellation without implicit interruption; exactly one explicit interrupt acknowledgement; normal/error/EOF/cancel/full-queue terminal status and concurrent cleanup. No live Codex executable.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket02-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Full exported-client and model suites under race detector, including overlapping subscription registration/cancellation/close and mutable per-subscriber payload isolation.",
+      "tested_sdk_commit": "9e4d0840e56a52d686ded8d95ea464a5efc961ed",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket03-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "581 synthetic model round trips over 117 exact upstream definitions; full resume/unsubscribe fields, omitted/null/value serviceTier, non-null excludeTurns, arbitrary history union preservation, native required fields and pagination bounds. No server process.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket03-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Complete model suite under Go race detector; no live compatibility claim.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket03-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go"
+      ],
+      "coverage": "Two independently initialized fake children; exact opaque native ID resume/read; strict mismatch with responded/correlation evidence; full params and native unsubscribe statuses; local observer independence; missing/internal errors, malformed results/envelopes and EOF; method counts prove no fallback/replay/reconnect; pre-dispatch and confirmed-dispatch cancellation, timeouts/close/late replies; validation/frame/pending admission and concurrent cleanup. No real server persistence claim.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
+      "test_names": [
+        "TestResumeAcrossIndependentConnections",
+        "TestResumeMismatchKeepsCorrelationAndNoFallback",
+        "TestResumeAndUnsubscribeFailureNeverReplay",
+        "TestResumeAndUnsubscribeCancellationEvidence",
+        "TestResumeAndUnsubscribeTimeoutAndClose",
+        "TestUnsubscribeNativeStatusAndLocalIndependence",
+        "TestResumeAndUnsubscribeConcurrentClose",
+        "TestResumeAndUnsubscribeNotSentLimits",
+        "TestResumeAndUnsubscribePendingAdmission"
+      ],
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket03-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go",
+        "types/protocol_test.go",
+        "types/turn_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Full exported-client and model suites under race detector, including concurrent typed resume/unsubscribe and Close. No real Codex executable or live model.",
+      "tested_sdk_commit": "2ba56049bf8c37c4501b6335ee419a23552c0f95",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket04-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "744 synthetic round trips over 154 exact upstream definitions; modern/legacy approvals, permissions, user-input and resolved notifications; exact signed-integer/string RequestID, invalid ID/raw escape rejection, all native decisions, unknown variants, omission/null/value fields and kind-tagged filesystem paths.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket04-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./protocol",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Complete native model suite under the Go race detector; source fidelity is not live server compatibility.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket04-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "request_contract_test.go",
+        "requests_example_test.go"
+      ],
+      "coverage": "Public bounded Requests and opaque answer handles against an independent fake child; exact IDs and explicit result/error frames; native/raw ownership; duplicate/stale/cancel/expiry/resolution; competing answers; response/event progress under stalled consumption; queue/active exhaustion; safe prewrite reuse versus ambiguous writes; close without waiting for caller code. No automatic policy decision or retry.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
+      "test_names": [
+        "TestServerRequestIDsAndNativeReplyEnvelopes",
+        "TestServerRequestRawAndTypedCopies",
+        "TestStalledServerRequestsDoNotBlockCallsOrEvents",
+        "TestAnswerPreflightFailuresLeaveHandleUsable",
+        "TestServerRequestLocalCancellationAndExpiration",
+        "TestResolvedServerRequestUsesExactIDAndKeepsEvent",
+        "TestServerRequestCapacityFailureIsExplicit",
+        "TestServerRequestCloseInvalidatesAndUnblocks",
+        "TestConcurrentServerRequestAnswerIsOneShot",
+        "TestServerRequestDuplicateActiveIDTerminates",
+        "TestPartialServerRequestAnswerIsUnknownAndNeverReplayed",
+        "TestServerRequestLimitDefaultsAndValidation",
+        "TestEverySupportedServerRequestTypedNativeRoundTrip",
+        "TestMalformedOrUnrelatedResolutionKeepsHandle",
+        "TestServerRequestQueueAdmissionFailureIsReusable",
+        "TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose",
+        "TestZeroAnswerHandleFailsLocally",
+        "TestQueuedAnswerCancellationIsNotSentButConsumesHandle",
+        "TestConcurrentAnswerAndCancelHaveOneWinner",
+        "TestMalformedServerRequestEnvelopeTerminates",
+        "TestConcurrentAnswerAndNativeResolutionHaveOneOutcome",
+        "TestReusedServerRequestIDDoesNotReviveOldHandle",
+        "TestExpiredBufferedRequestsRemainInspectableAfterClose",
+        "TestLegacyRequestResolutionUsesConversationIdentity",
+        "TestServerRequestsArrivingDuringInitializeAreRetained",
+        "TestServerRequestOverflowDuringInitializeCleansUp"
+      ],
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket04-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "client_contract_test.go",
+        "request_contract_test.go",
+        "requests_example_test.go",
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "coverage": "Full exported-client and model suites under the race detector, including competing answer/reject/cancel, resolution, expiry, blocked writes, Close and stale connection handles. No live Codex executable.",
+      "tested_sdk_commit": "37679703719ae2c88713b37e3eeb2ec118a3d1ac",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket05-remote-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "coverage": "Final working-tree normal run: 52 shared exported-client contract bodies through WS and synthetic-trust WSS; full single-connection P0 lifecycle and explicit native-ID resume; partial socket writes/admission/cancellation/Close; 13 security functions; coalesced valid-response/event prefix regression; compile-only remote example. No real Codex, credential, account, or model. Five repeated normal runs and the independently recorded full race run also passed.",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go",
+        "request_contract_test.go",
+        "remote_backpressure_test.go",
+        "remote_coalescing_test.go",
+        "remote_contract_test.go",
+        "remote_example_test.go",
+        "remote_security_test.go"
+      ],
+      "test_names": [
+        "TestRemoteBlockedWritesAndAnswers",
+        "TestRemoteQueuedAnswerAdmissionAndCancellation",
+        "TestRemoteCloseLeavesListenerAvailable",
+        "TestRemoteValidPrefixSurvivesMalformedFrame",
+        "TestRemotePublicContractParity",
+        "TestRemoteNativeWorkflow",
+        "TestRemoteSecurityExactBearerAndNoOrigin",
+        "TestRemoteSecurityTLSVerificationAndConfigIsolation",
+        "TestRemoteSecurityRejectsInvalidInputBeforeDial",
+        "TestRemoteSecurityRedirectsNeverForwardCredentials",
+        "TestRemoteSecurityReflectedHandshakeErrorsAreSafe",
+        "TestRemoteSecurityReflectedCloseReasonIsSafe",
+        "TestRemoteSecurityReflectedNativeRPCErrorsAreSafe",
+        "TestRemoteSecurityReflectedNumericDecodeErrorIsSafe",
+        "TestRemoteSecurityConstructionContext",
+        "TestRemoteSecurityStalledTLSHandshakeIsBounded",
+        "TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction",
+        "TestRemoteSecurityMalformedRawWebSocketFrames",
+        "TestRemoteSecurityWebSocketMessageFraming"
+      ],
+      "shared_contract_cases": [
+        "TestOwnedStdioLifecycle",
+        "TestIDExactness",
+        "TestCancellationAndLateResponse",
+        "TestRPCErrorNoReplay",
+        "TestConnectionLossIsUnknown",
+        "TestMalformedFrames",
+        "TestInitializeFailures",
+        "TestPendingAdmissionLimit",
+        "TestOutgoingFrameLimitAndDefaultCallTimeout",
+        "TestInvalidOptionsAndClosedCall",
+        "TestTurnEarlyEventsKeepResponseIdentity",
+        "TestNotificationRawAndDecodeErrors",
+        "TestSubscriptionOverflowIsolatedAndInspectable",
+        "TestSlowSubscriberNeverBlocksResponse",
+        "TestSubscriptionOwnsPayloadAndNoReplay",
+        "TestCancellationDoesNotInterruptTurn",
+        "TestTurnFailureNeverReplays",
+        "TestSubscriptionTerminalStatus",
+        "TestSubscriptionConcurrentLifecycle",
+        "TestSubscriptionAdmissionValidation",
+        "TestResumeAcrossIndependentConnections",
+        "TestResumeMismatchKeepsCorrelationAndNoFallback",
+        "TestResumeAndUnsubscribeFailureNeverReplay",
+        "TestResumeAndUnsubscribeCancellationEvidence",
+        "TestResumeAndUnsubscribeTimeoutAndClose",
+        "TestUnsubscribeNativeStatusAndLocalIndependence",
+        "TestResumeAndUnsubscribeConcurrentClose",
+        "TestResumeAndUnsubscribeNotSentLimits",
+        "TestResumeAndUnsubscribePendingAdmission",
+        "TestServerRequestIDsAndNativeReplyEnvelopes",
+        "TestServerRequestRawAndTypedCopies",
+        "TestStalledServerRequestsDoNotBlockCallsOrEvents",
+        "TestAnswerPreflightFailuresLeaveHandleUsable",
+        "TestServerRequestLocalCancellationAndExpiration",
+        "TestResolvedServerRequestUsesExactIDAndKeepsEvent",
+        "TestServerRequestCapacityFailureIsExplicit",
+        "TestServerRequestCloseInvalidatesAndUnblocks",
+        "TestConcurrentServerRequestAnswerIsOneShot",
+        "TestServerRequestDuplicateActiveIDTerminates",
+        "TestServerRequestLimitDefaultsAndValidation",
+        "TestEverySupportedServerRequestTypedNativeRoundTrip",
+        "TestMalformedOrUnrelatedResolutionKeepsHandle",
+        "TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose",
+        "TestZeroAnswerHandleFailsLocally",
+        "TestConcurrentAnswerAndCancelHaveOneWinner",
+        "TestMalformedServerRequestEnvelopeTerminates",
+        "TestConcurrentAnswerAndNativeResolutionHaveOneOutcome",
+        "TestReusedServerRequestIDDoesNotReviveOldHandle",
+        "TestExpiredBufferedRequestsRemainInspectableAfterClose",
+        "TestLegacyRequestResolutionUsesConversationIdentity",
+        "TestServerRequestsArrivingDuringInitializeAreRetained",
+        "TestServerRequestOverflowDuringInitializeCleansUp"
+      ],
+      "attempts": [
+        {
+          "result": "failed",
+          "command": "mise exec go@1.26.9 -- go test -count=5 ./...",
+          "detail": "A repeated normal run exposed a cancellation-test timing assumption and a constructor timeout-classification race. The tests now use a later echo barrier to establish a settled local write before late-response reuse. Dial failures now preserve safe deadline/cancellation evidence from errors.Is/net.Error even when HTTP transport timeout occurs before ctx.Err publication. Thirty focused repetitions and complete final normal/repeated-normal/race reruns subsequently passed."
+        },
+        {
+          "result": "passed",
+          "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+          "detail": "Full normal run passed in 17.179 seconds before read-only review found a coalesced-read prefix-loss issue in the new strict frame guard. The guard now returns the preceding valid response bytes and retains a sticky ErrProtocol for the invalid suffix. This earlier run is not the final changed-tree gate."
+        }
+      ],
+      "package_elapsed_seconds": 17.15,
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket05-remote-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "coverage": "Final working-tree full race run: all stdio cases and 52 shared exported-client bodies through WS and synthetic-trust WSS, native workflow/resume, socket backpressure, 13 security functions, valid-prefix framing regression, and compile-only examples. Includes concurrent subscriptions, one-shot answers/cancellation/resolution, stale handles and bounded cleanup. Protocol model race results are separately recorded. No real Codex or credentials.",
+      "test_files": [
+        "client_contract_test.go",
+        "turn_contract_test.go",
+        "resume_contract_test.go",
+        "request_contract_test.go",
+        "remote_backpressure_test.go",
+        "remote_coalescing_test.go",
+        "remote_contract_test.go",
+        "remote_example_test.go",
+        "remote_security_test.go"
+      ],
+      "test_names": [
+        "TestRemoteBlockedWritesAndAnswers",
+        "TestRemoteQueuedAnswerAdmissionAndCancellation",
+        "TestRemoteCloseLeavesListenerAvailable",
+        "TestRemoteValidPrefixSurvivesMalformedFrame",
+        "TestRemotePublicContractParity",
+        "TestRemoteNativeWorkflow",
+        "TestRemoteSecurityExactBearerAndNoOrigin",
+        "TestRemoteSecurityTLSVerificationAndConfigIsolation",
+        "TestRemoteSecurityRejectsInvalidInputBeforeDial",
+        "TestRemoteSecurityRedirectsNeverForwardCredentials",
+        "TestRemoteSecurityReflectedHandshakeErrorsAreSafe",
+        "TestRemoteSecurityReflectedCloseReasonIsSafe",
+        "TestRemoteSecurityReflectedNativeRPCErrorsAreSafe",
+        "TestRemoteSecurityReflectedNumericDecodeErrorIsSafe",
+        "TestRemoteSecurityConstructionContext",
+        "TestRemoteSecurityStalledTLSHandshakeIsBounded",
+        "TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction",
+        "TestRemoteSecurityMalformedRawWebSocketFrames",
+        "TestRemoteSecurityWebSocketMessageFraming"
+      ],
+      "shared_contract_cases": [
+        "TestOwnedStdioLifecycle",
+        "TestIDExactness",
+        "TestCancellationAndLateResponse",
+        "TestRPCErrorNoReplay",
+        "TestConnectionLossIsUnknown",
+        "TestMalformedFrames",
+        "TestInitializeFailures",
+        "TestPendingAdmissionLimit",
+        "TestOutgoingFrameLimitAndDefaultCallTimeout",
+        "TestInvalidOptionsAndClosedCall",
+        "TestTurnEarlyEventsKeepResponseIdentity",
+        "TestNotificationRawAndDecodeErrors",
+        "TestSubscriptionOverflowIsolatedAndInspectable",
+        "TestSlowSubscriberNeverBlocksResponse",
+        "TestSubscriptionOwnsPayloadAndNoReplay",
+        "TestCancellationDoesNotInterruptTurn",
+        "TestTurnFailureNeverReplays",
+        "TestSubscriptionTerminalStatus",
+        "TestSubscriptionConcurrentLifecycle",
+        "TestSubscriptionAdmissionValidation",
+        "TestResumeAcrossIndependentConnections",
+        "TestResumeMismatchKeepsCorrelationAndNoFallback",
+        "TestResumeAndUnsubscribeFailureNeverReplay",
+        "TestResumeAndUnsubscribeCancellationEvidence",
+        "TestResumeAndUnsubscribeTimeoutAndClose",
+        "TestUnsubscribeNativeStatusAndLocalIndependence",
+        "TestResumeAndUnsubscribeConcurrentClose",
+        "TestResumeAndUnsubscribeNotSentLimits",
+        "TestResumeAndUnsubscribePendingAdmission",
+        "TestServerRequestIDsAndNativeReplyEnvelopes",
+        "TestServerRequestRawAndTypedCopies",
+        "TestStalledServerRequestsDoNotBlockCallsOrEvents",
+        "TestAnswerPreflightFailuresLeaveHandleUsable",
+        "TestServerRequestLocalCancellationAndExpiration",
+        "TestResolvedServerRequestUsesExactIDAndKeepsEvent",
+        "TestServerRequestCapacityFailureIsExplicit",
+        "TestServerRequestCloseInvalidatesAndUnblocks",
+        "TestConcurrentServerRequestAnswerIsOneShot",
+        "TestServerRequestDuplicateActiveIDTerminates",
+        "TestServerRequestLimitDefaultsAndValidation",
+        "TestEverySupportedServerRequestTypedNativeRoundTrip",
+        "TestMalformedOrUnrelatedResolutionKeepsHandle",
+        "TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose",
+        "TestZeroAnswerHandleFailsLocally",
+        "TestConcurrentAnswerAndCancelHaveOneWinner",
+        "TestMalformedServerRequestEnvelopeTerminates",
+        "TestConcurrentAnswerAndNativeResolutionHaveOneOutcome",
+        "TestReusedServerRequestIDDoesNotReviveOldHandle",
+        "TestExpiredBufferedRequestsRemainInspectableAfterClose",
+        "TestLegacyRequestResolutionUsesConversationIdentity",
+        "TestServerRequestsArrivingDuringInitializeAreRetained",
+        "TestServerRequestOverflowDuringInitializeCleansUp"
+      ],
+      "attempts": [
+        {
+          "result": "passed",
+          "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+          "detail": "Full race run passed in 128.9 seconds before the subsequent repeated-normal failure led to cancellation-barrier and safe-timeout-classification changes. This earlier pass is not the final changed-tree gate."
+        }
+      ],
+      "package_elapsed_seconds": 128.342,
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket05-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go",
+        "types/turn_test.go"
+      ],
+      "coverage": "Protocol unit-package portion of the final full normal run: unchanged 744 generated model round trips and existing model tests for optional/null/unknown fields, native IDs, turn/resume, approval/input, and resolution shapes. No schema or generated type change in ticket 05; these are not complete JSON Schema validators. No server process or live compatibility claim.",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only.",
+      "package_elapsed_seconds": 0.071,
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "ticket05-model-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "test_files": [
+        "types/protocol_test.go",
+        "types/requests_test.go",
+        "types/resume_test.go",
+        "types/schema_generated_test.go",
+        "types/turn_test.go"
+      ],
+      "coverage": "Protocol unit-package portion of the final full race run: unchanged 744 generated model round trips and existing native model tests. No schema or generated type change in ticket 05; source fidelity is not full JSON Schema validation or live compatibility.",
+      "tested_sdk_commit": "86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f",
+      "sdk_revision_note": "Final source/test tree passed before commit and was committed unchanged at the recorded identifier; subsequent changes are documentation-only.",
+      "package_elapsed_seconds": 1.461,
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "mac01-stdio-live",
+      "kind": "live",
+      "status": "passed",
+      "tested_sdk_commit": "c3842e2516e8caf383447379557b3bc8702e530a",
+      "delivery_commit": "cd5ed954e880ae468f56cdbe1b42122f216a1127",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-stdio-lifecycle.md",
+      "cli_version": "0.162.1",
+      "go_version": "1.26.9",
+      "platform": "darwin/arm64",
+      "turn_start_attempts": 2,
+      "coverage": "stdio lifecycle, two completed turns/events, durable history, explicit new connection same-ID resume, unsubscribe and owned-child close",
+      "status_scope": "Only the explicitly passed assertions; untriggered scenarios are not passes.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "mac02-user-input-live",
+      "kind": "live",
+      "status": "passed",
+      "tested_sdk_commit": "cd5ed954e880ae468f56cdbe1b42122f216a1127",
+      "delivery_commit": "b6a42a4a3746488464fc9ee19dedc8f3d9e70346",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-interactions-interrupt.md",
+      "cli_version": "0.162.1",
+      "go_version": "1.26.9",
+      "platform": "darwin/arm64",
+      "turn_start_attempts": 5,
+      "coverage": "stdio BLUE request/answer, exact native resolution, BLUE result and completed terminal; command effect passed separately; command/file/permissions approvals and interrupt untriggered",
+      "status_scope": "Only the explicitly passed assertions; untriggered scenarios are not passes.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "mac03-loopback-ws-live",
+      "kind": "live",
+      "status": "passed",
+      "tested_sdk_commit": "b6a42a4a3746488464fc9ee19dedc8f3d9e70346",
+      "delivery_commit": "7e6468edb701d76f9fdedff53aeb09e45a031c6c",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-websocket-lifecycle.md",
+      "cli_version": "0.162.1",
+      "go_version": "1.26.9",
+      "platform": "darwin/arm64",
+      "turn_start_attempts": 2,
+      "coverage": "real authenticated loopback WS; wrong token 401; two completed turns/events, durable history, explicit new connection same-ID resume; socket close leaves service available; owned cleanup; no public WSS/JWT",
+      "status_scope": "Only the explicitly passed assertions; untriggered scenarios are not passes.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "historical-linux-live-blocker",
+      "kind": "live_attempt",
+      "status": "environment-blocked",
+      "tested_sdk_commit": "a83ab64915e0bb7e7290d74ca3ac0204d11ec61c",
+      "cli_version": "0.159.2",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/final-live.md",
+      "turn_start_attempts": 0,
+      "coverage": "Initialization outcome-unknown EOF; separate zero-message startup diagnostic found SQLite state-runtime failure. No retry or model turn. Historical evidence only.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "mac04-final-offline-unit",
+      "kind": "mock",
+      "status": "passed",
+      "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
+      "command": "mise exec go@1.26.9 -- go test -count=1 ./...",
+      "package_elapsed_seconds": 24.211,
+      "coverage": "Full current unit/mock suite, examples and live harness compilation; all four live flags 0. Inherited default macOS TMPDIR. No model call. Includes test-only lifecycle, path-identity and deadline-isolation repairs.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "mac04-final-offline-race",
+      "kind": "race",
+      "status": "passed",
+      "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
+      "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
+      "coverage": "Full current race suite with all four live flags 0 and inherited default macOS TMPDIR. No real CLI. Historical live revisions unchanged.",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent01-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 mise exec -- go test -count=1 ./...",
+      "test_files": [
+        "tree_contract_test.go",
+        "client_contract_test.go",
+        "remote_contract_test.go"
+      ],
+      "test_names": [
+        "TestTreeLiveChildStream",
+        "TestTreeFailedSpawnAndResumeAreNotCreated",
+        "TestTreeBoundsAndLocalClose",
+        "TestTreeAdmissionAndNodeBound"
+      ],
+      "coverage": "Original synthetic fake-peer fixtures over owned stdio and loopback WS/WSS. Successful live-shaped spawn, failed spawn, resume association, duplicate relations, early child notifications before root response, unchanged native broadcast/bytes/null/unknown fields, independent buffers, zero child/subscribe RPCs, admission/graph bounds, queue isolation, concurrent local close. Full offline repository suite; live switches explicitly disabled. Does not prove real provider runtime support.",
+      "tested_sdk_base": "8f35ee30394fd8724303e1aabdd4b581f305d2dc",
+      "tested_source_sha256": {
+        "tree.go": "9f578e3f66c55f9ccf59a6e76ffe13418590e4675dd67601aeda2b4da3be78b6",
+        "tree_contract_test.go": "4bdb7fa9a67c657255fc56856f53923e3088720e0ef745de2c4fdbe15ccae3ae",
+        "client.go": "f5b187b288ec42f662dc4eb85a01e63a91d7ad9f94f312262ab2a8c1f3419666",
+        "client_contract_test.go": "4ca1e5b4e7c49fca1a5f2444728b53e606dc30e8b801e674ded697b8cfe20ba2",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "wire.go": "7abc30ef4989ade7b9309d9a169e51b8f4e038a20c9fa83275756f75dbdcb57f"
+      },
+      "revision_note": "Working source/test snapshot identified by hashes; delivered in the commit containing this record. Exact delivery SHA and hosted CI result are reported separately. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent01-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 mise exec -- go test -race -count=1 ./...",
+      "test_files": [
+        "tree_contract_test.go",
+        "client_contract_test.go",
+        "remote_contract_test.go"
+      ],
+      "test_names": [
+        "TestTreeLiveChildStream",
+        "TestTreeFailedSpawnAndResumeAreNotCreated",
+        "TestTreeBoundsAndLocalClose",
+        "TestTreeAdmissionAndNodeBound"
+      ],
+      "coverage": "Original synthetic fake-peer fixtures over owned stdio and loopback WS/WSS. Successful live-shaped spawn, failed spawn, resume association, duplicate relations, early child notifications before root response, unchanged native broadcast/bytes/null/unknown fields, independent buffers, zero child/subscribe RPCs, admission/graph bounds, queue isolation, concurrent local close. Full offline repository suite; live switches explicitly disabled. Does not prove real provider runtime support.",
+      "tested_sdk_base": "8f35ee30394fd8724303e1aabdd4b581f305d2dc",
+      "tested_source_sha256": {
+        "tree.go": "9f578e3f66c55f9ccf59a6e76ffe13418590e4675dd67601aeda2b4da3be78b6",
+        "tree_contract_test.go": "4bdb7fa9a67c657255fc56856f53923e3088720e0ef745de2c4fdbe15ccae3ae",
+        "client.go": "f5b187b288ec42f662dc4eb85a01e63a91d7ad9f94f312262ab2a8c1f3419666",
+        "client_contract_test.go": "4ca1e5b4e7c49fca1a5f2444728b53e606dc30e8b801e674ded697b8cfe20ba2",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "wire.go": "7abc30ef4989ade7b9309d9a169e51b8f4e038a20c9fa83275756f75dbdcb57f"
+      },
+      "revision_note": "Working source/test snapshot identified by hashes; delivered in the commit containing this record. Exact delivery SHA and hosted CI result are reported separately. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent02-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "bf7654035f1e073a2374bf2600e667d947684ac7",
+      "tested_source_sha256": {
+        "tree.go": "a021bf538b07e3167a181f31fd2cc7adb6b1fe1b3d5b738ae3fc119c39b9224d",
+        "tree_contract_test.go": "b2eb9f2b5d754699efc4b1cb0ba4bf7af5d0d5577dbe173d270cc38758cab836",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go"
+      ],
+      "test_names": [
+        "TestTreeNestedOrderingAndIdentity",
+        "TestTreePendingLimitsAndNoReplay",
+        "TestTreeDepthAndDedupBounds"
+      ],
+      "coverage": "Full offline repository suite. Original public-client synthetic stdio/WS/WSS fixtures prove recursive ancestor-first routing, early native event ordering and exact Raw, source/collab enrichment, multi-turn entity stability, reliable known terminal replay deduplication, identical no-ID deltas and unknown item identities preserved, partial/complete preserved, accepted/rejected conflict evidence, cycle rejection, pending count/bytes/age limits and no replay after unresolved delivery, depth and FIFO identity bounds. Existing native Subscribe remains broadcast; no child RPC or extra connection.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-02.md",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent02-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "bf7654035f1e073a2374bf2600e667d947684ac7",
+      "tested_source_sha256": {
+        "tree.go": "a021bf538b07e3167a181f31fd2cc7adb6b1fe1b3d5b738ae3fc119c39b9224d",
+        "tree_contract_test.go": "b2eb9f2b5d754699efc4b1cb0ba4bf7af5d0d5577dbe173d270cc38758cab836",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go"
+      ],
+      "test_names": [
+        "TestTreeNestedOrderingAndIdentity",
+        "TestTreePendingLimitsAndNoReplay",
+        "TestTreeDepthAndDedupBounds"
+      ],
+      "coverage": "Full offline repository suite. Original public-client synthetic stdio/WS/WSS fixtures prove recursive ancestor-first routing, early native event ordering and exact Raw, source/collab enrichment, multi-turn entity stability, reliable known terminal replay deduplication, identical no-ID deltas and unknown item identities preserved, partial/complete preserved, accepted/rejected conflict evidence, cycle rejection, pending count/bytes/age limits and no replay after unresolved delivery, depth and FIFO identity bounds. Existing native Subscribe remains broadcast; no child RPC or extra connection.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-02.md",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent03-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "9aca0c39a788b42ef7caa4d877f22fe30fee88d5",
+      "tested_source_sha256": {
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "tree.go": "a4ea651d35a247f4e391de9827aef074668a94d29b525df9ed742723cec5234f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a"
+      },
+      "test_files": [
+        "client.go",
+        "subscription_management.go",
+        "tree_contract_test.go",
+        "tree_lifecycle_test.go"
+      ],
+      "test_names": [
+        "TestTreeParentIdleChildActive",
+        "TestTreeCloseCancelSharedSource",
+        "TestTreeDisconnectHistoryEpoch",
+        "TestTreeDisconnectFullQueueAndSeedBounds"
+      ],
+      "coverage": "Full offline suite. Original synthetic public-client stdio/WS/WSS fixtures cover parent idle while child active; root turn completion followed by child deltas, activity completed/interrupted, interrupted child turn and new child turn; concurrent idempotent close/cancel with another root sharing the same source and unchanged native subscriber; historical parent/source/collab seed with ancestor discovery, no historical Created, known historical entity without a parent later associated live, new live child Created; explicit new Clients/epochs delivering the same terminal IDs again; abrupt EOF preserving queued native bytes plus disconnected permanent-gap, including a full queue; bounded/invalid seeds; exact RPC transcripts exclude automatic read/list/resume/start/unsubscribe recovery. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-03.md",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent03-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "9aca0c39a788b42ef7caa4d877f22fe30fee88d5",
+      "tested_source_sha256": {
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "tree.go": "a4ea651d35a247f4e391de9827aef074668a94d29b525df9ed742723cec5234f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a"
+      },
+      "test_files": [
+        "client.go",
+        "subscription_management.go",
+        "tree_contract_test.go",
+        "tree_lifecycle_test.go"
+      ],
+      "test_names": [
+        "TestTreeParentIdleChildActive",
+        "TestTreeCloseCancelSharedSource",
+        "TestTreeDisconnectHistoryEpoch",
+        "TestTreeDisconnectFullQueueAndSeedBounds"
+      ],
+      "coverage": "Full offline suite. Original synthetic public-client stdio/WS/WSS fixtures cover parent idle while child active; root turn completion followed by child deltas, activity completed/interrupted, interrupted child turn and new child turn; concurrent idempotent close/cancel with another root sharing the same source and unchanged native subscriber; historical parent/source/collab seed with ancestor discovery, no historical Created, known historical entity without a parent later associated live, new live child Created; explicit new Clients/epochs delivering the same terminal IDs again; abrupt EOF preserving queued native bytes plus disconnected permanent-gap, including a full queue; bounded/invalid seeds; exact RPC transcripts exclude automatic read/list/resume/start/unsubscribe recovery. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-03.md",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent04-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "94b7ba6cceec55ca8a56493313d9fbae58988fcd",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_bounds_requests_test.go"
+      ],
+      "test_names": [
+        "TestTreeFanoutAdmissionIsAtomic",
+        "TestTreePendingDeadlineFanoutIsAtomic",
+        "TestTreeFullQueuePreservesOriginalRequestAuthority",
+        "TestTreeObservationCancellationDoesNotCancelRequest",
+        "TestTreeRequestTerminalAndEpochIsolation",
+        "TestTreeTextThinkingAndUsageStayAtNativeSource",
+        "TestTreeQueueCapacityOverflowIsRejected"
+      ],
+      "coverage": "Original synthetic public API stdio/WS/WSS fixtures: all-or-none association/multi-receiver/pending fanout, pending-expiry atomicity, full event queue with original approval/question handles and RPC replies, 12 concurrent one-shot answers, unchanged other tree/native subscriber, observation cancel/Close/publication races, cancel/expiry/resolution/Client.Close late answers and reused IDs across epochs, identical deltas, source-separated thinking/usage/parent final answer, explicit/inherited capacity arithmetic overflow. Existing contracts retain count/byte/age, graph/depth/cache, history and disconnect limits. No E3/E4 validation.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final full normal suite; all live opt-ins explicitly SKIP. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-04.md",
+      "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-test-final.log",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent04-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "94b7ba6cceec55ca8a56493313d9fbae58988fcd",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "tree_bounds_requests_test.go": "1656a7852d98db18c160858cb2b32708bac441705a205d5458901ff47a16eb70"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_bounds_requests_test.go"
+      ],
+      "test_names": [
+        "TestTreeFanoutAdmissionIsAtomic",
+        "TestTreePendingDeadlineFanoutIsAtomic",
+        "TestTreeFullQueuePreservesOriginalRequestAuthority",
+        "TestTreeObservationCancellationDoesNotCancelRequest",
+        "TestTreeRequestTerminalAndEpochIsolation",
+        "TestTreeTextThinkingAndUsageStayAtNativeSource",
+        "TestTreeQueueCapacityOverflowIsRejected"
+      ],
+      "coverage": "Original synthetic public API stdio/WS/WSS fixtures: all-or-none association/multi-receiver/pending fanout, pending-expiry atomicity, full event queue with original approval/question handles and RPC replies, 12 concurrent one-shot answers, unchanged other tree/native subscriber, observation cancel/Close/publication races, cancel/expiry/resolution/Client.Close late answers and reused IDs across epochs, identical deltas, source-separated thinking/usage/parent final answer, explicit/inherited capacity arithmetic overflow. Existing contracts retain count/byte/age, graph/depth/cache, history and disconnect limits. No E3/E4 validation.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Full race suite passed with final production code. The thinking/usage synthetic payloads were subsequently completed with pinned native fields; the final fixture revision is separately retested below. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-04.md",
+      "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race.log",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent04-final-fixture-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 -run '^TestTree(TextThinkingAndUsageStayAtNativeSource|QueueCapacityOverflowIsRejected)$' ./...",
+      "tested_sdk_base": "94b7ba6cceec55ca8a56493313d9fbae58988fcd",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_bounds_requests_test.go"
+      ],
+      "test_names": [
+        "TestTreeTextThinkingAndUsageStayAtNativeSource",
+        "TestTreeQueueCapacityOverflowIsRejected"
+      ],
+      "coverage": "Original synthetic public API stdio/WS/WSS fixtures: all-or-none association/multi-receiver/pending fanout, pending-expiry atomicity, full event queue with original approval/question handles and RPC replies, 12 concurrent one-shot answers, unchanged other tree/native subscriber, observation cancel/Close/publication races, cancel/expiry/resolution/Client.Close late answers and reused IDs across epochs, identical deltas, source-separated thinking/usage/parent final answer, explicit/inherited capacity arithmetic overflow. Existing contracts retain count/byte/age, graph/depth/cache, history and disconnect limits. No E3/E4 validation.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Focused final-fixture race rerun after adding native contentIndex and complete token counters; final explicit/inherited capacity check included. Exact delivered source/test hashes. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-04.md",
+      "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race-final-fixtures.log",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent05-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+      "tested_at_utc": "2026-10-18T05:40:21.675309+00:00",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "client.go",
+        "subscription.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go",
+        "tree_lifecycle_test.go",
+        "tree_bounds_requests_test.go",
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
+      ],
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "coverage": "Full offline suite including all four tree fixture contracts and runnable example transcript; original synthetic stdio/loopback WS/WSS. Full queue/request authority, lifecycle/history/permanent-gap, nested ordering/narrow dedup and source-separated text/thinking/usage. All three live tests visibly SKIP; no E3/E4.",
+      "revision_note": "Pre-commit working tree on the stated base; production code unchanged in ticket05, new example identified by hashes. Initial concurrent normal run failed one existing WS flood 3-second deadline; concurrent race failed existing blocked-writer prefix waits. Final serial full reruns and focused normal repetition passed without changing code or deadline. Hosted exact-delivery SHA/run checked separately in handoff.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
+      "sdk_package_seconds": 46.415,
+      "additional_command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=3 -run '^TestRemotePublicContractParity$/(ws|wss)/TestSlowSubscriberNeverBlocksResponse$' .",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent05-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+      "tested_at_utc": "2026-10-18T05:40:21.675309+00:00",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "client.go",
+        "subscription.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go",
+        "tree_lifecycle_test.go",
+        "tree_bounds_requests_test.go",
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
+      ],
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "coverage": "Full offline suite including all four tree fixture contracts and runnable example transcript; original synthetic stdio/loopback WS/WSS. Full queue/request authority, lifecycle/history/permanent-gap, nested ordering/narrow dedup and source-separated text/thinking/usage. All three live tests visibly SKIP; no E3/E4.",
+      "revision_note": "Pre-commit working tree on the stated base; production code unchanged in ticket05, new example identified by hashes. Initial concurrent normal run failed one existing WS flood 3-second deadline; concurrent race failed existing blocked-writer prefix waits. Final serial full reruns and focused normal repetition passed without changing code or deadline. Hosted exact-delivery SHA/run checked separately in handoff.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
+      "sdk_package_seconds": 218.265,
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent05-offline-gates",
+      "kind": "unit",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "See commands below and https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
+      "commands": [
+        "mise exec -- go vet ./...",
+        "mise exec -- go mod download",
+        "mise exec -- go mod verify",
+        "python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v",
+        "python3 docs/protocol/verify_inventory.py",
+        "mise exec -- bash scripts/check_generated.sh",
+        "mise exec -- go run ./examples/observe-tree-offline",
+        "git diff --check"
+      ],
+      "tested_sdk_base": "40438a66bc4b6539ac97f993d704dae4684a45f8",
+      "tested_at_utc": "2026-10-18T05:40:21.675309+00:00",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "examples/observe-subagents-offline/main_test.go"
+      ],
+      "coverage": "33 unchanged schema/generator roots; 154 definitions/397 types/744 round-trip cases; 170/11/85/1 registry plus 24 controls. Fixed-source E1 hashes/registry/schema separately verified using installed zstd CLI. No dependency download, model, real CLI, authentication or budget changes.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
+      "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
+    },
+    {
+      "id": "subagent05-current-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "protocol_version": "0.162.1",
+      "tested_at_utc": "2026-10-18T06:09:30.214353+00:00",
+      "tested_source_sha256": {
+        "tree.go": "794277c6336e86d54087f856bc89f85d144be22a0b5f9b829b2456f140636733",
+        "tree_current_contract_test.go": "1b9565d08c4679c815a15684f451bac464812b6ddd58eca377eec04c69d4cd8a",
+        "tree_contract_test.go": "9798c5ad95d398156c00d71851c485893f3384e867e80ed5c179768e1f680712",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "turn_contract_test.go": "6affc38113c59679be00caf62a880b1af146c6c6c621a7327a6331c85557c6a1",
+        "protocol/current_test.go": "3b44116f6a3bfce2278b49ddc391091e718ea98aba2c0ff922b3e0713a2d3fa5",
+        "protocol/schema.json": "4f129fdc2bbaebf4b1752dd8f7bfb22180849736d0c064a7ac0052b111e0733a",
+        "protocol/types_generated.go": "457c16cf9c94f1cad3ecefe206e1d3f988b05c7039fa0f457256421407568b1d",
+        "protocol/schema_generated_test.go": "f2d1be0ed7f2c646f7d65c335e1c9566fc08ac5b55adcdc67a40fea5cc7b2611",
+        "scripts/generate_protocol.py": "ef318a064a7aec34e6644f820e1d66a91434862be14662b1d1665b3358648645",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_current_contract_test.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go",
+        "tree_lifecycle_test.go",
+        "tree_bounds_requests_test.go",
+        "turn_contract_test.go",
+        "types/current_test.go",
+        "types/schema.json",
+        "types/types_generated.go",
+        "types/schema_generated_test.go",
+        "scripts/generate_protocol.py",
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
+      ],
+      "sdk_package_seconds": 44.095,
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "coverage": "Full current-version offline suite: 399 generated types/750 round-trip cases, current activity metadata, native turn-chain IDs, partial_answer, open CodexErrorInfo raw objects, existing managed-tree ordering/history/gaps/bounds/original authority, stdio/loopback WS/WSS and runnable example. Three live tests visibly SKIP. Current V2 Started is not evidence for Created; lineage Associated only.",
+      "revision_note": "Pre-commit current-version working tree; exact hashes identify tested changes. First current full race attempt failed existing prefix/construction timing assertions on shared loaded host, no race report. Original failed assertions passed two focused race repetitions and this resource-bounded full race; no timeout/assertion was weakened. Exact-delivery CI is independently reported in handoff.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
+    },
+    {
+      "id": "subagent05-current-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off GOMAXPROCS=2 mise exec -- go test -race -v -count=1 -p=1 ./...",
+      "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "protocol_version": "0.162.1",
+      "tested_at_utc": "2026-10-18T06:09:30.214353+00:00",
+      "tested_source_sha256": {
+        "tree.go": "794277c6336e86d54087f856bc89f85d144be22a0b5f9b829b2456f140636733",
+        "tree_current_contract_test.go": "1b9565d08c4679c815a15684f451bac464812b6ddd58eca377eec04c69d4cd8a",
+        "tree_contract_test.go": "9798c5ad95d398156c00d71851c485893f3384e867e80ed5c179768e1f680712",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "turn_contract_test.go": "6affc38113c59679be00caf62a880b1af146c6c6c621a7327a6331c85557c6a1",
+        "protocol/current_test.go": "3b44116f6a3bfce2278b49ddc391091e718ea98aba2c0ff922b3e0713a2d3fa5",
+        "protocol/schema.json": "4f129fdc2bbaebf4b1752dd8f7bfb22180849736d0c064a7ac0052b111e0733a",
+        "protocol/types_generated.go": "457c16cf9c94f1cad3ecefe206e1d3f988b05c7039fa0f457256421407568b1d",
+        "protocol/schema_generated_test.go": "f2d1be0ed7f2c646f7d65c335e1c9566fc08ac5b55adcdc67a40fea5cc7b2611",
+        "scripts/generate_protocol.py": "ef318a064a7aec34e6644f820e1d66a91434862be14662b1d1665b3358648645",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "subscription_management.go",
+        "tree_current_contract_test.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go",
+        "tree_lifecycle_test.go",
+        "tree_bounds_requests_test.go",
+        "turn_contract_test.go",
+        "types/current_test.go",
+        "types/schema.json",
+        "types/types_generated.go",
+        "types/schema_generated_test.go",
+        "scripts/generate_protocol.py",
+        "examples/observe-subagents-offline/main.go",
+        "examples/observe-subagents-offline/main_test.go",
+        "examples/observe-subagents-offline/expected.txt"
+      ],
+      "sdk_package_seconds": 220.345,
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "coverage": "Full current-version offline suite: 399 generated types/750 round-trip cases, current activity metadata, native turn-chain IDs, partial_answer, open CodexErrorInfo raw objects, existing managed-tree ordering/history/gaps/bounds/original authority, stdio/loopback WS/WSS and runnable example. Three live tests visibly SKIP. Current V2 Started is not evidence for Created; lineage Associated only.",
+      "revision_note": "Pre-commit current-version working tree; exact hashes identify tested changes. First current full race attempt failed existing prefix/construction timing assertions on shared loaded host, no race report. Original failed assertions passed two focused race repetitions and this resource-bounded full race; no timeout/assertion was weakened. Exact-delivery CI is independently reported in handoff.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
+    },
+    {
+      "id": "subagent05-current-model-unit",
+      "kind": "unit",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -count=1 -run 'TestTreeCurrentVersionMetadata|TestTurnEarlyEventsKeepResponseIdentity|TestCurrentOpenErrorInfo|TestGeneratedSchemaRoundTrips' ./...",
+      "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "protocol_version": "0.162.1",
+      "tested_at_utc": "2026-10-18T06:09:30.214353+00:00",
+      "tested_source_sha256": {
+        "tree.go": "794277c6336e86d54087f856bc89f85d144be22a0b5f9b829b2456f140636733",
+        "tree_current_contract_test.go": "1b9565d08c4679c815a15684f451bac464812b6ddd58eca377eec04c69d4cd8a",
+        "tree_contract_test.go": "9798c5ad95d398156c00d71851c485893f3384e867e80ed5c179768e1f680712",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e",
+        "turn_contract_test.go": "6affc38113c59679be00caf62a880b1af146c6c6c621a7327a6331c85557c6a1",
+        "protocol/current_test.go": "3b44116f6a3bfce2278b49ddc391091e718ea98aba2c0ff922b3e0713a2d3fa5",
+        "protocol/schema.json": "4f129fdc2bbaebf4b1752dd8f7bfb22180849736d0c064a7ac0052b111e0733a",
+        "protocol/types_generated.go": "457c16cf9c94f1cad3ecefe206e1d3f988b05c7039fa0f457256421407568b1d",
+        "protocol/schema_generated_test.go": "f2d1be0ed7f2c646f7d65c335e1c9566fc08ac5b55adcdc67a40fea5cc7b2611",
+        "scripts/generate_protocol.py": "ef318a064a7aec34e6644f820e1d66a91434862be14662b1d1665b3358648645",
+        "examples/observe-tree-offline/main.go": "5bd1592a5bd43fead899e684438a52bd4eee5c3d5b4abe0ee20b7ba277779cd0",
+        "examples/observe-tree-offline/main_test.go": "6fb77aa52316de6f03c000c4caf48d09ad374ffa0cc31daa3487e55265c560bf",
+        "examples/observe-tree-offline/expected.txt": "3aaaef7fd4404ca70341386cffe678af14e196a791a3ac4318b8b0f4388b4d43"
+      },
+      "test_files": [
+        "types/current_test.go",
+        "types/schema_generated_test.go",
+        "tree_current_contract_test.go",
+        "turn_contract_test.go"
+      ],
+      "coverage": "Current schema metadata/turn linkage/partial phase/open error fallback; 750 current synthetic round trips and public fake transport fixtures. Initial fixture-only nonexistent enum reference corrected before pass.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
+    },
+    {
+      "id": "subagent05-current-offline-gates",
+      "kind": "unit",
+      "status": "passed",
+      "evidence_level": "E2",
+      "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "tested_at_utc": "2026-10-18T06:09:30.214353+00:00",
+      "commands": [
+        "GOMAXPROCS=2 mise exec -- go test -race -v -count=2 -p=1 -run '^TestRemote(QueuedAnswerAdmissionAndCancellation|SecurityConstructionContext)$' .",
+        "mise exec -- go vet ./...",
+        "GOPROXY=off GOSUMDB=off mise exec -- go mod download",
+        "GOPROXY=off GOSUMDB=off mise exec -- go mod verify",
+        "python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v",
+        "python3 docs/protocol/verify_inventory.py",
+        "git diff --check"
+      ],
+      "test_files": [
+        "scripts/test_ci_checks.py"
+      ],
+      "coverage": "Six CI gate self-tests include current generator reproducibility and negative committed drift. Source bytes/registry/schema matched exact official pin; all 65 blobs independently matched official Git tree. Six Chinese Mermaid figures rendered and visually checked; 16 JSON lines parsed; local links and STC style checked. No model/auth/CLI upgrade.",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
+    },
+    {
+      "id": "subagent-v2-created-unit",
+      "kind": "unit",
+      "status": "passed",
+      "command": "GOPROXY=off GOSUMDB=off GOMAXPROCS=2 RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 mise exec -- go test -v -p=1 -count=1 ./...",
+      "test_files": [
+        "tree_v2_contract_test.go"
+      ],
+      "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "source_sha256": {
+        "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
+        "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
+      },
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
+      "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
+      "log_sha256": "54ec2a8a7657899b1caf8a8cea4a8829a5e0454185a83ac7c60a02c4d83ae107"
+    },
+    {
+      "id": "subagent-v2-created-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "mise exec -- go test -run '^TestTreeV2' -count=1 .",
+      "test_files": [
+        "tree_v2_contract_test.go"
+      ],
+      "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "source_sha256": {
+        "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
+        "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
+      },
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
+      "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run."
+    },
+    {
+      "id": "subagent-v2-created-race",
+      "kind": "race",
+      "status": "passed",
+      "command": "GOPROXY=off GOSUMDB=off GOMAXPROCS=2 mise exec -- go test -race -p=1 -count=1 ./...",
+      "test_files": [
+        "tree_v2_contract_test.go"
+      ],
+      "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "source_sha256": {
+        "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
+        "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
+      },
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
+      "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
+      "log_sha256": "4cf3cae1d279421eb4074d59a4db1032818add6c040ac9544f148c14efcd4f70"
+    }
+  ],
+  "verification_commands": [
+    {
+      "command": "mise exec go@1.26.9 -- go vet ./...",
+      "status": "passed",
+      "scope": "Final ticket 05 source/test tree committed unchanged at 86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f; chained after the successful five-repeat normal run, exit 0."
+    },
+    {
+      "command": "python3 docs/protocol/verify_inventory.py path/to/exact-official-source-bundle",
+      "status": "passed",
+      "scope": "Ticket 05 documentation documentation working tree; all 43 source files materialized with git show from exact official pin, then verified against preserved hashes, registries, and schema membership."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "scope": "Final ticket 05 documentation working tree."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go test -count=5 ./...",
+      "status": "passed",
+      "scope": "Final ticket 05 source/test tree committed unchanged at 86e4b30d5e6b8f72f08317cc903fd7e9b4a98b1f; exported-client package 85.144 seconds, protocol unit package 0.326 seconds, examples compiled. Earlier failed attempt and fixes retained in mock record."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go mod verify",
+      "status": "passed",
+      "scope": "Final ticket 05 dependency graph; exact module/version and sums recorded in dependencies.json and go.sum."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go vet ./...",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go mod download",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go mod verify",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "uv run --no-project docs/protocol/verify_inventory.py",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "mise exec go@1.26.9 -- go test -v -count=1 ./tests/live",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "JSON/local Markdown links, privacy-path scan and budget/commit consistency",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "mise exec -- go vet ./...",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "mise exec -- go mod download",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "mise exec -- go mod verify",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "python3 docs/protocol/verify_inventory.py",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "mise exec -- bash scripts/check_generated.sh",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    }
+  ],
+  "model_budget": {
+    "limit": 9,
+    "used": 9,
+    "remaining": 0,
+    "mac01": 2,
+    "mac02": 5,
+    "mac03": 2,
+    "mac04": 0,
+    "token_usage": "not measured",
+    "monetary_cost": "not measured"
+  },
+  "untriggered_live_scenarios": {
+    "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-interactions-interrupt.md",
+    "delivery_commit": "b6a42a4a3746488464fc9ee19dedc8f3d9e70346",
+    "command_approval": "untriggered; command effect passed separately",
+    "file_approval": "untriggered; no file-effect pass",
+    "permissions_approval": "untriggered; no expansion",
+    "turn_interrupt": "untriggered; guard unmatched, RPC not dispatched, no interrupted terminal or stopped-process pass"
+  },
+  "subagent_validation": {
+    "evidence_level": "E1/E2 only",
+    "current_cli_version": "0.162.1",
+    "current_source_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+    "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
+    "revision_note": "Current follow-up working tree hashes in subagent05-current-*; delivery SHA/hosted CI reported in handoff. Prior schema records remain historical.",
+    "report": "../subagent-compatibility.md",
+    "live": "Current subagent E3/E4 not run. Read-only --version is binary identity, not workflow validation.",
+    "tested_sdk_source_commit": "1f11440e157cf7b31ab89cdde85d540542950ada"
+  },
+  "historical_tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
+  "historical_hosted_ci": {
+    "status": "passed",
+    "workflow": ".github/workflows/ci.yml",
+    "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
+    "run_id": 39088440655,
+    "url": "https://github.com/zoumo/codex-sdk-go/actions/runs/39088440655",
+    "verified_updated_at": "2026-10-18T02:02:02Z",
+    "scope": "Independently read back completed/success. Offline only. Final documentation delivery CI must be checked at its own exact HEAD and is returned in handoff."
+  },
+  "subagent_v2_creation": {
+    "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
+    "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
+    "revision_note": "Validated source hashes in subagent-v2-created-* records; final delivery SHA and hosted Linux/macOS CI verified in handoff. Native types/schema unchanged.",
+    "live": "E3/E4 not run; no model/authentication changes."
+  },
+  "native_subscription_migration": {
+    "base": "885bf4de79c9bde75c342c807a9e3e45f098187c",
+    "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/native-subscription.md",
+    "note": "Historical source hash keys remain unchanged. test_files paths follow relocated current coverage; direct-native events replace the public Tree wrapper. Official generated native JSON and sanitized recordings are unchanged."
+  }
+}

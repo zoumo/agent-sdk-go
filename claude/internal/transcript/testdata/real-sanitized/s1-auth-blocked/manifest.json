@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "story_id": "S1",
+  "provenance": "real-sanitized",
+  "outcome": "authentication-blocked",
+  "evidence_level": "real CLI startup and failed root turn; no successful model completion or local tool execution",
+  "cli_version": "2.1.258",
+  "cli_sha256": "0d036f0b635d239844e6df6996bc05263fe305df505b073c71f79f83668ea35a",
+  "sdk_base": "282f85aed93c571d4aaa500751d6786b021897b6",
+  "documentation_commit": "282f85aed93c571d4aaa500751d6786b021897b6",
+  "recorder_version": "1 (pre-hardening attempt; future attempts reject startup hooks and native error results)",
+  "sanitizer_version": 1,
+  "model_advertised": "claude-opus-5[1m]",
+  "model_executed": false,
+  "prompt_sha256": "fc8af543937b32d70776ce4de0a91620b1f57f7c30b6dbbb3b7aac8ce139a8b5",
+  "input_sha256": "dcf7d0378a8e4f73292ceb621c258ebd4ae42b709fa70c57f5705a38318f0c19",
+  "launch_options": [
+    "restricted",
+    "safe-mode",
+    "no-session-persistence",
+    "disable-slash-commands",
+    "strict-mcp-config (empty)",
+    "no-chrome",
+    "setting-sources empty",
+    "tools Read,Write",
+    "settings disableAllHooks and ask Read/Write",
+    "minimal synthetic system prompt",
+    "max-budget-usd 1"
+  ],
+  "scope": "One stdio epoch. Client/server wire captured by proxy; one SDK Receive consumer. Stderr separate, zero bytes. Capture ordinal reflects recorder observation, not universal causality.",
+  "bounds": {
+    "root_attempts_max": 3,
+    "child_max": 1,
+    "scenario_seconds": 120,
+    "model_activity_seconds_max": 480,
+    "wire_bytes_max": 2097152,
+    "stderr_bytes_max": 262144,
+    "automatic_retries": 0
+  },
+  "actual": {
+    "root_attempts": 1,
+    "model_requests_conservatively_counted": 1,
+    "model_api_execution_observed": false,
+    "children": 0,
+    "seconds": 2.241444834,
+    "permission_callbacks": 0,
+    "wire_frames": 11,
+    "stderr_bytes": 0,
+    "sdk_cleanup": "Close returned nil, recorder/proxy exited 0",
+    "cli_usage": {
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "cli_total_cost_usd": 0,
+    "independent_bill_verification": null,
+    "cleanup_verified": "recorded CLI PID no longer exists; no owned recorder/proxy command remains",
+    "wire_native_json_bytes": 7497,
+    "raw_cleanup": "private raw, observations, stderr and temporary mapping copies deleted after replay/scan/process verification"
+  },
+  "end_reason": "Native error result followed by native idle; explicit Close. Original recorder returned zero because it only checked SDK transport errors; fixed without another live attempt.",
+  "observed": {
+    "initialize_forwarding_request": 1,
+    "startup_hook_started": 2,
+    "startup_hook_response": 3,
+    "initialize_response": 4,
+    "user_prompt": 5,
+    "running": 6,
+    "init": 7,
+    "requesting": 8,
+    "authentication_failed_assistant": 9,
+    "error_result_with_success_subtype": 10,
+    "idle_after_result": 11
+  },
+  "not_observed": [
+    "successful S1 model answer",
+    "Read/Write tool_use/tool_result",
+    "permission request/reply",
+    "stream deltas",
+    "subagent creation or forwarding",
+    "background task boundary"
+  ],
+  "blocked": [
+    "S2: no usable authentication in replacement environment; not attempted",
+    "S3: child count/depth/tool restrictions not proven; not attempted",
+    "safe-mode still emitted SessionStart hook events; future recorder rejects before sending a user turn"
+  ],
+  "privacy": {
+    "raw_published": false,
+    "path_root": "/fixture/project",
+    "runtime_socket": "/fixture/runtime/socket",
+    "pid": 1000,
+    "native_ids": "typed string mapping; equality classes and field occurrences verified; original values not retained",
+    "fields_dropped": [],
+    "stderr": "empty; file not published",
+    "scan": "whitelist + secret, header, home-path and email canaries passed; all published fixture files scanned",
+    "timestamps": "ISO string type preserved; reset to neutral 2000 epoch, retain relative offsets"
+  },
+  "limitations": [
+    "S1 minimum success criterion remains unmet. Ticket is partial/blocked.",
+    "This is a real CLI failure sample, not model-generated output. Native assistant model is <synthetic>.",
+    "CLI account tokenSource=none proves only this minimal environment had no usable auth; no credential inspection or auth change was performed.",
+    "Default CI replays this sample only; it does not repair the failed recording.",
+    "Subscription billing is not independently measurable; reported cost/usage is native telemetry.",
+    "No official model output token cap was available in inspected CLI help; capture bytes and wall time were bounded."
+  ],
+  "wire_sha256": "605842e0f04f8a387056121e39caacd2168d078387f5417cd4aa449933b355c7",
+  "files": {
+    "wire.jsonl": "605842e0f04f8a387056121e39caacd2168d078387f5417cd4aa449933b355c7",
+    "id-relations.json": "bb1f19dc6f6764f2beea669d28c31a0c3ac976b70da8d46e23f31397795077b8",
+    "expected-observations.json": "13c6c0cad1ecfcb7c2158bea4428671e08b6aa9418a67a267fb743abe486ee43",
+    "transport.json": "6a7241871aca398f4831c1c421a4e182ab296511d4bd5ccd5d91be2f1ab38cb2"
+  }
+}

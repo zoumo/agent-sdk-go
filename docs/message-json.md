@@ -118,13 +118,11 @@ over a branch's fields. Prefer editing metadata on `Event` and subtype on the
 system/result view. Content block `Type` and event `Type` are mandatory and
 cannot be removed by a field override.
 
-Ticket03 extends this contract with the detached permission and question data
-below. Answer handles, cancellation, lifecycle and transport remain in the
-runtime. No new control sending method, generator, hosted MCP, hook or permission
-persistence API is introduced. No real Agent, account, credential or Mac test
-is part of this evidence.
+Detached permission and question data follow the same JSON contract. Answer
+handles, cancellation, lifecycle and transport remain in the runtime. The data
+codecs supply no control sending, hosted MCP, hook or permission persistence API.
 
-## Detached permission data (ticket03)
+## Detached permission data
 
 `PermissionMetadata` describes the **nested** `can_use_tool` request, including
 tool name/input/use ID, agent ID, suggestions, blocked path, decision reason and
@@ -172,7 +170,7 @@ the data codec, not additional runtime answer options or permission persistence.
 The runtime continues to reject contradictory/invalid answers after consuming
 the sole attempt, with the existing visible failure semantics.
 
-## AskUserQuestion data and answering (ticket03)
+## AskUserQuestion data and answering
 
 `AskUserQuestionInput` contains `Questions []Question`, optional `Answers`
 and optional general `Response`. Questions expose text, header, ordered options

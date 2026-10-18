@@ -19,7 +19,7 @@ Official TypeScript npm 0.3.302 was used for wire-schema cross-checking only;
 it is not MIT. No reference implementation source is redistributed.
 Detailed source/license review: docs/type-sources.md.
 
-Ticket03 additionally cross-checks detached permission/control schemas and
-AskUserQuestion data against those pinned SDK sources and the official
+Detached permission/control schemas and AskUserQuestion data were also
+cross-checked against those pinned SDK sources and the official
 Agent SDK user-input documentation. These are source-reviewed and mock-tested
 contracts, not a claim of live CLI interoperability.

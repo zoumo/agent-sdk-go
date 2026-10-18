@@ -1,15 +1,15 @@
-# Subagent capability matrix (tickets 01–06)
+# Subagent capability matrix
 
 Current creation target: **CLI 2.1.258**, returned by the installed
-`/Users/jim/bin/claude --version` on 2026-10-18. Official SDK **0.3.258** manifest
+CLI `--version` on 2026-10-18. Official SDK **0.3.258** manifest
 and declarations were rechecked for this exact version. No upgrade or model
-call was made. See [ticket06 evidence](evidence/subagent-ticket06.md).
+call was made. See [source provenance](type-sources.md).
 
 **Created is conditionally implemented.** It is a distinct sdk-derived fact
 under the [foreground or corroborated successful result criteria](subagent-events.md#creation-evidence).
 Associated remains observation only. No live subagent capability is verified.
-Earlier tickets' newer schema fields remain losslessly preserved; they are not
-claimed as emitted by current 2.1.258. This ticket adds no old-version expansion.
+Newer schema fields remain losslessly preserved; they are not claimed as emitted
+by current 2.1.258.
 
 ## Versions and evidence levels
 
@@ -21,12 +21,11 @@ claimed as emitted by current 2.1.258. This ticket adds no old-version expansion
 | D | [Hooks](https://code.claude.com/docs/en/hooks#subagentstart) and [Python SystemMessage](https://code.claude.com/docs/en/agent-sdk/python#systemmessage), reviewed 2026-10-18 | Mutable official docs; E1 only |
 | E1 | Read source, declarations or documented contract | Does not mean tests ran |
 | E2 | Executed original synthetic codec / subprocess / transport tests | Includes the separately reported race suite; no actual provider process |
-| E3 | Actual provider process with a mock backend | **Not run for this subagent round** |
-| E4 | Real model end-to-end | **Not run for this subagent round** |
+| E3 | Actual provider process with a mock backend | **Not run for subagent validation** |
+| E4 | Real model end-to-end | **Not run for subagent validation** |
 
 The installed version is verified as 2.1.258 by `--version`; no installed CLI
-subagent behavior is live-verified. Older
-partial live checks of other APIs in the main compatibility inventory do not
+subagent behavior is live-verified. Partial live checks of other APIs in the main compatibility inventory do not
 transfer here. Go **1.26.9**, standard library only. Source pins, hashes and
 licenses are retained in [type sources](type-sources.md) and [NOTICE](../NOTICE).
 
@@ -53,7 +52,7 @@ an arbitrary installed CLI emits it or accepts the option.
 | Background task snapshot | T `background_tasks_changed` REPLACE level signal | Raw Tasks entries preserved | Session state codec / run terminal tests; offline example empty snapshot before terminal | Replace application snapshot; process-local, asynchronous, no promised startup snapshot; absence is not terminal/deletion |
 | History / resume | P explicit --resume; T history queries are file helpers | Caller-verified SubagentOptions.History association seeds; explicit ResumeID only | `TestTreeHistorySeedAndFreshEpoch` | No native history query API, transcript replay, live poll, or Created; permanent history-gap |
 | Permission / question | P/T can_use_tool metadata and response | Original sole PermissionRequest; RequestID/ToolUseID/Epoch/context retained; default deny and cancellation unchanged | `TestTreePermissionUsesOriginalHandleAfterParentResult`, question/queue/cancel tests in `tree_bounds_test.go` | Relationship metadata has no answer authority; no automatic approve or synthetic question responder |
-| Raw / unknown / null | T wire envelopes | Native.Raw byte preservation; unknown fields/types, absent/null/value codecs | Single-layer; `TestTaskLineageFieldsLosslessNullAbsentEdits`, `TestTreeUnknownSystemSubtypeNeedsSourceEvidence`, envelope tests | Receiving raw data does not implement a new native action |
+| Raw / unknown / null | T wire envelopes | Event.Raw byte preservation; unknown fields/types, absent/null/value codecs | Single-layer; `TestTaskLineageFieldsLosslessNullAbsentEdits`, `TestTreeUnknownSystemSubtypeNeedsSourceEvidence`, envelope tests | Receiving raw data does not implement a new native action |
 | UUID dedup / no-ID deltas | T known envelope UUID; SDK scope policy | Bounded epoch/session/source/task/run/type identity cache | `TestTreeUUIDDedupFullScopeAndNoIDPreservation`, `TestTreeNoRunUUIDNotSuppressedAcrossObservedRunBoundary` | No text/hash dedup, no cross-epoch exactly-once, unknown system subtypes not deduped, partial and complete distinct |
 | Unresolved attribution | SDK observation contract | Bounded wait/count/bytes; diagnostics then unresolved Native; later relation only, no replay | `TestTreeUnresolvedExpiryPreservesRawAndOnlyEnrichesLater`, capacity/order fixtures | Buffering may change local delivery order; scope unresolved is not a proven child |
 | Resource / control isolation | Existing Client limits plus SubagentOptions | Positive graph/depth/run/dedup/creation-evidence/fanout/held bounds; explicit ResourceLimit; controls bypass relation wait | Bounds, full-queue Interrupt, original question and Close race fixtures | Terminal exhaustion closes owned client; not an independent detachable subscription |
@@ -111,7 +110,7 @@ explicit resume/history creates incomplete/history-gap. Open a new observation
 explicitly after disconnect: it has a new epoch and request handles. Neither local
 sequence nor native session ID supplies a replay cursor. No request, permission
 answer or user input is automatically replayed. See the [API and bounds](subagent-events.md)
-for all defaults and ceilings and the [actual validation evidence](evidence/subagent-ticket06.md).
+for all defaults and ceilings and the [source provenance](type-sources.md).
 
 ## Sources and license boundary
 
@@ -120,7 +119,7 @@ patch terminals and keeping stdin/control open after result. No Python source or
 fixtures were copied. TypeScript 0.3.302 is **not MIT**: its declarations were
 cross-checked as schema evidence only; no package implementation or declarations
 are redistributed. Original Go implementation, example and fixtures remain
-Apache-2.0; no new dependency is added. See [type sources](type-sources.md).
+Apache-2.0; no third-party dependency is used. See [type sources](type-sources.md).
 
 The [ACP Subagent Sessions RFD at 014b1391ee8a49f3fb7a5536cd4a6cce4116825c](https://github.com/agentclientprotocol/agent-client-protocol/blob/014b1391ee8a49f3fb7a5536cd4a6cce4116825c/docs/rfds/subagents.mdx)
 is design context only: a draft, not a stable standard, runtime dependency or

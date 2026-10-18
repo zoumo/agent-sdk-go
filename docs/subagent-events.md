@@ -1,8 +1,8 @@
-# Subagent forwarding and lineage (tickets 01–06)
+# Subagent forwarding and lineage
 
 See the [per-capability compatibility matrix](subagent-compatibility.md),
 [runnable offline example](../examples/subagents-offline/main.go) and
-[ticket06 validation evidence](evidence/subagent-ticket06.md). Created is
+[source provenance](type-sources.md). Created is
 conditional for exact CLI 2.1.258, the current installed version. `--version`
 inspection and static source review do not constitute live subagent validation.
 
@@ -11,8 +11,7 @@ inspection and static source review do not constitute live subagent validation.
 `SubagentAssociated`, `SubagentCreated`, and `ObservationState` values.
 `Options.Subagents` configures bounds/history only; zero values still manage the stream.
 There is no extra CLI flag, child process, subscription, hook, or automatic resume.
-See the [breaking migration](default-managed-migration.md) and
-[user-story sequences](event-sequences.md).
+See the [user-story sequences](event-sequences.md).
 
 ```go
 client, err := claude.Open(ctx, claude.Options{
@@ -67,7 +66,7 @@ is independent of association and the observer never reports complete forwarding
 ## Creation evidence
 
 The creation contract targets **exactly CLI 2.1.258**, inspected at
-`/Users/jim/bin/claude` on 2026-10-18. Official SDK 0.3.258 declarations and
+the installed executable on 2026-10-18. Official SDK 0.3.258 declarations and
 manifest, plus read-only static inspection of that local binary, support the
 criteria below. No model invocation, upgrade or auth change was made. Other
 version strings retain observation/Raw but cannot establish Created. This does
@@ -94,7 +93,7 @@ the same caller as the request. Conflicting evidence poisons that invocation;
 graph conflicts conservatively disable all later creation claims in this epoch.
 
 Created confirms that creation occurred; it supplies no invented timestamp.
-Associated precedes attributed Native as before. Child Native continues while
+Associated precedes attributed native events. Child Native continues while
 waiting for background confirmation, including after a parent result. A late
 Created can therefore follow child text when later task/ancestry evidence completes
 the proof. In current 0.3.258, a root turn result follows that turn's
@@ -108,14 +107,14 @@ messages remain independently delivered.
 
 Current 2.1.258 declarations do **not** expose run_id, parent_task_id or message
 agent_id. Created has empty Source.RunID and `RunScope: legacy-unknown`; it
-uses observed tool ancestry. Earlier tickets retain optional codecs/Raw for
-additional native fields and their offline fixtures, but those newer fields are
+uses observed tool ancestry. Optional codecs/Raw preserve
+additional native fields covered by offline fixtures, but those newer fields are
 not a claim about current CLI emission. Missing identity/ancestry remains a
 conservative creation gap. The observer makes no live validation claim.
 
 ## Identity, lineage and runs
 
-`SystemEvent` adds optional `RunID`, `ParentTaskID`, `SpawnDepth` and
+`SystemEvent` includes optional `RunID`, `ParentTaskID`, `SpawnDepth` and
 `IsBackgrounded` pointers. Existing `TaskType` and raw `Patch` remain unchanged.
 Missing/null/value and unknown patch members round-trip through the existing
 Raw/Fields codec, including false and zero. Native frames are never rewritten.
@@ -173,7 +172,7 @@ no text, usage or fees are aggregated.
 ## Evidence and compatibility boundary
 
 Current creation baseline: official TS SDK **0.3.258**, whose manifest names
-CLI **2.1.258**. See [source hashes](evidence/subagent-ticket06.md). The rest of
+CLI **2.1.258**. See [source hashes](type-sources.md). The rest of
 the existing observation API was originally implemented against the following
 newer schema reference; this is not a current-CLI emission claim.
 
@@ -186,7 +185,7 @@ source are E1 evidence, not proof of installed CLI behavior.
 
 | Capability | SDK / offline evidence | Runtime evidence |
 | --- | --- | --- |
-| Initialize forwarding option | Implemented; fake process captures false omission, true and automatic enabling | Unverified |
+| Initialize forwarding option | Implemented; synthetic process captures automatic enabling | Unverified |
 | One owned root stream, child text/thinking/tools, Raw and permission handle | Implemented; original synthetic subprocess fixtures (E2), including race suite | No live CLI/model test |
 | Associated before attributed native | Recursive same-session task/tool graph; ancestor ordering and later enrichment (E2 fixtures) | Unverified |
 | Created | Exact 2.1.258 foreground/corroborated-result rules; original subprocess fixtures (E2) | No live subagent test |
@@ -222,7 +221,7 @@ The graph/alias/tool-owner/non-agent index is bounded by `SubagentOptions.MaxNod
 negative/above-ceiling values fail before startup. Alias entries count against
 the graph bound; no stale identity history is silently evicted. Overflow uses
 the owned client's terminal ResourceLimit path and emits incomplete plus the
-already accepted native frame with unresolved scope. Wrapper fanout and pending
+already accepted native frame with unresolved scope. Derived-event fanout and pending
 source attribution have their own bounds below; the underlying bounded event/control
 transport remains unchanged. A disconnect reports incomplete, then the original
 terminal error; explicit Close reports closed, never child success.
@@ -232,18 +231,18 @@ The retained official TS 0.3.302 declaration file SHA256 is
 Its task declarations specify same-task run ordering and stable task identity
 across resume (lines 6145–6271); assistant/user task mapping is at lines 3702
 and 6475. These are E1 declaration evidence, not live interoperability tests.
-All new fixtures in `tree_lineage_test.go` are original synthetic peers through
+The fixtures in `tree_lineage_test.go` are original synthetic peers through
 Open/Send/Receive (E2); no upstream implementation was copied.
 
 Offline validation uses Go 1.26.9 through mise, `CLAUDE_GO_LIVE=0`,
 `GOPROXY=off`, `GOSUMDB=off`, `GOTOOLCHAIN=local`, `GOENV=off`, and a temporary
 GOCACHE. Commands: `go test -count=1 -timeout 180s ./...`,
 `go test -race -count=1 -timeout 300s ./...`, and `go vet ./...`.
-All fixtures re-execute the test binary under an isolated HOME; no installed
+Synthetic subprocess fixtures re-execute the test binary under an isolated HOME; no installed
 CLI, real model, authentication change, or account probe is used.
 
 
-## Result, waiting, idle, stopping and identity (ticket 03)
+## Result, waiting, idle, stopping and identity
 
 Keep these independent dimensions in the UI and application state:
 
@@ -328,8 +327,8 @@ a fresh run/dedup ledger and no reusable old request handles. Disconnect/EOF emi
 incomplete/stream-ended followed by the original client error; explicit Close
 emits closed/client-closed followed by EOF. Neither path invents run success.
 
-Ticket 03 adds original synthetic subprocess tests in tree_terminal_test.go and
-extends the result→original permission handle→patch killed test. Coverage includes
+Original synthetic subprocess tests in tree_terminal_test.go cover the
+result→original permission handle→patch killed sequence. Coverage includes
 both terminal families, duplicate terminals, late/unknown/paused/legacy runs,
 background snapshot ordering, native idle without inferred task completion,
 receive timeout, disconnect, history seeds, fresh epochs and run exhaustion.
@@ -337,7 +336,7 @@ Existing close-race tests remain part of the full race suite. These are E2
 observations only. No real CLI/model, installed runtime interoperability,
 authentication change or transcript completeness is claimed.
 
-## Bounded attribution and original requests (ticket 04)
+## Bounded attribution and original requests
 
 | SubagentOptions limit | Default | Ceiling |
 | --- | --- | --- |
@@ -356,17 +355,17 @@ A native frame with unresolved attribution waits for later graph evidence.
 Associations/enrichments precede attributed delivery. Once a held frame resolves,
 its private attribution gains the proven source/parent while Event.Raw, original native IDs,
 run metadata, text and usage remain intact. Unrelated root/control frames can pass
-held frames. Sequence means local delivery order, and buffering can change delivery
+held frames. Derived Sequence means local notification order, and buffering can change delivery
 order relative to native arrival. There is no server cursor or replay guarantee.
 Unknown events without source identity remain unscoped and are never buffered.
 Control requests/cancellations bypass association waiting; the sole answer authority
 is still the original PermissionRequest delivered by the existing worker pool.
-Wrapper/metadata copies have no answer method or authority.
+Relationship metadata copies have no answer method or authority.
 
 The association wait starts when Client.Receive accepts a frame. It advances only
 local attribution, never a task lifecycle. Expiration produces
 `ObservationState(incomplete, unresolved-source)` followed by the unchanged Native
-with `Scope: unresolved` / `Reason: unresolved-source`. Later evidence enriches the
+without attaching SDK scope/reason fields to it. Later evidence enriches the
 association without replaying already delivered Native. Receive cancellation
 preserves held frames. No extra reader/timer goroutine, process, RPC or auto-answer
 is introduced. Expiration is observed on Receive, and Close/EOF releases held
@@ -380,7 +379,7 @@ association/diagnostic/Native fanout reserves MaxPendingRecords atomically. If i
 cannot fit, none of that input's staged derived records is published. Instead a
 fixed diagnostic plus a single reserved raw frame reports incomplete/fanout-limit
 and unresolved attribution. The graph is frozen after a failed fanout; remaining
-accepted transport frames drain with unresolved scope. Historical seed fanout
+accepted transport frames drain as unchanged native events. Historical seed fanout
 exhaustion fails Open before spawning its process. Emergency storage is constant
 (one reserved input plus one released held frame), independent of the full fanout
 queue, so diagnostics cannot be hidden by a full queue. Done and Err expose
@@ -394,8 +393,9 @@ request/tool/agent IDs, automatically approves, or changes default deny and unkn
 control errors. Native cancellation, caller answer cancellation, Close and a fresh
 epoch retain the existing single-use handle rules. Parent result is still only
 its native answer/usage boundary; child text/thinking, partial/complete snapshots
-and task usage stay separate with source/scope and UsageScope unknown. No totals
-are accumulated.
+and task usage stay separate. Derived notifications retain relationship
+source/scope and unknown UsageScope; native events carry only native fields.
+No totals are accumulated.
 
 Original synthetic `tree_bounds_test.go` peers cover attribution before/after the
 wait deadline, receive cancellation, count/byte/single-frame exhaustion, atomic

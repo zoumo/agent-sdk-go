@@ -1,14 +1,18 @@
 # 按用户故事理解事件流：CLI 2.1.258
 
 本页依据固定的官方 SDK **0.3.258** 声明和已记录的 CLI **2.1.258** 静态证据。
-[来源与限制](evidence/subagent-ticket06.md)保留原核查时点。本票只运行原创合成 peer，
-**以下均为契约示意，不是真实模型录制**。每个故事可作为后续独立真实验证票的操作清单；
+[来源与限制](type-sources.md)记录固定版本。本页由原创合成 peer 覆盖，
+**以下均为契约示意，不是真实模型录制**。每个故事可作为后续真实验证的操作清单；
 实际事件是否出现、身份字段、后台输出及精确先后均标记为**待真实验证**，不得把合成通过写成 live 通过。
 
 唯一入口为 `Open(ctx, Options)`，返回 `*Client`；唯一 `Receive` 返回 `ReceivedEvent`。
 `Open` 始终在 initialize 请求 `forwardSubagentText:true`，拒绝则启动失败。
 接受应答仍只首发 `ObservationState(unverified, forwarding-not-confirmed)`，不证明子流完整。
 `Options.Subagents` 仅设置资源和历史，不选择 raw/managed 模式。
+
+图中 Native 表示直接交付的 `Event`，不是公开包装类型。原生事件不带 SDK `Source`、
+`Parent`、`Scope` 或 `Sequence`；这些字段仅在独立派生记录中。UI 根据原生身份字段和
+关联记录组织面板，身份不足时保留未归属状态。
 
 图中 **N** 是直接返回的 CLI 原生 `Event`，保留精确 `Event.Raw`；**D** 是独立的便利事件，
 包括 SubagentAssociated、SubagentCreated、ObservationState，不发给模型或 CLI。
@@ -77,7 +81,7 @@ sequenceDiagram
 
 **状态与输出：** 用 tool_use_id 匹配，不按工具名匹配。user envelope 的 `tool_use_result` 是结构化
 工具输出，`message.content` 中 tool_result.content 是给模型的内容，两者分别读取。
-普通工具不产生 SubagentCreated。工具调用所在 Native 的 Source 决定显示在根还是子任务面板。
+普通工具不产生 SubagentCreated。用原生工具/任务身份及派生关联记录决定根或子任务面板；身份不足时不猜测。
 
 **禁止推断：** assistant tool_use 不是权限句柄；出现 Read/Bash 不证明正在等待用户，也不证明已执行。
 
@@ -163,7 +167,7 @@ sequenceDiagram
     G-->>A: D Associated A 与 B（Created 另需证明）
     G-->>A: Native 原始证据
     C-->>G: N A 子消息含 tool_use spawnG
-    G-->>A: Native Source=A
+    G-->>A: Native 原生身份指向 A
     C-->>G: N G task_started tool_use_id=spawnG
     G-->>A: D Associated G，Parent=A
     G-->>A: Native G 任务证据
@@ -275,7 +279,7 @@ sequenceDiagram
         G-->>A: Native 已归属子文本
     else 等待或资源边界耗尽
         G-->>A: D ObservationState incomplete
-        G-->>A: Native unresolved，保留 Raw
+        G-->>A: Native 保留 Raw，归属仍未知
     end
     C-->>G: N 可靠原生身份的重复帧
     Note over G: 当前 epoch 与来源范围去重
@@ -285,7 +289,7 @@ sequenceDiagram
 
 **何时结束：** 归属等待结束不是任务结束；资源耗尽可能使连接终止，但仍须排空已接纳 Native 与终止错误。
 
-**状态与输出：** Sequence 只是本地交付顺序，不是原生全局顺序或恢复 cursor。后续身份可补充关联而不重播文本。
+**状态与输出：** 派生记录的 Sequence 只是本地通知顺序，不是原生全局顺序或恢复 cursor。后续身份可补充关联而不重播文本。
 图、证据、去重、run、held、fanout 和 transport 均有界；耗尽显式报告，不能静默丢失后报告完整。
 已接纳 Native 的 fallback 保留原内容；未知 type/subtype/field/block 继续留在 Raw。
 
@@ -331,14 +335,14 @@ sequenceDiagram
 [原创合成示例](../examples/subagents-offline/main.go)实际输出 13 条 Native、2 条 Created，覆盖前台孙任务、
 后台晚确认、父 result 后子文本、patch-only killed 和显式 Close。它证明 SDK 的处理逻辑，不能证明真实 CLI 发射顺序。
 
-后续独立真实验证票应逐故事记录：明确用户输入/审批动作、CLI 与 SDK 精确版本、未改写的原生 frame、
+后续真实验证应逐故事记录：明确用户输入/审批动作、CLI 与 SDK 精确版本、未改写的原生 frame、
 对应派生记录、结束策略、缺失事件及环境开关；发布前去除敏感信息并区分原件与脱敏副本。
 后台命令的输出可见性、session idle 与 bgwait 的关系、并行嵌套的真实身份/交错均仍待验证。
-本票没有运行真实 CLI/模型，没有修改认证或升级 CLI。
+这些故事尚未经过真实 CLI/模型验证。
 
 完整字段与边界见 [API 与资源界限](subagent-events.md)、[能力矩阵](subagent-compatibility.md)
-和 [默认托管 API 迁移](default-managed-migration.md)。
+和 [API 对照](api-comparison.md)。
 
 ## 有限真实尝试的补充证据
 
-后续[独立录制票](record-replay.md)只取得一次 CLI 2.1.258 认证失败样本，未取得成功模型/工具或子流证据。实际 result 的 `subtype=success` 与 `is_error=true` 同时出现，且随后发出原生 idle。因此判断成功还必须检查错误字段；初始化接受、result subtype 和 idle 都不能单独证明模型工作成功。以上九故事的成功路径、工具与子任务交错仍不因该失败样本升级为真实验证通过。
+后续[录制样本](record-replay.md)只取得一次 CLI 2.1.258 认证失败样本，未取得成功模型/工具或子流证据。实际 result 的 `subtype=success` 与 `is_error=true` 同时出现，且随后发出原生 idle。因此判断成功还必须检查错误字段；初始化接受、result subtype 和 idle 都不能单独证明模型工作成功。以上九故事的成功路径、工具与子任务交错仍不因该失败样本升级为真实验证通过。

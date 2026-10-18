@@ -4,6 +4,14 @@ An experimental, independent native Go client for a locally installed Claude Cod
 
 **Experimental core implemented; not production-validated. Live Claude CLI compatibility: UNKNOWN.** See the [canonical compatibility matrix and complete official feature inventory](docs/compatibility.md) for implemented APIs, synthetic/race evidence, and unsupported features. The current CLI target is **2.1.258**, with official TypeScript contract **0.3.258**. The broader schema reference is the official Python SDK at [`f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab`](https://github.com/anthropics/claude-agent-sdk-python/tree/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab), which references CLI 2.1.302. Synthetic tests do not establish real runtime interoperability or official endorsement.
 
+## Documentation
+
+- [API comparison and examples](docs/api-comparison.md), [message JSON](docs/message-json.md)
+- [Compatibility and limitations](docs/compatibility.md), [type/version provenance](docs/type-sources.md)
+- [Subagent API and bounds](docs/subagent-events.md), [capability matrix](docs/subagent-compatibility.md)
+- [Event sequences / 用户故事](docs/event-sequences.md), [architecture](docs/design/sdk-design.md)
+- [Testing and CI](docs/ci.md), [offline recorded replay](docs/record-replay.md), [manual live checklist](docs/live-compatibility.md)
+
 ## Implemented core
 
 - Local process startup with literal argv, explicit CLI path/workdir/model, bounded and correlated initialization
@@ -20,7 +28,7 @@ The typed Go views are handwritten, with raw JSON preserving unknown exposed-eve
 
 ## Usage
 
-You must install and configure Claude Code separately. Running this example can use your configured account and incur model costs. The SDK's own tests never invoke the real CLI.
+You must install and configure Claude Code separately. Running this example can use your configured account and incur model costs. Default offline tests never invoke the real CLI.
 
 ```go
 package main
@@ -70,7 +78,7 @@ A result ends one turn, not the process. Always close the client. `Done` is inde
 
 Incoming `can_use_tool` requests are denied when no permission handler is configured. This is not a sandbox: CLI settings, previously granted permissions and operations that do not prompt still apply. An assistant `AskUserQuestion` content block is observable data and causes no synthetic reply.
 
-`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, 128 queued events, 4 MiB per frame, 32 pending outbound controls, 32 queued automatic responses, 32 queued permission-handler jobs, 128 unanswered incoming controls, 4 concurrent permission handlers, 4,096 distinct incoming control/cancellation IDs per connection, and an 8 KiB stderr tail. Request-ID history is never evicted; exhaustion terminates the connection rather than reviving stale requests. Zero-valued fields select defaults. Incoming overflow terminates the connection visibly, retaining only already accepted events. Oversized local sends and excess pending outbound controls are rejected before writing and do not close the connection. Values above documented [validated resource ceilings](docs/compatibility.md#resource-and-shutdown-contract) are rejected before process startup. Linux subprocess/race tests verify direct-child reaping and process-group teardown, including descendants holding stdout and descendants that close their pipes. Other platform runtimes are unverified; non-POSIX builds kill only the direct child, and escaped process groups are outside the guarantee. Close never waits for arbitrary user callbacks that ignore cancellation.
+`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, 128 queued events, 4 MiB per frame, 32 pending outbound controls, 32 queued automatic responses, 32 queued permission-handler jobs, 128 unanswered incoming controls, 4 concurrent permission handlers, 4,096 distinct incoming control/cancellation IDs per connection, and an 8 KiB stderr tail. Request-ID history is never evicted; exhaustion terminates the connection rather than reviving stale requests. Zero-valued fields select defaults. Incoming overflow terminates the connection visibly, retaining only already accepted events. Oversized local sends and excess pending outbound controls are rejected before writing and do not close the connection. Values above documented [validated resource ceilings](docs/compatibility.md#resource-and-shutdown-contract) are rejected before process startup. Linux/macOS offline subprocess/race tests verify direct-child reaping and process-group teardown, including descendants holding stdout and descendants that close their pipes. Other platform runtimes are unverified; non-POSIX builds kill only the direct child, and escaped process groups are outside the guarantee. Close never waits for arbitrary user callbacks that ignore cancellation.
 
 ## Native resume and interrupt
 
@@ -107,22 +115,21 @@ A real `can_use_tool` for `AskUserQuestion` uses this same API with caller-suppl
 
 ## Data types and compatible imports
 
-Pure data and the existing JSON decoders now live in
+Pure data and JSON decoders live in
 `github.com/zoumo/claude-agent-sdk-go/types`. Import that package alone to inspect
 frames with `types.ParseEvent`, build content/permission answers, or store CLI
 configuration without depending on the process client. It uses only the Go
-standard library. Message fields and JSON behavior are unchanged by this move;
-usage and unknown data remain raw JSON.
+standard library. Usage and unknown data remain raw JSON.
 
-The root package aliases the moved event/content/result/control types,
+The root package aliases the event/content/result/control types,
 `PermissionBehavior`, `PermissionAnswer`, and `Limits`, including the existing
-permission constants. Old literals, method sets, and assignments to/from the
-new import continue to compile. The canonical named types now belong to
+permission constants. Literals, method sets and assignments work across both imports. The canonical
+named types belong to
 `types`: reflection `PkgPath` and type-name formatting (including `%T`) can
 change. Those strings are not a compatibility guarantee.
 
-`claude.Options` retains callback-free startup fields and runtime callbacks;
-the removed relationship configuration is covered in the migration guide. `PermissionRequest` is a connection-bound answer handle, and
+`claude.Options` contains callback-free startup fields, runtime callbacks and
+`Subagents` bounds/history. `PermissionRequest` is a connection-bound answer handle, and
 `PermissionHandler` accepts that handle; both remain in the root package.
 `types.Options` contains only the callback-free startup fields. Adapt it
 explicitly, then attach a handler if needed:
@@ -160,7 +167,7 @@ Offline tests exercise exported APIs against a scripted subprocess with a replac
 
 Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
 
-See the [compatibility inventory](docs/compatibility.md) for every official export, client method, option and wire-control boundary, and [the design](docs/design/sdk-design.md) for the implemented core contract and deferred scope. Source/test provenance is recorded there and in [NOTICE](NOTICE).
+See the [compatibility inventory](docs/compatibility.md) for official runtime exports, query methods, options, input/output variants and callback/control boundaries, and [the design](docs/design/sdk-design.md) for the implemented core contract and deferred scope. Source/test provenance is recorded there and in [NOTICE](NOTICE).
 
 Message construction, JSON round trips, optional values and Raw/typed editing
 rules are documented in [the message JSON contract](docs/message-json.md).
@@ -190,8 +197,7 @@ mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go run ./exa
 It prints source/parent/run records through a single Open/Receive consumer, continues
 after the parent result, observes patch-only terminals and explicitly closes.
 Session-state events need a native opt-in on applicable CLIs; background task
-snapshots replace a process-local set and do not prove termination. See the
-[offline validation evidence](docs/evidence/subagent-ticket05.md).
+snapshots replace a process-local set and do not prove termination. See the [offline checks](docs/ci.md).
 
 中文事件时序说明：[前台/后台任务、子流、审批和结束边界](docs/event-sequences.md)。
 
@@ -203,8 +209,7 @@ Native values arrive directly, with unchanged fields, JSON and `Raw` bytes.
 `Event.Origin` remains the official `*MessageOrigin` object. Relationship tracking
 and child forwarding are automatic. `Options.Subagents` sets bounds and verified
 history; `Options.Types()` omits this runtime configuration. See the
-[API comparison with pinned official examples](docs/api-comparison.md),
-[breaking migration](docs/default-managed-migration.md), and
+[API comparison with pinned official examples](docs/api-comparison.md) and
 [derived definitions](derived_events.go).
 
 [Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.

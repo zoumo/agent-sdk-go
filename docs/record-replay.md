@@ -1,6 +1,8 @@
-# Recorded wire replay (partial recording ticket)
+# Recorded wire replay
 
-This ticket did **not** obtain the required successful S1 model/tool transcript. One real CLI process attempted S1 on base `282f85aed93c571d4aaa500751d6786b021897b6`; its replacement environment had no usable authentication. The CLI returned `authentication_failed` and zero native usage/cost. This does not establish that the normal interactive CLI lacks authentication. No credentials were inspected or changed, no CLI was upgraded, and the attempt was not retried.
+The checked-in sample contains no successful model/tool transcript. One real CLI
+process attempted the read/write story (S1); its replacement environment had no
+usable authentication. The CLI returned `authentication_failed` and zero native usage/cost. This does not establish that the normal interactive CLI lacks authentication. No credentials were inspected or changed, no CLI was upgraded, and the attempt was not retried.
 
 The published sample is a **real CLI authentication failure**, not model-generated output. S2 was not attempted after the authentication failure. S3 was not attempted because count/depth/child-tool restrictions were not proven enforceable. The minimum successful recording criterion remains blocked. Existing synthetic child/permission tests remain synthetic evidence.
 
@@ -18,7 +20,7 @@ The peer replays captured direction/order dependencies without sleeps. It suppor
 
 ## Evidence and scope
 
-[Manifest](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/manifest.json), [wire](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/wire.jsonl), [ID relations](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/id-relations.json), and [story cards](evidence/record-replay-story-cards.md).
+[Manifest](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/manifest.json), [wire](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/wire.jsonl), [ID relations](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/id-relations.json).
 
 | Story | Real attempts | Children | Seconds | Result |
 | --- | ---: | ---: | ---: | --- |
@@ -38,10 +40,28 @@ Private raw wire, derived observations and stderr were created outside the repos
 
 `expected-observations.json` contains offline assertions, not invented recorded model/tool events. Additional malformed/control fixtures have `provenance=synthetic` under [synthetic-faults](../internal/transcript/testdata/synthetic-faults/README.md). Existing tree terminal/lineage/bounds and permission cancellation tests cover parent-result/late-child, unknown frames, EOF, cancellation and resource limits; none are counted as live observations.
 
-## Future explicit recording/E2E
+## Recording scenarios
+
+The recorder supports fixed synthetic stories, not arbitrary prompts:
+
+- **S1 (read/write):** read `numbers.txt` containing `7\n11\n`, then write
+  `summary.txt` containing `total=18\n`. Only Read/Write are exposed. Approval
+  requires the exact canonical paths, no symlinks and exact write content, with
+  at most two approvals. Completion requires both approvals and the output file.
+- **S2 (question):** one AskUserQuestion asks for Blue or Green. The original
+  matching handle answers Blue once; other requests are denied.
+- **S3 (subagents):** unsupported by the recorder. Child count, depth and tool
+  restrictions are not proven enforceable; prompt instructions alone do not
+  establish isolation. Late child events remain synthetic coverage.
+
+S1/S2 receive through the root result to native idle, subject to the deadline.
+No fixed model wording or delta count is assumed. The recorded S1 error sample
+establishes neither story's successful path.
+
+## Explicit recording/E2E entry point
 
 The manual `cmd/record-transcript` is separate from all tests/examples and has no CI invocation. It refuses any nonempty `CI`, requires both `--mode record|e2e` and `SDK_REAL_AGENT_E2E=1`, an absolute approved CLI path, an absolute new private directory and an absolute durable `--session-ledger`. Reuse one ledger for the authorized recording session: each supported S1/S2 story is reserved exactly once before startup, with no retry, resume or extra turn; S3 is not implemented. Guard refusal is tested offline. The legacy `CLAUDE_GO_LIVE` smoke flag cannot enable it.
 
 Each supported story has a 120-second deadline including initialization, 30-second initialization bound, 3-second SDK shutdown, 2 MiB combined wire and 256 KiB stderr cap. There are at most two supported 120-second stories per ledger (less than the authorized 480-second ceiling). A deadline/limit aborts the process and marks failure. Read/Write and AskUserQuestion have exact synthetic policies; S1 completion requires two approvals and the exact output file, S2 requires one matching original question answered Blue. Unknown/outside/symlink paths are denied. The CLI restricted tool sandbox provides the directory boundary; the callback alone cannot constrain auto-approved tools, and the ask-policy behavior was **not** exercised by this failed attempt.
 
-Approved version is 2.1.258. The future entry point passes existing recognized authentication environment variables opaquely rather than inspecting/logging their values; the first attempt had retained only HOME/PATH/TMPDIR. No change was used for a second attempt. The explicit mode is not proof of a successful E2E run. Fixing authentication or managed-hook isolation is outside this ticket's authority; do not rerun automatically. The public workflow keeps all live flags zero, uses no model secrets, and only runs offline replay/example/scans.
+Approved version is 2.1.258. The future entry point passes existing recognized authentication environment variables opaquely rather than inspecting/logging their values; the first attempt had retained only HOME/PATH/TMPDIR. No change was used for a second attempt. The explicit mode is not proof of a successful E2E run. Fixing authentication or managed-hook isolation is outside the recording workflow; do not rerun automatically. The public workflow keeps all live flags zero, uses no model secrets, and only runs offline replay/example/scans.

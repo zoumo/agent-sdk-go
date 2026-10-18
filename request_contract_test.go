@@ -1007,9 +1007,12 @@ func TestConcurrentAnswerAndNativeResolutionHaveOneOutcome(t *testing.T) {
 }
 
 func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
-	for _, firstOutcome := range []string{"cancel", "expire", "resolved", "answered"} {
+	// Expiry and its ID reuse are exercised with controlled time in
+	// TestTerminalRequestIDReuseWithControlledTime. Real transport scheduling must
+	// not race an unrelated short lifetime against these explicit outcomes.
+	for _, firstOutcome := range []string{"cancel", "resolved", "answered"} {
 		t.Run(firstOutcome, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{RequestTimeout: 100 * time.Millisecond, ActiveRequests: 1})
+			f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1})
 			emitRequests(t, f.c, requestFrame(`"reused"`, "item/commandExecution/requestApproval", approvalParams))
 			old := nextRequest(t, f.c)
 			cause := codex.ErrRequestCanceled
@@ -1018,8 +1021,6 @@ func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
 				if err := old.Handle().Cancel(); err != nil {
 					t.Fatal(err)
 				}
-			case "expire":
-				cause = codex.ErrRequestExpired
 			case "resolved":
 				cause = codex.ErrRequestResolved
 				emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":"reused"}}`)

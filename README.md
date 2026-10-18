@@ -459,8 +459,26 @@ count, byte or age limit they are delivered with `Scope="unresolved"` and an
 only `Scope="child"` establishes tree membership. Later association does not
 replay already delivered native records. Per-source pending order and exact Raw
 are retained. The initial observation remains incomplete because native attach is
-best-effort and runtime coverage is unverified. History seeds and reconnect
-recovery are not implemented.
+best-effort and runtime coverage is unverified, including unknown server versions.
+
+For explicit reconstruction on a new Client, pass caller-owned native Thread
+snapshots in `TreeOptions.History` (`[]json.RawMessage`, each a Thread object,
+not a thread/read response envelope). Only parent/source links and successful
+completed collab items in `turns[].items` establish relations. Seeded relations
+have `Provenance="history"`, `Reason="history"`, and never emit Created, even if
+later live evidence repeats their spawn. History does not replay native events,
+seed occurrence deduplication, or establish current execution state. A new live
+child can still emit Created. Seed count is bounded by MaxNodes and total snapshot
+bytes by PendingBytes; invalid snapshot IDs fail admission. Snapshots are not
+retained. Graph/depth and event queue limits also apply during seeding.
+
+A seed emits `ObservationState(incomplete, history-recovery-gap)`: new-thread
+auto-attach does not prove attachment to old threads on a cold connection. The SDK
+never issues read/list/resume/start requests to fill this gap. Silence, lagged
+attach and missing history cannot establish completeness. Explicitly reconnecting
+requires a new Client and SubscribeTree, with a new process-local epoch and empty
+occurrence cache; identical native IDs can be delivered again. There is no replay
+cursor or cross-epoch exactly-once guarantee.
 
 Native deduplication is deliberately narrow: successfully decoded known-type `item/completed`
 notifications use thread, turn, method and item identity within this connection
@@ -488,6 +506,23 @@ negative values are invalid. The age limit only bounds association waiting.
 Queue overflow terminates only that observer with `SubscriptionOverflowError`;
 graph/depth exhaustion ends it with `ErrLimit`. Each tree uses one shared admission
 slot. `Close` ends local observation without interrupting provider work. Parent
-completion does not close it. Permission and question answers still go through
-original `Client.Requests()` handles, with no second answer authority in records.
+completion does not close it. Parent and child statuses are independent: parent
+idle may coexist with child active; child turn/activity completed or interrupted
+does not destroy the agent or prevent later turns. The SDK forwards native states
+and identities without synthesizing child completion. While a parent waits in
+wait_agent, its turn remains active. At pinned 0.160.1, TurnComplete awaits
+note_turn_completed (publishing that thread's idle change when applicable) before
+handle_turn_complete enqueues turn/completed on the same outbound queue. Status
+is per thread, with no child aggregation. This is not a cross-thread ordering or
+success-result-first promise.
+
+Unexpected connection termination preserves queued records, then emits
+`ObservationState(disconnected, permanent-gap)` and closes Events/Done with the
+original connection cause in Err. This observation remains incomplete; EOF is not
+work success. One extra queue slot is reserved for this terminal record, including
+when EventQueue accepted records are unread. Close/cancel are idempotent, do not
+wait for consumers, preserve accepted records and the first terminal cause, and
+release only this local observation. The shared server attachment is never
+unsubscribed by observation teardown. Permission and question answers still go
+through original `Client.Requests()` handles, with no second answer authority in records.
 The existing `Subscribe` API remains a connection-wide native broadcast.

@@ -15,6 +15,11 @@ var connectionEpoch atomic.Uint64
 // TreeOptions bounds one local observation. Zero values select defaults;
 // negative values are invalid. PendingAge limits association waiting, not work.
 type TreeOptions struct {
+	// History contains caller-supplied native Thread snapshots (not RPC envelopes).
+	// Only lineage and completed collab relations are imported, never native events,
+	// execution state or creation. Total bytes are bounded by PendingBytes and
+	// snapshot count by MaxNodes. The SDK performs no history/read/resume RPC.
+	History       []json.RawMessage
 	EventQueue    int
 	MaxNodes      int
 	MaxDepth      int
@@ -44,9 +49,11 @@ type TreeIdentity struct {
 }
 
 // TreeEvidence identifies the native notification supporting a direct relation.
+// Method is empty for caller-supplied snapshots, which are not notifications.
 // ReceiverThreadIDs preserves every receiver, in native order, including repeats.
 type TreeEvidence struct {
 	Method            string
+	Provenance        string // "live" or "history" supporting evidence
 	ParentThreadID    string
 	Source            TreeIdentity
 	Tool              string
@@ -55,7 +62,7 @@ type TreeEvidence struct {
 
 // TreeEvent wraps an independently owned native Event or an SDK-derived record.
 // Raw is the exact notification envelope, excluding transport delimiters, only
-// for Native. Origin is "native" or "sdk-derived"; Provenance is "live".
+// for Native. Origin is "native" or "sdk-derived"; Provenance is "live" or "history".
 // Sequence is local delivery order, not a replay cursor. Epoch identifies this
 // Client connection within this process, not a durable provider identity.
 // Scope is "root", "child", "unresolved", "unscoped", or "observation". Unscoped events do
@@ -88,6 +95,7 @@ type TreeEvent struct {
 
 type treeRelation struct {
 	parent                      string
+	history                     bool
 	evidence                    TreeEvidence
 	createdEvidence             *TreeEvidence
 	announced, createdAnnounced bool
@@ -113,6 +121,8 @@ type TreeSubscription struct {
 	closed        bool
 	stop          func() bool
 	sequence      uint64
+	seeding       bool
+	historyIDs    map[string]struct{}
 	maxNodes      int
 	children      map[string]*treeRelation
 	relationOrder []string
@@ -172,10 +182,42 @@ func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options
 	if options.DedupEntries == 0 {
 		options.DedupEntries = 8192
 	}
-	t := &TreeSubscription{client: c, root: rootThreadID, events: make(chan TreeEvent, options.EventQueue), done: make(chan struct{}), maxNodes: options.MaxNodes, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{})}
+	// Validate the complete seed before registering. It is bounded separately from
+	// live pending storage, which is initially empty. Snapshots are not retained.
+	if len(options.History) > options.MaxNodes {
+		return nil, ErrLimit
+	}
+	historyIDs := make(map[string]struct{}, len(options.History))
+	remaining := options.PendingBytes
+	for _, snapshot := range options.History {
+		if len(snapshot) > remaining {
+			return nil, ErrLimit
+		}
+		remaining -= len(snapshot)
+		fields, err := objectFields(snapshot)
+		var id string
+		if err != nil || json.Unmarshal(fields["id"], &id) != nil || id == "" {
+			return nil, errors.New("codex: history seed requires native Thread snapshots with IDs")
+		}
+		historyIDs[id] = struct{}{}
+	}
+	t := &TreeSubscription{client: c, root: rootThreadID, events: make(chan TreeEvent, options.EventQueue+1), done: make(chan struct{}), maxNodes: options.MaxNodes, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
 	c.trees[t] = struct{}{}
 	t.stop = context.AfterFunc(ctx, func() { c.mu.Lock(); defer c.mu.Unlock(); t.finishLocked(ctx.Err()) })
 	t.emitLocked(TreeEvent{Kind: TreeObservationState, Scope: "observation", State: "incomplete", Reason: "best-effort-auto-attach-unverified"})
+	if len(options.History) > 0 {
+		t.emitLocked(TreeEvent{Kind: TreeObservationState, Scope: "observation", State: "incomplete", Reason: "history-recovery-gap", Provenance: "history"})
+		t.seeding = true
+		for _, snapshot := range options.History {
+			t.seedLocked(snapshot)
+			if t.closed {
+				break
+			}
+		}
+		t.announceLocked()
+		t.seeding = false
+	}
+	t.options.History = nil
 	return t, nil
 }
 func (t *TreeSubscription) Events() <-chan TreeEvent { return t.events }
@@ -208,11 +250,34 @@ func (t *TreeSubscription) finishLocked(cause error) {
 	t.seen = nil
 	t.seenOrder = nil
 	t.children = nil
+	t.historyIDs = nil
 	t.relationOrder = nil
 	close(t.done)
 	close(t.events)
 }
+
+// One reserved slot ensures disconnect remains observable even at queue capacity.
+// It never evicts accepted native records or changes the connection failure cause.
+func (t *TreeSubscription) disconnectLocked(cause error) {
+	if t.closed {
+		return
+	}
+	t.enqueueLocked(TreeEvent{Kind: TreeObservationState, Scope: "observation", State: "disconnected", Reason: "permanent-gap"})
+	t.finishLocked(cause)
+}
+
 func (t *TreeSubscription) emitLocked(e TreeEvent) {
+	if t.closed {
+		return
+	}
+	if len(t.events) >= t.options.EventQueue {
+		t.finishLocked(&SubscriptionOverflowError{Capacity: t.options.EventQueue})
+		return
+	}
+	t.enqueueLocked(e)
+}
+
+func (t *TreeSubscription) enqueueLocked(e TreeEvent) {
 	if t.closed {
 		return
 	}
@@ -231,7 +296,12 @@ func (t *TreeSubscription) emitLocked(e TreeEvent) {
 	e.Provider = "codex"
 	e.Epoch = t.client.epoch
 	e.RootThreadID = t.root
-	e.Provenance = "live"
+	if e.Provenance == "" {
+		e.Provenance = "live"
+		if t.seeding {
+			e.Provenance = "history"
+		}
+	}
 	e.UsageScope = "unknown"
 	e.Origin = "sdk-derived"
 	if e.Kind == TreeNative {
@@ -240,7 +310,7 @@ func (t *TreeSubscription) emitLocked(e TreeEvent) {
 	select {
 	case t.events <- e:
 	default:
-		t.finishLocked(&SubscriptionOverflowError{Capacity: cap(t.events)})
+		t.finishLocked(&SubscriptionOverflowError{Capacity: t.options.EventQueue})
 	}
 }
 
@@ -330,6 +400,11 @@ func (t *TreeSubscription) diagnostic(reason, child, parent string, evidence *Tr
 
 func (t *TreeSubscription) relationLocked(child, parent string, evidence TreeEvidence, created bool) {
 	evidence.ParentThreadID = parent
+	evidence.Provenance = "live"
+	if t.seeding {
+		evidence.Provenance = "history"
+		evidence.Method = "" // A snapshot is not a native notification.
+	}
 	if child == "" || parent == "" {
 		return
 	}
@@ -364,11 +439,12 @@ func (t *TreeSubscription) relationLocked(child, parent string, evidence TreeEvi
 			t.finishLocked(ErrLimit)
 			return
 		}
-		r = &treeRelation{parent: parent, evidence: evidence}
+		_, historical := t.historyIDs[child]
+		r = &treeRelation{parent: parent, evidence: evidence, history: t.seeding || historical}
 		t.children[child] = r
 		t.relationOrder = append(t.relationOrder, child)
 	}
-	if created && r.createdEvidence == nil {
+	if created && !t.seeding && !r.history && r.createdEvidence == nil {
 		e := evidence
 		r.createdEvidence = &e
 	}
@@ -408,11 +484,14 @@ func (t *TreeSubscription) announceLocked() {
 		if !r.announced {
 			r.announced = true
 			kind, reason, evidence := TreeSubagentAssociated, "discovered", &r.evidence
+			if r.evidence.Provenance == "history" {
+				reason = "history"
+			}
 			if r.createdEvidence != nil {
 				kind, reason, evidence = TreeSubagentCreated, "successful-live-spawn", r.createdEvidence
 				r.createdAnnounced = true
 			}
-			t.emitLocked(TreeEvent{Kind: kind, Source: TreeIdentity{ThreadID: child}, ParentThreadID: r.parent, Scope: "child", RelationKey: child, CreationConfirmed: r.createdEvidence != nil, Reason: reason, Evidence: evidence})
+			t.emitLocked(TreeEvent{Kind: kind, Source: TreeIdentity{ThreadID: child}, ParentThreadID: r.parent, Scope: "child", RelationKey: child, CreationConfirmed: r.createdEvidence != nil, Reason: reason, Evidence: evidence, Provenance: evidence.Provenance})
 		}
 		if r.createdEvidence != nil && !r.createdAnnounced {
 			r.createdAnnounced = true
@@ -422,6 +501,40 @@ func (t *TreeSubscription) announceLocked() {
 	// Stable insertion order also makes multi-receiver discovery deterministic.
 	for _, child := range t.relationOrder {
 		announce(child)
+	}
+}
+
+// Seed uses the same native lineage parser, but never delivers history as live
+// notifications or seeds occurrence deduplication. Missing history stays a gap.
+func (t *TreeSubscription) seedLocked(snapshot json.RawMessage) {
+	params, _ := json.Marshal(map[string]json.RawMessage{"thread": snapshot})
+	t.discoverLocked(decodeEvent("thread/started", params), treeIdentity(params))
+	fields, _ := objectFields(snapshot)
+	var threadID string
+	_ = json.Unmarshal(fields["id"], &threadID)
+	var turns []json.RawMessage
+	_ = json.Unmarshal(fields["turns"], &turns)
+	for _, turn := range turns {
+		f, err := objectFields(turn)
+		if err != nil {
+			continue
+		}
+		var turnID string
+		_ = json.Unmarshal(f["id"], &turnID)
+		var items []json.RawMessage
+		_ = json.Unmarshal(f["items"], &items)
+		for _, item := range items {
+			if t.closed {
+				return
+			}
+			var decoded protocol.ThreadItem
+			if json.Unmarshal(item, &decoded) == nil && decoded.CollabAgentToolCall != nil {
+				f, _ := objectFields(item)
+				var itemID string
+				_ = json.Unmarshal(f["id"], &itemID)
+				t.collabLocked(decoded.CollabAgentToolCall, TreeIdentity{ThreadID: threadID, TurnID: turnID, ItemID: itemID})
+			}
+		}
 	}
 }
 
@@ -461,7 +574,10 @@ func (t *TreeSubscription) discoverLocked(native Event, source TreeIdentity) {
 	if native.DecodeError != nil || !ok || n.Item.CollabAgentToolCall == nil {
 		return
 	}
-	item := n.Item.CollabAgentToolCall
+	t.collabLocked(n.Item.CollabAgentToolCall, source)
+}
+
+func (t *TreeSubscription) collabLocked(item *protocol.CollabAgentToolCallThreadItem, source TreeIdentity) {
 	if item.Status != protocol.CollabAgentToolCallStatusCompleted || item.SenderThreadID != source.ThreadID {
 		return
 	}
@@ -469,7 +585,7 @@ func (t *TreeSubscription) discoverLocked(native Event, source TreeIdentity) {
 		if t.closed {
 			return
 		}
-		evidence := TreeEvidence{Method: native.Method, Source: source, Tool: string(item.Tool), ReceiverThreadIDs: append([]string(nil), item.ReceiverThreadIDs...)}
+		evidence := TreeEvidence{Method: "item/completed", Source: source, Tool: string(item.Tool), ReceiverThreadIDs: append([]string(nil), item.ReceiverThreadIDs...)}
 		t.relationLocked(child, item.SenderThreadID, evidence, item.Tool == protocol.CollabAgentToolSpawnAgent)
 	}
 }

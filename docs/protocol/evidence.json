@@ -735,6 +735,68 @@
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
       "report": "../evidence/subagent-02.md"
+    },
+    {
+      "id": "subagent03-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "9aca0c39a788b42ef7caa4d877f22fe30fee88d5",
+      "tested_source_sha256": {
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "tree.go": "a4ea651d35a247f4e391de9827aef074668a94d29b525df9ed742723cec5234f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a"
+      },
+      "test_files": [
+        "client.go",
+        "tree.go",
+        "tree_contract_test.go",
+        "tree_lifecycle_test.go"
+      ],
+      "test_names": [
+        "TestTreeParentIdleChildActive",
+        "TestTreeCloseCancelSharedSource",
+        "TestTreeDisconnectHistoryEpoch",
+        "TestTreeDisconnectFullQueueAndSeedBounds"
+      ],
+      "coverage": "Full offline suite. Original synthetic public-client stdio/WS/WSS fixtures cover parent idle while child active; root turn completion followed by child deltas, activity completed/interrupted, interrupted child turn and new child turn; concurrent idempotent close/cancel with another root sharing the same source and unchanged native subscriber; historical parent/source/collab seed with ancestor discovery, no historical Created, known historical entity without a parent later associated live, new live child Created; explicit new Clients/epochs delivering the same terminal IDs again; abrupt EOF preserving queued native bytes plus disconnected permanent-gap, including a full queue; bounded/invalid seeds; exact RPC transcripts exclude automatic read/list/resume/start/unsubscribe recovery. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "../evidence/subagent-03.md"
+    },
+    {
+      "id": "subagent03-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "9aca0c39a788b42ef7caa4d877f22fe30fee88d5",
+      "tested_source_sha256": {
+        "client.go": "93fa0aaa9dc32d025e12da8418428d6a29b2cd329e19770338a24ce9db27e127",
+        "tree.go": "a4ea651d35a247f4e391de9827aef074668a94d29b525df9ed742723cec5234f",
+        "tree_contract_test.go": "7c0ca0ab87d80e6d1b48d03bb2c2b25e2d3e51f7d412d1e28e876489c6e39744",
+        "tree_lifecycle_test.go": "ac90dee12634a98a156273a31b21e8018ebb7d2e6e000b8f60079005678a932a"
+      },
+      "test_files": [
+        "client.go",
+        "tree.go",
+        "tree_contract_test.go",
+        "tree_lifecycle_test.go"
+      ],
+      "test_names": [
+        "TestTreeParentIdleChildActive",
+        "TestTreeCloseCancelSharedSource",
+        "TestTreeDisconnectHistoryEpoch",
+        "TestTreeDisconnectFullQueueAndSeedBounds"
+      ],
+      "coverage": "Full offline suite. Original synthetic public-client stdio/WS/WSS fixtures cover parent idle while child active; root turn completion followed by child deltas, activity completed/interrupted, interrupted child turn and new child turn; concurrent idempotent close/cancel with another root sharing the same source and unchanged native subscriber; historical parent/source/collab seed with ancestor discovery, no historical Created, known historical entity without a parent later associated live, new live child Created; explicit new Clients/epochs delivering the same terminal IDs again; abrupt EOF preserving queued native bytes plus disconnected permanent-gap, including a full queue; bounded/invalid seeds; exact RPC transcripts exclude automatic read/list/resume/start/unsubscribe recovery. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "../evidence/subagent-03.md"
     }
   ],
   "verification_commands": [

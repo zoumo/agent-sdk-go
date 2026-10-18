@@ -26,7 +26,7 @@ func treeSpawnParams(tool, status string) string {
 // events arrive on the original connection before the root start RPC response.
 // No model, real CLI, credentials, or extra socket is used by the SDK.
 func handleTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
-	if handleNestedTreePeer(mode, m, send) {
+	if handleLifecycleTreePeer(mode, m, send) || handleNestedTreePeer(mode, m, send) {
 		return true
 	}
 	if !strings.HasPrefix(mode, "tree-") {

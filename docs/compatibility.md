@@ -188,20 +188,51 @@ remain unscoped. Deduplication only covers successfully decoded known-type termi
 item/completed identities scoped to thread/turn/method/item and this connection;
 cache eviction permits old replays. Identical deltas, unknown occurrence IDs and
 partial versus complete items are preserved. Graph, depth, queue, pending storage
-and identity cache are bounded independently. History seed and reconnect recovery
-remain unimplemented. No live/model validation was run.
+and identity cache are bounded independently.
+
+Ticket 03 adds explicit native Thread snapshots through `TreeOptions.History`.
+Seeded parent/source and successful historical collab relations are history
+Associated only; they never create entities or replay notifications. Their evidence
+has history provenance and no notification method. Seeded entities cannot later
+be reclassified as newly created. New live children can still be Created. Snapshot
+count/bytes use MaxNodes/PendingBytes, with ordinary graph/depth/queue bounds.
+No current work state is inferred from a snapshot. History seeds explicitly emit
+an incomplete recovery-gap record; cold reconnect attachment to old threads and
+missed/lagged auto-attach remain unverified. Unknown versions remain incomplete,
+with no speculative resume or read/list fallback.
+
+Parent idle and child active can coexist. Root turn completion, child activity
+completion/interruption and entity lifetime are separate. Closing/canceling one
+observation leaves native and other tree observations intact, including another
+root sharing a child source. Unexpected disconnect appends a disconnected /
+permanent-gap record using a reserved terminal queue slot, preserves accepted
+records and the connection failure in Err, and never synthesizes work completion.
+Explicit new Clients have fresh epochs and occurrence caches; there is no seamless
+recovery or exactly-once claim. No live/model validation was run.
+
+Pinned lifecycle source: [TurnComplete handling](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/bespoke_event_handling.rs#L185-L202)
+awaits note_turn_completed before handle_turn_complete; [thread status](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_status.rs#L148-L158)
+clears only that thread, and [publication](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_status.rs#L223-L248)
+uses the shared outbound sender. Idle change (when applicable) precedes that
+thread's turn/completed enqueue; child status is not aggregated. Waiting for
+wait_agent does not complete the parent turn; completing the parent does not
+invoke close_agent on children. Native IDs/notifications are retained. These
+source facts do not promise cross-thread order or successful result arrival first.
 
 | Capability | Native availability / source evidence (E1) | SDK implementation | Offline evidence (E2) | Live evidence |
 | --- | --- | --- | --- | --- |
 | New-thread notification routing | Pinned [server lib.rs lines 1282–1310](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/lib.rs#L1282-L1310) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
 | Independent creation / association | Pinned [collab item schema](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1125) | Derived Created or Associated precedes child native events | Success, failure, resume and repeated receiver cases | Not run |
 | Native compatibility and isolation | Existing raw/typed notification transport | Recursive membership and bounded unresolved routing, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
+| History and disconnect boundaries | Native snapshots expose lineage; new-thread attach is distinct from cold recovery | History-only Associated; disconnected/permanent-gap; explicit new epochs, zero recovery RPCs | Seed/live distinction, repeated IDs across epochs, full-queue EOF, close/cancel shared-source race | Not run |
 | Bounded local observation | Existing SDK subscription limits | Independent queue, shared admission cap, graph-node bound, idempotent local close | Slow observer isolation, node/admission bounds, concurrent close; Go race suite | Not run |
 
-Offline commands and fixture scope are recorded under `subagent01-*` and
-`subagent02-*` in
+Offline commands and fixture scope are recorded under `subagent01-*`,
+`subagent02-*` and `subagent03-*` in
 [protocol/evidence.json](protocol/evidence.json). Real CLI/model tests and auth
 changes were excluded. Existing live evidence elsewhere in this document does
 not establish subagent runtime coverage.
 
 Ticket 02 validation and API defaults: [recursive ordering evidence](evidence/subagent-02.md).
+
+Ticket 03 lifecycle and recovery limits: [offline evidence](evidence/subagent-03.md).

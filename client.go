@@ -463,7 +463,11 @@ func (c *Client) fail(cause error) {
 		if cause == ErrClosed {
 			terminal = nil
 		}
-		t.finishLocked(terminal)
+		if terminal != nil {
+			t.disconnectLocked(terminal)
+		} else {
+			t.finishLocked(nil)
+		}
 	}
 	close(c.done)
 	c.mu.Unlock()

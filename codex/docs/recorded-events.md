@@ -65,13 +65,14 @@ before publication. Unknown structures quarantine the capture.
 
 ## Explicit future real-agent maintenance
 
-The independent maintenance entry point is never called by the workflow:
+The independent maintenance entry point is never called by the workflow. From
+the repository root:
 
 ```sh
-go build -o /tmp/record-events ./cmd/record-events
-SDK_REAL_AGENT_E2E=1 python3 scripts/record_real.py --record \
+go build -o /tmp/record ./codex/cmd/record
+SDK_REAL_AGENT_E2E=1 python3 codex/scripts/record_real.py --record \
   --cli /absolute/path/to/pinned/native/codex \
-  --runner /tmp/record-events --session-root /tmp/new-private-recording
+  --runner /tmp/record --session-root /tmp/new-private-recording
 ```
 
 Requires Python 3.11+, an absolute approved CLI 0.162.1, existing login and a new

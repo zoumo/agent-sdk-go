@@ -1,4 +1,4 @@
-// record-events is an opt-in maintenance tool. Default tests never invoke Codex.
+// record is an opt-in maintenance tool. Default tests never invoke Codex.
 package recorder
 
 import (
@@ -21,7 +21,7 @@ const s2 = "Synthetic interaction fixture. Use request_user_input exactly once t
 // Run executes the explicitly guarded recorder using the process arguments and environment.
 func Run() error {
 	if len(os.Args) != 3 {
-		return errors.New("usage: record-events --record|--proxy private-config.json")
+		return errors.New("usage: record --record|--proxy private-config.json")
 	}
 	mode := ""
 	if os.Args[1] == "--record" || os.Args[1] == "--proxy" {

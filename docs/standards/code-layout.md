@@ -14,8 +14,8 @@ Both native SDKs use the same separation of responsibilities:
 | `tests/consumers/codex-public` | Pure public API/import-boundary consumer, not an SDK usage demonstration |
 | `tests/stories` | Shared story suite, native test adapters and synthetic protocol peers |
 
-The recording commands are `codex/cmd/record-events` and
-`claude/cmd/record-transcript`. Native wire formats and implementations may
+The recording commands are `codex/cmd/record` and
+`claude/cmd/record`. Native wire formats and implementations may
 remain different. Reusable helpers must remain importable by SDK tests and
 examples: do not hide those shared helpers under `tools/internal`, which would
 violate Go's internal visibility rule. Tool-only private implementation may use

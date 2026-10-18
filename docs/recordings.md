@@ -59,7 +59,7 @@ reclassify synthetic fixtures to fill the missing real-subagent evidence.
 
 See the [layout standards](standards/code-layout.md) for the authoritative
 cmd/tools/testdata responsibilities. The current entry points are
-`codex/cmd/record-events` and `claude/cmd/record-transcript`; they delegate to
+`codex/cmd/record` and `claude/cmd/record`; they delegate to
 their native `tools/recorder`, which uses native `tools/replay` helpers. The data
 links above point to the single published fixture copies.
 

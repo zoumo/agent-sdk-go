@@ -60,7 +60,22 @@ establishes neither story's successful path.
 
 ## Explicit recording/E2E entry point
 
-The manual `cmd/record-transcript` is separate from all tests/examples and has no CI invocation. It refuses any nonempty `CI`, requires both `--mode record|e2e` and `SDK_REAL_AGENT_E2E=1`, an absolute approved CLI path, an absolute new private directory and an absolute durable `--session-ledger`. Reuse one ledger for the authorized recording session: each supported S1/S2 story is reserved exactly once before startup, with no retry, resume or extra turn; S3 is not implemented. Guard refusal is tested offline. The legacy `CLAUDE_GO_LIVE` smoke flag cannot enable it.
+The manual `claude/cmd/record` is separate from all tests/examples and has no CI invocation. It refuses any nonempty `CI`, requires both `--mode record|e2e` and `SDK_REAL_AGENT_E2E=1`, an absolute approved CLI path, an absolute new private directory and an absolute durable `--session-ledger`. Reuse one ledger for the authorized recording session: each supported S1/S2 story is reserved exactly once before startup, with no retry, resume or extra turn; S3 is not implemented. Guard refusal is tested offline. The legacy `CLAUDE_GO_LIVE` smoke flag cannot enable it.
+
+From the repository root, inspect the flags without starting a real agent:
+
+```sh
+go run ./claude/cmd/record --help
+```
+
+An explicitly authorized future recording uses the same entry point:
+
+```sh
+SDK_REAL_AGENT_E2E=1 go run ./claude/cmd/record \
+  --mode record --story s1 --cli /absolute/path/to/pinned/native/claude \
+  --private-dir /absolute/new-private-recording \
+  --session-ledger /absolute/durable-session-ledger
+```
 
 Each supported story has a 120-second deadline including initialization, 30-second initialization bound, 3-second SDK shutdown, 2 MiB combined wire and 256 KiB stderr cap. There are at most two supported 120-second stories per ledger (less than the authorized 480-second ceiling). A deadline/limit aborts the process and marks failure. Read/Write and AskUserQuestion have exact synthetic policies; S1 completion requires two approvals and the exact output file, S2 requires one matching original question answered Blue. Unknown/outside/symlink paths are denied. The CLI restricted tool sandbox provides the directory boundary; the callback alone cannot constrain auto-approved tools, and the ask-policy behavior was **not** exercised by this failed attempt.
 

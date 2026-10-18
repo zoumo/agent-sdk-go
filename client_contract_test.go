@@ -504,10 +504,20 @@ func TestOwnedChildExitWithOpenOutput(t *testing.T) {
 	}
 	assertReaped(t, f.pid)
 }
-func TestOutgoingFrameLimitAndDefaultCallTimeout(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{MaxFrameBytes: 4096, CallTimeout: 50 * time.Millisecond})
+func TestOutgoingFrameLimit(t *testing.T) {
+	// Real process/socket initialization uses the normal startup budget. The
+	// default call deadline is checked separately with controlled time.
+	f := startFake(t, "normal", codex.Limits{MaxFrameBytes: 4096})
 	callError(t, f.c.Call(context.Background(), "echo", strings.Repeat("x", 8192), nil), codex.NotSent, codex.ErrFrameTooLarge)
-	callError(t, f.c.Call(context.Background(), "wait", nil, nil), codex.OutcomeUnknown, context.DeadlineExceeded)
+	var result string
+	if err := f.c.Call(context.Background(), "echo", "still usable", &result); err != nil || result != "still usable" {
+		t.Fatalf("frame rejection damaged connection: result=%q error=%v", result, err)
+	}
+	for _, m := range trace(t, f.trace) {
+		if m.Method == "echo" && string(m.Params) != `"still usable"` {
+			t.Fatal("oversized request reached peer")
+		}
+	}
 }
 
 func TestOutboundAdmissionIsBounded(t *testing.T) {

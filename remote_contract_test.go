@@ -169,7 +169,7 @@ func TestRemotePublicContractParity(t *testing.T) {
 		{"TestMalformedFrames", TestMalformedFrames},
 		{"TestInitializeFailures", TestInitializeFailures},
 		{"TestPendingAdmissionLimit", TestPendingAdmissionLimit},
-		{"TestOutgoingFrameLimitAndDefaultCallTimeout", TestOutgoingFrameLimitAndDefaultCallTimeout},
+		{"TestOutgoingFrameLimit", TestOutgoingFrameLimit},
 		{"TestInvalidOptionsAndClosedCall", TestInvalidOptionsAndClosedCall},
 		{"TestTurnEarlyEventsKeepResponseIdentity", TestTurnEarlyEventsKeepResponseIdentity},
 		{"TestNotificationRawAndDecodeErrors", TestNotificationRawAndDecodeErrors},

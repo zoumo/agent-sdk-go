@@ -556,3 +556,12 @@ through original `Client.Requests()` handles, with no second answer authority in
 `Subscribe(ctx, rootThreadID, TreeOptions{})` is the sole subscription entry.
 It always manages relations and descendant routing; there is no observation mode switch.
 See [breaking migration](docs/default-managed-migration.md).
+
+
+### Recorded event replay
+
+Run `go run ./examples/replay-recorded` without Codex, credentials or network.
+The embedded real sanitized S1/S2 transcripts cover two bounded dynamic file
+tools and one native user question. Default CI validates and replays them offline.
+Native shell approvals, subagent creation and background boundaries were not
+observed. See [recording evidence and explicit real-agent maintenance](docs/recorded-events.md).

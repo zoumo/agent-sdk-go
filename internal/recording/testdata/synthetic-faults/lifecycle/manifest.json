@@ -1,0 +1,4 @@
+{
+  "provenance": "synthetic",
+  "purpose": "offline preparation: two dynamic tools, early notification and numeric/string IDs; faults mutate this in tests"
+}

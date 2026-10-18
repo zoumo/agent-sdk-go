@@ -1,0 +1,138 @@
+[
+  {
+    "namespace": "thread",
+    "jsonType": "str",
+    "replacement": "thread-001",
+    "frames": [
+      6,
+      7,
+      9,
+      11,
+      12,
+      18,
+      19,
+      23,
+      24,
+      26,
+      27,
+      30,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      39,
+      40,
+      44,
+      45
+    ]
+  },
+  {
+    "namespace": "session",
+    "jsonType": "str",
+    "replacement": "session-001",
+    "frames": [
+      6,
+      7
+    ]
+  },
+  {
+    "namespace": "turn",
+    "jsonType": "str",
+    "replacement": "turn-001",
+    "frames": [
+      10,
+      12,
+      18,
+      19,
+      24,
+      30,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      39,
+      40,
+      45
+    ]
+  },
+  {
+    "namespace": "item",
+    "jsonType": "str",
+    "replacement": "item-001",
+    "frames": [
+      18,
+      19
+    ]
+  },
+  {
+    "namespace": "item",
+    "jsonType": "str",
+    "replacement": "item-002",
+    "frames": [
+      24
+    ]
+  },
+  {
+    "namespace": "question",
+    "jsonType": "str",
+    "replacement": "question-001",
+    "frames": [
+      24
+    ]
+  },
+  {
+    "namespace": "rpc-server",
+    "jsonType": "int",
+    "replacement": 101,
+    "frames": [
+      24,
+      25,
+      26
+    ]
+  },
+  {
+    "namespace": "item",
+    "jsonType": "str",
+    "replacement": "item-003",
+    "frames": [
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      39
+    ]
+  },
+  {
+    "namespace": "rpc-client",
+    "jsonType": "int",
+    "replacement": 101,
+    "frames": [
+      1,
+      2
+    ]
+  },
+  {
+    "namespace": "rpc-client",
+    "jsonType": "int",
+    "replacement": 102,
+    "frames": [
+      5,
+      6
+    ]
+  },
+  {
+    "namespace": "rpc-client",
+    "jsonType": "int",
+    "replacement": 103,
+    "frames": [
+      9,
+      10
+    ]
+  }
+]

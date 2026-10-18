@@ -1,0 +1,337 @@
+{
+  "provenance": "live-sdk-derived-sanitized-subset",
+  "note": "Local sequence gaps reflect omitted diagnostics; replay sequences need not match.",
+  "completed": true,
+  "tools": 2,
+  "questions": 0,
+  "observations": [
+    {
+      "sequence": 1,
+      "kind": "ObservationState"
+    },
+    {
+      "sequence": 2,
+      "kind": "Native",
+      "method": "thread/status/changed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 3,
+      "kind": "Native",
+      "method": "turn/started",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 9,
+      "kind": "Native",
+      "method": "item/started",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 10,
+      "kind": "Native",
+      "method": "item/completed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 11,
+      "kind": "Native",
+      "method": "item/started",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 12,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 13,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 14,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 15,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 16,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 17,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 18,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 19,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 20,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 21,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 22,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 23,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 24,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 25,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 26,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 27,
+      "kind": "Native",
+      "method": "item/completed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 31,
+      "kind": "Native",
+      "method": "item/started",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 32,
+      "kind": "Native",
+      "method": "item/completed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 35,
+      "kind": "Native",
+      "method": "thread/tokenUsage/updated",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 40,
+      "kind": "Native",
+      "method": "item/started",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 41,
+      "kind": "Native",
+      "method": "item/completed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 44,
+      "kind": "Native",
+      "method": "thread/tokenUsage/updated",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 46,
+      "kind": "Native",
+      "method": "item/started",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 47,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 48,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 49,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 50,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 51,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 52,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 53,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 54,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 55,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 56,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 57,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 58,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 59,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 60,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 61,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 62,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 63,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 64,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 65,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 66,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 67,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 68,
+      "kind": "Native",
+      "method": "item/agentMessage/delta",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 70,
+      "kind": "Native",
+      "method": "item/completed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 71,
+      "kind": "Native",
+      "method": "thread/tokenUsage/updated",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 75,
+      "kind": "Native",
+      "method": "thread/status/changed",
+      "threadId": "thread-001"
+    },
+    {
+      "sequence": 76,
+      "kind": "Native",
+      "method": "turn/completed",
+      "threadId": "thread-001"
+    }
+  ]
+}

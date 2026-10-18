@@ -172,23 +172,36 @@ SDK wrapper names are outside `protocol`; native Event and protocol generation
 remain unchanged. Native envelopes and parameter bytes are retained independently
 for each observer. Request handles remain exclusively on `Client.Requests()`.
 
-The initial derived observation state is incomplete: direct-child scope,
-pre-relation event gap, best-effort server attach and unverified runtime coverage.
-Unknown-source notifications are explicitly unscoped; known unrelated sources are
-filtered. Recursive graph discovery, early-child buffering, history seed, event-ID
-deduplication and reconnect recovery belong to later tickets and are not claimed.
-Text deltas without an event identity are never deduplicated. No final answer or
-usage aggregation is added. Graph and queue exhaustion terminate only the local
-observer with an inspectable error.
+Ticket 02 extends this API to recursive relations and bounded early-event
+routing. Native Thread parent/source and completed collab evidence establish
+edges; no path inference or child RPC is used. Conflicts retain the original
+parent and emit both accepted and rejected evidence; cycles emit diagnostics. Related ancestors
+precede buffered descendants. Associated can later receive one Created
+confirmation with its original supporting native identity and the same relation
+key. Entity identity remains distinct from each turn.
+
+The initial derived state remains incomplete due to best-effort auto-attach and
+unverified runtime coverage. Unknown sources are buffered within configurable
+count/bytes/age bounds, then explicitly delivered as unresolved with an incomplete
+diagnostic. They are never replayed after later association. Source-less events
+remain unscoped. Deduplication only covers successfully decoded known-type terminal
+item/completed identities scoped to thread/turn/method/item and this connection;
+cache eviction permits old replays. Identical deltas, unknown occurrence IDs and
+partial versus complete items are preserved. Graph, depth, queue, pending storage
+and identity cache are bounded independently. History seed and reconnect recovery
+remain unimplemented. No live/model validation was run.
 
 | Capability | Native availability / source evidence (E1) | SDK implementation | Offline evidence (E2) | Live evidence |
 | --- | --- | --- | --- | --- |
 | New-thread notification routing | Pinned [server lib.rs lines 1282–1310](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/lib.rs#L1282-L1310) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
 | Independent creation / association | Pinned [collab item schema](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1125) | Derived Created or Associated precedes child native events | Success, failure, resume and repeated receiver cases | Not run |
-| Native compatibility and isolation | Existing raw/typed notification transport | Root/direct-child filter, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
+| Native compatibility and isolation | Existing raw/typed notification transport | Recursive membership and bounded unresolved routing, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
 | Bounded local observation | Existing SDK subscription limits | Independent queue, shared admission cap, graph-node bound, idempotent local close | Slow observer isolation, node/admission bounds, concurrent close; Go race suite | Not run |
 
-Offline commands and fixture scope are recorded under `subagent01-*` in
+Offline commands and fixture scope are recorded under `subagent01-*` and
+`subagent02-*` in
 [protocol/evidence.json](protocol/evidence.json). Real CLI/model tests and auth
 changes were excluded. Existing live evidence elsewhere in this document does
 not establish subagent runtime coverage.
+
+Ticket 02 validation and API defaults: [recursive ordering evidence](evidence/subagent-02.md).

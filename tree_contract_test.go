@@ -26,6 +26,9 @@ func treeSpawnParams(tool, status string) string {
 // events arrive on the original connection before the root start RPC response.
 // No model, real CLI, credentials, or extra socket is used by the SDK.
 func handleTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
+	if handleNestedTreePeer(mode, m, send) {
+		return true
+	}
 	if !strings.HasPrefix(mode, "tree-") {
 		return false
 	}
@@ -237,7 +240,7 @@ func TestTreeFailedSpawnAndResumeAreNotCreated(t *testing.T) {
 					nativeSpawn++
 				}
 			}
-			if nativeSpawn != 2 {
+			if nativeSpawn != 1 {
 				t.Fatal("lost native collab")
 			}
 			if mode == "tree-failed" && (associated != 0 || child != 0) {
@@ -302,6 +305,11 @@ func TestTreeAdmissionAndNodeBound(t *testing.T) {
 		{context.Background(), "", codex.TreeOptions{}},
 		{context.Background(), "root", codex.TreeOptions{EventQueue: -1}},
 		{context.Background(), "root", codex.TreeOptions{MaxNodes: -1}},
+		{context.Background(), "root", codex.TreeOptions{MaxDepth: -1}},
+		{context.Background(), "root", codex.TreeOptions{PendingEvents: -1}},
+		{context.Background(), "root", codex.TreeOptions{PendingBytes: -1}},
+		{context.Background(), "root", codex.TreeOptions{PendingAge: -1}},
+		{context.Background(), "root", codex.TreeOptions{DedupEntries: -1}},
 	} {
 		if _, err := f.c.SubscribeTree(tc.ctx, tc.root, tc.options); err == nil {
 			t.Fatal("invalid admission accepted")

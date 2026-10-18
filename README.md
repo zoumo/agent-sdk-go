@@ -413,7 +413,7 @@ attribution and [dependency provenance](docs/protocol/README.md#licensing) for t
 WebSocket transport library. This is an independent SDK, not an OpenAI-maintained
 Go SDK.
 
-### Observe a root and its live direct children
+### Observe a root and its live descendants
 
 Register before starting root work:
 
@@ -443,12 +443,31 @@ Source thread/turn/item IDs, direct parent, provider, connection epoch and local
 sequence accompany delivery. Unknown fields, methods, explicit null and absent
 parameters remain available. Each observer owns its buffers.
 
-This first slice follows **direct children only** after their collab evidence
-arrives. Its initial `ObservationState(incomplete)` explicitly reports this
-scope, the pre-relation gap, and unverified best-effort runtime coverage. Known
-source IDs outside the root/direct-child set are filtered; this includes child
-events arriving before the relation. No pending-event replay, recursive discovery,
-history seed, recovery or complete-tree guarantee is provided in this slice.
+Relations from completed collab items, native `Thread.parentThreadId`, and
+`source.subAgent.thread_spawn.parent_thread_id` recursively establish descendants.
+Ancestors are announced before descendants and their buffered native events.
+`agentPath` never proves a parent. First confirmed parent wins; conflicting or
+cyclic evidence produces an incomplete observation diagnostic with the rejected
+evidence, without rebinding. `PreviousEvidence` retains the accepted edge on a
+conflict, and `TreeEvidence.ParentThreadID` identifies each proposed parent.
+A later live spawn can independently confirm Created
+on the same relation key after Associated, once per entity across turns.
+
+Events whose source is not yet related enter bounded pending storage. After a
+count, byte or age limit they are delivered with `Scope="unresolved"` and an
+`unresolved-source` incomplete diagnostic. This can include unrelated roots;
+only `Scope="child"` establishes tree membership. Later association does not
+replay already delivered native records. Per-source pending order and exact Raw
+are retained. The initial observation remains incomplete because native attach is
+best-effort and runtime coverage is unverified. History seeds and reconnect
+recovery are not implemented.
+
+Native deduplication is deliberately narrow: successfully decoded known-type `item/completed`
+notifications use thread, turn, method and item identity within this connection
+epoch. The bounded FIFO identity cache can forget older entries. Other native
+events, including repeated identical deltas and started/complete snapshots, are
+preserved. An item ID alone never identifies an individual delta.
+
 Notifications without an identifiable source are preserved as `unscoped` and do
 not establish membership. `UsageScope` remains `unknown`; child text and usage are
 never combined with parent answers or usage.
@@ -462,9 +481,12 @@ remain unverified; the SDK does not probe them with execution RPCs. See
 [compatibility and evidence](docs/compatibility.md#managed-direct-child-observation-ticket-01).
 
 `TreeOptions.EventQueue` defaults to `Limits.EventQueue`; `MaxNodes` defaults to
-4096 including the root. Both require positive values or zero for defaults. Queue
-overflow terminates only that observer with `SubscriptionOverflowError`; graph
-exhaustion ends it with `ErrLimit`. Each tree uses one shared subscription-admission
+4096 including the root and unresolved relation nodes; `MaxDepth` defaults to 32
+edges. `PendingEvents`, `PendingBytes`, `PendingAge` and `DedupEntries` default to
+128, 4 MiB (stored envelope plus params), 5 seconds and 8192. Zero selects defaults;
+negative values are invalid. The age limit only bounds association waiting.
+Queue overflow terminates only that observer with `SubscriptionOverflowError`;
+graph/depth exhaustion ends it with `ErrLimit`. Each tree uses one shared admission
 slot. `Close` ends local observation without interrupting provider work. Parent
 completion does not close it. Permission and question answers still go through
 original `Client.Requests()` handles, with no second answer authority in records.

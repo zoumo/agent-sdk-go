@@ -679,6 +679,62 @@
       "revision_note": "Working source/test snapshot identified by hashes; delivered in the commit containing this record. Exact delivery SHA and hosted CI result are reported separately. E3/E4 not run.",
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9"
+    },
+    {
+      "id": "subagent02-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "bf7654035f1e073a2374bf2600e667d947684ac7",
+      "tested_source_sha256": {
+        "tree.go": "a021bf538b07e3167a181f31fd2cc7adb6b1fe1b3d5b738ae3fc119c39b9224d",
+        "tree_contract_test.go": "b2eb9f2b5d754699efc4b1cb0ba4bf7af5d0d5577dbe173d270cc38758cab836",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95"
+      },
+      "test_files": [
+        "tree.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go"
+      ],
+      "test_names": [
+        "TestTreeNestedOrderingAndIdentity",
+        "TestTreePendingLimitsAndNoReplay",
+        "TestTreeDepthAndDedupBounds"
+      ],
+      "coverage": "Full offline repository suite. Original public-client synthetic stdio/WS/WSS fixtures prove recursive ancestor-first routing, early native event ordering and exact Raw, source/collab enrichment, multi-turn entity stability, reliable known terminal replay deduplication, identical no-ID deltas and unknown item identities preserved, partial/complete preserved, accepted/rejected conflict evidence, cycle rejection, pending count/bytes/age limits and no replay after unresolved delivery, depth and FIFO identity bounds. Existing native Subscribe remains broadcast; no child RPC or extra connection.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
+      "report": "../evidence/subagent-02.md"
+    },
+    {
+      "id": "subagent02-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "bf7654035f1e073a2374bf2600e667d947684ac7",
+      "tested_source_sha256": {
+        "tree.go": "a021bf538b07e3167a181f31fd2cc7adb6b1fe1b3d5b738ae3fc119c39b9224d",
+        "tree_contract_test.go": "b2eb9f2b5d754699efc4b1cb0ba4bf7af5d0d5577dbe173d270cc38758cab836",
+        "tree_nested_test.go": "07f82ec938851900d8748f7d283a197658148323b449f4480c131c87c23deb95"
+      },
+      "test_files": [
+        "tree.go",
+        "tree_contract_test.go",
+        "tree_nested_test.go"
+      ],
+      "test_names": [
+        "TestTreeNestedOrderingAndIdentity",
+        "TestTreePendingLimitsAndNoReplay",
+        "TestTreeDepthAndDedupBounds"
+      ],
+      "coverage": "Full offline repository suite. Original public-client synthetic stdio/WS/WSS fixtures prove recursive ancestor-first routing, early native event ordering and exact Raw, source/collab enrichment, multi-turn entity stability, reliable known terminal replay deduplication, identical no-ID deltas and unknown item identities preserved, partial/complete preserved, accepted/rejected conflict evidence, cycle rejection, pending count/bytes/age limits and no replay after unresolved delivery, depth and FIFO identity bounds. Existing native Subscribe remains broadcast; no child RPC or extra connection.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
+      "report": "../evidence/subagent-02.md"
     }
   ],
   "verification_commands": [

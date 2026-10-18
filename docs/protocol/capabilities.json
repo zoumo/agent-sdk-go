@@ -7594,14 +7594,16 @@
       "support": "partial",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v2/item.rs",
       "source_line": 1125,
-      "description": "SubscribeTree: local root/direct-child stream from completed collab evidence; successful live spawn confirms SDK-derived creation. Existing native broadcast unchanged; exact native envelope and per-observer data retained. No child resume/start/subscribe RPC or extra connection. Initial incomplete state reports direct-child-only, pre-relation gap, and unverified best-effort server auto-attach. Recursive/history/recovery workflows are not implemented. See ../compatibility.md#managed-direct-child-observation-ticket-01 for separate server E1 source evidence and limits.",
+      "description": "SubscribeTree: recursive native parent/source and completed collab relations, ancestor-first bounded pending delivery, explicit unresolved scope, conflict/cycle diagnostics and bounded terminal item identity deduplication. Live spawn confirms SDK-derived creation once across turns; no-ID deltas remain distinct. Existing native broadcast, exact envelopes and per-observer data retained. No child resume/start/subscribe RPC or extra connection. Best-effort server auto-attach is runtime-unverified. History/recovery workflows are not implemented. See ../compatibility.md#managed-direct-child-observation-ticket-01 for separate server E1 source evidence and limits.",
       "evidence": {
         "unit": [],
         "mock": [
-          "subagent01-contract-mock"
+          "subagent01-contract-mock",
+          "subagent02-contract-mock"
         ],
         "race": [
-          "subagent01-contract-race"
+          "subagent01-contract-race",
+          "subagent02-contract-race"
         ],
         "live": []
       }

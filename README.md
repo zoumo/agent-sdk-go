@@ -160,3 +160,11 @@ See the [compatibility inventory](docs/compatibility.md) for every official expo
 Message construction, JSON round trips, optional values and Raw/typed editing
 rules are documented in [the message JSON contract](docs/message-json.md).
 See [type source and license review](docs/type-sources.md) for pinned references.
+
+### Subagent forwarding
+
+`OpenTree` owns one native stream and enables `forwardSubagentText` during
+initialization. It exposes lossless native frames and explicitly marked SDK
+association/observation records. Forwarding support remains unverified until
+there is runtime evidence; new entity creation is not inferred from task start.
+See [API, creation evidence and current limits](docs/subagent-events.md).

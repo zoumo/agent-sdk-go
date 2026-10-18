@@ -32,12 +32,15 @@ type Options struct {
 	Model   string
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
-	ResumeID          string
-	Env               []string
-	InitializeTimeout time.Duration
-	ShutdownTimeout   time.Duration
-	Limits            Limits
-	PermissionHandler PermissionHandler
+	ResumeID string
+	// ForwardSubagentText requests native child text forwarding at initialize.
+	// False omits the option; acknowledgment does not prove CLI support.
+	ForwardSubagentText bool
+	Env                 []string
+	InitializeTimeout   time.Duration
+	ShutdownTimeout     time.Duration
+	Limits              Limits
+	PermissionHandler   PermissionHandler
 }
 
 func (o *Options) defaults() error {
@@ -184,7 +187,11 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	go c.ownLifecycle()
 	initCtx, cancel := context.WithTimeout(ctx, options.InitializeTimeout)
 	defer cancel()
-	if _, err := c.control(initCtx, "initialize", map[string]any{"subtype": "initialize", "hooks": nil}); err != nil {
+	initialize := map[string]any{"subtype": "initialize", "hooks": nil}
+	if options.ForwardSubagentText {
+		initialize["forwardSubagentText"] = true
+	}
+	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
 		c.fail(&Error{Op: "initialize", Err: err})
 		_ = c.Close()
 		final := c.Err()

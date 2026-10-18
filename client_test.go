@@ -58,6 +58,12 @@ func runFixture(mode string) {
 		}
 	}
 	switch mode {
+	case "tree_early":
+		request, _ := init["request"].(map[string]any)
+		if request["forwardSubagentText"] != true {
+			os.Exit(14)
+		}
+		fmt.Fprintln(os.Stdout, earlyTreeFrame)
 	case "session_identity_at_initialize":
 		fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": "native-at-initialize"})
 	case "init_stderr":
@@ -79,6 +85,10 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if mode == "tree" {
+		runTreeFixture(reader)
+		return
+	}
 	if strings.HasPrefix(mode, "overload_") {
 		runOverloadFixture(mode, reader)
 		return

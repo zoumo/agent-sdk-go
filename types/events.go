@@ -13,6 +13,9 @@ import (
 // views. Unknown message kinds, fields and content blocks remain in Raw.
 // Raw values belong to the caller and are never reused by the reader.
 type Event struct {
+	// AgentID is the native envelope identity, not a session or tool-use ID.
+	AgentID         *string                 `json:"agent_id,omitempty"`
+	SubagentType    *string                 `json:"subagent_type,omitempty"`
 	Type            string                  `json:"type"`
 	Subtype         string                  `json:"subtype,omitempty"`
 	SessionID       string                  `json:"session_id,omitempty"`

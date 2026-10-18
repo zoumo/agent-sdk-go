@@ -9,14 +9,15 @@ import "github.com/zoumo/claude-agent-sdk-go/types"
 // as it is when copying Options directly; this function does not validate it.
 func OptionsFromTypes(config types.Options) Options {
 	return Options{
-		CLIPath:           config.CLIPath,
-		WorkDir:           config.WorkDir,
-		Model:             config.Model,
-		ResumeID:          config.ResumeID,
-		Env:               config.Env,
-		InitializeTimeout: config.InitializeTimeout,
-		ShutdownTimeout:   config.ShutdownTimeout,
-		Limits:            config.Limits,
+		ForwardSubagentText: config.ForwardSubagentText,
+		CLIPath:             config.CLIPath,
+		WorkDir:             config.WorkDir,
+		Model:               config.Model,
+		ResumeID:            config.ResumeID,
+		Env:                 config.Env,
+		InitializeTimeout:   config.InitializeTimeout,
+		ShutdownTimeout:     config.ShutdownTimeout,
+		Limits:              config.Limits,
 	}
 }
 
@@ -24,13 +25,14 @@ func OptionsFromTypes(config types.Options) Options {
 // runtime options; Env retains the same backing slice.
 func (o Options) Types() types.Options {
 	return types.Options{
-		CLIPath:           o.CLIPath,
-		WorkDir:           o.WorkDir,
-		Model:             o.Model,
-		ResumeID:          o.ResumeID,
-		Env:               o.Env,
-		InitializeTimeout: o.InitializeTimeout,
-		ShutdownTimeout:   o.ShutdownTimeout,
-		Limits:            o.Limits,
+		ForwardSubagentText: o.ForwardSubagentText,
+		CLIPath:             o.CLIPath,
+		WorkDir:             o.WorkDir,
+		Model:               o.Model,
+		ResumeID:            o.ResumeID,
+		Env:                 o.Env,
+		InitializeTimeout:   o.InitializeTimeout,
+		ShutdownTimeout:     o.ShutdownTimeout,
+		Limits:              o.Limits,
 	}
 }

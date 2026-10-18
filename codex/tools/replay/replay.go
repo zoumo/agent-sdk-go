@@ -22,12 +22,15 @@ import (
 var fixtures = fixturedata.Files
 
 type Frame struct {
-	Ordinal   int             `json:"ordinal"`
-	Direction string          `json:"direction"`
-	Channel   string          `json:"channel"`
-	Epoch     int             `json:"epoch"`
-	ElapsedMS int64           `json:"elapsedMs"`
-	Wire      json.RawMessage `json:"wire"`
+	Ordinal   int    `json:"ordinal"`
+	Direction string `json:"direction"`
+	Channel   string `json:"channel"`
+	Epoch     int    `json:"epoch"`
+	ElapsedMS int64  `json:"elapsedMs"`
+	// DelayMS and Disconnect are synthetic scenario actions, never inferred from capture timing.
+	DelayMS    int64           `json:"delayMs,omitempty"`
+	Disconnect bool            `json:"disconnect,omitempty"`
+	Wire       json.RawMessage `json:"wire"`
 }
 
 func Load(story string) ([]Frame, error) {
@@ -82,95 +85,10 @@ func canonical(b []byte) any {
 	return v
 }
 
-// Peer follows captured dependencies, never wall-clock delays. Each client RPC ID
-// is rebound to the current SDK ID; reverse IDs remain in their separate namespace.
-// The final private assertion proves that every retained frame was consumed.
+// Peer follows captured dependencies and retains the private replay/assert
+// completion handshake used by existing recording verification.
 func Peer(in io.Reader, out io.Writer, frames []Frame) error {
-	s := bufio.NewScanner(in)
-	s.Buffer(make([]byte, 4096), 2<<20)
-	ids := map[string]json.RawMessage{}
-	active := map[string]bool{}
-	reverse := map[string]bool{}
-	for _, f := range frames {
-		want, err := object(f.Wire)
-		if err != nil {
-			return err
-		}
-		if f.Direction == "c2s" {
-			if !s.Scan() {
-				return errors.New("early client EOF")
-			}
-			got, err := object(s.Bytes())
-			if err != nil {
-				return err
-			}
-			if _, rpc := want["method"]; rpc && want["id"] != nil {
-				key := string(want["id"])
-				if active[key] || ids[key] != nil {
-					return errors.New("duplicate recorded request ID")
-				}
-				if got["id"] == nil {
-					return errors.New("missing client ID")
-				}
-				for _, id := range ids {
-					if bytes.Equal(id, got["id"]) {
-						return errors.New("duplicate current request ID")
-					}
-				}
-				ids[key] = append(json.RawMessage(nil), got["id"]...)
-				active[key] = true
-				got["id"] = want["id"]
-			} else if want["id"] != nil {
-				key := string(want["id"])
-				if !reverse[key] {
-					return errors.New("unknown or duplicate reverse answer")
-				}
-				delete(reverse, key)
-			}
-			if !equal(canonical(mustJSON(got)), canonical(f.Wire)) {
-				return fmt.Errorf("client frame mismatch at ordinal %d", f.Ordinal)
-			}
-		} else {
-			if id := want["id"]; id != nil {
-				key := string(id)
-				if want["method"] != nil {
-					if reverse[key] {
-						return errors.New("duplicate reverse ID")
-					}
-					reverse[key] = true
-				} else {
-					if !active[key] || ids[key] == nil {
-						return errors.New("response without request")
-					}
-					want["id"] = ids[key]
-					delete(active, key)
-				}
-			}
-			if _, err = fmt.Fprintln(out, string(mustJSON(want))); err != nil {
-				return err
-			}
-		}
-	}
-	if len(active) != 0 || len(reverse) != 0 {
-		return errors.New("unfinished protocol requests")
-	}
-	if !s.Scan() {
-		return errors.New("missing completion assertion")
-	}
-	m, err := object(s.Bytes())
-	if err != nil {
-		return err
-	}
-	if string(m["method"]) != `"replay/assert"` || m["id"] == nil || m["params"] != nil {
-		return errors.New("extra client request")
-	}
-	if _, err = fmt.Fprintf(out, "{\"id\":%s,\"result\":{}}\n", m["id"]); err != nil {
-		return err
-	}
-	if s.Scan() {
-		return errors.New("request after assertion")
-	}
-	return s.Err()
+	return runPeer(context.Background(), in, out, frames, true)
 }
 func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)

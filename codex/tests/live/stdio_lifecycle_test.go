@@ -22,7 +22,12 @@ type StdioLifecycleHistorySuite struct {
 	executable string
 }
 
-func TestStdioLifecycleHistory(t *testing.T) { suite.Run(t, new(StdioLifecycleHistorySuite)) }
+func TestStdioLifecycleHistory(t *testing.T) {
+	if os.Getenv("RUN_MAC_STDIO_LIVE") != "1" {
+		t.Skip("live scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	}
+	suite.Run(t, new(StdioLifecycleHistorySuite))
+}
 
 func (s *StdioLifecycleHistorySuite) SetupTest() {
 	t := s.T()

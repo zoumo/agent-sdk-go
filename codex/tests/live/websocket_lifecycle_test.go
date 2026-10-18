@@ -32,7 +32,12 @@ type WebSocketLifecycleHistorySuite struct {
 	executable string
 }
 
-func TestWebSocketLifecycleHistory(t *testing.T) { suite.Run(t, new(WebSocketLifecycleHistorySuite)) }
+func TestWebSocketLifecycleHistory(t *testing.T) {
+	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
+		t.Skip("live scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	}
+	suite.Run(t, new(WebSocketLifecycleHistorySuite))
+}
 
 func (s *WebSocketLifecycleHistorySuite) SetupTest() {
 	t := s.T()

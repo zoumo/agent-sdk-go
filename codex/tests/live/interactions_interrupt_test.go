@@ -22,7 +22,12 @@ type StdioInteractionsInterruptSuite struct {
 	executable string
 }
 
-func TestStdioInteractionsInterrupt(t *testing.T) { suite.Run(t, new(StdioInteractionsInterruptSuite)) }
+func TestStdioInteractionsInterrupt(t *testing.T) {
+	if os.Getenv("RUN_MAC_INTERACTIONS_LIVE") != "1" {
+		t.Skip("live scenario skipped: set RUN_MAC_INTERACTIONS_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
+	}
+	suite.Run(t, new(StdioInteractionsInterruptSuite))
+}
 
 func (s *StdioInteractionsInterruptSuite) SetupTest() {
 	t := s.T()

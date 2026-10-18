@@ -84,7 +84,15 @@ func (s *CommonStoriesSuite) checkStory(story string, got storyTrace) {
 		check.Error(got.AnswerError, "closing while waiting for an answer must invalidate the original handle")
 		check.Error(got.RetryError, "closed original handle must stay invalid")
 	case "US-009":
-		check.Error(got.OverflowError, "slow consumption silently lost events")
+		check.NoError(got.OverflowError, "slow consumer terminated observation")
+		bursts := 0
+		for _, event := range got.Events {
+			if event.Kind == "burst" {
+				bursts++
+			}
+		}
+		check.Equal(32, bursts, "accepted burst must drain completely")
+		check.Equal("barrier", got.Events[len(got.Events)-1].Kind, "burst barrier must remain last")
 	case "US-010":
 		unknown := 0
 		for _, e := range got.Events {

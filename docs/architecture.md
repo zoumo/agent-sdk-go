@@ -9,6 +9,8 @@ worker-safety requirements. Humans and agents use the same standards.
 One module and version keep builds and releases coordinated while native SDKs
 retain their own protocols. Sharing confirmed relationship rules avoids two
 implementations of graph admission without coupling native event interpretation.
+The shared [event FIFO](event-delivery.md) likewise handles storage and waiting
+without sharing client instances or native event semantics.
 
 Package documentation retains native protocol inventories, schema sources,
 compatibility boundaries and recorded fixture provenance. Shared operating and

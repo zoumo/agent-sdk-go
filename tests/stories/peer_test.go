@@ -119,6 +119,7 @@ func peer(provider, story string) error {
 			for i := 0; i < 32; i++ {
 				marker("burst")
 			}
+			marker("barrier")
 		case "US-010":
 			for i := 0; i < 2; i++ {
 				if provider == "codex" {

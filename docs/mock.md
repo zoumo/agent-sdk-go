@@ -211,6 +211,10 @@ authentication failure. Author successful Claude conversations as synthetic.
 [External consumer tests](../tests/consumers/mock/mock_test.go) demonstrate
 complete synthetic initialization, two-way question/permission handling,
 interrupts, canceled caller contexts, disconnection and strict mismatch failures.
+Paused-consumer stress sends 2,048 ordered native events through each built mock
+CLI with the legacy event capacity set to one. Question/permission answers and
+control replies finish before events are read; accepted events then drain in order
+after the synthetic disconnect. These are synthetic stress cases, not recordings.
 The consumer gate fetches the precise pushed module SHA into a fresh module and
 cache, builds both commands by public import path and runs those tests against
 the real SDKs. Downloads occur first; test execution then disables module network
@@ -224,8 +228,7 @@ mise exec -- bash scripts/check-consumers.sh FULL_PUSHED_COMMIT_SHA
 These peers expose SDK behavior; they do not repair it. Current native tests and
 source audit identify these limits, which are not a permanent API promise: Codex
 late responses after local call timeout count as unmatched responses, queued
-approval handles may remain writable after resolution, a shared delta/full-event
-queue overflow terminates the connection, and duplicate `item/completed` keys
+approval handles may remain writable after resolution, and duplicate `item/completed` keys
 follow native deduplication. See native compatibility and observation docs for
 other SDK limits. Synthetic passing tests establish the chosen offline paths;
 they do not certify unmodeled real CLI behavior.

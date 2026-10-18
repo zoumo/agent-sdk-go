@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,7 +166,7 @@ func (s *consumerSuite) TestClaude() {
 			permissions := make(chan *claude.PermissionRequest, 1)
 			client, err := claude.Open(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
 			require.NoError(t, err)
-			defer client.Close()
+			defer client.Abort()
 			require.NoError(t, client.Send(ctx, "hello"))
 			if mode != "permission-and-interrupt" {
 				for {
@@ -269,5 +270,146 @@ func (s *consumerSuite) TestCommandExit() {
 				assert.NotEmpty(t, response)
 			})
 		}
+	}
+}
+
+// The mock waits for real question/control answers after writing the entire burst.
+// Until those replies arrive the SDK consumer deliberately reads no events.
+func (s *consumerSuite) TestSlowConsumerBurst() {
+	const count = 2048
+	for _, native := range []string{"codex", "claude"} {
+		s.Run(native, func() {
+			t := s.T()
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			if native == "codex" {
+				frames := append([]string(nil), codexInit...)
+				frames = append(frames, `>{"id":92,"method":"consumer/burst","params":{}}`)
+				for i := 0; i < count; i++ {
+					frames = append(frames, fmt.Sprintf(`<{"method":"fixture/burst","params":{"threadId":"root","index":%d}}`, i))
+				}
+				frames = append(frames,
+					`<{"id":"question","method":"item/tool/requestUserInput","params":{"threadId":"root","turnId":"turn","itemId":"item","questions":[]}}`,
+					`>{"id":"question","result":{"answers":{}}}`,
+					`<{"id":92,"result":{}}`,
+					`>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`,
+					`<{"id":93,"result":{}}`,
+					`>{"id":94,"method":"consumer/release","params":{}}`, `!`)
+				path := scenario(t, native, frames...)
+				client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: os.Getenv("SDK_MOCK_CODEX_BIN"), Args: []string{"app-server"}, Env: []string{"CODEX_MOCK_SCENARIO=" + path}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
+				require.NoError(t, err)
+				defer client.Close()
+				sub, err := client.Subscribe(ctx, "root", codextypes.SubscriptionOptions{EventQueue: 1})
+				require.NoError(t, err)
+				defer sub.Abort()
+				response := make(chan error, 1)
+				go func() { response <- client.Call(ctx, "consumer/burst", map[string]any{}, nil) }()
+				select {
+				case request := <-client.Requests():
+					require.NoError(t, request.Handle().Answer(ctx, json.RawMessage(`{"answers":{}}`)))
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				require.NoError(t, <-response)
+				_, err = client.InterruptTurn(ctx, codextypes.TurnInterruptParams{ThreadID: "root", TurnID: "turn"})
+				require.NoError(t, err)
+				require.Error(t, client.Call(ctx, "consumer/release", map[string]any{}, nil))
+				select {
+				case <-sub.Done():
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				require.Error(t, sub.Err()) // terminal transport error is visible before draining
+				seen := 0
+				startup := 0
+				for {
+					select {
+					case event, ok := <-sub.Events():
+						if !ok {
+							require.Equal(t, count, seen)
+							require.Equal(t, 1, startup, "initial derived observation must survive the burst")
+							return
+						}
+						if state, ok := event.Data.(*codextypes.ObservationState); ok && state.Reason == "best-effort-auto-attach-unverified" {
+							require.Zero(t, seen, "initial derived observation must precede native events")
+							startup++
+						}
+						if event.Method != "fixture/burst" {
+							continue
+						}
+						var payload struct{ Index int }
+						require.NoError(t, json.Unmarshal(event.Params, &payload))
+						require.Equal(t, seen, payload.Index)
+						seen++
+					case <-ctx.Done():
+						t.Fatal(ctx.Err())
+					}
+				}
+			}
+			frames := append([]string(nil), claudeInit...)
+			frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`)
+			for i := 0; i < count; i++ {
+				frames = append(frames, fmt.Sprintf(`<{"type":"fixture_burst","session_id":"synthetic","index":%d}`, i))
+			}
+			frames = append(frames,
+				`<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`,
+				`>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{}}}}`,
+				`>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`,
+				`<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`,
+				`>{"type":"user","message":{"role":"user","content":"release"},"parent_tool_use_id":null,"session_id":""}`, `!`)
+			path := scenario(t, native, frames...)
+			permissions := make(chan *claude.PermissionRequest, 1)
+			client, err := claude.Open(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, Limits: claude.Limits{EventBuffer: 1}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
+			require.NoError(t, err)
+			defer client.Abort()
+			require.NoError(t, client.Send(ctx, "hello"))
+			select {
+			case p := <-permissions:
+				require.NoError(t, p.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: json.RawMessage(`{}`)}))
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			require.NoError(t, client.Interrupt(ctx))
+			// The final input releases the fault only after the control ack is observed.
+			err = client.Send(ctx, "release")
+			require.NotErrorIs(t, err, context.DeadlineExceeded)
+			select {
+			case <-client.Done():
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			require.Error(t, client.Err())
+			canceled, stop := context.WithCancel(ctx)
+			stop()
+			_, err = client.Receive(canceled)
+			require.ErrorIs(t, err, context.Canceled)
+			seen := 0
+			startup := 0
+			for {
+				event, err := client.Receive(ctx)
+				if err != nil {
+					require.NotErrorIs(t, err, context.DeadlineExceeded)
+					require.Equal(t, count, seen)
+					require.Equal(t, 1, startup, "initial derived observation must survive the burst")
+					var terminal *claude.Error
+					require.ErrorAs(t, client.Close(), &terminal)
+					require.NotNil(t, terminal.ExitCode)
+					require.Equal(t, 4, *terminal.ExitCode)
+					break
+				}
+				if state, ok := event.(claude.ObservationState); ok && state.Reason == "forwarding-not-confirmed" {
+					require.Zero(t, seen, "initial derived observation must precede native events")
+					startup++
+				}
+				value, ok := event.(claude.Event)
+				if !ok || value.Type != "fixture_burst" {
+					continue
+				}
+				var payload struct{ Index int }
+				require.NoError(t, json.Unmarshal(value.Raw, &payload))
+				require.Equal(t, seen, payload.Index)
+				seen++
+			}
+		})
 	}
 }

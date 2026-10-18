@@ -95,7 +95,7 @@ func codexStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	s, err := c.Subscribe(ctx, "root", opts)
 	must(t, err)
-	defer s.Close()
+	defer s.Abort()
 	readUntil := func(target string) {
 		for {
 			select {
@@ -117,9 +117,9 @@ func codexStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	_, trace.SendError = c.StartTurn(ctx, ct.TurnStartParams{ThreadID: "root", Input: []ct.UserInput{}})
 	if story == "US-009" {
-		wait(t, ctx, s.Done())
+		must(t, trace.SendError) // reply follows the complete burst while Events is unread
+		readUntil("barrier")
 		trace.OverflowError = s.Err()
-		require.ErrorIs(t, trace.OverflowError, codex.ErrSubscriptionOverflow)
 		return
 	}
 	if story == "US-006" || story == "US-007" || story == "US-008" {
@@ -210,6 +210,8 @@ func codexFact(trace *storyTrace, e ct.Event) {
 		add("tool", p.ThreadID, "")
 	case "item/agentMessage/delta":
 		add("native", p.ThreadID, "")
+	case "fixture/burst":
+		add("burst", "", "")
 	case "fixture/barrier":
 		add("barrier", "", "")
 	case "fixture/unknown":
@@ -256,7 +258,7 @@ func claudeStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	c, err := claude.Open(ctx, opts)
 	must(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Abort() })
 	readUntil := func(target string) {
 		for {
 			e, err := c.Receive(ctx)
@@ -274,10 +276,9 @@ func claudeStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	trace.SendError = c.Send(ctx, "start")
 	if story == "US-009" {
-		wait(t, ctx, c.Done())
+		must(t, c.Interrupt(ctx)) // control reply follows the complete unread burst
+		readUntil("barrier")
 		trace.OverflowError = c.Err()
-		var overload *claude.ResourceLimitError
-		require.ErrorAs(t, trace.OverflowError, &overload)
 		return
 	}
 	if story == "US-006" || story == "US-007" || story == "US-008" {
@@ -385,6 +386,8 @@ func claudeFact(trace *storyTrace, event claude.ReceivedEvent) {
 			if v.AgentID != nil {
 				add("native", *v.AgentID, "", string(v.Raw))
 			}
+		case "fixture_burst":
+			add("burst", "", "", string(v.Raw))
 		case "fixture_barrier":
 			add("barrier", "", "", string(v.Raw))
 		case "fixture_unknown":

@@ -1,47 +1,53 @@
 package lineage
 
 import (
-	"errors"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func newGraph(t *testing.T, limits Limits) *Graph[string] {
 	t.Helper()
 	g, err := New[string](limits)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return g
 }
 func accept(t *testing.T, err error) {
 	t.Helper()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 }
 func limits() Limits { return Limits{MaxNodes: 16, MaxRelations: 15, MaxDepth: 8} }
 
-func TestUnknownParentAndAncestors(t *testing.T) {
-	g := newGraph(t, limits())
+// GraphSuite gives each stateful relationship scenario its own graph.
+type GraphSuite struct {
+	suite.Suite
+	graph *Graph[string]
+}
+
+func (s *GraphSuite) SetupTest() { s.graph = newGraph(s.T(), limits()) }
+func TestGraph(t *testing.T)     { suite.Run(t, new(GraphSuite)) }
+
+func (s *GraphSuite) TestUnknownParentAndAncestors() {
+	t := s.T()
+	g := s.graph
 	accept(t, g.Root("root"))
 	accept(t, g.Confirm("leaf", "parent"))
-	if g.Reaches("leaf", "root") {
-		t.Fatal("unknown ancestry became root membership")
-	}
-	if parent, known := g.Parent("parent"); known || parent != "" {
-		t.Fatal(parent, known)
-	}
+	assert.False(t, g.Reaches("leaf", "root"), "unknown ancestry became root membership")
+	parent, known := g.Parent("parent")
+	assert.False(t, known)
+	assert.Empty(t, parent)
 	accept(t, g.Confirm("parent", "root"))
-	if !g.Reaches("leaf", "root") || !reflect.DeepEqual(g.Ancestors("leaf"), []string{"parent", "root"}) {
-		t.Fatal(g.Ancestors("leaf"))
-	}
-	if depth, rooted, exists := g.Depth("leaf"); depth != 2 || !rooted || !exists {
-		t.Fatal(depth, rooted, exists)
-	}
-	if _, _, exists := g.Depth("absent"); exists || g.Reaches("absent", "absent") {
-		t.Fatal("invented identity")
-	}
+	assert.True(t, g.Reaches("leaf", "root"))
+	assert.Equal(t, []string{"parent", "root"}, g.Ancestors("leaf"))
+	depth, rooted, exists := g.Depth("leaf")
+	assert.Equal(t, 2, depth)
+	assert.True(t, rooted)
+	assert.True(t, exists)
+	_, _, exists = g.Depth("absent")
+	assert.False(t, exists, "invented identity")
+	assert.False(t, g.Reaches("absent", "absent"), "invented identity")
 }
 
 // Include vertex membership in snapshots: rejected candidate evidence must not
@@ -66,16 +72,13 @@ func snapshot(g *Graph[string]) any {
 func reject(t *testing.T, g *Graph[string], want error, action func() error) {
 	t.Helper()
 	before := snapshot(g)
-	if err := action(); !errors.Is(err, want) {
-		t.Fatalf("got %v, want %v", err, want)
-	}
-	if !reflect.DeepEqual(before, snapshot(g)) {
-		t.Fatal("rejection changed graph")
-	}
+	assert.ErrorIs(t, action(), want)
+	assert.Equal(t, before, snapshot(g), "rejection changed graph")
 }
 
-func TestConfirmRejectionsAreAtomic(t *testing.T) {
-	g := newGraph(t, limits())
+func (s *GraphSuite) TestConfirmRejectionsAreAtomic() {
+	t := s.T()
+	g := s.graph
 	accept(t, g.Root("root"))
 	accept(t, g.Confirm("a", "root"))
 	accept(t, g.Confirm("b", "a"))
@@ -86,12 +89,13 @@ func TestConfirmRejectionsAreAtomic(t *testing.T) {
 	reject(t, g, ErrCycle, func() error { return g.Confirm("y", "x") })
 	reject(t, g, ErrConflict, func() error { return g.Root("a") })
 	accept(t, g.Confirm("a", "root"))
-	if nodes, edges := g.Counts(); nodes != 5 || edges != 3 {
-		t.Fatal(nodes, edges)
-	}
+	nodes, edges := g.Counts()
+	assert.Equal(t, 5, nodes)
+	assert.Equal(t, 3, edges)
 }
 
-func TestLiteralLimitsAndLateAncestors(t *testing.T) {
+func (s *GraphSuite) TestLiteralLimitsAndLateAncestors() {
+	t := s.T()
 	for _, tc := range []struct {
 		name  string
 		bound Limits
@@ -120,15 +124,12 @@ func TestLiteralLimitsAndLateAncestors(t *testing.T) {
 			reject(t, g, ErrDepthLimit, func() error { return g.Confirm("b", "a") })
 		}
 	}
-	for _, l := range []Limits{{}, {MaxNodes: 1, MaxRelations: -1}, {MaxNodes: 1, MaxDepth: -1}, {MaxNodes: 1, UnknownDepth: 2}} {
-		if _, err := New[string](l); !errors.Is(err, ErrInvalidLimits) {
-			t.Fatal(l, err)
-		}
-	}
+
 }
 
-func TestMergeRepointsAllDescendants(t *testing.T) {
-	g := newGraph(t, limits())
+func (s *GraphSuite) TestMergeRepointsAllDescendants() {
+	t := s.T()
+	g := s.graph
 	accept(t, g.Root("root"))
 	accept(t, g.Ensure("keep"))
 	accept(t, g.Confirm("drop", "root"))
@@ -136,22 +137,21 @@ func TestMergeRepointsAllDescendants(t *testing.T) {
 		accept(t, g.Confirm(child, "drop"))
 	}
 	accept(t, g.Merge("keep", "drop"))
-	if g.Has("drop") {
-		t.Fatal("retained contracted identity")
-	}
+	assert.False(t, g.Has("drop"), "retained contracted identity")
 	for _, child := range []string{"early", "late", "last"} {
 		parent, known := g.Parent(child)
-		if !known || parent != "keep" || !g.Reaches(child, "root") {
-			t.Fatal(child, parent, known)
-		}
+		assert.True(t, known, child)
+		assert.Equal(t, "keep", parent, child)
+		assert.True(t, g.Reaches(child, "root"), child)
 	}
-	if nodes, edges := g.Counts(); nodes != 5 || edges != 4 {
-		t.Fatal(nodes, edges)
-	}
+	nodes, edges := g.Counts()
+	assert.Equal(t, 5, nodes)
+	assert.Equal(t, 4, edges)
 }
 
-func TestMergeRejectsConflictsCyclesAndLateDepth(t *testing.T) {
-	g := newGraph(t, limits())
+func (s *GraphSuite) TestMergeRejectsConflictsCyclesAndLateDepth() {
+	t := s.T()
+	g := s.graph
 	accept(t, g.Confirm("a", "p"))
 	accept(t, g.Confirm("b", "q"))
 	reject(t, g, ErrConflict, func() error { return g.Merge("a", "b") })
@@ -167,30 +167,48 @@ func TestMergeRejectsConflictsCyclesAndLateDepth(t *testing.T) {
 	reject(t, g, ErrDepthLimit, func() error { return g.Merge("keep", "drop") })
 }
 
-func TestObserversOwnIndependentGraphs(t *testing.T) {
+func (s *GraphSuite) TestObserversOwnIndependentGraphs() {
+	t := s.T()
 	a, b := newGraph(t, limits()), newGraph(t, limits())
 	accept(t, a.Confirm("child", "one"))
 	accept(t, b.Confirm("child", "two"))
-	if parent, _ := a.Parent("child"); parent != "one" {
-		t.Fatal(parent)
-	}
-	if parent, _ := b.Parent("child"); parent != "two" {
-		t.Fatal(parent)
+	for _, tc := range []struct {
+		name  string
+		graph *Graph[string]
+		want  string
+	}{{"first", a, "one"}, {"second", b, "two"}} {
+		t.Run(tc.name, func(t *testing.T) { parent, _ := tc.graph.Parent("child"); assert.Equal(t, tc.want, parent) })
 	}
 }
 
-func TestRootAndEdgeAdmissionRollBackTogether(t *testing.T) {
+func (s *GraphSuite) TestRootAndEdgeAdmissionRollBackTogether() {
+	t := s.T()
 	g := newGraph(t, Limits{MaxNodes: 2, MaxRelations: 0, MaxDepth: 2})
 	accept(t, g.Ensure("child"))
 	reject(t, g, ErrRelationLimit, func() error { return g.ConfirmRoot("child", "new-root") })
 	accept(t, g.Ensure("unknown"))
 	reject(t, g, ErrRelationLimit, func() error { return g.ConfirmRoot("child", "unknown") })
-	if g.IsRoot("unknown") {
-		t.Fatal("rejected root designation retained")
-	}
+	assert.False(t, g.IsRoot("unknown"), "rejected root designation retained")
 	g = newGraph(t, limits())
 	accept(t, g.ConfirmRoot("child", "root"))
-	if !g.Reaches("child", "root") || !g.IsRoot("root") {
-		t.Fatal("root edge not confirmed")
+	assert.True(t, g.Reaches("child", "root"), "root edge not confirmed")
+	assert.True(t, g.IsRoot("root"), "root edge not confirmed")
+}
+
+// New is a pure constructor: exercise its rejected inputs as independent cases.
+func TestNewRejectsInvalidLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		limits Limits
+	}{
+		{"zero", Limits{}},
+		{"negative relations", Limits{MaxNodes: 1, MaxRelations: -1}},
+		{"negative depth", Limits{MaxNodes: 1, MaxDepth: -1}},
+		{"invalid unknown depth", Limits{MaxNodes: 1, UnknownDepth: 2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := New[string](tc.limits)
+			assert.ErrorIs(t, err, ErrInvalidLimits, "limits=%+v", tc.limits)
+		})
 	}
 }

@@ -35,6 +35,8 @@ print(directory)
 PY
 )
 go get "github.com/zoumo/agent-sdk-go@$revision"
+# The consumer owns its test dependency; resolve it normally in its fresh cache.
+go get github.com/stretchr/testify@v1.12.1
 cat > consumer_test.go <<'GO'
 package consumer
 
@@ -43,6 +45,9 @@ import (
     "encoding/json"
     "reflect"
     "testing"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 
     codex "github.com/zoumo/agent-sdk-go/codex"
     codextypes "github.com/zoumo/agent-sdk-go/codex/types"
@@ -56,21 +61,34 @@ var _ func(*claude.Client, context.Context) (claude.ReceivedEvent, error) = (*cl
 // This executes only pure value/configuration operations; no client is opened.
 func TestNativeConfiguration(t *testing.T) {
     params := codextypes.ThreadStartParams{Ephemeral: codextypes.Some(true)}
-    data, err := json.Marshal(params)
-    if err != nil { t.Fatal(err) }
-    var decoded codextypes.ThreadStartParams
-    if err := json.Unmarshal(data, &decoded); err != nil { t.Fatal(err) }
-    if !reflect.DeepEqual(params, decoded) { t.Fatalf("configuration roundtrip: %s", data) }
     config := claudetypes.Options{CLIPath: "/explicit/unused/claude", ResumeID: "native-session"}
-    options := claude.OptionsFromTypes(config)
-    if options.CLIPath != config.CLIPath || options.ResumeID != config.ResumeID { t.Fatal("configuration adaptation changed native values") }
-    for _, value := range []struct{ value any; want string }{
-        {params, "github.com/zoumo/agent-sdk-go/codex/types"},
-        {config, "github.com/zoumo/agent-sdk-go/claude/types"},
+    for _, tc := range []struct {
+        name string
+        check func(*testing.T)
+    }{
+        {"codex configuration roundtrip", func(t *testing.T) {
+            data, err := json.Marshal(params)
+            require.NoError(t, err)
+            var decoded codextypes.ThreadStartParams
+            require.NoError(t, json.Unmarshal(data, &decoded))
+            assert.Equal(t, params, decoded, "configuration roundtrip: %s", data)
+        }},
+        {"claude native configuration", func(t *testing.T) {
+            options := claude.OptionsFromTypes(config)
+            assert.Equal(t, config.CLIPath, options.CLIPath, "configuration adaptation changed native CLI path")
+            assert.Equal(t, config.ResumeID, options.ResumeID, "configuration adaptation changed native resume ID")
+        }},
+        {"codex package identity", func(t *testing.T) {
+            assert.Equal(t, "github.com/zoumo/agent-sdk-go/codex/types", reflect.TypeOf(params).PkgPath())
+        }},
+        {"claude package identity", func(t *testing.T) {
+            assert.Equal(t, "github.com/zoumo/agent-sdk-go/claude/types", reflect.TypeOf(config).PkgPath())
+        }},
     } {
-        if got := reflect.TypeOf(value.value).PkgPath(); got != value.want { t.Fatalf("package identity %q, want %q", got, value.want) }
+        t.Run(tc.name, tc.check)
     }
 }
+
 GO
 python3 - "$module_dir" <<'PY'
 import pathlib, shutil, sys

@@ -3,31 +3,54 @@ package stories_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	claude "github.com/zoumo/agent-sdk-go/claude"
 	clt "github.com/zoumo/agent-sdk-go/claude/types"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	ct "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/testkit"
 )
 
-func TestCommonStories(t *testing.T) {
-	for _, story := range testkit.Stories {
-		t.Run(story, func(t *testing.T) {
-			t.Run("codex", func(t *testing.T) { testkit.Check(t, story, codexStory(t, story)) })
-			t.Run("claude", func(t *testing.T) { testkit.Check(t, story, claudeStory(t, story)) })
-			if story == "US-006" || story == "US-008" {
-				suffix := "-allow"
-				if story == "US-008" {
-					suffix = "-close"
+// CommonStoriesSuite runs the same acceptance table through isolated native
+// lifecycle adapters. The adapters keep each original answer handle local.
+type storyAdapter struct {
+	name string
+	run  func(*testing.T, string) storyTrace
+}
+type CommonStoriesSuite struct {
+	suite.Suite
+	adapters []storyAdapter
+}
+
+func (s *CommonStoriesSuite) SetupSuite() {
+	s.adapters = []storyAdapter{{"codex", codexStory}, {"claude", claudeStory}}
+}
+
+func TestCommonStories(t *testing.T) { suite.Run(t, new(CommonStoriesSuite)) }
+func (s *CommonStoriesSuite) TestNativeAdapters() {
+	for _, story := range storyIDs {
+		s.Run(story, func() {
+			modes := []string{""}
+			if story == "US-006" {
+				modes = append(modes, "-allow")
+			}
+			if story == "US-008" {
+				modes = append(modes, "-close")
+			}
+			for _, adapter := range s.adapters {
+				for _, suffix := range modes {
+					s.Run(adapter.name+suffix, func() {
+						t := s.T()
+						s.checkStory(story+suffix, adapter.run(t, story+suffix))
+					})
 				}
-				t.Run("codex"+suffix, func(t *testing.T) { testkit.Check(t, story+suffix, codexStory(t, story+suffix)) })
-				t.Run("claude"+suffix, func(t *testing.T) { testkit.Check(t, story+suffix, claudeStory(t, story+suffix)) })
 			}
 		})
 	}
@@ -40,22 +63,20 @@ func deadline(t *testing.T) context.Context {
 }
 func must(t *testing.T, err error) {
 	t.Helper()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 }
 func wait(t *testing.T, ctx context.Context, ch <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-ch:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.NoError(t, ctx.Err())
 	}
 }
 
 // Adapters deliberately retain native clients, native types and original answer
-// handles locally. Only detached facts cross into the common assertion package.
-func codexStory(t *testing.T, story string) (trace testkit.Trace) {
+// handles locally. Only detached facts reach the suite acceptance assertions.
+func codexStory(t *testing.T, story string) (trace storyTrace) {
 	mode := story
 	story = strings.TrimSuffix(strings.TrimSuffix(story, "-allow"), "-close")
 	ctx := deadline(t)
@@ -79,15 +100,13 @@ func codexStory(t *testing.T, story string) (trace testkit.Trace) {
 		for {
 			select {
 			case e, ok := <-s.Events():
-				if !ok {
-					t.Fatalf("observation ended: %v", s.Err())
-				}
+				require.True(t, ok, "observation ended: %v", s.Err())
 				codexFact(&trace, e)
 				if e.Method == "fixture/"+target {
 					return
 				}
 			case <-ctx.Done():
-				t.Fatal(ctx.Err())
+				require.NoError(t, ctx.Err())
 			}
 		}
 	}
@@ -100,9 +119,7 @@ func codexStory(t *testing.T, story string) (trace testkit.Trace) {
 	if story == "US-009" {
 		wait(t, ctx, s.Done())
 		trace.OverflowError = s.Err()
-		if !errors.Is(trace.OverflowError, codex.ErrSubscriptionOverflow) {
-			t.Fatalf("wrong overflow: %v", trace.OverflowError)
-		}
+		require.ErrorIs(t, trace.OverflowError, codex.ErrSubscriptionOverflow)
 		return
 	}
 	if story == "US-006" || story == "US-007" || story == "US-008" {
@@ -110,11 +127,9 @@ func codexStory(t *testing.T, story string) (trace testkit.Trace) {
 		select {
 		case r = <-c.Requests():
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.NoError(t, ctx.Err())
 		}
-		if r.ID().String() == "" {
-			t.Fatal("missing native request identity")
-		}
+		require.NotEmpty(t, r.ID().String(), "missing native request identity")
 		_, err := r.Data()
 		must(t, err)
 		if strings.HasSuffix(mode, "-close") {
@@ -130,9 +145,8 @@ func codexStory(t *testing.T, story string) (trace testkit.Trace) {
 		if story != "US-006" {
 			var questions ct.ToolRequestUserInputParams
 			must(t, json.Unmarshal(r.Params(), &questions))
-			if len(questions.Questions) != 1 || questions.Questions[0].ID != "q" {
-				t.Fatal("question identity lost")
-			}
+			require.Len(t, questions.Questions, 1, "question identity lost")
+			assert.Equal(t, "q", questions.Questions[0].ID, "question identity lost")
 			answer = json.RawMessage(`{"answers":{"q":{"answers":["free text / 自由文本"]}}}`)
 		}
 		handle := r.Handle()
@@ -150,13 +164,11 @@ func codexStory(t *testing.T, story string) (trace testkit.Trace) {
 	if story == "US-003" {
 		select {
 		case <-c.Requests():
-			t.Fatal("relationship minted answer authority")
+			assert.Fail(t, "relationship minted answer authority")
 		default:
 		}
 		var forged codex.AnswerHandle
-		if forged.Answer(ctx, nil) == nil {
-			t.Fatal("zero handle answered")
-		}
+		assert.Error(t, forged.Answer(ctx, nil), "zero handle answered")
 	}
 	if story == "US-012" {
 		_, trace.InterruptError = c.InterruptTurn(ctx, ct.TurnInterruptParams{ThreadID: "root", TurnID: "turn"})
@@ -171,9 +183,9 @@ func codexStory(t *testing.T, story string) (trace testkit.Trace) {
 	}
 	return
 }
-func codexFact(trace *testkit.Trace, e ct.Event) {
+func codexFact(trace *storyTrace, e ct.Event) {
 	add := func(kind, id, parent string) {
-		trace.Events = append(trace.Events, testkit.Observation{Kind: kind, ID: id, Parent: parent, Raw: string(e.Raw)})
+		trace.Events = append(trace.Events, storyObservation{Kind: kind, ID: id, Parent: parent, Raw: string(e.Raw)})
 	}
 	switch v := e.Data.(type) {
 	case *ct.SubagentAssociated:
@@ -226,7 +238,7 @@ func codexFact(trace *testkit.Trace, e ct.Event) {
 	}
 }
 
-func claudeStory(t *testing.T, story string) (trace testkit.Trace) {
+func claudeStory(t *testing.T, story string) (trace storyTrace) {
 	mode := story
 	story = strings.TrimSuffix(strings.TrimSuffix(story, "-allow"), "-close")
 	ctx := deadline(t)
@@ -265,9 +277,7 @@ func claudeStory(t *testing.T, story string) (trace testkit.Trace) {
 		wait(t, ctx, c.Done())
 		trace.OverflowError = c.Err()
 		var overload *claude.ResourceLimitError
-		if !errors.As(trace.OverflowError, &overload) {
-			t.Fatalf("wrong overflow: %v", trace.OverflowError)
-		}
+		require.ErrorAs(t, trace.OverflowError, &overload)
 		return
 	}
 	if story == "US-006" || story == "US-007" || story == "US-008" {
@@ -275,11 +285,10 @@ func claudeStory(t *testing.T, story string) (trace testkit.Trace) {
 		select {
 		case r = <-requests:
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.NoError(t, ctx.Err())
 		}
-		if r.RequestID() != "original" {
-			t.Fatal("request ID changed")
-		}
+		require.NotNil(t, r)
+		assert.Equal(t, "original", r.RequestID(), "request ID changed")
 		if strings.HasSuffix(mode, "-close") {
 			trace.CloseError = c.Close()
 			trace.AnswerError = r.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny})
@@ -296,9 +305,7 @@ func claudeStory(t *testing.T, story string) (trace testkit.Trace) {
 		if story != "US-006" {
 			var questions clt.AskUserQuestionInput
 			must(t, json.Unmarshal(r.Input(), &questions))
-			if len(questions.Questions) != 1 {
-				t.Fatal("question lost")
-			}
+			require.Len(t, questions.Questions, 1, "question lost")
 			text := "free text / 自由文本"
 			updated, err := questions.WithAnswers(map[string]clt.QuestionAnswer{questions.Questions[0].Question: {Text: &text}})
 			must(t, err)
@@ -318,13 +325,11 @@ func claudeStory(t *testing.T, story string) (trace testkit.Trace) {
 	if story == "US-003" {
 		select {
 		case <-requests:
-			t.Fatal("relationship minted permission authority")
+			assert.Fail(t, "relationship minted permission authority")
 		default:
 		}
 		var forged claude.PermissionRequest
-		if forged.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny}) == nil {
-			t.Fatal("zero permission handle answered")
-		}
+		assert.Error(t, forged.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny}), "zero permission handle answered")
 	}
 	if story == "US-012" {
 		trace.InterruptError = c.Interrupt(ctx)
@@ -338,9 +343,9 @@ func claudeStory(t *testing.T, story string) (trace testkit.Trace) {
 	}
 	return
 }
-func claudeFact(trace *testkit.Trace, event claude.ReceivedEvent) {
+func claudeFact(trace *storyTrace, event claude.ReceivedEvent) {
 	add := func(kind, id, parent, raw string) {
-		trace.Events = append(trace.Events, testkit.Observation{Kind: kind, ID: id, Parent: parent, Raw: raw})
+		trace.Events = append(trace.Events, storyObservation{Kind: kind, ID: id, Parent: parent, Raw: raw})
 	}
 	identity := func(i claude.SubagentIdentity) string {
 		if i.TaskID != "" {

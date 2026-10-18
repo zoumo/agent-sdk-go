@@ -2,7 +2,7 @@
 
 故事定义用户目标和共同验收，不要求两个原生协议具有相同事件全序。
 
-运行 `mise exec -- go test ./tests/stories -count=1`，或使用仓库 `scripts/check-offline.sh`。测试适配通过各自公开 API 连接到自执行的合成子进程；子进程替换完整环境，不启动真实 agent。`internal/testkit` 只检查脱离原始句柄的测试事实，不提供通用客户端、问答接口或回答状态机。
+运行 `mise exec -- go test ./tests/stories -count=1`，或使用仓库 `scripts/check-offline.sh`。测试适配通过各自公开 API 连接到自执行的合成子进程；子进程替换完整环境，不启动真实 agent。共同验收直接位于 [`CommonStoriesSuite.checkStory`](../../tests/stories/acceptance_test.go)，只检查脱离原始句柄的私有测试事实；原生适配和生命周期保留在 [`stories_test.go`](../../tests/stories/stories_test.go)。没有独立 testkit 包、通用客户端、问答接口或回答状态机。
 
 能力“支持”指原生公开 API 可表达契约；“条件支持”依赖原生请求或转发证据；“不支持”须显式记录，不能用跳过测试伪装通过。源码、离线、真实运行证据分别记录。
 
@@ -23,4 +23,4 @@
 
 真实 agent 测试本轮未执行。所有故事的真实运行证据均为“未验证”；已有认证受阻录制不构成成功证据，真实子 agent 自动关联成功仍未验证。协议各自的测试、schema、inventory、脱敏录制和示例继续独立保留。
 
-阶段 B 的 Linux 本地验证使用 mise 管理的 Go 1.26.9：共同故事普通测试、race 测试、`go vet ./internal/testkit ./tests/stories` 和导入边界检查均通过。macOS 与推送提交的精确 CI 结果以远程工作流为准；本地合成测试不替代真实运行证据。
+阶段 B 的 Linux 本地验证使用 mise 管理的 Go 1.26.9：共同故事普通测试、race 测试、`go vet ./tests/stories` 和导入边界检查均通过。macOS 与推送提交的精确 CI 结果以远程工作流为准；本地合成测试不替代真实运行证据。

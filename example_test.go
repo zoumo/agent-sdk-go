@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-package claude_test
+package claude
 
 import (
 	"context"
 	"fmt"
 	"log"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // This example compiles during tests but is not executed. Running it requires
@@ -15,7 +13,7 @@ import (
 func ExampleOpen() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client, err := claude.Open(ctx, claude.Options{CLIPath: "claude"})
+	client, err := Open(ctx, Options{CLIPath: "claude"})
 	if err != nil {
 		log.Print(err)
 		return
@@ -31,11 +29,11 @@ func ExampleOpen() {
 			log.Print(err)
 			return
 		}
-		if record.Kind != "Native" {
+		event, ok := record.(Event)
+		if !ok {
 			// Handle relationship and observation records in the application UI.
 			continue
 		}
-		event := record.Native
 		if event.Assistant != nil {
 			for _, block := range event.Assistant.Content.Blocks {
 				if block.Text != nil {
@@ -43,7 +41,7 @@ func ExampleOpen() {
 				}
 			}
 		}
-		if record.Scope == "root" && event.Result != nil {
+		if event.ParentToolUseID == nil && event.Result != nil {
 			return
 		} // This application stops at the root result; background work may still run.
 	}
@@ -54,7 +52,7 @@ func ExampleOpen() {
 func ExampleClient_RequestedResumeID() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client, err := claude.Open(ctx, claude.Options{CLIPath: "claude", ResumeID: "previous-native-session-id"})
+	client, err := Open(ctx, Options{CLIPath: "claude", ResumeID: "previous-native-session-id"})
 	if err != nil {
 		log.Print(err)
 		return
@@ -73,10 +71,10 @@ func ExampleClient_RequestedResumeID() {
 // This example is compiled but never executed by tests. A real run requires a
 // configured CLI and can incur account usage. The application owns the human UI.
 func ExamplePermissionRequest_Answer() {
-	requests := make(chan *claude.PermissionRequest, 8)
-	client, err := claude.Open(context.Background(), claude.Options{
+	requests := make(chan *PermissionRequest, 8)
+	client, err := Open(context.Background(), Options{
 		CLIPath: "claude",
-		PermissionHandler: func(request *claude.PermissionRequest) {
+		PermissionHandler: func(request *PermissionRequest) {
 			select {
 			case requests <- request: // Retain the handle for the application UI.
 			case <-request.Context().Done():
@@ -98,8 +96,8 @@ func ExamplePermissionRequest_Answer() {
 	select {
 	case request := <-requests:
 		fmt.Println(request.RequestID(), request.ToolName(), string(request.Input()))
-		if err := request.Answer(ctx, claude.PermissionAnswer{
-			Behavior: claude.PermissionDeny, Message: "The user declined this request",
+		if err := request.Answer(ctx, PermissionAnswer{
+			Behavior: PermissionDeny, Message: "The user declined this request",
 		}); err != nil {
 			log.Print(err)
 		}

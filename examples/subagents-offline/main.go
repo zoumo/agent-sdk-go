@@ -42,12 +42,12 @@ func run(output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "claude-tree-offline-")
+	dir, err := os.MkdirTemp("", "claude-subagents-offline-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	tree, err := claude.Open(ctx, claude.Options{
+	client, err := claude.Open(ctx, claude.Options{
 		CLIPath: executable,
 		WorkDir: dir,
 		// Replacement environment: no account configuration is inherited.
@@ -56,41 +56,35 @@ func run(output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer tree.Close()
-	if err := tree.Send(ctx, "emit synthetic tree"); err != nil {
+	defer client.Close()
+	if err := client.Send(ctx, "emit synthetic children"); err != nil {
 		return err
 	}
 	encoder := json.NewEncoder(output)
 	for {
-		record, err := tree.Receive(ctx) // exactly one consumer for the entire tree
+		record, err := client.Receive(ctx) // exactly one consumer for the session and its children
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		// Inspect Kind (Associated/Created/ObservationState/Native), Source, Parent,
-		// Source.RunID and CurrentRunID. Created confirms creation only when the fixed
-		// criterion is met. Native.Raw retains the original frame; usage is not summed.
-		raw := ""
-		if record.Native != nil {
-			raw = string(record.Native.Raw)
-		}
-		// Native marshals through its JSON codec; expose the exact original bytes
-		// separately as a string so output readers can also compare byte order.
-		if err := encoder.Encode(struct {
-			claude.TreeRecord
-			NativeRaw string `json:"native_raw,omitempty"`
-		}{record, raw}); err != nil {
+		// Native frames are printed directly, with their exact original bytes.
+		// Derived events use their separate concrete JSON codecs.
+		if native, ok := record.(claude.Event); ok {
+			if _, err := fmt.Fprintln(output, string(native.Raw)); err != nil {
+				return err
+			}
+		} else if err := encoder.Encode(record); err != nil {
 			return err
 		}
-		if record.Native != nil && record.Native.System != nil &&
-			record.Native.Subtype == "session_state_changed" && record.Native.System.State != nil &&
-			*record.Native.System.State == "idle" {
+		native, ok := record.(claude.Event)
+		if ok && native.System != nil && native.Subtype == "session_state_changed" &&
+			native.System.State != nil && *native.System.State == "idle" {
 			// A demo stop policy after all scripted frames. Idle is not proof that every
 			// task ended. In an application choose your own explicit Close policy.
 			// The root result above did not end this receive loop.
-			if err := tree.Close(); err != nil {
+			if err := client.Close(); err != nil {
 				return err
 			}
 		}

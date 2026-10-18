@@ -1,7 +1,7 @@
 //go:build !linux && !darwin && !freebsd && !openbsd && !netbsd && !dragonfly
 
 // SPDX-License-Identifier: Apache-2.0
-package claude_test
+package claude
 
 import "bufio"
 

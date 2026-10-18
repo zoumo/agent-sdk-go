@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"bufio"
@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	claude "github.com/zoumo/claude-agent-sdk-go"
 	"github.com/zoumo/claude-agent-sdk-go/internal/transcript"
 )
 
@@ -201,29 +200,29 @@ func runFixture(mode string) {
 	}
 }
 
-func fixtureOptions(t *testing.T, mode string) claude.Options {
+func fixtureOptions(t *testing.T, mode string) Options {
 	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	return claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_GO_FIXTURE=" + mode, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}
+	return Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_GO_FIXTURE=" + mode, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}
 }
-func openFixture(t *testing.T, mode string, configure ...func(*claude.Options)) *claude.Client {
+func openFixture(t *testing.T, mode string, configure ...func(*Options)) *Client {
 	t.Helper()
 	opts := fixtureOptions(t, mode)
 	for _, fn := range configure {
 		fn(&opts)
 	}
-	c, err := claude.Open(context.Background(), opts)
+	c, err := Open(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
-func receive(t *testing.T, c *claude.Client) claude.Event {
+func receive(t *testing.T, c *Client) Event {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -233,13 +232,13 @@ func receive(t *testing.T, c *claude.Client) claude.Event {
 	}
 	return event
 }
-func send(t *testing.T, c *claude.Client, text string) {
+func send(t *testing.T, c *Client, text string) {
 	t.Helper()
 	if err := c.Send(context.Background(), text); err != nil {
 		t.Fatal(err)
 	}
 }
-func awaitDone(t *testing.T, c *claude.Client) {
+func awaitDone(t *testing.T, c *Client) {
 	t.Helper()
 	select {
 	case <-c.Done():
@@ -264,12 +263,12 @@ func TestOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T) {
 	})
 }
 
-func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts claude.Options) {
+func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options) {
 	t.Helper()
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	opts.Model = "--odd model; $(not-a-shell)"
-	c, err := claude.Open(context.Background(), opts)
+	c, err := Open(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +335,7 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts claude.
 func TestTypedViewsAndLosslessUnknowns(t *testing.T) {
 	c := openFixture(t, "frames")
 	send(t, c, "first")
-	events := make([]claude.Event, 6)
+	events := make([]Event, 6)
 	for i := range events {
 		events[i] = receive(t, c)
 	}
@@ -397,7 +396,7 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 			opts := fixtureOptions(t, mode)
 			opts.InitializeTimeout = 100 * time.Millisecond
 			start := time.Now()
-			c, err := claude.Open(context.Background(), opts)
+			c, err := Open(context.Background(), opts)
 			if c != nil || err == nil {
 				t.Fatalf("Open = %v, %v", c, err)
 			}
@@ -410,7 +409,7 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 				}
 			}
 			if mode == "init_error" {
-				var control *claude.ControlError
+				var control *ControlError
 				if !errors.As(err, &control) || control.Message != "fixture refused initialization" {
 					t.Fatalf("control error lost: %v", err)
 				}
@@ -422,7 +421,7 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
 	for _, mode := range []string{"malformed", "truncated", "oversize"} {
 		t.Run(mode, func(t *testing.T) {
-			c := openFixture(t, mode, func(o *claude.Options) { o.Limits.FrameBytes = 1024 })
+			c := openFixture(t, mode, func(o *Options) { o.Limits.FrameBytes = 1024 })
 			send(t, c, "go")
 			e := receive(t, c)
 			if e.Type != "accepted" {
@@ -431,9 +430,9 @@ func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			_, err := nextNative(c, ctx)
-			target := claude.ErrProtocol
+			target := ErrProtocol
 			if mode == "oversize" {
-				target = claude.ErrResourceLimit
+				target = ErrResourceLimit
 			}
 			if !errors.Is(err, target) {
 				t.Fatalf("terminal = %v", err)
@@ -444,16 +443,16 @@ func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
 	c := openFixture(t, "invalid_type")
 	send(t, c, "go")
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, claude.ErrProtocol) {
+	if !errors.Is(err, ErrProtocol) {
 		t.Fatalf("invalid type = %v", err)
 	}
 }
 
 func TestOverflowIsTerminalAndDoneDoesNotNeedConsumer(t *testing.T) {
-	c := openFixture(t, "overflow", func(o *claude.Options) { o.Limits.EventBuffer = 2 })
+	c := openFixture(t, "overflow", func(o *Options) { o.Limits.EventBuffer = 2 })
 	send(t, c, "go")
 	awaitDone(t, c)
-	if !errors.Is(c.Err(), claude.ErrResourceLimit) {
+	if !errors.Is(c.Err(), ErrResourceLimit) {
 		t.Fatalf("Err = %v", c.Err())
 	}
 	for i := 0; i < 2; i++ {
@@ -465,13 +464,13 @@ func TestOverflowIsTerminalAndDoneDoesNotNeedConsumer(t *testing.T) {
 		}
 	}
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, claude.ErrResourceLimit) {
+	if !errors.Is(err, ErrResourceLimit) {
 		t.Fatalf("Receive = %v", err)
 	}
 }
 
 func TestExitErrorFollowsLastEventWithBoundedDiagnostics(t *testing.T) {
-	c := openFixture(t, "exit_error", func(o *claude.Options) { o.Limits.StderrBytes = 32 })
+	c := openFixture(t, "exit_error", func(o *Options) { o.Limits.StderrBytes = 32 })
 	send(t, c, "go")
 	if event := receive(t, c); event.Result == nil || event.Result.Result != "last" {
 		t.Fatal("last result lost")
@@ -480,7 +479,7 @@ func TestExitErrorFollowsLastEventWithBoundedDiagnostics(t *testing.T) {
 	if err == nil {
 		t.Fatal("exit error lost")
 	}
-	var detail *claude.Error
+	var detail *Error
 	if !errors.As(err, &detail) || detail.ExitCode == nil || *detail.ExitCode != 17 || len(detail.Stderr) > 32 || !strings.HasSuffix(detail.Stderr, "tail-marker") {
 		t.Fatalf("error diagnostics = %#v", detail)
 	}
@@ -491,7 +490,7 @@ func TestUnexpectedEOFAfterAcceptedEvent(t *testing.T) {
 	send(t, c, "go")
 	receive(t, c)
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, claude.ErrUnexpectedEOF) {
+	if !errors.Is(err, ErrUnexpectedEOF) {
 		t.Fatalf("EOF = %v", err)
 	}
 }
@@ -548,7 +547,7 @@ func TestSendCancellationBeforeWriteDoesNotClose(t *testing.T) {
 	c := openFixture(t, "echo")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := c.Send(ctx, "must not send"); !errors.Is(err, context.Canceled) || errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := c.Send(ctx, "must not send"); !errors.Is(err, context.Canceled) || errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("Send = %v", err)
 	}
 	send(t, c, "only frame")
@@ -566,7 +565,7 @@ func TestWriteFailuresAreReturnedDirectly(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 			err := c.Send(ctx, strings.Repeat("x", 1<<20))
-			if err == nil || !errors.Is(err, claude.ErrUnknownOutcome) {
+			if err == nil || !errors.Is(err, ErrUnknownOutcome) {
 				t.Fatalf("Send = %v", err)
 			}
 			awaitDone(t, c)
@@ -622,7 +621,7 @@ func TestConcurrentCloseAndReceiveWake(t *testing.T) {
 	if err := <-result; !errors.Is(err, io.EOF) {
 		t.Fatalf("Receive after Close = %v", err)
 	}
-	if err := c.Send(context.Background(), "after"); !errors.Is(err, claude.ErrClosed) {
+	if err := c.Send(context.Background(), "after"); !errors.Is(err, ErrClosed) {
 		t.Fatalf("Send after Close = %v", err)
 	}
 	awaitDone(t, c)
@@ -645,8 +644,8 @@ func TestCloseRetainsBufferedEvents(t *testing.T) {
 }
 
 func TestLocalOversizeRejectedWithoutWriting(t *testing.T) {
-	c := openFixture(t, "echo", func(o *claude.Options) { o.Limits.FrameBytes = 512 })
-	if err := c.Send(context.Background(), strings.Repeat("x", 1024)); !errors.Is(err, claude.ErrResourceLimit) {
+	c := openFixture(t, "echo", func(o *Options) { o.Limits.FrameBytes = 512 })
+	if err := c.Send(context.Background(), strings.Repeat("x", 1024)); !errors.Is(err, ErrResourceLimit) {
 		t.Fatalf("Send = %v", err)
 	}
 	send(t, c, "small")
@@ -656,7 +655,7 @@ func TestLocalOversizeRejectedWithoutWriting(t *testing.T) {
 }
 
 func TestStderrIsDrainedDuringInitialize(t *testing.T) {
-	c := openFixture(t, "init_stderr", func(o *claude.Options) { o.Limits.StderrBytes = 16 })
+	c := openFixture(t, "init_stderr", func(o *Options) { o.Limits.StderrBytes = 16 })
 	send(t, c, "ready")
 	receive(t, c)
 	if err := c.Close(); err != nil {
@@ -665,10 +664,10 @@ func TestStderrIsDrainedDuringInitialize(t *testing.T) {
 }
 
 func TestOversizeFrameFailsBeforeNewline(t *testing.T) {
-	c := openFixture(t, "oversize_without_newline", func(o *claude.Options) { o.Limits.FrameBytes = 1024 })
+	c := openFixture(t, "oversize_without_newline", func(o *Options) { o.Limits.FrameBytes = 1024 })
 	send(t, c, "go")
 	awaitDone(t, c)
-	if !errors.Is(c.Err(), claude.ErrResourceLimit) {
+	if !errors.Is(c.Err(), ErrResourceLimit) {
 		t.Fatalf("Err = %v", c.Err())
 	}
 }
@@ -677,7 +676,7 @@ func TestInvalidUTF8IsProtocolError(t *testing.T) {
 	c := openFixture(t, "invalid_utf8")
 	send(t, c, "go")
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, claude.ErrProtocol) {
+	if !errors.Is(err, ErrProtocol) {
 		t.Fatalf("Receive = %v", err)
 	}
 }
@@ -686,27 +685,27 @@ func TestCloseAfterDoneRetainsFinalProtocolError(t *testing.T) {
 	c := openFixture(t, "truncated")
 	send(t, c, "go")
 	awaitDone(t, c)
-	if err := c.Close(); !errors.Is(err, claude.ErrProtocol) {
+	if err := c.Close(); !errors.Is(err, ErrProtocol) {
 		t.Fatalf("Close = %v", err)
 	}
 	if e := receive(t, c); e.Type != "accepted" {
 		t.Fatal("accepted event lost")
 	}
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, claude.ErrProtocol) {
+	if !errors.Is(err, ErrProtocol) {
 		t.Fatalf("Receive = %v", err)
 	}
 }
 
 // nextNative is deliberately test-only: native contract tests skip SDK records.
-func nextNative(c *claude.Client, ctx context.Context) (claude.Event, error) {
+func nextNative(c *Client, ctx context.Context) (Event, error) {
 	for {
 		record, err := c.Receive(ctx)
 		if err != nil {
-			return claude.Event{}, err
+			return Event{}, err
 		}
-		if record.Kind == "Native" {
-			return *record.Native, nil
+		if event, ok := record.(Event); ok {
+			return event, nil
 		}
 	}
 }

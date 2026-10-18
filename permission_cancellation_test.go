@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"bufio"
@@ -16,8 +16,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // Original public-boundary tests informed by the pinned official Python
@@ -111,20 +109,20 @@ func awaitSignal(t *testing.T, signal <-chan struct{}) {
 
 func assertPermissionError(t *testing.T, err error, id string, reason error) {
 	t.Helper()
-	var permissionErr *claude.PermissionError
+	var permissionErr *PermissionError
 	if !errors.Is(err, reason) || !errors.As(err, &permissionErr) || permissionErr.RequestID != id {
 		t.Fatalf("expected permission %q with %v, got %v", id, reason, err)
 	}
 }
 
 func TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 2)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
-		opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+	requests := make(chan *PermissionRequest, 2)
+	c := openFixture(t, "permission_controls", func(opts *Options) {
+		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	emitPermission(t, c, "completed", "Read", json.RawMessage(`{}`))
 	completed := awaitPermission(t, requests)
-	if err := completed.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny}); err != nil {
+	if err := completed.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}); err != nil {
 		t.Fatal(err)
 	}
 	assertPermissionReply(t, c, "completed", map[string]any{"behavior": "deny", "message": ""})
@@ -138,9 +136,9 @@ func TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs(t *testing.T)
 		}
 		event.Cancel.RequestID = "changed-by-consumer"
 	}
-	assertPermissionError(t, pending.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), "pending", claude.ErrPermissionCancelled)
-	assertPermissionError(t, completed.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), "completed", claude.ErrPermissionUsed)
-	if !errors.Is(context.Cause(completed.Context()), claude.ErrPermissionUsed) || !errors.Is(context.Cause(pending.Context()), claude.ErrPermissionCancelled) {
+	assertPermissionError(t, pending.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "pending", ErrPermissionCancelled)
+	assertPermissionError(t, completed.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "completed", ErrPermissionUsed)
+	if !errors.Is(context.Cause(completed.Context()), ErrPermissionUsed) || !errors.Is(context.Cause(pending.Context()), ErrPermissionCancelled) {
 		t.Fatal("late cancellation overwrote a completed outcome")
 	}
 	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 1 {
@@ -150,39 +148,39 @@ func TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs(t *testing.T)
 		t.Fatal(err)
 	}
 	// Closing the transport cannot erase already terminal per-handle outcomes.
-	assertPermissionError(t, pending.Answer(context.Background(), claude.PermissionAnswer{}), "pending", claude.ErrPermissionCancelled)
-	assertPermissionError(t, completed.Answer(context.Background(), claude.PermissionAnswer{}), "completed", claude.ErrPermissionUsed)
+	assertPermissionError(t, pending.Answer(context.Background(), PermissionAnswer{}), "pending", ErrPermissionCancelled)
+	assertPermissionError(t, completed.Answer(context.Background(), PermissionAnswer{}), "completed", ErrPermissionUsed)
 }
 
 func TestPermissionFailedAttemptRemainsDistinctAfterClose(t *testing.T) {
 	for _, invalid := range []bool{false, true} {
 		t.Run(map[bool]string{false: "oversized", true: "invalid"}[invalid], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
-			requests := make(chan *claude.PermissionRequest, 1)
-			c := openFixture(t, "permission_controls", func(opts *claude.Options) {
+			requests := make(chan *PermissionRequest, 1)
+			c := openFixture(t, "permission_controls", func(opts *Options) {
 				opts.Limits.FrameBytes = 4096
 				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-				opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+				opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 			})
 			emitPermission(t, c, "failed", "Read", json.RawMessage(`{}`))
 			p := awaitPermission(t, requests)
-			answer := claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: strings.Repeat("x", 8192)}
-			underlying := claude.ErrResourceLimit
+			answer := PermissionAnswer{Behavior: PermissionDeny, Message: strings.Repeat("x", 8192)}
+			underlying := ErrResourceLimit
 			if invalid {
 				answer.Behavior = "invalid"
-				underlying = claude.ErrInvalidPermissionAnswer
+				underlying = ErrInvalidPermissionAnswer
 			}
 			err := p.Answer(context.Background(), answer)
-			assertPermissionError(t, err, "failed", claude.ErrPermissionWriteFailed)
-			if !errors.Is(err, underlying) || errors.Is(err, claude.ErrUnknownOutcome) {
+			assertPermissionError(t, err, "failed", ErrPermissionWriteFailed)
+			if !errors.Is(err, underlying) || errors.Is(err, ErrUnknownOutcome) {
 				t.Fatalf("pre-write failure lost known outcome: %v", err)
 			}
 			awaitDone(t, c)
 			_ = c.Close()
 			for range 2 {
-				err = p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow})
-				assertPermissionError(t, err, "failed", claude.ErrPermissionWriteFailed)
-				if errors.Is(err, claude.ErrClosed) {
+				err = p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+				assertPermissionError(t, err, "failed", ErrPermissionWriteFailed)
+				if errors.Is(err, ErrClosed) {
 					t.Fatal("failed answer was hidden by transport closure")
 				}
 			}
@@ -195,11 +193,11 @@ func TestPermissionFailedAttemptRemainsDistinctAfterClose(t *testing.T) {
 
 func TestPermissionCancelOverflowInvalidatesOtherHandles(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
-	requests := make(chan *claude.PermissionRequest, 2)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
+	requests := make(chan *PermissionRequest, 2)
+	c := openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Limits.EventBuffer = 1
 		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-		opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	emitPermission(t, c, "cancelled", "Read", json.RawMessage(`{}`))
 	cancelled := awaitPermission(t, requests)
@@ -209,19 +207,19 @@ func TestPermissionCancelOverflowInvalidatesOtherHandles(t *testing.T) {
 	emitPermissionFrame(t, c, map[string]any{"type": "accepted-before-overflow"})
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "cancelled"})
 	awaitDone(t, c)
-	if !errors.Is(context.Cause(cancelled.Context()), claude.ErrPermissionCancelled) || other.Context().Err() == nil {
+	if !errors.Is(context.Cause(cancelled.Context()), ErrPermissionCancelled) || other.Context().Err() == nil {
 		t.Fatal("cancel/overflow left a handle live")
 	}
 	if receive(t, c).Type != "accepted-before-overflow" {
 		t.Fatal("accepted output lost")
 	}
 	_, err := nextNative(c, context.Background())
-	var limit *claude.ResourceLimitError
-	if !errors.Is(err, claude.ErrResourceLimit) || !errors.As(err, &limit) || limit.Resource != "event buffer" {
+	var limit *ResourceLimitError
+	if !errors.Is(err, ErrResourceLimit) || !errors.As(err, &limit) || limit.Resource != "event buffer" {
 		t.Fatalf("overflow was not terminal: %v", err)
 	}
-	assertPermissionError(t, cancelled.Answer(context.Background(), claude.PermissionAnswer{}), "cancelled", claude.ErrPermissionCancelled)
-	assertPermissionError(t, other.Answer(context.Background(), claude.PermissionAnswer{}), "other", claude.ErrClosed)
+	assertPermissionError(t, cancelled.Answer(context.Background(), PermissionAnswer{}), "cancelled", ErrPermissionCancelled)
+	assertPermissionError(t, other.Answer(context.Background(), PermissionAnswer{}), "other", ErrClosed)
 	_ = c.Close()
 	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
 		t.Fatalf("overflowed cancellation allowed response: %#v", got)
@@ -230,7 +228,7 @@ func TestPermissionCancelOverflowInvalidatesOtherHandles(t *testing.T) {
 
 func TestPermissionUnknownCancelHistoryExhaustionIsExplicit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
+	c := openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Limits.PermissionHistory = 1
 		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 	})
@@ -242,7 +240,7 @@ func TestPermissionUnknownCancelHistoryExhaustionIsExplicit(t *testing.T) {
 	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "excess"})
 	awaitDone(t, c)
-	var limit *claude.ResourceLimitError
+	var limit *ResourceLimitError
 	if err := c.Close(); !errors.As(err, &limit) || limit.Resource != "permission request history" {
 		t.Fatalf("history exhaustion was not explicit: %v", err)
 	}
@@ -252,14 +250,14 @@ func TestPermissionUnknownCancelHistoryExhaustionIsExplicit(t *testing.T) {
 }
 
 func TestPermissionCancelledIgnoringHandlerCannotAnswerLater(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
+	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
 	results := make(chan error, 1)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
-		opts.PermissionHandler = func(p *claude.PermissionRequest) {
+	c := openFixture(t, "permission_controls", func(opts *Options) {
+		opts.PermissionHandler = func(p *PermissionRequest) {
 			requests <- p
 			<-release // Deliberately ignores cancellation until the test releases it.
-			results <- p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow})
+			results <- p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
 		}
 	})
 	emitPermission(t, c, "ignores-context", "Read", json.RawMessage(`{}`))
@@ -269,7 +267,7 @@ func TestPermissionCancelledIgnoringHandlerCannotAnswerLater(t *testing.T) {
 		t.Fatal("cancellation missing")
 	}
 	close(release)
-	assertPermissionError(t, awaitPermissionError(t, results), p.RequestID(), claude.ErrPermissionCancelled)
+	assertPermissionError(t, awaitPermissionError(t, results), p.RequestID(), ErrPermissionCancelled)
 	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 0 {
 		t.Fatalf("uncooperative callback answered: %#v", got)
 	}
@@ -277,10 +275,10 @@ func TestPermissionCancelledIgnoringHandlerCannotAnswerLater(t *testing.T) {
 
 func TestPermissionDisconnectInvalidatesPendingHandle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
-	requests := make(chan *claude.PermissionRequest, 1)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
+	requests := make(chan *PermissionRequest, 1)
+	c := openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-		opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	emitPermission(t, c, "disconnected", "Read", json.RawMessage(`{}`))
 	p := awaitPermission(t, requests)
@@ -291,7 +289,7 @@ func TestPermissionDisconnectInvalidatesPendingHandle(t *testing.T) {
 	}
 	_ = c.Close()
 	for range 2 {
-		assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), p.RequestID(), claude.ErrClosed)
+		assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), ErrClosed)
 	}
 	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
 		t.Fatalf("disconnected handle responded: %#v", got)
@@ -307,12 +305,12 @@ func TestPermissionMalformedCancellationIsProtocolFailure(t *testing.T) {
 	} {
 		t.Run(frame, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
-			c := openFixture(t, "permission_controls", func(opts *claude.Options) {
+			c := openFixture(t, "permission_controls", func(opts *Options) {
 				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 			})
 			emitPermissionFrame(t, c, json.RawMessage(frame))
 			awaitDone(t, c)
-			if err := c.Close(); !errors.Is(err, claude.ErrProtocol) {
+			if err := c.Close(); !errors.Is(err, ErrProtocol) {
 				t.Fatalf("malformed cancellation silently accepted: %v", err)
 			}
 			if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {

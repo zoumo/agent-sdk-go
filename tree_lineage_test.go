@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"context"
@@ -10,15 +10,13 @@ import (
 	"reflect"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // Read through the sent native frame and inspect the public derived records.
-func treeFrame(t *testing.T, c *claude.Client, frame string) ([]claude.TreeRecord, claude.TreeRecord) {
+func treeFrame(t *testing.T, c *Client, frame string) ([]relationshipRecord, relationshipRecord) {
 	t.Helper()
 	treeEmit(t, c, frame)
-	var derived []claude.TreeRecord
+	var derived []relationshipRecord
 	for {
 		r := treeReceive(t, c)
 		if r.Kind == "SubagentCreated" {
@@ -33,7 +31,7 @@ func treeFrame(t *testing.T, c *claude.Client, frame string) ([]claude.TreeRecor
 		derived = append(derived, r)
 	}
 }
-func treeHas(records []claude.TreeRecord, kind, reason string) bool {
+func treeHas(records []relationshipRecord, kind, reason string) bool {
 	for _, r := range records {
 		if r.Kind == kind && r.Reason == reason {
 			return true
@@ -192,7 +190,7 @@ func TestTreeLineageConflictsDoNotRebind(t *testing.T) {
 	}
 }
 func TestTreeAdditionalBounds(t *testing.T) {
-	for _, opts := range []claude.TreeOptions{{MaxDepth: -1}, {MaxDepth: 257}, {MaxDedupEntries: -1}, {MaxDedupEntries: 131073}} {
+	for _, opts := range []SubagentOptions{{MaxDepth: -1}, {MaxDepth: 257}, {MaxDedupEntries: -1}, {MaxDedupEntries: 131073}} {
 		if c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), opts); err == nil {
 			c.Close()
 			t.Fatal("invalid bounds", opts)
@@ -200,9 +198,9 @@ func TestTreeAdditionalBounds(t *testing.T) {
 	}
 	for _, mode := range []string{"depth", "dedup"} {
 		t.Run(mode, func(t *testing.T) {
-			opts := claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxDepth: 1}
+			opts := SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxDepth: 1}
 			if mode == "dedup" {
-				opts = claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxDedupEntries: 1}
+				opts = SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxDedupEntries: 1}
 			}
 			c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), opts)
 			if err != nil {
@@ -220,12 +218,12 @@ func TestTreeAdditionalBounds(t *testing.T) {
 				t.Fatal(ds)
 			}
 			for {
-				_, err = c.Receive(context.Background())
+				_, err = c.tree.receive(context.Background())
 				if err != nil {
 					break
 				}
 			}
-			if !errors.Is(err, claude.ErrResourceLimit) {
+			if !errors.Is(err, ErrResourceLimit) {
 				t.Fatal(err)
 			}
 		})
@@ -234,7 +232,7 @@ func TestTreeAdditionalBounds(t *testing.T) {
 func TestTaskLineageFieldsLosslessNullAbsentEdits(t *testing.T) {
 	for _, extra := range []string{``, `,"run_id":null,"parent_task_id":null,"spawn_depth":null,"is_backgrounded":null`, `,"run_id":"001","parent_task_id":"p","spawn_depth":2,"is_backgrounded":false`} {
 		frame := `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","patch":{"future":null,"status":"running"},"unknown":42` + extra + `}`
-		e, err := claude.ParseEvent([]byte(frame))
+		e, err := ParseEvent([]byte(frame))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -357,7 +355,7 @@ func TestTreeNoRunUUIDNotSuppressedAcrossObservedRunBoundary(t *testing.T) {
 }
 
 // Old lineage cases may now include the explicit association-wait diagnostic.
-func treeOnlyUnresolved(records []claude.TreeRecord) bool {
+func treeOnlyUnresolved(records []relationshipRecord) bool {
 	for _, r := range records {
 		if r.Kind != "ObservationState" || r.Reason != "unresolved-source" {
 			return false

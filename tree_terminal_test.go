@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package claude_test
+package claude
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	claude "github.com/zoumo/claude-agent-sdk-go"
 	"github.com/zoumo/claude-agent-sdk-go/types"
 )
 
@@ -92,7 +91,7 @@ func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
 	treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"1"}`)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := c.Receive(ctx); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := c.tree.receive(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
 	select {
@@ -109,7 +108,7 @@ func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
 	if end.State != "incomplete" {
 		t.Fatal(end)
 	}
-	if _, err := c.Receive(context.Background()); err == nil || errors.Is(err, io.EOF) {
+	if _, err := c.tree.receive(context.Background()); err == nil || errors.Is(err, io.EOF) {
 		t.Fatal(err)
 	}
 }
@@ -117,7 +116,7 @@ func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
 func TestTreeHistorySeedAndFreshEpoch(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
 	opts.ResumeID = "s"
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b", ParentTaskID: "a"}}})
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b", ParentTaskID: "a"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +143,7 @@ func TestTreeHistorySeedAndFreshEpoch(t *testing.T) {
 }
 
 func TestTreeRunLedgerBound(t *testing.T) {
-	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxRuns: 1})
+	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxRuns: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,12 +157,12 @@ func TestTreeRunLedgerBound(t *testing.T) {
 	}
 	treeReceive(t, c) // accepted native frame survives overflow
 	for {
-		_, err = c.Receive(context.Background())
+		_, err = c.tree.receive(context.Background())
 		if err != nil {
 			break
 		}
 	}
-	if !errors.Is(err, claude.ErrResourceLimit) {
+	if !errors.Is(err, ErrResourceLimit) {
 		t.Fatal(err)
 	}
 }

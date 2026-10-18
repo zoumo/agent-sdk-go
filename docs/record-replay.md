@@ -12,7 +12,7 @@ CLAUDE_GO_LIVE=0 SDK_REAL_AGENT_E2E=0 go run ./examples/recorded-replay
 python3 scripts/check-transcripts.py
 ```
 
-The example and integration test use `Open -> Send -> Receive(TreeRecord)` against a re-executed fake process with a replacement HOME/environment. The installed CLI, account, network and live fallback are never used. A poison CLI sentinel, native Raw comparison, dynamic initialize ID, complete-frame marker and deadline verify this. The example consumes the native idle **after** the error result and explicitly closes.
+The example and integration test use `Open -> Send -> Receive(ReceivedEvent)` against a re-executed fake process with a replacement HOME/environment. The installed CLI, account, network and live fallback are never used. A poison CLI sentinel, native Raw comparison, dynamic initialize ID, complete-frame marker and deadline verify this. The example consumes the native idle **after** the error result and explicitly closes.
 
 The peer replays captured direction/order dependencies without sleeps. It supports multiple in-flight controls and notification-before-response, binds dynamic client request IDs with string/number type preservation, validates reverse requests/replies exactly once, and fails on extra/wrong/duplicate requests, missing IDs, early EOF or pending controls. It deliberately checks recorded request order; it is not an arbitrary scheduling emulator. Test callers bound its lifetime. Tool IDs and other server-owned native IDs remain the consistent sanitized fixture IDs. Native byte order is retained except for dynamic control response ID substitution.
 

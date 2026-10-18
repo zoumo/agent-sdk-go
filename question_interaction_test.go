@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"context"
@@ -9,14 +9,13 @@ import (
 	"reflect"
 	"testing"
 
-	claude "github.com/zoumo/claude-agent-sdk-go"
 	"github.com/zoumo/claude-agent-sdk-go/types"
 )
 
 func TestQuestionContractThroughOriginalPermissionHandle(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
-		opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+	requests := make(chan *PermissionRequest, 1)
+	c := openFixture(t, "permission_controls", func(opts *Options) {
+		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	input := json.RawMessage(`{"questions":[{"question":"Which output format should I use?","header":"Format","options":[{"label":"Summary","description":"Short","future":{"x":true}},{"label":"Detailed","description":"Long"}],"multiSelect":false,"future":[null]},{"question":"Which sections should I include?","header":"Sections","options":[{"label":"Intro"},{"label":"End"}],"multiSelect":true}],"unknown":{"nested":[false,1]}}`)
 	// An assistant tool_use can be displayed/decoded, but cannot grant authority.
@@ -57,12 +56,12 @@ func TestQuestionContractThroughOriginalPermissionHandle(t *testing.T) {
 	if err != nil || fresh.ToolUseID != "tool/question" || fresh.Input[0] != '{' || p.RequestID() != "request/original" {
 		t.Fatal("metadata changed authority", err)
 	}
-	var questions claude.AskUserQuestionInput
+	var questions AskUserQuestionInput
 	if err := json.Unmarshal(p.Input(), &questions); err != nil {
 		t.Fatal(err)
 	}
 	custom := "自由文本 / custom format"
-	updated, err := questions.WithAnswers(map[string]claude.QuestionAnswer{
+	updated, err := questions.WithAnswers(map[string]QuestionAnswer{
 		questions.Questions[0].Question: {Text: &custom},
 		questions.Questions[1].Question: {Labels: []string{"Intro", "End"}},
 	})
@@ -105,7 +104,7 @@ func TestQuestionContractThroughOriginalPermissionHandle(t *testing.T) {
 		t.Fatal("unknown input lost", got, want)
 	}
 	copyHandle := *p
-	if err := copyHandle.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny}); !errors.Is(err, claude.ErrPermissionUsed) {
+	if err := copyHandle.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}); !errors.Is(err, ErrPermissionUsed) {
 		t.Fatal(err)
 	}
 	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 1 {
@@ -114,9 +113,9 @@ func TestQuestionContractThroughOriginalPermissionHandle(t *testing.T) {
 }
 
 func TestQuestionPreparedAnswerCannotBypassCancellation(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
-		opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+	requests := make(chan *PermissionRequest, 1)
+	c := openFixture(t, "permission_controls", func(opts *Options) {
+		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	emitPermission(t, c, "cancel/question", "AskUserQuestion", json.RawMessage(`{"questions":[{"question":"Proceed?","options":[]}]}`))
 	p := awaitPermission(t, requests)
@@ -137,7 +136,7 @@ func TestQuestionPreparedAnswerCannotBypassCancellation(t *testing.T) {
 	if event := receive(t, c); event.Cancel == nil {
 		t.Fatal("missing cancellation")
 	}
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: updated}); !errors.Is(err, claude.ErrPermissionCancelled) {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated}); !errors.Is(err, ErrPermissionCancelled) {
 		t.Fatal(err)
 	}
 	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 0 {
@@ -145,12 +144,12 @@ func TestQuestionPreparedAnswerCannotBypassCancellation(t *testing.T) {
 	}
 	emitPermission(t, c, "deny/question", "AskUserQuestion", json.RawMessage(`{"questions":[]}`))
 	deny := awaitPermission(t, requests)
-	if err := deny.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: "User declined"}); err != nil {
+	if err := deny.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "User declined"}); err != nil {
 		t.Fatal(err)
 	}
 	assertPermissionReply(t, c, "deny/question", map[string]any{"behavior": "deny", "message": "User declined"})
-	for _, zero := range []*claude.PermissionRequest{nil, new(claude.PermissionRequest)} {
-		if _, err := zero.Metadata(); !errors.Is(err, claude.ErrInvalidPermissionRequest) {
+	for _, zero := range []*PermissionRequest{nil, new(PermissionRequest)} {
+		if _, err := zero.Metadata(); !errors.Is(err, ErrInvalidPermissionRequest) {
 			t.Fatal(err)
 		}
 	}

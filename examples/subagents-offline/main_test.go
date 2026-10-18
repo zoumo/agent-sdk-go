@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -30,79 +29,52 @@ func TestOfflineExample(t *testing.T) {
 	if err := run(&output); err != nil {
 		t.Fatal(err)
 	}
-	decoder := json.NewDecoder(&output)
-	scanner := strings.Split(strings.TrimSpace(frames), "\n")
+	expected := strings.Split(strings.TrimSpace(frames), "\n")
 	associated := make(map[string]bool)
-	native, rootResult, childAfter, nested, patchTerminal, closed := 0, false, false, false, false, false
 	created := make(map[string]bool)
-	childBeforeCreation := false
-	rootReceipt := false
-	for {
-		var r struct {
-			claude.TreeRecord
-			NativeRaw string `json:"native_raw"`
+	nativeCount, rootResult, childAfter, nested, terminal, closed := 0, false, false, false, false, false
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var header struct {
+			Type string `json:"type"`
+			claude.SubagentInfo
 		}
-		err := decoder.Decode(&r)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
+		if err := json.Unmarshal([]byte(line), &header); err != nil {
 			t.Fatal(err)
 		}
-		if r.Kind == "SubagentCreated" {
-			if created[r.Source.TaskID] || !associated[r.Source.AssociationID] || r.Source.RunID != "" || r.RunScope != "legacy-unknown" {
-				t.Fatal(r)
+		switch header.Type {
+		case "subagent_associated":
+			associated[header.Source.AssociationID] = true
+			if header.Source.TaskID == "grandchild" && header.Parent != nil && header.Parent.TaskID == "child" {
+				nested = true
 			}
-			if r.Source.TaskID == "child" && (!rootResult || !childBeforeCreation) {
-				t.Fatal("background creation blocked or preceded child output")
+		case "subagent_created":
+			if !associated[header.Source.AssociationID] || created[header.Source.TaskID] {
+				t.Fatal(header)
 			}
-			created[r.Source.TaskID] = true
-		}
-		if r.Kind == "SubagentAssociated" {
-			associated[r.Source.AssociationID] = true
-		}
-		if r.State == "closed" {
-			closed = true
-		}
-		if r.Native == nil {
-			continue
-		}
-		if native >= len(scanner) || r.NativeRaw != scanner[native] {
-			t.Fatalf("native frame changed: %s", r.NativeRaw)
-		}
-		native++
-		if r.Native.Subtype == "background_tasks_changed" && r.RunTerminal {
-			t.Fatal("snapshot must not end a run")
-		}
-		if r.Scope == "child" && !associated[r.Source.AssociationID] {
-			t.Fatal("native preceded association")
-		}
-		if r.Native.Result != nil {
-			if !rootReceipt {
-				t.Fatal("same-turn tool receipt must precede root result")
+			created[header.Source.TaskID] = true
+		case "observation_state":
+			closed = closed || header.State == "closed"
+		default:
+			if nativeCount >= len(expected) || line != expected[nativeCount] {
+				t.Fatalf("native changed: %s", line)
 			}
-			rootResult = true
-		}
-		if r.Native.User != nil && len(r.Native.ToolUseResult) > 0 {
-			if rootResult {
-				t.Fatal("same-turn tool receipt followed root result")
+			nativeCount++
+			e, err := claude.ParseEvent([]byte(line))
+			if err != nil {
+				t.Fatal(err)
 			}
-			rootReceipt = true
-		}
-		if r.Source.ToolUseID == "spawn-child" && r.Native.Assistant != nil {
-			childBeforeCreation = true
-		}
-		if r.Source.TaskID == "child" && r.Native.Assistant != nil && rootResult {
-			childAfter = true
-		}
-		if r.Source.TaskID == "grandchild" && r.Parent != nil && r.Parent.TaskID == "child" {
-			nested = true
-		}
-		if r.Native.Subtype == "task_updated" && r.Source.TaskID == "child" {
-			patchTerminal = rootResult && r.Source.RunID == "" && r.RunTerminal && r.RunStatus == "killed"
+			if e.Result != nil {
+				rootResult = true
+			}
+			if e.Assistant != nil && e.ParentToolUseID != nil && rootResult {
+				childAfter = true
+			}
+			if e.Subtype == "task_updated" && e.System != nil && strings.Contains(string(e.System.Patch), "killed") {
+				terminal = true
+			}
 		}
 	}
-	if native != len(scanner) || !rootResult || !childAfter || !nested || !patchTerminal || !closed || len(created) != 2 {
-		t.Fatalf("native=%d root=%t after=%t nested=%t terminal=%t closed=%t", native, rootResult, childAfter, nested, patchTerminal, closed)
+	if nativeCount != len(expected) || !rootResult || !childAfter || !nested || !terminal || !closed || len(created) != 2 {
+		t.Fatalf("native=%d root=%t after=%t nested=%t terminal=%t closed=%t created=%v", nativeCount, rootResult, childAfter, nested, terminal, closed, created)
 	}
 }

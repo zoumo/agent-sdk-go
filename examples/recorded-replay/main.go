@@ -55,10 +55,10 @@ func run(out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if record.Native == nil {
+		native, ok := record.(claude.Event)
+		if !ok {
 			continue
 		}
-		native := record.Native
 		if native.Result != nil {
 			result = true
 			fmt.Fprintf(out, "result: subtype=%s is_error=%t (subtype alone does not mean success)\n", native.Subtype, native.Result.IsError)

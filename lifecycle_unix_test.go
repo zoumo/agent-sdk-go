@@ -1,7 +1,7 @@
 //go:build linux || darwin || freebsd || openbsd || netbsd || dragonfly
 
 // SPDX-License-Identifier: Apache-2.0
-package claude_test
+package claude
 
 import (
 	"bufio"
@@ -18,15 +18,13 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 func TestCloseReapsUncooperativeChild(t *testing.T) {
 	opts := fixtureOptions(t, "ignore_eof")
 	capture := filepath.Join(opts.WorkDir, "pid.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	c, err := claude.Open(context.Background(), opts)
+	c, err := Open(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +51,7 @@ func TestInitializationTimeoutReapsChild(t *testing.T) {
 	opts.InitializeTimeout = 150 * time.Millisecond
 	capture := filepath.Join(opts.WorkDir, "pid.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	_, err := claude.Open(context.Background(), opts)
+	_, err := Open(context.Background(), opts)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Open = %v", err)
 	}
@@ -153,7 +151,7 @@ func TestProcessGroupTeardownAndDescendantHoldingStdout(t *testing.T) {
 	for _, mode := range []string{"lifecycle_tree", "lifecycle_parent_exit", "lifecycle_closed_pipes"} {
 		t.Run(mode, func(t *testing.T) {
 			marker := filepath.Join(t.TempDir(), "terminated")
-			c := openFixture(t, mode, func(o *claude.Options) { o.Env = append(o.Env, "CLAUDE_GO_TERMINATED="+marker) })
+			c := openFixture(t, mode, func(o *Options) { o.Env = append(o.Env, "CLAUDE_GO_TERMINATED="+marker) })
 			send(t, c, "start")
 			event := receive(t, c)
 			var info struct{ PID, Descendant int }
@@ -170,7 +168,7 @@ func TestProcessGroupTeardownAndDescendantHoldingStdout(t *testing.T) {
 			}
 			err := c.Close()
 			if mode != "lifecycle_tree" {
-				if !errors.Is(err, claude.ErrUnexpectedEOF) {
+				if !errors.Is(err, ErrUnexpectedEOF) {
 					t.Fatalf("unexpected exit hidden: %v", err)
 				}
 			} else if err != nil {

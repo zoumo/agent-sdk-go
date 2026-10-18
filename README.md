@@ -2,7 +2,7 @@
 
 An experimental, independent native Go client for a locally installed Claude Code CLI. No other Go SDK or language runtime is required by the client. Original code is licensed under Apache-2.0.
 
-**Experimental core implemented; not production-validated. Live Claude CLI compatibility: UNKNOWN.** See the [canonical compatibility matrix and complete official feature inventory](docs/compatibility.md) for implemented APIs, synthetic/race evidence, and unsupported features. The protocol baseline is the official Python SDK at [`f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab`](https://github.com/anthropics/claude-agent-sdk-python/tree/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab), which references CLI 2.1.302. Synthetic tests do not establish real runtime interoperability or official endorsement.
+**Experimental core implemented; not production-validated. Live Claude CLI compatibility: UNKNOWN.** See the [canonical compatibility matrix and complete official feature inventory](docs/compatibility.md) for implemented APIs, synthetic/race evidence, and unsupported features. The current CLI target is **2.1.258**, with official TypeScript contract **0.3.258**. The broader schema reference is the official Python SDK at [`f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab`](https://github.com/anthropics/claude-agent-sdk-python/tree/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab), which references CLI 2.1.302. Synthetic tests do not establish real runtime interoperability or official endorsement.
 
 ## Implemented core
 
@@ -47,19 +47,19 @@ func main() {
         return
     }
     for {
-        record, err := client.Receive(ctx)
+        received, err := client.Receive(ctx)
         if err != nil { log.Print(err); return }
-        if record.Kind != "Native" {
+        event, ok := received.(claude.Event)
+        if !ok {
             // Handle relationship and observation records.
             continue
         }
-        event := record.Native
         if event.Assistant != nil {
             for _, block := range event.Assistant.Content.Blocks {
-                if block.Text != nil { fmt.Printf("[%s] %s\n", record.Scope, block.Text.Text) }
+                if block.Text != nil { fmt.Println(block.Text.Text) }
             }
         }
-        if record.Scope == "root" && event.Result != nil { return } // App stop policy; children may still run.
+        if event.ParentToolUseID == nil && event.Result != nil { return } // App stop policy; children may still run.
     }
 }
 ```
@@ -121,8 +121,8 @@ new import continue to compile. The canonical named types now belong to
 `types`: reflection `PkgPath` and type-name formatting (including `%T`) can
 change. Those strings are not a compatibility guarantee.
 
-`claude.Options` retains its original fields, so existing keyed literals still
-work. `PermissionRequest` is a connection-bound answer handle, and
+`claude.Options` retains callback-free startup fields and runtime callbacks;
+the removed relationship configuration is covered in the migration guide. `PermissionRequest` is a connection-bound answer handle, and
 `PermissionHandler` accepts that handle; both remain in the root package.
 `types.Options` contains only the callback-free startup fields. Adapt it
 explicitly, then attach a handler if needed:
@@ -195,15 +195,16 @@ snapshots replace a process-local set and do not prove termination. See the
 
 中文事件时序说明：[前台/后台任务、子流、审批和结束边界](docs/event-sequences.md)。
 
-### Default managed API migration
+### Native event stream
 
-`Open` returns `*Client`; `Receive` now returns `TreeRecord`. Check `Kind`, then
-read native fields through `record.Native`. The first record is an unverified
-observation state. `Options.Tree` only sets resource/history bounds. `OpenTree`,
-`TreeClient` and both SDK `ForwardSubagentText` option fields have been removed;
-forwarding is always requested. Native `Event.Origin` remains the official
-`*MessageOrigin` object; the wrapper Origin string is separate. See the
-[complete migration](docs/default-managed-migration.md) and independent
-[derived definitions](derived_events.go). `Options.Types()` omits runtime-only Tree.
+`Open` returns `*Client`; `Receive` returns `ReceivedEvent`. Type-switch on
+`Event`, `SubagentAssociated`, `SubagentCreated`, or `ObservationState`.
+Native values arrive directly, with unchanged fields, JSON and `Raw` bytes.
+`Event.Origin` remains the official `*MessageOrigin` object. Relationship tracking
+and child forwarding are automatic. `Options.Subagents` sets bounds and verified
+history; `Options.Types()` omits this runtime configuration. See the
+[API comparison with pinned official examples](docs/api-comparison.md),
+[breaking migration](docs/default-managed-migration.md), and
+[derived definitions](derived_events.go).
 
 [Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.

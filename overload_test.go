@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"bufio"
@@ -16,8 +16,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // These original subprocess cases extend the official test_subprocess_buffering.py,
@@ -85,7 +83,7 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 				capture := filepath.Join(opts.WorkDir, "must-not-start.json")
 				opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 				reflect.ValueOf(&opts.Limits).Elem().FieldByName(field).SetInt(int64(value))
-				c, err := claude.Open(context.Background(), opts)
+				c, err := Open(context.Background(), opts)
 				if c != nil || err == nil || !strings.Contains(err.Error(), field) {
 					t.Fatalf("invalid limit: %v, %v", c, err)
 				}
@@ -98,7 +96,7 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 }
 
 func TestFullEventQueueStillDispatchesControlResponses(t *testing.T) {
-	c := openFixture(t, "overload_ack_full", func(o *claude.Options) { o.Limits.EventBuffer = 3 })
+	c := openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 3 })
 	send(t, c, "fill")
 	// The reply is emitted after all three events, proving stdout crossed the
 	// entire full queue while the application has not called Receive.
@@ -121,12 +119,12 @@ func TestFullEventQueueStillDispatchesControlResponses(t *testing.T) {
 }
 
 func TestOverloadWakesInterruptAndPermissionWithRetainedOrder(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
+	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
 	defer close(release)
-	c := openFixture(t, "overload_controls", func(o *claude.Options) {
+	c := openFixture(t, "overload_controls", func(o *Options) {
 		o.Limits.EventBuffer = 3
-		o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p; <-release }
+		o.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release }
 	})
 	send(t, c, "permission")
 	if receive(t, c).Control == nil {
@@ -138,10 +136,10 @@ func TestOverloadWakesInterruptAndPermissionWithRetainedOrder(t *testing.T) {
 	send(t, c, "fill")
 	send(t, c, "overflow")
 	awaitDone(t, c)
-	if !errors.Is(context.Cause(p.Context()), claude.ErrResourceLimit) {
+	if !errors.Is(context.Cause(p.Context()), ErrResourceLimit) {
 		t.Fatalf("handle cause: %v", context.Cause(p.Context()))
 	}
-	if err := awaitInterrupt(t, pending); !errors.Is(err, claude.ErrResourceLimit) || !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitInterrupt(t, pending); !errors.Is(err, ErrResourceLimit) || !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("interrupt: %v", err)
 	}
 	var wg sync.WaitGroup
@@ -149,7 +147,7 @@ func TestOverloadWakesInterruptAndPermissionWithRetainedOrder(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := c.Close(); !errors.Is(err, claude.ErrResourceLimit) {
+			if err := c.Close(); !errors.Is(err, ErrResourceLimit) {
 				t.Errorf("Close: %v", err)
 			}
 		}()
@@ -166,21 +164,21 @@ func TestOverloadWakesInterruptAndPermissionWithRetainedOrder(t *testing.T) {
 		}
 	}
 	_, err := nextNative(c, context.Background())
-	var limit *claude.ResourceLimitError
+	var limit *ResourceLimitError
 	if !errors.As(err, &limit) || limit.Resource != "event buffer" || limit.Limit != 3 {
 		t.Fatalf("terminal: %v", err)
 	}
-	assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), "waiting", claude.ErrClosed)
+	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "waiting", ErrClosed)
 }
 
 func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 	for _, mode := range []string{"malformed", "oversize", "truncated", "eof", "exit"} {
 		t.Run(mode, func(t *testing.T) {
-			requests := make(chan *claude.PermissionRequest, 1)
-			c := openFixture(t, "overload_controls", func(o *claude.Options) {
+			requests := make(chan *PermissionRequest, 1)
+			c := openFixture(t, "overload_controls", func(o *Options) {
 				o.Limits.FrameBytes = 2048
 				o.Limits.StderrBytes = 32
-				o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+				o.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 			})
 			send(t, c, "permission")
 			receive(t, c)
@@ -194,7 +192,7 @@ func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 			send(t, c, mode)
 			awaitDone(t, c)
 			for _, call := range pending {
-				if err := awaitInterrupt(t, call); err == nil || !errors.Is(err, claude.ErrUnknownOutcome) {
+				if err := awaitInterrupt(t, call); err == nil || !errors.Is(err, ErrUnknownOutcome) {
 					t.Fatalf("pending control: %v", err)
 				}
 			}
@@ -203,18 +201,18 @@ func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 				t.Fatal("missing handle cancellation cause")
 			}
 			closed := c.Close()
-			want := claude.ErrProtocol
+			want := ErrProtocol
 			if mode == "oversize" {
-				want = claude.ErrResourceLimit
+				want = ErrResourceLimit
 			}
 			if mode == "eof" {
-				want = claude.ErrUnexpectedEOF
+				want = ErrUnexpectedEOF
 			}
 			if mode != "exit" && !errors.Is(closed, want) {
 				t.Fatalf("final cause: %v", closed)
 			}
 			if mode == "exit" {
-				var detail *claude.Error
+				var detail *Error
 				if !errors.As(closed, &detail) || detail.ExitCode == nil || *detail.ExitCode != 23 || len(detail.Stderr) > 32 || !strings.HasSuffix(detail.Stderr, "last-diagnostic") {
 					t.Fatalf("exit diagnostics: %#v", detail)
 				}
@@ -230,18 +228,18 @@ func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 			if _, err := nextNative(c, context.Background()); err == nil {
 				t.Fatal("missing terminal error")
 			}
-			assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), "waiting", claude.ErrClosed)
+			assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "waiting", ErrClosed)
 		})
 	}
 }
 
 func TestShutdownDoesNotWaitForIgnoringCallback(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
+	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
 	returned := make(chan struct{})
 	defer close(release)
-	c := openFixture(t, "overload_controls", func(o *claude.Options) {
-		o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p; <-release; close(returned) }
+	c := openFixture(t, "overload_controls", func(o *Options) {
+		o.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release; close(returned) }
 	})
 	send(t, c, "permission")
 	receive(t, c)
@@ -253,7 +251,7 @@ func TestShutdownDoesNotWaitForIgnoringCallback(t *testing.T) {
 	if time.Since(start) > 3*time.Second {
 		t.Fatal("Close waited for callback")
 	}
-	if !errors.Is(context.Cause(p.Context()), claude.ErrClosed) {
+	if !errors.Is(context.Cause(p.Context()), ErrClosed) {
 		t.Fatalf("callback context: %v", context.Cause(p.Context()))
 	}
 	select {

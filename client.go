@@ -33,8 +33,8 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
-	// Tree configures bounded relationship observation and history; management is always on.
-	Tree              TreeOptions
+	// Subagents bounds automatic relationship observation and verified history.
+	Subagents         SubagentOptions
 	Env               []string
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
@@ -132,7 +132,7 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 		return nil, err
 	}
 	// History has already been consumed into bounded private state.
-	options.Tree = tree.options
+	options.Subagents = tree.options
 	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
@@ -254,14 +254,18 @@ func (c *Client) Interrupt(ctx context.Context) error {
 	return err
 }
 
-// Receive returns native events and SDK-derived relationship/observation records.
-// The first record reports unverified forwarding. A root result or idle does not
+// Receive returns a direct Event, SubagentAssociated, SubagentCreated or
+// ObservationState value. The first value reports unverified forwarding. A root result or idle does not
 // end observation. Canceling ctx cancels only this wait; call Close to release the process.
-func (c *Client) Receive(ctx context.Context) (TreeRecord, error) {
+func (c *Client) Receive(ctx context.Context) (ReceivedEvent, error) {
 	if err := ctx.Err(); err != nil {
-		return TreeRecord{}, err
+		return nil, err
 	}
-	return c.tree.receive(ctx)
+	record, err := c.tree.receive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return record.event(), nil
 }
 
 func (c *Client) receiveNative(ctx context.Context) (Event, error) {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"bufio"
@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	claude "github.com/zoumo/claude-agent-sdk-go"
 	"github.com/zoumo/claude-agent-sdk-go/types"
 )
 
@@ -51,34 +50,34 @@ func runTreeFixture(reader *bufio.Reader) {
 		}
 	}
 }
-func openTreeFixture(t *testing.T, configure ...func(*claude.Options)) *claude.Client {
+func openTreeFixture(t *testing.T, configure ...func(*Options)) *Client {
 	t.Helper()
 	opts := fixtureOptions(t, "tree")
 	for _, f := range configure {
 		f(&opts)
 	}
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond})
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.Close() })
 	r := treeReceive(t, c)
-	if r.Kind != "ObservationState" || r.Origin != "sdk-derived" || r.State != "unverified" || r.Reason != "forwarding-not-confirmed" {
+	if r.Kind != "ObservationState" || r.State != "unverified" || r.Reason != "forwarding-not-confirmed" {
 		t.Fatalf("startup: %+v", r)
 	}
 	return c
 }
-func treeReceive(t *testing.T, c *claude.Client) claude.TreeRecord {
+func treeReceive(t *testing.T, c *Client) relationshipRecord {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	r, err := c.Receive(ctx)
+	r, err := c.tree.receive(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r
 }
-func treeEmit(t *testing.T, c *claude.Client, frame string) {
+func treeEmit(t *testing.T, c *Client, frame string) {
 	t.Helper()
 	if err := c.Send(context.Background(), frame); err != nil {
 		t.Fatal(err)
@@ -87,7 +86,7 @@ func treeEmit(t *testing.T, c *claude.Client, frame string) {
 
 func TestForwardSubagentTextHandshakeAndOptions(t *testing.T) {
 	config := types.Options{}
-	if got := claude.OptionsFromTypes(config).Types(); !reflect.DeepEqual(got, config) {
+	if got := OptionsFromTypes(config).Types(); !reflect.DeepEqual(got, config) {
 		t.Fatal(got)
 	}
 
@@ -96,7 +95,7 @@ func TestForwardSubagentTextHandshakeAndOptions(t *testing.T) {
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	opts.Model = "--model with ; literal"
 	opts.ResumeID = "--resume with ; literal"
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{})
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,14 +154,14 @@ func TestTreeSingleLayerNativeLosslessAndAssociationOrder(t *testing.T) {
 			}
 			if r.Kind == "SubagentAssociated" {
 				associations++
-				if r.Origin != "sdk-derived" || r.Source.TaskID != "child" || r.Parent == nil || r.Parent.SessionID != "root" || r.Scope != "child" {
+				if r.Source.TaskID != "child" || r.Parent == nil || r.Parent.SessionID != "root" || r.Scope != "child" {
 					t.Fatalf("association: %+v", r)
 				}
 				// Records must not share mutable parent storage with the graph/pending native.
 				r.Parent.SessionID = "tampered"
 				continue
 			}
-			if r.Kind != "Native" || r.Native == nil || string(r.Native.Raw) != frame || r.Origin != "native" {
+			if r.Kind != "Native" || r.Native == nil || string(r.Native.Raw) != frame {
 				t.Fatalf("native %d: %+v", i, r)
 			}
 			if i == 0 || i == 6 {
@@ -194,7 +193,7 @@ func TestTreeSingleLayerNativeLosslessAndAssociationOrder(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := c.Receive(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := c.tree.receive(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	treeEmit(t, c, `{"type":"assistant","session_id":"root","message":{"content":"still open"}}`)
@@ -233,8 +232,8 @@ func TestTreeUnresolvedAndNonAgentTask(t *testing.T) {
 }
 
 func TestTreePermissionUsesOriginalHandleAfterParentResult(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
-	c := openTreeFixture(t, func(o *claude.Options) { o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p } })
+	requests := make(chan *PermissionRequest, 1)
+	c := openTreeFixture(t, func(o *Options) { o.PermissionHandler = func(p *PermissionRequest) { requests <- p } })
 	treeEmit(t, c, `{"type":"result","subtype":"success","session_id":"root","result":"parent"}`)
 	treeReceive(t, c)
 	frame := `{"type":"control_request","request_id":"child-question","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","tool_use_id":"question-tool","agent_id":"child","input":{"questions":[{"question":"Choose?","header":"Choice","options":[{"label":"A"}]}],"future":42}}}`
@@ -248,10 +247,10 @@ func TestTreePermissionUsesOriginalHandleAfterParentResult(t *testing.T) {
 	if err != nil || metadata.AgentID != "child" || p.RequestID() != "child-question" {
 		t.Fatal(metadata, err)
 	}
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: "fixture denial"}); err != nil {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "fixture denial"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny}); !errors.Is(err, claude.ErrPermissionUsed) {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}); !errors.Is(err, ErrPermissionUsed) {
 		t.Fatal(err)
 	}
 	reply := treeReceive(t, c)
@@ -267,14 +266,14 @@ func TestTreePermissionUsesOriginalHandleAfterParentResult(t *testing.T) {
 }
 
 func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {
-	if _, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), claude.TreeOptions{MaxNodes: -1}); err == nil {
+	if _, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), SubagentOptions{MaxNodes: -1}); err == nil {
 		t.Fatal("invalid bound accepted")
 	}
-	if c, err := openWithTree(context.Background(), fixtureOptions(t, "init_error"), claude.TreeOptions{}); err == nil || c != nil {
+	if c, err := openWithTree(context.Background(), fixtureOptions(t, "init_error"), SubagentOptions{}); err == nil || c != nil {
 		t.Fatal("rejection accepted", c, err)
 	}
 	opts := fixtureOptions(t, "tree")
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxNodes: 1})
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxNodes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,12 +303,12 @@ func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {
 	}
 	// The native client terminal ResourceLimit remains visible after draining.
 	for {
-		_, err = c.Receive(context.Background())
+		_, err = c.tree.receive(context.Background())
 		if err != nil {
 			break
 		}
 	}
-	if !errors.Is(err, claude.ErrResourceLimit) {
+	if !errors.Is(err, ErrResourceLimit) {
 		t.Fatal(err)
 	}
 	c2 := openTreeFixture(t)
@@ -317,7 +316,7 @@ func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {
 	wg.Go(func() { _ = c2.Close() })
 	wg.Go(func() { _ = c2.Close() })
 	for {
-		_, err = c2.Receive(context.Background())
+		_, err = c2.tree.receive(context.Background())
 		if err != nil {
 			break
 		}
@@ -330,7 +329,7 @@ func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {
 
 func TestSubagentEnvelopeNullAbsentAndTypedEdits(t *testing.T) {
 	for _, frame := range []string{`{"type":"assistant","message":{"content":[]}}`, `{"type":"assistant","agent_id":null,"subagent_type":null,"message":{"content":[]}}`, `{"type":"assistant","agent_id":"child","subagent_type":"Explore","message":{"content":[]},"unknown":42}`} {
-		e, err := claude.ParseEvent([]byte(frame))
+		e, err := ParseEvent([]byte(frame))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -346,7 +345,7 @@ func TestSubagentEnvelopeNullAbsentAndTypedEdits(t *testing.T) {
 		}
 		value := "edited"
 		e.AgentID = &value
-		e.Fields = map[string]claude.FieldState{"subagent_type": claude.Present}
+		e.Fields = map[string]FieldState{"subagent_type": Present}
 		encoded, err = json.Marshal(e)
 		if err != nil {
 			t.Fatal(err)
@@ -362,7 +361,7 @@ func TestSubagentEnvelopeNullAbsentAndTypedEdits(t *testing.T) {
 const earlyTreeFrame = ` {"type":"assistant","session_id":"root","agent_id":"early","parent_tool_use_id":"not-observed","message":{"content":"before initialize ack"},"extra":null} `
 
 func TestTreeForwardingBeforeFirstNativeAndDisconnect(t *testing.T) {
-	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree_early"), claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond})
+	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree_early"), SubagentOptions{MaxUnresolvedWait: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,7 +386,7 @@ func TestTreeForwardingBeforeFirstNativeAndDisconnect(t *testing.T) {
 	if r := treeReceive(t, c2); r.State != "incomplete" || r.Reason != "stream-ended" {
 		t.Fatal(r)
 	}
-	if _, err := c2.Receive(context.Background()); !errors.Is(err, claude.ErrUnexpectedEOF) {
+	if _, err := c2.tree.receive(context.Background()); !errors.Is(err, ErrUnexpectedEOF) {
 		t.Fatal(err)
 	}
 }
@@ -420,16 +419,16 @@ func TestTreeUnknownSystemSubtypeNeedsSourceEvidence(t *testing.T) {
 }
 
 // Tests exercise the sole public entry point with resource/history configuration.
-func openWithTree(ctx context.Context, options claude.Options, bounds claude.TreeOptions) (*claude.Client, error) {
-	options.Tree = bounds
-	return claude.Open(ctx, options)
+func openWithTree(ctx context.Context, options Options, bounds SubagentOptions) (*Client, error) {
+	options.Subagents = bounds
+	return Open(ctx, options)
 }
 
 func TestDefaultManagedOpenAndNativeOriginBoundary(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	c, err := claude.Open(context.Background(), opts)
+	c, err := Open(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +444,7 @@ func TestDefaultManagedOpenAndNativeOriginBoundary(t *testing.T) {
 		native := record.Native
 		var official *types.MessageOrigin = native.Origin
 		var resultOrigin *types.MessageOrigin = native.Result.Origin
-		if record.Origin != "native" || string(native.Raw) != frame || !reflect.DeepEqual(official, resultOrigin) {
+		if string(native.Raw) != frame || !reflect.DeepEqual(official, resultOrigin) {
 			t.Fatal(record)
 		}
 		encoded, err := json.Marshal(native)
@@ -460,15 +459,15 @@ func TestDefaultManagedOpenAndNativeOriginBoundary(t *testing.T) {
 }
 
 func TestDefaultManagedRejectsTreeBeforeSpawn(t *testing.T) {
-	for _, bounds := range []claude.TreeOptions{
-		{MaxNodes: -1}, {History: []claude.TreeSeed{{SessionID: "s"}}},
-		{MaxPendingRecords: 1, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}},
+	for _, bounds := range []SubagentOptions{
+		{MaxNodes: -1}, {History: []SubagentHistory{{SessionID: "s"}}},
+		{MaxPendingRecords: 1, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}},
 	} {
 		opts := fixtureOptions(t, "echo")
 		capture := filepath.Join(opts.WorkDir, "capture.json")
 		opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-		opts.Tree = bounds
-		if c, err := claude.Open(context.Background(), opts); err == nil || c != nil {
+		opts.Subagents = bounds
+		if c, err := Open(context.Background(), opts); err == nil || c != nil {
 			if c != nil {
 				c.Close()
 			}

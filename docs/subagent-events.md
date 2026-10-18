@@ -7,8 +7,9 @@ conditional for exact CLI 2.1.258, the current installed version. `--version`
 inspection and static source review do not constitute live subagent validation.
 
 `Open` always requests `forwardSubagentText: true` at initialize and returns
-`*Client`. `Client.Receive` returns `TreeRecord`, with no raw/managed choice.
-`Options.Tree` configures bounds/history only; zero values still manage the stream.
+`*Client`. `Client.Receive` returns `ReceivedEvent`: direct native `Event` values or separate
+`SubagentAssociated`, `SubagentCreated`, and `ObservationState` values.
+`Options.Subagents` configures bounds/history only; zero values still manage the stream.
 There is no extra CLI flag, child process, subscription, hook, or automatic resume.
 See the [breaking migration](default-managed-migration.md) and
 [user-story sequences](event-sequences.md).
@@ -17,7 +18,7 @@ See the [breaking migration](default-managed-migration.md) and
 client, err := claude.Open(ctx, claude.Options{
     CLIPath: "claude",
     PermissionHandler: handler, // original PermissionRequest; no second responder
-    Tree: claude.TreeOptions{},
+    Subagents: claude.SubagentOptions{},
 })
 if err != nil {
     return err
@@ -31,16 +32,17 @@ for {
     if err != nil {
         return err
     }
-    switch record.Kind {
-    case "Native":
-        // record.Native.Raw is the exact native frame, excluding its newline.
-        // Render by Source/Scope; do not append child text to the root answer.
-    case "SubagentAssociated":
-        // Establish or enrich an observed node before its native event.
-    case "SubagentCreated":
-        // Confirmed creation fact; delivery time is not the native creation time.
-    case "ObservationState":
-        // Surface record.State / record.Reason to the observer.
+    switch event := record.(type) {
+    case claude.Event:
+        _ = event.Raw // exact frame bytes, excluding newline
+        _ = event.ParentToolUseID // native identity, never rewritten
+    case claude.SubagentAssociated:
+        _ = event.Source // observation, not proof of creation
+    case claude.SubagentCreated:
+        _ = event.Source.TaskID // conservative creation confirmation
+    case claude.ObservationState:
+        _ = event.Reason
+
     }
 }
 ```
@@ -51,22 +53,16 @@ RequestedResumeID, Done, Err and Close retain their lifecycle/concurrency contra
 Receive requires one caller; its context bounds that call. Close owns process
 shutdown; root result or idle does not close observation or stop permissions.
 
-Every wrapper contains provider, process epoch, local delivery sequence,
-live-arrival provenance, root/source identity, scope and unknown usage scope.
-Native UUID, session, parent tool, content, usage and unknown fields remain in
-`Native`, without rewriting Raw. `Event.AgentID` and `Event.SubagentType` expose
-native `agent_id` / `subagent_type`; the existing Raw/Fields codec preserves
-absent, null and typed edits. These fields remain absent where the CLI omits
-them; the SDK does not synthesize them into native messages.
+Native values retain UUID, session, parent tool, content, usage, Origin and
+unknown fields without rewriting Raw. Event.AgentID and Event.SubagentType expose
+native fields only where present. No inferred source, run state, delivery sequence
+or SDK-origin flag is added to native messages.
 
-The SDK envelope carries `origin: sdk-derived` for derived records and
-`origin: native` for Native records. These are wrapper strings, not native fields.
-`Native.Origin` and `Native.Result.Origin` remain official `*MessageOrigin` objects,
-with absent/null/unknown members preserved. Definitions are in `derived_events.go`;
-derived records have no Native payload and never fabricate native type/subtype.
-Sequence is a local arrival/delivery order, not a server cursor.
-`SubagentCreated` is independently derived, never a renamed association.
-The observer never reports complete forwarding.
+Derived convenience values carry relationship and observation metadata separately.
+Their definitions and JSON codecs live in derived_events.go. Their concrete Go
+types identify the event; no native message is nested inside them. Sequence is
+local delivery order on these notifications, not a native cursor. SubagentCreated
+is independent of association and the observer never reports complete forwarding.
 
 ## Creation evidence
 
@@ -124,7 +120,7 @@ conservative creation gap. The observer makes no live validation claim.
 Missing/null/value and unknown patch members round-trip through the existing
 Raw/Fields codec, including false and zero. Native frames are never rewritten.
 
-`TreeIdentity.AssociationID` is an SDK key scoped by wrapper SessionID and Epoch;
+`SubagentIdentity.AssociationID` is an SDK key scoped by session identity and epoch;
 it is separate from native agent, task, run and tool IDs. A tool-only node has
 `AssociationID: "tool:<id>"`, `ToolUseID: "<id>"`, and no invented AgentID/TaskID.
 When a same-session message or local-agent task bridges tool and task identity,
@@ -159,7 +155,7 @@ It remains Raw data, not invented live ancestry.
 only the fixed protocol's plain-string ordering. A newly observed run emits
 `ObservationState(run-observed, new-run-observed)` before Native and keeps the
 entity's association key. This is discovery of work, not proof of creation or
-start time. A lower run stays Native with `Stale: true` and its original RunID;
+start time. A lower run retains its original native RunID; the private ledger marks it stale;
 it cannot modify current-run metadata, task type, tool aliases or parent.
 Terminal accounting is described below; a late terminal changes only its own
 run ledger entry. Missing run IDs cannot disambiguate
@@ -204,7 +200,7 @@ source are E1 evidence, not proof of installed CLI behavior.
 | Timed unresolved buffering, atomic bounded fanout and request isolation | Implemented; public API synthetic peers, full-queue control replies, pending-work invalidation, original question handles and close races (E2) | Unverified |
 
 Initialize rejection fails Open. A successful acknowledgment does not prove
-the CLI honors forwarding, so the first wrapper always reports
+the CLI honors forwarding, so the first ObservationState always reports
 `ObservationState(unverified, forwarding-not-confirmed)`. Missing source attribution
 waits within the bounds below, then remains explicitly unresolved; unknown unowned
 events are unscoped. This is not a promise of complete descendants or recovered
@@ -220,7 +216,7 @@ run_id remain legacy/unknown-run. A newly observed run creates a conservative
 dedup boundary so a later no-run frame is never suppressed solely by an older
 run's UUID history; this assigns no native run to that frame.
 
-The graph/alias/tool-owner/non-agent index is bounded by `TreeOptions.MaxNodes`
+The graph/alias/tool-owner/non-agent index is bounded by `SubagentOptions.MaxNodes`
 (default 4096, ceiling 65536 total entries). `MaxDepth` defaults to 32 (ceiling
 256), and `MaxDedupEntries` to 8192 (ceiling 131072). Zero selects defaults;
 negative/above-ceiling values fail before startup. Alias entries count against
@@ -290,7 +286,7 @@ no startup snapshot is promised for a newly spawned CLI.
 
 ### Run ledger
 
-Every task lifecycle Native record with session/task identity carries
+The private ledger for each task lifecycle event with session/task identity tracks
 `RunStatus`, `RunTerminal` and optional `RunBackgrounded`, plus
 `CurrentRunStatus` / `CurrentRunTerminal` for the greatest observed native run.
 This includes unclassified and non-agent tasks without promoting them to agents.
@@ -309,7 +305,7 @@ legacy-unknown bucket and never terminate the known current run. Within that
 bucket multiple legacy executions cannot be distinguished; terminal stickiness
 cannot establish a new run without a native run ID. A new native run reuses the
 same agent association and remains observed after prior runs finish. The ledger
-has no delete operation and does not evict state. `TreeOptions.MaxRuns` bounds
+has no delete operation and does not evict state. `SubagentOptions.MaxRuns` bounds
 all session/task/run buckets (default 8192, ceiling 131072); exhaustion reports
 incomplete/run-limit, preserves the accepted Native and terminates through the
 existing ResourceLimit path. The current-run index has at most one entry per
@@ -317,7 +313,7 @@ ledger task and is bounded by the same limit. No global all-done count is inferr
 
 ### Explicit recovery and gaps
 
-`TreeOptions.History` accepts `TreeSeed{SessionID, TaskID, ParentTaskID}` only for
+`SubagentOptions.History` accepts `SubagentHistory{SessionID, TaskID, ParentTaskID}` only for
 caller-verified historical local-agent associations. It uses existing graph bounds
 and lineage diagnostics. Seeds emit SubagentAssociated with reason/provenance
 history before live events; they never emit Created, native transcript frames,
@@ -343,7 +339,7 @@ authentication change or transcript completeness is claimed.
 
 ## Bounded attribution and original requests (ticket 04)
 
-| TreeOptions limit | Default | Ceiling |
+| SubagentOptions limit | Default | Ceiling |
 | --- | --- | --- |
 | MaxPendingRecords | 8192 records per atomic fanout | 131072 |
 | MaxUnresolvedEvents | 128 held Native frames | 65536 |
@@ -358,7 +354,7 @@ Graph, alias, depth, run and UUID bounds continue to apply independently.
 
 A native frame with unresolved attribution waits for later graph evidence.
 Associations/enrichments precede attributed delivery. Once a held frame resolves,
-its wrapper gains the proven source/parent while Native.Raw, original native IDs,
+its private attribution gains the proven source/parent while Event.Raw, original native IDs,
 run metadata, text and usage remain intact. Unrelated root/control frames can pass
 held frames. Sequence means local delivery order, and buffering can change delivery
 order relative to native arrival. There is no server cursor or replay guarantee.
@@ -393,7 +389,7 @@ terminal failure without draining Receive.
 The ordinary stdout reader continues dispatching control replies before event
 capacity checks. Full capacity does not block Interrupt acknowledgments; exceeding
 capacity still fails the whole owned client and wakes pending controls, writes and
-permission contexts. Tree buffering never queues a permission response, replaces
+permission contexts. Relationship buffering never queues a permission response, replaces
 request/tool/agent IDs, automatically approves, or changes default deny and unknown
 control errors. Native cancellation, caller answer cancellation, Close and a fresh
 epoch retain the existing single-use handle rules. Parent result is still only

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"bufio"
@@ -16,8 +16,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // These original public-boundary scenarios use the official Python SDK's
@@ -113,7 +111,7 @@ func sessionReply(id, message string) {
 	fixtureEmit(map[string]any{"type": "control_response", "response": response})
 }
 
-func interruptAsync(c *claude.Client, ctx context.Context) <-chan error {
+func interruptAsync(c *Client, ctx context.Context) <-chan error {
 	result := make(chan error, 1)
 	go func() { result <- c.Interrupt(ctx) }()
 	return result
@@ -130,7 +128,7 @@ func awaitInterrupt(t *testing.T, result <-chan error) error {
 	}
 }
 
-func receiveInterrupt(t *testing.T, c *claude.Client) string {
+func receiveInterrupt(t *testing.T, c *Client) string {
 	t.Helper()
 	event := receive(t, c)
 	if event.Type != "control_seen" {
@@ -156,7 +154,7 @@ func receiveInterrupt(t *testing.T, c *claude.Client) string {
 	return id
 }
 
-func sessionCommand(t *testing.T, c *claude.Client, command, wantType string) claude.Event {
+func sessionCommand(t *testing.T, c *Client, command, wantType string) Event {
 	t.Helper()
 	send(t, c, command)
 	event := receive(t, c)
@@ -166,7 +164,7 @@ func sessionCommand(t *testing.T, c *claude.Client, command, wantType string) cl
 	return event
 }
 
-func assertSessionID(t *testing.T, c *claude.Client, want string, known bool) {
+func assertSessionID(t *testing.T, c *Client, want string, known bool) {
 	t.Helper()
 	if got, ok := c.SessionID(); got != want || ok != known {
 		t.Fatalf("SessionID = (%q, %t), want (%q, %t)", got, ok, want, known)
@@ -174,7 +172,7 @@ func assertSessionID(t *testing.T, c *claude.Client, want string, known bool) {
 }
 
 func TestSessionIdentityDistinguishesRequestAndObservation(t *testing.T) {
-	c := openFixture(t, "session_controls", func(opts *claude.Options) { opts.ResumeID = "requested-native" })
+	c := openFixture(t, "session_controls", func(opts *Options) { opts.ResumeID = "requested-native" })
 	if c.RequestedResumeID() != "requested-native" {
 		t.Fatal("requested resume ID was changed")
 	}
@@ -217,7 +215,7 @@ func TestSessionIdentityObservedBeforeReceiveAndWithoutSystemInit(t *testing.T) 
 func TestResumeUsesFreshProcessLiteralArgAndNoReplay(t *testing.T) {
 	firstOptions := fixtureOptions(t, "session_resume")
 	firstOptions.Env = append(firstOptions.Env, "CLAUDE_GO_SESSION_ID=native-before")
-	first, err := claude.Open(context.Background(), firstOptions)
+	first, err := Open(context.Background(), firstOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +244,7 @@ func TestResumeUsesFreshProcessLiteralArgAndNoReplay(t *testing.T) {
 			transcript := filepath.Join(opts.WorkDir, "stdin.ndjson")
 			opts.ResumeID = requested
 			opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture, "CLAUDE_GO_TRANSCRIPT="+transcript, "CLAUDE_GO_SESSION_ID=native-after")
-			resumed, err := claude.Open(context.Background(), opts)
+			resumed, err := Open(context.Background(), opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -316,7 +314,7 @@ func TestInterruptCorrelatesOutOfOrderAndUnknownResponses(t *testing.T) {
 	}
 	sessionCommand(t, c, "error:unknown-id", "barrier")
 	sessionCommand(t, c, "error:"+secondID, "barrier")
-	var controlErr *claude.ControlError
+	var controlErr *ControlError
 	if err := awaitInterrupt(t, second); !errors.As(err, &controlErr) || controlErr.RequestID != secondID || controlErr.Subtype != "interrupt" || controlErr.Message != "fixture rejected interrupt" {
 		t.Fatalf("wrong second response: %v", err)
 	}
@@ -340,7 +338,7 @@ func TestInterruptAcknowledgmentIsSeparateFromTurnResult(t *testing.T) {
 	}
 	// A result alone cannot complete this request. Its matching error must win.
 	sessionCommand(t, c, "error:"+id, "barrier")
-	var controlErr *claude.ControlError
+	var controlErr *ControlError
 	if err := awaitInterrupt(t, pending); !errors.As(err, &controlErr) {
 		t.Fatalf("turn result resolved the interrupt: %v", err)
 	}
@@ -367,7 +365,7 @@ func TestInterruptImmediateAcknowledgments(t *testing.T) {
 }
 
 func TestInterruptCancellationAndStaleResponse(t *testing.T) {
-	c := openFixture(t, "session_controls", func(opts *claude.Options) { opts.Limits.PendingControls = 1 })
+	c := openFixture(t, "session_controls", func(opts *Options) { opts.Limits.PendingControls = 1 })
 	ctx, cancel := context.WithCancel(context.Background())
 	first := interruptAsync(c, ctx)
 	id := receiveInterrupt(t, c)
@@ -375,7 +373,7 @@ func TestInterruptCancellationAndStaleResponse(t *testing.T) {
 	// known to occur during the response wait rather than the original OS write.
 	sessionCommand(t, c, "echo", "echo")
 	cancel()
-	if err := awaitInterrupt(t, first); !errors.Is(err, context.Canceled) || !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitInterrupt(t, first); !errors.Is(err, context.Canceled) || !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("canceled written request must have unknown outcome: %v", err)
 	}
 	second := interruptAsync(c, context.Background())
@@ -391,10 +389,10 @@ func TestInterruptCancellationAndStaleResponse(t *testing.T) {
 }
 
 func TestInterruptTimeoutAndPreCanceledContext(t *testing.T) {
-	c := openFixture(t, "session_controls", func(opts *claude.Options) { opts.Limits.PendingControls = 1 })
+	c := openFixture(t, "session_controls", func(opts *Options) { opts.Limits.PendingControls = 1 })
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := c.Interrupt(ctx); !errors.Is(err, context.Canceled) || errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := c.Interrupt(ctx); !errors.Is(err, context.Canceled) || errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("pre-canceled interrupt: %v", err)
 	}
 	// A deterministic stdin barrier proves a canceled call emitted no control.
@@ -403,7 +401,7 @@ func TestInterruptTimeoutAndPreCanceledContext(t *testing.T) {
 	defer cancel()
 	pending := interruptAsync(c, ctx)
 	id := receiveInterrupt(t, c)
-	if err := awaitInterrupt(t, pending); !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitInterrupt(t, pending); !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("timed-out written interrupt: %v", err)
 	}
 	sessionCommand(t, c, "ack:"+id, "barrier")
@@ -413,10 +411,10 @@ func TestInterruptTimeoutAndPreCanceledContext(t *testing.T) {
 }
 
 func TestInterruptPendingLimitRejectsWithoutWriting(t *testing.T) {
-	c := openFixture(t, "session_controls", func(opts *claude.Options) { opts.Limits.PendingControls = 1 })
+	c := openFixture(t, "session_controls", func(opts *Options) { opts.Limits.PendingControls = 1 })
 	pending := interruptAsync(c, context.Background())
 	id := receiveInterrupt(t, c)
-	if err := c.Interrupt(context.Background()); !errors.Is(err, claude.ErrResourceLimit) || errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := c.Interrupt(context.Background()); !errors.Is(err, ErrResourceLimit) || errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("limit rejection: %v", err)
 	}
 	sessionCommand(t, c, "echo", "echo")
@@ -435,17 +433,17 @@ func TestInterruptWaitersWakeOnTermination(t *testing.T) {
 				pending = append(pending, interruptAsync(c, context.Background()))
 				receiveInterrupt(t, c)
 			}
-			want := claude.ErrClosed
+			want := ErrClosed
 			switch mode {
 			case "close":
 				if err := c.Close(); err != nil {
 					t.Fatal(err)
 				}
 			case "disconnect":
-				want = claude.ErrUnexpectedEOF
+				want = ErrUnexpectedEOF
 				send(t, c, mode)
 			case "malformed", "malformed_exit":
-				want = claude.ErrProtocol
+				want = ErrProtocol
 				send(t, c, mode)
 			}
 			for _, result := range pending {
@@ -454,9 +452,9 @@ func TestInterruptWaitersWakeOnTermination(t *testing.T) {
 				if mode == "malformed_exit" {
 					// Process termination can wake waiters before the final stdout
 					// decode adds the more specific error. Cleanup must retain it.
-					matches = matches || errors.Is(err, claude.ErrUnexpectedEOF)
+					matches = matches || errors.Is(err, ErrUnexpectedEOF)
 				}
-				if !matches || !errors.Is(err, claude.ErrUnknownOutcome) {
+				if !matches || !errors.Is(err, ErrUnknownOutcome) {
 					t.Fatalf("pending interrupt on %s: %v", mode, err)
 				}
 			}
@@ -466,7 +464,7 @@ func TestInterruptWaitersWakeOnTermination(t *testing.T) {
 					t.Fatalf("final diagnostic lost after %s: Close = %v, Err = %v", mode, err, c.Err())
 				}
 			}
-			if err := c.Interrupt(context.Background()); !errors.Is(err, claude.ErrClosed) || errors.Is(err, claude.ErrUnknownOutcome) {
+			if err := c.Interrupt(context.Background()); !errors.Is(err, ErrClosed) || errors.Is(err, ErrUnknownOutcome) {
 				t.Fatalf("interrupt after termination: %v", err)
 			}
 		})
@@ -480,10 +478,10 @@ func TestInterruptWriteFailureWakesOtherWaiters(t *testing.T) {
 	sessionCommand(t, c, "close_stdin", "ready")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := c.Interrupt(ctx); err == nil || !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := c.Interrupt(ctx); err == nil || !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("closed stdin interrupt: %v", err)
 	}
-	if err := awaitInterrupt(t, pending); err == nil || !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitInterrupt(t, pending); err == nil || !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("other waiter did not observe write failure: %v", err)
 	}
 	awaitDone(t, c)
@@ -504,11 +502,11 @@ func TestInterruptResponseCancellationAndCloseRaces(t *testing.T) {
 		go func() { defer wg.Done(); <-start; _ = c.Close() }()
 		close(start)
 		err := awaitInterrupt(t, pending)
-		if err != nil && !errors.Is(err, claude.ErrUnknownOutcome) {
+		if err != nil && !errors.Is(err, ErrUnknownOutcome) {
 			t.Fatalf("unexpected race outcome: %v", err)
 		}
 		wg.Wait()
-		if err := c.Interrupt(context.Background()); !errors.Is(err, claude.ErrClosed) && !errors.Is(err, claude.ErrUnknownOutcome) {
+		if err := c.Interrupt(context.Background()); !errors.Is(err, ErrClosed) && !errors.Is(err, ErrUnknownOutcome) {
 			t.Fatalf("closed client accepted a new interrupt: %v", err)
 		}
 		for {
@@ -519,7 +517,7 @@ func TestInterruptResponseCancellationAndCloseRaces(t *testing.T) {
 			if err != nil {
 				// Close can overlap the fixture-release Send's OS write. That
 				// separate write failure remains observable after draining.
-				if !errors.Is(err, claude.ErrUnknownOutcome) {
+				if !errors.Is(err, ErrUnknownOutcome) {
 					t.Fatal(err)
 				}
 				break

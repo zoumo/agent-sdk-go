@@ -5,20 +5,20 @@
 **以下均为契约示意，不是真实模型录制**。每个故事可作为后续独立真实验证票的操作清单；
 实际事件是否出现、身份字段、后台输出及精确先后均标记为**待真实验证**，不得把合成通过写成 live 通过。
 
-唯一入口为 `Open(ctx, Options)`，返回 `*Client`；唯一 `Receive` 返回 `TreeRecord`。
+唯一入口为 `Open(ctx, Options)`，返回 `*Client`；唯一 `Receive` 返回 `ReceivedEvent`。
 `Open` 始终在 initialize 请求 `forwardSubagentText:true`，拒绝则启动失败。
 接受应答仍只首发 `ObservationState(unverified, forwarding-not-confirmed)`，不证明子流完整。
-`Options.Tree` 仅设置资源和历史，不选择 raw/managed 模式。
+`Options.Subagents` 仅设置资源和历史，不选择 raw/managed 模式。
 
-图中 **N** 是 CLI 原生事件，由 `Native` 包装并保留精确 `Native.Raw`；**D** 是 SDK 派生记录，
-包括 Associated、Created、ObservationState，`Native=nil`，不发给模型或 CLI。
-包装 `TreeRecord.Origin` 是 native/sdk-derived 字符串；`Native.Origin` 和
-`Native.Result.Origin` 仍是官方 `*MessageOrigin` 对象。不要把包装 JSON 当作 CLI JSON。
+图中 **N** 是直接返回的 CLI 原生 `Event`，保留精确 `Event.Raw`；**D** 是独立的便利事件，
+包括 SubagentAssociated、SubagentCreated、ObservationState，不发给模型或 CLI。
+用 Go type switch 分流；原生 `Event.Origin` 和 `Event.Result.Origin` 保持官方对象。
+关系管理在内部进行，不在原生事件中添加分类字段。
 图中省略非关键事件，箭头不是对跨来源全局顺序的保证。
 
 ## 故事 1：我输入一个普通任务，等待答案
 
-**用户动作：** Open 后 Send「概括这段文本」，持续 Receive，按 Kind 分流。
+**用户动作：** Open 后 Send「概括这段文本」，持续 Receive，按具体 Go 类型分流。
 
 ```mermaid
 sequenceDiagram

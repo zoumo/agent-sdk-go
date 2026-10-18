@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // TestLiveCLIInitialization is an opt-in real process startup check, not a
@@ -31,7 +29,7 @@ func TestLiveCLIInitialization(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := claude.Open(ctx, claude.Options{CLIPath: path, WorkDir: t.TempDir()})
+	client, err := Open(ctx, Options{CLIPath: path, WorkDir: t.TempDir()})
 	if err != nil {
 		t.Fatal("live CLI initialization failed (diagnostics withheld; inspect privately)")
 	}

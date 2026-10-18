@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"context"
@@ -14,11 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
-func openBoundedTree(t *testing.T, bounds claude.TreeOptions, configure ...func(*claude.Options)) *claude.Client {
+func openBoundedTree(t *testing.T, bounds SubagentOptions, configure ...func(*Options)) *Client {
 	t.Helper()
 	opts := fixtureOptions(t, "tree")
 	for _, f := range configure {
@@ -39,7 +37,7 @@ const heldChild = ` {"type":"assistant","session_id":"s","agent_id":"a","parent_
 const rootTool = `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`
 
 func TestTreeBufferedSourceResolvesBeforeNativeWithoutReplay(t *testing.T) {
-	c := openBoundedTree(t, claude.TreeOptions{MaxUnresolvedWait: time.Second})
+	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Second})
 	treeEmit(t, c, heldChild)
 	first := treeReceive(t, c)
 	if first.Kind != "SubagentAssociated" || first.Scope != "unresolved" {
@@ -48,7 +46,7 @@ func TestTreeBufferedSourceResolvesBeforeNativeWithoutReplay(t *testing.T) {
 	// The call timeout neither discards the held frame nor stops the process.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	if _, err := c.Receive(ctx); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := c.tree.receive(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
 	treeEmit(t, c, rootTool)
@@ -68,7 +66,7 @@ func TestTreeBufferedSourceResolvesBeforeNativeWithoutReplay(t *testing.T) {
 }
 
 func TestTreeUnresolvedExpiryPreservesRawAndOnlyEnrichesLater(t *testing.T) {
-	c := openBoundedTree(t, claude.TreeOptions{MaxUnresolvedWait: 30 * time.Millisecond})
+	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: 30 * time.Millisecond})
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c) // association
 	d := treeReceive(t, c)
@@ -94,7 +92,7 @@ func TestTreeUnresolvedExpiryPreservesRawAndOnlyEnrichesLater(t *testing.T) {
 func TestTreeUnresolvedCapacityFailsVisiblyWithoutPartialFanout(t *testing.T) {
 	for _, mode := range []string{"count", "bytes", "single-frame"} {
 		t.Run(mode, func(t *testing.T) {
-			opts := claude.TreeOptions{MaxUnresolvedWait: time.Minute, MaxUnresolvedEvents: 1}
+			opts := SubagentOptions{MaxUnresolvedWait: time.Minute, MaxUnresolvedEvents: 1}
 			if mode == "bytes" {
 				opts.MaxUnresolvedEvents = 10
 				opts.MaxUnresolvedBytes = len(heldChild)
@@ -118,16 +116,16 @@ func TestTreeUnresolvedCapacityFailsVisiblyWithoutPartialFanout(t *testing.T) {
 				t.Fatal("partial fanout or missing diagnostic", d)
 			}
 			<-c.Done()
-			if !errors.Is(c.Err(), claude.ErrResourceLimit) {
+			if !errors.Is(c.Err(), ErrResourceLimit) {
 				t.Fatal(c.Err())
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			var nativeOrder []string
 			for {
-				r, err := c.Receive(ctx)
+				r, err := c.tree.receive(ctx)
 				if err != nil {
-					if !errors.Is(err, claude.ErrResourceLimit) {
+					if !errors.Is(err, ErrResourceLimit) {
 						t.Fatal(err)
 					}
 					break
@@ -158,7 +156,7 @@ func TestTreeUnresolvedCapacityFailsVisiblyWithoutPartialFanout(t *testing.T) {
 func TestTreeAtomicFanoutAndHistoryBounds(t *testing.T) {
 	for _, limit := range []int{1, 2} {
 		t.Run(fmt.Sprint(limit), func(t *testing.T) {
-			c := openBoundedTree(t, claude.TreeOptions{MaxPendingRecords: limit})
+			c := openBoundedTree(t, SubagentOptions{MaxPendingRecords: limit})
 			frame := `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"1"}`
 			treeEmit(t, c, frame) // association + run-observed + native = 3
 			r := treeReceive(t, c)
@@ -169,9 +167,9 @@ func TestTreeAtomicFanoutAndHistoryBounds(t *testing.T) {
 				t.Fatal(r)
 			}
 			for {
-				r, err := c.Receive(context.Background())
+				r, err := c.tree.receive(context.Background())
 				if err != nil {
-					if !errors.Is(err, claude.ErrResourceLimit) {
+					if !errors.Is(err, ErrResourceLimit) {
 						t.Fatal(err)
 					}
 					break
@@ -183,14 +181,14 @@ func TestTreeAtomicFanoutAndHistoryBounds(t *testing.T) {
 		})
 	}
 	opts := fixtureOptions(t, "tree")
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxPendingRecords: 1, History: []claude.TreeSeed{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}})
-	if c != nil || !errors.Is(err, claude.ErrResourceLimit) {
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxPendingRecords: 1, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}})
+	if c != nil || !errors.Is(err, ErrResourceLimit) {
 		t.Fatal(c, err)
 	}
 }
 
 func TestTreeNewBoundsRejectBeforeStartup(t *testing.T) {
-	for _, bounds := range []claude.TreeOptions{
+	for _, bounds := range []SubagentOptions{
 		{MaxPendingRecords: -1}, {MaxPendingRecords: 131073},
 		{MaxUnresolvedEvents: -1}, {MaxUnresolvedEvents: 65537},
 		{MaxUnresolvedBytes: -1}, {MaxUnresolvedBytes: 64<<20 + 1},
@@ -210,10 +208,10 @@ func TestTreeNewBoundsRejectBeforeStartup(t *testing.T) {
 }
 
 func TestTreeFullQueueControlResponseAndOriginalQuestionAuthority(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
-	c := openBoundedTree(t, claude.TreeOptions{MaxPendingRecords: 1}, func(o *claude.Options) {
+	requests := make(chan *PermissionRequest, 1)
+	c := openBoundedTree(t, SubagentOptions{MaxPendingRecords: 1}, func(o *Options) {
 		o.Limits.EventBuffer = 3
-		o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+		o.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	frame := `{"type":"control_request","session_id":"s","request_id":"original","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","tool_use_id":"question","agent_id":"a","input":{"questions":[{"question":"Which?","options":[{"label":"A","future":null}]}],"future":42}}}`
 	treeEmit(t, c, frame)
@@ -231,17 +229,17 @@ func TestTreeFullQueueControlResponseAndOriginalQuestionAuthority(t *testing.T) 
 		t.Fatal(r)
 	} // association+native cannot fit
 	awaitSignal(t, c.Done())
-	if !errors.Is(context.Cause(p.Context()), claude.ErrResourceLimit) {
+	if !errors.Is(context.Cause(p.Context()), ErrResourceLimit) {
 		t.Fatal(context.Cause(p.Context()))
 	}
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}); !errors.Is(err, claude.ErrClosed) {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrClosed) {
 		t.Fatal(err)
 	}
 	var raws []string
 	for {
-		r, err := c.Receive(ctx)
+		r, err := c.tree.receive(ctx)
 		if err != nil {
-			if !errors.Is(err, claude.ErrResourceLimit) {
+			if !errors.Is(err, ErrResourceLimit) {
 				t.Fatal(err)
 			}
 			break
@@ -256,8 +254,8 @@ func TestTreeFullQueueControlResponseAndOriginalQuestionAuthority(t *testing.T) 
 }
 
 func TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 2)
-	c := openBoundedTree(t, claude.TreeOptions{MaxUnresolvedEvents: 1, MaxUnresolvedWait: time.Minute}, func(o *claude.Options) { o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p } })
+	requests := make(chan *PermissionRequest, 2)
+	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedEvents: 1, MaxUnresolvedWait: time.Minute}, func(o *Options) { o.PermissionHandler = func(p *PermissionRequest) { requests <- p } })
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c) // fill held queue
 	input := `{"questions":[{"question":"Which?","header":"Format","options":[{"label":"A","future":null}]}],"future":42}`
@@ -276,25 +274,25 @@ func TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput(t *testing.T) {
 	if p.RequestID() != "original" || p.ToolUseID() != "question" || string(p.Input()) != input {
 		t.Fatal(p.RequestID(), p.ToolUseID(), string(p.Input()))
 	}
-	var q claude.AskUserQuestionInput
+	var q AskUserQuestionInput
 	if err := json.Unmarshal(p.Input(), &q); err != nil {
 		t.Fatal(err)
 	}
 	answer := "custom"
-	updated, err := q.WithAnswers(map[string]claude.QuestionAnswer{"Which?": {Text: &answer}})
+	updated, err := q.WithAnswers(map[string]QuestionAnswer{"Which?": {Text: &answer}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := p.Answer(cancelled, claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: updated}); !errors.Is(err, context.Canceled) {
+	if err := p.Answer(cancelled, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: updated}); err != nil {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated}); err != nil {
 		t.Fatal(err)
 	}
 	copyHandle := *p
-	if err := copyHandle.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny}); !errors.Is(err, claude.ErrPermissionUsed) {
+	if err := copyHandle.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}); !errors.Is(err, ErrPermissionUsed) {
 		t.Fatal(err)
 	}
 	echo := treeReceive(t, c)
@@ -330,29 +328,29 @@ func TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput(t *testing.T) {
 }
 
 func TestTreeCancelledQuestionOldEpochAndCloseRace(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 2)
-	config := func(o *claude.Options) { o.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p } }
-	c := openBoundedTree(t, claude.TreeOptions{}, config)
+	requests := make(chan *PermissionRequest, 2)
+	config := func(o *Options) { o.PermissionHandler = func(p *PermissionRequest) { requests <- p } }
+	c := openBoundedTree(t, SubagentOptions{}, config)
 	frame := `{"type":"control_request","request_id":"same","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","tool_use_id":"tool","agent_id":"a","input":{"questions":[]}}}`
 	treeEmit(t, c, frame)
 	treeReceive(t, c)
 	old := awaitPermission(t, requests)
 	treeEmit(t, c, `{"type":"control_cancel_request","request_id":"same"}`)
 	treeReceive(t, c)
-	if err := old.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}); !errors.Is(err, claude.ErrPermissionCancelled) {
+	if err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrPermissionCancelled) {
 		t.Fatal(err)
 	}
 	if err := c.Close(); err != nil {
 		t.Fatal(err)
 	}
-	fresh := openBoundedTree(t, claude.TreeOptions{}, config)
+	fresh := openBoundedTree(t, SubagentOptions{}, config)
 	treeEmit(t, fresh, frame)
 	r := treeReceive(t, fresh)
 	p := awaitPermission(t, requests)
 	if old.Epoch() == p.Epoch() || r.Epoch != p.Epoch() {
 		t.Fatal("epoch reused")
 	}
-	if err := old.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}); !errors.Is(err, claude.ErrPermissionCancelled) {
+	if err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrPermissionCancelled) {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
@@ -360,7 +358,7 @@ func TestTreeCancelledQuestionOldEpochAndCloseRace(t *testing.T) {
 		wg.Go(func() { _ = fresh.Close() })
 	}
 	for {
-		_, err := fresh.Receive(context.Background())
+		_, err := fresh.tree.receive(context.Background())
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				t.Fatal(err)
@@ -369,13 +367,13 @@ func TestTreeCancelledQuestionOldEpochAndCloseRace(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}); !errors.Is(err, claude.ErrClosed) {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrClosed) {
 		t.Fatal(err)
 	}
 }
 
 func TestTreeParentResultChildThinkingAndUsageStaySeparate(t *testing.T) {
-	c := openBoundedTree(t, claude.TreeOptions{})
+	c := openBoundedTree(t, SubagentOptions{})
 	treeFrame(t, c, rootTool)
 	frames := []string{
 		heldChild,
@@ -400,11 +398,11 @@ func TestTreeParentResultChildThinkingAndUsageStaySeparate(t *testing.T) {
 }
 
 func TestTreeTransportOverflowWakesPendingInterruptAndQuestion(t *testing.T) {
-	requests := make(chan *claude.PermissionRequest, 1)
+	requests := make(chan *PermissionRequest, 1)
 	opts := fixtureOptions(t, "overload_controls")
 	opts.Limits.EventBuffer = 3
-	opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{})
+	opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,12 +421,12 @@ func TestTreeTransportOverflowWakesPendingInterruptAndQuestion(t *testing.T) {
 	treeEmit(t, c, "fill")
 	treeEmit(t, c, "overflow")
 	awaitSignal(t, c.Done())
-	if !errors.Is(c.Err(), claude.ErrResourceLimit) || !errors.Is(context.Cause(p.Context()), claude.ErrResourceLimit) {
+	if !errors.Is(c.Err(), ErrResourceLimit) || !errors.Is(context.Cause(p.Context()), ErrResourceLimit) {
 		t.Fatal(c.Err(), context.Cause(p.Context()))
 	}
 	select {
 	case err := <-pending:
-		if !errors.Is(err, claude.ErrResourceLimit) || !errors.Is(err, claude.ErrUnknownOutcome) {
+		if !errors.Is(err, ErrResourceLimit) || !errors.Is(err, ErrUnknownOutcome) {
 			t.Fatal(err)
 		}
 	case <-time.After(3 * time.Second):
@@ -445,16 +443,16 @@ func TestTreeTransportOverflowWakesPendingInterruptAndQuestion(t *testing.T) {
 	if r := treeReceive(t, c); r.State != "incomplete" {
 		t.Fatal(r)
 	}
-	if _, err := c.Receive(context.Background()); !errors.Is(err, claude.ErrResourceLimit) {
+	if _, err := c.tree.receive(context.Background()); !errors.Is(err, ErrResourceLimit) {
 		t.Fatal(err)
 	}
-	if err := p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}); !errors.Is(err, claude.ErrClosed) {
+	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrClosed) {
 		t.Fatal(err)
 	}
 }
 
 func TestTreeHeldFramesDoNotRelaxDenyOrUnknownControlPolicy(t *testing.T) {
-	c := openBoundedTree(t, claude.TreeOptions{MaxUnresolvedWait: time.Minute})
+	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Minute})
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c)
 	for _, subtype := range []string{"can_use_tool", "future_control"} {
@@ -494,7 +492,7 @@ func TestTreeHeldFramesDoNotRelaxDenyOrUnknownControlPolicy(t *testing.T) {
 }
 
 func TestTreeHeldFrameCloseDoesNotWaitForAssociationDeadline(t *testing.T) {
-	c := openBoundedTree(t, claude.TreeOptions{MaxUnresolvedWait: time.Minute})
+	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Minute})
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c)
 	closed := make(chan struct{})
@@ -503,7 +501,7 @@ func TestTreeHeldFrameCloseDoesNotWaitForAssociationDeadline(t *testing.T) {
 	defer cancel()
 	natives := 0
 	for {
-		r, err := c.Receive(ctx)
+		r, err := c.tree.receive(ctx)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				t.Fatal(err)
@@ -527,7 +525,7 @@ func TestTreeHeldFrameCloseDoesNotWaitForAssociationDeadline(t *testing.T) {
 }
 
 func TestTreeBufferedSourceOrderAcrossUnrelatedUnresolvedSource(t *testing.T) {
-	c := openBoundedTree(t, claude.TreeOptions{MaxUnresolvedWait: time.Minute})
+	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Minute})
 	unrelated := `{"type":"assistant","session_id":"s","agent_id":"other","message":{"content":"unresolved"}}`
 	treeEmit(t, c, unrelated)
 	treeReceive(t, c)

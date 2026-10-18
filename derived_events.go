@@ -2,10 +2,12 @@
 
 package claude
 
-// TreeIdentity preserves distinct native identity namespaces. Empty fields mean
+import "encoding/json"
+
+// SubagentIdentity preserves distinct native identity namespaces. Empty fields mean
 // unknown, never an inferred session/agent/tool identity. ToolUseID can identify
 // an unresolved parent tool reference without identifying its owning agent.
-type TreeIdentity struct {
+type SubagentIdentity struct {
 	// AssociationID is a session/epoch-scoped SDK key, stable through enrichment.
 	AssociationID string `json:"association_id,omitempty"`
 	RunID         string `json:"run_id,omitempty"`
@@ -15,28 +17,28 @@ type TreeIdentity struct {
 	ToolUseID     string `json:"tool_use_id,omitempty"`
 }
 
-// TreeRecord is an SDK envelope, never a native protocol event. Defined separately
-// from native types: Origin here is a wrapper string; Native.Origin remains the
-// official *MessageOrigin object. Derived records have Native == nil. Kind is Native,
-// SubagentAssociated, SubagentCreated or ObservationState. Created confirms
-// creation under the fixed contract described in docs/subagent-events.md. Native retains
-// the original Event and Raw bytes. Sequence is local delivery order, not a
-// replay cursor. UsageScope remains unknown; no aggregate usage is calculated.
-type TreeRecord struct {
-	Kind       string        `json:"kind"`
-	Origin     string        `json:"origin"` // native or sdk-derived
-	Provider   string        `json:"provider"`
-	Epoch      uint64        `json:"epoch"`
-	Sequence   uint64        `json:"sequence"`
-	Provenance string        `json:"provenance"` // live arrival, not proof of live creation
-	Root       TreeIdentity  `json:"root"`
-	Source     TreeIdentity  `json:"source"`
-	Parent     *TreeIdentity `json:"parent,omitempty"`
-	Scope      string        `json:"scope"` // root, child, unresolved, unscoped
-	Evidence   string        `json:"evidence,omitempty"`
-	Reason     string        `json:"reason,omitempty"`
-	State      string        `json:"state,omitempty"`
-	UsageScope string        `json:"usage_scope"`
+// ReceivedEvent is a native Event or a SubagentAssociated, SubagentCreated or
+// ObservationState value. Use a type switch to consume the stream. Native values
+// retain their original schema and JSON codec.
+type ReceivedEvent interface {
+	MarshalJSON() ([]byte, error)
+}
+
+// SubagentInfo describes observed relationships and runs. It is carried only by
+// the derived convenience events; it is never added to native Event values.
+type SubagentInfo struct {
+	Provider   string            `json:"provider"`
+	Epoch      uint64            `json:"epoch"`
+	Sequence   uint64            `json:"sequence"`
+	Provenance string            `json:"provenance"` // live arrival, not proof of live creation
+	Root       SubagentIdentity  `json:"root"`
+	Source     SubagentIdentity  `json:"source"`
+	Parent     *SubagentIdentity `json:"parent,omitempty"`
+	Scope      string            `json:"scope"` // root, child, unresolved, unscoped
+	Evidence   string            `json:"evidence,omitempty"`
+	Reason     string            `json:"reason,omitempty"`
+	State      string            `json:"state,omitempty"`
+	UsageScope string            `json:"usage_scope"`
 	// CurrentRunID is the newest observed native run for this entity. A frame
 	// without run_id remains legacy-unknown; it never inherits CurrentRunID.
 	CurrentRunID string `json:"current_run_id,omitempty"`
@@ -51,12 +53,60 @@ type TreeRecord struct {
 	Stale              bool   `json:"stale,omitempty"`
 	// PreviousAssociationID redirects a previously unresolved node to Source.
 	PreviousAssociationID string `json:"previous_association_id,omitempty"`
-	Native                *Event `json:"native,omitempty"`
 }
 
-// TreeSeed asserts a previously verified local-agent task in a native session.
+// SubagentAssociated reports observed identity/parent evidence, not creation.
+type SubagentAssociated struct{ SubagentInfo }
+
+// SubagentCreated confirms creation under the conservative fixed-version criteria
+// documented in docs/subagent-events.md.
+type SubagentCreated struct{ SubagentInfo }
+
+// ObservationState reports forwarding and relationship observation health.
+type ObservationState struct{ SubagentInfo }
+
+func (e SubagentAssociated) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		SubagentInfo
+	}{"subagent_associated", e.SubagentInfo})
+}
+func (e SubagentCreated) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		SubagentInfo
+	}{"subagent_created", e.SubagentInfo})
+}
+func (e ObservationState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		SubagentInfo
+	}{"observation_state", e.SubagentInfo})
+}
+
+// relationshipRecord is private staging state, never a public event envelope.
+type relationshipRecord struct {
+	SubagentInfo
+	Kind   string
+	Native *Event
+}
+
+func (r relationshipRecord) event() ReceivedEvent {
+	switch r.Kind {
+	case "Native":
+		return *r.Native
+	case "SubagentAssociated":
+		return SubagentAssociated{r.SubagentInfo}
+	case "SubagentCreated":
+		return SubagentCreated{r.SubagentInfo}
+	default:
+		return ObservationState{r.SubagentInfo}
+	}
+}
+
+// SubagentHistory asserts a previously verified local-agent task in a native session.
 // It discovers identity only; it does not execute/resume work or replay requests.
-type TreeSeed struct {
+type SubagentHistory struct {
 	SessionID    string
 	TaskID       string
 	ParentTaskID string

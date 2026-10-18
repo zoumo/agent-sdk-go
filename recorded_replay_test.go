@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package claude_test
+package claude
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	claude "github.com/zoumo/claude-agent-sdk-go"
 	"github.com/zoumo/claude-agent-sdk-go/internal/transcript"
 	"os"
 	"path/filepath"
@@ -33,7 +32,7 @@ func TestRecordedAuthenticationFailureReplay(t *testing.T) {
 	marker := filepath.Join(dir, "consumed")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := claude.Open(ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
+	client, err := Open(ctx, Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,29 +53,30 @@ func TestRecordedAuthenticationFailureReplay(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if record.Kind == "SubagentCreated" {
+		if _, ok := record.(SubagentCreated); ok {
 			t.Fatal("error fixture cannot prove creation")
 		}
-		if record.Native == nil {
+		native, ok := record.(Event)
+		if !ok {
 			continue
 		}
 		nativeCount++
-		if bytes.Contains(transcript.Wire, record.Native.Raw) {
+		if bytes.Contains(transcript.Wire, native.Raw) {
 			rawCount++
 		} else {
 			t.Fatal("Raw changed")
 		}
-		if record.Native.Result != nil {
-			if !record.Native.Result.IsError || record.Native.Subtype != "success" {
+		if native.Result != nil {
+			if !native.Result.IsError || native.Subtype != "success" {
 				t.Fatal("lost native error semantics")
 			}
-			resultSequence = record.Sequence
-			if !bytes.Contains(record.Native.Raw, []byte(`"terminal_reason":"api_error"`)) {
+			resultSequence = uint64(nativeCount)
+			if !bytes.Contains(native.Raw, []byte(`"terminal_reason":"api_error"`)) {
 				t.Fatal("unknown native field missing")
 			}
 		}
-		if record.Native.Subtype == "session_state_changed" && record.Native.System != nil && record.Native.System.State != nil && *record.Native.System.State == "idle" {
-			idleSequence = record.Sequence
+		if native.Subtype == "session_state_changed" && native.System != nil && native.System.State != nil && *native.System.State == "idle" {
+			idleSequence = uint64(nativeCount)
 		}
 	}
 	if nativeCount != 8 || rawCount != 8 || resultSequence == 0 || idleSequence <= resultSequence {

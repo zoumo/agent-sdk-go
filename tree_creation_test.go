@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package claude_test
+package claude
 
 import (
 	"context"
@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 const creationInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258","tools":["Agent","Task","SendMessage"]}`
@@ -44,9 +42,9 @@ func creationResult(tool, agent, status string) string {
 
 // A sentinel lets each test assert the absence of delayed Created without
 // timing guesses, while checking every original native byte in arrival order.
-func creationFrames(t *testing.T, c *claude.Client, frames ...string) []claude.TreeRecord {
+func creationFrames(t *testing.T, c *Client, frames ...string) []relationshipRecord {
 	t.Helper()
-	var got []claude.TreeRecord
+	var got []relationshipRecord
 	for _, frame := range frames {
 		treeEmit(t, c, frame)
 		for {
@@ -70,8 +68,8 @@ func creationFrames(t *testing.T, c *claude.Client, frames ...string) []claude.T
 	}
 	return got
 }
-func creations(records []claude.TreeRecord) []claude.TreeRecord {
-	var result []claude.TreeRecord
+func creations(records []relationshipRecord) []relationshipRecord {
+	var result []relationshipRecord
 	for _, r := range records {
 		if r.Kind == "SubagentCreated" {
 			result = append(result, r)
@@ -118,7 +116,7 @@ func TestTreeCreatedForegroundAndLateBackground(t *testing.T) {
 			}
 			all := append(append(initial, middle...), late...)
 			created := creations(all)[0]
-			if created.Origin != "sdk-derived" || created.Provenance != "live" || created.Source.TaskID != "child" || created.Source.RunID != "" || created.RunScope != "legacy-unknown" || created.Parent == nil || created.Parent.SessionID != "s" || created.Scope != "child" || created.Native != nil || created.Evidence == "" {
+			if created.Provenance != "live" || created.Source.TaskID != "child" || created.Source.RunID != "" || created.RunScope != "legacy-unknown" || created.Parent == nil || created.Parent.SessionID != "s" || created.Scope != "child" || created.Native != nil || created.Evidence == "" {
 				t.Fatal(created)
 			}
 			associated := false
@@ -202,9 +200,9 @@ func TestTreeCreatedHistoryAndRootResume(t *testing.T) {
 	for _, history := range []bool{false, true} {
 		t.Run(fmt.Sprint(history), func(t *testing.T) {
 			opts := fixtureOptions(t, "tree")
-			bounds := claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond}
+			bounds := SubagentOptions{MaxUnresolvedWait: time.Nanosecond}
 			if history {
-				bounds.History = []claude.TreeSeed{{SessionID: "s", TaskID: "old"}}
+				bounds.History = []SubagentHistory{{SessionID: "s", TaskID: "old"}}
 			} else {
 				opts.ResumeID = "s"
 			}
@@ -245,7 +243,7 @@ func TestTreeCreatedNestedParallelAndEntityDedup(t *testing.T) {
 }
 func TestTreeCreationEvidenceBound(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxCreationEntries: 1})
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxCreationEntries: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +254,7 @@ func TestTreeCreationEvidenceBound(t *testing.T) {
 	var limit bool
 	for i := 0; i < 4; i++ {
 		r := treeReceive(t, c)
-		if r.Reason == "tree-resource-limit" {
+		if r.Reason == "subagent-resource-limit" {
 			limit = true
 		}
 		if r.Kind == "Native" {
@@ -294,7 +292,7 @@ func TestTreeCreatedSurvivesAliasMerge(t *testing.T) {
 }
 func TestTreeCreatedUUIDCapacityDoesNotEvictEntity(t *testing.T) {
 	opts := fixtureOptions(t, "tree")
-	c, err := openWithTree(context.Background(), opts, claude.TreeOptions{MaxDedupEntries: 1})
+	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxDedupEntries: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +310,7 @@ func TestTreeCreatedUUIDCapacityDoesNotEvictEntity(t *testing.T) {
 		if r.Kind == "SubagentCreated" {
 			t.Fatal("cache exhaustion recreated entity")
 		}
-		if r.Reason == "tree-resource-limit" {
+		if r.Reason == "subagent-resource-limit" {
 			limited = true
 		}
 		if r.Kind == "Native" {

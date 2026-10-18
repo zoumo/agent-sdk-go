@@ -31,14 +31,14 @@ func (t *managedTree) creationCall(k treeKey) (*treeCreationCall, error) {
 		return c, nil
 	}
 	if len(t.creation.calls) >= t.options.MaxCreationEntries {
-		return nil, &ResourceLimitError{Resource: "tree creation evidence", Limit: t.options.MaxCreationEntries}
+		return nil, &ResourceLimitError{Resource: "subagent creation evidence", Limit: t.options.MaxCreationEntries}
 	}
 	c := &treeCreationCall{}
 	t.creation.calls[k] = c
 	return c, nil
 }
 
-func (t *managedTree) observeCreation(r TreeRecord, e Event) error {
+func (t *managedTree) observeCreation(r relationshipRecord, e Event) error {
 	c := &t.creation
 	if e.IsReplay != nil && *e.IsReplay {
 		c.disabled = true
@@ -212,7 +212,7 @@ func (t *managedTree) observeCreation(r TreeRecord, e Event) error {
 			continue
 		}
 		n.created = true
-		created := t.record("SubagentCreated", TreeIdentity{SessionID: k.session})
+		created := t.record("SubagentCreated", SubagentIdentity{SessionID: k.session})
 		created.Source, created.Parent, created.Scope = n.identity, copyTreeParent(parent), scope
 		created.Source.RunID = ""
 		created.RunScope = "legacy-unknown"

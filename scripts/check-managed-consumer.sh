@@ -21,19 +21,18 @@ import (
     "github.com/zoumo/claude-agent-sdk-go/types"
 )
 
-var _ func(context.Context) (claude.TreeRecord, error) = (*claude.Client)(nil).Receive
+var _ func(context.Context) (claude.ReceivedEvent, error) = (*claude.Client)(nil).Receive
 
 // Compile-only: go test runs no CLI or model calls.
-func consume(ctx context.Context, config types.Options) error {
+func consumeConfig(ctx context.Context, config types.Options) error {
     opts := claude.OptionsFromTypes(config)
-    opts.Tree = claude.TreeOptions{MaxNodes: 8}
+    opts.Subagents = claude.SubagentOptions{MaxNodes: 8}
     c, err := claude.Open(ctx, opts)
     if err != nil { return err }
     defer c.Close()
     r, err := c.Receive(ctx)
     if err != nil { return err }
-    if r.Kind == "Native" {
-        var native *types.Event = r.Native
+    if native, ok := r.(types.Event); ok {
         var official *types.MessageOrigin = native.Origin
         var message *types.Message = native.Assistant
         _ = official
@@ -43,4 +42,11 @@ func consume(ctx context.Context, config types.Options) error {
     return nil
 }
 GO
+python3 - "$sdk_root/docs/api-comparison.md" "$consumer_dir/comparison.go" <<'PYDOC'
+import pathlib, sys
+text = pathlib.Path(sys.argv[1]).read_text()
+section = text.split("## Go: configuration,", 1)[1]
+code = section.split("```go\n", 1)[1].split("```", 1)[0]
+pathlib.Path(sys.argv[2]).write_text('package consumer\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/claude-agent-sdk-go")\n'+code)
+PYDOC
 (cd "$consumer_dir" && go test ./...)

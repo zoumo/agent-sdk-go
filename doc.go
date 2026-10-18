@@ -24,9 +24,10 @@
 // Pure data and existing JSON codecs have canonical definitions in the types
 // subpackage. Root aliases preserve source compatibility, while reflected and
 // formatted named-type paths may change. Options retains its callback and
-// runtime-only Tree resource/history configuration; OptionsFromTypes adapts
+// runtime-only Subagents resource/history configuration; OptionsFromTypes adapts
 // callback-free types.Options. Open always requests native child forwarding.
-// Receive returns TreeRecord (defined in derived_events.go), whose Kind separates
-// Native from SDK-derived records. Native.Origin remains the official object;
-// TreeRecord.Origin is only wrapper provenance. No raw/managed mode is offered.
+// Receive returns direct native Event values and distinct SubagentAssociated,
+// SubagentCreated and ObservationState convenience values. Relationship tracking
+// is private; native fields and JSON remain unchanged. Event.Origin is the
+// official MessageOrigin object. Forwarding is automatic.
 package claude

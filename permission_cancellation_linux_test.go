@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: Apache-2.0
 
-package claude_test
+package claude
 
 import (
 	"bytes"
@@ -14,14 +14,12 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-
-	claude "github.com/zoumo/claude-agent-sdk-go"
 )
 
 // Linux FIFOs provide deterministic cross-process barriers without network
 // access, timing guesses, or access to SDK internals. All assertions use the
 // public client and bytes actually consumed from its subprocess stdin.
-func permissionWireBarrier(t *testing.T) (*claude.Client, <-chan *claude.PermissionRequest, *os.File, string) {
+func permissionWireBarrier(t *testing.T) (*Client, <-chan *PermissionRequest, *os.File, string) {
 	t.Helper()
 	dir := t.TempDir()
 	fifoPath, transcript := filepath.Join(dir, "gate"), filepath.Join(dir, "stdin.ndjson")
@@ -35,10 +33,10 @@ func permissionWireBarrier(t *testing.T) (*claude.Client, <-chan *claude.Permiss
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = gate.Close() })
-	requests := make(chan *claude.PermissionRequest, 2)
-	c := openFixture(t, "permission_controls", func(opts *claude.Options) {
+	requests := make(chan *PermissionRequest, 2)
+	c := openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Env = append(opts.Env, "CLAUDE_GO_WRITE_BARRIER="+fifoPath, "CLAUDE_GO_TRANSCRIPT="+transcript)
-		opts.PermissionHandler = func(p *claude.PermissionRequest) { requests <- p }
+		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	return c, requests, gate, transcript
 }
@@ -50,7 +48,7 @@ func releasePermissionWire(t *testing.T, gate *os.File, action byte) {
 	}
 }
 
-func expectPermissionWireEvent(t *testing.T, c *claude.Client, kind string) claude.Event {
+func expectPermissionWireEvent(t *testing.T, c *Client, kind string) Event {
 	t.Helper()
 	event := receive(t, c)
 	if event.Type != kind {
@@ -59,7 +57,7 @@ func expectPermissionWireEvent(t *testing.T, c *claude.Client, kind string) clau
 	return event
 }
 
-func startBlockedPermissionWriter(t *testing.T, c *claude.Client, id string, p *claude.PermissionRequest) <-chan error {
+func startBlockedPermissionWriter(t *testing.T, c *Client, id string, p *PermissionRequest) <-chan error {
 	t.Helper()
 	send(t, c, "block_write:"+id)
 	expectPermissionWireEvent(t, c, "writer_ready")
@@ -68,7 +66,7 @@ func startBlockedPermissionWriter(t *testing.T, c *claude.Client, id string, p *
 		if p == nil {
 			results <- c.Send(context.Background(), strings.Repeat("user-writer", 250000))
 		} else {
-			results <- p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: strings.Repeat("answer-writer", 220000)})
+			results <- p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: strings.Repeat("answer-writer", 220000)})
 		}
 	}()
 	event := expectPermissionWireEvent(t, c, "writer_prefix")
@@ -97,15 +95,15 @@ func TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes(t *testing.T) 
 	blockedSend := startBlockedPermissionWriter(t, c, p.RequestID(), nil)
 	ctx := &answerReservationContext{Context: context.Background(), reserved: make(chan struct{})}
 	answers := make(chan error, 1)
-	go func() { answers <- p.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionAllow}) }()
+	go func() { answers <- p.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow}) }()
 	awaitSignal(t, ctx.reserved)
 	releasePermissionWire(t, gate, 'q')
 	if event := expectPermissionWireEvent(t, c, "control_cancel_request"); event.Cancel.RequestID != p.RequestID() {
 		t.Fatal("wrong cancellation ID")
 	}
 	err := awaitPermissionError(t, answers)
-	assertPermissionError(t, err, p.RequestID(), claude.ErrPermissionCancelled)
-	if errors.Is(err, claude.ErrUnknownOutcome) {
+	assertPermissionError(t, err, p.RequestID(), ErrPermissionCancelled)
+	if errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("never-authorized answer falsely ambiguous: %v", err)
 	}
 	releasePermissionWire(t, gate, 'd')
@@ -113,7 +111,7 @@ func TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes(t *testing.T) 
 	if err := awaitPermissionError(t, blockedSend); err != nil {
 		t.Fatalf("queued cancellation interrupted unrelated write: %v", err)
 	}
-	assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), p.RequestID(), claude.ErrPermissionCancelled)
+	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), ErrPermissionCancelled)
 	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 0 {
 		t.Fatalf("cancelled queued answer reached wire: %#v", got)
 	}
@@ -136,19 +134,19 @@ func TestPermissionQueuedWriterCloseOrCallerCancel(t *testing.T) {
 			defer cancel()
 			ctx := &answerReservationContext{Context: base, reserved: make(chan struct{})}
 			answers := make(chan error, 1)
-			go func() { answers <- p.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionAllow}) }()
+			go func() { answers <- p.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow}) }()
 			awaitSignal(t, ctx.reserved)
 			closeResults := make(chan error, 1)
-			want := claude.ErrClosed
+			want := ErrClosed
 			if callerCancels {
-				want = claude.ErrPermissionWriteFailed
+				want = ErrPermissionWriteFailed
 				cancel()
 			} else {
 				go func() { closeResults <- c.Close() }()
 			}
 			err := awaitPermissionError(t, answers)
 			assertPermissionError(t, err, p.RequestID(), want)
-			if errors.Is(err, claude.ErrUnknownOutcome) {
+			if errors.Is(err, ErrUnknownOutcome) {
 				t.Fatalf("queued answer inherited another write's ambiguity: %v", err)
 			}
 			awaitDone(t, c)
@@ -161,7 +159,7 @@ func TestPermissionQueuedWriterCloseOrCallerCancel(t *testing.T) {
 			} else {
 				_ = awaitPermissionError(t, closeResults)
 			}
-			assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{}), p.RequestID(), want)
+			assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{}), p.RequestID(), want)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
@@ -181,9 +179,9 @@ func TestPermissionStartedWriteCancellationAndCloseAreAmbiguous(t *testing.T) {
 			p := awaitPermission(t, requests)
 			answers := startBlockedPermissionWriter(t, c, p.RequestID(), p)
 			closeResults := make(chan error, 1)
-			want := claude.ErrPermissionWriteFailed
+			want := ErrPermissionWriteFailed
 			if cliCancels {
-				want = claude.ErrPermissionCancelled
+				want = ErrPermissionCancelled
 				releasePermissionWire(t, gate, 'c')
 				expectPermissionWireEvent(t, c, "control_cancel_request")
 			} else {
@@ -191,7 +189,7 @@ func TestPermissionStartedWriteCancellationAndCloseAreAmbiguous(t *testing.T) {
 			}
 			err := awaitPermissionError(t, answers)
 			assertPermissionError(t, err, p.RequestID(), want)
-			if !errors.Is(err, claude.ErrUnknownOutcome) {
+			if !errors.Is(err, ErrUnknownOutcome) {
 				t.Fatalf("started response falsely known not written: %v", err)
 			}
 			awaitDone(t, c)
@@ -202,7 +200,7 @@ func TestPermissionStartedWriteCancellationAndCloseAreAmbiguous(t *testing.T) {
 				_ = awaitPermissionError(t, closeResults)
 			}
 			for range 2 {
-				assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{Behavior: claude.PermissionAllow}), p.RequestID(), want)
+				assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), want)
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -233,7 +231,7 @@ func TestPermissionStartedWriteCanFinishBeforeCancellation(t *testing.T) {
 	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": p.RequestID()})
 	expectPermissionWireEvent(t, c, "control_cancel_request")
-	assertPermissionError(t, p.Answer(context.Background(), claude.PermissionAnswer{}), p.RequestID(), claude.ErrPermissionUsed)
+	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{}), p.RequestID(), ErrPermissionUsed)
 	if err := c.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -256,18 +254,18 @@ func TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity(t *testing.T) {
 	go func() { closeResults <- c.Close() }()
 	for _, result := range []<-chan error{queuedSend, queuedControl} {
 		err := awaitPermissionError(t, result)
-		if !errors.Is(err, claude.ErrClosed) || errors.Is(err, claude.ErrUnknownOutcome) {
+		if !errors.Is(err, ErrClosed) || errors.Is(err, ErrUnknownOutcome) {
 			t.Fatalf("queued operation inherited ambiguity: %v", err)
 		}
 	}
-	if err := awaitPermissionError(t, started); !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitPermissionError(t, started); !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("started write outcome: %v", err)
 	}
 	releasePermissionWire(t, gate, 'x')
-	if err := awaitPermissionError(t, closeResults); !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitPermissionError(t, closeResults); !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("Close lost started write failure: %v", err)
 	}
-	if !errors.Is(c.Err(), claude.ErrUnknownOutcome) {
+	if !errors.Is(c.Err(), ErrUnknownOutcome) {
 		t.Fatalf("Err lost original cause: %v", c.Err())
 	}
 }
@@ -284,7 +282,7 @@ func TestAutomaticResponseQueueOverflowUnblocksStartedWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer gate.Close()
-	c := openFixture(t, "permission_controls", func(o *claude.Options) {
+	c := openFixture(t, "permission_controls", func(o *Options) {
 		o.Limits.ControlBuffer = 2
 		o.Limits.EventBuffer = 32
 		o.Env = append(o.Env, "CLAUDE_GO_WRITE_BARRIER="+fifo, "CLAUDE_GO_TRANSCRIPT="+path)
@@ -292,10 +290,10 @@ func TestAutomaticResponseQueueOverflowUnblocksStartedWriter(t *testing.T) {
 	started := startBlockedPermissionWriter(t, c, "unused", nil)
 	releasePermissionWire(t, gate, 'r')
 	awaitDone(t, c)
-	if err := awaitPermissionError(t, started); !errors.Is(err, claude.ErrUnknownOutcome) {
+	if err := awaitPermissionError(t, started); !errors.Is(err, ErrUnknownOutcome) {
 		t.Fatalf("blocked writer: %v", err)
 	}
-	var limit *claude.ResourceLimitError
+	var limit *ResourceLimitError
 	if err := c.Close(); !errors.As(err, &limit) || limit.Resource != "incoming control queue" || limit.Limit != 2 {
 		t.Fatalf("response queue bound: %v", err)
 	}

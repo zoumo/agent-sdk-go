@@ -1,66 +1,56 @@
-# Migrate to default managed events
+# Migrate to native events
 
-This is a breaking API change. The supported creation contract remains exact CLI
-2.1.258 and official SDK 0.3.258; synthetic tests do not establish live coverage.
+This breaking change removes the public relationship envelope. The current CLI
+target remains 2.1.258 and the official TypeScript contract is 0.3.258.
 
-| Before | Now |
+| Previous API | Current API |
 | --- | --- |
-| `Open(ctx, opts)` returns `*Client`; Receive returns Event | Open still returns `*Client`; Receive returns `TreeRecord` |
-| Read `event.Type`, `.Raw`, `.Assistant` | Check `record.Kind == "Native"`, then read `record.Native.Type`, `.Raw`, `.Assistant` |
-| First receive assumed system/init | First record is ObservationState(unverified); handle all Kind values |
-| `OpenTree(ctx, opts, bounds)` / `*TreeClient` | Set `opts.Tree = bounds`; call `Open(ctx, opts)` / `*Client` |
-| Runtime/types `ForwardSubagentText` boolean | Remove the field; Open always requests `forwardSubagentText:true` |
-| Optional forwarding path | One managed path; initialize rejection fails Open without fallback |
-
-There is no compatibility factory, alias, raw-only Receive, or mode selector.
-`ParseEvent` remains an offline native parser, not another runtime stream.
+| `Receive(ctx) (TreeRecord, error)` | `Receive(ctx) (ReceivedEvent, error)` |
+| `record.Kind == "Native"`, then `record.Native` | Type assertion or switch on direct `Event` value |
+| String Kind for derived records | Concrete `SubagentAssociated`, `SubagentCreated`, `ObservationState` values |
+| Wrapper origin string | Removed; native `Event.Origin` remains the official object |
+| `Options.Tree`, `TreeOptions`, `TreeSeed`, `TreeIdentity` | `Options.Subagents`, `SubagentOptions`, `SubagentHistory`, `SubagentIdentity` |
+| Native wrapper Source/Parent/run metadata | Private ledger; use native IDs and separate relationship/observation events |
 
 ```go
 opts := claude.OptionsFromTypes(config)
-opts.Tree = claude.TreeOptions{MaxNodes: 4096}
+opts.Subagents = claude.SubagentOptions{MaxNodes: 4096}
 opts.PermissionHandler = handler
 client, err := claude.Open(ctx, opts)
 if err != nil { return err }
 defer client.Close()
 for {
-    record, err := client.Receive(ctx)
+    received, err := client.Receive(ctx)
     if err != nil { return err }
-    switch record.Kind {
-    case "Native":
-        var native *types.Event = record.Native
-        var officialOrigin *types.MessageOrigin = native.Origin
-        _ = officialOrigin
-        _ = native.Raw // exact input bytes, excluding newline
-    case "SubagentAssociated", "SubagentCreated":
-        _ = record.Source
-    case "ObservationState":
-        _ = record.Reason // retain unverified/incomplete/history-gap diagnostics
+    switch event := received.(type) {
+    case claude.Event:
+        _ = event.Raw
+        _ = event.Origin // official *MessageOrigin, never SDK classification
+    case claude.SubagentAssociated:
+        _ = event.Source
+    case claude.SubagentCreated:
+        _ = event.Source.TaskID
+    case claude.ObservationState:
+        _ = event.Reason
     }
 }
 ```
 
-`TreeRecord`, `TreeIdentity` and `TreeSeed` are independently defined in
-[derived_events.go](../derived_events.go). Kind is the authoritative discriminator.
-The wrapper Origin is a native/sdk-derived string; Event.Origin and
-ResultEvent.Origin remain official `*MessageOrigin` objects, with their existing
-JSON codecs and absent/null/unknown-member behavior. Derived records have
-Native=nil and do not fabricate native type/subtype. Marshal Native or use its
-Raw for native JSON; marshaling TreeRecord produces an SDK envelope.
+Native Event aliases retain identity with types.Event. Derived event definitions
+and JSON codecs live separately in derived_events.go; they do not wrap native
+messages. Their JSON type names are subagent_associated, subagent_created and
+observation_state. There is no SDK-origin flag. Raw bytes remain exact; marshaling
+a native event uses its existing lossless semantic JSON codec.
 
-`Options.Tree` controls bounded resources and caller-verified history only.
-`Options.Types()` omits runtime-only Tree and callbacks; `OptionsFromTypes()`
-starts with zero/default Tree. The entire runtime Options is not a lossless
-round trip through callback-free types.Options. Invalid bounds/history fail
-before spawning the CLI. Default Tree still manages the stream.
+The first receive remains an unverified ObservationState. Open always requests
+child text forwarding. Bounds/history validation still precedes process startup.
+Options.Types omits Subagents and callbacks; OptionsFromTypes initializes defaults.
 
-Permissions retain the original sole answerable PermissionRequest. No automatic
-approval, second responder, child resume/turn/process, hook, output-file reader,
-or extra stdout consumer is introduced. Canceling Receive only cancels its wait.
-Root result and native idle do not close observation; background tasks and
-requests can require continued Receive. Native idle is not synthesized from
-result, silence or an available input box. Scope/source output and usage stay
-separate. Close releases the owned process; disconnect retains a visible gap.
+PermissionRequest remains the sole answerable handle. Send, Interrupt, SessionID,
+RequestedResumeID, Done, Err, Close and Receive cancellation keep their contracts.
+A root result or native idle does not close observation or prove every child is
+finished. Call Close under an explicit application policy.
 
-See [user-story sequences](event-sequences.md), [bounds and creation rules](subagent-events.md)
-and the [capability matrix](subagent-compatibility.md). Historical evidence files
-retain their original API and validation dates; they are not new acceptance runs.
+[Independent consumer compile check](../scripts/check-managed-consumer.sh) and
+[offline child example](../examples/subagents-offline/main.go) use the current API.
+Historical evidence files retain their original APIs and validation dates.

@@ -142,14 +142,14 @@ func run() error {
 				runErr = e
 				break
 			}
-			if record.Native != nil {
-				if record.Native.Type == "result" {
+			if native, ok := record.(claude.Event); ok {
+				if native.Type == "result" {
 					result = true
-					if record.Native.Result != nil {
-						modelError = record.Native.Result.IsError
+					if native.Result != nil {
+						modelError = native.Result.IsError
 					}
 				}
-				if record.Native.System != nil && record.Native.Subtype == "session_state_changed" && record.Native.System.State != nil && *record.Native.System.State == "idle" {
+				if native.System != nil && native.Subtype == "session_state_changed" && native.System.State != nil && *native.System.State == "idle" {
 					idle = true
 					if result {
 						break

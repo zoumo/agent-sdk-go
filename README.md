@@ -21,6 +21,7 @@ module import paths have no compatibility forwarding packages.
 - [Engineering standards](docs/standards/architecture.md) — [testing](docs/standards/testing.md), [code layout](docs/standards/code-layout.md)
 - [Migration and source history](docs/migration.md)
 - [Offline validation](docs/testing.md) and [pure public API consumer](tests/consumers/codex-public/main.go)
+- [Offline mock CLIs and programmable protocol peers](docs/mock.md)
 - [Recorded test data: Codex tools/questions, Claude authentication failure, and synthetic fixtures](docs/recordings.md)
 - [Shared user stories and native evidence](docs/stories/index.md)
 - [Shared terms](docs/glossary.md)

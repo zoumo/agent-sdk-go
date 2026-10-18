@@ -67,13 +67,16 @@ Both scripts create their modules and module caches under `/tmp`, disable
 `go.work` and inherited Go overlays/modfiles, and fetch from the new repository
 without `replace`. The root script resolves the exact SHA directly from GitHub,
 checks its full VCS origin hash, compiles all four public imports, copied public
-examples and documented configuration/approval snippets, and runs only synthetic
+examples and documented configuration/approval snippets, and runs synthetic
 value/configuration checks and the [pure Codex public consumer](../tests/consumers/codex-public/main.go).
 This consumer checks import identity, API signatures and configuration only; SDK
 usage demonstrations stay under each native package's `examples/` directory. The retained
 Claude script separately compiles its native consumer and configuration snippet.
 Dependency download requires network access; compilation/runtime checks then use
-`GOPROXY=off` and `GOSUMDB=off`. Neither script opens a client or invokes an agent.
+`GOPROXY=off` and `GOSUMDB=off`. The root script also builds both [mock CLIs](mock.md) from the fetched module
+and opens real SDK clients against them to test bidirectional question/permission
+answers, interrupts, local cancellation, disconnection and strict mismatches.
+Neither script invokes a real agent CLI or model.
 
 External consumer CI runs on Linux/macOS for pushed `main` commits and manual
 workflow runs, targeting `github.sha`. PR offline checks remain separate because

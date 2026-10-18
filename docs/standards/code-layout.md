@@ -5,13 +5,15 @@ Both native SDKs use the same separation of responsibilities:
 | Location | Responsibility |
 |---|---|
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
-| `codex/cmd/<command>`, `claude/cmd/<command>` | Thin CLI `main` entry points; delegate to recorder tools and preserve error/exit behavior |
+| `codex/cmd/<command>`, `claude/cmd/<command>` | Thin CLI `main` entry points; delegate to native tools and preserve error/exit behavior |
 | `codex/tools/recorder`, `claude/tools/recorder` | Explicit recording orchestration, native SDK setup, guarded proxy dispatch and capture lifecycle |
+| `codex/tools/mock`, `claude/tools/mock` | Public versioned offline scenario runners using the native replay engine; no model/tool execution |
 | `codex/tools/replay`, `claude/tools/replay` | Importable native capture/safety primitives, fixture reading and offline replay helpers used by commands, SDK tests and replay examples |
 | `codex/tests/testdata/recordings/real-sanitized`, `claude/tests/testdata/recordings/real-sanitized` | Sanitized real captures and their manifests, expected observations, ID maps and transport metadata |
 | Each native `tests/testdata/synthetic-faults` | Clearly identified synthetic protocol/fault data |
 | `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
 | Each native `examples` | Genuine SDK usage and offline usage demonstrations |
+| `tests/consumers/mock` | External fetched-module checks of real SDKs against built mock commands |
 | `tests/consumers/codex-public` | Pure public API/import-boundary consumer, not an SDK usage demonstration |
 | `tests/stories` | Shared story suite, native test adapters and synthetic protocol peers |
 

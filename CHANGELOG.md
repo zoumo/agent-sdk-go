@@ -15,6 +15,9 @@
   including conflict/cycle rejection, ancestors, depth and resource bounds.
   Native event parsing, creation evidence, Claude aliases/runs/deduplication and
   transport ownership remain in their respective SDKs.
+- Adds public native `tools/mock` scenario runners and `cmd/mock` protocol peers
+  for offline integration tests using the real SDKs, with strict bidirectional
+  matching, bounded faults and independent fetched-module consumer checks.
 - Pins mise-managed Go 1.26.9 and checks Linux/macOS offline contracts, race,
   vet, schemas/inventories, types boundaries, sanitized recordings and examples.
   External consumers retrieve exact pushed commits into independent modules.

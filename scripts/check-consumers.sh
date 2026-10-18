@@ -113,6 +113,9 @@ source = pathlib.Path(sys.argv[1])
 target = pathlib.Path('consumers/codex-public')
 target.mkdir(parents=True)
 shutil.copyfile(source / 'tests/consumers/codex-public/main.go', target / 'main.go')
+target = pathlib.Path('consumers/mock')
+target.mkdir(parents=True)
+shutil.copyfile(source / 'tests/consumers/mock/mock_test.go', target / 'mock_test.go')
 # Compile consumer copies of the fetched module's public examples, excluding
 # example tests and all examples that import implementation-only packages.
 for name, relative in (
@@ -143,7 +146,12 @@ go mod tidy
 go mod verify
 go mod edit -json | python3 -c 'import json, sys; assert not json.load(sys.stdin).get("Replace"), "consumer unexpectedly contains a replace directive"'
 test ! -e go.work
-# Downloads are complete: consumer/example compilation and pure checks now run offline.
+mkdir -p "$consumer_dir/bin"
+GOPROXY=off GOSUMDB=off go build -o "$consumer_dir/bin/mock-codex" github.com/zoumo/agent-sdk-go/codex/cmd/mock
+GOPROXY=off GOSUMDB=off go build -o "$consumer_dir/bin/mock-claude" github.com/zoumo/agent-sdk-go/claude/cmd/mock
+export SDK_MOCK_CODEX_BIN="$consumer_dir/bin/mock-codex"
+export SDK_MOCK_CLAUDE_BIN="$consumer_dir/bin/mock-claude"
+# Downloads are complete: consumer/example compilation and mock checks now run offline.
 GOPROXY=off GOSUMDB=off go test -count=1 ./...
 GOPROXY=off GOSUMDB=off go run ./consumers/codex-public
 printf 'External consumer verified pushed commit %s\n' "$revision"

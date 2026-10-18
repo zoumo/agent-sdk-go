@@ -9,20 +9,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 // This independent opt-in spends at most five attempts, with no write replay.
 // Read-only sandbox and inherited approval policy are never weakened.
-func TestStdioInteractionsInterrupt(t *testing.T) {
+type StdioInteractionsInterruptSuite struct {
+	suite.Suite
+	executable string
+}
+
+func TestStdioInteractionsInterrupt(t *testing.T) { suite.Run(t, new(StdioInteractionsInterruptSuite)) }
+
+func (s *StdioInteractionsInterruptSuite) SetupTest() {
+	t := s.T()
 	if os.Getenv("RUN_MAC_INTERACTIONS_LIVE") != "1" {
 		t.Skip("live scenario skipped: set RUN_MAC_INTERACTIONS_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
-	executable := os.Getenv("MAC_LIVE_CODEX")
-	if executable == "" {
-		t.Fatal("explicit executable required")
-	}
+	s.executable = os.Getenv("MAC_LIVE_CODEX")
+	require.False(t, s.executable == "",
+		"explicit executable required")
+
+}
+
+func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
+	t := s.T()
+	executable := s.executable
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	attempts := 0
@@ -33,9 +48,9 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 	initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
 	c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket02", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
 	stop()
-	if err != nil {
-		t.Fatalf("initialize failed: %T; payload withheld", err)
-	}
+	require.True(t, err == nil,
+		"initialize failed: %T; payload withheld", err)
+
 	defer c.Close()
 	var modes struct {
 		Data []struct {
@@ -63,13 +78,13 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 			continue
 		}
 		th, e := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Sandbox: types.Some(types.SandboxModeReadOnly), Ephemeral: types.Some(true)})
-		if e != nil {
-			t.Fatalf("thread/start failed: %T", e)
-		}
+		require.True(t, e == nil,
+			"thread/start failed: %T", e)
+
 		id := th.Thread.ID
-		if id == "" || th.Sandbox.ReadOnly == nil {
-			t.Fatal("identity/read-only sandbox assertion failed")
-		}
+		require.False(t, id == "" || th.Sandbox.ReadOnly == nil,
+			"identity/read-only sandbox assertion failed")
+
 		policy := "other"
 		for _, v := range []types.AskForApprovalValue{types.AskForApprovalValueNever, types.AskForApprovalValueOnRequest, types.AskForApprovalValueUntrusted} {
 			if th.ApprovalPolicy.Value != nil && *th.ApprovalPolicy.Value == v {
@@ -78,9 +93,9 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 		}
 		t.Logf("scenario=%s native thread created read-only; inherited approval_policy=%s", sc.name, policy)
 		s, e := c.Subscribe(ctx, id, types.SubscriptionOptions{})
-		if e != nil {
-			t.Fatal("subscribe failed")
-		}
+		require.True(t, e == nil,
+			"subscribe failed")
+
 		p := types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: sc.prompt})}}}
 		if sc.name == "user-input" {
 			p.CollaborationMode = types.Some(types.CollaborationMode{Mode: types.ModeKindPlan, Settings: types.Settings{Model: th.Model, DeveloperInstructions: types.Null[string](), ReasoningEffort: types.Null[types.ReasoningEffort]()}})
@@ -106,25 +121,25 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 			select {
 			case r := <-starts:
 				if r.e != nil {
-					t.Fatalf("%s turn/start failed; no replay: %T", sc.name, r.e)
+					require.FailNowf(t, "assertion failed", "%s turn/start failed; no replay: %T", sc.name, r.e)
 				}
 				response = r.v.Turn.ID
 				if response == "" || (turn != "" && turn != response) {
-					t.Fatal("RPC/event identity mismatch")
+					require.FailNow(t, "RPC/event identity mismatch")
 				}
 				turn = response
 				t.Logf("scenario=%s turn/start responded native ID matched", sc.name)
 			case r, ok := <-c.Requests():
 				if !ok {
-					t.Fatal("requests ended")
+					require.FailNow(t, "requests ended")
 				}
 				if seen[r.ID()] {
-					t.Fatal("duplicate request ID")
+					require.FailNow(t, "duplicate request ID")
 				}
 				seen[r.ID()] = true
 				d, e := r.Data()
 				if e != nil {
-					t.Fatalf("typed request decode failed: %T", e)
+					require.FailNowf(t, "assertion failed", "typed request decode failed: %T", e)
 				}
 				matched := false
 				var answer any
@@ -173,29 +188,29 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 				}
 				done()
 				if e != nil {
-					t.Fatalf("response failed; no replay: %T", e)
+					require.FailNowf(t, "assertion failed", "response failed; no replay: %T", e)
 				}
 				if !errors.Is(r.Handle().Err(), codex.ErrRequestAnswered) {
-					t.Fatal("one-shot terminal state mismatch")
+					require.FailNow(t, "one-shot terminal state mismatch")
 				}
 				t.Logf("scenario=%s request=%s native_identity_matched=%t single_response_written=true (not server acceptance)", sc.name, r.Method(), matched)
 			case ev, ok := <-s.Events():
 				if !ok {
-					t.Fatal("event stream closed")
+					require.FailNow(t, "event stream closed")
 				}
 				if ev.Raw == nil {
 					continue
 				}
 				native := ev
 				if native.DecodeError != nil {
-					t.Fatal("event loss/decode failure")
+					require.FailNow(t, "event loss/decode failure")
 				}
 				switch v := native.Data.(type) {
 				case *types.TurnStartedNotification:
 					if v.ThreadID == id {
-						if turn != "" && turn != v.Turn.ID {
-							t.Fatal("turn identity mismatch")
-						}
+						require.False(t, turn != "" && turn != v.Turn.ID,
+							"turn identity mismatch")
+
 						turn = v.Turn.ID
 						t.Logf("scenario=%s matched turn/started", sc.name)
 					}
@@ -204,9 +219,9 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 						itemID = v.Item.CommandExecution.ID
 						interruptSent = true
 						_, e := c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: id, TurnID: turn})
-						if e != nil {
-							t.Fatalf("interrupt failed; no replay: %T", e)
-						}
+						require.True(t, e == nil,
+							"interrupt failed; no replay: %T", e)
+
 						ack = true
 						t.Log("scenario=interrupt active sleep item observed; exact native turn interrupt ack")
 					}
@@ -232,7 +247,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 						t.Logf("scenario=%s matched serverRequest/resolved exact tagged ID", sc.name)
 					}
 				case *types.ErrorNotification:
-					t.Fatalf("%s native error event; payload withheld", sc.name)
+					require.FailNowf(t, "assertion failed", "%s native error event; payload withheld", sc.name)
 				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == turn {
 						status = string(v.Turn.Status)
@@ -240,24 +255,27 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 					}
 				}
 			case <-s.Done():
-				t.Fatalf("subscription ended early: %T", s.Err())
+				require.FailNowf(t, "assertion failed", "subscription ended early: %T", s.Err())
 			case <-timer.C:
 				if turn != "" && !interruptSent {
 					_, _ = c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: id, TurnID: turn})
 				}
-				t.Fatal("turn timed out; at most one interrupt; termination unconfirmed")
+				require.FailNow(t, "turn timed out; at most one interrupt; termination unconfirmed")
 			case <-ctx.Done():
-				t.Fatal("ticket wall clock exhausted")
+				require.FailNow(t, "ticket wall clock exhausted")
 			}
 		}
 		timer.Stop()
-		if e := s.Close(); e != nil || s.Err() != nil {
-			t.Fatal("subscription close/loss failure")
+		{
+			e := s.Close()
+			require.False(t, e != nil || s.Err() != nil,
+				"subscription close/loss failure")
 		}
+
 		t.Logf("scenario=%s target_requests=%d answers=%d resolutions=%d command_effect=%t blue_exact=%t interrupt_ack=%t interrupted_terminal=%t item_stopped=%t", sc.name, targets, answers, resolved, commandEffect, blue, ack, status == "interrupted", itemStopped)
-		if status == "failed" {
-			t.Fatal("server turn failed; not untriggered")
-		}
+		require.False(t, status == "failed",
+			"server turn failed; not untriggered")
+
 	}
 	closeStart := time.Now()
 	closed := make(chan error, 1)
@@ -265,15 +283,15 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 	select {
 	case e := <-closed:
 		if e != nil || !errors.Is(c.Err(), codex.ErrClosed) {
-			t.Fatal("close failed")
+			require.FailNow(t, "close failed")
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("close exceeded observation budget")
+		require.FailNow(t, "close exceeded observation budget")
 	}
 	select {
 	case <-c.Done():
 	default:
-		t.Fatal("Done open")
+		require.FailNow(t, "Done open")
 	}
 	t.Logf("Close=nil Done=closed ErrClosed owned child reaped elapsed_ms=%d", time.Since(closeStart).Milliseconds())
 }

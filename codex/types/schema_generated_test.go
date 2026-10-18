@@ -8,1898 +8,775 @@ import (
 )
 
 func TestGeneratedSchemaRoundTrips(t *testing.T) {
-	t.Run("AdditionalPermissionProfile/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AdditionalPermissionProfile), "{}") })
-	t.Run("AdditionalPermissionProfile/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalPermissionProfile), "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ApplyPatchApprovalParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyPatchApprovalParams), "{\"callId\":\"synthetic-value\",\"conversationId\":\"synthetic-value\",\"fileChanges\":{\"sample\":{\"content\":\"synthetic-value\",\"type\":\"add\"}}}")
-	})
-	t.Run("ApplyPatchApprovalParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyPatchApprovalParams), "{\"callId\":\"synthetic-value\",\"conversationId\":\"synthetic-value\",\"fileChanges\":{\"sample\":{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"grantRoot\":\"synthetic-value\",\"reason\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ApplyPatchApprovalResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyPatchApprovalResponse), "{\"decision\":\"approved\"}")
-	})
-	t.Run("ApplyPatchApprovalResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyPatchApprovalResponse), "{\"decision\":\"approved\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ClientInfo/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ClientInfo), "{\"name\":\"synthetic-value\",\"version\":\"synthetic-value\"}")
-	})
-	t.Run("ClientInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ClientInfo), "{\"name\":\"synthetic-value\",\"title\":\"synthetic-value\",\"version\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionApprovalDecision/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionApprovalDecision), "\"accept\"") })
-	t.Run("CommandExecutionApprovalDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionApprovalDecision), "\"acceptForSession\"")
-	})
-	t.Run("CommandExecutionApprovalDecision/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionApprovalDecision), "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionApprovalDecision/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionApprovalDecision), "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionApprovalDecision/4", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionApprovalDecision), "\"decline\"") })
-	t.Run("CommandExecutionApprovalDecision/5", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionApprovalDecision), "\"cancel\"") })
-	t.Run("CommandExecutionApprovalKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionApprovalKind), "\"command\"") })
-	t.Run("CommandExecutionRequestApprovalParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionRequestApprovalParams), "{\"itemId\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("CommandExecutionRequestApprovalParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionRequestApprovalParams), "{\"additionalPermissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalId\":\"synthetic-value\",\"availableDecisions\":[\"accept\"],\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"kind\":\"command\",\"networkApprovalContext\":{\"host\":\"synthetic-value\",\"protocol\":\"http\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"proposedExecpolicyAmendment\":[\"synthetic-value\"],\"proposedNetworkPolicyAmendments\":[{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionRequestApprovalResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionRequestApprovalResponse), "{\"decision\":\"accept\"}")
-	})
-	t.Run("CommandExecutionRequestApprovalResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionRequestApprovalResponse), "{\"decision\":\"accept\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ExecCommandApprovalParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExecCommandApprovalParams), "{\"callId\":\"synthetic-value\",\"command\":[],\"conversationId\":\"synthetic-value\",\"cwd\":\"synthetic-value\",\"parsedCmd\":[]}")
-	})
-	t.Run("ExecCommandApprovalParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExecCommandApprovalParams), "{\"approvalId\":\"synthetic-value\",\"callId\":\"synthetic-value\",\"command\":[\"synthetic-value\"],\"conversationId\":\"synthetic-value\",\"cwd\":\"synthetic-value\",\"parsedCmd\":[{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"reason\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ExecCommandApprovalResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExecCommandApprovalResponse), "{\"decision\":\"approved\"}")
-	})
-	t.Run("ExecCommandApprovalResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExecCommandApprovalResponse), "{\"decision\":\"approved\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileChange/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\"}")
-	})
-	t.Run("FileChange/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileChange/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChange), "{\"content\":\"synthetic-value\",\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileChange/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChange), "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"unified_diff\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileChangeApprovalDecision/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FileChangeApprovalDecision), "\"accept\"") })
-	t.Run("FileChangeApprovalDecision/1", func(t *testing.T) { schemaRoundTrip(t, new(types.FileChangeApprovalDecision), "\"acceptForSession\"") })
-	t.Run("FileChangeApprovalDecision/2", func(t *testing.T) { schemaRoundTrip(t, new(types.FileChangeApprovalDecision), "\"decline\"") })
-	t.Run("FileChangeApprovalDecision/3", func(t *testing.T) { schemaRoundTrip(t, new(types.FileChangeApprovalDecision), "\"cancel\"") })
-	t.Run("FileChangeRequestApprovalParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChangeRequestApprovalParams), "{\"itemId\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("FileChangeRequestApprovalParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChangeRequestApprovalParams), "{\"grantRoot\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileChangeRequestApprovalResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChangeRequestApprovalResponse), "{\"decision\":\"accept\"}")
-	})
-	t.Run("FileChangeRequestApprovalResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChangeRequestApprovalResponse), "{\"decision\":\"accept\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("GrantedPermissionProfile/0", func(t *testing.T) { schemaRoundTrip(t, new(types.GrantedPermissionProfile), "{}") })
-	t.Run("GrantedPermissionProfile/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GrantedPermissionProfile), "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InitializeCapabilities/0", func(t *testing.T) { schemaRoundTrip(t, new(types.InitializeCapabilities), "{}") })
-	t.Run("InitializeCapabilities/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InitializeCapabilities), "{\"experimentalApi\":false,\"explicitGatewayOauth\":false,\"extensions\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"mcpServerOpenaiFormElicitation\":false,\"optOutNotificationMethods\":[\"synthetic-value\"],\"requestAttestation\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InitializeParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InitializeParams), "{\"clientInfo\":{\"name\":\"synthetic-value\",\"version\":\"synthetic-value\"}}")
-	})
-	t.Run("InitializeParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InitializeParams), "{\"capabilities\":{\"experimentalApi\":false,\"explicitGatewayOauth\":false,\"extensions\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"mcpServerOpenaiFormElicitation\":false,\"optOutNotificationMethods\":[\"synthetic-value\"],\"requestAttestation\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"clientInfo\":{\"name\":\"synthetic-value\",\"title\":\"synthetic-value\",\"version\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InitializeResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InitializeResponse), "{\"codexHome\":\"synthetic-value\",\"platformFamily\":\"synthetic-value\",\"platformOs\":\"synthetic-value\",\"userAgent\":\"synthetic-value\"}")
-	})
-	t.Run("InitializeResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InitializeResponse), "{\"codexHome\":\"synthetic-value\",\"platformFamily\":\"synthetic-value\",\"platformOs\":\"synthetic-value\",\"userAgent\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NetworkApprovalContext/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkApprovalContext), "{\"host\":\"synthetic-value\",\"protocol\":\"http\"}")
-	})
-	t.Run("NetworkApprovalContext/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkApprovalContext), "{\"host\":\"synthetic-value\",\"protocol\":\"http\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NetworkPolicyAmendment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkPolicyAmendment), "{\"action\":\"allow\",\"host\":\"synthetic-value\"}")
-	})
-	t.Run("NetworkPolicyAmendment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkPolicyAmendment), "{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NetworkPolicyRuleAction/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NetworkPolicyRuleAction), "\"allow\"") })
-	t.Run("ParsedCommand/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
-	})
-	t.Run("ParsedCommand/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ParsedCommand/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"list_files\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ParsedCommand/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ParsedCommand/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("PermissionGrantScope/0", func(t *testing.T) { schemaRoundTrip(t, new(types.PermissionGrantScope), "\"turn\"") })
-	t.Run("PermissionsRequestApprovalParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PermissionsRequestApprovalParams), "{\"cwd\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"permissions\":{},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("PermissionsRequestApprovalParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PermissionsRequestApprovalParams), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"permissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("PermissionsRequestApprovalResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PermissionsRequestApprovalResponse), "{\"permissions\":{}}")
-	})
-	t.Run("PermissionsRequestApprovalResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PermissionsRequestApprovalResponse), "{\"permissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"scope\":\"turn\",\"strictAutoReview\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReviewDecision/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReviewDecision), "\"approved\"") })
-	t.Run("ReviewDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReviewDecision), "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReviewDecision/2", func(t *testing.T) { schemaRoundTrip(t, new(types.ReviewDecision), "\"approved_for_session\"") })
-	t.Run("ReviewDecision/3", func(t *testing.T) { schemaRoundTrip(t, new(types.ReviewDecision), "\"approved_mcp_policy_amendment\"") })
-	t.Run("ReviewDecision/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReviewDecision), "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReviewDecision/5", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReviewDecision), "{\"denied\":{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReviewDecision/6", func(t *testing.T) { schemaRoundTrip(t, new(types.ReviewDecision), "\"timed_out\"") })
-	t.Run("ReviewDecision/7", func(t *testing.T) { schemaRoundTrip(t, new(types.ReviewDecision), "\"abort\"") })
-	t.Run("ToolRequestUserInputAnswer/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ToolRequestUserInputAnswer), "{\"answers\":[]}") })
-	t.Run("ToolRequestUserInputAnswer/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputAnswer), "{\"answers\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ToolRequestUserInputOption/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputOption), "{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\"}")
-	})
-	t.Run("ToolRequestUserInputOption/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputOption), "{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ToolRequestUserInputParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputParams), "{\"isBlocking\":false,\"itemId\":\"synthetic-value\",\"questions\":[],\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("ToolRequestUserInputParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputParams), "{\"autoResolutionMs\":7,\"isBlocking\":false,\"itemId\":\"synthetic-value\",\"questions\":[{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"question\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ToolRequestUserInputQuestion/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputQuestion), "{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"question\":\"synthetic-value\"}")
-	})
-	t.Run("ToolRequestUserInputQuestion/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputQuestion), "{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"question\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ToolRequestUserInputResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputResponse), "{\"answers\":{\"sample\":{\"answers\":[]}}}")
-	})
-	t.Run("ToolRequestUserInputResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolRequestUserInputResponse), "{\"answers\":{\"sample\":{\"answers\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AbsolutePathBuf/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AbsolutePathBuf), "\"synthetic-value\"") })
-	t.Run("ActivePermissionProfile/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActivePermissionProfile), "{\"id\":\"synthetic-value\"}")
-	})
-	t.Run("ActivePermissionProfile/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActivePermissionProfile), "{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AdditionalContextEntry/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalContextEntry), "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\"}")
-	})
-	t.Run("AdditionalContextEntry/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalContextEntry), "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AdditionalContextKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AdditionalContextKind), "\"untrusted\"") })
-	t.Run("AdditionalFileSystemPermissions/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AdditionalFileSystemPermissions), "{}") })
-	t.Run("AdditionalFileSystemPermissions/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalFileSystemPermissions), "{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AdditionalNetworkPermissions/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AdditionalNetworkPermissions), "{}") })
-	t.Run("AdditionalNetworkPermissions/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalNetworkPermissions), "{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AgentMessageDelivery/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AgentMessageDelivery), "\"async\"") })
-	t.Run("AgentMessageDeltaNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageDeltaNotification), "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("AgentMessageDeltaNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageDeltaNotification), "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AgentMessageInputContent/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageInputContent), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
-	})
-	t.Run("AgentMessageInputContent/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageInputContent), "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AgentMessageInputContent/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageInputContent), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AgentPath/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AgentPath), "\"synthetic-value\"") })
-	t.Run("ApprovalsReviewer/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ApprovalsReviewer), "\"user\"") })
-	t.Run("AskForApproval/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AskForApproval), "\"untrusted\"") })
-	t.Run("AskForApproval/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AskForApproval), "{\"granular\":{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AsyncUserInputQuestion/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AsyncUserInputQuestion), "{\"title\":\"synthetic-value\"}")
-	})
-	t.Run("AsyncUserInputQuestion/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AsyncUserInputQuestion), "{\"options\":[\"synthetic-value\"],\"title\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ByteRange/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ByteRange), "{\"end\":7,\"start\":7}") })
-	t.Run("ByteRange/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ByteRange), "{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CapabilityRootLocation/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CapabilityRootLocation), "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}")
-	})
-	t.Run("CapabilityRootLocation/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CapabilityRootLocation), "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfo/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CodexErrorInfo), "\"contextWindowExceeded\"") })
-	t.Run("CodexErrorInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CodexErrorInfo), "{\"httpConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfo/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CodexErrorInfo), "{\"responseStreamConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfo/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CodexErrorInfo), "{\"responseStreamDisconnected\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfo/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CodexErrorInfo), "{\"responseTooManyFailedAttempts\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfo/5", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CodexErrorInfo), "{\"activeTurnNotSteerable\":{\"turnKind\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfo/6", func(t *testing.T) { schemaRoundTrip(t, new(types.CodexErrorInfo), "\"synthetic-value\"") })
-	t.Run("CollabAgentState/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CollabAgentState), "{\"status\":\"pendingInit\"}") })
-	t.Run("CollabAgentState/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CollabAgentState), "{\"message\":\"synthetic-value\",\"status\":\"pendingInit\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CollabAgentStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CollabAgentStatus), "\"pendingInit\"") })
-	t.Run("CollabAgentTool/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CollabAgentTool), "\"spawnAgent\"") })
-	t.Run("CollabAgentToolCallStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CollabAgentToolCallStatus), "\"inProgress\"") })
-	t.Run("CollaborationMode/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CollaborationMode), "{\"mode\":\"plan\",\"settings\":{\"model\":\"synthetic-value\"}}")
-	})
-	t.Run("CollaborationMode/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CollaborationMode), "{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandAction), "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
-	})
-	t.Run("CommandAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandAction), "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandAction/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandAction), "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"listFiles\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandAction/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandAction), "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandAction/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandAction), "{\"command\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionSource/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionSource), "\"agent\"") })
-	t.Run("CommandExecutionStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionStatus), "\"inProgress\"") })
-	t.Run("ConfigurationReasoning/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ConfigurationReasoning), "{\"effort\":\"synthetic-value\"}")
-	})
-	t.Run("ConfigurationReasoning/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ConfigurationReasoning), "{\"effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
-	})
-	t.Run("ContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ContentItem/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContentItem), "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ContentItem/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContentItem), "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ContentItem/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContentItem), "{\"text\":\"synthetic-value\",\"type\":\"output_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CyberAccessProgram/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CyberAccessProgram), "\"standard\"") })
-	t.Run("DynamicToolCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"inputText\"}")
-	})
-	t.Run("DynamicToolCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DynamicToolCallOutputContentItem/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallOutputContentItem), "{\"imageUrl\":\"synthetic-value\",\"type\":\"inputImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DynamicToolCallOutputContentItem/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallOutputContentItem), "{\"audioUrl\":\"synthetic-value\",\"type\":\"inputAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DynamicToolCallStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.DynamicToolCallStatus), "\"inProgress\"") })
-	t.Run("DynamicToolNamespaceTool/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolNamespaceTool), "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}")
-	})
-	t.Run("DynamicToolNamespaceTool/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolNamespaceTool), "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DynamicToolSpec/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolSpec), "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}")
-	})
-	t.Run("DynamicToolSpec/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolSpec), "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DynamicToolSpec/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolSpec), "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"namespace\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ErrorNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ErrorNotification), "{\"error\":{\"message\":\"synthetic-value\"},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false}")
-	})
-	t.Run("ErrorNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ErrorNotification), "{\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemAccessMode/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FileSystemAccessMode), "\"read\"") })
-	t.Run("FileSystemPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\"}")
-	})
-	t.Run("FileSystemPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemPath/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemPath), "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemPath/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemPath), "{\"type\":\"special\",\"value\":{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSandboxEntry/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSandboxEntry), "{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\"}}")
-	})
-	t.Run("FileSystemSandboxEntry/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSandboxEntry), "{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPath/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"root\"}") })
-	t.Run("FileSystemSpecialPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPath/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"minimal\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPath/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"project_roots\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPath/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"tmpdir\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPath/5", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"slash_tmp\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPath/6", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPath), "{\"kind\":\"unknown\",\"path\":\"synthetic-value\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileUpdateChange/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileUpdateChange), "{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\"},\"path\":\"synthetic-value\"}")
-	})
-	t.Run("FileUpdateChange/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileUpdateChange), "{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallOutputBody/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FunctionCallOutputBody), "\"synthetic-value\"") })
-	t.Run("FunctionCallOutputBody/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputBody), "[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}]")
-	})
-	t.Run("FunctionCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
-	})
-	t.Run("FunctionCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallOutputContentItem/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputContentItem), "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallOutputContentItem/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputContentItem), "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallOutputContentItem/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputContentItem), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("GitInfo/0", func(t *testing.T) { schemaRoundTrip(t, new(types.GitInfo), "{}") })
-	t.Run("GitInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GitInfo), "{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("HookPromptFragment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HookPromptFragment), "{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\"}")
-	})
-	t.Run("HookPromptFragment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HookPromptFragment), "{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ImageDetail/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ImageDetail), "\"auto\"") })
-	t.Run("ImageGenerationFailure/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationFailure), "{\"limitId\":\"synthetic-value\",\"type\":\"usageLimitExceeded\"}")
-	})
-	t.Run("ImageGenerationFailure/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationFailure), "{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InternalChatMessageMetadataPassthrough/0", func(t *testing.T) { schemaRoundTrip(t, new(types.InternalChatMessageMetadataPassthrough), "{}") })
-	t.Run("InternalChatMessageMetadataPassthrough/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InternalChatMessageMetadataPassthrough), "{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ItemCompletedNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ItemCompletedNotification), "{\"completedAtMs\":7,\"item\":{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("ItemCompletedNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ItemCompletedNotification), "{\"completedAtMs\":7,\"item\":{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ItemStartedNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ItemStartedNotification), "{\"item\":{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("ItemStartedNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ItemStartedNotification), "{\"item\":{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("LegacyAppPathString/0", func(t *testing.T) { schemaRoundTrip(t, new(types.LegacyAppPathString), "\"synthetic-value\"") })
-	t.Run("LocalShellAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalShellAction), "{\"command\":[],\"type\":\"exec\"}")
-	})
-	t.Run("LocalShellAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalShellAction), "{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("LocalShellStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.LocalShellStatus), "\"completed\"") })
-	t.Run("MCPAppDisplayMode/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MCPAppDisplayMode), "\"inline\"") })
-	t.Run("MCPAppUI/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPAppUI), "{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\"}")
-	})
-	t.Run("MCPAppUI/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPAppUI), "{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MCPToolCallAppContext/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallAppContext), "{\"connectorId\":\"synthetic-value\"}")
-	})
-	t.Run("MCPToolCallAppContext/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallAppContext), "{\"actionName\":\"synthetic-value\",\"appName\":\"synthetic-value\",\"connectorId\":\"synthetic-value\",\"linkId\":\"synthetic-value\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MCPToolCallError/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallError), "{\"message\":\"synthetic-value\"}")
-	})
-	t.Run("MCPToolCallError/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallError), "{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MCPToolCallResult/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MCPToolCallResult), "{\"content\":[]}") })
-	t.Run("MCPToolCallResult/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallResult), "{\"_meta\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"content\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"structuredContent\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MCPToolCallStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MCPToolCallStatus), "\"inProgress\"") })
-	t.Run("MemoryCitation/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MemoryCitation), "{\"entries\":[],\"threadIds\":[]}") })
-	t.Run("MemoryCitation/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MemoryCitation), "{\"entries\":[{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadIds\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MemoryCitationEntry/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MemoryCitationEntry), "{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\"}")
-	})
-	t.Run("MemoryCitationEntry/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MemoryCitationEntry), "{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MessagePhase/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MessagePhase), "\"commentary\"") })
-	t.Run("MessagePhase/1", func(t *testing.T) { schemaRoundTrip(t, new(types.MessagePhase), "\"partial_answer\"") })
-	t.Run("MessagePhase/2", func(t *testing.T) { schemaRoundTrip(t, new(types.MessagePhase), "\"final_answer\"") })
-	t.Run("MisalignmentErrorDetails/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MisalignmentErrorDetails), "{}") })
-	t.Run("MisalignmentErrorDetails/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MisalignmentErrorDetails), "{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MisalignmentSteer/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MisalignmentSteer), "{\"message\":\"synthetic-value\"}")
-	})
-	t.Run("MisalignmentSteer/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MisalignmentSteer), "{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ModeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ModeKind), "\"plan\"") })
-	t.Run("MultiAgentMode/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MultiAgentMode), "\"explicitRequestOnly\"") })
-	t.Run("MultiAgentMode/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MultiAgentMode), "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NetworkAccess/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NetworkAccess), "\"restricted\"") })
-	t.Run("NetworkApprovalProtocol/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NetworkApprovalProtocol), "\"http\"") })
-	t.Run("NonSteerableTurnKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NonSteerableTurnKind), "\"review\"") })
-	t.Run("PatchApplyStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.PatchApplyStatus), "\"inProgress\"") })
-	t.Run("PatchChangeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.PatchChangeKind), "{\"type\":\"add\"}") })
-	t.Run("PatchChangeKind/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PatchChangeKind), "{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("PatchChangeKind/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PatchChangeKind), "{\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("PatchChangeKind/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PatchChangeKind), "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("Personality/0", func(t *testing.T) { schemaRoundTrip(t, new(types.Personality), "\"none\"") })
-	t.Run("ReasoningEffort/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReasoningEffort), "\"synthetic-value\"") })
-	t.Run("ReasoningItemContent/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\"}")
-	})
-	t.Run("ReasoningItemContent/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReasoningItemContent/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReasoningItemReasoningSummary/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningItemReasoningSummary), "{\"text\":\"synthetic-value\",\"type\":\"summary_text\"}")
-	})
-	t.Run("ReasoningItemReasoningSummary/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningItemReasoningSummary), "{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReasoningSummary/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReasoningSummary), "\"auto\"") })
-	t.Run("ReasoningSummary/1", func(t *testing.T) { schemaRoundTrip(t, new(types.ReasoningSummary), "\"none\"") })
-	t.Run("RequestID/0", func(t *testing.T) { schemaRoundTrip(t, new(types.RequestID), "\"synthetic-value\"") })
-	t.Run("RequestID/1", func(t *testing.T) { schemaRoundTrip(t, new(types.RequestID), "7") })
-	t.Run("RequestPermissionProfile/0", func(t *testing.T) { schemaRoundTrip(t, new(types.RequestPermissionProfile), "{}") })
-	t.Run("RequestPermissionProfile/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.RequestPermissionProfile), "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"role\":\"synthetic-value\",\"tools\":[],\"type\":\"additional_tools\"}")
-	})
-	t.Run("ResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"id\":\"synthetic-value\",\"role\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"additional_tools\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"role\":\"synthetic-value\",\"type\":\"message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"author\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"recipient\":\"synthetic-value\",\"type\":\"agent_message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"summary\":[{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/5", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"action\":{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"completed\",\"type\":\"local_shell_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/6", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"arguments\":\"synthetic-value\",\"call_id\":\"synthetic-value\",\"encrypted_function_args\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"type\":\"function_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/7", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"tool_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/8", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"function_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/9", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"input\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"custom_tool_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/10", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"custom_tool_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/11", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"tool_search_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/12", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"web_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/13", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"result\":\"synthetic-value\",\"revised_prompt\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"image_generation_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/14", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/15", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"reasoning\":{\"effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"configuration_update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/16", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"type\":\"compaction_trigger\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/17", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"context_compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseItem/18", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseItem), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponsesAPIWebSearchAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponsesAPIWebSearchAction), "{\"type\":\"search\"}")
-	})
-	t.Run("ResponsesAPIWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponsesAPIWebSearchAction), "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponsesAPIWebSearchAction/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponsesAPIWebSearchAction), "{\"type\":\"open_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponsesAPIWebSearchAction/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponsesAPIWebSearchAction), "{\"pattern\":\"synthetic-value\",\"type\":\"find_in_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponsesAPIWebSearchAction/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponsesAPIWebSearchAction), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SandboxMode/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SandboxMode), "\"read-only\"") })
-	t.Run("SandboxPolicy/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SandboxPolicy), "{\"type\":\"dangerFullAccess\"}") })
-	t.Run("SandboxPolicy/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SandboxPolicy), "{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SandboxPolicy/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SandboxPolicy), "{\"networkAccess\":false,\"type\":\"readOnly\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SandboxPolicy/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SandboxPolicy), "{\"networkAccess\":\"restricted\",\"type\":\"externalSandbox\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SandboxPolicy/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SandboxPolicy), "{\"excludeSlashTmp\":false,\"excludeTmpdirEnvVar\":false,\"networkAccess\":false,\"type\":\"workspaceWrite\",\"writableRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SelectedCapabilityRoot/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SelectedCapabilityRoot), "{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}}")
-	})
-	t.Run("SelectedCapabilityRoot/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SelectedCapabilityRoot), "{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ServerRequestResolvedNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ServerRequestResolvedNotification), "{\"requestId\":\"synthetic-value\",\"threadId\":\"synthetic-value\"}")
-	})
-	t.Run("ServerRequestResolvedNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ServerRequestResolvedNotification), "{\"requestId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SessionSource/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SessionSource), "\"cli\"") })
-	t.Run("SessionSource/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SessionSource), "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SessionSource/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SessionSource), "{\"subAgent\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("Settings/0", func(t *testing.T) { schemaRoundTrip(t, new(types.Settings), "{\"model\":\"synthetic-value\"}") })
-	t.Run("Settings/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.Settings), "{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SortDirection/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SortDirection), "\"asc\"") })
-	t.Run("SubAgentActivityKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SubAgentActivityKind), "\"started\"") })
-	t.Run("SubAgentSource/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SubAgentSource), "\"review\"") })
-	t.Run("SubAgentSource/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SubAgentSource), "{\"thread_spawn\":{\"agent_nickname\":\"synthetic-value\",\"agent_path\":\"synthetic-value\",\"agent_role\":\"synthetic-value\",\"depth\":7,\"parent_thread_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SubAgentSource/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SubAgentSource), "{\"other\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TextElement/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TextElement), "{\"byteRange\":{\"end\":7,\"start\":7}}")
-	})
-	t.Run("TextElement/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TextElement), "{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("Thread/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.Thread), "{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}")
-	})
-	t.Run("Thread/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.Thread), "{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadActiveFlag/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadActiveFlag), "\"waitingOnApproval\"") })
-	t.Run("ThreadEnvironment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadEnvironment), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[]}")
-	})
-	t.Run("ThreadEnvironment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadEnvironment), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadExtra/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadExtra), "{}") })
-	t.Run("ThreadExtra/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadExtra), "{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadHistoryMode/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadHistoryMode), "\"legacy\"") })
-	t.Run("ThreadID/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadID), "\"synthetic-value\"") })
-	t.Run("ThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"}")
-	})
-	t.Run("ThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"fragments\":[{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"hookPrompt\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"delivery\":\"async\",\"id\":\"synthetic-value\",\"memoryCitation\":{\"entries\":[{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadIds\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"questions\":[{\"options\":[\"synthetic-value\"],\"title\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"text\":\"synthetic-value\",\"type\":\"agentMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"functionCallOutput\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/5", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"plan\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/6", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"content\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"summary\":[\"synthetic-value\"],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/7", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"aggregatedOutput\":\"synthetic-value\",\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"durationMs\":7,\"exitCode\":7,\"id\":\"synthetic-value\",\"pluginId\":\"synthetic-value\",\"processId\":\"synthetic-value\",\"scriptPath\":\"synthetic-value\",\"source\":\"agent\",\"status\":\"inProgress\",\"type\":\"commandExecution\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/8", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"changes\":[{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"fileChange\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/9", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"appContext\":{\"actionName\":\"synthetic-value\",\"appName\":\"synthetic-value\",\"connectorId\":\"synthetic-value\",\"linkId\":\"synthetic-value\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"durationMs\":7,\"error\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"mcpAppResourceUri\":\"synthetic-value\",\"mcpAppUi\":{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"pluginId\":\"synthetic-value\",\"readOnlyHint\":false,\"result\":{\"_meta\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"content\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"structuredContent\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"server\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"mcpToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/10", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"contentItems\":[{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"durationMs\":7,\"id\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"inProgress\",\"success\":false,\"tool\":\"synthetic-value\",\"type\":\"dynamicToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/11", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"agentsStates\":{\"sample\":{\"message\":\"synthetic-value\",\"status\":\"pendingInit\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"prompt\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"receiverThreadIds\":[\"synthetic-value\"],\"senderThreadId\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"spawnAgent\",\"type\":\"collabAgentToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/12", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"agentPath\":\"synthetic-value\",\"agentThreadId\":\"synthetic-value\",\"id\":\"synthetic-value\",\"kind\":\"started\",\"model\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"type\":\"subAgentActivity\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/13", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"query\":\"synthetic-value\",\"results\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"webSearch\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/14", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"id\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"imageView\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/15", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"durationMs\":7,\"id\":\"synthetic-value\",\"type\":\"sleep\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/16", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"failure\":{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"result\":\"synthetic-value\",\"revisedPrompt\":\"synthetic-value\",\"savedPath\":\"synthetic-value\",\"status\":\"synthetic-value\",\"transparentBackground\":false,\"type\":\"imageGeneration\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/17", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"enteredReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/18", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"exitedReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadItem/19", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadItem), "{\"id\":\"synthetic-value\",\"type\":\"contextCompaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadReadParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadReadParams), "{\"threadId\":\"synthetic-value\"}")
-	})
-	t.Run("ThreadReadParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadReadParams), "{\"includeTurns\":false,\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadReadResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadReadResponse), "{\"thread\":{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}}")
-	})
-	t.Run("ThreadReadResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadReadResponse), "{\"thread\":{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadResumeInitialTurnsPageParams/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadResumeInitialTurnsPageParams), "{}") })
-	t.Run("ThreadResumeInitialTurnsPageParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadResumeInitialTurnsPageParams), "{\"itemsView\":\"notLoaded\",\"limit\":7,\"sortDirection\":\"asc\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadResumeParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadResumeParams), "{\"threadId\":\"synthetic-value\"}")
-	})
-	t.Run("ThreadResumeParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadResumeParams), "{\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"baseInstructions\":\"synthetic-value\",\"config\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"cwd\":\"synthetic-value\",\"developerInstructions\":\"synthetic-value\",\"excludeTurns\":false,\"history\":[{\"id\":\"synthetic-value\",\"role\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"additional_tools\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"initialTurnsPage\":{\"itemsView\":\"notLoaded\",\"limit\":7,\"sortDirection\":\"asc\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"path\":\"synthetic-value\",\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":\"read-only\",\"serviceTier\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadResumeResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadResumeResponse), "{\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"cwd\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"sandbox\":{\"type\":\"dangerFullAccess\"},\"thread\":{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}}")
-	})
-	t.Run("ThreadResumeResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadResumeResponse), "{\"activePermissionProfile\":{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"collaborationMode\":{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"cwd\":\"synthetic-value\",\"disabledPluginIds\":[\"synthetic-value\"],\"initialTurnsPage\":{\"backwardsCursor\":\"synthetic-value\",\"data\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"nextCursor\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"instructionSources\":[\"synthetic-value\"],\"itemsBackwardsCursor\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"reasoningEffort\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"thread\":{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"turnsBackwardsCursor\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadSection/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSection), "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\"}")
-	})
-	t.Run("ThreadSection/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSection), "{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadSectionAppearance/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadSectionAppearance), "{}") })
-	t.Run("ThreadSectionAppearance/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSectionAppearance), "{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadSource/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadSource), "\"synthetic-value\"") })
-	t.Run("ThreadStartParams/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadStartParams), "{}") })
-	t.Run("ThreadStartParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStartParams), "{\"allowProviderModelFallback\":false,\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"baseInstructions\":\"synthetic-value\",\"config\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"developerInstructions\":\"synthetic-value\",\"dynamicTools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"experimentalRawEvents\":false,\"historyMode\":\"legacy\",\"mockExperimentalField\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"projectId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":\"read-only\",\"selectedCapabilityRoots\":[{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"serviceName\":\"synthetic-value\",\"serviceTier\":\"synthetic-value\",\"sessionStartSource\":\"startup\",\"threadSource\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadStartResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStartResponse), "{\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"cwd\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"sandbox\":{\"type\":\"dangerFullAccess\"},\"thread\":{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}}")
-	})
-	t.Run("ThreadStartResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStartResponse), "{\"activePermissionProfile\":{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"cwd\":\"synthetic-value\",\"disabledPluginIds\":[\"synthetic-value\"],\"instructionSources\":[\"synthetic-value\"],\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"reasoningEffort\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"thread\":{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadStartSource/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadStartSource), "\"startup\"") })
-	t.Run("ThreadStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadStatus), "{\"type\":\"notLoaded\"}") })
-	t.Run("ThreadStatus/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStatus), "{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadStatus/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStatus), "{\"type\":\"idle\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadStatus/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStatus), "{\"type\":\"systemError\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadStatus/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadStatus), "{\"activeFlags\":[\"waitingOnApproval\"],\"type\":\"active\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadUnsubscribeParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadUnsubscribeParams), "{\"threadId\":\"synthetic-value\"}")
-	})
-	t.Run("ThreadUnsubscribeParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadUnsubscribeParams), "{\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadUnsubscribeResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadUnsubscribeResponse), "{\"status\":\"notLoaded\"}")
-	})
-	t.Run("ThreadUnsubscribeResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadUnsubscribeResponse), "{\"status\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ThreadUnsubscribeStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ThreadUnsubscribeStatus), "\"notLoaded\"") })
-	t.Run("Turn/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.Turn), "{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}")
-	})
-	t.Run("Turn/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.Turn), "{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnCompletedNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnCompletedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}")
-	})
-	t.Run("TurnCompletedNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnCompletedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnEnvironmentParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnEnvironmentParams), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\"}")
-	})
-	t.Run("TurnEnvironmentParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnEnvironmentParams), "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnError/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnError), "{\"message\":\"synthetic-value\"}") })
-	t.Run("TurnError/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnError), "{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnInterruptParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnInterruptParams), "{\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}")
-	})
-	t.Run("TurnInterruptParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnInterruptParams), "{\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnInterruptResponse/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnInterruptResponse), "{}") })
-	t.Run("TurnInterruptResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnInterruptResponse), "{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnItemsView/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnItemsView), "\"notLoaded\"") })
-	t.Run("TurnItemsView/1", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnItemsView), "\"summary\"") })
-	t.Run("TurnItemsView/2", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnItemsView), "\"full\"") })
-	t.Run("TurnStartParams/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnStartParams), "{\"input\":[],\"threadId\":\"synthetic-value\"}")
-	})
-	t.Run("TurnStartParams/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnStartParams), "{\"additionalContext\":{\"sample\":{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"clientUserMessageId\":\"synthetic-value\",\"collaborationMode\":{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"cwd\":\"synthetic-value\",\"cyberAccessProgram\":\"standard\",\"disabledPluginIds\":[\"synthetic-value\"],\"effort\":\"synthetic-value\",\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"input\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"model\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"outputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"parentTurnId\":\"synthetic-value\",\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"responsesapiClientMetadata\":{\"sample\":\"synthetic-value\"},\"rootTurnId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandboxPolicy\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"serviceTierForTurn\":\"synthetic-value\",\"summary\":\"auto\",\"threadId\":\"synthetic-value\",\"toolOutput\":{\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"turnTrigger\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnStartResponse/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnStartResponse), "{\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}")
-	})
-	t.Run("TurnStartResponse/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnStartResponse), "{\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnStartedNotification/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnStartedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}")
-	})
-	t.Run("TurnStartedNotification/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnStartedNotification), "{\"threadId\":\"synthetic-value\",\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnStatus), "\"completed\"") })
-	t.Run("TurnToolOutput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnToolOutput), "{\"name\":\"synthetic-value\",\"output\":\"synthetic-value\"}")
-	})
-	t.Run("TurnToolOutput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnToolOutput), "{\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TurnsPage/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TurnsPage), "{\"data\":[]}") })
-	t.Run("TurnsPage/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TurnsPage), "{\"backwardsCursor\":\"synthetic-value\",\"data\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"nextCursor\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"text\":\"synthetic-value\",\"type\":\"text\"}")
-	})
-	t.Run("UserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"detail\":\"auto\",\"type\":\"image\",\"url\":\"synthetic-value\",\"fileId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"detail\":\"auto\",\"path\":\"synthetic-value\",\"type\":\"localImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"type\":\"audio\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/5", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"path\":\"synthetic-value\",\"type\":\"localAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/6", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"skill\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserInput/7", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserInput), "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"mention\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WebSearchAction/0", func(t *testing.T) { schemaRoundTrip(t, new(types.WebSearchAction), "{\"type\":\"search\"}") })
-	t.Run("WebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchAction), "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WebSearchAction/2", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchAction), "{\"type\":\"openPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WebSearchAction/3", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchAction), "{\"pattern\":\"synthetic-value\",\"type\":\"findInPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WebSearchAction/4", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchAction), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionApprovalDecisionValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CommandExecutionApprovalDecisionValue), "\"accept\"") })
-	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision), "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[]}}")
-	})
-	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision), "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision), "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}}")
-	})
-	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision), "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AddFileChange/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AddFileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\"}")
-	})
-	t.Run("AddFileChange/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AddFileChange), "{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DeleteFileChange/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeleteFileChange), "{\"content\":\"synthetic-value\",\"type\":\"delete\"}")
-	})
-	t.Run("DeleteFileChange/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeleteFileChange), "{\"content\":\"synthetic-value\",\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UpdateFileChange/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UpdateFileChange), "{\"type\":\"update\",\"unified_diff\":\"synthetic-value\"}")
-	})
-	t.Run("UpdateFileChange/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UpdateFileChange), "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"unified_diff\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReadParsedCommand/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReadParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
-	})
-	t.Run("ReadParsedCommand/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReadParsedCommand), "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ListFilesParsedCommand/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ListFilesParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"list_files\"}")
-	})
-	t.Run("ListFilesParsedCommand/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ListFilesParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"list_files\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SearchParsedCommand/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"search\"}")
-	})
-	t.Run("SearchParsedCommand/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchParsedCommand), "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UnknownParsedCommand/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UnknownParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\"}")
-	})
-	t.Run("UnknownParsedCommand/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UnknownParsedCommand), "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReviewDecisionValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReviewDecisionValue), "\"approved\"") })
-	t.Run("ApprovedExecpolicyAmendmentReviewDecision/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApprovedExecpolicyAmendmentReviewDecision), "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[]}}")
-	})
-	t.Run("ApprovedExecpolicyAmendmentReviewDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApprovedExecpolicyAmendmentReviewDecision), "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NetworkPolicyAmendmentReviewDecision/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkPolicyAmendmentReviewDecision), "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}}")
-	})
-	t.Run("NetworkPolicyAmendmentReviewDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkPolicyAmendmentReviewDecision), "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DeniedReviewDecision/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeniedReviewDecision), "{\"denied\":{\"rejection\":\"synthetic-value\"}}")
-	})
-	t.Run("DeniedReviewDecision/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeniedReviewDecision), "{\"denied\":{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputTextAgentMessageInputContent/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextAgentMessageInputContent), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
-	})
-	t.Run("InputTextAgentMessageInputContent/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextAgentMessageInputContent), "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("EncryptedContentAgentMessageInputContent/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EncryptedContentAgentMessageInputContent), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\"}")
-	})
-	t.Run("EncryptedContentAgentMessageInputContent/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EncryptedContentAgentMessageInputContent), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AskForApprovalValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AskForApprovalValue), "\"untrusted\"") })
-	t.Run("GranularAskForApproval/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GranularAskForApproval), "{\"granular\":{\"mcp_elicitations\":false,\"rules\":false,\"sandbox_approval\":false}}")
-	})
-	t.Run("GranularAskForApproval/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GranularAskForApproval), "{\"granular\":{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("EnvironmentCapabilityRootLocation/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EnvironmentCapabilityRootLocation), "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}")
-	})
-	t.Run("EnvironmentCapabilityRootLocation/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EnvironmentCapabilityRootLocation), "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CodexErrorInfoValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CodexErrorInfoValue), "\"contextWindowExceeded\"") })
-	t.Run("HTTPConnectionFailedCodexErrorInfo/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HTTPConnectionFailedCodexErrorInfo), "{\"httpConnectionFailed\":{}}")
-	})
-	t.Run("HTTPConnectionFailedCodexErrorInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HTTPConnectionFailedCodexErrorInfo), "{\"httpConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseStreamConnectionFailedCodexErrorInfo/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamConnectionFailedCodexErrorInfo), "{\"responseStreamConnectionFailed\":{}}")
-	})
-	t.Run("ResponseStreamConnectionFailedCodexErrorInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamConnectionFailedCodexErrorInfo), "{\"responseStreamConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseStreamDisconnectedCodexErrorInfo/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamDisconnectedCodexErrorInfo), "{\"responseStreamDisconnected\":{}}")
-	})
-	t.Run("ResponseStreamDisconnectedCodexErrorInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamDisconnectedCodexErrorInfo), "{\"responseStreamDisconnected\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseTooManyFailedAttemptsCodexErrorInfo/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseTooManyFailedAttemptsCodexErrorInfo), "{\"responseTooManyFailedAttempts\":{}}")
-	})
-	t.Run("ResponseTooManyFailedAttemptsCodexErrorInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseTooManyFailedAttemptsCodexErrorInfo), "{\"responseTooManyFailedAttempts\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ActiveTurnNotSteerableCodexErrorInfo/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActiveTurnNotSteerableCodexErrorInfo), "{\"activeTurnNotSteerable\":{\"turnKind\":\"review\"}}")
-	})
-	t.Run("ActiveTurnNotSteerableCodexErrorInfo/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActiveTurnNotSteerableCodexErrorInfo), "{\"activeTurnNotSteerable\":{\"turnKind\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReadCommandAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReadCommandAction), "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}")
-	})
-	t.Run("ReadCommandAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReadCommandAction), "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ListFilesCommandAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ListFilesCommandAction), "{\"command\":\"synthetic-value\",\"type\":\"listFiles\"}")
-	})
-	t.Run("ListFilesCommandAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ListFilesCommandAction), "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"listFiles\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SearchCommandAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchCommandAction), "{\"command\":\"synthetic-value\",\"type\":\"search\"}")
-	})
-	t.Run("SearchCommandAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchCommandAction), "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UnknownCommandAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UnknownCommandAction), "{\"command\":\"synthetic-value\",\"type\":\"unknown\"}")
-	})
-	t.Run("UnknownCommandAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UnknownCommandAction), "{\"command\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputTextContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
-	})
-	t.Run("InputTextContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputImageContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageContentItem), "{\"type\":\"input_image\",\"image_url\":\"synthetic-value\"}")
-	})
-	t.Run("InputImageContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageContentItem), "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputAudioContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioContentItem), "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\"}")
-	})
-	t.Run("InputAudioContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioContentItem), "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OutputTextContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OutputTextContentItem), "{\"text\":\"synthetic-value\",\"type\":\"output_text\"}")
-	})
-	t.Run("OutputTextContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OutputTextContentItem), "{\"text\":\"synthetic-value\",\"type\":\"output_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputTextDynamicToolCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextDynamicToolCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"inputText\"}")
-	})
-	t.Run("InputTextDynamicToolCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextDynamicToolCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputImageDynamicToolCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageDynamicToolCallOutputContentItem), "{\"imageUrl\":\"synthetic-value\",\"type\":\"inputImage\"}")
-	})
-	t.Run("InputImageDynamicToolCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageDynamicToolCallOutputContentItem), "{\"imageUrl\":\"synthetic-value\",\"type\":\"inputImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputAudioDynamicToolCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioDynamicToolCallOutputContentItem), "{\"audioUrl\":\"synthetic-value\",\"type\":\"inputAudio\"}")
-	})
-	t.Run("InputAudioDynamicToolCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioDynamicToolCallOutputContentItem), "{\"audioUrl\":\"synthetic-value\",\"type\":\"inputAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionDynamicToolNamespaceTool/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionDynamicToolNamespaceTool), "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}")
-	})
-	t.Run("FunctionDynamicToolNamespaceTool/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionDynamicToolNamespaceTool), "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionDynamicToolSpec/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionDynamicToolSpec), "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}")
-	})
-	t.Run("FunctionDynamicToolSpec/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionDynamicToolSpec), "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NamespaceDynamicToolSpec/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NamespaceDynamicToolSpec), "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[],\"type\":\"namespace\"}")
-	})
-	t.Run("NamespaceDynamicToolSpec/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NamespaceDynamicToolSpec), "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"namespace\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("PathFileSystemPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PathFileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\"}")
-	})
-	t.Run("PathFileSystemPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PathFileSystemPath), "{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("GlobPatternFileSystemPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GlobPatternFileSystemPath), "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\"}")
-	})
-	t.Run("GlobPatternFileSystemPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GlobPatternFileSystemPath), "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SpecialFileSystemPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SpecialFileSystemPath), "{\"type\":\"special\",\"value\":{\"kind\":\"root\"}}")
-	})
-	t.Run("SpecialFileSystemPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SpecialFileSystemPath), "{\"type\":\"special\",\"value\":{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("RootFileSystemSpecialPath/0", func(t *testing.T) { schemaRoundTrip(t, new(types.RootFileSystemSpecialPath), "{\"kind\":\"root\"}") })
-	t.Run("RootFileSystemSpecialPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.RootFileSystemSpecialPath), "{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MinimalFileSystemSpecialPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MinimalFileSystemSpecialPath), "{\"kind\":\"minimal\"}")
-	})
-	t.Run("MinimalFileSystemSpecialPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MinimalFileSystemSpecialPath), "{\"kind\":\"minimal\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("KindFileSystemSpecialPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.KindFileSystemSpecialPath), "{\"kind\":\"project_roots\"}")
-	})
-	t.Run("KindFileSystemSpecialPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.KindFileSystemSpecialPath), "{\"kind\":\"project_roots\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TmpdirFileSystemSpecialPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TmpdirFileSystemSpecialPath), "{\"kind\":\"tmpdir\"}")
-	})
-	t.Run("TmpdirFileSystemSpecialPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TmpdirFileSystemSpecialPath), "{\"kind\":\"tmpdir\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SlashTmpFileSystemSpecialPath/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SlashTmpFileSystemSpecialPath), "{\"kind\":\"slash_tmp\"}")
-	})
-	t.Run("SlashTmpFileSystemSpecialPath/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SlashTmpFileSystemSpecialPath), "{\"kind\":\"slash_tmp\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileSystemSpecialPathVariant5/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPathVariant5), "{\"kind\":\"unknown\",\"path\":\"synthetic-value\"}")
-	})
-	t.Run("FileSystemSpecialPathVariant5/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileSystemSpecialPathVariant5), "{\"kind\":\"unknown\",\"path\":\"synthetic-value\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputTextFunctionCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextFunctionCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}")
-	})
-	t.Run("InputTextFunctionCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextFunctionCallOutputContentItem), "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputImageFunctionCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageFunctionCallOutputContentItem), "{\"type\":\"input_image\",\"image_url\":\"synthetic-value\"}")
-	})
-	t.Run("InputImageFunctionCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageFunctionCallOutputContentItem), "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputAudioFunctionCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioFunctionCallOutputContentItem), "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\"}")
-	})
-	t.Run("InputAudioFunctionCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioFunctionCallOutputContentItem), "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("EncryptedContentFunctionCallOutputContentItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EncryptedContentFunctionCallOutputContentItem), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\"}")
-	})
-	t.Run("EncryptedContentFunctionCallOutputContentItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EncryptedContentFunctionCallOutputContentItem), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UsageLimitExceededImageGenerationFailure/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UsageLimitExceededImageGenerationFailure), "{\"limitId\":\"synthetic-value\",\"type\":\"usageLimitExceeded\"}")
-	})
-	t.Run("UsageLimitExceededImageGenerationFailure/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UsageLimitExceededImageGenerationFailure), "{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ExecLocalShellAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExecLocalShellAction), "{\"command\":[],\"type\":\"exec\"}")
-	})
-	t.Run("ExecLocalShellAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExecLocalShellAction), "{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MultiAgentModeValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MultiAgentModeValue), "\"explicitRequestOnly\"") })
-	t.Run("CustomMultiAgentMode/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomMultiAgentMode), "{\"custom\":\"synthetic-value\"}")
-	})
-	t.Run("CustomMultiAgentMode/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomMultiAgentMode), "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AddPatchChangeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AddPatchChangeKind), "{\"type\":\"add\"}") })
-	t.Run("AddPatchChangeKind/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AddPatchChangeKind), "{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DeletePatchChangeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.DeletePatchChangeKind), "{\"type\":\"delete\"}") })
-	t.Run("DeletePatchChangeKind/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeletePatchChangeKind), "{\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UpdatePatchChangeKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.UpdatePatchChangeKind), "{\"type\":\"update\"}") })
-	t.Run("UpdatePatchChangeKind/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UpdatePatchChangeKind), "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReasoningTextReasoningItemContent/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningTextReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\"}")
-	})
-	t.Run("ReasoningTextReasoningItemContent/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningTextReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TextReasoningItemContent/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TextReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"text\"}")
-	})
-	t.Run("TextReasoningItemContent/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TextReasoningItemContent), "{\"text\":\"synthetic-value\",\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SummaryTextReasoningItemReasoningSummary/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SummaryTextReasoningItemReasoningSummary), "{\"text\":\"synthetic-value\",\"type\":\"summary_text\"}")
-	})
-	t.Run("SummaryTextReasoningItemReasoningSummary/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SummaryTextReasoningItemReasoningSummary), "{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AdditionalToolsResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalToolsResponseItem), "{\"role\":\"synthetic-value\",\"tools\":[],\"type\":\"additional_tools\"}")
-	})
-	t.Run("AdditionalToolsResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalToolsResponseItem), "{\"id\":\"synthetic-value\",\"role\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"additional_tools\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MessageResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MessageResponseItem), "{\"content\":[],\"role\":\"synthetic-value\",\"type\":\"message\"}")
-	})
-	t.Run("MessageResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MessageResponseItem), "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"role\":\"synthetic-value\",\"type\":\"message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AgentMessageResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageResponseItem), "{\"author\":\"synthetic-value\",\"content\":[],\"recipient\":\"synthetic-value\",\"type\":\"agent_message\"}")
-	})
-	t.Run("AgentMessageResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageResponseItem), "{\"author\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"recipient\":\"synthetic-value\",\"type\":\"agent_message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReasoningResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningResponseItem), "{\"summary\":[],\"type\":\"reasoning\"}")
-	})
-	t.Run("ReasoningResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningResponseItem), "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"summary\":[{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("LocalShellCallResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalShellCallResponseItem), "{\"action\":{\"command\":[],\"type\":\"exec\"},\"status\":\"completed\",\"type\":\"local_shell_call\"}")
-	})
-	t.Run("LocalShellCallResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalShellCallResponseItem), "{\"action\":{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"completed\",\"type\":\"local_shell_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallResponseItem), "{\"arguments\":\"synthetic-value\",\"call_id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"type\":\"function_call\"}")
-	})
-	t.Run("FunctionCallResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallResponseItem), "{\"arguments\":\"synthetic-value\",\"call_id\":\"synthetic-value\",\"encrypted_function_args\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"type\":\"function_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ToolSearchCallResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolSearchCallResponseItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"execution\":\"synthetic-value\",\"type\":\"tool_search_call\"}")
-	})
-	t.Run("ToolSearchCallResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolSearchCallResponseItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"tool_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallOutputResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputResponseItem), "{\"output\":\"synthetic-value\",\"type\":\"function_call_output\"}")
-	})
-	t.Run("FunctionCallOutputResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputResponseItem), "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"function_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CustomToolCallResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomToolCallResponseItem), "{\"call_id\":\"synthetic-value\",\"input\":\"synthetic-value\",\"name\":\"synthetic-value\",\"type\":\"custom_tool_call\"}")
-	})
-	t.Run("CustomToolCallResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomToolCallResponseItem), "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"input\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"custom_tool_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CustomToolCallOutputResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomToolCallOutputResponseItem), "{\"call_id\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"custom_tool_call_output\"}")
-	})
-	t.Run("CustomToolCallOutputResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomToolCallOutputResponseItem), "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"custom_tool_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ToolSearchOutputResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolSearchOutputResponseItem), "{\"execution\":\"synthetic-value\",\"status\":\"synthetic-value\",\"tools\":[],\"type\":\"tool_search_output\"}")
-	})
-	t.Run("ToolSearchOutputResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolSearchOutputResponseItem), "{\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"tool_search_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WebSearchCallResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchCallResponseItem), "{\"type\":\"web_search_call\"}")
-	})
-	t.Run("WebSearchCallResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchCallResponseItem), "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"web_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ImageGenerationCallResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationCallResponseItem), "{\"result\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"image_generation_call\"}")
-	})
-	t.Run("ImageGenerationCallResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationCallResponseItem), "{\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"result\":\"synthetic-value\",\"revised_prompt\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"image_generation_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CompactionResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CompactionResponseItem), "{\"encrypted_content\":\"synthetic-value\",\"type\":\"compaction\"}")
-	})
-	t.Run("CompactionResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CompactionResponseItem), "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ConfigurationUpdateResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ConfigurationUpdateResponseItem), "{\"reasoning\":{\"effort\":\"synthetic-value\"},\"type\":\"configuration_update\"}")
-	})
-	t.Run("ConfigurationUpdateResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ConfigurationUpdateResponseItem), "{\"reasoning\":{\"effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"configuration_update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CompactionTriggerResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CompactionTriggerResponseItem), "{\"type\":\"compaction_trigger\"}")
-	})
-	t.Run("CompactionTriggerResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CompactionTriggerResponseItem), "{\"type\":\"compaction_trigger\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ContextCompactionResponseItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContextCompactionResponseItem), "{\"type\":\"context_compaction\"}")
-	})
-	t.Run("ContextCompactionResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContextCompactionResponseItem), "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"context_compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OtherResponseItem/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OtherResponseItem), "{\"type\":\"other\"}") })
-	t.Run("OtherResponseItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OtherResponseItem), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SearchResponsesAPIWebSearchAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchResponsesAPIWebSearchAction), "{\"type\":\"search\"}")
-	})
-	t.Run("SearchResponsesAPIWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchResponsesAPIWebSearchAction), "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OpenPageResponsesAPIWebSearchAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OpenPageResponsesAPIWebSearchAction), "{\"type\":\"open_page\"}")
-	})
-	t.Run("OpenPageResponsesAPIWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OpenPageResponsesAPIWebSearchAction), "{\"type\":\"open_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FindInPageResponsesAPIWebSearchAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FindInPageResponsesAPIWebSearchAction), "{\"type\":\"find_in_page\"}")
-	})
-	t.Run("FindInPageResponsesAPIWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FindInPageResponsesAPIWebSearchAction), "{\"pattern\":\"synthetic-value\",\"type\":\"find_in_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OtherResponsesAPIWebSearchAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OtherResponsesAPIWebSearchAction), "{\"type\":\"other\"}")
-	})
-	t.Run("OtherResponsesAPIWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OtherResponsesAPIWebSearchAction), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DangerFullAccessSandboxPolicy/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DangerFullAccessSandboxPolicy), "{\"type\":\"dangerFullAccess\"}")
-	})
-	t.Run("DangerFullAccessSandboxPolicy/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DangerFullAccessSandboxPolicy), "{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReadOnlySandboxPolicy/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReadOnlySandboxPolicy), "{\"type\":\"readOnly\"}") })
-	t.Run("ReadOnlySandboxPolicy/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReadOnlySandboxPolicy), "{\"networkAccess\":false,\"type\":\"readOnly\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ExternalSandboxSandboxPolicy/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExternalSandboxSandboxPolicy), "{\"type\":\"externalSandbox\"}")
-	})
-	t.Run("ExternalSandboxSandboxPolicy/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExternalSandboxSandboxPolicy), "{\"networkAccess\":\"restricted\",\"type\":\"externalSandbox\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WorkspaceWriteSandboxPolicy/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WorkspaceWriteSandboxPolicy), "{\"type\":\"workspaceWrite\"}")
-	})
-	t.Run("WorkspaceWriteSandboxPolicy/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WorkspaceWriteSandboxPolicy), "{\"excludeSlashTmp\":false,\"excludeTmpdirEnvVar\":false,\"networkAccess\":false,\"type\":\"workspaceWrite\",\"writableRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SessionSourceValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SessionSourceValue), "\"cli\"") })
-	t.Run("CustomSessionSource/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomSessionSource), "{\"custom\":\"synthetic-value\"}")
-	})
-	t.Run("CustomSessionSource/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomSessionSource), "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SubAgentSessionSource/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SubAgentSessionSource), "{\"subAgent\":\"review\"}") })
-	t.Run("SubAgentSessionSource/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SubAgentSessionSource), "{\"subAgent\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SubAgentSourceValue/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SubAgentSourceValue), "\"review\"") })
-	t.Run("ThreadSpawnSubAgentSource/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSpawnSubAgentSource), "{\"thread_spawn\":{\"depth\":7,\"parent_thread_id\":\"synthetic-value\"}}")
-	})
-	t.Run("ThreadSpawnSubAgentSource/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSpawnSubAgentSource), "{\"thread_spawn\":{\"agent_nickname\":\"synthetic-value\",\"agent_path\":\"synthetic-value\",\"agent_role\":\"synthetic-value\",\"depth\":7,\"parent_thread_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OtherSubAgentSource/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OtherSubAgentSource), "{\"other\":\"synthetic-value\"}")
-	})
-	t.Run("OtherSubAgentSource/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OtherSubAgentSource), "{\"other\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserMessageThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserMessageThreadItem), "{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"}")
-	})
-	t.Run("UserMessageThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UserMessageThreadItem), "{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("HookPromptThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HookPromptThreadItem), "{\"fragments\":[],\"id\":\"synthetic-value\",\"type\":\"hookPrompt\"}")
-	})
-	t.Run("HookPromptThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HookPromptThreadItem), "{\"fragments\":[{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"hookPrompt\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AgentMessageThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageThreadItem), "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"agentMessage\"}")
-	})
-	t.Run("AgentMessageThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AgentMessageThreadItem), "{\"delivery\":\"async\",\"id\":\"synthetic-value\",\"memoryCitation\":{\"entries\":[{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadIds\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"questions\":[{\"options\":[\"synthetic-value\"],\"title\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"text\":\"synthetic-value\",\"type\":\"agentMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FunctionCallOutputThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputThreadItem), "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"functionCallOutput\"}")
-	})
-	t.Run("FunctionCallOutputThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputThreadItem), "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"functionCallOutput\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("PlanThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PlanThreadItem), "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"plan\"}")
-	})
-	t.Run("PlanThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.PlanThreadItem), "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"plan\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReasoningThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningThreadItem), "{\"id\":\"synthetic-value\",\"type\":\"reasoning\"}")
-	})
-	t.Run("ReasoningThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningThreadItem), "{\"content\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"summary\":[\"synthetic-value\"],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CommandExecutionThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionThreadItem), "{\"command\":\"synthetic-value\",\"commandActions\":[],\"cwd\":\"synthetic-value\",\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"commandExecution\"}")
-	})
-	t.Run("CommandExecutionThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionThreadItem), "{\"aggregatedOutput\":\"synthetic-value\",\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"durationMs\":7,\"exitCode\":7,\"id\":\"synthetic-value\",\"pluginId\":\"synthetic-value\",\"processId\":\"synthetic-value\",\"scriptPath\":\"synthetic-value\",\"source\":\"agent\",\"status\":\"inProgress\",\"type\":\"commandExecution\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FileChangeThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChangeThreadItem), "{\"changes\":[],\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"fileChange\"}")
-	})
-	t.Run("FileChangeThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FileChangeThreadItem), "{\"changes\":[{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"fileChange\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MCPToolCallThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallThreadItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"id\":\"synthetic-value\",\"server\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"mcpToolCall\"}")
-	})
-	t.Run("MCPToolCallThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MCPToolCallThreadItem), "{\"appContext\":{\"actionName\":\"synthetic-value\",\"appName\":\"synthetic-value\",\"connectorId\":\"synthetic-value\",\"linkId\":\"synthetic-value\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"durationMs\":7,\"error\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"mcpAppResourceUri\":\"synthetic-value\",\"mcpAppUi\":{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"pluginId\":\"synthetic-value\",\"readOnlyHint\":false,\"result\":{\"_meta\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"content\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"structuredContent\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"server\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"mcpToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DynamicToolCallThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallThreadItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"dynamicToolCall\"}")
-	})
-	t.Run("DynamicToolCallThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallThreadItem), "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"contentItems\":[{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"durationMs\":7,\"id\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"inProgress\",\"success\":false,\"tool\":\"synthetic-value\",\"type\":\"dynamicToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("CollabAgentToolCallThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CollabAgentToolCallThreadItem), "{\"agentsStates\":{\"sample\":{\"status\":\"pendingInit\"}},\"id\":\"synthetic-value\",\"receiverThreadIds\":[],\"senderThreadId\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"spawnAgent\",\"type\":\"collabAgentToolCall\"}")
-	})
-	t.Run("CollabAgentToolCallThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CollabAgentToolCallThreadItem), "{\"agentsStates\":{\"sample\":{\"message\":\"synthetic-value\",\"status\":\"pendingInit\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"prompt\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"receiverThreadIds\":[\"synthetic-value\"],\"senderThreadId\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"spawnAgent\",\"type\":\"collabAgentToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SubAgentActivityThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SubAgentActivityThreadItem), "{\"agentPath\":\"synthetic-value\",\"agentThreadId\":\"synthetic-value\",\"id\":\"synthetic-value\",\"kind\":\"started\",\"type\":\"subAgentActivity\"}")
-	})
-	t.Run("SubAgentActivityThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SubAgentActivityThreadItem), "{\"agentPath\":\"synthetic-value\",\"agentThreadId\":\"synthetic-value\",\"id\":\"synthetic-value\",\"kind\":\"started\",\"model\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"type\":\"subAgentActivity\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("WebSearchThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchThreadItem), "{\"id\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"webSearch\"}")
-	})
-	t.Run("WebSearchThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchThreadItem), "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"query\":\"synthetic-value\",\"results\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"webSearch\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ImageViewThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageViewThreadItem), "{\"id\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"imageView\"}")
-	})
-	t.Run("ImageViewThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageViewThreadItem), "{\"id\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"imageView\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SleepThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SleepThreadItem), "{\"durationMs\":7,\"id\":\"synthetic-value\",\"type\":\"sleep\"}")
-	})
-	t.Run("SleepThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SleepThreadItem), "{\"durationMs\":7,\"id\":\"synthetic-value\",\"type\":\"sleep\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ImageGenerationThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationThreadItem), "{\"id\":\"synthetic-value\",\"result\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"imageGeneration\"}")
-	})
-	t.Run("ImageGenerationThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationThreadItem), "{\"failure\":{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"result\":\"synthetic-value\",\"revisedPrompt\":\"synthetic-value\",\"savedPath\":\"synthetic-value\",\"status\":\"synthetic-value\",\"transparentBackground\":false,\"type\":\"imageGeneration\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("EnteredReviewModeThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EnteredReviewModeThreadItem), "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"enteredReviewMode\"}")
-	})
-	t.Run("EnteredReviewModeThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EnteredReviewModeThreadItem), "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"enteredReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ExitedReviewModeThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExitedReviewModeThreadItem), "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"exitedReviewMode\"}")
-	})
-	t.Run("ExitedReviewModeThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExitedReviewModeThreadItem), "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"exitedReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ContextCompactionThreadItem/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContextCompactionThreadItem), "{\"id\":\"synthetic-value\",\"type\":\"contextCompaction\"}")
-	})
-	t.Run("ContextCompactionThreadItem/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContextCompactionThreadItem), "{\"id\":\"synthetic-value\",\"type\":\"contextCompaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NotLoadedThreadStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NotLoadedThreadStatus), "{\"type\":\"notLoaded\"}") })
-	t.Run("NotLoadedThreadStatus/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NotLoadedThreadStatus), "{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("IdleThreadStatus/0", func(t *testing.T) { schemaRoundTrip(t, new(types.IdleThreadStatus), "{\"type\":\"idle\"}") })
-	t.Run("IdleThreadStatus/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.IdleThreadStatus), "{\"type\":\"idle\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SystemErrorThreadStatus/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SystemErrorThreadStatus), "{\"type\":\"systemError\"}")
-	})
-	t.Run("SystemErrorThreadStatus/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SystemErrorThreadStatus), "{\"type\":\"systemError\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ActiveThreadStatus/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActiveThreadStatus), "{\"activeFlags\":[],\"type\":\"active\"}")
-	})
-	t.Run("ActiveThreadStatus/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActiveThreadStatus), "{\"activeFlags\":[\"waitingOnApproval\"],\"type\":\"active\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("TextUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TextUserInput), "{\"text\":\"synthetic-value\",\"type\":\"text\"}")
-	})
-	t.Run("TextUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.TextUserInput), "{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ImageUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageUserInput), "{\"type\":\"image\",\"url\":\"synthetic-value\"}")
-	})
-	t.Run("ImageUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageUserInput), "{\"detail\":\"auto\",\"type\":\"image\",\"url\":\"synthetic-value\",\"fileId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("LocalImageUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalImageUserInput), "{\"path\":\"synthetic-value\",\"type\":\"localImage\"}")
-	})
-	t.Run("LocalImageUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalImageUserInput), "{\"detail\":\"auto\",\"path\":\"synthetic-value\",\"type\":\"localImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AudioUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AudioUserInput), "{\"type\":\"audio\",\"url\":\"synthetic-value\"}")
-	})
-	t.Run("AudioUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AudioUserInput), "{\"type\":\"audio\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("LocalAudioUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalAudioUserInput), "{\"path\":\"synthetic-value\",\"type\":\"localAudio\"}")
-	})
-	t.Run("LocalAudioUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalAudioUserInput), "{\"path\":\"synthetic-value\",\"type\":\"localAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SkillUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SkillUserInput), "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"skill\"}")
-	})
-	t.Run("SkillUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SkillUserInput), "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"skill\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("MentionUserInput/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MentionUserInput), "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"mention\"}")
-	})
-	t.Run("MentionUserInput/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.MentionUserInput), "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"mention\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("SearchWebSearchAction/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SearchWebSearchAction), "{\"type\":\"search\"}") })
-	t.Run("SearchWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SearchWebSearchAction), "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OpenPageWebSearchAction/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OpenPageWebSearchAction), "{\"type\":\"openPage\"}") })
-	t.Run("OpenPageWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OpenPageWebSearchAction), "{\"type\":\"openPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("FindInPageWebSearchAction/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FindInPageWebSearchAction), "{\"type\":\"findInPage\"}")
-	})
-	t.Run("FindInPageWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FindInPageWebSearchAction), "{\"pattern\":\"synthetic-value\",\"type\":\"findInPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("OtherWebSearchAction/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OtherWebSearchAction), "{\"type\":\"other\"}") })
-	t.Run("OtherWebSearchAction/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OtherWebSearchAction), "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment), "{\"execpolicy_amendment\":[]}")
-	})
-	t.Run("AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment), "{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}")
-	})
-	t.Run("ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("AddFileChangeType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AddFileChangeType), "\"add\"") })
-	t.Run("DeleteFileChangeType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.DeleteFileChangeType), "\"delete\"") })
-	t.Run("UpdateFileChangeType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.UpdateFileChangeType), "\"update\"") })
-	t.Run("ReadParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReadParsedCommandType), "\"read\"") })
-	t.Run("ListFilesParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ListFilesParsedCommandType), "\"list_files\"") })
-	t.Run("SearchParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SearchParsedCommandType), "\"search\"") })
-	t.Run("UnknownParsedCommandType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.UnknownParsedCommandType), "\"unknown\"") })
-	t.Run("ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment), "{\"proposed_execpolicy_amendment\":[]}")
-	})
-	t.Run("ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment), "{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}")
-	})
-	t.Run("NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment), "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("DeniedReviewDecisionDenied/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeniedReviewDecisionDenied), "{\"rejection\":\"synthetic-value\"}")
-	})
-	t.Run("DeniedReviewDecisionDenied/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DeniedReviewDecisionDenied), "{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("InputTextAgentMessageInputContentType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextAgentMessageInputContentType), "\"input_text\"")
-	})
-	t.Run("EncryptedContentAgentMessageInputContentType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EncryptedContentAgentMessageInputContentType), "\"encrypted_content\"")
-	})
-	t.Run("GranularAskForApprovalGranular/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GranularAskForApprovalGranular), "{\"mcp_elicitations\":false,\"rules\":false,\"sandbox_approval\":false}")
-	})
-	t.Run("GranularAskForApprovalGranular/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.GranularAskForApprovalGranular), "{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("EnvironmentCapabilityRootLocationType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EnvironmentCapabilityRootLocationType), "\"environment\"")
-	})
-	t.Run("HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed), "{}")
-	})
-	t.Run("HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed), "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed), "{}")
-	})
-	t.Run("ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed), "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected), "{}")
-	})
-	t.Run("ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected), "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts), "{}")
-	})
-	t.Run("ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts), "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable), "{\"turnKind\":\"review\"}")
-	})
-	t.Run("ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable), "{\"turnKind\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("ReadCommandActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReadCommandActionType), "\"read\"") })
-	t.Run("ListFilesCommandActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ListFilesCommandActionType), "\"listFiles\"") })
-	t.Run("SearchCommandActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SearchCommandActionType), "\"search\"") })
-	t.Run("UnknownCommandActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.UnknownCommandActionType), "\"unknown\"") })
-	t.Run("InputTextContentItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.InputTextContentItemType), "\"input_text\"") })
-	t.Run("InputImageContentItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.InputImageContentItemType), "\"input_image\"") })
-	t.Run("InputAudioContentItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.InputAudioContentItemType), "\"input_audio\"") })
-	t.Run("OutputTextContentItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OutputTextContentItemType), "\"output_text\"") })
-	t.Run("InputTextDynamicToolCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextDynamicToolCallOutputContentItemType), "\"inputText\"")
-	})
-	t.Run("InputImageDynamicToolCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageDynamicToolCallOutputContentItemType), "\"inputImage\"")
-	})
-	t.Run("InputAudioDynamicToolCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioDynamicToolCallOutputContentItemType), "\"inputAudio\"")
-	})
-	t.Run("FunctionDynamicToolNamespaceToolType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionDynamicToolNamespaceToolType), "\"function\"")
-	})
-	t.Run("FunctionDynamicToolSpecType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FunctionDynamicToolSpecType), "\"function\"") })
-	t.Run("NamespaceDynamicToolSpecType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NamespaceDynamicToolSpecType), "\"namespace\"") })
-	t.Run("PathFileSystemPathType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.PathFileSystemPathType), "\"path\"") })
-	t.Run("GlobPatternFileSystemPathType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.GlobPatternFileSystemPathType), "\"glob_pattern\"") })
-	t.Run("SpecialFileSystemPathType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SpecialFileSystemPathType), "\"special\"") })
-	t.Run("RootFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.RootFileSystemSpecialPathKind), "\"root\"") })
-	t.Run("MinimalFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MinimalFileSystemSpecialPathKind), "\"minimal\"") })
-	t.Run("KindFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.KindFileSystemSpecialPathKind), "\"project_roots\"") })
-	t.Run("TmpdirFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TmpdirFileSystemSpecialPathKind), "\"tmpdir\"") })
-	t.Run("SlashTmpFileSystemSpecialPathKind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SlashTmpFileSystemSpecialPathKind), "\"slash_tmp\"") })
-	t.Run("FileSystemSpecialPathVariant5Kind/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FileSystemSpecialPathVariant5Kind), "\"unknown\"") })
-	t.Run("InputTextFunctionCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputTextFunctionCallOutputContentItemType), "\"input_text\"")
-	})
-	t.Run("InputImageFunctionCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputImageFunctionCallOutputContentItemType), "\"input_image\"")
-	})
-	t.Run("InputAudioFunctionCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.InputAudioFunctionCallOutputContentItemType), "\"input_audio\"")
-	})
-	t.Run("EncryptedContentFunctionCallOutputContentItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EncryptedContentFunctionCallOutputContentItemType), "\"encrypted_content\"")
-	})
-	t.Run("UsageLimitExceededImageGenerationFailureType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.UsageLimitExceededImageGenerationFailureType), "\"usageLimitExceeded\"")
-	})
-	t.Run("ExecLocalShellActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ExecLocalShellActionType), "\"exec\"") })
-	t.Run("AddPatchChangeKindType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AddPatchChangeKindType), "\"add\"") })
-	t.Run("DeletePatchChangeKindType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.DeletePatchChangeKindType), "\"delete\"") })
-	t.Run("UpdatePatchChangeKindType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.UpdatePatchChangeKindType), "\"update\"") })
-	t.Run("ReasoningTextReasoningItemContentType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ReasoningTextReasoningItemContentType), "\"reasoning_text\"")
-	})
-	t.Run("TextReasoningItemContentType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TextReasoningItemContentType), "\"text\"") })
-	t.Run("SummaryTextReasoningItemReasoningSummaryType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SummaryTextReasoningItemReasoningSummaryType), "\"summary_text\"")
-	})
-	t.Run("AdditionalToolsResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.AdditionalToolsResponseItemType), "\"additional_tools\"")
-	})
-	t.Run("MessageResponseItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MessageResponseItemType), "\"message\"") })
-	t.Run("AgentMessageResponseItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AgentMessageResponseItemType), "\"agent_message\"") })
-	t.Run("ReasoningResponseItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReasoningResponseItemType), "\"reasoning\"") })
-	t.Run("LocalShellCallResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.LocalShellCallResponseItemType), "\"local_shell_call\"")
-	})
-	t.Run("FunctionCallResponseItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FunctionCallResponseItemType), "\"function_call\"") })
-	t.Run("ToolSearchCallResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolSearchCallResponseItemType), "\"tool_search_call\"")
-	})
-	t.Run("FunctionCallOutputResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputResponseItemType), "\"function_call_output\"")
-	})
-	t.Run("CustomToolCallResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomToolCallResponseItemType), "\"custom_tool_call\"")
-	})
-	t.Run("CustomToolCallOutputResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CustomToolCallOutputResponseItemType), "\"custom_tool_call_output\"")
-	})
-	t.Run("ToolSearchOutputResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ToolSearchOutputResponseItemType), "\"tool_search_output\"")
-	})
-	t.Run("WebSearchCallResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WebSearchCallResponseItemType), "\"web_search_call\"")
-	})
-	t.Run("ImageGenerationCallResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationCallResponseItemType), "\"image_generation_call\"")
-	})
-	t.Run("CompactionResponseItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.CompactionResponseItemType), "\"compaction\"") })
-	t.Run("ConfigurationUpdateResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ConfigurationUpdateResponseItemType), "\"configuration_update\"")
-	})
-	t.Run("CompactionTriggerResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CompactionTriggerResponseItemType), "\"compaction_trigger\"")
-	})
-	t.Run("ContextCompactionResponseItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContextCompactionResponseItemType), "\"context_compaction\"")
-	})
-	t.Run("OtherResponseItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OtherResponseItemType), "\"other\"") })
-	t.Run("SearchResponsesAPIWebSearchActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SearchResponsesAPIWebSearchActionType), "\"search\"") })
-	t.Run("OpenPageResponsesAPIWebSearchActionType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.OpenPageResponsesAPIWebSearchActionType), "\"open_page\"")
-	})
-	t.Run("FindInPageResponsesAPIWebSearchActionType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FindInPageResponsesAPIWebSearchActionType), "\"find_in_page\"")
-	})
-	t.Run("OtherResponsesAPIWebSearchActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OtherResponsesAPIWebSearchActionType), "\"other\"") })
-	t.Run("DangerFullAccessSandboxPolicyType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DangerFullAccessSandboxPolicyType), "\"dangerFullAccess\"")
-	})
-	t.Run("ReadOnlySandboxPolicyType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReadOnlySandboxPolicyType), "\"readOnly\"") })
-	t.Run("ExternalSandboxSandboxPolicyType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExternalSandboxSandboxPolicyType), "\"externalSandbox\"")
-	})
-	t.Run("WorkspaceWriteSandboxPolicyType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.WorkspaceWriteSandboxPolicyType), "\"workspaceWrite\"")
-	})
-	t.Run("ThreadSpawnSubAgentSourceThreadSpawn/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSpawnSubAgentSourceThreadSpawn), "{\"depth\":7,\"parent_thread_id\":\"synthetic-value\"}")
-	})
-	t.Run("ThreadSpawnSubAgentSourceThreadSpawn/1", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ThreadSpawnSubAgentSourceThreadSpawn), "{\"agent_nickname\":\"synthetic-value\",\"agent_path\":\"synthetic-value\",\"agent_role\":\"synthetic-value\",\"depth\":7,\"parent_thread_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}")
-	})
-	t.Run("UserMessageThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.UserMessageThreadItemType), "\"userMessage\"") })
-	t.Run("HookPromptThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.HookPromptThreadItemType), "\"hookPrompt\"") })
-	t.Run("AgentMessageThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AgentMessageThreadItemType), "\"agentMessage\"") })
-	t.Run("FunctionCallOutputThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.FunctionCallOutputThreadItemType), "\"functionCallOutput\"")
-	})
-	t.Run("PlanThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.PlanThreadItemType), "\"plan\"") })
-	t.Run("ReasoningThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ReasoningThreadItemType), "\"reasoning\"") })
-	t.Run("CommandExecutionThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CommandExecutionThreadItemType), "\"commandExecution\"")
-	})
-	t.Run("FileChangeThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FileChangeThreadItemType), "\"fileChange\"") })
-	t.Run("MCPToolCallThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MCPToolCallThreadItemType), "\"mcpToolCall\"") })
-	t.Run("DynamicToolCallThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.DynamicToolCallThreadItemType), "\"dynamicToolCall\"")
-	})
-	t.Run("CollabAgentToolCallThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.CollabAgentToolCallThreadItemType), "\"collabAgentToolCall\"")
-	})
-	t.Run("SubAgentActivityThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.SubAgentActivityThreadItemType), "\"subAgentActivity\"")
-	})
-	t.Run("WebSearchThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.WebSearchThreadItemType), "\"webSearch\"") })
-	t.Run("ImageViewThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ImageViewThreadItemType), "\"imageView\"") })
-	t.Run("SleepThreadItemType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SleepThreadItemType), "\"sleep\"") })
-	t.Run("ImageGenerationThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ImageGenerationThreadItemType), "\"imageGeneration\"")
-	})
-	t.Run("EnteredReviewModeThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.EnteredReviewModeThreadItemType), "\"enteredReviewMode\"")
-	})
-	t.Run("ExitedReviewModeThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ExitedReviewModeThreadItemType), "\"exitedReviewMode\"")
-	})
-	t.Run("ContextCompactionThreadItemType/0", func(t *testing.T) {
-		schemaRoundTrip(t, new(types.ContextCompactionThreadItemType), "\"contextCompaction\"")
-	})
-	t.Run("NotLoadedThreadStatusType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.NotLoadedThreadStatusType), "\"notLoaded\"") })
-	t.Run("IdleThreadStatusType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.IdleThreadStatusType), "\"idle\"") })
-	t.Run("SystemErrorThreadStatusType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SystemErrorThreadStatusType), "\"systemError\"") })
-	t.Run("ActiveThreadStatusType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ActiveThreadStatusType), "\"active\"") })
-	t.Run("TextUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.TextUserInputType), "\"text\"") })
-	t.Run("ImageUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.ImageUserInputType), "\"image\"") })
-	t.Run("LocalImageUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.LocalImageUserInputType), "\"localImage\"") })
-	t.Run("AudioUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.AudioUserInputType), "\"audio\"") })
-	t.Run("LocalAudioUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.LocalAudioUserInputType), "\"localAudio\"") })
-	t.Run("SkillUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SkillUserInputType), "\"skill\"") })
-	t.Run("MentionUserInputType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.MentionUserInputType), "\"mention\"") })
-	t.Run("SearchWebSearchActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.SearchWebSearchActionType), "\"search\"") })
-	t.Run("OpenPageWebSearchActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OpenPageWebSearchActionType), "\"openPage\"") })
-	t.Run("FindInPageWebSearchActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.FindInPageWebSearchActionType), "\"findInPage\"") })
-	t.Run("OtherWebSearchActionType/0", func(t *testing.T) { schemaRoundTrip(t, new(types.OtherWebSearchActionType), "\"other\"") })
+	cases := []struct {
+		name   string
+		target func() any
+		raw    string
+	}{
+		{"AdditionalPermissionProfile/0", func() any { return new(types.AdditionalPermissionProfile) }, "{}"},
+		{"AdditionalPermissionProfile/1", func() any { return new(types.AdditionalPermissionProfile) }, "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ApplyPatchApprovalParams/0", func() any { return new(types.ApplyPatchApprovalParams) }, "{\"callId\":\"synthetic-value\",\"conversationId\":\"synthetic-value\",\"fileChanges\":{\"sample\":{\"content\":\"synthetic-value\",\"type\":\"add\"}}}"},
+		{"ApplyPatchApprovalParams/1", func() any { return new(types.ApplyPatchApprovalParams) }, "{\"callId\":\"synthetic-value\",\"conversationId\":\"synthetic-value\",\"fileChanges\":{\"sample\":{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"grantRoot\":\"synthetic-value\",\"reason\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ApplyPatchApprovalResponse/0", func() any { return new(types.ApplyPatchApprovalResponse) }, "{\"decision\":\"approved\"}"},
+		{"ApplyPatchApprovalResponse/1", func() any { return new(types.ApplyPatchApprovalResponse) }, "{\"decision\":\"approved\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ClientInfo/0", func() any { return new(types.ClientInfo) }, "{\"name\":\"synthetic-value\",\"version\":\"synthetic-value\"}"},
+		{"ClientInfo/1", func() any { return new(types.ClientInfo) }, "{\"name\":\"synthetic-value\",\"title\":\"synthetic-value\",\"version\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionApprovalDecision/0", func() any { return new(types.CommandExecutionApprovalDecision) }, "\"accept\""},
+		{"CommandExecutionApprovalDecision/1", func() any { return new(types.CommandExecutionApprovalDecision) }, "\"acceptForSession\""},
+		{"CommandExecutionApprovalDecision/2", func() any { return new(types.CommandExecutionApprovalDecision) }, "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionApprovalDecision/3", func() any { return new(types.CommandExecutionApprovalDecision) }, "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionApprovalDecision/4", func() any { return new(types.CommandExecutionApprovalDecision) }, "\"decline\""},
+		{"CommandExecutionApprovalDecision/5", func() any { return new(types.CommandExecutionApprovalDecision) }, "\"cancel\""},
+		{"CommandExecutionApprovalKind/0", func() any { return new(types.CommandExecutionApprovalKind) }, "\"command\""},
+		{"CommandExecutionRequestApprovalParams/0", func() any { return new(types.CommandExecutionRequestApprovalParams) }, "{\"itemId\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"CommandExecutionRequestApprovalParams/1", func() any { return new(types.CommandExecutionRequestApprovalParams) }, "{\"additionalPermissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalId\":\"synthetic-value\",\"availableDecisions\":[\"accept\"],\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"kind\":\"command\",\"networkApprovalContext\":{\"host\":\"synthetic-value\",\"protocol\":\"http\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"proposedExecpolicyAmendment\":[\"synthetic-value\"],\"proposedNetworkPolicyAmendments\":[{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionRequestApprovalResponse/0", func() any { return new(types.CommandExecutionRequestApprovalResponse) }, "{\"decision\":\"accept\"}"},
+		{"CommandExecutionRequestApprovalResponse/1", func() any { return new(types.CommandExecutionRequestApprovalResponse) }, "{\"decision\":\"accept\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ExecCommandApprovalParams/0", func() any { return new(types.ExecCommandApprovalParams) }, "{\"callId\":\"synthetic-value\",\"command\":[],\"conversationId\":\"synthetic-value\",\"cwd\":\"synthetic-value\",\"parsedCmd\":[]}"},
+		{"ExecCommandApprovalParams/1", func() any { return new(types.ExecCommandApprovalParams) }, "{\"approvalId\":\"synthetic-value\",\"callId\":\"synthetic-value\",\"command\":[\"synthetic-value\"],\"conversationId\":\"synthetic-value\",\"cwd\":\"synthetic-value\",\"parsedCmd\":[{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"reason\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ExecCommandApprovalResponse/0", func() any { return new(types.ExecCommandApprovalResponse) }, "{\"decision\":\"approved\"}"},
+		{"ExecCommandApprovalResponse/1", func() any { return new(types.ExecCommandApprovalResponse) }, "{\"decision\":\"approved\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileChange/0", func() any { return new(types.FileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"add\"}"},
+		{"FileChange/1", func() any { return new(types.FileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileChange/2", func() any { return new(types.FileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileChange/3", func() any { return new(types.FileChange) }, "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"unified_diff\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileChangeApprovalDecision/0", func() any { return new(types.FileChangeApprovalDecision) }, "\"accept\""},
+		{"FileChangeApprovalDecision/1", func() any { return new(types.FileChangeApprovalDecision) }, "\"acceptForSession\""},
+		{"FileChangeApprovalDecision/2", func() any { return new(types.FileChangeApprovalDecision) }, "\"decline\""},
+		{"FileChangeApprovalDecision/3", func() any { return new(types.FileChangeApprovalDecision) }, "\"cancel\""},
+		{"FileChangeRequestApprovalParams/0", func() any { return new(types.FileChangeRequestApprovalParams) }, "{\"itemId\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"FileChangeRequestApprovalParams/1", func() any { return new(types.FileChangeRequestApprovalParams) }, "{\"grantRoot\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileChangeRequestApprovalResponse/0", func() any { return new(types.FileChangeRequestApprovalResponse) }, "{\"decision\":\"accept\"}"},
+		{"FileChangeRequestApprovalResponse/1", func() any { return new(types.FileChangeRequestApprovalResponse) }, "{\"decision\":\"accept\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"GrantedPermissionProfile/0", func() any { return new(types.GrantedPermissionProfile) }, "{}"},
+		{"GrantedPermissionProfile/1", func() any { return new(types.GrantedPermissionProfile) }, "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InitializeCapabilities/0", func() any { return new(types.InitializeCapabilities) }, "{}"},
+		{"InitializeCapabilities/1", func() any { return new(types.InitializeCapabilities) }, "{\"experimentalApi\":false,\"explicitGatewayOauth\":false,\"extensions\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"mcpServerOpenaiFormElicitation\":false,\"optOutNotificationMethods\":[\"synthetic-value\"],\"requestAttestation\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InitializeParams/0", func() any { return new(types.InitializeParams) }, "{\"clientInfo\":{\"name\":\"synthetic-value\",\"version\":\"synthetic-value\"}}"},
+		{"InitializeParams/1", func() any { return new(types.InitializeParams) }, "{\"capabilities\":{\"experimentalApi\":false,\"explicitGatewayOauth\":false,\"extensions\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"mcpServerOpenaiFormElicitation\":false,\"optOutNotificationMethods\":[\"synthetic-value\"],\"requestAttestation\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"clientInfo\":{\"name\":\"synthetic-value\",\"title\":\"synthetic-value\",\"version\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InitializeResponse/0", func() any { return new(types.InitializeResponse) }, "{\"codexHome\":\"synthetic-value\",\"platformFamily\":\"synthetic-value\",\"platformOs\":\"synthetic-value\",\"userAgent\":\"synthetic-value\"}"},
+		{"InitializeResponse/1", func() any { return new(types.InitializeResponse) }, "{\"codexHome\":\"synthetic-value\",\"platformFamily\":\"synthetic-value\",\"platformOs\":\"synthetic-value\",\"userAgent\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NetworkApprovalContext/0", func() any { return new(types.NetworkApprovalContext) }, "{\"host\":\"synthetic-value\",\"protocol\":\"http\"}"},
+		{"NetworkApprovalContext/1", func() any { return new(types.NetworkApprovalContext) }, "{\"host\":\"synthetic-value\",\"protocol\":\"http\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NetworkPolicyAmendment/0", func() any { return new(types.NetworkPolicyAmendment) }, "{\"action\":\"allow\",\"host\":\"synthetic-value\"}"},
+		{"NetworkPolicyAmendment/1", func() any { return new(types.NetworkPolicyAmendment) }, "{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NetworkPolicyRuleAction/0", func() any { return new(types.NetworkPolicyRuleAction) }, "\"allow\""},
+		{"ParsedCommand/0", func() any { return new(types.ParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}"},
+		{"ParsedCommand/1", func() any { return new(types.ParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ParsedCommand/2", func() any { return new(types.ParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"list_files\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ParsedCommand/3", func() any { return new(types.ParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ParsedCommand/4", func() any { return new(types.ParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"PermissionGrantScope/0", func() any { return new(types.PermissionGrantScope) }, "\"turn\""},
+		{"PermissionsRequestApprovalParams/0", func() any { return new(types.PermissionsRequestApprovalParams) }, "{\"cwd\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"permissions\":{},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"PermissionsRequestApprovalParams/1", func() any { return new(types.PermissionsRequestApprovalParams) }, "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"permissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"reason\":\"synthetic-value\",\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"PermissionsRequestApprovalResponse/0", func() any { return new(types.PermissionsRequestApprovalResponse) }, "{\"permissions\":{}}"},
+		{"PermissionsRequestApprovalResponse/1", func() any { return new(types.PermissionsRequestApprovalResponse) }, "{\"permissions\":{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"scope\":\"turn\",\"strictAutoReview\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReviewDecision/0", func() any { return new(types.ReviewDecision) }, "\"approved\""},
+		{"ReviewDecision/1", func() any { return new(types.ReviewDecision) }, "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReviewDecision/2", func() any { return new(types.ReviewDecision) }, "\"approved_for_session\""},
+		{"ReviewDecision/3", func() any { return new(types.ReviewDecision) }, "\"approved_mcp_policy_amendment\""},
+		{"ReviewDecision/4", func() any { return new(types.ReviewDecision) }, "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReviewDecision/5", func() any { return new(types.ReviewDecision) }, "{\"denied\":{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReviewDecision/6", func() any { return new(types.ReviewDecision) }, "\"timed_out\""},
+		{"ReviewDecision/7", func() any { return new(types.ReviewDecision) }, "\"abort\""},
+		{"ToolRequestUserInputAnswer/0", func() any { return new(types.ToolRequestUserInputAnswer) }, "{\"answers\":[]}"},
+		{"ToolRequestUserInputAnswer/1", func() any { return new(types.ToolRequestUserInputAnswer) }, "{\"answers\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ToolRequestUserInputOption/0", func() any { return new(types.ToolRequestUserInputOption) }, "{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\"}"},
+		{"ToolRequestUserInputOption/1", func() any { return new(types.ToolRequestUserInputOption) }, "{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ToolRequestUserInputParams/0", func() any { return new(types.ToolRequestUserInputParams) }, "{\"isBlocking\":false,\"itemId\":\"synthetic-value\",\"questions\":[],\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"ToolRequestUserInputParams/1", func() any { return new(types.ToolRequestUserInputParams) }, "{\"autoResolutionMs\":7,\"isBlocking\":false,\"itemId\":\"synthetic-value\",\"questions\":[{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"question\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ToolRequestUserInputQuestion/0", func() any { return new(types.ToolRequestUserInputQuestion) }, "{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"question\":\"synthetic-value\"}"},
+		{"ToolRequestUserInputQuestion/1", func() any { return new(types.ToolRequestUserInputQuestion) }, "{\"header\":\"synthetic-value\",\"id\":\"synthetic-value\",\"isOther\":false,\"isSecret\":false,\"options\":[{\"description\":\"synthetic-value\",\"label\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"question\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ToolRequestUserInputResponse/0", func() any { return new(types.ToolRequestUserInputResponse) }, "{\"answers\":{\"sample\":{\"answers\":[]}}}"},
+		{"ToolRequestUserInputResponse/1", func() any { return new(types.ToolRequestUserInputResponse) }, "{\"answers\":{\"sample\":{\"answers\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AbsolutePathBuf/0", func() any { return new(types.AbsolutePathBuf) }, "\"synthetic-value\""},
+		{"ActivePermissionProfile/0", func() any { return new(types.ActivePermissionProfile) }, "{\"id\":\"synthetic-value\"}"},
+		{"ActivePermissionProfile/1", func() any { return new(types.ActivePermissionProfile) }, "{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AdditionalContextEntry/0", func() any { return new(types.AdditionalContextEntry) }, "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\"}"},
+		{"AdditionalContextEntry/1", func() any { return new(types.AdditionalContextEntry) }, "{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AdditionalContextKind/0", func() any { return new(types.AdditionalContextKind) }, "\"untrusted\""},
+		{"AdditionalFileSystemPermissions/0", func() any { return new(types.AdditionalFileSystemPermissions) }, "{}"},
+		{"AdditionalFileSystemPermissions/1", func() any { return new(types.AdditionalFileSystemPermissions) }, "{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AdditionalNetworkPermissions/0", func() any { return new(types.AdditionalNetworkPermissions) }, "{}"},
+		{"AdditionalNetworkPermissions/1", func() any { return new(types.AdditionalNetworkPermissions) }, "{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AgentMessageDelivery/0", func() any { return new(types.AgentMessageDelivery) }, "\"async\""},
+		{"AgentMessageDeltaNotification/0", func() any { return new(types.AgentMessageDeltaNotification) }, "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"AgentMessageDeltaNotification/1", func() any { return new(types.AgentMessageDeltaNotification) }, "{\"delta\":\"synthetic-value\",\"itemId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AgentMessageInputContent/0", func() any { return new(types.AgentMessageInputContent) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}"},
+		{"AgentMessageInputContent/1", func() any { return new(types.AgentMessageInputContent) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AgentMessageInputContent/2", func() any { return new(types.AgentMessageInputContent) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AgentPath/0", func() any { return new(types.AgentPath) }, "\"synthetic-value\""},
+		{"ApprovalsReviewer/0", func() any { return new(types.ApprovalsReviewer) }, "\"user\""},
+		{"AskForApproval/0", func() any { return new(types.AskForApproval) }, "\"untrusted\""},
+		{"AskForApproval/1", func() any { return new(types.AskForApproval) }, "{\"granular\":{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AsyncUserInputQuestion/0", func() any { return new(types.AsyncUserInputQuestion) }, "{\"title\":\"synthetic-value\"}"},
+		{"AsyncUserInputQuestion/1", func() any { return new(types.AsyncUserInputQuestion) }, "{\"options\":[\"synthetic-value\"],\"title\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ByteRange/0", func() any { return new(types.ByteRange) }, "{\"end\":7,\"start\":7}"},
+		{"ByteRange/1", func() any { return new(types.ByteRange) }, "{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CapabilityRootLocation/0", func() any { return new(types.CapabilityRootLocation) }, "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}"},
+		{"CapabilityRootLocation/1", func() any { return new(types.CapabilityRootLocation) }, "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfo/0", func() any { return new(types.CodexErrorInfo) }, "\"contextWindowExceeded\""},
+		{"CodexErrorInfo/1", func() any { return new(types.CodexErrorInfo) }, "{\"httpConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfo/2", func() any { return new(types.CodexErrorInfo) }, "{\"responseStreamConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfo/3", func() any { return new(types.CodexErrorInfo) }, "{\"responseStreamDisconnected\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfo/4", func() any { return new(types.CodexErrorInfo) }, "{\"responseTooManyFailedAttempts\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfo/5", func() any { return new(types.CodexErrorInfo) }, "{\"activeTurnNotSteerable\":{\"turnKind\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfo/6", func() any { return new(types.CodexErrorInfo) }, "\"synthetic-value\""},
+		{"CollabAgentState/0", func() any { return new(types.CollabAgentState) }, "{\"status\":\"pendingInit\"}"},
+		{"CollabAgentState/1", func() any { return new(types.CollabAgentState) }, "{\"message\":\"synthetic-value\",\"status\":\"pendingInit\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CollabAgentStatus/0", func() any { return new(types.CollabAgentStatus) }, "\"pendingInit\""},
+		{"CollabAgentTool/0", func() any { return new(types.CollabAgentTool) }, "\"spawnAgent\""},
+		{"CollabAgentToolCallStatus/0", func() any { return new(types.CollabAgentToolCallStatus) }, "\"inProgress\""},
+		{"CollaborationMode/0", func() any { return new(types.CollaborationMode) }, "{\"mode\":\"plan\",\"settings\":{\"model\":\"synthetic-value\"}}"},
+		{"CollaborationMode/1", func() any { return new(types.CollaborationMode) }, "{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandAction/0", func() any { return new(types.CommandAction) }, "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}"},
+		{"CommandAction/1", func() any { return new(types.CommandAction) }, "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandAction/2", func() any { return new(types.CommandAction) }, "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"listFiles\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandAction/3", func() any { return new(types.CommandAction) }, "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandAction/4", func() any { return new(types.CommandAction) }, "{\"command\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionSource/0", func() any { return new(types.CommandExecutionSource) }, "\"agent\""},
+		{"CommandExecutionStatus/0", func() any { return new(types.CommandExecutionStatus) }, "\"inProgress\""},
+		{"ConfigurationReasoning/0", func() any { return new(types.ConfigurationReasoning) }, "{\"effort\":\"synthetic-value\"}"},
+		{"ConfigurationReasoning/1", func() any { return new(types.ConfigurationReasoning) }, "{\"effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ContentItem/0", func() any { return new(types.ContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}"},
+		{"ContentItem/1", func() any { return new(types.ContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ContentItem/2", func() any { return new(types.ContentItem) }, "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ContentItem/3", func() any { return new(types.ContentItem) }, "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ContentItem/4", func() any { return new(types.ContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"output_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CyberAccessProgram/0", func() any { return new(types.CyberAccessProgram) }, "\"standard\""},
+		{"DynamicToolCallOutputContentItem/0", func() any { return new(types.DynamicToolCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"inputText\"}"},
+		{"DynamicToolCallOutputContentItem/1", func() any { return new(types.DynamicToolCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DynamicToolCallOutputContentItem/2", func() any { return new(types.DynamicToolCallOutputContentItem) }, "{\"imageUrl\":\"synthetic-value\",\"type\":\"inputImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DynamicToolCallOutputContentItem/3", func() any { return new(types.DynamicToolCallOutputContentItem) }, "{\"audioUrl\":\"synthetic-value\",\"type\":\"inputAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DynamicToolCallStatus/0", func() any { return new(types.DynamicToolCallStatus) }, "\"inProgress\""},
+		{"DynamicToolNamespaceTool/0", func() any { return new(types.DynamicToolNamespaceTool) }, "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}"},
+		{"DynamicToolNamespaceTool/1", func() any { return new(types.DynamicToolNamespaceTool) }, "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DynamicToolSpec/0", func() any { return new(types.DynamicToolSpec) }, "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}"},
+		{"DynamicToolSpec/1", func() any { return new(types.DynamicToolSpec) }, "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DynamicToolSpec/2", func() any { return new(types.DynamicToolSpec) }, "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"namespace\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ErrorNotification/0", func() any { return new(types.ErrorNotification) }, "{\"error\":{\"message\":\"synthetic-value\"},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false}"},
+		{"ErrorNotification/1", func() any { return new(types.ErrorNotification) }, "{\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"willRetry\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemAccessMode/0", func() any { return new(types.FileSystemAccessMode) }, "\"read\""},
+		{"FileSystemPath/0", func() any { return new(types.FileSystemPath) }, "{\"path\":\"synthetic-value\",\"type\":\"path\"}"},
+		{"FileSystemPath/1", func() any { return new(types.FileSystemPath) }, "{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemPath/2", func() any { return new(types.FileSystemPath) }, "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemPath/3", func() any { return new(types.FileSystemPath) }, "{\"type\":\"special\",\"value\":{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSandboxEntry/0", func() any { return new(types.FileSystemSandboxEntry) }, "{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\"}}"},
+		{"FileSystemSandboxEntry/1", func() any { return new(types.FileSystemSandboxEntry) }, "{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPath/0", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"root\"}"},
+		{"FileSystemSpecialPath/1", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPath/2", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"minimal\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPath/3", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"project_roots\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPath/4", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"tmpdir\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPath/5", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"slash_tmp\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPath/6", func() any { return new(types.FileSystemSpecialPath) }, "{\"kind\":\"unknown\",\"path\":\"synthetic-value\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileUpdateChange/0", func() any { return new(types.FileUpdateChange) }, "{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\"},\"path\":\"synthetic-value\"}"},
+		{"FileUpdateChange/1", func() any { return new(types.FileUpdateChange) }, "{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallOutputBody/0", func() any { return new(types.FunctionCallOutputBody) }, "\"synthetic-value\""},
+		{"FunctionCallOutputBody/1", func() any { return new(types.FunctionCallOutputBody) }, "[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}]"},
+		{"FunctionCallOutputContentItem/0", func() any { return new(types.FunctionCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}"},
+		{"FunctionCallOutputContentItem/1", func() any { return new(types.FunctionCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallOutputContentItem/2", func() any { return new(types.FunctionCallOutputContentItem) }, "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallOutputContentItem/3", func() any { return new(types.FunctionCallOutputContentItem) }, "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallOutputContentItem/4", func() any { return new(types.FunctionCallOutputContentItem) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"GitInfo/0", func() any { return new(types.GitInfo) }, "{}"},
+		{"GitInfo/1", func() any { return new(types.GitInfo) }, "{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"HookPromptFragment/0", func() any { return new(types.HookPromptFragment) }, "{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\"}"},
+		{"HookPromptFragment/1", func() any { return new(types.HookPromptFragment) }, "{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ImageDetail/0", func() any { return new(types.ImageDetail) }, "\"auto\""},
+		{"ImageGenerationFailure/0", func() any { return new(types.ImageGenerationFailure) }, "{\"limitId\":\"synthetic-value\",\"type\":\"usageLimitExceeded\"}"},
+		{"ImageGenerationFailure/1", func() any { return new(types.ImageGenerationFailure) }, "{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InternalChatMessageMetadataPassthrough/0", func() any { return new(types.InternalChatMessageMetadataPassthrough) }, "{}"},
+		{"InternalChatMessageMetadataPassthrough/1", func() any { return new(types.InternalChatMessageMetadataPassthrough) }, "{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ItemCompletedNotification/0", func() any { return new(types.ItemCompletedNotification) }, "{\"completedAtMs\":7,\"item\":{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"ItemCompletedNotification/1", func() any { return new(types.ItemCompletedNotification) }, "{\"completedAtMs\":7,\"item\":{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ItemStartedNotification/0", func() any { return new(types.ItemStartedNotification) }, "{\"item\":{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"ItemStartedNotification/1", func() any { return new(types.ItemStartedNotification) }, "{\"item\":{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"startedAtMs\":7,\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"LegacyAppPathString/0", func() any { return new(types.LegacyAppPathString) }, "\"synthetic-value\""},
+		{"LocalShellAction/0", func() any { return new(types.LocalShellAction) }, "{\"command\":[],\"type\":\"exec\"}"},
+		{"LocalShellAction/1", func() any { return new(types.LocalShellAction) }, "{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"LocalShellStatus/0", func() any { return new(types.LocalShellStatus) }, "\"completed\""},
+		{"MCPAppDisplayMode/0", func() any { return new(types.MCPAppDisplayMode) }, "\"inline\""},
+		{"MCPAppUI/0", func() any { return new(types.MCPAppUI) }, "{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\"}"},
+		{"MCPAppUI/1", func() any { return new(types.MCPAppUI) }, "{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MCPToolCallAppContext/0", func() any { return new(types.MCPToolCallAppContext) }, "{\"connectorId\":\"synthetic-value\"}"},
+		{"MCPToolCallAppContext/1", func() any { return new(types.MCPToolCallAppContext) }, "{\"actionName\":\"synthetic-value\",\"appName\":\"synthetic-value\",\"connectorId\":\"synthetic-value\",\"linkId\":\"synthetic-value\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MCPToolCallError/0", func() any { return new(types.MCPToolCallError) }, "{\"message\":\"synthetic-value\"}"},
+		{"MCPToolCallError/1", func() any { return new(types.MCPToolCallError) }, "{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MCPToolCallResult/0", func() any { return new(types.MCPToolCallResult) }, "{\"content\":[]}"},
+		{"MCPToolCallResult/1", func() any { return new(types.MCPToolCallResult) }, "{\"_meta\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"content\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"structuredContent\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MCPToolCallStatus/0", func() any { return new(types.MCPToolCallStatus) }, "\"inProgress\""},
+		{"MemoryCitation/0", func() any { return new(types.MemoryCitation) }, "{\"entries\":[],\"threadIds\":[]}"},
+		{"MemoryCitation/1", func() any { return new(types.MemoryCitation) }, "{\"entries\":[{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadIds\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MemoryCitationEntry/0", func() any { return new(types.MemoryCitationEntry) }, "{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\"}"},
+		{"MemoryCitationEntry/1", func() any { return new(types.MemoryCitationEntry) }, "{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MessagePhase/0", func() any { return new(types.MessagePhase) }, "\"commentary\""},
+		{"MessagePhase/1", func() any { return new(types.MessagePhase) }, "\"partial_answer\""},
+		{"MessagePhase/2", func() any { return new(types.MessagePhase) }, "\"final_answer\""},
+		{"MisalignmentErrorDetails/0", func() any { return new(types.MisalignmentErrorDetails) }, "{}"},
+		{"MisalignmentErrorDetails/1", func() any { return new(types.MisalignmentErrorDetails) }, "{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MisalignmentSteer/0", func() any { return new(types.MisalignmentSteer) }, "{\"message\":\"synthetic-value\"}"},
+		{"MisalignmentSteer/1", func() any { return new(types.MisalignmentSteer) }, "{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ModeKind/0", func() any { return new(types.ModeKind) }, "\"plan\""},
+		{"MultiAgentMode/0", func() any { return new(types.MultiAgentMode) }, "\"explicitRequestOnly\""},
+		{"MultiAgentMode/1", func() any { return new(types.MultiAgentMode) }, "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NetworkAccess/0", func() any { return new(types.NetworkAccess) }, "\"restricted\""},
+		{"NetworkApprovalProtocol/0", func() any { return new(types.NetworkApprovalProtocol) }, "\"http\""},
+		{"NonSteerableTurnKind/0", func() any { return new(types.NonSteerableTurnKind) }, "\"review\""},
+		{"PatchApplyStatus/0", func() any { return new(types.PatchApplyStatus) }, "\"inProgress\""},
+		{"PatchChangeKind/0", func() any { return new(types.PatchChangeKind) }, "{\"type\":\"add\"}"},
+		{"PatchChangeKind/1", func() any { return new(types.PatchChangeKind) }, "{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"PatchChangeKind/2", func() any { return new(types.PatchChangeKind) }, "{\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"PatchChangeKind/3", func() any { return new(types.PatchChangeKind) }, "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"Personality/0", func() any { return new(types.Personality) }, "\"none\""},
+		{"ReasoningEffort/0", func() any { return new(types.ReasoningEffort) }, "\"synthetic-value\""},
+		{"ReasoningItemContent/0", func() any { return new(types.ReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\"}"},
+		{"ReasoningItemContent/1", func() any { return new(types.ReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReasoningItemContent/2", func() any { return new(types.ReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReasoningItemReasoningSummary/0", func() any { return new(types.ReasoningItemReasoningSummary) }, "{\"text\":\"synthetic-value\",\"type\":\"summary_text\"}"},
+		{"ReasoningItemReasoningSummary/1", func() any { return new(types.ReasoningItemReasoningSummary) }, "{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReasoningSummary/0", func() any { return new(types.ReasoningSummary) }, "\"auto\""},
+		{"ReasoningSummary/1", func() any { return new(types.ReasoningSummary) }, "\"none\""},
+		{"RequestID/0", func() any { return new(types.RequestID) }, "\"synthetic-value\""},
+		{"RequestID/1", func() any { return new(types.RequestID) }, "7"},
+		{"RequestPermissionProfile/0", func() any { return new(types.RequestPermissionProfile) }, "{}"},
+		{"RequestPermissionProfile/1", func() any { return new(types.RequestPermissionProfile) }, "{\"fileSystem\":{\"entries\":[{\"access\":\"read\",\"path\":{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"globScanMaxDepth\":7,\"read\":[\"synthetic-value\"],\"write\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"network\":{\"enabled\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/0", func() any { return new(types.ResponseItem) }, "{\"role\":\"synthetic-value\",\"tools\":[],\"type\":\"additional_tools\"}"},
+		{"ResponseItem/1", func() any { return new(types.ResponseItem) }, "{\"id\":\"synthetic-value\",\"role\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"additional_tools\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/2", func() any { return new(types.ResponseItem) }, "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"role\":\"synthetic-value\",\"type\":\"message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/3", func() any { return new(types.ResponseItem) }, "{\"author\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"recipient\":\"synthetic-value\",\"type\":\"agent_message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/4", func() any { return new(types.ResponseItem) }, "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"summary\":[{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/5", func() any { return new(types.ResponseItem) }, "{\"action\":{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"completed\",\"type\":\"local_shell_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/6", func() any { return new(types.ResponseItem) }, "{\"arguments\":\"synthetic-value\",\"call_id\":\"synthetic-value\",\"encrypted_function_args\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"type\":\"function_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/7", func() any { return new(types.ResponseItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"tool_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/8", func() any { return new(types.ResponseItem) }, "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"function_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/9", func() any { return new(types.ResponseItem) }, "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"input\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"custom_tool_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/10", func() any { return new(types.ResponseItem) }, "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"custom_tool_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/11", func() any { return new(types.ResponseItem) }, "{\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"tool_search_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/12", func() any { return new(types.ResponseItem) }, "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"web_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/13", func() any { return new(types.ResponseItem) }, "{\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"result\":\"synthetic-value\",\"revised_prompt\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"image_generation_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/14", func() any { return new(types.ResponseItem) }, "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/15", func() any { return new(types.ResponseItem) }, "{\"reasoning\":{\"effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"configuration_update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/16", func() any { return new(types.ResponseItem) }, "{\"type\":\"compaction_trigger\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/17", func() any { return new(types.ResponseItem) }, "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"context_compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseItem/18", func() any { return new(types.ResponseItem) }, "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponsesAPIWebSearchAction/0", func() any { return new(types.ResponsesAPIWebSearchAction) }, "{\"type\":\"search\"}"},
+		{"ResponsesAPIWebSearchAction/1", func() any { return new(types.ResponsesAPIWebSearchAction) }, "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponsesAPIWebSearchAction/2", func() any { return new(types.ResponsesAPIWebSearchAction) }, "{\"type\":\"open_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponsesAPIWebSearchAction/3", func() any { return new(types.ResponsesAPIWebSearchAction) }, "{\"pattern\":\"synthetic-value\",\"type\":\"find_in_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponsesAPIWebSearchAction/4", func() any { return new(types.ResponsesAPIWebSearchAction) }, "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SandboxMode/0", func() any { return new(types.SandboxMode) }, "\"read-only\""},
+		{"SandboxPolicy/0", func() any { return new(types.SandboxPolicy) }, "{\"type\":\"dangerFullAccess\"}"},
+		{"SandboxPolicy/1", func() any { return new(types.SandboxPolicy) }, "{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SandboxPolicy/2", func() any { return new(types.SandboxPolicy) }, "{\"networkAccess\":false,\"type\":\"readOnly\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SandboxPolicy/3", func() any { return new(types.SandboxPolicy) }, "{\"networkAccess\":\"restricted\",\"type\":\"externalSandbox\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SandboxPolicy/4", func() any { return new(types.SandboxPolicy) }, "{\"excludeSlashTmp\":false,\"excludeTmpdirEnvVar\":false,\"networkAccess\":false,\"type\":\"workspaceWrite\",\"writableRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SelectedCapabilityRoot/0", func() any { return new(types.SelectedCapabilityRoot) }, "{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}}"},
+		{"SelectedCapabilityRoot/1", func() any { return new(types.SelectedCapabilityRoot) }, "{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ServerRequestResolvedNotification/0", func() any { return new(types.ServerRequestResolvedNotification) }, "{\"requestId\":\"synthetic-value\",\"threadId\":\"synthetic-value\"}"},
+		{"ServerRequestResolvedNotification/1", func() any { return new(types.ServerRequestResolvedNotification) }, "{\"requestId\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SessionSource/0", func() any { return new(types.SessionSource) }, "\"cli\""},
+		{"SessionSource/1", func() any { return new(types.SessionSource) }, "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SessionSource/2", func() any { return new(types.SessionSource) }, "{\"subAgent\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"Settings/0", func() any { return new(types.Settings) }, "{\"model\":\"synthetic-value\"}"},
+		{"Settings/1", func() any { return new(types.Settings) }, "{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SortDirection/0", func() any { return new(types.SortDirection) }, "\"asc\""},
+		{"SubAgentActivityKind/0", func() any { return new(types.SubAgentActivityKind) }, "\"started\""},
+		{"SubAgentSource/0", func() any { return new(types.SubAgentSource) }, "\"review\""},
+		{"SubAgentSource/1", func() any { return new(types.SubAgentSource) }, "{\"thread_spawn\":{\"agent_nickname\":\"synthetic-value\",\"agent_path\":\"synthetic-value\",\"agent_role\":\"synthetic-value\",\"depth\":7,\"parent_thread_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SubAgentSource/2", func() any { return new(types.SubAgentSource) }, "{\"other\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TextElement/0", func() any { return new(types.TextElement) }, "{\"byteRange\":{\"end\":7,\"start\":7}}"},
+		{"TextElement/1", func() any { return new(types.TextElement) }, "{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"Thread/0", func() any { return new(types.Thread) }, "{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}"},
+		{"Thread/1", func() any { return new(types.Thread) }, "{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadActiveFlag/0", func() any { return new(types.ThreadActiveFlag) }, "\"waitingOnApproval\""},
+		{"ThreadEnvironment/0", func() any { return new(types.ThreadEnvironment) }, "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[]}"},
+		{"ThreadEnvironment/1", func() any { return new(types.ThreadEnvironment) }, "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadExtra/0", func() any { return new(types.ThreadExtra) }, "{}"},
+		{"ThreadExtra/1", func() any { return new(types.ThreadExtra) }, "{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadHistoryMode/0", func() any { return new(types.ThreadHistoryMode) }, "\"legacy\""},
+		{"ThreadID/0", func() any { return new(types.ThreadID) }, "\"synthetic-value\""},
+		{"ThreadItem/0", func() any { return new(types.ThreadItem) }, "{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"}"},
+		{"ThreadItem/1", func() any { return new(types.ThreadItem) }, "{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/2", func() any { return new(types.ThreadItem) }, "{\"fragments\":[{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"hookPrompt\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/3", func() any { return new(types.ThreadItem) }, "{\"delivery\":\"async\",\"id\":\"synthetic-value\",\"memoryCitation\":{\"entries\":[{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadIds\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"questions\":[{\"options\":[\"synthetic-value\"],\"title\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"text\":\"synthetic-value\",\"type\":\"agentMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/4", func() any { return new(types.ThreadItem) }, "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"functionCallOutput\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/5", func() any { return new(types.ThreadItem) }, "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"plan\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/6", func() any { return new(types.ThreadItem) }, "{\"content\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"summary\":[\"synthetic-value\"],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/7", func() any { return new(types.ThreadItem) }, "{\"aggregatedOutput\":\"synthetic-value\",\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"durationMs\":7,\"exitCode\":7,\"id\":\"synthetic-value\",\"pluginId\":\"synthetic-value\",\"processId\":\"synthetic-value\",\"scriptPath\":\"synthetic-value\",\"source\":\"agent\",\"status\":\"inProgress\",\"type\":\"commandExecution\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/8", func() any { return new(types.ThreadItem) }, "{\"changes\":[{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"fileChange\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/9", func() any { return new(types.ThreadItem) }, "{\"appContext\":{\"actionName\":\"synthetic-value\",\"appName\":\"synthetic-value\",\"connectorId\":\"synthetic-value\",\"linkId\":\"synthetic-value\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"durationMs\":7,\"error\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"mcpAppResourceUri\":\"synthetic-value\",\"mcpAppUi\":{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"pluginId\":\"synthetic-value\",\"readOnlyHint\":false,\"result\":{\"_meta\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"content\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"structuredContent\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"server\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"mcpToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/10", func() any { return new(types.ThreadItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"contentItems\":[{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"durationMs\":7,\"id\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"inProgress\",\"success\":false,\"tool\":\"synthetic-value\",\"type\":\"dynamicToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/11", func() any { return new(types.ThreadItem) }, "{\"agentsStates\":{\"sample\":{\"message\":\"synthetic-value\",\"status\":\"pendingInit\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"prompt\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"receiverThreadIds\":[\"synthetic-value\"],\"senderThreadId\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"spawnAgent\",\"type\":\"collabAgentToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/12", func() any { return new(types.ThreadItem) }, "{\"agentPath\":\"synthetic-value\",\"agentThreadId\":\"synthetic-value\",\"id\":\"synthetic-value\",\"kind\":\"started\",\"model\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"type\":\"subAgentActivity\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/13", func() any { return new(types.ThreadItem) }, "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"query\":\"synthetic-value\",\"results\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"webSearch\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/14", func() any { return new(types.ThreadItem) }, "{\"id\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"imageView\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/15", func() any { return new(types.ThreadItem) }, "{\"durationMs\":7,\"id\":\"synthetic-value\",\"type\":\"sleep\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/16", func() any { return new(types.ThreadItem) }, "{\"failure\":{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"result\":\"synthetic-value\",\"revisedPrompt\":\"synthetic-value\",\"savedPath\":\"synthetic-value\",\"status\":\"synthetic-value\",\"transparentBackground\":false,\"type\":\"imageGeneration\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/17", func() any { return new(types.ThreadItem) }, "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"enteredReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/18", func() any { return new(types.ThreadItem) }, "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"exitedReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadItem/19", func() any { return new(types.ThreadItem) }, "{\"id\":\"synthetic-value\",\"type\":\"contextCompaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadReadParams/0", func() any { return new(types.ThreadReadParams) }, "{\"threadId\":\"synthetic-value\"}"},
+		{"ThreadReadParams/1", func() any { return new(types.ThreadReadParams) }, "{\"includeTurns\":false,\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadReadResponse/0", func() any { return new(types.ThreadReadResponse) }, "{\"thread\":{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}}"},
+		{"ThreadReadResponse/1", func() any { return new(types.ThreadReadResponse) }, "{\"thread\":{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadResumeInitialTurnsPageParams/0", func() any { return new(types.ThreadResumeInitialTurnsPageParams) }, "{}"},
+		{"ThreadResumeInitialTurnsPageParams/1", func() any { return new(types.ThreadResumeInitialTurnsPageParams) }, "{\"itemsView\":\"notLoaded\",\"limit\":7,\"sortDirection\":\"asc\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadResumeParams/0", func() any { return new(types.ThreadResumeParams) }, "{\"threadId\":\"synthetic-value\"}"},
+		{"ThreadResumeParams/1", func() any { return new(types.ThreadResumeParams) }, "{\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"baseInstructions\":\"synthetic-value\",\"config\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"cwd\":\"synthetic-value\",\"developerInstructions\":\"synthetic-value\",\"excludeTurns\":false,\"history\":[{\"id\":\"synthetic-value\",\"role\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"additional_tools\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"initialTurnsPage\":{\"itemsView\":\"notLoaded\",\"limit\":7,\"sortDirection\":\"asc\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"path\":\"synthetic-value\",\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":\"read-only\",\"serviceTier\":\"synthetic-value\",\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadResumeResponse/0", func() any { return new(types.ThreadResumeResponse) }, "{\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"cwd\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"sandbox\":{\"type\":\"dangerFullAccess\"},\"thread\":{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}}"},
+		{"ThreadResumeResponse/1", func() any { return new(types.ThreadResumeResponse) }, "{\"activePermissionProfile\":{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"collaborationMode\":{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"cwd\":\"synthetic-value\",\"disabledPluginIds\":[\"synthetic-value\"],\"initialTurnsPage\":{\"backwardsCursor\":\"synthetic-value\",\"data\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"nextCursor\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"instructionSources\":[\"synthetic-value\"],\"itemsBackwardsCursor\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"reasoningEffort\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"thread\":{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"turnsBackwardsCursor\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadSection/0", func() any { return new(types.ThreadSection) }, "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\"}"},
+		{"ThreadSection/1", func() any { return new(types.ThreadSection) }, "{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadSectionAppearance/0", func() any { return new(types.ThreadSectionAppearance) }, "{}"},
+		{"ThreadSectionAppearance/1", func() any { return new(types.ThreadSectionAppearance) }, "{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadSource/0", func() any { return new(types.ThreadSource) }, "\"synthetic-value\""},
+		{"ThreadStartParams/0", func() any { return new(types.ThreadStartParams) }, "{}"},
+		{"ThreadStartParams/1", func() any { return new(types.ThreadStartParams) }, "{\"allowProviderModelFallback\":false,\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"baseInstructions\":\"synthetic-value\",\"config\":{\"sample\":{\"opaque\":9007199254740993,\"nested\":[null,false]}},\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"developerInstructions\":\"synthetic-value\",\"dynamicTools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"experimentalRawEvents\":false,\"historyMode\":\"legacy\",\"mockExperimentalField\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"projectId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":\"read-only\",\"selectedCapabilityRoots\":[{\"id\":\"synthetic-value\",\"location\":{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"serviceName\":\"synthetic-value\",\"serviceTier\":\"synthetic-value\",\"sessionStartSource\":\"startup\",\"threadSource\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadStartResponse/0", func() any { return new(types.ThreadStartResponse) }, "{\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"cwd\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"sandbox\":{\"type\":\"dangerFullAccess\"},\"thread\":{\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"ephemeral\":false,\"id\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\"},\"turns\":[],\"updatedAt\":7}}"},
+		{"ThreadStartResponse/1", func() any { return new(types.ThreadStartResponse) }, "{\"activePermissionProfile\":{\"extends\":\"synthetic-value\",\"id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"cwd\":\"synthetic-value\",\"disabledPluginIds\":[\"synthetic-value\"],\"instructionSources\":[\"synthetic-value\"],\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"reasoningEffort\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandbox\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"thread\":{\"agentNickname\":\"synthetic-value\",\"agentRole\":\"synthetic-value\",\"canAcceptDirectInput\":false,\"cliVersion\":\"synthetic-value\",\"createdAt\":7,\"cwd\":\"synthetic-value\",\"daybreakEnabled\":false,\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"ephemeral\":false,\"extra\":{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"forkedFromId\":\"synthetic-value\",\"gitInfo\":{\"branch\":\"synthetic-value\",\"originUrl\":\"synthetic-value\",\"sha\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"historyMode\":\"legacy\",\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"modelProvider\":\"synthetic-value\",\"name\":\"synthetic-value\",\"originator\":\"synthetic-value\",\"parentThreadId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"preview\":\"synthetic-value\",\"projectId\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"recencyAt\":7,\"section\":{\"appearance\":{\"color\":\"synthetic-value\",\"icon\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"sectionEnteredAt\":7,\"sessionId\":\"synthetic-value\",\"source\":\"cli\",\"status\":{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"threadSource\":\"synthetic-value\",\"turns\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"updatedAt\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadStartSource/0", func() any { return new(types.ThreadStartSource) }, "\"startup\""},
+		{"ThreadStatus/0", func() any { return new(types.ThreadStatus) }, "{\"type\":\"notLoaded\"}"},
+		{"ThreadStatus/1", func() any { return new(types.ThreadStatus) }, "{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadStatus/2", func() any { return new(types.ThreadStatus) }, "{\"type\":\"idle\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadStatus/3", func() any { return new(types.ThreadStatus) }, "{\"type\":\"systemError\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadStatus/4", func() any { return new(types.ThreadStatus) }, "{\"activeFlags\":[\"waitingOnApproval\"],\"type\":\"active\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadUnsubscribeParams/0", func() any { return new(types.ThreadUnsubscribeParams) }, "{\"threadId\":\"synthetic-value\"}"},
+		{"ThreadUnsubscribeParams/1", func() any { return new(types.ThreadUnsubscribeParams) }, "{\"threadId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadUnsubscribeResponse/0", func() any { return new(types.ThreadUnsubscribeResponse) }, "{\"status\":\"notLoaded\"}"},
+		{"ThreadUnsubscribeResponse/1", func() any { return new(types.ThreadUnsubscribeResponse) }, "{\"status\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ThreadUnsubscribeStatus/0", func() any { return new(types.ThreadUnsubscribeStatus) }, "\"notLoaded\""},
+		{"Turn/0", func() any { return new(types.Turn) }, "{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}"},
+		{"Turn/1", func() any { return new(types.Turn) }, "{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnCompletedNotification/0", func() any { return new(types.TurnCompletedNotification) }, "{\"threadId\":\"synthetic-value\",\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}"},
+		{"TurnCompletedNotification/1", func() any { return new(types.TurnCompletedNotification) }, "{\"threadId\":\"synthetic-value\",\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnEnvironmentParams/0", func() any { return new(types.TurnEnvironmentParams) }, "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\"}"},
+		{"TurnEnvironmentParams/1", func() any { return new(types.TurnEnvironmentParams) }, "{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnError/0", func() any { return new(types.TurnError) }, "{\"message\":\"synthetic-value\"}"},
+		{"TurnError/1", func() any { return new(types.TurnError) }, "{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnInterruptParams/0", func() any { return new(types.TurnInterruptParams) }, "{\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\"}"},
+		{"TurnInterruptParams/1", func() any { return new(types.TurnInterruptParams) }, "{\"threadId\":\"synthetic-value\",\"turnId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnInterruptResponse/0", func() any { return new(types.TurnInterruptResponse) }, "{}"},
+		{"TurnInterruptResponse/1", func() any { return new(types.TurnInterruptResponse) }, "{\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnItemsView/0", func() any { return new(types.TurnItemsView) }, "\"notLoaded\""},
+		{"TurnItemsView/1", func() any { return new(types.TurnItemsView) }, "\"summary\""},
+		{"TurnItemsView/2", func() any { return new(types.TurnItemsView) }, "\"full\""},
+		{"TurnStartParams/0", func() any { return new(types.TurnStartParams) }, "{\"input\":[],\"threadId\":\"synthetic-value\"}"},
+		{"TurnStartParams/1", func() any { return new(types.TurnStartParams) }, "{\"additionalContext\":{\"sample\":{\"kind\":\"untrusted\",\"value\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"approvalPolicy\":\"untrusted\",\"approvalsReviewer\":\"user\",\"clientUserMessageId\":\"synthetic-value\",\"collaborationMode\":{\"mode\":\"plan\",\"settings\":{\"developer_instructions\":\"synthetic-value\",\"model\":\"synthetic-value\",\"reasoning_effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"cwd\":\"synthetic-value\",\"cyberAccessProgram\":\"standard\",\"disabledPluginIds\":[\"synthetic-value\"],\"effort\":\"synthetic-value\",\"environments\":[{\"cwd\":\"synthetic-value\",\"environmentId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"input\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"model\":\"synthetic-value\",\"multiAgentMode\":\"explicitRequestOnly\",\"outputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"parentTurnId\":\"synthetic-value\",\"permissions\":\"synthetic-value\",\"personality\":\"none\",\"responsesapiClientMetadata\":{\"sample\":\"synthetic-value\"},\"rootTurnId\":\"synthetic-value\",\"runtimeWorkspaceRoots\":[\"synthetic-value\"],\"sandboxPolicy\":{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"serviceTier\":\"synthetic-value\",\"serviceTierForTurn\":\"synthetic-value\",\"summary\":\"auto\",\"threadId\":\"synthetic-value\",\"toolOutput\":{\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"turnTrigger\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnStartResponse/0", func() any { return new(types.TurnStartResponse) }, "{\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}"},
+		{"TurnStartResponse/1", func() any { return new(types.TurnStartResponse) }, "{\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnStartedNotification/0", func() any { return new(types.TurnStartedNotification) }, "{\"threadId\":\"synthetic-value\",\"turn\":{\"id\":\"synthetic-value\",\"items\":[],\"status\":\"completed\"}}"},
+		{"TurnStartedNotification/1", func() any { return new(types.TurnStartedNotification) }, "{\"threadId\":\"synthetic-value\",\"turn\":{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnStatus/0", func() any { return new(types.TurnStatus) }, "\"completed\""},
+		{"TurnToolOutput/0", func() any { return new(types.TurnToolOutput) }, "{\"name\":\"synthetic-value\",\"output\":\"synthetic-value\"}"},
+		{"TurnToolOutput/1", func() any { return new(types.TurnToolOutput) }, "{\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TurnsPage/0", func() any { return new(types.TurnsPage) }, "{\"data\":[]}"},
+		{"TurnsPage/1", func() any { return new(types.TurnsPage) }, "{\"backwardsCursor\":\"synthetic-value\",\"data\":[{\"completedAt\":7,\"durationMs\":7,\"error\":{\"additionalDetails\":\"synthetic-value\",\"codexErrorInfo\":\"contextWindowExceeded\",\"message\":\"synthetic-value\",\"misalignment\":{\"detailedExplanation\":\"synthetic-value\",\"errorType\":\"synthetic-value\",\"reviewTarget\":\"synthetic-value\",\"steer\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"items\":[{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"itemsView\":\"notLoaded\",\"rootTurnId\":\"synthetic-value\",\"startedAt\":7,\"status\":\"completed\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"nextCursor\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/0", func() any { return new(types.UserInput) }, "{\"text\":\"synthetic-value\",\"type\":\"text\"}"},
+		{"UserInput/1", func() any { return new(types.UserInput) }, "{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/2", func() any { return new(types.UserInput) }, "{\"detail\":\"auto\",\"type\":\"image\",\"url\":\"synthetic-value\",\"fileId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/3", func() any { return new(types.UserInput) }, "{\"detail\":\"auto\",\"path\":\"synthetic-value\",\"type\":\"localImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/4", func() any { return new(types.UserInput) }, "{\"type\":\"audio\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/5", func() any { return new(types.UserInput) }, "{\"path\":\"synthetic-value\",\"type\":\"localAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/6", func() any { return new(types.UserInput) }, "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"skill\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserInput/7", func() any { return new(types.UserInput) }, "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"mention\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WebSearchAction/0", func() any { return new(types.WebSearchAction) }, "{\"type\":\"search\"}"},
+		{"WebSearchAction/1", func() any { return new(types.WebSearchAction) }, "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WebSearchAction/2", func() any { return new(types.WebSearchAction) }, "{\"type\":\"openPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WebSearchAction/3", func() any { return new(types.WebSearchAction) }, "{\"pattern\":\"synthetic-value\",\"type\":\"findInPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WebSearchAction/4", func() any { return new(types.WebSearchAction) }, "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionApprovalDecisionValue/0", func() any { return new(types.CommandExecutionApprovalDecisionValue) }, "\"accept\""},
+		{"AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision/0", func() any { return new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision) }, "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[]}}"},
+		{"AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision/1", func() any { return new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision) }, "{\"acceptWithExecpolicyAmendment\":{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision/0", func() any { return new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision) }, "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}}"},
+		{"ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision/1", func() any { return new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision) }, "{\"applyNetworkPolicyAmendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AddFileChange/0", func() any { return new(types.AddFileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"add\"}"},
+		{"AddFileChange/1", func() any { return new(types.AddFileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DeleteFileChange/0", func() any { return new(types.DeleteFileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"delete\"}"},
+		{"DeleteFileChange/1", func() any { return new(types.DeleteFileChange) }, "{\"content\":\"synthetic-value\",\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UpdateFileChange/0", func() any { return new(types.UpdateFileChange) }, "{\"type\":\"update\",\"unified_diff\":\"synthetic-value\"}"},
+		{"UpdateFileChange/1", func() any { return new(types.UpdateFileChange) }, "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"unified_diff\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReadParsedCommand/0", func() any { return new(types.ReadParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}"},
+		{"ReadParsedCommand/1", func() any { return new(types.ReadParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ListFilesParsedCommand/0", func() any { return new(types.ListFilesParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"type\":\"list_files\"}"},
+		{"ListFilesParsedCommand/1", func() any { return new(types.ListFilesParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"list_files\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SearchParsedCommand/0", func() any { return new(types.SearchParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"type\":\"search\"}"},
+		{"SearchParsedCommand/1", func() any { return new(types.SearchParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UnknownParsedCommand/0", func() any { return new(types.UnknownParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\"}"},
+		{"UnknownParsedCommand/1", func() any { return new(types.UnknownParsedCommand) }, "{\"cmd\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReviewDecisionValue/0", func() any { return new(types.ReviewDecisionValue) }, "\"approved\""},
+		{"ApprovedExecpolicyAmendmentReviewDecision/0", func() any { return new(types.ApprovedExecpolicyAmendmentReviewDecision) }, "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[]}}"},
+		{"ApprovedExecpolicyAmendmentReviewDecision/1", func() any { return new(types.ApprovedExecpolicyAmendmentReviewDecision) }, "{\"approved_execpolicy_amendment\":{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NetworkPolicyAmendmentReviewDecision/0", func() any { return new(types.NetworkPolicyAmendmentReviewDecision) }, "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}}"},
+		{"NetworkPolicyAmendmentReviewDecision/1", func() any { return new(types.NetworkPolicyAmendmentReviewDecision) }, "{\"network_policy_amendment\":{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DeniedReviewDecision/0", func() any { return new(types.DeniedReviewDecision) }, "{\"denied\":{\"rejection\":\"synthetic-value\"}}"},
+		{"DeniedReviewDecision/1", func() any { return new(types.DeniedReviewDecision) }, "{\"denied\":{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputTextAgentMessageInputContent/0", func() any { return new(types.InputTextAgentMessageInputContent) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}"},
+		{"InputTextAgentMessageInputContent/1", func() any { return new(types.InputTextAgentMessageInputContent) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"EncryptedContentAgentMessageInputContent/0", func() any { return new(types.EncryptedContentAgentMessageInputContent) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\"}"},
+		{"EncryptedContentAgentMessageInputContent/1", func() any { return new(types.EncryptedContentAgentMessageInputContent) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AskForApprovalValue/0", func() any { return new(types.AskForApprovalValue) }, "\"untrusted\""},
+		{"GranularAskForApproval/0", func() any { return new(types.GranularAskForApproval) }, "{\"granular\":{\"mcp_elicitations\":false,\"rules\":false,\"sandbox_approval\":false}}"},
+		{"GranularAskForApproval/1", func() any { return new(types.GranularAskForApproval) }, "{\"granular\":{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"EnvironmentCapabilityRootLocation/0", func() any { return new(types.EnvironmentCapabilityRootLocation) }, "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}"},
+		{"EnvironmentCapabilityRootLocation/1", func() any { return new(types.EnvironmentCapabilityRootLocation) }, "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CodexErrorInfoValue/0", func() any { return new(types.CodexErrorInfoValue) }, "\"contextWindowExceeded\""},
+		{"HTTPConnectionFailedCodexErrorInfo/0", func() any { return new(types.HTTPConnectionFailedCodexErrorInfo) }, "{\"httpConnectionFailed\":{}}"},
+		{"HTTPConnectionFailedCodexErrorInfo/1", func() any { return new(types.HTTPConnectionFailedCodexErrorInfo) }, "{\"httpConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseStreamConnectionFailedCodexErrorInfo/0", func() any { return new(types.ResponseStreamConnectionFailedCodexErrorInfo) }, "{\"responseStreamConnectionFailed\":{}}"},
+		{"ResponseStreamConnectionFailedCodexErrorInfo/1", func() any { return new(types.ResponseStreamConnectionFailedCodexErrorInfo) }, "{\"responseStreamConnectionFailed\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseStreamDisconnectedCodexErrorInfo/0", func() any { return new(types.ResponseStreamDisconnectedCodexErrorInfo) }, "{\"responseStreamDisconnected\":{}}"},
+		{"ResponseStreamDisconnectedCodexErrorInfo/1", func() any { return new(types.ResponseStreamDisconnectedCodexErrorInfo) }, "{\"responseStreamDisconnected\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseTooManyFailedAttemptsCodexErrorInfo/0", func() any { return new(types.ResponseTooManyFailedAttemptsCodexErrorInfo) }, "{\"responseTooManyFailedAttempts\":{}}"},
+		{"ResponseTooManyFailedAttemptsCodexErrorInfo/1", func() any { return new(types.ResponseTooManyFailedAttemptsCodexErrorInfo) }, "{\"responseTooManyFailedAttempts\":{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ActiveTurnNotSteerableCodexErrorInfo/0", func() any { return new(types.ActiveTurnNotSteerableCodexErrorInfo) }, "{\"activeTurnNotSteerable\":{\"turnKind\":\"review\"}}"},
+		{"ActiveTurnNotSteerableCodexErrorInfo/1", func() any { return new(types.ActiveTurnNotSteerableCodexErrorInfo) }, "{\"activeTurnNotSteerable\":{\"turnKind\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReadCommandAction/0", func() any { return new(types.ReadCommandAction) }, "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\"}"},
+		{"ReadCommandAction/1", func() any { return new(types.ReadCommandAction) }, "{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ListFilesCommandAction/0", func() any { return new(types.ListFilesCommandAction) }, "{\"command\":\"synthetic-value\",\"type\":\"listFiles\"}"},
+		{"ListFilesCommandAction/1", func() any { return new(types.ListFilesCommandAction) }, "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"listFiles\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SearchCommandAction/0", func() any { return new(types.SearchCommandAction) }, "{\"command\":\"synthetic-value\",\"type\":\"search\"}"},
+		{"SearchCommandAction/1", func() any { return new(types.SearchCommandAction) }, "{\"command\":\"synthetic-value\",\"path\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UnknownCommandAction/0", func() any { return new(types.UnknownCommandAction) }, "{\"command\":\"synthetic-value\",\"type\":\"unknown\"}"},
+		{"UnknownCommandAction/1", func() any { return new(types.UnknownCommandAction) }, "{\"command\":\"synthetic-value\",\"type\":\"unknown\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputTextContentItem/0", func() any { return new(types.InputTextContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}"},
+		{"InputTextContentItem/1", func() any { return new(types.InputTextContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputImageContentItem/0", func() any { return new(types.InputImageContentItem) }, "{\"type\":\"input_image\",\"image_url\":\"synthetic-value\"}"},
+		{"InputImageContentItem/1", func() any { return new(types.InputImageContentItem) }, "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputAudioContentItem/0", func() any { return new(types.InputAudioContentItem) }, "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\"}"},
+		{"InputAudioContentItem/1", func() any { return new(types.InputAudioContentItem) }, "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OutputTextContentItem/0", func() any { return new(types.OutputTextContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"output_text\"}"},
+		{"OutputTextContentItem/1", func() any { return new(types.OutputTextContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"output_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputTextDynamicToolCallOutputContentItem/0", func() any { return new(types.InputTextDynamicToolCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"inputText\"}"},
+		{"InputTextDynamicToolCallOutputContentItem/1", func() any { return new(types.InputTextDynamicToolCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputImageDynamicToolCallOutputContentItem/0", func() any { return new(types.InputImageDynamicToolCallOutputContentItem) }, "{\"imageUrl\":\"synthetic-value\",\"type\":\"inputImage\"}"},
+		{"InputImageDynamicToolCallOutputContentItem/1", func() any { return new(types.InputImageDynamicToolCallOutputContentItem) }, "{\"imageUrl\":\"synthetic-value\",\"type\":\"inputImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputAudioDynamicToolCallOutputContentItem/0", func() any { return new(types.InputAudioDynamicToolCallOutputContentItem) }, "{\"audioUrl\":\"synthetic-value\",\"type\":\"inputAudio\"}"},
+		{"InputAudioDynamicToolCallOutputContentItem/1", func() any { return new(types.InputAudioDynamicToolCallOutputContentItem) }, "{\"audioUrl\":\"synthetic-value\",\"type\":\"inputAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionDynamicToolNamespaceTool/0", func() any { return new(types.FunctionDynamicToolNamespaceTool) }, "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}"},
+		{"FunctionDynamicToolNamespaceTool/1", func() any { return new(types.FunctionDynamicToolNamespaceTool) }, "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionDynamicToolSpec/0", func() any { return new(types.FunctionDynamicToolSpec) }, "{\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\"}"},
+		{"FunctionDynamicToolSpec/1", func() any { return new(types.FunctionDynamicToolSpec) }, "{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NamespaceDynamicToolSpec/0", func() any { return new(types.NamespaceDynamicToolSpec) }, "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[],\"type\":\"namespace\"}"},
+		{"NamespaceDynamicToolSpec/1", func() any { return new(types.NamespaceDynamicToolSpec) }, "{\"description\":\"synthetic-value\",\"name\":\"synthetic-value\",\"tools\":[{\"deferLoading\":false,\"description\":\"synthetic-value\",\"inputSchema\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"name\":\"synthetic-value\",\"type\":\"function\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"namespace\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"PathFileSystemPath/0", func() any { return new(types.PathFileSystemPath) }, "{\"path\":\"synthetic-value\",\"type\":\"path\"}"},
+		{"PathFileSystemPath/1", func() any { return new(types.PathFileSystemPath) }, "{\"path\":\"synthetic-value\",\"type\":\"path\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"GlobPatternFileSystemPath/0", func() any { return new(types.GlobPatternFileSystemPath) }, "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\"}"},
+		{"GlobPatternFileSystemPath/1", func() any { return new(types.GlobPatternFileSystemPath) }, "{\"pattern\":\"synthetic-value\",\"type\":\"glob_pattern\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SpecialFileSystemPath/0", func() any { return new(types.SpecialFileSystemPath) }, "{\"type\":\"special\",\"value\":{\"kind\":\"root\"}}"},
+		{"SpecialFileSystemPath/1", func() any { return new(types.SpecialFileSystemPath) }, "{\"type\":\"special\",\"value\":{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"RootFileSystemSpecialPath/0", func() any { return new(types.RootFileSystemSpecialPath) }, "{\"kind\":\"root\"}"},
+		{"RootFileSystemSpecialPath/1", func() any { return new(types.RootFileSystemSpecialPath) }, "{\"kind\":\"root\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MinimalFileSystemSpecialPath/0", func() any { return new(types.MinimalFileSystemSpecialPath) }, "{\"kind\":\"minimal\"}"},
+		{"MinimalFileSystemSpecialPath/1", func() any { return new(types.MinimalFileSystemSpecialPath) }, "{\"kind\":\"minimal\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"KindFileSystemSpecialPath/0", func() any { return new(types.KindFileSystemSpecialPath) }, "{\"kind\":\"project_roots\"}"},
+		{"KindFileSystemSpecialPath/1", func() any { return new(types.KindFileSystemSpecialPath) }, "{\"kind\":\"project_roots\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TmpdirFileSystemSpecialPath/0", func() any { return new(types.TmpdirFileSystemSpecialPath) }, "{\"kind\":\"tmpdir\"}"},
+		{"TmpdirFileSystemSpecialPath/1", func() any { return new(types.TmpdirFileSystemSpecialPath) }, "{\"kind\":\"tmpdir\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SlashTmpFileSystemSpecialPath/0", func() any { return new(types.SlashTmpFileSystemSpecialPath) }, "{\"kind\":\"slash_tmp\"}"},
+		{"SlashTmpFileSystemSpecialPath/1", func() any { return new(types.SlashTmpFileSystemSpecialPath) }, "{\"kind\":\"slash_tmp\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileSystemSpecialPathVariant5/0", func() any { return new(types.FileSystemSpecialPathVariant5) }, "{\"kind\":\"unknown\",\"path\":\"synthetic-value\"}"},
+		{"FileSystemSpecialPathVariant5/1", func() any { return new(types.FileSystemSpecialPathVariant5) }, "{\"kind\":\"unknown\",\"path\":\"synthetic-value\",\"subpath\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputTextFunctionCallOutputContentItem/0", func() any { return new(types.InputTextFunctionCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\"}"},
+		{"InputTextFunctionCallOutputContentItem/1", func() any { return new(types.InputTextFunctionCallOutputContentItem) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputImageFunctionCallOutputContentItem/0", func() any { return new(types.InputImageFunctionCallOutputContentItem) }, "{\"type\":\"input_image\",\"image_url\":\"synthetic-value\"}"},
+		{"InputImageFunctionCallOutputContentItem/1", func() any { return new(types.InputImageFunctionCallOutputContentItem) }, "{\"detail\":\"auto\",\"type\":\"input_image\",\"image_url\":\"synthetic-value\",\"file_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputAudioFunctionCallOutputContentItem/0", func() any { return new(types.InputAudioFunctionCallOutputContentItem) }, "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\"}"},
+		{"InputAudioFunctionCallOutputContentItem/1", func() any { return new(types.InputAudioFunctionCallOutputContentItem) }, "{\"audio_url\":\"synthetic-value\",\"type\":\"input_audio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"EncryptedContentFunctionCallOutputContentItem/0", func() any { return new(types.EncryptedContentFunctionCallOutputContentItem) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\"}"},
+		{"EncryptedContentFunctionCallOutputContentItem/1", func() any { return new(types.EncryptedContentFunctionCallOutputContentItem) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UsageLimitExceededImageGenerationFailure/0", func() any { return new(types.UsageLimitExceededImageGenerationFailure) }, "{\"limitId\":\"synthetic-value\",\"type\":\"usageLimitExceeded\"}"},
+		{"UsageLimitExceededImageGenerationFailure/1", func() any { return new(types.UsageLimitExceededImageGenerationFailure) }, "{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ExecLocalShellAction/0", func() any { return new(types.ExecLocalShellAction) }, "{\"command\":[],\"type\":\"exec\"}"},
+		{"ExecLocalShellAction/1", func() any { return new(types.ExecLocalShellAction) }, "{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MultiAgentModeValue/0", func() any { return new(types.MultiAgentModeValue) }, "\"explicitRequestOnly\""},
+		{"CustomMultiAgentMode/0", func() any { return new(types.CustomMultiAgentMode) }, "{\"custom\":\"synthetic-value\"}"},
+		{"CustomMultiAgentMode/1", func() any { return new(types.CustomMultiAgentMode) }, "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AddPatchChangeKind/0", func() any { return new(types.AddPatchChangeKind) }, "{\"type\":\"add\"}"},
+		{"AddPatchChangeKind/1", func() any { return new(types.AddPatchChangeKind) }, "{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DeletePatchChangeKind/0", func() any { return new(types.DeletePatchChangeKind) }, "{\"type\":\"delete\"}"},
+		{"DeletePatchChangeKind/1", func() any { return new(types.DeletePatchChangeKind) }, "{\"type\":\"delete\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UpdatePatchChangeKind/0", func() any { return new(types.UpdatePatchChangeKind) }, "{\"type\":\"update\"}"},
+		{"UpdatePatchChangeKind/1", func() any { return new(types.UpdatePatchChangeKind) }, "{\"move_path\":\"synthetic-value\",\"type\":\"update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReasoningTextReasoningItemContent/0", func() any { return new(types.ReasoningTextReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\"}"},
+		{"ReasoningTextReasoningItemContent/1", func() any { return new(types.ReasoningTextReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TextReasoningItemContent/0", func() any { return new(types.TextReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"text\"}"},
+		{"TextReasoningItemContent/1", func() any { return new(types.TextReasoningItemContent) }, "{\"text\":\"synthetic-value\",\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SummaryTextReasoningItemReasoningSummary/0", func() any { return new(types.SummaryTextReasoningItemReasoningSummary) }, "{\"text\":\"synthetic-value\",\"type\":\"summary_text\"}"},
+		{"SummaryTextReasoningItemReasoningSummary/1", func() any { return new(types.SummaryTextReasoningItemReasoningSummary) }, "{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AdditionalToolsResponseItem/0", func() any { return new(types.AdditionalToolsResponseItem) }, "{\"role\":\"synthetic-value\",\"tools\":[],\"type\":\"additional_tools\"}"},
+		{"AdditionalToolsResponseItem/1", func() any { return new(types.AdditionalToolsResponseItem) }, "{\"id\":\"synthetic-value\",\"role\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"additional_tools\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MessageResponseItem/0", func() any { return new(types.MessageResponseItem) }, "{\"content\":[],\"role\":\"synthetic-value\",\"type\":\"message\"}"},
+		{"MessageResponseItem/1", func() any { return new(types.MessageResponseItem) }, "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"role\":\"synthetic-value\",\"type\":\"message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AgentMessageResponseItem/0", func() any { return new(types.AgentMessageResponseItem) }, "{\"author\":\"synthetic-value\",\"content\":[],\"recipient\":\"synthetic-value\",\"type\":\"agent_message\"}"},
+		{"AgentMessageResponseItem/1", func() any { return new(types.AgentMessageResponseItem) }, "{\"author\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"recipient\":\"synthetic-value\",\"type\":\"agent_message\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReasoningResponseItem/0", func() any { return new(types.ReasoningResponseItem) }, "{\"summary\":[],\"type\":\"reasoning\"}"},
+		{"ReasoningResponseItem/1", func() any { return new(types.ReasoningResponseItem) }, "{\"content\":[{\"text\":\"synthetic-value\",\"type\":\"reasoning_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"summary\":[{\"text\":\"synthetic-value\",\"type\":\"summary_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"LocalShellCallResponseItem/0", func() any { return new(types.LocalShellCallResponseItem) }, "{\"action\":{\"command\":[],\"type\":\"exec\"},\"status\":\"completed\",\"type\":\"local_shell_call\"}"},
+		{"LocalShellCallResponseItem/1", func() any { return new(types.LocalShellCallResponseItem) }, "{\"action\":{\"command\":[\"synthetic-value\"],\"env\":{\"sample\":\"synthetic-value\"},\"timeout_ms\":7,\"type\":\"exec\",\"user\":\"synthetic-value\",\"working_directory\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"completed\",\"type\":\"local_shell_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallResponseItem/0", func() any { return new(types.FunctionCallResponseItem) }, "{\"arguments\":\"synthetic-value\",\"call_id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"type\":\"function_call\"}"},
+		{"FunctionCallResponseItem/1", func() any { return new(types.FunctionCallResponseItem) }, "{\"arguments\":\"synthetic-value\",\"call_id\":\"synthetic-value\",\"encrypted_function_args\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"type\":\"function_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ToolSearchCallResponseItem/0", func() any { return new(types.ToolSearchCallResponseItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"execution\":\"synthetic-value\",\"type\":\"tool_search_call\"}"},
+		{"ToolSearchCallResponseItem/1", func() any { return new(types.ToolSearchCallResponseItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"tool_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallOutputResponseItem/0", func() any { return new(types.FunctionCallOutputResponseItem) }, "{\"output\":\"synthetic-value\",\"type\":\"function_call_output\"}"},
+		{"FunctionCallOutputResponseItem/1", func() any { return new(types.FunctionCallOutputResponseItem) }, "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"function_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CustomToolCallResponseItem/0", func() any { return new(types.CustomToolCallResponseItem) }, "{\"call_id\":\"synthetic-value\",\"input\":\"synthetic-value\",\"name\":\"synthetic-value\",\"type\":\"custom_tool_call\"}"},
+		{"CustomToolCallResponseItem/1", func() any { return new(types.CustomToolCallResponseItem) }, "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"input\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"custom_tool_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CustomToolCallOutputResponseItem/0", func() any { return new(types.CustomToolCallOutputResponseItem) }, "{\"call_id\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"custom_tool_call_output\"}"},
+		{"CustomToolCallOutputResponseItem/1", func() any { return new(types.CustomToolCallOutputResponseItem) }, "{\"call_id\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"name\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"custom_tool_call_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ToolSearchOutputResponseItem/0", func() any { return new(types.ToolSearchOutputResponseItem) }, "{\"execution\":\"synthetic-value\",\"status\":\"synthetic-value\",\"tools\":[],\"type\":\"tool_search_output\"}"},
+		{"ToolSearchOutputResponseItem/1", func() any { return new(types.ToolSearchOutputResponseItem) }, "{\"call_id\":\"synthetic-value\",\"execution\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"tools\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"tool_search_output\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WebSearchCallResponseItem/0", func() any { return new(types.WebSearchCallResponseItem) }, "{\"type\":\"web_search_call\"}"},
+		{"WebSearchCallResponseItem/1", func() any { return new(types.WebSearchCallResponseItem) }, "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"status\":\"synthetic-value\",\"type\":\"web_search_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ImageGenerationCallResponseItem/0", func() any { return new(types.ImageGenerationCallResponseItem) }, "{\"result\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"image_generation_call\"}"},
+		{"ImageGenerationCallResponseItem/1", func() any { return new(types.ImageGenerationCallResponseItem) }, "{\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"result\":\"synthetic-value\",\"revised_prompt\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"image_generation_call\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CompactionResponseItem/0", func() any { return new(types.CompactionResponseItem) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"compaction\"}"},
+		{"CompactionResponseItem/1", func() any { return new(types.CompactionResponseItem) }, "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ConfigurationUpdateResponseItem/0", func() any { return new(types.ConfigurationUpdateResponseItem) }, "{\"reasoning\":{\"effort\":\"synthetic-value\"},\"type\":\"configuration_update\"}"},
+		{"ConfigurationUpdateResponseItem/1", func() any { return new(types.ConfigurationUpdateResponseItem) }, "{\"reasoning\":{\"effort\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"configuration_update\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CompactionTriggerResponseItem/0", func() any { return new(types.CompactionTriggerResponseItem) }, "{\"type\":\"compaction_trigger\"}"},
+		{"CompactionTriggerResponseItem/1", func() any { return new(types.CompactionTriggerResponseItem) }, "{\"type\":\"compaction_trigger\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ContextCompactionResponseItem/0", func() any { return new(types.ContextCompactionResponseItem) }, "{\"type\":\"context_compaction\"}"},
+		{"ContextCompactionResponseItem/1", func() any { return new(types.ContextCompactionResponseItem) }, "{\"encrypted_content\":\"synthetic-value\",\"id\":\"synthetic-value\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"type\":\"context_compaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OtherResponseItem/0", func() any { return new(types.OtherResponseItem) }, "{\"type\":\"other\"}"},
+		{"OtherResponseItem/1", func() any { return new(types.OtherResponseItem) }, "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SearchResponsesAPIWebSearchAction/0", func() any { return new(types.SearchResponsesAPIWebSearchAction) }, "{\"type\":\"search\"}"},
+		{"SearchResponsesAPIWebSearchAction/1", func() any { return new(types.SearchResponsesAPIWebSearchAction) }, "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OpenPageResponsesAPIWebSearchAction/0", func() any { return new(types.OpenPageResponsesAPIWebSearchAction) }, "{\"type\":\"open_page\"}"},
+		{"OpenPageResponsesAPIWebSearchAction/1", func() any { return new(types.OpenPageResponsesAPIWebSearchAction) }, "{\"type\":\"open_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FindInPageResponsesAPIWebSearchAction/0", func() any { return new(types.FindInPageResponsesAPIWebSearchAction) }, "{\"type\":\"find_in_page\"}"},
+		{"FindInPageResponsesAPIWebSearchAction/1", func() any { return new(types.FindInPageResponsesAPIWebSearchAction) }, "{\"pattern\":\"synthetic-value\",\"type\":\"find_in_page\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OtherResponsesAPIWebSearchAction/0", func() any { return new(types.OtherResponsesAPIWebSearchAction) }, "{\"type\":\"other\"}"},
+		{"OtherResponsesAPIWebSearchAction/1", func() any { return new(types.OtherResponsesAPIWebSearchAction) }, "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DangerFullAccessSandboxPolicy/0", func() any { return new(types.DangerFullAccessSandboxPolicy) }, "{\"type\":\"dangerFullAccess\"}"},
+		{"DangerFullAccessSandboxPolicy/1", func() any { return new(types.DangerFullAccessSandboxPolicy) }, "{\"type\":\"dangerFullAccess\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReadOnlySandboxPolicy/0", func() any { return new(types.ReadOnlySandboxPolicy) }, "{\"type\":\"readOnly\"}"},
+		{"ReadOnlySandboxPolicy/1", func() any { return new(types.ReadOnlySandboxPolicy) }, "{\"networkAccess\":false,\"type\":\"readOnly\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ExternalSandboxSandboxPolicy/0", func() any { return new(types.ExternalSandboxSandboxPolicy) }, "{\"type\":\"externalSandbox\"}"},
+		{"ExternalSandboxSandboxPolicy/1", func() any { return new(types.ExternalSandboxSandboxPolicy) }, "{\"networkAccess\":\"restricted\",\"type\":\"externalSandbox\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WorkspaceWriteSandboxPolicy/0", func() any { return new(types.WorkspaceWriteSandboxPolicy) }, "{\"type\":\"workspaceWrite\"}"},
+		{"WorkspaceWriteSandboxPolicy/1", func() any { return new(types.WorkspaceWriteSandboxPolicy) }, "{\"excludeSlashTmp\":false,\"excludeTmpdirEnvVar\":false,\"networkAccess\":false,\"type\":\"workspaceWrite\",\"writableRoots\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SessionSourceValue/0", func() any { return new(types.SessionSourceValue) }, "\"cli\""},
+		{"CustomSessionSource/0", func() any { return new(types.CustomSessionSource) }, "{\"custom\":\"synthetic-value\"}"},
+		{"CustomSessionSource/1", func() any { return new(types.CustomSessionSource) }, "{\"custom\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SubAgentSessionSource/0", func() any { return new(types.SubAgentSessionSource) }, "{\"subAgent\":\"review\"}"},
+		{"SubAgentSessionSource/1", func() any { return new(types.SubAgentSessionSource) }, "{\"subAgent\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SubAgentSourceValue/0", func() any { return new(types.SubAgentSourceValue) }, "\"review\""},
+		{"ThreadSpawnSubAgentSource/0", func() any { return new(types.ThreadSpawnSubAgentSource) }, "{\"thread_spawn\":{\"depth\":7,\"parent_thread_id\":\"synthetic-value\"}}"},
+		{"ThreadSpawnSubAgentSource/1", func() any { return new(types.ThreadSpawnSubAgentSource) }, "{\"thread_spawn\":{\"agent_nickname\":\"synthetic-value\",\"agent_path\":\"synthetic-value\",\"agent_role\":\"synthetic-value\",\"depth\":7,\"parent_thread_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OtherSubAgentSource/0", func() any { return new(types.OtherSubAgentSource) }, "{\"other\":\"synthetic-value\"}"},
+		{"OtherSubAgentSource/1", func() any { return new(types.OtherSubAgentSource) }, "{\"other\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserMessageThreadItem/0", func() any { return new(types.UserMessageThreadItem) }, "{\"content\":[],\"id\":\"synthetic-value\",\"type\":\"userMessage\"}"},
+		{"UserMessageThreadItem/1", func() any { return new(types.UserMessageThreadItem) }, "{\"clientId\":\"synthetic-value\",\"content\":[{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"userMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"HookPromptThreadItem/0", func() any { return new(types.HookPromptThreadItem) }, "{\"fragments\":[],\"id\":\"synthetic-value\",\"type\":\"hookPrompt\"}"},
+		{"HookPromptThreadItem/1", func() any { return new(types.HookPromptThreadItem) }, "{\"fragments\":[{\"hookRunId\":\"synthetic-value\",\"text\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"type\":\"hookPrompt\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AgentMessageThreadItem/0", func() any { return new(types.AgentMessageThreadItem) }, "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"agentMessage\"}"},
+		{"AgentMessageThreadItem/1", func() any { return new(types.AgentMessageThreadItem) }, "{\"delivery\":\"async\",\"id\":\"synthetic-value\",\"memoryCitation\":{\"entries\":[{\"lineEnd\":7,\"lineStart\":7,\"note\":\"synthetic-value\",\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"threadIds\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"phase\":\"commentary\",\"questions\":[{\"options\":[\"synthetic-value\"],\"title\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"text\":\"synthetic-value\",\"type\":\"agentMessage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FunctionCallOutputThreadItem/0", func() any { return new(types.FunctionCallOutputThreadItem) }, "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"functionCallOutput\"}"},
+		{"FunctionCallOutputThreadItem/1", func() any { return new(types.FunctionCallOutputThreadItem) }, "{\"id\":\"synthetic-value\",\"name\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"output\":\"synthetic-value\",\"type\":\"functionCallOutput\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"PlanThreadItem/0", func() any { return new(types.PlanThreadItem) }, "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"plan\"}"},
+		{"PlanThreadItem/1", func() any { return new(types.PlanThreadItem) }, "{\"id\":\"synthetic-value\",\"text\":\"synthetic-value\",\"type\":\"plan\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReasoningThreadItem/0", func() any { return new(types.ReasoningThreadItem) }, "{\"id\":\"synthetic-value\",\"type\":\"reasoning\"}"},
+		{"ReasoningThreadItem/1", func() any { return new(types.ReasoningThreadItem) }, "{\"content\":[\"synthetic-value\"],\"id\":\"synthetic-value\",\"summary\":[\"synthetic-value\"],\"type\":\"reasoning\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CommandExecutionThreadItem/0", func() any { return new(types.CommandExecutionThreadItem) }, "{\"command\":\"synthetic-value\",\"commandActions\":[],\"cwd\":\"synthetic-value\",\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"commandExecution\"}"},
+		{"CommandExecutionThreadItem/1", func() any { return new(types.CommandExecutionThreadItem) }, "{\"aggregatedOutput\":\"synthetic-value\",\"command\":\"synthetic-value\",\"commandActions\":[{\"command\":\"synthetic-value\",\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"read\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"cwd\":\"synthetic-value\",\"durationMs\":7,\"exitCode\":7,\"id\":\"synthetic-value\",\"pluginId\":\"synthetic-value\",\"processId\":\"synthetic-value\",\"scriptPath\":\"synthetic-value\",\"source\":\"agent\",\"status\":\"inProgress\",\"type\":\"commandExecution\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FileChangeThreadItem/0", func() any { return new(types.FileChangeThreadItem) }, "{\"changes\":[],\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"fileChange\"}"},
+		{"FileChangeThreadItem/1", func() any { return new(types.FileChangeThreadItem) }, "{\"changes\":[{\"diff\":\"synthetic-value\",\"kind\":{\"type\":\"add\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"path\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"type\":\"fileChange\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MCPToolCallThreadItem/0", func() any { return new(types.MCPToolCallThreadItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"id\":\"synthetic-value\",\"server\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"mcpToolCall\"}"},
+		{"MCPToolCallThreadItem/1", func() any { return new(types.MCPToolCallThreadItem) }, "{\"appContext\":{\"actionName\":\"synthetic-value\",\"appName\":\"synthetic-value\",\"connectorId\":\"synthetic-value\",\"linkId\":\"synthetic-value\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"durationMs\":7,\"error\":{\"message\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"mcpAppResourceUri\":\"synthetic-value\",\"mcpAppUi\":{\"preferredModelDisplayMode\":\"inline\",\"resourceUri\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"pluginId\":\"synthetic-value\",\"readOnlyHint\":false,\"result\":{\"_meta\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"content\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"structuredContent\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"server\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"mcpToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DynamicToolCallThreadItem/0", func() any { return new(types.DynamicToolCallThreadItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"id\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"synthetic-value\",\"type\":\"dynamicToolCall\"}"},
+		{"DynamicToolCallThreadItem/1", func() any { return new(types.DynamicToolCallThreadItem) }, "{\"arguments\":{\"opaque\":9007199254740993,\"nested\":[null,false]},\"contentItems\":[{\"text\":\"synthetic-value\",\"type\":\"inputText\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"durationMs\":7,\"id\":\"synthetic-value\",\"namespace\":\"synthetic-value\",\"status\":\"inProgress\",\"success\":false,\"tool\":\"synthetic-value\",\"type\":\"dynamicToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"CollabAgentToolCallThreadItem/0", func() any { return new(types.CollabAgentToolCallThreadItem) }, "{\"agentsStates\":{\"sample\":{\"status\":\"pendingInit\"}},\"id\":\"synthetic-value\",\"receiverThreadIds\":[],\"senderThreadId\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"spawnAgent\",\"type\":\"collabAgentToolCall\"}"},
+		{"CollabAgentToolCallThreadItem/1", func() any { return new(types.CollabAgentToolCallThreadItem) }, "{\"agentsStates\":{\"sample\":{\"message\":\"synthetic-value\",\"status\":\"pendingInit\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}},\"id\":\"synthetic-value\",\"model\":\"synthetic-value\",\"prompt\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"receiverThreadIds\":[\"synthetic-value\"],\"senderThreadId\":\"synthetic-value\",\"status\":\"inProgress\",\"tool\":\"spawnAgent\",\"type\":\"collabAgentToolCall\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SubAgentActivityThreadItem/0", func() any { return new(types.SubAgentActivityThreadItem) }, "{\"agentPath\":\"synthetic-value\",\"agentThreadId\":\"synthetic-value\",\"id\":\"synthetic-value\",\"kind\":\"started\",\"type\":\"subAgentActivity\"}"},
+		{"SubAgentActivityThreadItem/1", func() any { return new(types.SubAgentActivityThreadItem) }, "{\"agentPath\":\"synthetic-value\",\"agentThreadId\":\"synthetic-value\",\"id\":\"synthetic-value\",\"kind\":\"started\",\"model\":\"synthetic-value\",\"reasoningEffort\":\"synthetic-value\",\"type\":\"subAgentActivity\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"WebSearchThreadItem/0", func() any { return new(types.WebSearchThreadItem) }, "{\"id\":\"synthetic-value\",\"query\":\"synthetic-value\",\"type\":\"webSearch\"}"},
+		{"WebSearchThreadItem/1", func() any { return new(types.WebSearchThreadItem) }, "{\"action\":{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"query\":\"synthetic-value\",\"results\":[{\"opaque\":9007199254740993,\"nested\":[null,false]}],\"type\":\"webSearch\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ImageViewThreadItem/0", func() any { return new(types.ImageViewThreadItem) }, "{\"id\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"imageView\"}"},
+		{"ImageViewThreadItem/1", func() any { return new(types.ImageViewThreadItem) }, "{\"id\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"imageView\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SleepThreadItem/0", func() any { return new(types.SleepThreadItem) }, "{\"durationMs\":7,\"id\":\"synthetic-value\",\"type\":\"sleep\"}"},
+		{"SleepThreadItem/1", func() any { return new(types.SleepThreadItem) }, "{\"durationMs\":7,\"id\":\"synthetic-value\",\"type\":\"sleep\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ImageGenerationThreadItem/0", func() any { return new(types.ImageGenerationThreadItem) }, "{\"id\":\"synthetic-value\",\"result\":\"synthetic-value\",\"status\":\"synthetic-value\",\"type\":\"imageGeneration\"}"},
+		{"ImageGenerationThreadItem/1", func() any { return new(types.ImageGenerationThreadItem) }, "{\"failure\":{\"limitId\":\"synthetic-value\",\"resetsAt\":7,\"type\":\"usageLimitExceeded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"id\":\"synthetic-value\",\"result\":\"synthetic-value\",\"revisedPrompt\":\"synthetic-value\",\"savedPath\":\"synthetic-value\",\"status\":\"synthetic-value\",\"transparentBackground\":false,\"type\":\"imageGeneration\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"EnteredReviewModeThreadItem/0", func() any { return new(types.EnteredReviewModeThreadItem) }, "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"enteredReviewMode\"}"},
+		{"EnteredReviewModeThreadItem/1", func() any { return new(types.EnteredReviewModeThreadItem) }, "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"enteredReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ExitedReviewModeThreadItem/0", func() any { return new(types.ExitedReviewModeThreadItem) }, "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"exitedReviewMode\"}"},
+		{"ExitedReviewModeThreadItem/1", func() any { return new(types.ExitedReviewModeThreadItem) }, "{\"id\":\"synthetic-value\",\"review\":\"synthetic-value\",\"type\":\"exitedReviewMode\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ContextCompactionThreadItem/0", func() any { return new(types.ContextCompactionThreadItem) }, "{\"id\":\"synthetic-value\",\"type\":\"contextCompaction\"}"},
+		{"ContextCompactionThreadItem/1", func() any { return new(types.ContextCompactionThreadItem) }, "{\"id\":\"synthetic-value\",\"type\":\"contextCompaction\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NotLoadedThreadStatus/0", func() any { return new(types.NotLoadedThreadStatus) }, "{\"type\":\"notLoaded\"}"},
+		{"NotLoadedThreadStatus/1", func() any { return new(types.NotLoadedThreadStatus) }, "{\"type\":\"notLoaded\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"IdleThreadStatus/0", func() any { return new(types.IdleThreadStatus) }, "{\"type\":\"idle\"}"},
+		{"IdleThreadStatus/1", func() any { return new(types.IdleThreadStatus) }, "{\"type\":\"idle\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SystemErrorThreadStatus/0", func() any { return new(types.SystemErrorThreadStatus) }, "{\"type\":\"systemError\"}"},
+		{"SystemErrorThreadStatus/1", func() any { return new(types.SystemErrorThreadStatus) }, "{\"type\":\"systemError\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ActiveThreadStatus/0", func() any { return new(types.ActiveThreadStatus) }, "{\"activeFlags\":[],\"type\":\"active\"}"},
+		{"ActiveThreadStatus/1", func() any { return new(types.ActiveThreadStatus) }, "{\"activeFlags\":[\"waitingOnApproval\"],\"type\":\"active\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"TextUserInput/0", func() any { return new(types.TextUserInput) }, "{\"text\":\"synthetic-value\",\"type\":\"text\"}"},
+		{"TextUserInput/1", func() any { return new(types.TextUserInput) }, "{\"text\":\"synthetic-value\",\"text_elements\":[{\"byteRange\":{\"end\":7,\"start\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"placeholder\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}],\"type\":\"text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ImageUserInput/0", func() any { return new(types.ImageUserInput) }, "{\"type\":\"image\",\"url\":\"synthetic-value\"}"},
+		{"ImageUserInput/1", func() any { return new(types.ImageUserInput) }, "{\"detail\":\"auto\",\"type\":\"image\",\"url\":\"synthetic-value\",\"fileId\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"LocalImageUserInput/0", func() any { return new(types.LocalImageUserInput) }, "{\"path\":\"synthetic-value\",\"type\":\"localImage\"}"},
+		{"LocalImageUserInput/1", func() any { return new(types.LocalImageUserInput) }, "{\"detail\":\"auto\",\"path\":\"synthetic-value\",\"type\":\"localImage\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AudioUserInput/0", func() any { return new(types.AudioUserInput) }, "{\"type\":\"audio\",\"url\":\"synthetic-value\"}"},
+		{"AudioUserInput/1", func() any { return new(types.AudioUserInput) }, "{\"type\":\"audio\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"LocalAudioUserInput/0", func() any { return new(types.LocalAudioUserInput) }, "{\"path\":\"synthetic-value\",\"type\":\"localAudio\"}"},
+		{"LocalAudioUserInput/1", func() any { return new(types.LocalAudioUserInput) }, "{\"path\":\"synthetic-value\",\"type\":\"localAudio\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SkillUserInput/0", func() any { return new(types.SkillUserInput) }, "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"skill\"}"},
+		{"SkillUserInput/1", func() any { return new(types.SkillUserInput) }, "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"skill\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"MentionUserInput/0", func() any { return new(types.MentionUserInput) }, "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"mention\"}"},
+		{"MentionUserInput/1", func() any { return new(types.MentionUserInput) }, "{\"name\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"mention\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"SearchWebSearchAction/0", func() any { return new(types.SearchWebSearchAction) }, "{\"type\":\"search\"}"},
+		{"SearchWebSearchAction/1", func() any { return new(types.SearchWebSearchAction) }, "{\"queries\":[\"synthetic-value\"],\"query\":\"synthetic-value\",\"type\":\"search\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OpenPageWebSearchAction/0", func() any { return new(types.OpenPageWebSearchAction) }, "{\"type\":\"openPage\"}"},
+		{"OpenPageWebSearchAction/1", func() any { return new(types.OpenPageWebSearchAction) }, "{\"type\":\"openPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"FindInPageWebSearchAction/0", func() any { return new(types.FindInPageWebSearchAction) }, "{\"type\":\"findInPage\"}"},
+		{"FindInPageWebSearchAction/1", func() any { return new(types.FindInPageWebSearchAction) }, "{\"pattern\":\"synthetic-value\",\"type\":\"findInPage\",\"url\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"OtherWebSearchAction/0", func() any { return new(types.OtherWebSearchAction) }, "{\"type\":\"other\"}"},
+		{"OtherWebSearchAction/1", func() any { return new(types.OtherWebSearchAction) }, "{\"type\":\"other\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment/0", func() any {
+			return new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment)
+		}, "{\"execpolicy_amendment\":[]}"},
+		{"AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment/1", func() any {
+			return new(types.AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecisionAcceptWithExecpolicyAmendment)
+		}, "{\"execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment/0", func() any {
+			return new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment)
+		}, "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}"},
+		{"ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment/1", func() any {
+			return new(types.ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecisionApplyNetworkPolicyAmendment)
+		}, "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"AddFileChangeType/0", func() any { return new(types.AddFileChangeType) }, "\"add\""},
+		{"DeleteFileChangeType/0", func() any { return new(types.DeleteFileChangeType) }, "\"delete\""},
+		{"UpdateFileChangeType/0", func() any { return new(types.UpdateFileChangeType) }, "\"update\""},
+		{"ReadParsedCommandType/0", func() any { return new(types.ReadParsedCommandType) }, "\"read\""},
+		{"ListFilesParsedCommandType/0", func() any { return new(types.ListFilesParsedCommandType) }, "\"list_files\""},
+		{"SearchParsedCommandType/0", func() any { return new(types.SearchParsedCommandType) }, "\"search\""},
+		{"UnknownParsedCommandType/0", func() any { return new(types.UnknownParsedCommandType) }, "\"unknown\""},
+		{"ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment/0", func() any { return new(types.ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment) }, "{\"proposed_execpolicy_amendment\":[]}"},
+		{"ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment/1", func() any { return new(types.ApprovedExecpolicyAmendmentReviewDecisionApprovedExecpolicyAmendment) }, "{\"proposed_execpolicy_amendment\":[\"synthetic-value\"],\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment/0", func() any { return new(types.NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment) }, "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\"}}"},
+		{"NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment/1", func() any { return new(types.NetworkPolicyAmendmentReviewDecisionNetworkPolicyAmendment) }, "{\"network_policy_amendment\":{\"action\":\"allow\",\"host\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"DeniedReviewDecisionDenied/0", func() any { return new(types.DeniedReviewDecisionDenied) }, "{\"rejection\":\"synthetic-value\"}"},
+		{"DeniedReviewDecisionDenied/1", func() any { return new(types.DeniedReviewDecisionDenied) }, "{\"rejection\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"InputTextAgentMessageInputContentType/0", func() any { return new(types.InputTextAgentMessageInputContentType) }, "\"input_text\""},
+		{"EncryptedContentAgentMessageInputContentType/0", func() any { return new(types.EncryptedContentAgentMessageInputContentType) }, "\"encrypted_content\""},
+		{"GranularAskForApprovalGranular/0", func() any { return new(types.GranularAskForApprovalGranular) }, "{\"mcp_elicitations\":false,\"rules\":false,\"sandbox_approval\":false}"},
+		{"GranularAskForApprovalGranular/1", func() any { return new(types.GranularAskForApprovalGranular) }, "{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"EnvironmentCapabilityRootLocationType/0", func() any { return new(types.EnvironmentCapabilityRootLocationType) }, "\"environment\""},
+		{"HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed/0", func() any { return new(types.HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed) }, "{}"},
+		{"HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed/1", func() any { return new(types.HTTPConnectionFailedCodexErrorInfoHTTPConnectionFailed) }, "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed/0", func() any {
+			return new(types.ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed)
+		}, "{}"},
+		{"ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed/1", func() any {
+			return new(types.ResponseStreamConnectionFailedCodexErrorInfoResponseStreamConnectionFailed)
+		}, "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected/0", func() any { return new(types.ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected) }, "{}"},
+		{"ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected/1", func() any { return new(types.ResponseStreamDisconnectedCodexErrorInfoResponseStreamDisconnected) }, "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts/0", func() any { return new(types.ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts) }, "{}"},
+		{"ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts/1", func() any { return new(types.ResponseTooManyFailedAttemptsCodexErrorInfoResponseTooManyFailedAttempts) }, "{\"httpStatusCode\":7,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable/0", func() any { return new(types.ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable) }, "{\"turnKind\":\"review\"}"},
+		{"ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable/1", func() any { return new(types.ActiveTurnNotSteerableCodexErrorInfoActiveTurnNotSteerable) }, "{\"turnKind\":\"review\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"ReadCommandActionType/0", func() any { return new(types.ReadCommandActionType) }, "\"read\""},
+		{"ListFilesCommandActionType/0", func() any { return new(types.ListFilesCommandActionType) }, "\"listFiles\""},
+		{"SearchCommandActionType/0", func() any { return new(types.SearchCommandActionType) }, "\"search\""},
+		{"UnknownCommandActionType/0", func() any { return new(types.UnknownCommandActionType) }, "\"unknown\""},
+		{"InputTextContentItemType/0", func() any { return new(types.InputTextContentItemType) }, "\"input_text\""},
+		{"InputImageContentItemType/0", func() any { return new(types.InputImageContentItemType) }, "\"input_image\""},
+		{"InputAudioContentItemType/0", func() any { return new(types.InputAudioContentItemType) }, "\"input_audio\""},
+		{"OutputTextContentItemType/0", func() any { return new(types.OutputTextContentItemType) }, "\"output_text\""},
+		{"InputTextDynamicToolCallOutputContentItemType/0", func() any { return new(types.InputTextDynamicToolCallOutputContentItemType) }, "\"inputText\""},
+		{"InputImageDynamicToolCallOutputContentItemType/0", func() any { return new(types.InputImageDynamicToolCallOutputContentItemType) }, "\"inputImage\""},
+		{"InputAudioDynamicToolCallOutputContentItemType/0", func() any { return new(types.InputAudioDynamicToolCallOutputContentItemType) }, "\"inputAudio\""},
+		{"FunctionDynamicToolNamespaceToolType/0", func() any { return new(types.FunctionDynamicToolNamespaceToolType) }, "\"function\""},
+		{"FunctionDynamicToolSpecType/0", func() any { return new(types.FunctionDynamicToolSpecType) }, "\"function\""},
+		{"NamespaceDynamicToolSpecType/0", func() any { return new(types.NamespaceDynamicToolSpecType) }, "\"namespace\""},
+		{"PathFileSystemPathType/0", func() any { return new(types.PathFileSystemPathType) }, "\"path\""},
+		{"GlobPatternFileSystemPathType/0", func() any { return new(types.GlobPatternFileSystemPathType) }, "\"glob_pattern\""},
+		{"SpecialFileSystemPathType/0", func() any { return new(types.SpecialFileSystemPathType) }, "\"special\""},
+		{"RootFileSystemSpecialPathKind/0", func() any { return new(types.RootFileSystemSpecialPathKind) }, "\"root\""},
+		{"MinimalFileSystemSpecialPathKind/0", func() any { return new(types.MinimalFileSystemSpecialPathKind) }, "\"minimal\""},
+		{"KindFileSystemSpecialPathKind/0", func() any { return new(types.KindFileSystemSpecialPathKind) }, "\"project_roots\""},
+		{"TmpdirFileSystemSpecialPathKind/0", func() any { return new(types.TmpdirFileSystemSpecialPathKind) }, "\"tmpdir\""},
+		{"SlashTmpFileSystemSpecialPathKind/0", func() any { return new(types.SlashTmpFileSystemSpecialPathKind) }, "\"slash_tmp\""},
+		{"FileSystemSpecialPathVariant5Kind/0", func() any { return new(types.FileSystemSpecialPathVariant5Kind) }, "\"unknown\""},
+		{"InputTextFunctionCallOutputContentItemType/0", func() any { return new(types.InputTextFunctionCallOutputContentItemType) }, "\"input_text\""},
+		{"InputImageFunctionCallOutputContentItemType/0", func() any { return new(types.InputImageFunctionCallOutputContentItemType) }, "\"input_image\""},
+		{"InputAudioFunctionCallOutputContentItemType/0", func() any { return new(types.InputAudioFunctionCallOutputContentItemType) }, "\"input_audio\""},
+		{"EncryptedContentFunctionCallOutputContentItemType/0", func() any { return new(types.EncryptedContentFunctionCallOutputContentItemType) }, "\"encrypted_content\""},
+		{"UsageLimitExceededImageGenerationFailureType/0", func() any { return new(types.UsageLimitExceededImageGenerationFailureType) }, "\"usageLimitExceeded\""},
+		{"ExecLocalShellActionType/0", func() any { return new(types.ExecLocalShellActionType) }, "\"exec\""},
+		{"AddPatchChangeKindType/0", func() any { return new(types.AddPatchChangeKindType) }, "\"add\""},
+		{"DeletePatchChangeKindType/0", func() any { return new(types.DeletePatchChangeKindType) }, "\"delete\""},
+		{"UpdatePatchChangeKindType/0", func() any { return new(types.UpdatePatchChangeKindType) }, "\"update\""},
+		{"ReasoningTextReasoningItemContentType/0", func() any { return new(types.ReasoningTextReasoningItemContentType) }, "\"reasoning_text\""},
+		{"TextReasoningItemContentType/0", func() any { return new(types.TextReasoningItemContentType) }, "\"text\""},
+		{"SummaryTextReasoningItemReasoningSummaryType/0", func() any { return new(types.SummaryTextReasoningItemReasoningSummaryType) }, "\"summary_text\""},
+		{"AdditionalToolsResponseItemType/0", func() any { return new(types.AdditionalToolsResponseItemType) }, "\"additional_tools\""},
+		{"MessageResponseItemType/0", func() any { return new(types.MessageResponseItemType) }, "\"message\""},
+		{"AgentMessageResponseItemType/0", func() any { return new(types.AgentMessageResponseItemType) }, "\"agent_message\""},
+		{"ReasoningResponseItemType/0", func() any { return new(types.ReasoningResponseItemType) }, "\"reasoning\""},
+		{"LocalShellCallResponseItemType/0", func() any { return new(types.LocalShellCallResponseItemType) }, "\"local_shell_call\""},
+		{"FunctionCallResponseItemType/0", func() any { return new(types.FunctionCallResponseItemType) }, "\"function_call\""},
+		{"ToolSearchCallResponseItemType/0", func() any { return new(types.ToolSearchCallResponseItemType) }, "\"tool_search_call\""},
+		{"FunctionCallOutputResponseItemType/0", func() any { return new(types.FunctionCallOutputResponseItemType) }, "\"function_call_output\""},
+		{"CustomToolCallResponseItemType/0", func() any { return new(types.CustomToolCallResponseItemType) }, "\"custom_tool_call\""},
+		{"CustomToolCallOutputResponseItemType/0", func() any { return new(types.CustomToolCallOutputResponseItemType) }, "\"custom_tool_call_output\""},
+		{"ToolSearchOutputResponseItemType/0", func() any { return new(types.ToolSearchOutputResponseItemType) }, "\"tool_search_output\""},
+		{"WebSearchCallResponseItemType/0", func() any { return new(types.WebSearchCallResponseItemType) }, "\"web_search_call\""},
+		{"ImageGenerationCallResponseItemType/0", func() any { return new(types.ImageGenerationCallResponseItemType) }, "\"image_generation_call\""},
+		{"CompactionResponseItemType/0", func() any { return new(types.CompactionResponseItemType) }, "\"compaction\""},
+		{"ConfigurationUpdateResponseItemType/0", func() any { return new(types.ConfigurationUpdateResponseItemType) }, "\"configuration_update\""},
+		{"CompactionTriggerResponseItemType/0", func() any { return new(types.CompactionTriggerResponseItemType) }, "\"compaction_trigger\""},
+		{"ContextCompactionResponseItemType/0", func() any { return new(types.ContextCompactionResponseItemType) }, "\"context_compaction\""},
+		{"OtherResponseItemType/0", func() any { return new(types.OtherResponseItemType) }, "\"other\""},
+		{"SearchResponsesAPIWebSearchActionType/0", func() any { return new(types.SearchResponsesAPIWebSearchActionType) }, "\"search\""},
+		{"OpenPageResponsesAPIWebSearchActionType/0", func() any { return new(types.OpenPageResponsesAPIWebSearchActionType) }, "\"open_page\""},
+		{"FindInPageResponsesAPIWebSearchActionType/0", func() any { return new(types.FindInPageResponsesAPIWebSearchActionType) }, "\"find_in_page\""},
+		{"OtherResponsesAPIWebSearchActionType/0", func() any { return new(types.OtherResponsesAPIWebSearchActionType) }, "\"other\""},
+		{"DangerFullAccessSandboxPolicyType/0", func() any { return new(types.DangerFullAccessSandboxPolicyType) }, "\"dangerFullAccess\""},
+		{"ReadOnlySandboxPolicyType/0", func() any { return new(types.ReadOnlySandboxPolicyType) }, "\"readOnly\""},
+		{"ExternalSandboxSandboxPolicyType/0", func() any { return new(types.ExternalSandboxSandboxPolicyType) }, "\"externalSandbox\""},
+		{"WorkspaceWriteSandboxPolicyType/0", func() any { return new(types.WorkspaceWriteSandboxPolicyType) }, "\"workspaceWrite\""},
+		{"ThreadSpawnSubAgentSourceThreadSpawn/0", func() any { return new(types.ThreadSpawnSubAgentSourceThreadSpawn) }, "{\"depth\":7,\"parent_thread_id\":\"synthetic-value\"}"},
+		{"ThreadSpawnSubAgentSourceThreadSpawn/1", func() any { return new(types.ThreadSpawnSubAgentSourceThreadSpawn) }, "{\"agent_nickname\":\"synthetic-value\",\"agent_path\":\"synthetic-value\",\"agent_role\":\"synthetic-value\",\"depth\":7,\"parent_thread_id\":\"synthetic-value\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
+		{"UserMessageThreadItemType/0", func() any { return new(types.UserMessageThreadItemType) }, "\"userMessage\""},
+		{"HookPromptThreadItemType/0", func() any { return new(types.HookPromptThreadItemType) }, "\"hookPrompt\""},
+		{"AgentMessageThreadItemType/0", func() any { return new(types.AgentMessageThreadItemType) }, "\"agentMessage\""},
+		{"FunctionCallOutputThreadItemType/0", func() any { return new(types.FunctionCallOutputThreadItemType) }, "\"functionCallOutput\""},
+		{"PlanThreadItemType/0", func() any { return new(types.PlanThreadItemType) }, "\"plan\""},
+		{"ReasoningThreadItemType/0", func() any { return new(types.ReasoningThreadItemType) }, "\"reasoning\""},
+		{"CommandExecutionThreadItemType/0", func() any { return new(types.CommandExecutionThreadItemType) }, "\"commandExecution\""},
+		{"FileChangeThreadItemType/0", func() any { return new(types.FileChangeThreadItemType) }, "\"fileChange\""},
+		{"MCPToolCallThreadItemType/0", func() any { return new(types.MCPToolCallThreadItemType) }, "\"mcpToolCall\""},
+		{"DynamicToolCallThreadItemType/0", func() any { return new(types.DynamicToolCallThreadItemType) }, "\"dynamicToolCall\""},
+		{"CollabAgentToolCallThreadItemType/0", func() any { return new(types.CollabAgentToolCallThreadItemType) }, "\"collabAgentToolCall\""},
+		{"SubAgentActivityThreadItemType/0", func() any { return new(types.SubAgentActivityThreadItemType) }, "\"subAgentActivity\""},
+		{"WebSearchThreadItemType/0", func() any { return new(types.WebSearchThreadItemType) }, "\"webSearch\""},
+		{"ImageViewThreadItemType/0", func() any { return new(types.ImageViewThreadItemType) }, "\"imageView\""},
+		{"SleepThreadItemType/0", func() any { return new(types.SleepThreadItemType) }, "\"sleep\""},
+		{"ImageGenerationThreadItemType/0", func() any { return new(types.ImageGenerationThreadItemType) }, "\"imageGeneration\""},
+		{"EnteredReviewModeThreadItemType/0", func() any { return new(types.EnteredReviewModeThreadItemType) }, "\"enteredReviewMode\""},
+		{"ExitedReviewModeThreadItemType/0", func() any { return new(types.ExitedReviewModeThreadItemType) }, "\"exitedReviewMode\""},
+		{"ContextCompactionThreadItemType/0", func() any { return new(types.ContextCompactionThreadItemType) }, "\"contextCompaction\""},
+		{"NotLoadedThreadStatusType/0", func() any { return new(types.NotLoadedThreadStatusType) }, "\"notLoaded\""},
+		{"IdleThreadStatusType/0", func() any { return new(types.IdleThreadStatusType) }, "\"idle\""},
+		{"SystemErrorThreadStatusType/0", func() any { return new(types.SystemErrorThreadStatusType) }, "\"systemError\""},
+		{"ActiveThreadStatusType/0", func() any { return new(types.ActiveThreadStatusType) }, "\"active\""},
+		{"TextUserInputType/0", func() any { return new(types.TextUserInputType) }, "\"text\""},
+		{"ImageUserInputType/0", func() any { return new(types.ImageUserInputType) }, "\"image\""},
+		{"LocalImageUserInputType/0", func() any { return new(types.LocalImageUserInputType) }, "\"localImage\""},
+		{"AudioUserInputType/0", func() any { return new(types.AudioUserInputType) }, "\"audio\""},
+		{"LocalAudioUserInputType/0", func() any { return new(types.LocalAudioUserInputType) }, "\"localAudio\""},
+		{"SkillUserInputType/0", func() any { return new(types.SkillUserInputType) }, "\"skill\""},
+		{"MentionUserInputType/0", func() any { return new(types.MentionUserInputType) }, "\"mention\""},
+		{"SearchWebSearchActionType/0", func() any { return new(types.SearchWebSearchActionType) }, "\"search\""},
+		{"OpenPageWebSearchActionType/0", func() any { return new(types.OpenPageWebSearchActionType) }, "\"openPage\""},
+		{"FindInPageWebSearchActionType/0", func() any { return new(types.FindInPageWebSearchActionType) }, "\"findInPage\""},
+		{"OtherWebSearchActionType/0", func() any { return new(types.OtherWebSearchActionType) }, "\"other\""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) { schemaRoundTrip(t, tc.target(), tc.raw) })
+	}
 }

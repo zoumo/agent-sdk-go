@@ -9,20 +9,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 // This test spends at most two turn/start attempts and never retries a write.
 // It inherits normal CLI login; no credentials or raw payloads are logged.
-func TestStdioLifecycleHistory(t *testing.T) {
+type StdioLifecycleHistorySuite struct {
+	suite.Suite
+	executable string
+}
+
+func TestStdioLifecycleHistory(t *testing.T) { suite.Run(t, new(StdioLifecycleHistorySuite)) }
+
+func (s *StdioLifecycleHistorySuite) SetupTest() {
+	t := s.T()
 	if os.Getenv("RUN_MAC_STDIO_LIVE") != "1" {
 		t.Skip("live scenario skipped: set RUN_MAC_STDIO_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
-	executable := os.Getenv("MAC_LIVE_CODEX")
-	if executable == "" {
-		t.Fatal("MAC_LIVE_CODEX must select an explicit executable")
-	}
+	s.executable = os.Getenv("MAC_LIVE_CODEX")
+	require.False(t, s.executable == "",
+		"MAC_LIVE_CODEX must select an explicit executable")
+
+}
+
+func (s *StdioLifecycleHistorySuite) TestLifecycle() {
+	t := s.T()
+	executable := s.executable
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	cwd := t.TempDir()
@@ -35,9 +50,9 @@ func TestStdioLifecycleHistory(t *testing.T) {
 		defer stop()
 		c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd,
 			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket01", Version: "1"}}})
-		if err != nil {
-			t.Fatalf("initialize failed (no raw error logged): %T", err)
-		}
+		require.True(t, err == nil,
+			"initialize failed (no raw error logged): %T", err)
+
 		t.Log("initialize response and initialized write succeeded; server user agent present:", c.ServerInfo().UserAgent != "")
 		t.Cleanup(func() { _ = c.Close() })
 		go func() {
@@ -57,50 +72,49 @@ func TestStdioLifecycleHistory(t *testing.T) {
 		select {
 		case err := <-done:
 			if err != nil {
-				t.Fatalf("client Close failed: %T", err)
+				require.FailNowf(t, "assertion failed", "client Close failed: %T", err)
 			}
 			select {
 			case <-c.Done():
 			default:
-				t.Fatal("client Done open after Close")
+				require.FailNow(t, "client Done open after Close")
 			}
 			if !errors.Is(c.Err(), codex.ErrClosed) {
-				t.Fatal("unexpected client terminal cause")
+				require.FailNow(t, "unexpected client terminal cause")
 			}
 			t.Logf("Close succeeded; Done closed; ErrClosed; owned child reaped by public Close contract; elapsed_ms=%d", time.Since(start).Milliseconds())
 		case <-time.After(5 * time.Second):
-			t.Fatal("Close exceeded 5 second observation window")
+			require.FailNow(t, "Close exceeded 5 second observation window")
 		}
 	}
 	history := func(c *codex.Client, id string, turnIDs []string) {
 		r, err := c.ReadThread(ctx, types.ThreadReadParams{ThreadID: id, IncludeTurns: types.Some(true)})
-		if err != nil {
-			t.Fatalf("thread/read failed: %T", err)
-		}
-		if r.Thread.ID != id || len(r.Thread.Turns) != len(turnIDs) {
-			t.Fatal("history identity/count mismatch")
-		}
+		require.True(t, err == nil,
+			"thread/read failed: %T", err)
+		require.False(t, r.Thread.ID != id || len(r.Thread.Turns) != len(turnIDs),
+			"history identity/count mismatch")
+
 		for i, turn := range r.Thread.Turns {
-			if turn.ID != turnIDs[i] || turn.Status != types.TurnStatusCompleted {
-				t.Fatal("history turn identity/status mismatch")
-			}
+			require.False(t, turn.ID != turnIDs[i] || turn.Status != types.TurnStatusCompleted,
+				"history turn identity/status mismatch")
+
 			found := false
 			for _, item := range turn.Items {
 				if item.AgentMessage != nil && strings.TrimSpace(item.AgentMessage.Text) == "SDK_MAC_LIVE_OK" {
 					found = true
 				}
 			}
-			if !found {
-				t.Fatal("history missing synthetic agent marker")
-			}
+			require.True(t, found,
+				"history missing synthetic agent marker")
+
 		}
 		t.Logf("thread/read same native thread and %d completed native turn IDs; synthetic agent marker present in each", len(turnIDs))
 	}
 	observe := func(c *codex.Client, id, prompt string) string {
 		s, err := c.Subscribe(ctx, id, types.SubscriptionOptions{})
-		if err != nil {
-			t.Fatal("Subscribe failed")
-		}
+		require.True(t, err == nil,
+			"Subscribe failed")
+
 		defer s.Close()
 		attempts.Add(1)
 		started, err := c.StartTurn(ctx, types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}})
@@ -109,11 +123,11 @@ func TestStdioLifecycleHistory(t *testing.T) {
 			if errors.As(err, &ce) {
 				t.Logf("turn/start dispatch=%s", ce.Dispatch)
 			}
-			t.Fatalf("turn/start failed; no replay: %T", err)
+			require.FailNowf(t, "assertion failed", "turn/start failed; no replay: %T", err)
 		}
-		if started.Turn.ID == "" {
-			t.Fatal("empty native turn ID")
-		}
+		require.False(t, started.Turn.ID == "",
+			"empty native turn ID")
+
 		t.Logf("turn/start responded; native turn T%d recorded in memory", attempts.Load())
 		timer := time.NewTimer(120 * time.Second)
 		defer timer.Stop()
@@ -125,19 +139,19 @@ func TestStdioLifecycleHistory(t *testing.T) {
 				interruptCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
 				_, _ = c.InterruptTurn(interruptCtx, types.TurnInterruptParams{ThreadID: id, TurnID: started.Turn.ID})
 				stop()
-				t.Fatal("turn observation timeout; one explicit interrupt attempted, no replay")
+				require.FailNow(t, "turn observation timeout; one explicit interrupt attempted, no replay")
 			case <-s.Done():
-				t.Fatalf("subscription ended early: %T", s.Err())
+				require.FailNowf(t, "assertion failed", "subscription ended early: %T", s.Err())
 			case e, ok := <-s.Events():
 				if !ok || s.Err() != nil {
-					t.Fatal("event stream ended/lost")
+					require.FailNow(t, "event stream ended/lost")
 				}
 				if e.Raw == nil {
 					continue
 				}
 				native := e
 				if native.DecodeError != nil {
-					t.Fatalf("event decode failure method=%s", native.Method)
+					require.FailNowf(t, "assertion failed", "event decode failure method=%s", native.Method)
 				}
 				switch v := native.Data.(type) {
 				case *types.TurnStartedNotification:
@@ -155,23 +169,26 @@ func TestStdioLifecycleHistory(t *testing.T) {
 						t.Log("matched item/completed agentMessage")
 					}
 				case *types.ErrorNotification:
-					t.Fatal("native error notification received; raw payload withheld")
+					require.FailNow(t, "native error notification received; raw payload withheld")
 				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						if v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_LIVE_OK" || unexpected.Load() != 0 {
-							t.Fatal("completion/content/interaction assertion failed")
+						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_LIVE_OK" || unexpected.Load() != 0,
+							"completion/content/interaction assertion failed")
+						{
+
+							err := s.Close()
+							require.True(t, err == nil,
+								"subscription Close failed")
 						}
-						if err := s.Close(); err != nil {
-							t.Fatal("subscription Close failed")
-						}
+
 						select {
 						case <-s.Done():
 						default:
-							t.Fatal("subscription Done open")
+							require.FailNow(t, "subscription Done open")
 						}
-						if s.Err() != nil {
-							t.Fatal("subscription loss/terminal error")
-						}
+						require.Equal(t, nil, s.Err(),
+							"subscription loss/terminal error")
+
 						t.Log("matched turn/completed completed; delta and agent marker exact; subscription Close/Done/Err passed")
 						return started.Turn.ID
 					}
@@ -181,13 +198,13 @@ func TestStdioLifecycleHistory(t *testing.T) {
 	}
 	c := open()
 	thread, err := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Ephemeral: types.Some(false), Sandbox: types.Some(types.SandboxModeReadOnly)})
-	if err != nil {
-		t.Fatalf("thread/start failed; no replay: %T", err)
-	}
+	require.True(t, err == nil,
+		"thread/start failed; no replay: %T", err)
+
 	id := thread.Thread.ID
-	if id == "" {
-		t.Fatal("empty thread ID")
-	}
+	require.False(t, id == "",
+		"empty thread ID")
+
 	t.Log("thread/start persistent native thread A created in empty temporary cwd; read-only sandbox")
 	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_MAC_LIVE_OK and nothing else.")
 	history(c, id, []string{first})
@@ -195,22 +212,20 @@ func TestStdioLifecycleHistory(t *testing.T) {
 	c = open()
 	history(c, id, []string{first})
 	resumed, err := c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})
-	if err != nil {
-		t.Fatalf("thread/resume failed; no replacement or replay: %T", err)
-	}
-	if resumed.Thread.ID != id {
-		t.Fatal("resume identity mismatch")
-	}
+	require.True(t, err == nil,
+		"thread/resume failed; no replacement or replay: %T", err)
+	require.Equal(t, id, resumed.Thread.ID,
+		"resume identity mismatch")
+
 	t.Log("new connection thread/resume returned same native thread A")
 	second := observe(c, id, "Do not use tools or access files. Return exactly the marker from your previous assistant reply, with no additional text.")
 	history(c, id, []string{first, second})
 	detached, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
-	if err != nil {
-		t.Fatalf("native unsubscribe failed: %T", err)
-	}
-	if detached.Status != types.ThreadUnsubscribeStatusUnsubscribed {
-		t.Fatal("native unsubscribe unexpected status")
-	}
+	require.True(t, err == nil,
+		"native unsubscribe failed: %T", err)
+	require.Equal(t, types.ThreadUnsubscribeStatusUnsubscribed, detached.Status,
+		"native unsubscribe unexpected status")
+
 	t.Log("thread/unsubscribe status=unsubscribed")
 	closeClient(c)
 }

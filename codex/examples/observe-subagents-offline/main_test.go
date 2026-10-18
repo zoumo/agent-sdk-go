@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -19,14 +21,14 @@ func TestMain(m *testing.M) {
 // Verify the documented transcript through the public client and fake process.
 func TestOfflineTranscript(t *testing.T) {
 	var output bytes.Buffer
-	if err := run(&output); err != nil {
-		t.Fatal(err)
+	{
+		err := run(&output)
+		require.NoError(t, err)
 	}
+
 	expected, err := os.ReadFile("expected.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.String() != string(expected) {
-		t.Fatalf("transcript differs:\n%s", output.String())
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(expected), output.String(),
+		"transcript differs:\n%s", output.String())
+
 }

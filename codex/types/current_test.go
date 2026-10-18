@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -14,15 +15,18 @@ func TestCurrentOpenErrorInfo(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			var value types.CodexErrorInfo
 			schemaRoundTrip(t, &value, raw)
-			if raw[0] == '{' && len(value.Unknown) == 0 {
-				t.Fatal("opaque native error was interpreted as a known branch")
-			}
+			require.False(t, raw[0] == '{' && len(value.Unknown) == 0,
+				"opaque native error was interpreted as a known branch")
+
 		})
 	}
 	for _, raw := range []string{`null`, `false`, `[]`, `17`} {
 		var value types.CodexErrorInfo
-		if err := json.Unmarshal([]byte(raw), &value); err == nil {
-			t.Fatalf("wrong native error kind accepted: %s", raw)
+		{
+			err := json.Unmarshal([]byte(raw), &value)
+			require.Error(t, err,
+				"wrong native error kind accepted: %s", raw)
 		}
+
 	}
 }

@@ -17,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -24,35 +27,57 @@ import (
 // This opt-in spends at most two turn/start attempts and never retries a write.
 // It owns one isolated authenticated loopback server; Close owns only each socket.
 // It inherits normal CLI login; no credentials or raw payloads are logged.
-func TestWebSocketLifecycleHistory(t *testing.T) {
+type WebSocketLifecycleHistorySuite struct {
+	suite.Suite
+	executable string
+}
+
+func TestWebSocketLifecycleHistory(t *testing.T) { suite.Run(t, new(WebSocketLifecycleHistorySuite)) }
+
+func (s *WebSocketLifecycleHistorySuite) SetupTest() {
+	t := s.T()
 	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
 		t.Skip("live scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
-	executable := os.Getenv("MAC_LIVE_CODEX")
-	if executable == "" {
-		t.Fatal("MAC_LIVE_CODEX must select an explicit executable")
-	}
+	s.executable = os.Getenv("MAC_LIVE_CODEX")
+	require.False(t, s.executable == "",
+		"MAC_LIVE_CODEX must select an explicit executable")
+
+}
+
+func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
+	t := s.T()
+	executable := s.executable
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	cwd := t.TempDir()
 	// Token material is separate from the model cwd and never logged.
 	tokenDir := t.TempDir()
 	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		t.Fatal("random token generation failed")
+	{
+		_, err := rand.Read(tokenBytes)
+		require.True(t, err == nil,
+			"random token generation failed")
 	}
+
 	token := hex.EncodeToString(tokenBytes)
 	tokenPath := filepath.Join(tokenDir, "capability-token")
-	if err := os.WriteFile(tokenPath, []byte(token), 0600); err != nil {
-		t.Fatal("temporary token creation failed")
+	{
+		err := os.WriteFile(tokenPath, []byte(token), 0600)
+		require.True(t, err == nil,
+			"temporary token creation failed")
 	}
-	if st, err := os.Stat(tokenPath); err != nil || st.Mode().Perm() != 0600 {
-		t.Fatal("token permissions mismatch")
+	{
+
+		st, err := os.Stat(tokenPath)
+		require.False(t, err != nil || st.Mode().Perm() != 0600,
+			"token permissions mismatch")
 	}
+
 	reservation, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("loopback reservation failed: %T", err)
-	}
+	require.True(t, err == nil,
+		"loopback reservation failed: %T", err)
+
 	address := reservation.Addr().String()
 	_ = reservation.Close()
 	endpoint := "ws://" + address
@@ -60,9 +85,12 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	server.Dir = cwd
 	server.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	server.Stdout, server.Stderr = io.Discard, io.Discard
-	if err := server.Start(); err != nil {
-		t.Fatalf("owned server start failed: %T", err)
+	{
+		err := server.Start()
+		require.True(t, err == nil,
+			"owned server start failed: %T", err)
 	}
+
 	exited := make(chan error, 1)
 	go func() { exited <- server.Wait() }()
 	t.Cleanup(func() {
@@ -76,7 +104,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 			case <-exited:
 				t.Log("owned server killed and reaped after termination budget")
 			case <-time.After(2 * time.Second):
-				t.Error("owned server reaping exceeded bound")
+				assert.Fail(t, "owned server reaping exceeded bound")
 			}
 		}
 		groupDeadline := time.Now().Add(2 * time.Second)
@@ -85,16 +113,22 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		}
 		if syscall.Kill(-server.Process.Pid, 0) != syscall.ESRCH {
 			_ = syscall.Kill(-server.Process.Pid, syscall.SIGKILL)
-			t.Error("owned process group remained after graceful cleanup")
+			assert.Fail(t, "owned process group remained after graceful cleanup")
 		} else {
 			t.Log("owned process group absent after cleanup")
 		}
-		if err := os.Remove(tokenPath); err != nil {
-			t.Error("temporary token removal failed")
+		{
+			err := os.Remove(tokenPath)
+			assert.True(t, err == nil,
+				"temporary token removal failed")
 		}
-		if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
-			t.Error("temporary token still present")
+		{
+
+			_, err := os.Stat(tokenPath)
+			assert.True(t, os.IsNotExist(err),
+				"temporary token still present")
 		}
+
 		t.Log("process-only test credential removed; no persistent auth configuration")
 	})
 	readyDeadline := time.Now().Add(10 * time.Second)
@@ -102,7 +136,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		select {
 		case e := <-exited:
 			exited <- e
-			t.Fatal("owned server exited before readiness; stderr withheld")
+			require.FailNow(t, "owned server exited before readiness; stderr withheld")
 		default:
 		}
 		conn, e := net.DialTimeout("tcp4", address, 100*time.Millisecond)
@@ -110,17 +144,17 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 			_ = conn.Close()
 			break
 		}
-		if time.Now().After(readyDeadline) {
-			t.Fatal("owned loopback listener readiness timeout")
-		}
+		require.False(t, time.Now().After(readyDeadline),
+			"owned loopback listener readiness timeout")
+
 		time.Sleep(50 * time.Millisecond)
 	}
 	// Verify that this exact child owns only the requested loopback listener.
 	// Inspect only this launch tree, with PID/PPID and no argv/environment.
 	processRows, err := exec.Command("/bin/ps", "-axo", "pid=,ppid=").Output()
-	if err != nil {
-		t.Fatal("owned process tree inspection failed")
-	}
+	require.True(t, err == nil,
+		"owned process tree inspection failed")
+
 	owned := map[int]bool{server.Process.Pid: true}
 	for changed := true; changed; {
 		changed = false
@@ -146,26 +180,26 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		for _, line := range strings.Split(string(listening), "\n") {
 			if strings.HasPrefix(line, "n") {
 				listeners++
-				if line != "n"+address {
-					t.Fatal("owned listener is not exact requested loopback endpoint")
-				}
+				require.Equal(t, "n"+address, line,
+					"owned listener is not exact requested loopback endpoint")
+
 			}
 		}
 	}
-	if listeners != 1 {
-		t.Fatal("owned process tree listener count mismatch")
-	}
+	require.Equal(t, 1, listeners,
+		"owned process tree listener count mismatch")
+
 	t.Log("owned child has exactly one TCP listener on 127.0.0.1; temporary token mode 0600")
 	badCtx, badCancel := context.WithTimeout(ctx, 5*time.Second)
 	bad, badErr := codex.NewRemote(badCtx, codex.RemoteOptions{URL: endpoint, BearerToken: "invalid-ticket03-token", Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket03-rejected", Version: "1"}}})
 	badCancel()
 	if bad != nil {
 		_ = bad.Close()
-		t.Fatal("incorrect credential unexpectedly accepted")
+		require.FailNow(t, "incorrect credential unexpectedly accepted")
 	}
-	if !errors.Is(badErr, codex.ErrRemoteTransport) || !strings.Contains(badErr.Error(), "HTTP status 401") {
-		t.Fatalf("expected auth rejection HTTP 401, got error type %T", badErr)
-	}
+	require.False(t, !errors.Is(badErr, codex.ErrRemoteTransport) || !strings.Contains(badErr.Error(), "HTTP status 401"),
+		"expected auth rejection HTTP 401, got error type %T", badErr)
+
 	t.Log("incorrect temporary credential rejected with HTTP 401; no model turn dispatched")
 	var attempts, unexpected atomic.Int32
 	defer func() {
@@ -176,12 +210,11 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		defer stop()
 		c, err := codex.NewRemote(initCtx, codex.RemoteOptions{URL: endpoint, BearerToken: token,
 			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-mac-live-ticket03", Version: "1"}}})
-		if err != nil {
-			t.Fatalf("initialize failed (no raw error logged): %T", err)
-		}
-		if c.ServerInfo().UserAgent == "" {
-			t.Fatal("server user agent absent")
-		}
+		require.True(t, err == nil,
+			"initialize failed (no raw error logged): %T", err)
+		require.False(t, c.ServerInfo().UserAgent == "",
+			"server user agent absent")
+
 		t.Log("initialize response and initialized write succeeded; server user agent present:", c.ServerInfo().UserAgent != "")
 		t.Cleanup(func() { _ = c.Close() })
 		go func() {
@@ -201,50 +234,49 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 		select {
 		case err := <-done:
 			if err != nil {
-				t.Fatalf("client Close failed: %T", err)
+				require.FailNowf(t, "assertion failed", "client Close failed: %T", err)
 			}
 			select {
 			case <-c.Done():
 			default:
-				t.Fatal("client Done open after Close")
+				require.FailNow(t, "client Done open after Close")
 			}
 			if !errors.Is(c.Err(), codex.ErrClosed) {
-				t.Fatal("unexpected client terminal cause")
+				require.FailNow(t, "unexpected client terminal cause")
 			}
 			t.Logf("Close succeeded; Done closed; ErrClosed; remote socket closed without server ownership; elapsed_ms=%d", time.Since(start).Milliseconds())
 		case <-time.After(5 * time.Second):
-			t.Fatal("Close exceeded 5 second observation window")
+			require.FailNow(t, "Close exceeded 5 second observation window")
 		}
 	}
 	history := func(c *codex.Client, id string, turnIDs []string) {
 		r, err := c.ReadThread(ctx, types.ThreadReadParams{ThreadID: id, IncludeTurns: types.Some(true)})
-		if err != nil {
-			t.Fatalf("thread/read failed: %T", err)
-		}
-		if r.Thread.ID != id || len(r.Thread.Turns) != len(turnIDs) {
-			t.Fatal("history identity/count mismatch")
-		}
+		require.True(t, err == nil,
+			"thread/read failed: %T", err)
+		require.False(t, r.Thread.ID != id || len(r.Thread.Turns) != len(turnIDs),
+			"history identity/count mismatch")
+
 		for i, turn := range r.Thread.Turns {
-			if turn.ID != turnIDs[i] || turn.Status != types.TurnStatusCompleted {
-				t.Fatal("history turn identity/status mismatch")
-			}
+			require.False(t, turn.ID != turnIDs[i] || turn.Status != types.TurnStatusCompleted,
+				"history turn identity/status mismatch")
+
 			found := false
 			for _, item := range turn.Items {
 				if item.AgentMessage != nil && strings.TrimSpace(item.AgentMessage.Text) == "SDK_MAC_WS_OK" {
 					found = true
 				}
 			}
-			if !found {
-				t.Fatal("history missing synthetic agent marker")
-			}
+			require.True(t, found,
+				"history missing synthetic agent marker")
+
 		}
 		t.Logf("thread/read same native thread and %d completed native turn IDs; synthetic agent marker present in each", len(turnIDs))
 	}
 	observe := func(c *codex.Client, id, prompt string) string {
 		s, err := c.Subscribe(ctx, id, types.SubscriptionOptions{})
-		if err != nil {
-			t.Fatal("Subscribe failed")
-		}
+		require.True(t, err == nil,
+			"Subscribe failed")
+
 		defer s.Close()
 		attempts.Add(1)
 		started, err := c.StartTurn(ctx, types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}})
@@ -253,11 +285,11 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 			if errors.As(err, &ce) {
 				t.Logf("turn/start dispatch=%s", ce.Dispatch)
 			}
-			t.Fatalf("turn/start failed; no replay: %T", err)
+			require.FailNowf(t, "assertion failed", "turn/start failed; no replay: %T", err)
 		}
-		if started.Turn.ID == "" {
-			t.Fatal("empty native turn ID")
-		}
+		require.False(t, started.Turn.ID == "",
+			"empty native turn ID")
+
 		t.Logf("turn/start responded; native turn T%d recorded in memory", attempts.Load())
 		timer := time.NewTimer(120 * time.Second)
 		defer timer.Stop()
@@ -269,19 +301,19 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 				interruptCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
 				_, _ = c.InterruptTurn(interruptCtx, types.TurnInterruptParams{ThreadID: id, TurnID: started.Turn.ID})
 				stop()
-				t.Fatal("turn observation timeout; one explicit interrupt attempted, no replay")
+				require.FailNow(t, "turn observation timeout; one explicit interrupt attempted, no replay")
 			case <-s.Done():
-				t.Fatalf("subscription ended early: %T", s.Err())
+				require.FailNowf(t, "assertion failed", "subscription ended early: %T", s.Err())
 			case e, ok := <-s.Events():
 				if !ok || s.Err() != nil {
-					t.Fatal("event stream ended/lost")
+					require.FailNow(t, "event stream ended/lost")
 				}
 				if e.Raw == nil {
 					continue
 				}
 				native := e
 				if native.DecodeError != nil {
-					t.Fatalf("event decode failure method=%s", native.Method)
+					require.FailNowf(t, "assertion failed", "event decode failure method=%s", native.Method)
 				}
 				switch v := native.Data.(type) {
 				case *types.TurnStartedNotification:
@@ -299,23 +331,26 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 						t.Log("matched item/completed agentMessage")
 					}
 				case *types.ErrorNotification:
-					t.Fatal("native error notification received; raw payload withheld")
+					require.FailNow(t, "native error notification received; raw payload withheld")
 				case *types.TurnCompletedNotification:
 					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						if v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_WS_OK" || unexpected.Load() != 0 {
-							t.Fatal("completion/content/interaction assertion failed")
+						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_MAC_WS_OK" || unexpected.Load() != 0,
+							"completion/content/interaction assertion failed")
+						{
+
+							err := s.Close()
+							require.True(t, err == nil,
+								"subscription Close failed")
 						}
-						if err := s.Close(); err != nil {
-							t.Fatal("subscription Close failed")
-						}
+
 						select {
 						case <-s.Done():
 						default:
-							t.Fatal("subscription Done open")
+							require.FailNow(t, "subscription Done open")
 						}
-						if s.Err() != nil {
-							t.Fatal("subscription loss/terminal error")
-						}
+						require.Equal(t, nil, s.Err(),
+							"subscription loss/terminal error")
+
 						t.Log("matched turn/completed completed; delta and agent marker exact; subscription Close/Done/Err passed")
 						return started.Turn.ID
 					}
@@ -325,13 +360,13 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	}
 	c := open()
 	thread, err := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Ephemeral: types.Some(false), Sandbox: types.Some(types.SandboxModeReadOnly)})
-	if err != nil {
-		t.Fatalf("thread/start failed; no replay: %T", err)
-	}
+	require.True(t, err == nil,
+		"thread/start failed; no replay: %T", err)
+
 	id := thread.Thread.ID
-	if id == "" {
-		t.Fatal("empty thread ID")
-	}
+	require.False(t, id == "",
+		"empty thread ID")
+
 	t.Log("thread/start persistent native thread A created in empty temporary cwd; read-only sandbox")
 	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_MAC_WS_OK and nothing else.")
 	history(c, id, []string{first})
@@ -339,7 +374,7 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	select {
 	case e := <-exited:
 		exited <- e
-		t.Fatal("client Close terminated independently owned server")
+		require.FailNow(t, "client Close terminated independently owned server")
 	default:
 	}
 	t.Log("owned server still running after first remote Close")
@@ -347,34 +382,32 @@ func TestWebSocketLifecycleHistory(t *testing.T) {
 	t.Log("same owned listener accepted fresh authenticated initialize after first Close")
 	history(c, id, []string{first})
 	resumed, err := c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})
-	if err != nil {
-		t.Fatalf("thread/resume failed; no replacement or replay: %T", err)
-	}
-	if resumed.Thread.ID != id {
-		t.Fatal("resume identity mismatch")
-	}
+	require.True(t, err == nil,
+		"thread/resume failed; no replacement or replay: %T", err)
+	require.Equal(t, id, resumed.Thread.ID,
+		"resume identity mismatch")
+
 	t.Log("new connection thread/resume returned same native thread A")
 	second := observe(c, id, "Do not use tools or access files. Return exactly the marker from your previous assistant reply, with no additional text.")
 	history(c, id, []string{first, second})
 	detached, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
-	if err != nil {
-		t.Fatalf("native unsubscribe failed: %T", err)
-	}
-	if detached.Status != types.ThreadUnsubscribeStatusUnsubscribed {
-		t.Fatal("native unsubscribe unexpected status")
-	}
+	require.True(t, err == nil,
+		"native unsubscribe failed: %T", err)
+	require.Equal(t, types.ThreadUnsubscribeStatusUnsubscribed, detached.Status,
+		"native unsubscribe unexpected status")
+
 	t.Log("thread/unsubscribe status=unsubscribed")
 	closeClient(c)
 	select {
 	case e := <-exited:
 		exited <- e
-		t.Fatal("second Close terminated owned server")
+		require.FailNow(t, "second Close terminated owned server")
 	default:
 	}
 	probe, err := net.DialTimeout("tcp4", address, time.Second)
-	if err != nil {
-		t.Fatal("owned listener unavailable after second remote Close")
-	}
+	require.True(t, err == nil,
+		"owned listener unavailable after second remote Close")
+
 	_ = probe.Close()
 	t.Log("owned loopback listener remains connectable after second remote Close")
 }

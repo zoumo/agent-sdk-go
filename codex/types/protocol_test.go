@@ -3,10 +3,10 @@ package types_test
 import (
 	"bytes"
 	"encoding/json"
-	"reflect"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -15,24 +15,17 @@ func decodedJSON(t *testing.T, data []byte) any {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	var value any
-	if err := decoder.Decode(&value); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, decoder.Decode(&value))
 	return value
 }
 
 func schemaRoundTrip(t *testing.T, target any, raw string) {
 	t.Helper()
-	if err := json.Unmarshal([]byte(raw), target); err != nil {
-		t.Fatalf("decode %T: %v", target, err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(raw), target), "decode %T", target)
 	encoded, err := json.Marshal(target)
-	if err != nil {
-		t.Fatalf("encode %T: %v", target, err)
-	}
-	if !reflect.DeepEqual(decodedJSON(t, []byte(raw)), decodedJSON(t, encoded)) {
-		t.Fatalf("%T round trip changed data:\nin: %s\nout: %s", target, raw, encoded)
-	}
+	require.NoError(t, err, "encode %T", target)
+	require.Equal(t, decodedJSON(t, []byte(raw)), decodedJSON(t, encoded),
+		"%T round trip changed data:\nin: %s\nout: %s", target, raw, encoded)
 }
 
 func TestOptionalOmittedNullAndZero(t *testing.T) {
@@ -50,30 +43,38 @@ func TestOptionalOmittedNullAndZero(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := json.Marshal(tt.value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(got) != tt.want {
-				t.Fatalf("got %s, want %s", got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, string(got),
+				"got %s, want %s", got, tt.want)
+
 			var round types.ThreadStartParams
-			if err := json.Unmarshal(got, &round); err != nil {
-				t.Fatal(err)
+			{
+				err := json.Unmarshal(got, &round)
+				require.NoError(t, err)
 			}
-			if round.ServiceTier.IsSet() != tt.value.ServiceTier.IsSet() || round.ServiceTier.IsNull() != tt.value.ServiceTier.IsNull() {
-				t.Fatal("optional state changed")
-			}
+			require.False(t, round.ServiceTier.IsSet() != tt.value.ServiceTier.IsSet() || round.ServiceTier.IsNull() != tt.value.ServiceTier.IsNull(),
+				"optional state changed")
+
 		})
 	}
-	if _, ok := omitted.ServiceTier.Get(); ok {
-		t.Fatal("omitted value reported present")
+	{
+		_, ok := omitted.ServiceTier.Get()
+		require.False(t, ok,
+			"omitted value reported present")
 	}
-	if got := omitted.ServiceTier.ValueOr("fallback"); got != "fallback" {
-		t.Fatal(got)
+	{
+
+		got := omitted.ServiceTier.ValueOr("fallback")
+		require.Equal(t, "fallback", got,
+			got)
 	}
-	if got, ok := types.Some(false).Get(); !ok || got {
-		t.Fatal("present false lost")
+	{
+
+		got, ok := types.Some(false).Get()
+		require.False(t, !ok || got,
+			"present false lost")
 	}
+
 }
 
 func TestCompleteExperimentalStartFields(t *testing.T) {
@@ -92,17 +93,21 @@ func TestCompleteExperimentalStartFields(t *testing.T) {
 		MultiAgentMode:             types.Some(types.MultiAgentMode{Value: types.Ptr(types.MultiAgentModeValueExplicitRequestOnly)}),
 	}
 	encoded, err := json.Marshal(params)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &fields); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(encoded, &fields)
+		require.NoError(t, err)
 	}
+
 	for _, key := range []string{"allowProviderModelFallback", "runtimeWorkspaceRoots", "permissions", "historyMode", "projectId", "daybreakEnabled", "environments", "dynamicTools", "selectedCapabilityRoots", "mockExperimentalField", "experimentalRawEvents", "multiAgentMode"} {
-		if _, found := fields[key]; !found {
-			t.Errorf("missing native field %s", key)
+		{
+			_, found := fields[key]
+			assert.True(t, found,
+				"missing native field %s", key)
 		}
+
 	}
 	schemaRoundTrip(t, new(types.ThreadStartParams), string(encoded))
 }
@@ -111,28 +116,24 @@ func TestKnownAndFutureUnionVariants(t *testing.T) {
 	raw := `{"type":"agentMessage","id":"native-item","text":"answer","phase":"final_answer","future":{"large":9007199254740993},"memoryCitation":null}`
 	var item types.ThreadItem
 	schemaRoundTrip(t, &item, raw)
-	if item.AgentMessage == nil || item.AgentMessage.ID != "native-item" || item.AgentMessage.Text != "answer" {
-		t.Fatal("missing typed agent message")
-	}
-	if !item.AgentMessage.MemoryCitation.IsNull() {
-		t.Fatal("null citation lost")
-	}
-	if string(item.AgentMessage.UnknownFields["future"]) != `{"large":9007199254740993}` {
-		t.Fatal("unknown field lost")
-	}
+	require.False(t, item.AgentMessage == nil || item.AgentMessage.ID != "native-item" || item.AgentMessage.Text != "answer",
+		"missing typed agent message")
+	require.True(t, item.AgentMessage.MemoryCitation.IsNull(),
+		"null citation lost")
+	require.Equal(t, `{"large":9007199254740993}`, string(item.AgentMessage.UnknownFields["future"]),
+		"unknown field lost")
+
 	future := `{"type":"futureItem","id":"future-id","counter":9007199254740993}`
 	schemaRoundTrip(t, &item, future)
-	if item.AgentMessage != nil || string(item.Unknown) != future {
-		t.Fatal("union replacement or fallback failed")
-	}
+	require.False(t, item.AgentMessage != nil || string(item.Unknown) != future,
+		"union replacement or fallback failed")
+
 	created := types.ThreadItem{AgentMessage: &types.AgentMessageThreadItem{ID: "native", Text: "test"}}
 	encoded, err := json.Marshal(created)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(encoded), `"type":"agentMessage"`) {
-		t.Fatal("constant discriminator not emitted")
-	}
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"type":"agentMessage"`,
+		"constant discriminator not emitted")
+
 }
 
 func TestMalformedKnownDataRejected(t *testing.T) {
@@ -155,32 +156,36 @@ func TestMalformedKnownDataRejected(t *testing.T) {
 		{"null union", `null`, func() any { return new(types.ThreadItem) }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := json.Unmarshal([]byte(tt.raw), tt.target()); err == nil {
-				t.Fatal("malformed known data accepted")
+			{
+				err := json.Unmarshal([]byte(tt.raw), tt.target())
+				require.Error(t, err,
+					"malformed known data accepted")
 			}
+
 		})
 	}
 }
 
 func TestAtomicDecodeAndEncodingValidation(t *testing.T) {
-	p := types.ThreadReadParams{ThreadID: "original", IncludeTurns: types.Some(true)}
-	if err := json.Unmarshal([]byte(`{"threadId":"replacement","includeTurns":"wrong"}`), &p); err == nil {
-		t.Fatal("expected error")
-	}
-	if p.ThreadID != "original" || !p.IncludeTurns.ValueOr(false) {
-		t.Fatal("failed decode modified receiver")
-	}
-	if _, err := json.Marshal(types.ThreadReadParams{ThreadID: "id", IncludeTurns: types.Null[bool]()}); err == nil {
-		t.Fatal("null nonnullable value encoded")
-	}
-	if _, err := json.Marshal(types.ThreadItem{}); err == nil {
-		t.Fatal("empty union encoded")
-	}
-	if _, err := json.Marshal(types.ThreadItem{Unknown: json.RawMessage(`{}`), AgentMessage: &types.AgentMessageThreadItem{}}); err == nil {
-		t.Fatal("ambiguous union encoded")
-	}
-	if _, err := json.Marshal(types.ThreadReadParams{ThreadID: "id", UnknownFields: map[string]json.RawMessage{"threadId": json.RawMessage(`"override"`)}}); err == nil {
-		t.Fatal("unknown field overwrote known member")
+	t.Run("atomic decode", func(t *testing.T) {
+		original := types.ThreadReadParams{ThreadID: "original", IncludeTurns: types.Some(true)}
+		decoded := original
+		require.Error(t, json.Unmarshal([]byte(`{"threadId":"replacement","includeTurns":"wrong"}`), &decoded))
+		assert.Equal(t, original, decoded, "failed decode modified receiver")
+	})
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{"null nonnullable", types.ThreadReadParams{ThreadID: "id", IncludeTurns: types.Null[bool]()}},
+		{"empty union", types.ThreadItem{}},
+		{"ambiguous union", types.ThreadItem{Unknown: json.RawMessage(`{}`), AgentMessage: &types.AgentMessageThreadItem{}}},
+		{"unknown field overwrites known member", types.ThreadReadParams{ThreadID: "id", UnknownFields: map[string]json.RawMessage{"threadId": json.RawMessage(`"override"`)}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := json.Marshal(tc.value)
+			assert.Error(t, err, "invalid encoding accepted")
+		})
 	}
 }
 
@@ -206,9 +211,12 @@ func TestRejectLossyJSONDecoding(t *testing.T) {
 		"{\"threadId\":\"" + string([]byte{0xff}) + "\"}",
 	} {
 		var params types.ThreadReadParams
-		if err := json.Unmarshal([]byte(raw), &params); err == nil {
-			t.Errorf("lossy decoding accepted for %q", raw)
+		{
+			err := json.Unmarshal([]byte(raw), &params)
+			assert.Error(t, err,
+				"lossy decoding accepted for %q", raw)
 		}
+
 	}
 	for _, raw := range []string{
 		`{"threadId":"\ud83d\ude00"}`,
@@ -229,8 +237,11 @@ func TestRejectLossyJSONEncoding(t *testing.T) {
 		types.ThreadItem{Unknown: json.RawMessage(`{"type":"future","id":"\ud800"}`)},
 		types.SessionSource{Value: types.Ptr(types.SessionSourceValue(invalid))},
 	} {
-		if _, err := json.Marshal(value); err == nil {
-			t.Errorf("lossy JSON encoding accepted for %T", value)
+		{
+			_, err := json.Marshal(value)
+			assert.Error(t, err,
+				"lossy JSON encoding accepted for %T", value)
 		}
+
 	}
 }

@@ -1,6 +1,6 @@
 # codex 故事原生映射
 
-共同故事见[根目录故事](../../../docs/stories/README.md)。此处只描述各自原生契约；两个包不相互导入。原生说明见[兼容范围](../compatibility.md)、[子代理证据与限制](../subagent-compatibility.md)、[原生事件序列](../event-sequences.md)。
+共同故事见[根目录故事](../../../docs/stories/index.md)。此处只描述各自原生契约；两个包不相互导入。原生说明见[兼容范围](../compatibility.md)、[子代理证据与限制](../subagent-compatibility.md)、[原生事件序列](../event-sequences.md)。
 
 ## US-001
 

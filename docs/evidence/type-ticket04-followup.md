@@ -21,3 +21,10 @@ Workaround used solely for ticket04 validation: canonical isolated TMPDIR under
 `/private/tmp`. Full suite, race, vet and existing focused repeated checks pass
 there. No fix has been made or claimed in ticket04; parent should schedule this
 as an independent repair ticket.
+
+## Resolution
+
+The independent [macOS temp-path repair](mac-temp-path-repair.md) replaces the
+cwd text comparison with directory identity checks, preserves literal HOME and
+argv assertions, and adds a portable symlink fixture. That report records
+default-TMPDIR validation separately from ticket04's historical workaround.

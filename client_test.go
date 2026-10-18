@@ -231,7 +231,23 @@ func awaitDone(t *testing.T, c *claude.Client) {
 }
 
 func TestOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T) {
-	opts := fixtureOptions(t, "echo")
+	t.Run("default temp directory", func(t *testing.T) {
+		testOpenUsesLiteralArgumentsAndMatchedInitialize(t, fixtureOptions(t, "echo"))
+	})
+	t.Run("symlink work directory", func(t *testing.T) {
+		opts := fixtureOptions(t, "echo")
+		alias := filepath.Join(t.TempDir(), "workdir")
+		if err := os.Symlink(opts.WorkDir, alias); err != nil {
+			t.Fatal(err)
+		}
+		opts.WorkDir = alias
+		opts.Env[0] = "HOME=" + alias
+		testOpenUsesLiteralArgumentsAndMatchedInitialize(t, opts)
+	})
+}
+
+func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts claude.Options) {
+	t.Helper()
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	opts.Model = "--odd model; $(not-a-shell)"
@@ -256,8 +272,21 @@ func TestOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T) {
 	if !reflect.DeepEqual(captured.Argv, want) {
 		t.Fatalf("argv = %#v", captured.Argv)
 	}
-	if captured.CWD != opts.WorkDir || captured.Home != opts.WorkDir {
-		t.Fatalf("environment not isolated: %s", data)
+	// Getwd may resolve symlink aliases (including macOS /var -> /private/var).
+	// Require the requested directory's identity, while keeping HOME literal.
+	cwdInfo, err := os.Stat(captured.CWD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workDirInfo, err := os.Stat(opts.WorkDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cwdInfo.IsDir() || !workDirInfo.IsDir() || !os.SameFile(cwdInfo, workDirInfo) {
+		t.Fatalf("cwd does not identify requested WorkDir: %s", data)
+	}
+	if captured.Home != opts.WorkDir {
+		t.Fatalf("HOME not preserved literally: %s", data)
 	}
 	if string(captured.Init["type"]) != `"control_request"` || len(captured.Init["request_id"]) < 3 {
 		t.Fatalf("initialize envelope: %s", data)

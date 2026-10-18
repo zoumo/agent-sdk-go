@@ -1,6 +1,6 @@
 # Opt-in live compatibility checklist
 
-**Status: NOT RUN.** This is a manual plan, not part of `go test`, CI, or the synthetic fixture suite. It requires separate authorization before accessing an account, installed real CLI, network, or paid model. Do not turn synthetic successes into live checkmarks.
+**Status: PARTIALLY RUN on Mac, 2026-10-18.** See [ticket04 evidence](evidence/type-ticket04.md) for eight bounded synthetic inputs against CLI 2.1.258 and the exact passing observations, capped error results and uncovered cases. The full checklist and target CLI 2.1.302 remain unvalidated. This is a manual plan, not part of `go test`, CI, or the synthetic fixture suite. Additional runs require authorization for account, installed real CLI, network and paid model use. Do not turn synthetic successes into live checkmarks.
 
 ## Record before running
 

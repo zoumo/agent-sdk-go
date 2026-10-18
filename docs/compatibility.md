@@ -14,7 +14,7 @@ Use of the installed CLI and service remains subject to their applicable terms a
 
 - Official protocol source baseline: `anthropics/claude-agent-sdk-python` commit `f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab`.
 - That source's `_cli_version.py` references Claude Code **2.1.302**. This is a source target only.
-- **Runtime-validated Claude Code versions: none. Live interoperability is UNKNOWN.** No CLI installation, authentication, account, or model-backed tests were run.
+- **Fully runtime-validated Claude Code versions: none.** On 2026-10-18, bounded partial Mac checks ran against installed **2.1.258**, configured model `theta/GLM-5.3[1m]`, with eight synthetic inputs. Normal results, resume, permissions, question answers and pending-question interruption were observed; target **2.1.302** and the complete checklist remain unvalidated. See [ticket04 evidence and explicit limits](evidence/type-ticket04.md). The earlier synthetic inventory below is not upgraded to full live coverage.
 - Compiler target: Go 1.26.9 via mise. See the checked-in toolchain pin.
 - Implemented means a Go public API/code path exists. Mock-tested means exported API tests exercised a scripted subprocess based on the pinned source. Race-tested means that synthetic suite ran with Go's race detector. Neither means real CLI-tested.
 - Unsupported means no supported Go API is provided. Raw preservation means received JSON can be inspected losslessly; it does not implement the corresponding action, schema, callback, or semantic guarantee.

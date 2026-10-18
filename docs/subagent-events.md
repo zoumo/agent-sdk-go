@@ -1,4 +1,4 @@
-# Subagent forwarding and lineage (tickets 01–03)
+# Subagent forwarding and lineage (tickets 01–04)
 
 `Options.ForwardSubagentText` and `types.Options.ForwardSubagentText` default to
 false. `OptionsFromTypes` and `Options.Types` preserve the value. True adds
@@ -144,14 +144,14 @@ source are E1 evidence, not proof of installed CLI behavior.
 | Run terminal/background accounting | Implemented; patch-only and notification terminal, stale/legacy isolation, bounded ledger (E2) | Unverified |
 | Native session state / background snapshot | Typed State / raw Tasks entries; idle and result remain distinct (E2) | Emission is CLI/version/environment dependent; unverified |
 | History association seed / explicit resume | History provenance and permanent gap; no replay or creation (E2) | No live history recovery claim |
-| Timed unresolved buffering and full relation/request bounds | Deferred to ticket 04 | Not claimed |
+| Timed unresolved buffering, atomic bounded fanout and request isolation | Implemented; public API synthetic peers, full-queue control replies, pending-work invalidation, original question handles and close races (E2) | Unverified |
 
 Initialize rejection fails OpenTree. A successful acknowledgment does not prove
 the CLI honors forwarding, so the first wrapper always reports
-`ObservationState(unverified, forwarding-not-confirmed)`. Missing session or
-parent ownership is emitted as unresolved immediately; unknown unowned events
-are unscoped. Timed child-before-relation buffering is still ticket 04. This is
-not a promise of complete descendants or recovered history.
+`ObservationState(unverified, forwarding-not-confirmed)`. Missing source attribution
+waits within the bounds below, then remains explicitly unresolved; unknown unowned
+events are unscoped. This is not a promise of complete descendants or recovered
+history.
 
 Dedup uses only native UUIDs on known envelope contracts (assistant/user/system/
 result/stream_event), scoped by epoch, native session/source, task/run when
@@ -169,10 +169,10 @@ The graph/alias/tool-owner/non-agent index is bounded by `TreeOptions.MaxNodes`
 negative/above-ceiling values fail before startup. Alias entries count against
 the graph bound; no stale identity history is silently evicted. Overflow uses
 the owned client's terminal ResourceLimit path and emits incomplete plus the
-already accepted native frame. Pending wrapper fanout is bounded by the graph;
-the underlying bounded event/control transport remains unchanged. A disconnect
-reports incomplete, then the original terminal error; explicit Close reports
-closed, never child success.
+already accepted native frame with unresolved scope. Wrapper fanout and pending
+source attribution have their own bounds below; the underlying bounded event/control
+transport remains unchanged. A disconnect reports incomplete, then the original
+terminal error; explicit Close reports closed, never child success.
 
 The retained official TS 0.3.302 declaration file SHA256 is
 `26f9a0c91ad64e2020f0d3734932302e3cc09685bddf2b2f9ef60839ce278773`.
@@ -283,3 +283,72 @@ receive timeout, disconnect, history seeds, fresh epochs and run exhaustion.
 Existing close-race tests remain part of the full race suite. These are E2
 observations only. No real CLI/model, installed runtime interoperability,
 authentication change or transcript completeness is claimed.
+
+## Bounded attribution and original requests (ticket 04)
+
+| TreeOptions limit | Default | Ceiling |
+| --- | --- | --- |
+| MaxPendingRecords | 8192 records per atomic fanout | 131072 |
+| MaxUnresolvedEvents | 128 held Native frames | 65536 |
+| MaxUnresolvedBytes | 4 MiB of held native wire bytes | 64 MiB |
+| MaxUnresolvedWait | 5 seconds | 1 minute |
+
+Zero selects defaults; negative values and values above a ceiling fail before
+startup. Native transport buffering and frame size remain bounded by
+`Options.Limits.EventBuffer` / `FrameBytes`. Decoded views share each frame's
+lifetime; MaxUnresolvedBytes measures wire bytes, not total Go heap allocation.
+Graph, alias, depth, run and UUID bounds continue to apply independently.
+
+A native frame with unresolved attribution waits for later graph evidence.
+Associations/enrichments precede attributed delivery. Once a held frame resolves,
+its wrapper gains the proven source/parent while Native.Raw, original native IDs,
+run metadata, text and usage remain intact. Unrelated root/control frames can pass
+held frames. Sequence means local delivery order, and buffering can change delivery
+order relative to native arrival. There is no server cursor or replay guarantee.
+Unknown events without source identity remain unscoped and are never buffered.
+Control requests/cancellations bypass association waiting; the sole answer authority
+is still the original PermissionRequest delivered by the existing worker pool.
+Wrapper/metadata copies have no answer method or authority.
+
+The association wait starts when Tree.Receive accepts a frame. It advances only
+local attribution, never a task lifecycle. Expiration produces
+`ObservationState(incomplete, unresolved-source)` followed by the unchanged Native
+with `Scope: unresolved` / `Reason: unresolved-source`. Later evidence enriches the
+association without replaying already delivered Native. Receive cancellation
+preserves held frames. No extra reader/timer goroutine, process, RPC or auto-answer
+is introduced. Expiration is observed on Receive, and Close/EOF releases held
+frames immediately as unresolved without waiting for their deadline or inventing
+success. Consumers must drain Receive to obtain accepted frames and terminal errors.
+
+Count/byte exhaustion is terminal ResourceLimit (reason unresolved-source), in
+keeping with the owned Client contract. The raw overflow frame and already held
+frames remain observable; nothing is silently discarded. Each native input's
+association/diagnostic/Native fanout reserves MaxPendingRecords atomically. If it
+cannot fit, none of that input's staged derived records is published. Instead a
+fixed diagnostic plus a single reserved raw frame reports incomplete/fanout-limit
+and unresolved attribution. The graph is frozen after a failed fanout; remaining
+accepted transport frames drain with unresolved scope. Historical seed fanout
+exhaustion fails OpenTree and closes its owned client. Emergency storage is constant
+(one reserved input plus one released held frame), independent of the full fanout
+queue, so diagnostics cannot be hidden by a full queue. Done and Err expose
+terminal failure without draining Receive.
+
+The ordinary stdout reader continues dispatching control replies before event
+capacity checks. Full capacity does not block Interrupt acknowledgments; exceeding
+capacity still fails the whole owned client and wakes pending controls, writes and
+permission contexts. Tree buffering never queues a permission response, replaces
+request/tool/agent IDs, automatically approves, or changes default deny and unknown
+control errors. Native cancellation, caller answer cancellation, Close and a fresh
+epoch retain the existing single-use handle rules. Parent result is still only
+its native answer/usage boundary; child text/thinking, partial/complete snapshots
+and task usage stay separate with source/scope and UsageScope unknown. No totals
+are accumulated.
+
+Original synthetic `tree_bounds_test.go` peers cover attribution before/after the
+wait deadline, receive cancellation, count/byte/single-frame exhaustion, atomic
+fanout/history bounds, invalid limits before spawn, full native queues and control
+replies, terminal wake-up of pending Interrupt/permissions, question input and sole
+handle, native cancel/fresh epochs/concurrent Close, default deny/unknown controls,
+and separate root/child usage. Existing lineage/terminal cases explicitly choose
+a short wait when testing later enrichment after unresolved delivery. Evidence is
+E2 only; no real CLI/model, authentication change or runtime support claim.

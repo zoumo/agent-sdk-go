@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	claude "github.com/zoumo/claude-agent-sdk-go"
 )
@@ -199,9 +200,9 @@ func TestTreeAdditionalBounds(t *testing.T) {
 	}
 	for _, mode := range []string{"depth", "dedup"} {
 		t.Run(mode, func(t *testing.T) {
-			opts := claude.TreeOptions{MaxDepth: 1}
+			opts := claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxDepth: 1}
 			if mode == "dedup" {
-				opts = claude.TreeOptions{MaxDedupEntries: 1}
+				opts = claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxDedupEntries: 1}
 			}
 			c, err := claude.OpenTree(context.Background(), fixtureOptions(t, "tree"), opts)
 			if err != nil {
@@ -286,7 +287,7 @@ func TestTreeIndependentAliasesReconcileWithBridgeEvidence(t *testing.T) {
 		t.Fatal("caller cannot reconcile the previous association", ds)
 	}
 	ds, again := treeFrame(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"001"}`)
-	if len(ds) != 0 || again.Source.AssociationID != merged.Source.AssociationID {
+	if !treeOnlyUnresolved(ds) || again.Source.AssociationID != merged.Source.AssociationID {
 		t.Fatal(ds, again)
 	}
 }
@@ -295,7 +296,7 @@ func TestTreeStaleMetadataCannotPoisonCurrentRun(t *testing.T) {
 	treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"parent","task_type":"local_agent"}`)
 	_, current := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","parent_task_id":"parent","run_id":"002"}`)
 	ds, stale := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_bash","parent_task_id":"wrong","tool_use_id":"wrong-tool","run_id":"001"}`)
-	if len(ds) != 0 || !stale.Stale || stale.Parent == nil || stale.Parent.TaskID != "parent" || stale.CurrentRunID != "002" {
+	if !treeOnlyUnresolved(ds) || !stale.Stale || stale.Parent == nil || stale.Parent.TaskID != "parent" || stale.CurrentRunID != "002" {
 		t.Fatal(ds, stale)
 	}
 	_, later := treeFrame(t, c, `{"type":"assistant","session_id":"s","agent_id":"a","message":{"content":"new work"}}`)
@@ -307,7 +308,7 @@ func TestTreeKnownNonAgentToolDoesNotCreateLegacyAgent(t *testing.T) {
 	c := openTreeFixture(t)
 	treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"bash","task_type":"local_bash","tool_use_id":"bash-tool"}`)
 	ds, r := treeFrame(t, c, `{"type":"assistant","session_id":"s","parent_tool_use_id":"bash-tool","message":{"content":"ambiguous"}}`)
-	if len(ds) != 0 || r.Scope != "unresolved" || r.Source.AssociationID != "" || r.Reason != "non-agent-tool-reference" {
+	if !treeOnlyUnresolved(ds) || r.Scope != "unresolved" || r.Source.AssociationID != "" || r.Reason != "unresolved-source" {
 		t.Fatal(ds, r)
 	}
 }
@@ -333,7 +334,7 @@ func TestTreeResumeNewToolAndDuplicateRelationships(t *testing.T) {
 		t.Fatal(ds, resumed)
 	}
 	ds, _ = treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"two","run_id":"002"}`)
-	if len(ds) != 0 {
+	if !treeOnlyUnresolved(ds) {
 		t.Fatal("duplicate relationship/run produced derived records", ds)
 	}
 	// A partial and complete frame sharing a UUID occupy different event kinds.
@@ -353,4 +354,14 @@ func TestTreeNoRunUUIDNotSuppressedAcrossObservedRunBoundary(t *testing.T) {
 	if r.Source.RunID != "" || r.RunScope != "legacy-unknown" || r.CurrentRunID != "002" {
 		t.Fatal(r)
 	}
+}
+
+// Old lineage cases may now include the explicit association-wait diagnostic.
+func treeOnlyUnresolved(records []claude.TreeRecord) bool {
+	for _, r := range records {
+		if r.Kind != "ObservationState" || r.Reason != "unresolved-source" {
+			return false
+		}
+	}
+	return true
 }

@@ -8,16 +8,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 )
 
-// TreeOptions bounds graph entries, lineage depth and native identity history.
-// Zero selects defaults (4096 entries, 32 levels, 8192 dedup identities/runs).
+// TreeOptions bounds graph entries, lineage depth, native identity history and
+// buffered records. Zero selects the documented defaults in docs/subagent-events.md.
 // Exhaustion fails visibly; identities are never evicted and mistaken as new.
 type TreeOptions struct {
 	MaxNodes        int
 	MaxDepth        int
 	MaxDedupEntries int
 	MaxRuns         int
+	// MaxPendingRecords bounds one atomic association/diagnostic/native fanout.
+	MaxPendingRecords int
+	// MaxUnresolvedEvents/Bytes bound native frames awaiting source attribution.
+	MaxUnresolvedEvents int
+	MaxUnresolvedBytes  int
+	// MaxUnresolvedWait bounds association waiting, never provider work.
+	MaxUnresolvedWait time.Duration
 	// History contains caller-verified local-agent associations, not replay frames.
 	History []TreeSeed
 }
@@ -102,6 +110,10 @@ type treeNode struct {
 	publishedScope  string
 }
 type treeTool struct{ owner *treeNode }
+type treeHeld struct {
+	record   TreeRecord
+	deadline time.Time
+}
 type treeEventKey struct{ session, agent, task, tool, run, boundary, kind, subtype, uuid string }
 
 // TreeClient owns a private Client and its sole Receive consumer. Like Client,
@@ -119,7 +131,13 @@ type TreeClient struct {
 	seen          map[treeEventKey]struct{}
 	runs          map[treeRunKey]treeRun
 	currentRuns   map[treeKey]string
-	pending       []TreeRecord // bounded graph fanout plus the accepted native frame
+	pending       []TreeRecord // one atomically admitted fanout
+	held          []treeHeld
+	heldBytes     int
+	fanoutErr     error
+	halted        bool        // after graph/fanout exhaustion, drain raw frames without mutating state
+	fallback      *TreeRecord // one accepted native outside the bounded fanout
+	ready         *TreeRecord // the Native reserved in the current atomic fanout
 	sequence      uint64
 	startup       bool
 	end           error
@@ -138,6 +156,9 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 		{"MaxDepth", &treeOptions.MaxDepth, 32, 256},
 		{"MaxDedupEntries", &treeOptions.MaxDedupEntries, 8192, 131072},
 		{"MaxRuns", &treeOptions.MaxRuns, 8192, 131072},
+		{"MaxPendingRecords", &treeOptions.MaxPendingRecords, 8192, 131072},
+		{"MaxUnresolvedEvents", &treeOptions.MaxUnresolvedEvents, 128, 65536},
+		{"MaxUnresolvedBytes", &treeOptions.MaxUnresolvedBytes, 4 << 20, 64 << 20},
 	} {
 		if *bound.value < 0 || *bound.value > bound.ceiling {
 			return nil, fmt.Errorf("claude: %s must be between 0 and %d", bound.name, bound.ceiling)
@@ -145,6 +166,12 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 		if *bound.value == 0 {
 			*bound.value = bound.fallback
 		}
+	}
+	if treeOptions.MaxUnresolvedWait < 0 || treeOptions.MaxUnresolvedWait > time.Minute {
+		return nil, fmt.Errorf("claude: MaxUnresolvedWait must be between 0 and 1 minute")
+	}
+	if treeOptions.MaxUnresolvedWait == 0 {
+		treeOptions.MaxUnresolvedWait = 5 * time.Second
 	}
 	if len(treeOptions.History) > treeOptions.MaxNodes {
 		return nil, fmt.Errorf("claude: history exceeds MaxNodes")
@@ -167,6 +194,10 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 	if options.ResumeID != "" || len(treeOptions.History) > 0 {
 		t.diagnostic("", "history-gap")
 	}
+	if t.fanoutErr != nil {
+		_ = c.Close()
+		return nil, t.fanoutErr
+	}
 	return t, nil
 }
 
@@ -187,12 +218,10 @@ func (t *TreeClient) deliver(r TreeRecord) (TreeRecord, error) {
 	return r, nil
 }
 
-// Receive emits an association before its first child Native. Root answers are
-// never combined with child text. Parent tools without known ownership and
-// missing session identities stay unresolved. Later evidence enriches relationships
-// without replaying delivered Native records. Only scoped native UUIDs deduplicate;
-// identical no-ID deltas are retained. Timed unresolved buffering is not provided.
-// Canceling a receive wait leaves the process and permission service running.
+// Receive emits associations before attributed Native records. Unresolved native
+// frames wait within configured bounds, while control requests remain immediately
+// observable and their original handles are dispatched independently by Client.
+// Canceling this wait leaves both the held frames and permission service intact.
 func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 	if t.startup {
 		t.startup = false
@@ -201,54 +230,165 @@ func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 		r.State, r.Reason = "unverified", "forwarding-not-confirmed"
 		return t.deliver(r)
 	}
-	if len(t.pending) > 0 {
-		r := t.pending[0]
-		t.pending[0] = TreeRecord{}
-		t.pending = t.pending[1:]
-		return t.deliver(r)
-	}
-	if t.end != nil {
-		return TreeRecord{}, t.end
-	}
-nextEvent:
-	e, err := t.client.Receive(ctx)
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return TreeRecord{}, err
+	for {
+		if len(t.pending) > 0 {
+			r := t.pending[0]
+			t.pending[0] = TreeRecord{}
+			t.pending = t.pending[1:]
+			return t.deliver(r)
 		}
-		t.end = err
-		session, _ := t.SessionID()
-		r := t.record("ObservationState", TreeIdentity{SessionID: session})
-		r.State, r.Reason = "incomplete", "stream-ended"
-		if errors.Is(err, io.EOF) {
-			r.State, r.Reason = "closed", "client-closed"
+		if t.fallback != nil {
+			r := *t.fallback
+			t.fallback = nil
+			return t.deliver(r)
 		}
-		return t.deliver(r)
+		// Only Receive touches the graph and staging queues. No timer goroutine or
+		// second Client reader is needed; expiration is checked on every receive.
+		if r, ok := t.releaseHeld(); ok {
+			return t.deliver(r)
+		}
+		if t.ready != nil {
+			r := *t.ready
+			t.ready = nil
+			return t.deliver(r)
+		}
+		if t.end != nil {
+			return TreeRecord{}, t.end
+		}
+		waitCtx := ctx
+		cancel := func() {}
+		if len(t.held) > 0 {
+			waitCtx, cancel = context.WithDeadline(ctx, t.held[0].deadline)
+		}
+		e, err := t.client.Receive(waitCtx)
+		cancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				return TreeRecord{}, ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+			if errors.Is(err, context.Canceled) {
+				return TreeRecord{}, err
+			}
+			t.end = err
+			session, _ := t.SessionID()
+			r := t.record("ObservationState", TreeIdentity{SessionID: session})
+			r.State, r.Reason = "incomplete", "stream-ended"
+			if errors.Is(err, io.EOF) {
+				r.State, r.Reason = "closed", "client-closed"
+			}
+			return t.deliver(r)
+		}
+		root := TreeIdentity{SessionID: e.SessionID}
+		r := t.record("Native", root)
+		r.Origin, r.Native, r.Source, r.Scope = "native", &e, root, "root"
+		if e.SessionID == "" {
+			r.Scope = "unscoped"
+		}
+		if t.halted {
+			// Drain accepted frames without trusting graph changes from a
+			// rejected fanout; original native identities and Raw still survive.
+			r.Scope, r.Reason = "unresolved", "tree-resource-limit"
+			r.Source = treeFrameIdentity(e)
+			return t.deliver(r)
+		}
+		duplicate, identityErr := t.duplicate(e)
+		if duplicate {
+			continue
+		}
+		if identityErr != nil {
+			return t.failRecord(r, identityErr)
+		}
+		if err := t.route(&r, e); err != nil {
+			return t.failRecord(r, err)
+		}
+		if e.Control != nil {
+			if metadata, err := e.Control.PermissionMetadata(); err == nil {
+				r.Source.ToolUseID = metadata.ToolUseID
+			}
+		}
+		if err := t.trackRun(&r, e); err != nil {
+			return t.failRecord(r, err)
+		}
+		// Reserve the entire fanout, including its Native, before exposing any of
+		// it. A failure discards staged derived records and reports the raw frame
+		// as unresolved through a fixed emergency slot, even with capacity one.
+		if t.fanoutErr != nil {
+			return t.failRecord(r, t.fanoutErr)
+		}
+		if len(t.pending) >= t.options.MaxPendingRecords {
+			return t.failRecord(r, &ResourceLimitError{Resource: "tree pending records", Limit: t.options.MaxPendingRecords})
+		}
+		if r.Scope == "unresolved" && e.Control == nil && e.Cancel == nil {
+			if len(t.held) >= t.options.MaxUnresolvedEvents {
+				return t.failRecord(r, &ResourceLimitError{Resource: "tree unresolved events", Limit: t.options.MaxUnresolvedEvents})
+			}
+			if len(e.Raw) > t.options.MaxUnresolvedBytes-t.heldBytes {
+				return t.failRecord(r, &ResourceLimitError{Resource: "tree unresolved bytes", Limit: t.options.MaxUnresolvedBytes})
+			}
+			t.held = append(t.held, treeHeld{r, time.Now().Add(t.options.MaxUnresolvedWait)})
+			t.heldBytes += len(e.Raw)
+		} else {
+			t.ready = &r
+		}
 	}
-	duplicate, identityErr := t.duplicate(e)
-	if duplicate {
-		goto nextEvent
-	}
-	root := TreeIdentity{SessionID: e.SessionID}
-	r := t.record("Native", root)
-	r.Origin, r.Native, r.Source, r.Scope = "native", &e, root, "root"
-	if e.SessionID == "" {
-		r.Scope = "unscoped"
-	}
-	if identityErr != nil {
-		return t.failRecord(r, identityErr)
-	}
-	if err := t.route(&r, e); err != nil {
-		return t.failRecord(r, err)
-	}
-	if err := t.trackRun(&r, e); err != nil {
-		return t.failRecord(r, err)
+}
+
+// stage never lets one input's derived fanout grow beyond its positive bound.
+func (t *TreeClient) stage(r TreeRecord) {
+	if len(t.pending) >= t.options.MaxPendingRecords {
+		t.fanoutErr = &ResourceLimitError{Resource: "tree pending records", Limit: t.options.MaxPendingRecords}
+		return
 	}
 	t.pending = append(t.pending, r)
-	next := t.pending[0]
-	t.pending[0] = TreeRecord{}
-	t.pending = t.pending[1:]
-	return t.deliver(next)
+}
+
+// releaseHeld selects the first releasable frame, so an unrelated unresolved
+// source cannot make a newer frame overtake a resolved source's held frames.
+// Later evidence only enriches undelivered attribution; Native is never replayed.
+func (t *TreeClient) releaseHeld() (TreeRecord, bool) {
+	for i, h := range t.held {
+		r := h.record
+		if !t.halted && t.end == nil {
+			n := t.nodes[treeKey{r.Source.SessionID, r.Source.AssociationID}]
+			if n == nil && r.Source.TaskID != "" {
+				n = t.nodes[treeKey{r.Source.SessionID, "task:" + r.Source.TaskID}]
+			}
+			if n != nil {
+				parent, scope := t.parent(n)
+				if scope == "child" {
+					// Keep the frame's original native run/tool references across enrichment.
+					run, tool := r.Source.RunID, r.Source.ToolUseID
+					r.Source = n.identity
+					r.Source.RunID = run
+					if tool != "" {
+						r.Source.ToolUseID = tool
+					}
+					r.Parent, r.Scope = copyTreeParent(parent), scope
+				}
+			}
+		}
+		expired := !time.Now().Before(h.deadline)
+		if r.Scope != "child" && !expired && !t.halted && t.end == nil {
+			continue
+		}
+		copy(t.held[i:], t.held[i+1:])
+		t.held[len(t.held)-1] = treeHeld{}
+		t.held = t.held[:len(t.held)-1]
+		t.heldBytes -= len(r.Native.Raw)
+		if r.Scope == "child" {
+			return r, true
+		}
+		r.Scope, r.Reason = "unresolved", "unresolved-source"
+		t.fallback = &r
+		d := t.record("ObservationState", r.Root)
+		d.Source, d.Parent, d.Scope = r.Source, copyTreeParent(r.Parent), "unresolved"
+		d.State, d.Reason = "incomplete", "unresolved-source"
+		return d, true
+	}
+	return TreeRecord{}, false
 }
 
 // UUID identity is taken from the native frame, never from an enriched node:
@@ -316,7 +456,7 @@ func (t *TreeClient) reserve() error {
 func (t *TreeClient) diagnostic(session, reason string) {
 	d := t.record("ObservationState", TreeIdentity{SessionID: session})
 	d.State, d.Reason = "incomplete", reason
-	t.pending = append(t.pending, d)
+	t.stage(d)
 }
 func isTreeTaskEvent(e Event) bool {
 	if e.System == nil {
@@ -567,7 +707,7 @@ func (t *TreeClient) route(r *TreeRecord, e Event) error {
 			d := t.record("ObservationState", r.Root)
 			d.Source, d.Parent, d.Scope, d.CurrentRunID, d.RunScope = r.Source, copyTreeParent(r.Parent), r.Scope, n.currentRun, "native"
 			d.State, d.Reason = "run-observed", "new-run-observed"
-			t.pending = append(t.pending, d)
+			t.stage(d)
 		}
 		// Tool ownership below must refer to this entity, regardless of unresolved root.
 		if e.Assistant != nil {
@@ -671,7 +811,7 @@ func (t *TreeClient) merge(a, b *treeNode, session string) (*treeNode, bool) {
 		d.Parent, d.Scope = t.parent(a)
 		d.Reason, d.Evidence = "identity-merged", "verified-message-task-tool-mapping"
 		d.PreviousAssociationID = b.identity.AssociationID
-		t.pending = append(t.pending, d)
+		t.stage(d)
 	}
 	return a, true
 }
@@ -805,7 +945,7 @@ func (t *TreeClient) announce(session string) {
 		if n.announced {
 			a.Reason = "identity-enriched"
 		}
-		t.pending = append(t.pending, a)
+		t.stage(a)
 		n.announced, n.published, n.publishedParent, n.publishedScope = true, n.identity, copyTreeParent(parent), scope
 	}
 	for _, n := range t.order {
@@ -828,21 +968,63 @@ func copyTreeParent(p *TreeIdentity) *TreeIdentity {
 
 func (t *TreeClient) failRecord(native TreeRecord, err error) (TreeRecord, error) {
 	t.client.fail(err)
-	t.pending = append(t.pending, native)
+	t.halted = true
+	// No partial association fanout escapes. The connection is terminal, so
+	// graph mutations from this rejected batch will never be used again.
+	clear(t.pending)
+	t.pending = nil
+	native.Scope, native.Reason = "unresolved", "tree-resource-limit"
+	native.Source = treeFrameIdentity(*native.Native)
+	// Drain earlier held frames before the overflow frame, preserving their
+	// native order. This single reserved slot does not need fanout capacity.
+	t.ready = &native
 	r := t.record("ObservationState", native.Root)
 	r.State, r.Reason = "incomplete", "association-limit"
 	if limit, ok := err.(*ResourceLimitError); ok {
-		if limit.Resource == "tree dedup identities" {
+		switch limit.Resource {
+		case "tree dedup identities":
 			r.Reason = "dedup-limit"
-		}
-		if limit.Resource == "tree runs" {
+		case "tree runs":
 			r.Reason = "run-limit"
-		}
-		if limit.Resource == "tree lineage depth" {
+		case "tree lineage depth":
 			r.Reason = "depth-limit"
+		case "tree pending records":
+			r.Reason = "fanout-limit"
+		case "tree unresolved events", "tree unresolved bytes":
+			r.Reason = "unresolved-source"
 		}
 	}
 	return t.deliver(r)
+}
+
+// treeFrameIdentity reads native evidence only, including original request
+// metadata. It cannot expose an association whose fanout was rejected.
+func treeFrameIdentity(e Event) TreeIdentity {
+	source := TreeIdentity{SessionID: e.SessionID}
+	if e.AgentID != nil {
+		source.AgentID = *e.AgentID
+		if e.Type == "assistant" || e.Type == "user" {
+			source.TaskID = *e.AgentID
+		}
+	}
+	if e.ParentToolUseID != nil {
+		source.ToolUseID = *e.ParentToolUseID
+	}
+	if e.System != nil {
+		source.TaskID = e.System.TaskID
+		if e.System.ToolUseID != nil {
+			source.ToolUseID = *e.System.ToolUseID
+		}
+		if e.System.RunID != nil {
+			source.RunID = *e.System.RunID
+		}
+	}
+	if e.Control != nil {
+		if metadata, err := e.Control.PermissionMetadata(); err == nil {
+			source.AgentID, source.ToolUseID = metadata.AgentID, metadata.ToolUseID
+		}
+	}
+	return source
 }
 
 // seed uses the existing graph rules but never treats a snapshot as live creation.
@@ -965,7 +1147,7 @@ func (t *TreeClient) trackRun(r *TreeRecord, e Event) error {
 			b := *r.RunBackgrounded
 			d.RunBackgrounded = &b
 		}
-		t.pending = append(t.pending, d)
+		t.stage(d)
 	}
 	return nil
 }

@@ -57,7 +57,7 @@ func openTreeFixture(t *testing.T, configure ...func(*claude.Options)) *claude.T
 	for _, f := range configure {
 		f(&opts)
 	}
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{})
+	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,6 +235,10 @@ func TestTreeUnresolvedAndNonAgentTask(t *testing.T) {
 			}
 			r = treeReceive(t, c)
 		}
+
+		if r.Kind == "ObservationState" && r.Reason == "unresolved-source" {
+			r = treeReceive(t, c)
+		}
 		if r.Kind != "Native" || string(r.Native.Raw) != frame {
 			t.Fatal(r)
 		}
@@ -286,7 +290,7 @@ func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {
 		t.Fatal("rejection accepted", c, err)
 	}
 	opts := fixtureOptions(t, "tree")
-	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxNodes: 1})
+	c, err := claude.OpenTree(context.Background(), opts, claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond, MaxNodes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,6 +303,10 @@ func TestTreeBoundsRejectionAndCloseRace(t *testing.T) {
 		if id == "a" {
 			if r.Kind != "SubagentAssociated" {
 				t.Fatal(r)
+			}
+
+			if d := treeReceive(t, c); d.Reason != "unresolved-source" {
+				t.Fatal(d)
 			}
 			treeReceive(t, c)
 		} else {
@@ -370,7 +378,7 @@ func TestSubagentEnvelopeNullAbsentAndTypedEdits(t *testing.T) {
 const earlyTreeFrame = ` {"type":"assistant","session_id":"root","agent_id":"early","parent_tool_use_id":"not-observed","message":{"content":"before initialize ack"},"extra":null} `
 
 func TestTreeForwardingBeforeFirstNativeAndDisconnect(t *testing.T) {
-	c, err := claude.OpenTree(context.Background(), fixtureOptions(t, "tree_early"), claude.TreeOptions{})
+	c, err := claude.OpenTree(context.Background(), fixtureOptions(t, "tree_early"), claude.TreeOptions{MaxUnresolvedWait: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,6 +387,10 @@ func TestTreeForwardingBeforeFirstNativeAndDisconnect(t *testing.T) {
 		t.Fatal(r)
 	}
 	if r := treeReceive(t, c); r.Kind != "SubagentAssociated" || r.Scope != "unresolved" || r.Parent != nil {
+		t.Fatal(r)
+	}
+
+	if r := treeReceive(t, c); r.Reason != "unresolved-source" {
 		t.Fatal(r)
 	}
 	if r := treeReceive(t, c); r.Native == nil || string(r.Native.Raw) != earlyTreeFrame {

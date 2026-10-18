@@ -53,6 +53,8 @@ import (
     codextypes "github.com/zoumo/agent-sdk-go/codex/types"
     claude "github.com/zoumo/agent-sdk-go/claude"
     claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+    codexrecording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
+    claudetranscript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
 )
 
 var _ func(*codex.Client, context.Context, codextypes.ThreadStartParams) (codextypes.ThreadStartResponse, error) = (*codex.Client).StartThread
@@ -87,6 +89,20 @@ func TestNativeConfiguration(t *testing.T) {
     } {
         t.Run(tc.name, tc.check)
     }
+}
+
+// Tooling smoke check: the downloaded module must embed its relocated fixtures.
+// This is independent of the consumer's cwd and never opens a CLI or client.
+func TestEmbeddedRecordingFixtures(t *testing.T) {
+    for _, story := range []string{"s1", "s2"} {
+        frames, err := codexrecording.Load(story)
+        require.NoError(t, err)
+        require.NotEmpty(t, frames)
+    }
+    prompt, err := claudetranscript.Prompt()
+    require.NoError(t, err)
+    require.NotEmpty(t, prompt)
+    require.NotEmpty(t, claudetranscript.Wire)
 }
 
 GO

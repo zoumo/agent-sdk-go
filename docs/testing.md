@@ -46,6 +46,12 @@ and `SDK_REAL_AGENT_E2E=0`. Codex requires `CODEX_E2E_CLI` and Claude requires
 to equal `1` and refuses a nonempty `CI`. Offline validation and recorded replay invoke no real agent/model. Native successful subagent interoperability remains unverified;
 see each package's compatibility and recording documentation for precise evidence.
 
+Fixture evidence and its small embedding packages live in each native
+`tests/testdata`, alongside `tests/e2e`. Native replay tools embed those files,
+so replay tests and examples do not depend on the caller's working directory.
+External consumer checks also load both native recordings from the downloaded
+module to verify fixture packaging after path changes.
+
 ## External consumers
 
 After pushing a commit, validate the new module from independent temporary

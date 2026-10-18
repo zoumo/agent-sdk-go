@@ -55,8 +55,8 @@ Text and delta boundaries are evidence of this capture, not requirements on futu
 models. A parent result never proves whole-tree completion. No child behavior is
 claimed from S1 or S2; existing synthetic tree contracts cover that boundary.
 
-`testdata/recordings/real-sanitized` holds recorded evidence;
-`testdata/synthetic-faults` holds explicitly synthetic protocol
+`tests/testdata/recordings/real-sanitized` holds recorded evidence;
+`tests/testdata/synthetic-faults` holds explicitly synthetic protocol
 preparation/fault inputs. Each real manifest records source revisions, binary
 digest, prompt/input digests, retained coverage frame indices, exclusions,
 budgets, actual transport duration, cleanup and file hashes. ID relations publish

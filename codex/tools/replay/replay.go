@@ -14,7 +14,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
-	fixturedata "github.com/zoumo/agent-sdk-go/codex/testdata"
+	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 

@@ -1,7 +1,7 @@
 # Recorded test data
 
 Only the **real-sanitized** rows below contain captured provider traffic. Files
-are checked into this repository under the aligned native testdata directories. No new
+are checked into this repository under the native `tests/testdata` directories. No new
 recording was made for the testify test migration. Sanitizer rules, manifests,
 file hashes, typed ID mappings, source commits and evidence limits remain intact.
 
@@ -9,11 +9,11 @@ file hashes, typed ID mappings, source commits and evidence limits remain intact
 
 | Capture | Native wire data | Provenance and file hashes | Expected observations | ID mappings / transport |
 |---|---|---|---|---|
-| Codex S1: successful root task with two dynamic tool calls | [protocol.jsonl](../codex/testdata/recordings/real-sanitized/s1/protocol.jsonl) | [manifest.json](../codex/testdata/recordings/real-sanitized/s1/manifest.json) | [expected-observations.json](../codex/testdata/recordings/real-sanitized/s1/expected-observations.json) | [id-relations.json](../codex/testdata/recordings/real-sanitized/s1/id-relations.json) |
-| Codex S2: successful user-question request and original correlated answer | [protocol.jsonl](../codex/testdata/recordings/real-sanitized/s2/protocol.jsonl) | [manifest.json](../codex/testdata/recordings/real-sanitized/s2/manifest.json) | [expected-observations.json](../codex/testdata/recordings/real-sanitized/s2/expected-observations.json) | [id-relations.json](../codex/testdata/recordings/real-sanitized/s2/id-relations.json) |
-| Claude S1: real CLI authentication failure, **no successful model or tool execution** | [wire.jsonl](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/wire.jsonl) | [manifest.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/manifest.json) | [expected-observations.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/expected-observations.json) | [id-relations.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/id-relations.json), [transport.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/transport.json) |
+| Codex S1: successful root task with two dynamic tool calls | [protocol.jsonl](../codex/tests/testdata/recordings/real-sanitized/s1/protocol.jsonl) | [manifest.json](../codex/tests/testdata/recordings/real-sanitized/s1/manifest.json) | [expected-observations.json](../codex/tests/testdata/recordings/real-sanitized/s1/expected-observations.json) | [id-relations.json](../codex/tests/testdata/recordings/real-sanitized/s1/id-relations.json) |
+| Codex S2: successful user-question request and original correlated answer | [protocol.jsonl](../codex/tests/testdata/recordings/real-sanitized/s2/protocol.jsonl) | [manifest.json](../codex/tests/testdata/recordings/real-sanitized/s2/manifest.json) | [expected-observations.json](../codex/tests/testdata/recordings/real-sanitized/s2/expected-observations.json) | [id-relations.json](../codex/tests/testdata/recordings/real-sanitized/s2/id-relations.json) |
+| Claude S1: real CLI authentication failure, **no successful model or tool execution** | [wire.jsonl](../claude/tests/testdata/recordings/real-sanitized/s1-auth-blocked/wire.jsonl) | [manifest.json](../claude/tests/testdata/recordings/real-sanitized/s1-auth-blocked/manifest.json) | [expected-observations.json](../claude/tests/testdata/recordings/real-sanitized/s1-auth-blocked/expected-observations.json) | [id-relations.json](../claude/tests/testdata/recordings/real-sanitized/s1-auth-blocked/id-relations.json), [transport.json](../claude/tests/testdata/recordings/real-sanitized/s1-auth-blocked/transport.json) |
 
-Codex's [recording summary](../codex/testdata/recordings/real-sanitized/recording-summary.json)
+Codex's [recording summary](../codex/tests/testdata/recordings/real-sanitized/recording-summary.json)
 describes the original capture activity. Both Codex captures used CLI 0.162.1;
 Claude used CLI 2.1.258. These are historical observations of those captures,
 not current live compatibility claims. Codex S1 does not cover native shell or
@@ -30,8 +30,8 @@ synthetic tests; these tests do not establish successful real-agent behavior.
 
 | Fixture | Files | Meaning |
 |---|---|---|
-| Codex synthetic lifecycle/faults | [protocol.jsonl](../codex/testdata/synthetic-faults/lifecycle/protocol.jsonl), [manifest.json](../codex/testdata/synthetic-faults/lifecycle/manifest.json) | Handwritten fault/lifecycle traffic; not captured provider output |
-| Claude synthetic control protocol | [controls.jsonl](../claude/testdata/synthetic-faults/controls.jsonl), [README](../claude/testdata/synthetic-faults/README.md) | Handwritten control/permission/cancellation cases |
+| Codex synthetic lifecycle/faults | [protocol.jsonl](../codex/tests/testdata/synthetic-faults/lifecycle/protocol.jsonl), [manifest.json](../codex/tests/testdata/synthetic-faults/lifecycle/manifest.json) | Handwritten fault/lifecycle traffic; not captured provider output |
+| Claude synthetic control protocol | [controls.jsonl](../claude/tests/testdata/synthetic-faults/controls.jsonl), [README](../claude/tests/testdata/synthetic-faults/README.md) | Handwritten control/permission/cancellation cases |
 | Claude offline subagent example | [events.ndjson](../claude/examples/subagents-offline/testdata/events.ndjson) | Synthetic nested/background task sequence |
 | Shared story protocol peers | [peer_test.go](../tests/stories/peer_test.go) | Generated in-process/self-executed native peers, not recordings |
 

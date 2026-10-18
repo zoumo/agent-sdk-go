@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	fixturedata "github.com/zoumo/agent-sdk-go/claude/testdata"
+	fixturedata "github.com/zoumo/agent-sdk-go/claude/tests/testdata"
 )
 
 const PeerEnvironment = "CLAUDE_GO_RECORDED_PEER"

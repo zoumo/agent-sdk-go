@@ -12,7 +12,7 @@ spec = importlib.util.spec_from_file_location('sanitizer', root/'scripts/sanitiz
 sanitizer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sanitizer)
 sanitizer.selftest()
-base = root/'testdata/recordings/real-sanitized/s1-auth-blocked'
+base = root/'tests/testdata/recordings/real-sanitized/s1-auth-blocked'
 manifest = json.loads((base/'manifest.json').read_text())
 for path in base.iterdir():
     if sanitizer.SECRET.search(path.read_text()):

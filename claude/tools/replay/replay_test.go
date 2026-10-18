@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	fixturedata "github.com/zoumo/agent-sdk-go/claude/testdata"
+	fixturedata "github.com/zoumo/agent-sdk-go/claude/tests/testdata"
 	"os"
 	"path/filepath"
 	"strings"

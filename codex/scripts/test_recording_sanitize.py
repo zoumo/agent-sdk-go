@@ -12,7 +12,7 @@ spec.loader.exec_module(sanitize)
 
 class Publication(unittest.TestCase):
     def test_synthetic_lifecycle_whitelist_and_associations(self):
-        p = pathlib.Path(__file__).resolve().parents[1]/'testdata/synthetic-faults/lifecycle/protocol.jsonl'
+        p = pathlib.Path(__file__).resolve().parents[1]/'tests/testdata/synthetic-faults/lifecycle/protocol.jsonl'
         frames = [json.loads(line) for line in p.read_text().splitlines()]
         clean, omitted, ids = sanitize.transform(frames, '/synthetic-project', '/synthetic-home')
         self.assertEqual(len(clean), len(frames))

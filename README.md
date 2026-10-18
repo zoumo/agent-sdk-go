@@ -166,9 +166,11 @@ See [type source and license review](docs/type-sources.md) for pinned references
 `OpenTree` owns one native stream and enables `forwardSubagentText` during
 initialization. It exposes lossless native frames and explicitly marked SDK
 association/observation records. Forwarding support remains unverified until
-there is runtime evidence; new entity creation is not inferred from task start.
-Created remains **conditional and never emitted**: task_started and
-SubagentStart cannot alone exclude resume; Associated does not prove creation.
+there is runtime evidence. **SubagentCreated is conditionally implemented for
+exact CLI 2.1.258**, the locally installed version checked with `--version`.
+Creation requires the fixed foreground or corroborated successful Agent result
+criterion; ordinary task start, tool input and SubagentStart alone do not prove
+creation. Associated remains separate. See the [creation rules](docs/subagent-events.md#creation-evidence).
 See the [per-capability matrix](docs/subagent-compatibility.md) for pinned versions,
 E1/E2 evidence and foreground/background/nested/legacy limits, plus the
 [API and current limits](docs/subagent-events.md). No E3/E4 subagent checks ran.
@@ -185,3 +187,5 @@ after the parent result, observes patch-only terminals and explicitly closes.
 Session-state events need a native opt-in on applicable CLIs; background task
 snapshots replace a process-local set and do not prove termination. See the
 [offline validation evidence](docs/evidence/subagent-ticket05.md).
+
+中文事件时序说明：[前台/后台任务、子流、审批和结束边界](docs/event-sequences.md)。

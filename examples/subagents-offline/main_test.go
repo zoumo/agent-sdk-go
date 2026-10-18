@@ -34,6 +34,7 @@ func TestOfflineExample(t *testing.T) {
 	scanner := strings.Split(strings.TrimSpace(frames), "\n")
 	associated := make(map[string]bool)
 	native, rootResult, childAfter, nested, patchTerminal, closed := 0, false, false, false, false, false
+	created := make(map[string]bool)
 	for {
 		var r struct {
 			claude.TreeRecord
@@ -47,7 +48,13 @@ func TestOfflineExample(t *testing.T) {
 			t.Fatal(err)
 		}
 		if r.Kind == "SubagentCreated" {
-			t.Fatal("creation must remain conditional")
+			if created[r.Source.TaskID] || !associated[r.Source.AssociationID] || r.Source.RunID != "" || r.RunScope != "legacy-unknown" {
+				t.Fatal(r)
+			}
+			if r.Source.TaskID == "child" && !childAfter {
+				t.Fatal("background creation blocked or preceded child output")
+			}
+			created[r.Source.TaskID] = true
 		}
 		if r.Kind == "SubagentAssociated" {
 			associated[r.Source.AssociationID] = true
@@ -78,10 +85,10 @@ func TestOfflineExample(t *testing.T) {
 			nested = true
 		}
 		if r.Native.Subtype == "task_updated" && r.Source.TaskID == "child" {
-			patchTerminal = rootResult && r.Source.RunID == "001" && r.RunTerminal && r.RunStatus == "killed"
+			patchTerminal = rootResult && r.Source.RunID == "" && r.RunTerminal && r.RunStatus == "killed"
 		}
 	}
-	if native != len(scanner) || !rootResult || !childAfter || !nested || !patchTerminal || !closed {
+	if native != len(scanner) || !rootResult || !childAfter || !nested || !patchTerminal || !closed || len(created) != 2 {
 		t.Fatalf("native=%d root=%t after=%t nested=%t terminal=%t closed=%t", native, rootResult, childAfter, nested, patchTerminal, closed)
 	}
 }

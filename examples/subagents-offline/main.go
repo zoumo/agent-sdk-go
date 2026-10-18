@@ -70,8 +70,8 @@ func run(output io.Writer) error {
 			return err
 		}
 		// Inspect Kind (Associated/Created/ObservationState/Native), Source, Parent,
-		// Source.RunID and CurrentRunID. Created is reserved and is never emitted by
-		// this SDK version. Native.Raw retains the original frame; usage is not summed.
+		// Source.RunID and CurrentRunID. Created confirms creation only when the fixed
+		// criterion is met. Native.Raw retains the original frame; usage is not summed.
 		raw := ""
 		if record.Native != nil {
 			raw = string(record.Native.Raw)

@@ -60,3 +60,13 @@ Additional inspected type-organization file bytes (same pinned commits):
 | --- | --- |
 | severity1 `internal/shared/message.go` | `a4220bc169d58c9e500f308fda19598b9703a1671a37c5bd17634c4cfe46f216` |
 | Roasbeef `messages.go` | `762f11f74d05dcb231084dced650876b2d04be999476ac34a61c9156d05d555c` |
+
+## Ticket06 current CLI creation baseline
+
+The current installed CLI is **2.1.258**, checked with `--version` on 2026-10-18.
+[Official SDK 0.3.258](https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.258.tgz)
+manifest names that CLI version. Its task registration and Agent input/output
+declarations were read as schema reference only; the same non-MIT licensing
+boundary applies. No code, declaration bundle or third-party fixtures were copied.
+See [ticket06 hashes and binary/static evidence](evidence/subagent-ticket06.md).
+The older table remains historical source provenance, not a current-version claim.

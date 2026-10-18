@@ -2,19 +2,21 @@
 
 This is the canonical compatibility statement for this Go SDK. It is a deliberately limited, experimental native client, not feature parity with the official Python SDK.
 
-## Subagent observation (tickets 01–05)
+## Subagent observation (tickets 01–06)
 
 The [per-capability subagent matrix](subagent-compatibility.md) is the detailed
 subagent compatibility statement: native availability, SDK implementation,
 pinned versions, E1/E2 evidence and foreground/background/nested/legacy limits.
 OpenTree owns one stream with automatic initialize-time forwarding, lossless
-Native and SDK-derived Associated/ObservationState records. **Created is
-conditional and never emitted**: task_started/SubagentStart do not exclude
-resume. No E3/E4 subagent tests ran; prior partial live checks below do not apply.
+Native and SDK-derived Associated/Created/ObservationState records. **Created is
+conditional for exact CLI 2.1.258**, verified locally by `--version`; see the fixed
+foreground/corroborated-result rules in the subagent matrix. Version inspection
+is not live subagent validation. No E3/E4 subagent tests ran; prior partial live
+checks below do not apply.
 Session-state emission is opt-in; background snapshots REPLACE, not lifecycle
 edges. Parent result, child terminal and native idle remain independent.
 See the [runnable offline example](../examples/subagents-offline/main.go) and
-[validation evidence](evidence/subagent-ticket05.md).
+[ticket06 validation evidence](evidence/subagent-ticket06.md).
 
 ## Official documentation baseline
 

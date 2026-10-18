@@ -1,5 +1,9 @@
 # Subagent ticket05 delivery evidence
 
+Historical ticket05 report: its Created gap is superseded by
+[ticket06 current-version evidence](subagent-ticket06.md). The statements below
+record the earlier delivery, not the current Created implementation.
+
 Date: 2026-10-18 UTC. Implementation reviewed from
 `11d48dab8650647c42e70877cd1b49a4e3649ad6` through ticket04
 `5755d278f00510b77b6e211500b8b23f8fd66727` on main. This delivery adds public compatibility documentation, an original executable

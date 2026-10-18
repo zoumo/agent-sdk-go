@@ -1,10 +1,10 @@
-# Subagent forwarding and lineage (tickets 01–05)
+# Subagent forwarding and lineage (tickets 01–06)
 
 See the [per-capability compatibility matrix](subagent-compatibility.md),
 [runnable offline example](../examples/subagents-offline/main.go) and
-[ticket05 validation evidence](evidence/subagent-ticket05.md). Created remains
-conditional and never emitted; this does not fulfill the remaining request for
-proven first creation.
+[ticket06 validation evidence](evidence/subagent-ticket06.md). Created is
+conditional for exact CLI 2.1.258, the current installed version. `--version`
+inspection and static source review do not constitute live subagent validation.
 
 `Options.ForwardSubagentText` and `types.Options.ForwardSubagentText` default to
 false. `OptionsFromTypes` and `Options.Types` preserve the value. True adds
@@ -35,6 +35,8 @@ for {
         // Render by Source/Scope; do not append child text to the root answer.
     case "SubagentAssociated":
         // Establish or enrich an observed node before its native event.
+    case "SubagentCreated":
+        // Confirmed creation fact; delivery time is not the native creation time.
     case "ObservationState":
         // Surface record.State / record.Reason to the observer.
     }
@@ -57,18 +59,55 @@ absent, null and typed edits. These fields remain absent where the CLI omits
 them; the SDK does not synthesize them into native messages.
 
 SDK records carry `origin: sdk-derived`; Native carries `origin: native`.
-Sequence is a local arrival/delivery order, not a server cursor. This version
-never emits `SubagentCreated` and never reports complete forwarding.
+Sequence is a local arrival/delivery order, not a server cursor.
+`SubagentCreated` is independently derived, never a renamed association.
+The observer never reports complete forwarding.
 
 ## Creation evidence
 
-| Observation | SDK result | Why |
+The creation contract targets **exactly CLI 2.1.258**, inspected at
+`/Users/jim/bin/claude` on 2026-10-18. Official SDK 0.3.258 declarations and
+manifest, plus read-only static inspection of that local binary, support the
+criteria below. No model invocation, upgrade or auth change was made. Other
+version strings retain observation/Raw but cannot establish Created. This does
+not assert a minimum version or support for every version after 2.1.77.
+
+A single root `system/init` must identify that exact version, a nonempty stable
+session and the builtin tools. OpenTree must own a fresh process: explicit
+ResumeID or any History seed disables creation for the entire observation.
+Replay, repeated init (even UUID-deduplicated), a session change or a graph
+identity/parent/tool conflict disables further creation claims for the epoch.
+Those frames and ordinary associations still flow normally.
+
+| Observation | SDK result | Evidence required |
 | --- | --- | --- |
-| `task_started`, `task_type: local_agent` | Associated, first-observed | Task start may resume an existing entity. |
-| Assistant/user `agent_id` | Associated or identity-enriched | Fixed message contract equates it to task_id within the same session; first observation does not prove creation. |
-| Agent tool name/input, first task ID, spawn depth | No creation claim | These cannot exclude resume. |
-| SubagentStart hook | No creation claim; no hook installed | Native hook also fires for resume and teammate messages. |
-| Unambiguous native entity creation excluding resume | Created remains conditional / unsupported here | No general creation signal has been established for the pinned protocol. |
+| `local_agent` task_started with explicitly false `is_backgrounded` | Foreground Created | Nonempty native task/tool IDs, complete observed builtin Agent/Task request, attributable ancestry, no contradictions. Fixed 0.3.258 declaration says resumed subagents always register in background. Missing/null/true does not satisfy this route. |
+| Successful Agent structured result | Possibly late Created | Complete builtin request; exactly one successful matching tool_result in the user frame; structured tool_use_result status completed/async_launched and nonempty agentId; matching local_agent task/tool identity. Request, result and task may arrive in any order. |
+| Ordinary task start, first task ID, name, depth, input alone, hook | Associated only | These alone do not establish creation. No hook is installed. |
+| SendMessage, resume key (including null), remote_launched, error/malformed/missing result, ambiguous result blocks or contradictory IDs | No Created from that invocation | Hooks can replace input; absence of resume in a request is never the sole proof. |
+
+The request's input must be an object with nonempty prompt and description.
+Remote isolation and unadvertised/namespaced tools are excluded. Matching uses
+native task/tool IDs, never descriptions or agent names. A result must belong to
+the same caller as the request. Conflicting evidence poisons that invocation;
+graph conflicts conservatively disable all later creation claims in this epoch.
+
+Created confirms that creation occurred; it supplies no invented timestamp.
+Associated precedes attributed Native as before. Child Native continues while
+waiting for background confirmation, including after a parent result. A late
+Created can therefore follow child text. Created is emitted once per merged
+entity, across tool aliases and later work, without depending on UUID history.
+The evidence ledger has no eviction: MaxCreationEntries defaults to 8192,
+ceiling 131072. Exhaustion uses the existing visible terminal ResourceLimit
+path; it cannot turn an evicted entity into a second creation. No-ID native
+messages remain independently delivered.
+
+Current 2.1.258 declarations do **not** expose run_id, parent_task_id or message
+agent_id. Created has empty Source.RunID and `RunScope: legacy-unknown`; it
+uses observed tool ancestry. Earlier tickets retain optional codecs/Raw for
+additional native fields and their offline fixtures, but those newer fields are
+not a claim about current CLI emission. Missing identity/ancestry remains a
+conservative creation gap. The observer makes no live validation claim.
 
 ## Identity, lineage and runs
 
@@ -120,9 +159,8 @@ late work, and the SDK does not fabricate globally comparable legacy IDs.
 
 `SubagentStart` was rechecked against the
 [official Hooks reference](https://code.claude.com/docs/en/hooks#subagentstart)
-on 2026-10-18: it also fires on resume and teammate messages. No extra creation
-criterion excluding resume was found. **Created remains conditional and is
-never emitted.** No observation hook is installed.
+on 2026-10-18: it also fires on resume and teammate messages. The conditional
+Created rules above use task/result evidence instead. No observation hook is installed.
 
 Permission attribution retains the original request ID and sole answer handle.
 Root answers, native status (including killed), content and usage remain native;
@@ -130,7 +168,12 @@ no text, usage or fees are aggregated.
 
 ## Evidence and compatibility boundary
 
-Protocol reference: Python SDK commit
+Current creation baseline: official TS SDK **0.3.258**, whose manifest names
+CLI **2.1.258**. See [source hashes](evidence/subagent-ticket06.md). The rest of
+the existing observation API was originally implemented against the following
+newer schema reference; this is not a current-CLI emission claim.
+
+Original protocol reference: Python SDK commit
 [f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab, initialize forwarding](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/src/claude_agent_sdk/_internal/query.py)
 and TypeScript SDK 0.3.302 declarations (`SDKAssistantMessage`, `SDKUserMessage`,
 `SDKTaskStartedMessage`, `SDKTaskProgressMessage`, `SDKTaskUpdatedMessage`,
@@ -142,7 +185,7 @@ source are E1 evidence, not proof of installed CLI behavior.
 | Initialize forwarding option | Implemented; fake process captures false omission, true and automatic enabling | Unverified |
 | One owned root stream, child text/thinking/tools, Raw and permission handle | Implemented; original synthetic subprocess fixtures (E2), including race suite | No live CLI/model test |
 | Associated before attributed native | Recursive same-session task/tool graph; ancestor ordering and later enrichment (E2 fixtures) | Unverified |
-| Created | Conditional; deliberately never emitted | No unambiguous creation evidence |
+| Created | Exact 2.1.258 foreground/corroborated-result rules; original subprocess fixtures (E2) | No live subagent test |
 | Modern recursive graph and legacy tool reconciliation | Implemented; three-level fixtures, bridge evidence, conflicts/cycles (E2) | Unverified |
 | Run identity and late native frames | Implemented; new-run, stale metadata, resumed tool alias and missing-run fixtures (E2) | Unverified |
 | Scoped UUID deduplication | Implemented; session/source/run/type scope, bounded cache, no-ID/partial/complete fixtures (E2) | Single epoch only; unverified runtime |
@@ -358,3 +401,5 @@ handle, native cancel/fresh epochs/concurrent Close, default deny/unknown contro
 and separate root/child usage. Existing lineage/terminal cases explicitly choose
 a short wait when testing later enrichment after unresolved delivery. Evidence is
 E2 only; no real CLI/model, authentication change or runtime support claim.
+
+中文事件时序说明：[前台/后台任务、子流、审批和结束边界](event-sequences.md)。

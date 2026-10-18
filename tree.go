@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,8 @@ type TreeOptions struct {
 	MaxDepth        int
 	MaxDedupEntries int
 	MaxRuns         int
+	// MaxCreationEntries bounds retained tool/task creation evidence, without eviction.
+	MaxCreationEntries int
 	// MaxPendingRecords bounds one atomic association/diagnostic/native fanout.
 	MaxPendingRecords int
 	// MaxUnresolvedEvents/Bytes bound native frames awaiting source attribution.
@@ -44,8 +47,8 @@ type TreeIdentity struct {
 }
 
 // TreeRecord is an SDK envelope, never a native protocol event. Kind is Native,
-// SubagentAssociated or ObservationState. SubagentCreated is reserved for future
-// evidence that excludes resume; this version never emits it. Native retains
+// SubagentAssociated, SubagentCreated or ObservationState. Created confirms
+// creation under the fixed contract described in docs/subagent-events.md. Native retains
 // the original Event and Raw bytes. Sequence is local delivery order, not a
 // replay cursor. UsageScope remains unknown; no aggregate usage is calculated.
 type TreeRecord struct {
@@ -97,6 +100,7 @@ type treeRun struct {
 
 type treeKey struct{ session, id string }
 type treeNode struct {
+	created         bool
 	identity        TreeIdentity
 	parent          *treeNode
 	rootParent      bool
@@ -121,6 +125,7 @@ type treeEventKey struct{ session, agent, task, tool, run, boundary, kind, subty
 // It adds no reader goroutine, child process, subscription, resume or turn.
 // PermissionHandler receives the original sole answerable request handle.
 type TreeClient struct {
+	creation      treeCreation
 	client        *Client
 	options       TreeOptions
 	nodes         map[treeKey]*treeNode
@@ -156,6 +161,7 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 		{"MaxDepth", &treeOptions.MaxDepth, 32, 256},
 		{"MaxDedupEntries", &treeOptions.MaxDedupEntries, 8192, 131072},
 		{"MaxRuns", &treeOptions.MaxRuns, 8192, 131072},
+		{"MaxCreationEntries", &treeOptions.MaxCreationEntries, 8192, 131072},
 		{"MaxPendingRecords", &treeOptions.MaxPendingRecords, 8192, 131072},
 		{"MaxUnresolvedEvents", &treeOptions.MaxUnresolvedEvents, 128, 65536},
 		{"MaxUnresolvedBytes", &treeOptions.MaxUnresolvedBytes, 4 << 20, 64 << 20},
@@ -187,6 +193,8 @@ func OpenTree(ctx context.Context, options Options, treeOptions TreeOptions) (*T
 		return nil, err
 	}
 	t := &TreeClient{client: c, options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]treeTool), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
+	t.creation.disabled = options.ResumeID != "" || len(treeOptions.History) > 0
+	t.creation.calls = make(map[treeKey]*treeCreationCall)
 	if err := t.seed(treeOptions.History); err != nil {
 		_ = c.Close()
 		return nil, err
@@ -294,6 +302,13 @@ func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 			r.Source = treeFrameIdentity(e)
 			return t.deliver(r)
 		}
+		// Trust boundaries must be observed even when a Native UUID is a duplicate.
+		if e.IsReplay != nil && *e.IsReplay {
+			t.creation.disabled = true
+		}
+		if e.Type == "system" && e.Subtype == "init" && t.creation.initialized {
+			t.creation.disabled = true
+		}
 		duplicate, identityErr := t.duplicate(e)
 		if duplicate {
 			continue
@@ -310,6 +325,9 @@ func (t *TreeClient) Receive(ctx context.Context) (TreeRecord, error) {
 			}
 		}
 		if err := t.trackRun(&r, e); err != nil {
+			return t.failRecord(r, err)
+		}
+		if err := t.observeCreation(r, e); err != nil {
 			return t.failRecord(r, err)
 		}
 		// Reserve the entire fanout, including its Native, before exposing any of
@@ -458,6 +476,10 @@ func (t *TreeClient) reserve() error {
 	return nil
 }
 func (t *TreeClient) diagnostic(session, reason string) {
+	// Conflicting graph evidence cannot support a later creation claim.
+	if strings.Contains(reason, "conflict") || reason == "lineage-cycle" {
+		t.creation.disabled = true
+	}
 	d := t.record("ObservationState", TreeIdentity{SessionID: session})
 	d.State, d.Reason = "incomplete", reason
 	t.stage(d)
@@ -790,6 +812,15 @@ func (t *TreeClient) merge(a, b *treeNode, session string) (*treeNode, bool) {
 		if n == b {
 			a, b = b, a
 			break
+		}
+	}
+	a.created = a.created || b.created
+	for _, call := range t.creation.calls {
+		if call.owner == b {
+			call.owner = a
+		}
+		if call.resultOwner == b {
+			call.resultOwner = a
 		}
 	}
 	if a.identity.AgentID == "" {

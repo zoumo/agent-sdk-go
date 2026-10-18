@@ -34,5 +34,7 @@
 - 新路径说明、发布流程、版本说明和限制齐备。
 - 验收：独立消费者构建；跟踪 main 精确 SHA 的 Linux/macOS CI。
 - 不创建 tag 或 release。真实 agent 测试显式关闭；既有真实子 agent 未验证状态保留。
+- 落地：`scripts/check-consumers.sh` 用独立临时 GOPATH/module cache 从新仓库解析完整 SHA 并核对 VCS origin；四个公开包、公开示例、README 和 Claude 配置/审批片段均编译，仅运行纯值/配置检查。保留的 Claude consumer 脚本独立运行。Linux/macOS 的外部消费者 CI 与原生离线门禁分开，跟踪精确推送 SHA；最终 CI 证据在交付报告中给出。
+- 发布准备：`docs/releasing.md`、`docs/glossary.md` 和 `CHANGELOG.md`；版本计划为 `v0.1.0-rc.1`，尚未创建 tag/release。
 
 每票完成验证后独立提交并推送 main。旧仓库只读取，不修改、删除或归档。阶段证据记入相应提交的文档与最终报告，不提交临时执行日志。

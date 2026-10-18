@@ -20,6 +20,9 @@ module import paths have no compatibility forwarding packages.
 - [Architecture](docs/architecture.md)
 - [Migration and source history](docs/migration.md)
 - [Offline validation](docs/testing.md)
+- [Shared user stories and native evidence](docs/stories/index.md)
+- [Shared terms](docs/glossary.md)
+- [Release preparation and consumer checks](docs/releasing.md)
 - [Licenses and native attribution](NOTICE)
 
 Go **1.26.9** is pinned in the root `mise.toml`:
@@ -30,5 +33,9 @@ mise exec -- go mod download
 mise exec -- bash scripts/check-offline.sh
 ```
 
-All CI checks are offline. Historical recordings and source inspections have
-separate provenance; they do not establish current live agent compatibility.
+Native contract validation runs offline; real agent/model tests remain disabled.
+External consumer CI retrieves the exact
+pushed module and dependencies over the network, then compiles public imports,
+examples and documentation snippets without invoking a real CLI or model.
+Historical recordings and source inspections have separate provenance; they do
+not establish current live agent compatibility.

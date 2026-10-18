@@ -1,4 +1,4 @@
-name: Offline SDK checks
+name: SDK checks
 
 on:
   push:
@@ -84,4 +84,50 @@ jobs:
           independence, sanitization, recorded replays, examples, race and vet are separate gates.
           All real agent/model tests are **SKIPPED**. Historical live results retain their
           original scope; successful current native subagent interoperability is unverified.
+          SUMMARY
+
+  consumer:
+    name: External consumer (${{ matrix.os }}, pushed commit)
+    # Go module retrieval cannot reliably resolve synthetic PR merge commits.
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: local
+      GOENV: 'off'
+      GOMAXPROCS: '2'
+      SDK_CONSUMER_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out pushed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the mise-managed pinned compiler
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - name: Install the pinned generator interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13.13'
+          check-latest: false
+      - name: Retrieve exact remote commit into independent consumers
+        run: |
+          mise exec -- bash scripts/check-consumers.sh "$SDK_CONSUMER_SHA"
+          mise exec -- bash claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"
+      - name: Report external validation boundary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## External consumers
+          Consumers retrieve the pushed repository commit and dependencies over
+          the network into temporary modules with no replace or go.work.
+          Four public imports, public examples and documentation snippets compile.
+          Runtime checks use only synthetic data; no real CLI or model is invoked.
+          PR merge commits are outside this remote retrieval gate.
           SUMMARY

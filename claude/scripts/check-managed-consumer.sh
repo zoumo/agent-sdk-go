@@ -4,8 +4,14 @@
 set -euo pipefail
 sdk_root=$(cd "$(dirname "$0")/.." && pwd)
 version=${1:?usage: check-managed-consumer.sh COMMIT_OR_VERSION}
-consumer_dir=$(mktemp -d)
-trap 'rm -rf "$consumer_dir"' EXIT
+consumer_dir=$(mktemp -d /tmp/claude-sdk-consumer.XXXXXXXX)
+cleanup() {
+  chmod -R u+w "$consumer_dir"
+  rm -rf "$consumer_dir"
+}
+trap cleanup EXIT
+export GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=
+export GOPATH="$consumer_dir/go" GOMODCACHE="$consumer_dir/module-cache"
 cat > "$consumer_dir/go.mod" <<MOD
 module managed-consumer
 
@@ -49,4 +55,4 @@ section = text.split("## Go: configuration,", 1)[1]
 code = section.split("```go\n", 1)[1].split("```", 1)[0]
 pathlib.Path(sys.argv[2]).write_text('package consumer\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/agent-sdk-go/claude")\n'+code)
 PYDOC
-(cd "$consumer_dir" && GOWORK=off go get "github.com/zoumo/agent-sdk-go@$version" && GOWORK=off go mod tidy && GOWORK=off go test ./...)
+(cd "$consumer_dir" && go get "github.com/zoumo/agent-sdk-go@$version" && go mod tidy && go mod verify && GOPROXY=off GOSUMDB=off go test ./...)

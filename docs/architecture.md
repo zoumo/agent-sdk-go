@@ -14,3 +14,10 @@ or public question interface is introduced.
 Package documentation retains native protocol inventories, schema sources,
 compatibility boundaries and recorded fixture provenance. Shared operating and
 migration documentation lives here.
+
+The [shared stories](stories/index.md) describe common acceptance criteria while
+keeping native capability and evidence records separate. The [glossary](glossary.md)
+defines their terms. [Confirmed relationship bookkeeping](lineage.md) is the
+private shared implementation; native event parsing and answer authority remain
+in their SDKs. [Release preparation](releasing.md) covers one version for all
+four public packages and external consumer verification.

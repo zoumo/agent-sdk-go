@@ -399,7 +399,11 @@ func (t *TreeClient) duplicate(e Event) (bool, error) {
 		return false, nil
 	}
 	switch e.Type {
-	case "assistant", "user", "system", "result", "stream_event":
+	case "assistant", "user", "result", "stream_event":
+	case "system":
+		if !isTreeRootEvent(e) {
+			return false, nil
+		}
 	default:
 		return false, nil
 	}
@@ -468,6 +472,33 @@ func isTreeTaskEvent(e Event) bool {
 	}
 	return false
 }
+
+// isTreeRootEvent recognizes the pinned native envelope contracts only. A
+// session ID locates the root session but cannot assign an unknown notification
+// to its root agent. Explicit source evidence is handled separately in route.
+func isTreeRootEvent(e Event) bool {
+	switch e.Type {
+	case "assistant", "user", "result", "stream_event":
+		return true
+	case "system":
+		// Subtypes reviewed in official TS 0.3.302. Unknown future subtypes stay
+		// unscoped unless their own agent/task/tool evidence proves attribution.
+		switch e.Subtype {
+		case "init", "status", "compact_boundary", "api_retry",
+			"background_tasks_changed", "session_state_changed", "commands_changed",
+			"control_request_progress", "elicitation_complete", "files_persisted",
+			"hook_started", "hook_progress", "hook_response", "informational",
+			"local_command_output", "memory_recall", "mirror_error",
+			"model_refusal_fallback", "model_refusal_no_fallback", "notification",
+			"permission_denied", "plugin_install", "thinking_tokens",
+			"worker_shutting_down", "task_started", "task_progress", "task_updated",
+			"task_notification":
+			return true
+		}
+	}
+	return false
+}
+
 func (t *TreeClient) route(r *TreeRecord, e Event) error {
 	// Delayed native runs may be observed, but must not rewrite entity metadata,
 	// parent relations, tool aliases or the current run of newer work.
@@ -585,7 +616,7 @@ func (t *TreeClient) route(r *TreeRecord, e Event) error {
 		}
 	}
 	if agent == "" && task == "" && tool == "" {
-		if e.Type != "assistant" && e.Type != "user" && e.Type != "system" && e.Type != "result" && e.Type != "stream_event" {
+		if !isTreeRootEvent(e) {
 			r.Scope = "unscoped"
 		}
 	} else {

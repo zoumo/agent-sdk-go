@@ -2,6 +2,20 @@
 
 This is the canonical compatibility statement for this Go SDK. It is a deliberately limited, experimental native client, not feature parity with the official Python SDK.
 
+## Subagent observation (tickets 01–05)
+
+The [per-capability subagent matrix](subagent-compatibility.md) is the detailed
+subagent compatibility statement: native availability, SDK implementation,
+pinned versions, E1/E2 evidence and foreground/background/nested/legacy limits.
+OpenTree owns one stream with automatic initialize-time forwarding, lossless
+Native and SDK-derived Associated/ObservationState records. **Created is
+conditional and never emitted**: task_started/SubagentStart do not exclude
+resume. No E3/E4 subagent tests ran; prior partial live checks below do not apply.
+Session-state emission is opt-in; background snapshots REPLACE, not lifecycle
+edges. Parent result, child terminal and native idle remain independent.
+See the [runnable offline example](../examples/subagents-offline/main.go) and
+[validation evidence](evidence/subagent-ticket05.md).
+
 ## Official documentation baseline
 
 The [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) was reviewed on 2026-10-17 UTC. Its resolved URL was unchanged; fetched HTML SHA256 was `122dae0da4f76a8ebcb79164b4633491d011d7518bcc70fdb33f7eee9308aa67`. This is a mutable documentation page, not a versioned protocol specification. It describes the official Python/TypeScript SDKs; this repository is an independent Go implementation, not an Anthropic product.
@@ -91,7 +105,7 @@ CLI, account, or Mac validation.
 
 ### Runtime behavior
 
-Verified on 2026-10-18 with Go 1.26.9 on Linux/amd64. “PASS” below refers only to original synthetic subprocess fixtures. Public examples compile but do not run. Other platforms have not been runtime-validated.
+Verified on 2026-10-18 with Go 1.26.9 on Linux/amd64. “PASS” below refers only to original synthetic subprocess fixtures. Real-CLI examples compile but do not run. The subagents-offline example runs against its own synthetic peer (E2 only). [Ticket05 evidence](evidence/subagent-ticket05.md) additionally records macOS darwin/arm64 offline execution; no platform has subagent live validation.
 
 | Go behavior / public API | Implemented | Mock-tested | Race-tested | Real CLI-tested | Evidence (test file: cases) |
 | --- | --- | --- | --- | --- | --- |
@@ -181,7 +195,7 @@ These are CLI-wire operations, not local session-file utilities. The runtime sou
 
 | Operation | Go support | Boundary |
 | --- | --- | --- |
-| `initialize` | Implemented, matched request/response | Basic handshake only; no hook, agent, skills, prompt snapshot, or forwarded-subagent registration |
+| `initialize` | Implemented, matched request/response | Matched handshake and optional forwardSubagentText; OpenTree enables it automatically. No hook/agent/skills registration or prompt snapshot |
 | `interrupt` | Implemented, matched request/response | Acknowledgment is not rollback and does not replace a later turn result |
 | `can_use_tool` | Implemented, deferred handle | Original ID and input retained; allow/updated input or deny; no updated-permission rules or deny-interrupt shortcut |
 | `control_cancel_request` | Implemented | Observable request ID; invalidates handles; no durable cross-process cancellation journal |
@@ -258,7 +272,7 @@ Every one of the 49 fields of the pinned `ClaudeAgentOptions` is listed. An equi
 | `user` | Unsupported |
 | `include_partial_messages` | Always enabled with --include-partial-messages; no disable option |
 | `include_hook_events` | Unsupported |
-| `forward_subagent_text` | Unsupported |
+| `forward_subagent_text` | Implemented as Options.ForwardSubagentText; OpenTree enables it before initialize. E1/E2 only, live unverified; see [subagent matrix](subagent-compatibility.md) |
 | `verbatim_prompts` | Unsupported |
 | `fork_session` | Unsupported |
 | `resume_session_at` | Unsupported |

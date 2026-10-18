@@ -407,3 +407,30 @@ func TestTreeForwardingBeforeFirstNativeAndDisconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Unknown source-less system notifications must not acquire the root agent's
+// identity merely because their envelope names the same native session.
+func TestTreeUnknownSystemSubtypeNeedsSourceEvidence(t *testing.T) {
+	c := openTreeFixture(t)
+	for _, frame := range []string{
+		`{"type":"system","subtype":"future_notice","session_id":"s","uuid":"unknown-id","future":null}`,
+		`{"type":"system","subtype":"future_notice","session_id":"s","uuid":"unknown-id","future":null}`,
+		`{"type":"system","session_id":"s","future":42}`,
+		`{"type":"future_notice","session_id":"s","future":null}`,
+	} {
+		derived, r := treeFrame(t, c, frame)
+		if len(derived) != 0 || r.Scope != "unscoped" || r.Source.AssociationID != "" {
+			t.Fatalf("unknown event acquired source: %+v %+v", derived, r)
+		}
+	}
+	_, init := treeFrame(t, c, `{"type":"system","subtype":"init","session_id":"s"}`)
+	if init.Scope != "root" {
+		t.Fatal(init)
+	}
+	treeFrame(t, c, `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`)
+	treeFrame(t, c, `{"type":"assistant","session_id":"s","agent_id":"child","parent_tool_use_id":"spawn","message":{"content":"child"}}`)
+	_, child := treeFrame(t, c, `{"type":"system","subtype":"future_notice","session_id":"s","agent_id":"child","future":null}`)
+	if child.Scope != "child" || child.Source.AgentID != "child" || child.Parent == nil || child.Parent.SessionID != "s" {
+		t.Fatalf("known source lost attribution: %+v", child)
+	}
+}

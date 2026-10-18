@@ -1,4 +1,10 @@
-# Subagent forwarding and lineage (tickets 01–04)
+# Subagent forwarding and lineage (tickets 01–05)
+
+See the [per-capability compatibility matrix](subagent-compatibility.md),
+[runnable offline example](../examples/subagents-offline/main.go) and
+[ticket05 validation evidence](evidence/subagent-ticket05.md). Created remains
+conditional and never emitted; this does not fulfill the remaining request for
+proven first creation.
 
 `Options.ForwardSubagentText` and `types.Options.ForwardSubagentText` default to
 false. `OptionsFromTypes` and `Options.Types` preserve the value. True adds
@@ -157,7 +163,7 @@ Dedup uses only native UUIDs on known envelope contracts (assistant/user/system/
 result/stream_event), scoped by epoch, native session/source, task/run when
 present, type/subtype and parent tool. It does not hash text, message.id, Raw or
 time windows. Identical no-ID deltas are both delivered; partial and complete
-messages are distinct kinds. Unknown event kinds and sessionless frames are not
+messages are distinct kinds. Unknown event kinds, unknown system subtypes and sessionless frames are not
 deduplicated. No cross-epoch exactly-once claim is made. Frames lacking native
 run_id remain legacy/unknown-run. A newly observed run creates a conservative
 dedup boundary so a later no-run frame is never suppressed solely by an older

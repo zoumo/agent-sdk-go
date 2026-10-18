@@ -151,7 +151,7 @@ mise exec go@1.26.9 -- go list -deps ./types
 
 See [CI checks and live gate](docs/ci.md) for the Linux/macOS matrix, committed-change checks, and explicit live skip status.
 
-Offline tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, full event queues with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The public examples are compiled, not executed.
+Offline tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, full event queues with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The real-CLI examples are compiled, not executed. The subagents-offline example is executed against its own synthetic peer.
 
 Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
 
@@ -167,4 +167,21 @@ See [type source and license review](docs/type-sources.md) for pinned references
 initialization. It exposes lossless native frames and explicitly marked SDK
 association/observation records. Forwarding support remains unverified until
 there is runtime evidence; new entity creation is not inferred from task start.
-See [API, creation evidence and current limits](docs/subagent-events.md).
+Created remains **conditional and never emitted**: task_started and
+SubagentStart cannot alone exclude resume; Associated does not prove creation.
+See the [per-capability matrix](docs/subagent-compatibility.md) for pinned versions,
+E1/E2 evidence and foreground/background/nested/legacy limits, plus the
+[API and current limits](docs/subagent-events.md). No E3/E4 subagent checks ran.
+
+A self-contained example uses only a local synthetic peer (no installed CLI or
+model):
+
+```sh
+mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 go run ./examples/subagents-offline
+```
+
+It prints source/parent/run records through a single OpenTree consumer, continues
+after the parent result, observes patch-only terminals and explicitly closes.
+Session-state events need a native opt-in on applicable CLIs; background task
+snapshots replace a process-local set and do not prove termination. See the
+[offline validation evidence](docs/evidence/subagent-ticket05.md).

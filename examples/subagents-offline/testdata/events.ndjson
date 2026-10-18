@@ -1,0 +1,11 @@
+{"type":"assistant","session_id":"demo","message":{"content":[{"type":"tool_use","id":"spawn-child","name":"Agent","input":{}}]}}
+{"type":"system","subtype":"task_started","session_id":"demo","task_id":"child","task_type":"local_agent","tool_use_id":"spawn-child","run_id":"001","is_backgrounded":true}
+{"type":"assistant","session_id":"demo","agent_id":"child","parent_tool_use_id":"spawn-child","message":{"content":[{"type":"text","text":"child text"},{"type":"thinking","thinking":"child thinking","signature":"synthetic"},{"type":"tool_use","id":"spawn-grandchild","name":"Agent","input":{}}]}}
+{"type":"system","subtype":"task_started","session_id":"demo","task_id":"grandchild","task_type":"local_agent","tool_use_id":"spawn-grandchild","parent_task_id":"child","run_id":"001"}
+{"type":"assistant","session_id":"demo","agent_id":"grandchild","parent_tool_use_id":"spawn-grandchild","message":{"content":[{"type":"text","text":"nested text"}]}}
+{"type":"result","subtype":"success","session_id":"demo","result":"root answer only","usage":{"output_tokens":3}}
+{"type":"system","subtype":"background_tasks_changed","session_id":"demo","tasks":[]}
+{"type":"assistant","session_id":"demo","agent_id":"child","parent_tool_use_id":"spawn-child","message":{"content":[{"type":"text","text":"child after root result"}]}}
+{"type":"system","subtype":"task_updated","session_id":"demo","task_id":"grandchild","run_id":"001","patch":{"status":"completed"}}
+{"type":"system","subtype":"task_updated","session_id":"demo","task_id":"child","run_id":"001","patch":{"status":"killed","is_backgrounded":true}}
+{"type":"system","subtype":"session_state_changed","session_id":"demo","state":"idle"}

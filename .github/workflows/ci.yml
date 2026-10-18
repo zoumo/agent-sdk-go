@@ -2,18 +2,35 @@ name: Go checks
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CLAUDE_GO_LIVE: '0'
+
 jobs:
   synthetic-tests:
-    runs-on: ubuntu-latest
+    name: Offline (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0, Node 24
         with:
           go-version: '1.26.9'
           cache: false
@@ -21,24 +38,42 @@ jobs:
         run: |
           go version
           test "$(go env GOVERSION)" = go1.26.9
+      - name: Check committed whitespace and Go formatting
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/check-changes.sh "$BASE_SHA" "$HEAD_SHA"
       - name: Verify independent data package
         shell: bash
         run: |
           deps=$(GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off \
             go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./types | sed '/^$/d')
           test "$deps" = github.com/zoumo/claude-agent-sdk-go/types
-      - name: Unit, subprocess, race, and vet checks (no live CLI)
+      - name: Unit, subprocess, compatibility, race, and vet checks (offline)
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/sdk-home" "$RUNNER_TEMP/sdk-cache"
-          for check in test race vet; do
+          for check in live-status test race vet; do
             case "$check" in
+              live-status) args=(test -v -count=1 -run '^TestLiveCLIInitialization$' ./...) ;;
               test) args=(test -count=1 -timeout 180s ./...) ;;
               race) args=(test -race -count=1 -timeout 300s ./...) ;;
               vet) args=(vet ./...) ;;
             esac
             env -i PATH="$PATH" HOME="$RUNNER_TEMP/sdk-home" \
               GOCACHE="$RUNNER_TEMP/sdk-cache" GOTOOLCHAIN=local GOENV=off \
-              GOPROXY=off GOSUMDB=off \
+              GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 \
               GORACE=atexit_sleep_ms=0 go "${args[@]}"
           done
+      - name: Report live coverage boundary
+        if: always()
+        shell: bash
+        run: |
+          echo 'LIVE SKIPPED: CLAUDE_GO_LIVE=0; no real Agent/CLI or model calls.'
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ### Live checks: SKIPPED
+          `CLAUDE_GO_LIVE=0`: no real Agent/CLI or model calls in this job.
+          Unit/subprocess/compatibility and race tests use synthetic fixtures.
+          Full live interoperability remains a separately authorized manual checklist.
+          SUMMARY

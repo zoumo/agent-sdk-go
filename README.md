@@ -16,7 +16,7 @@ An experimental, independent native Go client for a locally installed Claude Cod
 - Bounded event/control queues, frame sizes and stderr tails; explicit overflow and protocol errors
 - Independent `Done` and `Err`, retained accepted events, idempotent concurrent `Close`, and owned child reaping with bounded escalation
 
-The typed Go views are handwritten, with raw JSON preserving unknown exposed-event data; no automatic upstream type synchronization/code generation exists. Hooks, SDK-hosted MCP, full configuration parity, session-store helpers and dynamic model/permission controls are unsupported. A separately authorized [live compatibility checklist](docs/live-compatibility.md) is provided; it is never part of default tests or CI.
+The typed Go views are handwritten, with raw JSON preserving unknown exposed-event data; no automatic upstream type synchronization/code generation exists. Hooks, SDK-hosted MCP, full configuration parity, session-store helpers and dynamic model/permission controls are unsupported. A separately authorized [live compatibility checklist](docs/live-compatibility.md) is provided. Default tests and CI skip the opt-in live initialization probe; the full checklist remains manual.
 
 ## Usage
 
@@ -149,7 +149,9 @@ mise exec go@1.26.9 -- go vet ./...
 mise exec go@1.26.9 -- go list -deps ./types
 ```
 
-Tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, full event queues with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The public examples are compiled, not executed.
+See [CI checks and live gate](docs/ci.md) for the Linux/macOS matrix, committed-change checks, and explicit live skip status.
+
+Offline tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, queue overflow, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, full event queues with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The public examples are compiled, not executed.
 
 Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
 

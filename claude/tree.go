@@ -10,6 +10,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/zoumo/agent-sdk-go/internal/lineage"
 )
 
 // SubagentOptions bounds graph entries, lineage depth, native identity history and
@@ -44,8 +46,6 @@ type treeKey struct{ session, id string }
 type treeNode struct {
 	created         bool
 	identity        SubagentIdentity
-	parent          *treeNode
-	rootParent      bool
 	parentTask      string
 	evidence        string
 	currentRun      string
@@ -63,6 +63,7 @@ type treeEventKey struct{ session, agent, task, tool, run, boundary, kind, subty
 // managedTree is the Client-owned sole native dequeue consumer. It adds no reader
 // goroutine, process, resume or turn and never answers permission requests.
 type managedTree struct {
+	lineage       *lineage.Graph[treeKey]
 	creation      treeCreation
 	client        *Client
 	options       SubagentOptions
@@ -124,7 +125,11 @@ func newManagedTree(options Options) (*managedTree, error) {
 			return nil, fmt.Errorf("claude: history requires session and task IDs")
 		}
 	}
-	t := &managedTree{options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]*treeNode), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
+	graph, err := lineage.New[treeKey](lineage.Limits{MaxNodes: 2 * treeOptions.MaxNodes, MaxRelations: treeOptions.MaxNodes, MaxDepth: treeOptions.MaxDepth, UnknownDepth: 1})
+	if err != nil {
+		return nil, err
+	}
+	t := &managedTree{lineage: graph, options: treeOptions, nodes: make(map[treeKey]*treeNode), tools: make(map[treeKey]*treeNode), nonAgents: make(map[treeKey]struct{}), nonAgentTools: make(map[treeKey]struct{}), seen: make(map[treeEventKey]struct{}), startup: true, runs: make(map[treeRunKey]treeRun), currentRuns: make(map[treeKey]string)}
 	t.creation.disabled = options.ResumeID != "" || len(treeOptions.History) > 0
 	t.creation.calls = make(map[treeKey]*treeCreationCall)
 	if err := t.seed(treeOptions.History); err != nil {
@@ -584,7 +589,11 @@ func (t *managedTree) route(r *relationshipRecord, e Event) error {
 				n = other
 			} else if other != nil && other != n {
 				var ok bool
-				n, ok = t.merge(n, other, e.SessionID)
+				var mergeErr error
+				n, ok, mergeErr = t.merge(n, other, e.SessionID)
+				if mergeErr != nil {
+					return mergeErr
+				}
 				if !ok {
 					r.Reason = "identity-conflict"
 					return nil
@@ -597,7 +606,11 @@ func (t *managedTree) route(r *relationshipRecord, e Event) error {
 				n = legacy
 			} else {
 				var ok bool
-				n, ok = t.merge(n, legacy, e.SessionID)
+				var mergeErr error
+				n, ok, mergeErr = t.merge(n, legacy, e.SessionID)
+				if mergeErr != nil {
+					return mergeErr
+				}
 				if !ok {
 					r.Reason = "identity-conflict"
 					return nil
@@ -607,6 +620,9 @@ func (t *managedTree) route(r *relationshipRecord, e Event) error {
 		if n == nil {
 			if err := t.reserve(); err != nil {
 				return err
+			}
+			if err := t.lineage.Ensure(treeKey{e.SessionID, key}); err != nil {
+				return t.lineageLimit(err)
 			}
 			n = &treeNode{identity: SubagentIdentity{SessionID: e.SessionID, AssociationID: key}, evidence: evidence}
 			t.order = append(t.order, n)
@@ -706,24 +722,11 @@ func (t *managedTree) route(r *relationshipRecord, e Event) error {
 
 // merge requires a verified message/task/tool mapping. Conflicting native
 // identities or ancestry are diagnostics, never silent rebindings.
-func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
+func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool, error) {
 	conflict := a.identity.AgentID != "" && b.identity.AgentID != "" && a.identity.AgentID != b.identity.AgentID || a.identity.TaskID != "" && b.identity.TaskID != "" && a.identity.TaskID != b.identity.TaskID || a.parentTask != "" && b.parentTask != "" && a.parentTask != b.parentTask
-	if (a.parent != nil || a.rootParent) && (b.parent != nil || b.rootParent) && (a.parent != b.parent || a.rootParent != b.rootParent) {
-		conflict = true
-	}
-	for p := a; p != nil; p = p.parent {
-		if p == b {
-			conflict = true
-		}
-	}
-	for p := b; p != nil; p = p.parent {
-		if p == a {
-			conflict = true
-		}
-	}
 	if conflict {
 		t.diagnostic(session, "identity-conflict")
-		return a, false
+		return a, false, nil
 	}
 	// Keep the earliest displayed association stable, and explicitly redirect the
 	// other key if both were observed before the bridge evidence arrived.
@@ -735,6 +738,13 @@ func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 			a, b = b, a
 			break
 		}
+	}
+	if err := t.lineage.Merge(treeNodeKey(a), treeNodeKey(b)); err != nil {
+		if errors.Is(err, lineage.ErrDepthLimit) || errors.Is(err, lineage.ErrNodeLimit) || errors.Is(err, lineage.ErrRelationLimit) {
+			return a, false, t.lineageLimit(err)
+		}
+		t.diagnostic(session, "identity-conflict")
+		return a, false, nil
 	}
 	a.created = a.created || b.created
 	for _, call := range t.creation.calls {
@@ -757,9 +767,6 @@ func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 	if a.parentTask == "" {
 		a.parentTask = b.parentTask
 	}
-	if a.parent == nil && !a.rootParent {
-		a.parent, a.rootParent = b.parent, b.rootParent
-	}
 	if b.currentRun > a.currentRun {
 		a.currentRun = b.currentRun
 	}
@@ -774,18 +781,9 @@ func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 		}
 	}
 	for i, n := range t.order {
-		if n.parent == b {
-			n.parent = a
-		}
 		if n == b {
 			t.order = append(t.order[:i], t.order[i+1:]...)
 			break
-		}
-	}
-	// Repoint every descendant, including those after the removed slot.
-	for _, n := range t.order {
-		if n.parent == b {
-			n.parent = a
 		}
 	}
 	if b.announced {
@@ -796,7 +794,7 @@ func (t *managedTree) merge(a, b *treeNode, session string) (*treeNode, bool) {
 		d.PreviousAssociationID = b.identity.AssociationID
 		t.stage(d)
 	}
-	return a, true
+	return a, true, nil
 }
 
 func (t *managedTree) observeTools(e Event, owner *treeNode) error {
@@ -822,6 +820,17 @@ func (t *managedTree) observeTools(e Event, owner *treeNode) error {
 	t.announce(e.SessionID)
 	return nil
 }
+
+// treeNodeKey stays stable while native task/agent/tool aliases are enriched.
+func treeNodeKey(n *treeNode) treeKey { return treeKey{n.identity.SessionID, n.identity.AssociationID} }
+
+func (t *managedTree) lineageLimit(err error) error {
+	if errors.Is(err, lineage.ErrDepthLimit) {
+		return &ResourceLimitError{Resource: "subagent lineage depth", Limit: t.options.MaxDepth}
+	}
+	return &ResourceLimitError{Resource: "subagent association entries", Limit: t.options.MaxNodes}
+}
+
 func (t *managedTree) resolve(session string) error {
 	for _, n := range t.order {
 		if n.identity.SessionID != session {
@@ -833,8 +842,7 @@ func (t *managedTree) resolve(session string) error {
 			candidate = t.nodes[treeKey{session, "task:" + n.parentTask}]
 			known = candidate != nil
 		}
-		// An explicit unresolved task reference takes precedence; tool ownership
-		// cannot silently substitute a different, already-known parent.
+		// Explicit unresolved task evidence cannot be replaced by tool ownership.
 		if n.parentTask != "" && !known {
 			continue
 		}
@@ -848,52 +856,36 @@ func (t *managedTree) resolve(session string) error {
 		if !known {
 			continue
 		}
-		if (n.parent != nil || n.rootParent) && (n.parent != candidate || n.rootParent != root) {
-			t.diagnostic(session, "parent-conflict")
-			continue
+		var err error
+		if root {
+			err = t.lineage.ConfirmRoot(treeNodeKey(n), treeKey{session, ""})
+		} else {
+			err = t.lineage.Confirm(treeNodeKey(n), treeNodeKey(candidate))
 		}
-		depth := 1
-		for p := candidate; p != nil; p = p.parent {
-			if p == n {
+		if err != nil {
+			switch {
+			case errors.Is(err, lineage.ErrCycle):
 				t.diagnostic(session, "lineage-cycle")
-				known = false
-				break
-			}
-			depth++
-			if depth > t.options.MaxDepth {
-				return &ResourceLimitError{Resource: "subagent lineage depth", Limit: t.options.MaxDepth}
-			}
-		}
-		if known {
-			n.parent, n.rootParent = candidate, root
-		}
-	}
-	// A newly resolved ancestor can deepen existing descendants.
-	for _, n := range t.order {
-		depth := 1
-		for p := n.parent; p != nil; p = p.parent {
-			depth++
-			if depth > t.options.MaxDepth {
-				return &ResourceLimitError{Resource: "subagent lineage depth", Limit: t.options.MaxDepth}
+			case errors.Is(err, lineage.ErrConflict):
+				t.diagnostic(session, "parent-conflict")
+			default:
+				return t.lineageLimit(err)
 			}
 		}
 	}
 	return nil
 }
 func (t *managedTree) parent(n *treeNode) (*SubagentIdentity, string) {
-	if n.rootParent {
-		return &SubagentIdentity{SessionID: n.identity.SessionID}, "child"
-	}
-	if n.parent != nil {
-		p := n.parent.identity
-		scope := "unresolved"
-		for a := n.parent; a != nil; a = a.parent {
-			if a.rootParent {
-				scope = "child"
-				break
-			}
+	if key, known := t.lineage.Parent(treeNodeKey(n)); known {
+		if t.lineage.IsRoot(key) {
+			return &SubagentIdentity{SessionID: n.identity.SessionID}, "child"
 		}
-		return &p, scope
+		p := t.nodes[key].identity
+		_, rooted, _ := t.lineage.Depth(treeNodeKey(n))
+		if rooted {
+			return &p, "child"
+		}
+		return &p, "unresolved"
 	}
 	if n.parentTask != "" {
 		return &SubagentIdentity{SessionID: n.identity.SessionID, TaskID: n.parentTask}, "unresolved"
@@ -908,8 +900,9 @@ func (t *managedTree) announce(session string) {
 			return
 		}
 		visited[n] = true
-		if n.parent != nil {
-			emit(n.parent)
+		key, known := t.lineage.Parent(treeNodeKey(n))
+		if known && !t.lineage.IsRoot(key) {
+			emit(t.nodes[key])
 		}
 		parent, scope := t.parent(n)
 		if n.announced && n.published == n.identity && equalTreeParent(n.publishedParent, parent) && n.publishedScope == scope {
@@ -920,10 +913,8 @@ func (t *managedTree) announce(session string) {
 		if n.parentTask != "" {
 			a.Evidence += "+parent-task-id"
 		}
-		if n.parent != nil || n.rootParent {
-			if n.identity.ToolUseID != "" {
-				a.Evidence += "+observed-tool-owner"
-			}
+		if known && n.identity.ToolUseID != "" {
+			a.Evidence += "+observed-tool-owner"
 		}
 		if n.announced {
 			a.Reason = "identity-enriched"
@@ -937,6 +928,7 @@ func (t *managedTree) announce(session string) {
 		}
 	}
 }
+
 func equalTreeParent(a, b *SubagentIdentity) bool {
 	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
@@ -1022,6 +1014,9 @@ func (t *managedTree) seed(seeds []SubagentHistory) error {
 		}
 		if err := t.reserve(); err != nil {
 			return err
+		}
+		if err := t.lineage.Ensure(key); err != nil {
+			return t.lineageLimit(err)
 		}
 		n := &treeNode{identity: SubagentIdentity{SessionID: seed.SessionID, TaskID: seed.TaskID, AssociationID: key.id}, parentTask: seed.ParentTaskID, evidence: "caller-verified-history"}
 		t.nodes[key] = n

@@ -215,11 +215,11 @@ run_id remain legacy/unknown-run. A newly observed run creates a conservative
 dedup boundary so a later no-run frame is never suppressed solely by an older
 run's UUID history; this assigns no native run to that frame.
 
-The graph/alias/tool-owner/non-agent index is bounded by `SubagentOptions.MaxNodes`
+The native alias/tool-owner/non-agent index is bounded by `SubagentOptions.MaxNodes`
 (default 4096, ceiling 65536 total entries). `MaxDepth` defaults to 32 (ceiling
 256), and `MaxDedupEntries` to 8192 (ceiling 131072). Zero selects defaults;
 negative/above-ceiling values fail before startup. Alias entries count against
-the graph bound; no stale identity history is silently evicted. Overflow uses
+the native index bound; no stale identity history is silently evicted. Overflow uses
 the owned client's terminal ResourceLimit path and emits incomplete plus the
 already accepted native frame with unresolved scope. Derived-event fanout and pending
 source attribution have their own bounds below; the underlying bounded event/control
@@ -407,3 +407,16 @@ a short wait when testing later enrichment after unresolved delivery. Evidence i
 E2 only; no real CLI/model, authentication change or runtime support claim.
 
 中文事件时序说明：[前台/后台任务、子流、审批和结束边界](event-sequences.md)。
+
+
+## Shared relationship storage
+
+Each managed observer uses the shared graph for accepted parent relationships,
+root membership, cycles, depth and identity contraction. See the
+[shared relationship contract](../../docs/lineage.md) for its independent bounds:
+at most `2 * MaxNodes` vertices (stable associations plus session roots) and
+`MaxNodes` relationships, in addition to the native index limit above.
+Native task/agent/tool alias recognition chooses a stable association before
+asking the graph to merge identities atomically. Unresolved parent-task evidence,
+runs, creation checks, deduplication, raw frames, permission handles and transport
+shutdown remain native responsibilities.

@@ -109,3 +109,14 @@ thread/started. types.SubagentEvidence.Activity retains the native item, includi
 fields; Tool and ReceiverThreadIDs stay collab-only. Interacted, Interrupted,
 Completed and item/started establish no edge. Historical Started seeds Associated
 only. See the [event-sequence document](event-sequences.md) for model-tool results, wait semantics and remaining gaps.
+
+
+## Shared relationship storage
+
+Each subscription now uses the bounded internal graph described in the
+[shared relationship contract](../../docs/lineage.md). `MaxNodes` includes the
+subscribed root and all confirmed-edge endpoints, including a parent that has not
+itself been associated with the root. The independent graph relation bound is
+`MaxNodes - 1`. Conflicts, cycles and limits reject the candidate atomically.
+Native evidence recognition, creation claims, pending routing, deduplication,
+raw data and request answer authority stay in this package.

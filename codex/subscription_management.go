@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/lineage"
 )
 
 type treeRelation struct {
-	parent                      string
 	history                     bool
 	evidence                    types.SubagentEvidence
 	createdEvidence             *types.SubagentEvidence
@@ -40,7 +40,7 @@ type Subscription struct {
 	batch         []types.Event
 	seeding       bool
 	historyIDs    map[string]struct{}
-	maxNodes      int
+	lineage       *lineage.Graph[string]
 	children      map[string]*treeRelation
 	relationOrder []string
 	options       types.SubscriptionOptions
@@ -126,7 +126,14 @@ func (c *Client) Subscribe(ctx context.Context, rootThreadID string, options typ
 		}
 		historyIDs[id] = struct{}{}
 	}
-	t := &Subscription{client: c, root: rootThreadID, events: make(chan types.Event, options.EventQueue+1), done: make(chan struct{}), maxNodes: options.MaxNodes, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
+	graph, err := lineage.New[string](lineage.Limits{MaxNodes: options.MaxNodes, MaxRelations: options.MaxNodes - 1, MaxDepth: options.MaxDepth})
+	if err != nil {
+		return nil, err
+	}
+	if err := graph.Root(rootThreadID); err != nil {
+		return nil, err
+	}
+	t := &Subscription{client: c, root: rootThreadID, events: make(chan types.Event, options.EventQueue+1), done: make(chan struct{}), lineage: graph, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
 	c.subscriptions[t] = struct{}{}
 	t.stop = context.AfterFunc(ctx, func() { c.mu.Lock(); defer c.mu.Unlock(); t.finishLocked(ctx.Err()) })
 	t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "best-effort-auto-attach-unverified"}})
@@ -179,6 +186,7 @@ func (t *Subscription) finishLocked(cause error) {
 	t.batch = nil
 	t.seen = nil
 	t.seenOrder = nil
+	t.lineage = nil
 	t.children = nil
 	t.historyIDs = nil
 	t.relationOrder = nil
@@ -323,17 +331,7 @@ func (t *Subscription) publishLocked(method string, params json.RawMessage, raw 
 }
 
 func (t *Subscription) member(id string) bool {
-	for depth := 0; depth <= t.options.MaxDepth; depth++ {
-		if id == t.root {
-			return true
-		}
-		r := t.children[id]
-		if r == nil {
-			return false
-		}
-		id = r.parent
-	}
-	return false
+	return t.lineage.Reaches(id, t.root)
 }
 
 func (t *Subscription) diagnostic(reason, child, parent string, evidence *types.SubagentEvidence) {
@@ -341,6 +339,9 @@ func (t *Subscription) diagnostic(reason, child, parent string, evidence *types.
 }
 
 func (t *Subscription) relationLocked(child, parent string, evidence types.SubagentEvidence, created bool) {
+	if t.closed {
+		return
+	}
 	evidence.ParentThreadID = parent
 	evidence.Provenance = "live"
 	if t.seeding {
@@ -350,63 +351,31 @@ func (t *Subscription) relationLocked(child, parent string, evidence types.Subag
 	if child == "" || parent == "" {
 		return
 	}
-	// Reject self-links and back edges, including cycles not yet rooted.
-	id := parent
-	for depth := 0; ; depth++ {
-		if id == child {
-			t.diagnostic("relation-cycle", child, parent, &evidence)
-			return
-		}
-		r := t.children[id]
-		if r == nil {
-			break
-		}
-		if depth >= t.options.MaxDepth {
-			t.finishLocked(ErrLimit)
-			return
-		}
-		id = r.parent
-	}
-	if child == t.root {
-		t.diagnostic("relation-conflict", child, parent, &evidence)
-		return
-	}
 	r := t.children[child]
-	if r != nil && r.parent != parent {
-		t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "relation-conflict", UnresolvedThreadID: child, ParentThreadID: parent, Evidence: &evidence, PreviousEvidence: &r.evidence}})
+	if err := t.lineage.Confirm(child, parent); err != nil {
+		switch {
+		case errors.Is(err, lineage.ErrCycle):
+			t.diagnostic("relation-cycle", child, parent, &evidence)
+		case errors.Is(err, lineage.ErrConflict):
+			var previous *types.SubagentEvidence
+			if r != nil {
+				previous = &r.evidence
+			}
+			t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "relation-conflict", UnresolvedThreadID: child, ParentThreadID: parent, Evidence: &evidence, PreviousEvidence: previous}})
+		default:
+			t.finishLocked(ErrLimit)
+		}
 		return
 	}
 	if r == nil {
-		if len(t.children)+1 >= t.maxNodes {
-			t.finishLocked(ErrLimit)
-			return
-		}
 		_, historical := t.historyIDs[child]
-		r = &treeRelation{parent: parent, evidence: evidence, history: t.seeding || historical}
+		r = &treeRelation{evidence: evidence, history: t.seeding || historical}
 		t.children[child] = r
 		t.relationOrder = append(t.relationOrder, child)
 	}
 	if created && !t.seeding && !r.history && r.createdEvidence == nil {
 		e := evidence
 		r.createdEvidence = &e
-	}
-	// A newly supplied ancestor must not make a stored descendant exceed depth.
-	for node := range t.children {
-		id = node
-		for depth := 0; ; depth++ {
-			if id == t.root {
-				break
-			}
-			next := t.children[id]
-			if next == nil {
-				break
-			}
-			if depth >= t.options.MaxDepth {
-				t.finishLocked(ErrLimit)
-				return
-			}
-			id = next.parent
-		}
 	}
 }
 
@@ -422,19 +391,23 @@ func (t *Subscription) announceLocked() {
 		if r == nil || !t.member(child) {
 			return
 		}
-		announce(r.parent)
+		parent, known := t.lineage.Parent(child)
+		if !known {
+			return
+		}
+		announce(parent)
 		if !r.announced {
 			r.announced = true
 			if r.createdEvidence != nil {
 				r.createdAnnounced = true
-				t.emitLocked(types.Event{Data: &types.SubagentCreated{ThreadID: child, ParentThreadID: r.parent, Evidence: r.createdEvidence}})
+				t.emitLocked(types.Event{Data: &types.SubagentCreated{ThreadID: child, ParentThreadID: parent, Evidence: r.createdEvidence}})
 			} else {
-				t.emitLocked(types.Event{Data: &types.SubagentAssociated{ThreadID: child, ParentThreadID: r.parent, Evidence: &r.evidence}})
+				t.emitLocked(types.Event{Data: &types.SubagentAssociated{ThreadID: child, ParentThreadID: parent, Evidence: &r.evidence}})
 			}
 		}
 		if r.createdEvidence != nil && !r.createdAnnounced {
 			r.createdAnnounced = true
-			t.emitLocked(types.Event{Data: &types.SubagentCreated{ThreadID: child, ParentThreadID: r.parent, Evidence: r.createdEvidence}})
+			t.emitLocked(types.Event{Data: &types.SubagentCreated{ThreadID: child, ParentThreadID: parent, Evidence: r.createdEvidence}})
 		}
 	}
 	// Stable insertion order also makes multi-receiver discovery deterministic.

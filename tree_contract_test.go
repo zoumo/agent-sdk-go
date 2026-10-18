@@ -64,7 +64,7 @@ func handleTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage, stri
 	}
 	return true
 }
-func nextTree(t *testing.T, s *codex.TreeSubscription) codex.TreeEvent {
+func nextTree(t *testing.T, s *codex.Subscription) codex.TreeEvent {
 	t.Helper()
 	select {
 	case e, ok := <-s.Events():
@@ -77,7 +77,7 @@ func nextTree(t *testing.T, s *codex.TreeSubscription) codex.TreeEvent {
 		return codex.TreeEvent{}
 	}
 }
-func treeUntilDone(t *testing.T, s *codex.TreeSubscription) []codex.TreeEvent {
+func treeUntilDone(t *testing.T, s *codex.Subscription) []codex.TreeEvent {
 	t.Helper()
 	var events []codex.TreeEvent
 	for {
@@ -100,17 +100,17 @@ func TestTreeLiveChildStream(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-success", codex.Limits{})
-			raw, err := f.c.Subscribe(context.Background())
+			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer raw.Close()
-			a, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			a, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer a.Close()
-			b, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			b, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -199,8 +199,8 @@ func TestTreeLiveChildStream(t *testing.T) {
 					break
 				}
 			}
-			if rawCount != 12 || rawOther != 2 {
-				t.Fatalf("native broadcast changed: count=%d other=%d", rawCount, rawOther)
+			if rawCount != 9 || rawOther != 0 {
+				t.Fatalf("managed native routing changed: count=%d other=%d", rawCount, rawOther)
 			}
 			calls := trace(t, f.trace)
 			if len(calls) != 3 || calls[0].Method != "initialize" || calls[1].Method != "initialized" || calls[2].Method != "turn/start" {
@@ -214,7 +214,7 @@ func TestTreeFailedSpawnAndResumeAreNotCreated(t *testing.T) {
 	for _, mode := range []string{"tree-failed", "tree-resume"} {
 		t.Run(mode, func(t *testing.T) {
 			f := startFake(t, mode, codex.Limits{})
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -255,12 +255,12 @@ func TestTreeFailedSpawnAndResumeAreNotCreated(t *testing.T) {
 
 func TestTreeBoundsAndLocalClose(t *testing.T) {
 	f := startFake(t, "tree-success", codex.Limits{})
-	slow, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{EventQueue: 1})
+	slow, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{EventQueue: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	nextTree(t, slow) // consume initial diagnostic
-	healthy, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+	healthy, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,20 +311,20 @@ func TestTreeAdmissionAndNodeBound(t *testing.T) {
 		{context.Background(), "root", codex.TreeOptions{PendingAge: -1}},
 		{context.Background(), "root", codex.TreeOptions{DedupEntries: -1}},
 	} {
-		if _, err := f.c.SubscribeTree(tc.ctx, tc.root, tc.options); err == nil {
+		if _, err := f.c.Subscribe(tc.ctx, tc.root, tc.options); err == nil {
 			t.Fatal("invalid admission accepted")
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := f.c.SubscribeTree(ctx, "root", codex.TreeOptions{}); !errors.Is(err, context.Canceled) {
+	if _, err := f.c.Subscribe(ctx, "root", codex.TreeOptions{}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{MaxNodes: 1})
+	s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{MaxNodes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.c.Subscribe(context.Background()); !errors.Is(err, codex.ErrLimit) {
+	if _, err = f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{}); !errors.Is(err, codex.ErrLimit) {
 		t.Fatalf("shared admission limit: %v", err)
 	}
 	treeStart(t, f.c)
@@ -336,7 +336,7 @@ func TestTreeAdmissionAndNodeBound(t *testing.T) {
 	if !errors.Is(s.Err(), codex.ErrLimit) {
 		t.Fatal(s.Err())
 	}
-	raw, err := f.c.Subscribe(context.Background())
+	raw, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 	if err != nil {
 		t.Fatal("tree did not release slot:", err)
 	}

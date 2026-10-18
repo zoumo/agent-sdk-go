@@ -219,20 +219,24 @@ remain caller-managed raw extensions; their reachability is not workflow certifi
 ## Observe and explicitly interrupt a turn
 
 `StartTurn(ctx, types.TurnStartParams)` and `InterruptTurn(ctx,
-types.TurnInterruptParams)` return native response types. Call `Subscribe(ctx)`
+types.TurnInterruptParams)` return native response types. Call `Subscribe(ctx, rootThreadID, codex.TreeOptions{})`
 first: a turn can emit events, including completion, before its start response.
 The response's turn ID remains authoritative for that response. The SDK does not
-filter, merge, accumulate, or reinterpret interleaved native thread/turn/item IDs.
+merge, accumulate, or reinterpret native thread/turn/item IDs. The explicit root
+selects proven descendants; unrelated identities may remain unresolved.
 
 The compilable [observe-turn example](examples/observe-turn/main.go) registers
-before starting work, matches both native thread and turn IDs, and checks stream
-loss. It is compiled by tests, never run against a model. Running it yourself may
+before starting work, prints native thread/turn/item IDs, and checks stream
+loss. Root completion is printed while observation continues until the caller
+context ends; applications must choose their own observation stop condition.
+It is compiled by tests, never run against a model. Running it yourself may
 use an authenticated account and consume model resources.
 
 A subscription is local observation, active when returned; it does not replay
-notifications received before registration. `Events()` supplies ordered `Event`
-values with the original `Method` and raw JSON `Params`, plus optional typed
-`Data` and a separate `DecodeError`. Absent parameters remain nil; explicit null
+notifications received before registration. `Events()` supplies `TreeEvent` records. Check `Kind` first: `TreeNative`
+records carry an original `Event` in `Native`, with `Method`, raw JSON `Params`,
+optional typed `Data` and a separate `DecodeError`. Other kinds describe SDK
+relations or observation state and have no native payload or method. Absent parameters remain nil; explicit null
 remains raw `null`. Each subscriber independently owns its raw and typed data.
 Typed payloads currently cover `turn/started`, `turn/completed`, `item/started`,
 `item/completed`, `item/agentMessage/delta`, `error`, and `serverRequest/resolved`.
@@ -431,7 +435,7 @@ proposals remain drafts and are not a stable protocol implemented by this SDK.
 Register before starting root work:
 
 ```go
-stream, err := client.SubscribeTree(ctx, rootThreadID, codex.TreeOptions{})
+stream, err := client.Subscribe(ctx, rootThreadID, codex.TreeOptions{})
 if err != nil {
     return err
 }
@@ -495,7 +499,7 @@ A seed emits `ObservationState(incomplete, history-recovery-gap)`: new-thread
 auto-attach does not prove attachment to old threads on a cold connection. The SDK
 never issues read/list/resume/start requests to fill this gap. Silence, lagged
 attach and missing history cannot establish completeness. Explicitly reconnecting
-requires a new Client and SubscribeTree, with a new process-local epoch and empty
+requires a new Client and Subscribe, with a new process-local epoch and empty
 occurrence cache; identical native IDs can be delivered again. There is no replay
 cursor or cross-epoch exactly-once guarantee.
 
@@ -549,4 +553,6 @@ wait for consumers, preserve accepted records and the first terminal cause, and
 release only this local observation. The shared server attachment is never
 unsubscribed by observation teardown. Permission and question answers still go
 through original `Client.Requests()` handles, with no second answer authority in records.
-The existing `Subscribe` API remains a connection-wide native broadcast.
+`Subscribe(ctx, rootThreadID, TreeOptions{})` is the sole subscription entry.
+It always manages relations and descendant routing; there is no observation mode switch.
+See [breaking migration](docs/default-managed-migration.md).

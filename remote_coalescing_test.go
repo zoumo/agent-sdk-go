@@ -91,10 +91,11 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 					options.TLSConfig = &tls.Config{RootCAs: roots}
 				}
 				c := securityOpen(t, options)
-				sub, err := c.Subscribe(context.Background())
+				sub, err := c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
+				nextTree(t, sub) // initial incomplete observation
 				var result string
 				if err = c.Call(context.Background(), "synthetic/settle-before-invalid", nil, &result); err != nil || result != "settled" {
 					t.Fatalf("valid response was lost before later framing failure: result=%q error=%v", result, err)
@@ -108,8 +109,11 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 					t.Fatalf("terminal protocol cause lost: client=%v subscription=%v", c.Err(), sub.Err())
 				}
 				event, ok := <-sub.Events()
-				if !ok || event.Method != "synthetic/valid-prefix" || !json.Valid(event.Params) || string(event.Params) != `{"value":1}` {
+				if !ok || event.Native.Method != "synthetic/valid-prefix" || !json.Valid(event.Native.Params) || string(event.Native.Params) != `{"value":1}` {
 					t.Fatalf("valid notification preceding failure was lost: %+v open=%v", event, ok)
+				}
+				if gap := nextTree(t, sub); gap.Reason != "permanent-gap" {
+					t.Fatalf("missing gap: %+v", gap)
 				}
 				if _, ok = <-sub.Events(); ok {
 					t.Fatal("malformed frame produced an additional event")

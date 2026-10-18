@@ -7,6 +7,9 @@ GOPROXY=off GOSUMDB=off mise exec -- go run ./examples/observe-tree-offline
 GOPROXY=off GOSUMDB=off mise exec -- go test ./examples/observe-tree-offline
 ```
 
+It uses the sole `Subscribe(ctx, rootID, TreeOptions{})` entry and consumes
+`TreeEvent` records; there is no separate observation mode.
+
 The program starts a copy of **itself** as a synthetic stdio peer with an empty
 environment. It never starts Codex, reads credentials, contacts a provider, or
 runs a model. Only standard Go build tooling is used; dependencies must already

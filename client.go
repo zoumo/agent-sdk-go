@@ -1,5 +1,8 @@
-// Package codex is a bounded, native Codex app-server client. See
-// docs/compatibility.md for the exact source target and evidence limits.
+// Package codex is a bounded, native Codex app-server client. Subscribe observes
+// an explicit root and proven descendants, delivering native notifications and
+// SDK-derived relations/state in one stream. Native types and JSON stay native;
+// Requests retains the only answer authority. See docs/compatibility.md for the
+// exact source target and evidence limits.
 package codex
 
 import (
@@ -55,7 +58,6 @@ type Client struct {
 	reverse       map[ID]*requestState
 	requests      chan Request
 	subscriptions map[*Subscription]struct{}
-	trees         map[*TreeSubscription]struct{}
 	epoch         uint64
 	nextID        int64
 	ready         bool
@@ -150,7 +152,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), trees: make(map[*TreeSubscription]struct{}), epoch: connectionEpoch.Add(1), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), epoch: connectionEpoch.Add(1), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 }
 
 func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {
@@ -451,14 +453,7 @@ func (c *Client) fail(cause error) {
 		}
 	}
 	close(c.requests)
-	for s := range c.subscriptions {
-		terminal := cause
-		if cause == ErrClosed {
-			terminal = nil
-		}
-		s.finishLocked(terminal)
-	}
-	for t := range c.trees {
+	for t := range c.subscriptions {
 		terminal := cause
 		if cause == ErrClosed {
 			terminal = nil

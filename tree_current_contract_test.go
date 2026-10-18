@@ -14,7 +14,7 @@ func TestTreeCurrentVersionMetadata(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,409 +1,287 @@
-# Codex 事件时序
+# 从用户动作看 Codex 事件时序
 
-本文对应本机 **Codex CLI 0.162.1**。
-源码固定为 [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d)。
-[当前版本核对](evidence/subagent-05-current.md)记录来源和离线结果。
-本文没有新增真实模型调用。
+本文固定 **Codex CLI 0.162.1**，源码为 [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d)。以下是源码与离线假服务端合约支持的故事，不是真实录制；本票不运行模型。真实录制另票执行。[当前来源核对](evidence/subagent-05-current.md)、[兼容矩阵](subagent-compatibility.md)区分源码、离线与 live 证据。
 
-图中的箭头展示一种允许的顺序。
-只有“保证的偏序”表中的约束属于保证。
-服务端、父模型和子模型可能并发工作。
-跨线程的箭头位置不表示全局先后关系。
+每个图是一种允许的顺序，不是跨线程全序。RPC result 只回答相同 `id` 的调用，可以晚于执行通知。模型工具结果进入模型上下文，不是客户端 RPC result。以下图中的「原生」通知通过 `TreeNative` 包装交付；「派生」是 SDK 记录，不是服务端 method。
 
-示例沿用当前原生字段。
-示例中的 `root`、`child` 和数字是教学占位符。
-示例不是 live 抓包。
+应用先取得原生根线程 ID，再调用 `Subscribe(ctx, rootID, TreeOptions{})`，返回后再 StartTurn。Events 返回 TreeEvent，初始派生记录为 `ObservationState(incomplete, best-effort-auto-attach-unverified)`。原生载荷在 `record.Native`，完整通知字节在 `record.Raw`；派生记录的 Native/Raw 为空。Kind/Origin 仅属于 SDK wrapper，未向原生 JSON 注入字段。通知不回放。
 
-## 先分清 4 类对象
+| 身份 | 示例 | 客户端用途 |
+| --- | --- | --- |
+| RPC id | `10`、`approval-7` | 请求响应关联，反向请求仍用原句柄回答 |
+| threadId | `R`、`C1`、`G` | 根、子、孙线程独立实体 |
+| turnId / turn.id | `RT1`、`CT1` | 同一线程某次工作，不能代替 threadId |
+| itemId / item.id | `answer-1`、`cmd-1` | 增量与完成项的关联键 |
+| rootTurnId | `RT1` | 因果链起始 turn，不能当作根线程 ID |
+| agentThreadId | `C1` | V2 活动的对象；通知 threadId 仍是发布活动的父线程 |
+| agentPath / task_name | `/root/research` | 显示路径；不能据此猜父关系或原生线程 ID |
 
-| 对象 | 例子 | 接收位置 | 含义 |
-| --- | --- | --- | --- |
-| 客户端 RPC 请求和响应 | `turn/start`、相同 `id` 的 `result` | `StartTurn` 返回值 | 服务端回答一次调用 |
-| 模型工具调用和结果 | `spawn_agent`、`wait_agent` 的返回文本 | 父模型上下文 | 工具向模型交付任务引用或状态 |
-| 原生通知 | `item/completed`、`turn/completed` | `Subscribe` 或树中的 `Native` | 服务端发布的执行事件 |
-| SDK 派生记录 | `SubagentCreated`、`SubagentAssociated`、`ObservationState` | `SubscribeTree` | SDK 解释关系或报告观察缺口 |
+## 1. 用户提交普通任务，看到答案并结束本次工作
 
-模型工具结果不是客户端 RPC 响应。
-`SubagentCreated` 不是原生 method。
-`item/completed` 只结束指定 item。
-某个工具完成不等于子 turn 完成。
-
-`threadId` 标识线程，`turnId` 标识一次工作。
-`itemId` 或 `item.id` 标识工作项。
-`rootTurnId` 标识因果链的起始 turn。
-SDK 不把 `rootTurnId` 改名为根线程 ID。
-`agentPath` 只提供显示线索。
-SDK 不从路径字符串推断父线程。
-
-## 普通 turn
-
-先注册观察，再发送工作。
-`StartTurn` 的响应和通知独立到达。
-通知可能早于响应，甚至先到达完成通知。
-[公开 API 测试](../turn_contract_test.go)覆盖这个边界。
+**用户动作：** 用户输入「检查实现」。应用持有线程 `R`，先注册 Subscribe，再调用 `StartTurn`。Requests 由独立循环处理。
 
 ```mermaid
 sequenceDiagram
-    participant A as 应用
+    participant U as 用户与应用
     participant S as app-server
-    participant O as 本地观察
-    A->>O: SubscribeTree(root) 返回
-    A->>S: RPC turn/start，id=10
-    S-->>O: 原生 turn/started
-    S-->>A: RPC result，id=10，turn.id=T
-    S-->>O: 原生 item/started
+    participant O as Subscription
+    U->>O: Subscribe(R) 返回
+    O-->>U: 派生 ObservationState incomplete
+    U->>S: RPC turn/start id=10 threadId=R
+    S-->>O: 原生 turn/started R RT1
+    S-->>U: RPC result id=10 turn.id=RT1
+    S-->>O: 原生 item/started answer-1
     S-->>O: 原生 item/agentMessage/delta
-    S-->>O: 原生 item/completed
-    S-->>O: 原生 thread/status/changed，idle
-    S-->>O: 原生 turn/completed
-    Note over A,O: RPC 响应也可能晚于这里的通知
+    S-->>O: 原生 item/completed answer-1
+    S-->>O: 原生 thread/status/changed idle
+    S-->>O: 原生 turn/completed R RT1
+    Note over U,O: Subscription 继续，应用决定观察何时结束
 ```
 
-客户端请求和响应示例：
+**原生与派生序列：** 初始观察诊断之后，普通文本任务只需原生 turn/item/delta。没有子关系证据时，不产生 Created/Associated。通知可能全部早于 turn/start result。
 
 ```json
-{"id":10,"method":"turn/start","params":{"threadId":"root","input":[{"type":"text","text":"检查实现","text_elements":[]}]}}
-{"id":10,"result":{"turn":{"id":"T","rootTurnId":"T","items":[],"status":"inProgress"}}}
+{"id":10,"method":"turn/start","params":{"threadId":"R","input":[{"type":"text","text":"检查实现","text_elements":[]}]}}
+{"id":10,"result":{"turn":{"id":"RT1","rootTurnId":"RT1","items":[],"status":"inProgress"}}}
+{"method":"item/agentMessage/delta","params":{"threadId":"R","turnId":"RT1","itemId":"answer-1","delta":"检查结果"}}
+{"method":"item/completed","params":{"threadId":"R","turnId":"RT1","completedAtMs":2,"item":{"type":"agentMessage","id":"answer-1","text":"检查结果","phase":"final_answer"}}}
+{"method":"turn/completed","params":{"threadId":"R","turn":{"id":"RT1","rootTurnId":"RT1","items":[],"status":"completed"}}}
 ```
 
-通知示例：
+**结束依据：** `item/completed` 只结束 answer-1。`turn/completed` 的原生 status 才说明 RT1 的完成、失败或中断；仍要检查观察 Err/缺口。`partial_answer` 可继续有工具和文本，`final_answer` 是模型的答案阶段声明。
 
-```json
-{"method":"item/agentMessage/delta","params":{"threadId":"root","turnId":"T","itemId":"answer","delta":"检查结果"}}
-{"method":"item/completed","params":{"threadId":"root","turnId":"T","completedAtMs":2,"item":{"type":"agentMessage","id":"answer","text":"检查结果","phase":"partial_answer"}}}
-{"method":"thread/status/changed","params":{"threadId":"root","status":{"type":"idle"}}}
-{"method":"turn/completed","params":{"threadId":"root","turn":{"id":"T","rootTurnId":"T","items":[],"status":"completed"}}}
-```
+**客户端更新：** 按 `(threadId, turnId, itemId)` 为增量更新文本；完成项作为该 item 的最终快照，避免再把完整文本追加一次。将 RPC result 存为独立调用结果，将 RT1 终态存在线程 R 下。
 
-`partial_answer` 允许后续输出和工具调用。
-`final_answer` 表示模型声明的终局答案阶段。
-应用仍须检查原生 turn 终态和观察错误。
-SDK 不拼接父子文本，也不生成树级最终答案。
+**禁止推断：** 文本停止、final_answer、idle 和 RPC 成功都不能单独证明 turn 成功或整棵树完成。关闭观察不等于停止工作。
 
-## spawn 已派发首次任务，返回不等待任务完成
+依据：[turn 合约测试](../turn_contract_test.go)、[当前 TurnComplete 路径](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L185-L202)。在该路径中，需要变化时，同线程 idle 先入队，再 turn/completed；不推广到跨线程或所有异常路径。
 
-0.162.1 同时包含 V1 和 V2 工具模式。
-这些模式属于同一版本的功能配置。
-本文不维护旧版本兼容分支。
+## 2. 用户要求执行工具，查看输出与工具结果
 
-V1 `spawn_agent` 以 `message/items` 提交首次输入。
-V2 `spawn_agent` 以 `message/task_name` 提交首次任务。
-
-服务端完成启动和输入接纳后返回任务引用。
-返回不等待子任务最终结果。
-这里的“立即返回”没有固定延迟承诺。
-调用方无需再派发一次相同的首次任务。
-子任务也可能在工具结果返回前完成。
+**用户动作：** 用户要求检查目录。模型选择命令工具；应用不需要另发一个 turn/start 才让命令执行。若需要权限，进入故事 3。
 
 ```mermaid
 sequenceDiagram
-    participant P as 父模型
-    participant R as 服务端工具
-    participant C as 子线程
-    participant O as 客户端观察
-    P->>R: 模型工具 spawn_agent，首次任务
-    R->>C: 创建线程并接纳首次输入
-    C-->>O: 子事件可能已开始到达
-    R-->>P: 模型工具结果，任务引用
-    Note over P,C: 返回任务引用不等待子任务结束
-    P->>P: 继续父任务或调用 wait_agent
-    C-->>O: 子文本、工具、状态通知
+    participant M as 模型
+    participant S as app-server
+    participant O as Subscription
+    M->>S: 模型命令工具调用
+    S-->>O: 原生 item/started commandExecution cmd-1
+    S-->>O: 原生 item/commandExecution/outputDelta cmd-1
+    S-->>O: 原生 item/completed commandExecution cmd-1
+    S-->>M: 模型工具结果
+    M->>S: 继续生成答案或调用工具
+    S-->>O: 原生答案 item 与 turn/completed
 ```
 
-V2 模型工具输入、结果示例：
+**原生与派生序列：** 这里没有新增的 SDK「工具完成」派生事件。命令执行的客户端通知是 `item/started`、`item/commandExecution/outputDelta` 和 `item/completed`。例如输出增量 `params={"threadId":"R","turnId":"RT1","itemId":"cmd-1","delta":"README.md\n"}`。完成的 commandExecution item 保留原生 `id`、`status`、`aggregatedOutput`、`exitCode` 等字段（按实际 payload 读取）。其他工具使用各自的原生 item 类型，不假装都有命令输出。
 
-```json
-{"task_name":"research","message":"核对边界","fork_turns":"none"}
-{"task_name":"/root/research","nickname":"Maple"}
-```
+**结束依据：** cmd-1 的 completed item 和 status/exitCode 是该命令的结果；应用继续等 RT1 的 turn 终态。工具调用成功返回给模型与模型最终答案是不同边界。
 
-V1 的模型工具结果形状不同：
+**客户端更新：** 为 cmd-1 显示运行状态，按 itemId 更新输出缓冲，用 completed item 校准最终快照与退出状态。`outputDelta` 当前在 SDK 中为 raw-only，读取 Native.Params；commandExecution 完成项可通过 `*types.ItemCompletedNotification` 的 union 读取。未知字段、类型保留 Raw/Params。
 
-```json
-{"agent_id":"child","nickname":"Maple"}
-```
+**禁止推断：** 工具 item 完成不是 turn 完成，也不是所有子线程完成。命令无输出不能证明无执行或成功。不要把内部 Rust `ExecCommandEnd` 当作唯一客户端线协议 method；当前 v2 映射使用规范 item 生命周期。
 
-V1 源码把原生线程 ID 写入 `agent_id`。
-V2 的 `task_name` 是任务路径，不能当作线程 ID。
-模型工具的参数不是客户端 `turn/start` 参数。
-SDK 不代替模型调用这些工具。
+依据：[原生 method 注册](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs)、[输出通知映射](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/event_mapping.rs)、[item 生命周期处理](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs)。
 
-源码依据：[V1 spawn](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents/spawn.rs)、[V2 spawn](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs)、[首次输入接纳](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L927-L961)。
+## 3. 用户回答权限或问题，再观察实际结果
 
-## 关系通知、Created 和乱序暂存
-
-SDK 只用明确证据建立父子关系。
-原生父线程字段、thread_spawn 来源、成功 collab 项和 V2 completed Started 活动提供证据。
-SDK 在子 Native 前发布已经证实的关系。
-SDK 先宣布祖先，再释放已经归属的后代记录。
-冲突保留已接纳的父关系并报告 incomplete。
-循环证据只产生诊断。
+**用户动作：** 应用向用户展示服务端请求，用户明确拒绝命令，或选择问题答案。应用调用 Requests 中原始 Request.Handle().Answer；SDK 不自动批准。
 
 ```mermaid
 sequenceDiagram
-    participant S as 服务端
-    participant T as SDK 树观察
-    participant A as 应用
-    S-->>T: 原生 child delta，关系尚未知
-    T->>T: 有界暂存
-    S-->>T: 原生父关系、成功 collab 或 V2 completed Started
-    T-->>A: 派生 Associated 或 Created
-    T-->>A: 已归属的 child Native
-    T-->>A: 建立关系的原生通知
-    Note over T,A: Associated 后可有一次独立 Created 确认
-```
-
-图中最后 2 条 Native 的顺序只是一个示例。
-它们取决于暂存记录和建立关系的通知。
-已先交付的原生记录不会重排。
-
-`Created` 采用实时成功的 `spawnAgent` collab 完成项，
-或成功解码的实时 `item/completed`，其 `SubAgentActivity.kind=started`。
-失败 spawn 和非 spawn collab 不能证明新建。
-已有 Associated 可收到一次 Created 确认。
-两条记录复用 `RelationKey`。
-历史 seed 只产生 Associated。
-
-V2 spawn 把 collab 项送给 analytics，并向执行事件流发布 Started 活动。
-固定源码在创建子线程并接纳首次输入成功后才发布 Started。
-因此 SDK 从实时 completed Started 建立父子关系并确认 Created。
-该路径不依赖 `thread/started`；原生自动附着本身不会发布这个通知。
-SDK 保留实际活动证据，不把它改写成 collab 工具。
-`item/started`、Interacted、Interrupted 和 Completed 都不能证明新建或父关系。
-历史 Started 只导入 Associated；后续重复实时通知也不会将其变为 Created。
-原生自动附着仍为 best-effort，漏通知或断线仍可能留下缺口。
-
-源码依据：[成功 spawn 后的 Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239)、[创建线程](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L767-L839)、[接纳首次输入](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L923-L959)、[官方无 collab 测试](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593)。
-这些是源码证据；本轮没有运行官方测试。
-
-V2 活动通知形状：
-
-```json
-{"method":"item/completed","params":{"threadId":"root","turnId":"T","completedAtMs":3,"item":{"type":"subAgentActivity","id":"spawn-call","kind":"started","agentThreadId":"child","agentPath":"/root/research","model":"selected-model","reasoningEffort":"high"}}}
-```
-
-活动通知的 `threadId` 标识发布活动的父线程。
-SDK 以它为 parent，以 `agentThreadId` 为 child，并保留父 turn/item ID。
-`agentThreadId` 标识活动对象。
-应用不能合并这 2 个身份。
-
-这里同时出现 `item/completed` 和 `kind=started`。
-前者结束活动记录，后者说明活动种类。
-两者都没有宣称子 turn 已完成。
-[活动发布器](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2.rs#L44-L52)连续发布 item started/completed。
-
-无法关联的记录有数量、字节和等待上限。
-达到上限时，SDK 发布 `incomplete/unresolved-source`。
-SDK 将原始 Native 标为 `Scope=unresolved`。
-这类记录可能属于另一棵树。
-后续关联不会重放已经交付的 Native。
-无 source 的通知保留为 `unscoped`。
-
-`Raw` 保留通知信封，`Native.Params` 保留参数字节。
-`Sequence` 只表示本地交付顺序。
-暂存可能改变不同 source 之间的交付位置。
-相同文本 delta 仍可连续出现 2 次。
-窄范围的终态 item 去重不提供全局 exactly-once。
-
-依据：[树实现](../tree.go)、[乱序与去重测试](../tree_nested_test.go)、[当前模式 metadata 测试](../tree_current_contract_test.go)、[V2 创建回归](../tree_v2_contract_test.go)。
-
-## 父子状态独立，wait 不关闭父 turn
-
-父线程 idle 和子线程 active 可以同时成立。
-父 turn 完成不会关闭树观察。
-子 turn 结束不会删除 agent 实体。
-同一子线程仍可能接收新的工作。
-
-```mermaid
-sequenceDiagram
-    participant P as 父线程
-    participant S as 服务端
-    participant C as 子线程
-    participant O as 观察
-    P->>S: 模型工具 wait_agent
-    Note over P,S: 等待期间父 turn 仍活动
-    C-->>S: 活动或终态信息
-    S-->>P: 模型工具 wait 结果
-    P-->>O: 父答案 item
-    S-->>O: 父 thread 状态 idle
-    S-->>O: 父 turn/completed
-    C-->>O: 子 delta 或工具事件仍可到达
-```
-
-在当前 `TurnComplete` 路径中，服务端先等待
-`note_turn_completed`，再调用 `handle_turn_complete`。
-需要状态变化时，前者发布该线程的 idle。
-后者再入队该线程的 `turn/completed`。
-状态代码没有聚合子线程状态。
-这不建立跨线程或所有失败路径的全局顺序。
-
-源码依据：[TurnComplete](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L185-L202)、[线程状态](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L148-L158)。
-离线依据：[父 idle、子 active 测试](../tree_lifecycle_test.go)。
-
-V1 wait 返回观察到的终态映射和 `timed_out`。
-V1 wait 不保证一次等齐所有目标。
-V2 wait 可因邮箱活动、新输入或超时返回。
-V2 wait 结果不等于某个子 turn 已成功。
-[两种 wait 实现](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers)区分这些条件。
-
-当前 V2 wait 的模型工具结果示例：
-
-```json
-{"message":"Wait completed.","timed_out":false}
-```
-
-后台完成还有独立的父线程回传路径。
-控制器根据原生终态构造完成消息。
-满足条件时，控制器还发布 completed 活动记录。
-控制器用 `trigger_turn=false` 投递完成消息。
-投递成功表示接纳入队，未必已经消费。
-父线程空闲时，回传不强制启动新的父 turn。
-
-父模型上下文中的完成消息示例：
-
-```text
-Message Type: FINAL_ANSWER
-Task name: /root
-Sender: /root/research
-Payload:
-核对结果
-```
-
-这个文本不是 app-server 的新 method。
-SDK 不把这个文本合成为父最终答案。
-回传和订阅流都可能存在缺口。
-不能仅靠回传缺失判断子任务失败。
-
-源码依据：[完成回传](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/completion.rs)、[消息格式](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/context/inter_agent_completion_message.rs)、[入队路径](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control.rs#L253-L323)。
-
-## 权限与用户问答使用原请求句柄
-
-服务端反向请求带原生 RPC `id`。
-`Client.Requests()` 是唯一请求入口。
-树中的关系记录没有回答权限。
-应用通过原始 `Request.Handle()` 回答一次。
-SDK 不自动批准或回答问题。
-
-```mermaid
-sequenceDiagram
-    participant S as 服务端
+    participant S as app-server
     participant Q as Client.Requests
-    participant U as 应用或用户
-    participant T as 树观察
-    S->>Q: 反向请求，id=approval-7，source=child
-    Q->>U: 原始 Request 和 Handle
-    U->>S: Handle.Answer，沿用原 id
-    S-->>T: 原生 serverRequest/resolved
-    Note over S,T: resolved 只说明请求不再待答
+    participant U as 用户与应用
+    participant O as Subscription
+    S->>Q: 原反向请求 id=approval-7 source=C1
+    Q->>U: Request 与唯一原始 Handle
+    U->>S: Handle.Answer 沿用 id=approval-7
+    S-->>O: 原生 serverRequest/resolved
+    S-->>O: 原生 item 或 turn 后续结果
+    Note over U,O: 派生关系记录没有回答句柄
 ```
 
-命令权限的原生 request-response 示例：
+**原生与派生序列：** 原请求不从 Events 再分发为第二个可答请求。子线程关系已知时，后续原生 resolved/item/turn 通知按 C1 路由。关系记录不改变请求或其原生 ID。
 
 ```json
-{"id":"approval-7","method":"item/commandExecution/requestApproval","params":{"threadId":"child","turnId":"child-turn","itemId":"command","startedAtMs":1,"command":"pwd","cwd":"/tmp"}}
+{"id":"approval-7","method":"item/commandExecution/requestApproval","params":{"threadId":"C1","turnId":"CT1","itemId":"cmd-1","startedAtMs":1,"command":"pwd","cwd":"/tmp"}}
 {"id":"approval-7","result":{"decision":"decline"}}
-{"method":"serverRequest/resolved","params":{"threadId":"child","requestId":"approval-7"}}
-```
-
-示例中的拒绝是调用方明确选择。
-成功写出回答不是服务端成功执行的确认。
-中断或服务端解决请求也可产生 resolved。
-resolved 的晚到通知不会撤回已接纳的回答。
-
-用户问答沿用相同的原始句柄规则：
-
-```json
-{"id":"question-1","method":"item/tool/requestUserInput","params":{"threadId":"child","turnId":"child-turn","itemId":"question-tool","isBlocking":true,"questions":[{"id":"choice","header":"选择","question":"使用 A 吗？"}]}}
+{"method":"serverRequest/resolved","params":{"threadId":"C1","requestId":"approval-7"}}
+{"id":"question-1","method":"item/tool/requestUserInput","params":{"threadId":"C1","turnId":"CT1","itemId":"question-tool","isBlocking":true,"questions":[{"id":"choice","header":"选择","question":"使用 A 吗？"}]}}
 {"id":"question-1","result":{"answers":{"choice":{"answers":["A"]}}}}
 ```
 
-关闭或取消树观察不使请求句柄失效。
-请求取消、过期、resolved 或断线保留原有语义。
-新连接上的相同 request ID 不能复用旧句柄。
-事件队列满时，原始请求与 RPC 路由仍独立工作。
+**结束依据：** Answer 成功只确认 SDK 沿原请求路径写出一次回答；resolved 表示不再待答。实际执行结果继续看对应 item/turn 终态。取消、过期、中断、服务端解决和断线仍按原句柄契约处理。
 
-依据：[原请求语义](../requests.go)、[满队列与句柄测试](../tree_bounds_requests_test.go)、[原生处理路径](protocol/README.md#server-request-resolution)。
+**客户端更新：** 用原 request ID 维护待答 UI，保留 thread/turn/item 上下文。并发 Answer 最多一次接纳；resolved 后清除待答状态，不伪造命令成功。
 
-## 停止工作、关闭观察和删除历史不是同一操作
+**禁止推断：** resolved 不等于批准或执行成功。观察 Close/cancel/满队列既不回答也不取消原请求；新 epoch 相同 request ID 不能复用旧句柄。Created/Associated 没有权限权威。
 
-| 操作 | 影响对象 | 可用边界 |
-| --- | --- | --- |
-| `InterruptTurn(threadId, turnId)` | 显式请求中断指定 turn | RPC 确认不等于已经停止；检查原生终态 |
-| 模型工具 `interrupt_agent` | V2 当前任务 | 属于模型工具；SDK 没有同名客户端 RPC |
-| 模型工具 `close_agent` | V1 agent 及可达存活后代 | 服务端关闭运行时并标记已关闭关系；不等于删除持久历史 |
-| `TreeSubscription.Close()` 或观察 context 取消 | 本地观察 | 不发送 interrupt、resume 或 unsubscribe |
-| `UnsubscribeThread(threadId)` | 原生连接对线程的附着 | 不删除线程，也不证明 turn 停止 |
-| `Client.Close()` | Client 拥有的连接或进程 | stdio 按已有所有权关闭子进程；远端只关闭连接 |
-| 原生 `thread/delete` | 服务端持久线程数据 | 当前有子树删除路径；SDK 没有专用 wrapper，也没有新增删除流程 |
+依据：[原请求语义](../requests.go)、[审批竞争、观察取消与满队列测试](../tree_bounds_requests_test.go)。
 
-`thread/closed` 和 `thread/deleted` 也不是同一通知。
-应用不能从父答案或空闲状态推断删除。
-树观察原样转发可归属的原生通知。
-树观察不会因活动 completed 删除关系节点。
+## 4. 用户委派并行任务，查看子线程与嵌套孙线程
 
-依据：[显式关闭](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/legacy.rs#L47-L112)、[V2 中断工具](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs)、[原生删除](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_delete.rs)。
-这些服务端操作的源码存在不等于本 SDK 提供完整工作流。
-
-## 断线与恢复缺口
+**用户动作：** 用户要求并行核对两项工作。父模型选择 spawn_agent，为子线程提交首次输入；子模型还可以继续委派孙线程。模型工具返回引用无需等待子任务结束，应用不重复发送首次任务。
 
 ```mermaid
 sequenceDiagram
-    participant S as 服务端
-    participant T as 旧树观察
-    participant A as 应用
-    participant N as 新 Client
-    S--xT: 连接终止
-    T->>T: 入队 gap 并关闭 Events 和 Done
-    T-->>A: Done 可读，Err 保留原因
-    T-->>A: 读取已接纳队列记录
-    T-->>A: 读取 disconnected，permanent-gap
-    Note over T,A: Done 关闭不等待队列排空
-    A->>N: 显式创建新 Client
-    A->>N: SubscribeTree 传入 History 快照
-    N-->>A: history Associated，incomplete
-    Note over A,N: 新 epoch 不填补旧连接的缺口
+    participant P as 父模型 R
+    participant S as app-server 与 SDK
+    participant C as 子线程 C1
+    participant G as 孙线程 G
+    participant U as 应用
+    P->>S: 模型 spawn_agent 首次任务
+    S->>C: 创建并接纳首次输入
+    C-->>S: 早到原生子 delta 有界暂存
+    S-->>U: 派生 Created R 到 C1
+    S-->>U: 释放已归属 C1 Native
+    S-->>U: 原生父 item/completed Started
+    S-->>P: 模型工具结果 task_name
+    P->>S: 继续父工作或 wait_agent
+    S-->>U: 原生父文本与子流交错
+    S-->>U: 派生 Created R 到 C2 基于另一实时 spawn 证据
+    S-->>U: 原生 C2 delta 可与 C1 交错
+    C->>S: 模型 spawn_agent 嵌套任务
+    S->>G: 创建并接纳首次输入
+    S-->>U: 派生 Created C1 到 G
+    S-->>U: 原生孙线程输出
+    Note over P,U: C2 可与这些事件交错，图不表示跨线程全序
 ```
 
-原生新线程 auto-attach 是 best-effort。
-服务端漏过创建广播时会跳过 resync。
-SDK 每次观察都先报告 incomplete。
-SDK 没有通用自动补订阅或重连循环。
+**原生与派生序列：** V1 成功实时 `spawnAgent` collab completed item 的 receiver IDs 可确认 Created；其他成功 collab 只证明 Associated。V2 使用成功解码的实时 `item/completed`，其活动 `kind=started`，从通知 threadId 和活动 agentThreadId 建立关系并确认 Created。固定源码在创建和接纳首次输入成功之后发布它；不依赖 `thread/started`。SDK 原样保留真实 `TreeEvidence.Activity`，不伪造成 collab。
 
-历史快照只提供已知关系。
-历史快照不重放 Native，也不证明实时新建。
-新连接不自动 resume、read、list 或启动旧子线程。
-显式 resume 是独立操作，不能冒充无副作用的监听。
-新 epoch 可能再次收到相同原生 ID。
-SDK 不保证跨 epoch exactly-once。
+```json
+{"method":"item/completed","params":{"threadId":"R","turnId":"RT1","completedAtMs":3,"item":{"type":"subAgentActivity","id":"spawn-1","kind":"started","agentThreadId":"C1","agentPath":"/root/research","model":"selected-model","reasoningEffort":"high"}}}
+{"method":"item/agentMessage/delta","params":{"threadId":"C1","turnId":"CT1","itemId":"child-answer","delta":"子结果"}}
+```
 
-观察尚未终止时，预留位置保留断线诊断。
-慢观察者溢出只终止该观察者。
-`Done()` 关闭不等待消费者排空队列。
-应用仍能读取已经接纳的记录。
-应用必须检查 `Done()` 和 `Err()`。
-收到父完成记录不能掩盖观察丢失。
+对应 SDK 记录的关键值为 `Kind=SubagentCreated, Source.ThreadID=C1, ParentThreadID=R, RelationKey=C1`，Evidence.Source 是 `(R, RT1, spawn-1)`。原生 thread 父字段或 thread_spawn 来源也可证明 Associated。已知祖先关系先于已归属后代 Native；早到孙关系在祖先证实后按祖先顺序宣布。先 Associated 后可单独确认一次 Created，复用 RelationKey。
 
-依据：[新线程附着与跳过 resync](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319)、[历史与断线测试](../tree_lifecycle_test.go)、[原始交互与有界观察](../tree_bounds_requests_test.go)。
+V2 模型工具结果形如 `{"task_name":"/root/research","nickname":"Maple"}`；V1 为 `{"agent_id":"C1","nickname":"Maple"}`。前者路径不是线程 ID。这些文本不是客户端 RPC。
 
-## 保证的偏序与不保证的全局顺序
+**结束依据：** C1/CT1、C2/CT2 和 G/GT1 分别从各自原生 turn 终态确定结果。父模型 wait_agent 的返回不是整棵树完成：V1 可只收到部分终态，V2 可因邮箱、新输入或超时返回。
 
-| 范围 | 有依据的约束 | 不能推出的结论 |
+**客户端更新：** 用 RelationKey 建树，用 Evidence 展示直接父证据；按 Source.ThreadID 分别显示文本、工具、状态、usage，不聚合 token 或拼接答案。冲突保留已接纳关系并显示 incomplete。关系节点在活动结束后仍保留，可继续接收新 turn。
+
+**禁止推断：** `item/started`、活动 Interacted/Interrupted/Completed 不证明创建或父关系；历史 Started 只关联，不成为实时 Created。`item/completed` 加 `kind=started` 是活动项结束，不是子 turn 结束。路径、缺失 thread/started、父答案和 wait 返回都不能推断全树完成。SDK 不新增 child start/resume/turn/read/list/subscribe RPC 或额外连接。
+
+依据：[V2 成功 Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239)、[首次输入接纳](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L923-L959)、[官方无 collab 测试源码](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593)、[离线 V2 正负例](../tree_v2_contract_test.go)、[嵌套与去重](../tree_nested_test.go)。本票未运行官方 Rust 测试。
+
+## 5. 用户启动耗时命令，持续查看后台输出
+
+**用户动作：** 用户请求耗时检查。模型调用 unified exec，首次等待窗口结束时进程仍运行；模型工具收到 session/process 引用，可以继续推理或调用 write_stdin。
+
+```mermaid
+sequenceDiagram
+    participant M as 模型
+    participant X as unified exec 与 watcher
+    participant S as app-server
+    participant U as 应用
+    M->>X: exec_command
+    X->>S: 命令 item started
+    S-->>U: 原生 item/started cmd-bg
+    X-->>M: 工具返回 进程仍运行与 session 引用
+    X->>S: watcher 输出增量
+    S-->>U: 原生 item/commandExecution/outputDelta cmd-bg
+    opt 模型另行读取或写入
+        M->>X: write_stdin 使用 session 引用
+        X-->>M: 工具结果中的输出与运行状态
+    end
+    X->>S: exit watcher 完成命令 item
+    S-->>U: 原生 item/completed cmd-bg
+```
+
+**原生与派生序列：** 客户端的输出增量和完成 item 来自 watcher 路径，不要求模型轮询 write_stdin 才有通知。模型侧 write_stdin 读取是另一条工具结果路径；它的 session/process 引用不能替换客户端 `(threadId, turnId, itemId)`。SDK 没有为后台命令制造派生 completed method。
+
+固定源码每个输出 delta 至多 8192 字节，数量受 `MAX_EXEC_OUTPUT_DELTAS_PER_CALL=10000` 限制，聚合 transcript 也受缓冲策略限制。watcher 等待进程退出、输出 drain 和相关监视条件后，通过工具 emitter 发布完成项。内部代码中的 ExecCommandEnd 是实现事件名，当前 app-server v2 的客户端边界仍是原生 commandExecution item 生命周期与 outputDelta；不能把内部名当作唯一线协议。
+
+**结束依据：** cmd-bg 的 completed item/status/exitCode 是该进程的终态依据；首次工具返回引用或某次 write_stdin 返回仍在运行都不是结束。超时、失败也要按实际原生字段呈现。
+
+**客户端更新：** 维持独立命令条目，逐次显示收到的 outputDelta，用 completed item 的聚合输出校准末态。输出缺口或截断应显式显示，不能宣称收到完整 stdout/stderr。不要把模型工具结果和客户端增量再混合追加，造成重复输出。
+
+**禁止推断：** delta 配额耗尽或输出静默不代表进程结束；模型不再读取也不代表 watcher 停止。SDK 缓冲有界不等于 provider 输出无限可靠，断线后不补齐输出。
+
+依据：[后台与 exit watcher](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/unified_exec/async_watcher.rs)、[delta 数量上限](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/exec.rs)、[进程管理与 write_stdin](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/unified_exec/process_manager.rs)。这些是固定源码依据，本票没有后台 shell live 录制。
+
+## 6. 用户看到父答案，但后台工作尚未结束
+
+**用户动作：** 用户收到父线程的答案后继续留在任务视图，等待子任务或后台命令完成。应用保持 Subscription 和 Requests 循环运行。
+
+```mermaid
+sequenceDiagram
+    participant R as 父线程 R
+    participant C as 子线程或后台命令
+    participant O as Subscription
+    participant B as 父 mailbox
+    R-->>O: 原生父答案 item/completed
+    R-->>O: 原生 thread/status/changed idle
+    R-->>O: 原生 turn/completed RT1
+    C-->>O: 原生子 delta 或后台命令 outputDelta
+    C-->>O: 原生子 turn 或命令 item completed
+    opt 子代理完成回传
+        C->>B: 完成消息 trigger_turn=false
+        Note over R,B: 普通 idle 不必启动新 turn，durable sleep 可被唤醒
+    end
+    Note over O,B: 邮箱消息与客户端原生通知是不同路径
+```
+
+**原生与派生序列：** 根 idle/turn/completed 不关闭本地观察。后续 C1 的文本、工具、终态和原请求仍可到达；根线程上的 cmd-bg 也可以在 RT1 结束之后报告自身完成。已有关系不会因完成删除，SDK 不合成全树终态。子代理完成回传可伴随父侧 Completed 活动项，但该活动不是子 turn 终态的替代品。
+
+子代理控制器把完成文本以 `trigger_turn=false` 投递父 mailbox。接纳入队不等于父模型已消费；普通 idle 无需自动开新 turn。存在 outstanding durable sleep 时，队列消息可唤醒该 sleep，这是必须单独区分的例外。完成回传中的 `Message Type: FINAL_ANSWER / Task name / Sender / Payload` 是模型上下文消息，不是 app-server 新 method。
+
+**结束依据：** 父 RT1、子 CT1 和后台 cmd-bg 的终态各自独立。应用若要显示「当前已知工作全部结束」，必须显式定义观察范围、所有已知 turn/item 的终态及完整性条件；SDK 初始 incomplete 和永久 gap 限制了完整性声明。用户也可以主动结束本地观察，但这不停止 provider 工作。
+
+**客户端更新：** 父面板显示 idle/RT1 completed，子面板与命令条目保持运行状态；后续更新各自实体。不要自动让父答案变成子答案。保持原 Requests 的审批 UI 可用。
+
+**禁止推断：** 根 idle、父 final_answer、Completed 活动、无 mailbox 回传或一段静默，都不能推断全树成功、失败、删除或父必然继续生成。普通完成回传不得被描述成无条件唤醒父 turn。
+
+依据：[父 idle 子 active 离线测试](../tree_lifecycle_test.go)、[完成回传](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/completion.rs)、[mailbox 与 trigger_turn](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control.rs#L253-L323)、[durable sleep 例外](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tasks/mod.rs#L428-L490)、[输入处理](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/session/handlers.rs)。
+
+## 7. 用户经历交错、重复、缺失与断线后恢复观察
+
+**用户动作：** 用户在网络中断后重开观察；应用明确创建新 Client，可从已有快照传入 History。SDK 不偷偷 resume 子线程或进行 read/list 补流。
+
+```mermaid
+sequenceDiagram
+    participant S as app-server
+    participant O as 旧 Subscription
+    participant U as 应用
+    participant N as 新 Client 与 Subscription
+    S-->>O: 原生未知 child delta
+    O->>O: 数量 字节 时间有界暂存
+    S-->>O: 原生关系证据 或重复 completed
+    O-->>U: 派生关系后释放 Native 或 unresolved 诊断
+    S--xO: 连接中断
+    O-->>U: Done 与 Err 原始原因
+    O-->>U: 可排空已接纳队列及 permanent-gap
+    U->>N: 新 Client Subscribe(R, History)
+    N-->>U: 派生 incomplete 与 history Associated
+    Note over U,N: 新 epoch 不填补旧 gap，不重放 Native 或 Created
+```
+
+**原生与派生序列：** 不同 source 交错；不明确来源的通知有界等待，超限/到期发布 `ObservationState(incomplete, unresolved-source)` 并以 `Scope=unresolved` 交付原生记录。无 source 的通知为 unscoped，不证明树成员。相同无 ID 文本 delta 可以重复两次；窄范围 item 终态去重不是全局 exactly-once。后续建立关系不会重放已交付 Native。冲突、循环和资源限制有诊断或终止错误。
+
+观察仍活动时，非预期断线使用预留槽交付 `ObservationState(disconnected, permanent-gap)`，Done/Events 关闭，Err 保留原始原因；已接纳记录可排空。队列满先终止的观察不再继续收事件。新观察从 incomplete 开始，History 只导入 Associated 与 history-recovery-gap，从不把快照当实时创建或 Native 重放。
+
+**结束依据：** Done/Err 是观察结束依据，不是工作成功/失败依据。单个慢订阅的 overflow/ErrLimit 只结束该观察，不阻塞连接、其他订阅或审批。Close/cancel 与断线保留第一终止原因。
+
+**客户端更新：** 显示永久缺口，保留各 epoch 的身份关联与来源，分别记录本地 Sequence。保存 Raw/Params 供未知协议和损坏载荷排查；不要用 Marshal(Data) 代替收到的原始字节。重连后显式合并应用快照，保持「状态未知」而非假装完整恢复。
+
+**禁止推断：** Sequence 不是 provider cursor，Epoch 不是持久 provider 身份；新 epoch 相同原生 ID 不提供 exactly-once。缺失通知、静默、EOF 或新的历史关系不证明任务结束或旧缺口已修复。Unknown 原生保留不等于支持其他服务端版本。
+
+依据：[有界与原子 fanout](../tree_bounds_requests_test.go)、[断线、历史与 epoch](../tree_lifecycle_test.go)、[Raw、未知、缺失/null 与独立所有权](../tree_contract_test.go)、[离线示例](../examples/observe-tree-offline/README.md)。
+
+## 用户主动停止与关闭的边界
+
+| 用户意图与操作 | 实际结束对象 | 仍需观察或明确的边界 |
 | --- | --- | --- |
-| 启动观察 | 返回 `SubscribeTree` 时本地注册完成 | 注册之前的通知会补发 |
-| 当前 spawn | 首次输入已接纳后返回任务引用 | 子任务已完成，或子事件一定晚于工具结果 |
-| 关系交付 | 已证实关系先于归属该子线程的 Native | Created 总会出现，或所有连接通知都属于这棵树 |
-| 当前 TurnComplete 路径 | 有变化时，同线程 idle 入队早于 turn/completed | 所有子任务完成，或所有异常路径都有同样通知 |
-| RPC 关联 | 响应沿用原 request ID | 响应一定先于通知，或成功响应表示工作成功 |
-| 权限回答 | 原句柄最多一次接纳回答 | resolved 证明批准、执行成功或费用产生 |
-| 本地 Sequence | 表示本观察交付顺序 | 服务端持久 cursor 或跨 source 因果顺序 |
-| 关闭观察 | 释放本地观察，保留已接纳队列 | provider 工作自动取消 |
-| 断线 | 明确 permanent-gap，保留终止原因 | 无缝补流或跨 epoch exactly-once |
+| InterruptTurn(threadId, turnId) | 请求中断指定 turn | RPC 确认不等于已停止，检查原生终态 |
+| 模型 interrupt_agent | V2 当前任务 | 模型工具，不是 SDK 同名 RPC |
+| 模型 close_agent | V1 agent 与可达存活后代 | 不是删除持久历史 |
+| Subscription.Close 或 context 取消 | 本地观察 | 不 interrupt/resume/unsubscribe，不影响原请求句柄 |
+| UnsubscribeThread | 原生连接附着 | 不删除线程，不证明工作停止 |
+| Client.Close | 所有权范围内连接/进程 | stdio 关闭拥有的子进程；远端只关闭连接 |
+| 原生 thread/delete | 持久线程数据 | SDK 无专用 wrapper，不从父 idle 推断删除 |
 
-[兼容矩阵](subagent-compatibility.md)区分源码 E1 和离线 E2。
-源码检查没有验证真实服务端路由覆盖率。
-离线假进程没有验证模型行为。
-本轮没有 E3/E4 子代理运行证据。
-ACP 子代理提案仍是草案参考。
-
-[离线示例](../examples/observe-tree-offline/README.md)能重现树交付顺序。
-示例只启动自己的假服务端。
+所有故事的保证仅限显式 ID 关联、已证关系先于归属后代 Native、独立原句柄与有界可见失败。原生 auto-attach 在固定版本为 best-effort。SDK 不提供树级完成保证、自动恢复或新增子任务控制流程。参见 [API 迁移](default-managed-migration.md)。

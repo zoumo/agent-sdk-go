@@ -18,6 +18,8 @@ func main() {
 	params := types.ThreadStartParams{Ephemeral: types.Some(true)}
 	var _ func(*codex.Client, context.Context, types.ThreadStartParams) (types.ThreadStartResponse, error) = (*codex.Client).StartThread
 	_ = codex.Event{}
+	var _ func(*codex.Client, context.Context, string, codex.TreeOptions) (*codex.Subscription, error) = (*codex.Client).Subscribe
+	var _ func(*codex.Subscription) <-chan codex.TreeEvent = (*codex.Subscription).Events
 	_ = codex.TreeEvent{}
 	if reflect.TypeOf(params).PkgPath() != "github.com/zoumo/codex-sdk-go/types" {
 		panic("unexpected native package identity")

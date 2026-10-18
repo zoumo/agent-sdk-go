@@ -170,7 +170,7 @@ The current [per-capability contract](subagent-compatibility.md) covers the full
 five-ticket recursive API. The sections below preserve its implementation and
 evidence history; no subagent live validation is claimed.
 
-`Client.SubscribeTree` adds a local, bounded stream for a root and direct children
+`Client.Subscribe` adds a local, bounded stream for a root and direct children
 identified by explicit native evidence. Successful live spawnAgent collab and
 live decoded V2 item/completed SubAgentActivity kind started confirm SDK-derived
 Created; successful non-spawn collab evidence is Associated. V2 derives parent

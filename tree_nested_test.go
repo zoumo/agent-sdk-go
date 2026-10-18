@@ -76,12 +76,12 @@ func TestTreeNestedOrderingAndIdentity(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-nested", codex.Limits{})
-			a, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			a, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer a.Close()
-			b, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			b, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +179,7 @@ func TestTreePendingLimitsAndNoReplay(t *testing.T) {
 				{PendingAge: 20 * time.Millisecond},
 			} {
 				f := startFake(t, "tree-pending", codex.Limits{})
-				s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", options)
+				s, err := f.c.Subscribe(context.Background(), "native-thread-42", options)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -215,7 +215,7 @@ func TestTreeDepthAndDedupBounds(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-nested", codex.Limits{})
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{MaxDepth: 1})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{MaxDepth: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -230,7 +230,7 @@ func TestTreeDepthAndDedupBounds(t *testing.T) {
 			}
 			// A tiny cache permits older terminal identities to be delivered again; it
 			// never trades bounded memory for a cross-epoch exactly-once claim.
-			s, err = f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{DedupEntries: 1})
+			s, err = f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{DedupEntries: 1})
 			if err != nil {
 				t.Fatal(err)
 			}

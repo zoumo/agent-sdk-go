@@ -29,73 +29,6 @@ type TreeOptions struct {
 	DedupEntries  int
 }
 
-// TreeEventKind distinguishes native notifications from SDK records. These
-// values are SDK API names, never app-server methods or protocol union variants.
-type TreeEventKind string
-
-const (
-	TreeNative             TreeEventKind = "Native"
-	TreeSubagentCreated    TreeEventKind = "SubagentCreated"
-	TreeSubagentAssociated TreeEventKind = "SubagentAssociated"
-	TreeObservationState   TreeEventKind = "ObservationState"
-)
-
-// TreeIdentity contains native identities only when present in the notification.
-// A turn is not an agent entity, and an item is not renamed to a task/run ID.
-type TreeIdentity struct {
-	ThreadID string
-	TurnID   string
-	ItemID   string
-}
-
-// TreeEvidence identifies the native notification supporting a direct relation.
-// Method is empty for caller-supplied snapshots, which are not notifications.
-// ReceiverThreadIDs preserves every receiver, in native order, including repeats.
-type TreeEvidence struct {
-	Method            string
-	Provenance        string // "live" or "history" supporting evidence
-	ParentThreadID    string
-	Source            TreeIdentity
-	Tool              string
-	ReceiverThreadIDs []string
-	// Activity retains the native V2 creation item; Tool/receivers remain collab-only.
-	Activity *types.SubAgentActivityThreadItem
-}
-
-// TreeEvent wraps an independently owned native Event or an SDK-derived record.
-// Raw is the exact notification envelope, excluding transport delimiters, only
-// for Native. Origin is "native" or "sdk-derived"; Provenance is "live" or "history".
-// Sequence is local delivery order, not a replay cursor. Epoch identifies this
-// Client connection within this process, not a durable provider identity.
-// Scope is "root", "child", "unresolved", "unscoped", or "observation". Unscoped events do
-// not establish membership. UsageScope is "unknown"; no usage is aggregated.
-// Created confirms creation via a live successful spawnAgent completed item or
-// a live completed SubAgentActivity item of kind started at the pinned version.
-// Associated alone never confirms creation. Neither kind grants request authority.
-type TreeEvent struct {
-	Kind              TreeEventKind
-	Origin            string
-	Provider          string
-	Epoch             uint64
-	RootThreadID      string
-	Source            TreeIdentity
-	ParentThreadID    string
-	Sequence          uint64
-	Provenance        string
-	Scope             string
-	UsageScope        string
-	RelationKey       string
-	CreationConfirmed bool
-	Evidence          *TreeEvidence
-	// PreviousEvidence retains the accepted edge when Evidence conflicts with it.
-	PreviousEvidence *TreeEvidence
-	Native           *Event
-	Raw              json.RawMessage
-	// State and Reason describe observation limits, never provider work success.
-	State  string
-	Reason string
-}
-
 type treeRelation struct {
 	parent                      string
 	history                     bool
@@ -110,12 +43,12 @@ type treePending struct {
 	arrived time.Time
 }
 
-// TreeSubscription is a bounded, local recursive observation on the existing
-// connection. SubscribeTree registers synchronously, before the caller starts
+// Subscription is a bounded, local recursive observation on the existing
+// connection. Subscribe registers synchronously, before the caller starts
 // root work. Closing it never interrupts work or sends unsubscribe/resume RPCs.
 // Events closes on termination; queued events remain readable. Done and Err work
 // even when the event queue is full. Requests() remains the only answer authority.
-type TreeSubscription struct {
+type Subscription struct {
 	client        *Client
 	root          string
 	events        chan TreeEvent
@@ -139,13 +72,16 @@ type TreeSubscription struct {
 	seenOrder     []string
 }
 
-// SubscribeTree observes root and proven descendant notifications without
+// Subscribe observes root and proven descendant notifications without
 // starting or resuming any thread. It shares the connection reader, with its own
 // buffers and queue. It consumes one Limits.Subscriptions slot.
 // The initial ObservationState is incomplete: native auto-attach is best-effort
 // at the pinned 0.162.1 source and runtime coverage is unverified. It
 // cannot guarantee recovery across disconnects or missed server notifications.
-func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options TreeOptions) (*TreeSubscription, error) {
+// rootThreadID must be a nonempty native thread ID. Registration does not replay
+// notifications received before it; obtain the root ID first, then Subscribe, then
+// StartTurn. Zero options always enable managed observation.
+func (c *Client) Subscribe(ctx context.Context, rootThreadID string, options TreeOptions) (*Subscription, error) {
 	if ctx == nil {
 		return nil, errors.New("codex: nil context")
 	}
@@ -163,7 +99,7 @@ func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options
 	if !c.ready {
 		return nil, ErrProtocol
 	}
-	if len(c.subscriptions)+len(c.trees) >= c.limits.Subscriptions {
+	if len(c.subscriptions) >= c.limits.Subscriptions {
 		return nil, ErrLimit
 	}
 	if options.EventQueue == 0 {
@@ -211,8 +147,8 @@ func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options
 		}
 		historyIDs[id] = struct{}{}
 	}
-	t := &TreeSubscription{client: c, root: rootThreadID, events: make(chan TreeEvent, options.EventQueue+1), done: make(chan struct{}), maxNodes: options.MaxNodes, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
-	c.trees[t] = struct{}{}
+	t := &Subscription{client: c, root: rootThreadID, events: make(chan TreeEvent, options.EventQueue+1), done: make(chan struct{}), maxNodes: options.MaxNodes, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
+	c.subscriptions[t] = struct{}{}
 	t.stop = context.AfterFunc(ctx, func() { c.mu.Lock(); defer c.mu.Unlock(); t.finishLocked(ctx.Err()) })
 	t.emitLocked(TreeEvent{Kind: TreeObservationState, Scope: "observation", State: "incomplete", Reason: "best-effort-auto-attach-unverified"})
 	if len(options.History) > 0 {
@@ -230,26 +166,29 @@ func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options
 	t.options.History = nil
 	return t, nil
 }
-func (t *TreeSubscription) Events() <-chan TreeEvent { return t.events }
-func (t *TreeSubscription) Done() <-chan struct{}    { return t.done }
-func (t *TreeSubscription) Err() error {
+func (t *Subscription) Events() <-chan TreeEvent { return t.events }
+func (t *Subscription) Done() <-chan struct{}    { return t.done }
+func (t *Subscription) Err() error {
 	t.client.mu.Lock()
 	defer t.client.mu.Unlock()
 	return t.cause
 }
-func (t *TreeSubscription) Close() error {
+
+// Close ends local observation, preserving queued records and the first cause.
+// It is idempotent, never waits for consumers, and does not cancel provider work.
+func (t *Subscription) Close() error {
 	t.client.mu.Lock()
 	defer t.client.mu.Unlock()
 	t.finishLocked(nil)
 	return nil
 }
-func (t *TreeSubscription) finishLocked(cause error) {
+func (t *Subscription) finishLocked(cause error) {
 	if t.closed {
 		return
 	}
 	t.closed = true
 	t.cause = cause
-	delete(t.client.trees, t)
+	delete(t.client.subscriptions, t)
 	if t.stop != nil {
 		t.stop()
 	}
@@ -270,7 +209,7 @@ func (t *TreeSubscription) finishLocked(cause error) {
 
 // One reserved slot ensures disconnect remains observable even at queue capacity.
 // It never evicts accepted native records or changes the connection failure cause.
-func (t *TreeSubscription) disconnectLocked(cause error) {
+func (t *Subscription) disconnectLocked(cause error) {
 	if t.closed {
 		return
 	}
@@ -278,7 +217,7 @@ func (t *TreeSubscription) disconnectLocked(cause error) {
 	t.finishLocked(cause)
 }
 
-func (t *TreeSubscription) emitLocked(e TreeEvent) {
+func (t *Subscription) emitLocked(e TreeEvent) {
 	if t.closed {
 		return
 	}
@@ -296,7 +235,7 @@ func (t *TreeSubscription) emitLocked(e TreeEvent) {
 // Stage one bounded notification fanout (including newly resolved pending
 // records) before admitting any of it. Overflow preserves earlier accepted
 // records, without exposing an association whose native event was rejected.
-func (t *TreeSubscription) commitBatchLocked() {
+func (t *Subscription) commitBatchLocked() {
 	batch := t.batch
 	t.batch = nil
 	t.batching = false
@@ -308,7 +247,7 @@ func (t *TreeSubscription) commitBatchLocked() {
 	}
 }
 
-func (t *TreeSubscription) enqueueLocked(e TreeEvent) {
+func (t *Subscription) enqueueLocked(e TreeEvent) {
 	if t.closed {
 		return
 	}
@@ -384,7 +323,7 @@ func treeIdentity(params json.RawMessage) TreeIdentity {
 }
 
 // publishLocked only receives notifications from the existing connection.
-func (t *TreeSubscription) publishLocked(method string, params json.RawMessage, raw []byte) {
+func (t *Subscription) publishLocked(method string, params json.RawMessage, raw []byte) {
 	if t.closed {
 		return
 	}
@@ -423,7 +362,7 @@ func (t *TreeSubscription) publishLocked(method string, params json.RawMessage, 
 	t.scheduleLocked()
 }
 
-func (t *TreeSubscription) member(id string) bool {
+func (t *Subscription) member(id string) bool {
 	for depth := 0; depth <= t.options.MaxDepth; depth++ {
 		if id == t.root {
 			return true
@@ -437,11 +376,11 @@ func (t *TreeSubscription) member(id string) bool {
 	return false
 }
 
-func (t *TreeSubscription) diagnostic(reason, child, parent string, evidence *TreeEvidence) {
+func (t *Subscription) diagnostic(reason, child, parent string, evidence *TreeEvidence) {
 	t.emitLocked(TreeEvent{Kind: TreeObservationState, Scope: "observation", State: "incomplete", Reason: reason, Source: TreeIdentity{ThreadID: child}, ParentThreadID: parent, Evidence: evidence})
 }
 
-func (t *TreeSubscription) relationLocked(child, parent string, evidence TreeEvidence, created bool) {
+func (t *Subscription) relationLocked(child, parent string, evidence TreeEvidence, created bool) {
 	evidence.ParentThreadID = parent
 	evidence.Provenance = "live"
 	if t.seeding {
@@ -511,7 +450,7 @@ func (t *TreeSubscription) relationLocked(child, parent string, evidence TreeEvi
 	}
 }
 
-func (t *TreeSubscription) announceLocked() {
+func (t *Subscription) announceLocked() {
 	// Follow parent pointers to emit proven ancestors before descendants. Arrival
 	// order among siblings is retained in pending notifications, not map order.
 	var announce func(string)
@@ -549,7 +488,7 @@ func (t *TreeSubscription) announceLocked() {
 
 // Seed uses the same native lineage parser, but never delivers history as live
 // notifications or seeds occurrence deduplication. Missing history stays a gap.
-func (t *TreeSubscription) seedLocked(snapshot json.RawMessage) {
+func (t *Subscription) seedLocked(snapshot json.RawMessage) {
 	params, _ := json.Marshal(map[string]json.RawMessage{"thread": snapshot})
 	t.discoverLocked(decodeEvent("thread/started", params), treeIdentity(params))
 	fields, _ := objectFields(snapshot)
@@ -587,7 +526,7 @@ func (t *TreeSubscription) seedLocked(snapshot json.RawMessage) {
 	}
 }
 
-func (t *TreeSubscription) discoverLocked(native Event, source TreeIdentity) {
+func (t *Subscription) discoverLocked(native Event, source TreeIdentity) {
 	if t.closed {
 		return
 	}
@@ -631,7 +570,7 @@ func (t *TreeSubscription) discoverLocked(native Event, source TreeIdentity) {
 	}
 }
 
-func (t *TreeSubscription) activityLocked(activity *types.SubAgentActivityThreadItem, source TreeIdentity) {
+func (t *Subscription) activityLocked(activity *types.SubAgentActivityThreadItem, source TreeIdentity) {
 	// At the pinned source, V2 Started follows successful spawn and initial input
 	// admission. Other activities prove neither creation nor a parent relation.
 	// History uses the same edge parser; relationLocked suppresses creation.
@@ -642,7 +581,7 @@ func (t *TreeSubscription) activityLocked(activity *types.SubAgentActivityThread
 	t.relationLocked(activity.AgentThreadID, source.ThreadID, evidence, true)
 }
 
-func (t *TreeSubscription) collabLocked(item *types.CollabAgentToolCallThreadItem, source TreeIdentity) {
+func (t *Subscription) collabLocked(item *types.CollabAgentToolCallThreadItem, source TreeIdentity) {
 	if item.Status != types.CollabAgentToolCallStatusCompleted || item.SenderThreadID != source.ThreadID {
 		return
 	}
@@ -655,7 +594,7 @@ func (t *TreeSubscription) collabLocked(item *types.CollabAgentToolCallThreadIte
 	}
 }
 
-func (t *TreeSubscription) deliverLocked(method string, params json.RawMessage, raw []byte, scope string) {
+func (t *Subscription) deliverLocked(method string, params json.RawMessage, raw []byte, scope string) {
 	if t.closed {
 		return
 	}
@@ -695,11 +634,11 @@ func (t *TreeSubscription) deliverLocked(method string, params json.RawMessage, 
 	t.emitLocked(TreeEvent{Kind: TreeNative, Source: source, ParentThreadID: parent, Scope: scope, Native: &native, Raw: append(json.RawMessage(nil), raw...)})
 }
 
-func (t *TreeSubscription) unresolvedLocked(method string, params json.RawMessage, raw []byte) {
+func (t *Subscription) unresolvedLocked(method string, params json.RawMessage, raw []byte) {
 	t.diagnostic("unresolved-source", treeIdentity(params).ThreadID, "", nil)
 	t.deliverLocked(method, params, raw, "unresolved")
 }
-func (t *TreeSubscription) releasePendingLocked(i int, unresolved bool) {
+func (t *Subscription) releasePendingLocked(i int, unresolved bool) {
 	p := t.pending[i]
 	t.pendingBytes -= len(p.raw) + len(p.params)
 	copy(t.pending[i:], t.pending[i+1:])
@@ -711,7 +650,7 @@ func (t *TreeSubscription) releasePendingLocked(i int, unresolved bool) {
 		t.deliverLocked(p.method, p.params, p.raw, "")
 	}
 }
-func (t *TreeSubscription) flushLocked(expire bool) {
+func (t *Subscription) flushLocked(expire bool) {
 	now := time.Now()
 	for i := 0; i < len(t.pending) && !t.closed; {
 		if t.member(treeIdentity(t.pending[i].params).ThreadID) {
@@ -724,7 +663,7 @@ func (t *TreeSubscription) flushLocked(expire bool) {
 	}
 	t.scheduleLocked()
 }
-func (t *TreeSubscription) scheduleLocked() {
+func (t *Subscription) scheduleLocked() {
 	// Keep one scheduled callback per observation. If its original oldest event
 	// resolves early, an early wake simply schedules the next actual deadline.
 	if t.closed || len(t.pending) == 0 || t.timer != nil {

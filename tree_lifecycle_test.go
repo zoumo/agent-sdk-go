@@ -55,7 +55,7 @@ func TestTreeParentIdleChildActive(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-lifecycle", codex.Limits{})
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,22 +119,22 @@ func TestTreeCloseCancelSharedSource(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "tree-lifecycle", codex.Limits{})
-			a, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{History: []json.RawMessage{json.RawMessage(`{"id":"child-1","parentThreadId":"native-thread-42"}`)}})
+			a, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{History: []json.RawMessage{json.RawMessage(`{"id":"child-1","parentThreadId":"native-thread-42"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := f.c.SubscribeTree(context.Background(), "child-1", codex.TreeOptions{})
+			b, err := f.c.Subscribe(context.Background(), "child-1", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer b.Close()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			canceled, err := f.c.SubscribeTree(ctx, "child-1", codex.TreeOptions{})
+			canceled, err := f.c.Subscribe(ctx, "child-1", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw, err := f.c.Subscribe(context.Background())
+			raw, err := f.c.Subscribe(context.Background(), "child-1", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -205,7 +205,7 @@ func TestTreeDisconnectHistoryEpoch(t *testing.T) {
 			}
 			for epoch := 0; epoch < 2; epoch++ {
 				f := startFake(t, "tree-history", codex.Limits{})
-				s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{History: history})
+				s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{History: history})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -287,11 +287,11 @@ func TestTreeDisconnectFullQueueAndSeedBounds(t *testing.T) {
 		{History: []json.RawMessage{json.RawMessage(`{"id":"a"}`), json.RawMessage(`{"id":"b"}`)}, MaxNodes: 1},
 		{History: []json.RawMessage{json.RawMessage(`{"thread":{"id":"wrong-envelope"}}`)}},
 	} {
-		if _, err := f.c.SubscribeTree(context.Background(), "root", options); err == nil {
+		if _, err := f.c.Subscribe(context.Background(), "root", options); err == nil {
 			t.Fatal("invalid/unbounded seed admitted")
 		}
 	}
-	s, err := f.c.SubscribeTree(context.Background(), "child-1", codex.TreeOptions{EventQueue: 1})
+	s, err := f.c.Subscribe(context.Background(), "child-1", codex.TreeOptions{EventQueue: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

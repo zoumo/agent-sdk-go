@@ -1,7 +1,7 @@
 # Managed subagent compatibility contract
 
 Protocol target: Codex **0.162.1**, official revision
-`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`. `Client.SubscribeTree` observes one
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`. `Client.Subscribe` observes one
 existing connection. Native server auto-attach to newly created threads is
 **best-effort**. Every observation begins incomplete; source inspection and a
 synthetic peer cannot prove runtime coverage. No subagent live pass or supported
@@ -45,7 +45,7 @@ workflow. E1 source keys link to immutable official code below.
 | Parent final answer | I: source-scoped agent message item | Exact parent answer retained; child text/thinking not merged, no synthetic parent result | TestTreeTextThinkingAndUsageStayAtNativeSource | Application selects native source/turn/item; parent answer is not global child completion |
 | Usage | N: native token-usage payload | Exact Raw and source retained; UsageScope=unknown, no tree total | TestTreeTextThinkingAndUsageStayAtNativeSource | No adding parent aggregate to child detail or cumulative snapshots to deltas; no cost inference |
 | Observation close / ownership | Existing local Subscription vs explicit native unsubscribe | Idempotent bounded local Close/cancel, independent observers and original handles | TestTreeCloseCancelSharedSource; TestTreeObservationCancellationDoesNotCancelRequest | Does not interrupt/unsubscribe provider work; Client.Close retains transport ownership semantics |
-| Protocol / version contract | N: fixed Codex native registry | SDK wrappers outside protocol; native Subscribe remains connection broadcast | TestTreeLiveChildStream; inventory/generation gates | ACP subagent RFD is draft design context only, not stable standard, runtime dependency or implemented ACP wire; older/unknown servers unverified |
+| Protocol / version contract | N: fixed Codex native registry | SDK wrappers outside protocol; Subscribe is the sole root-scoped managed stream | TestTreeLiveChildStream; inventory/generation gates | ACP subagent RFD is draft design context only, not stable standard, runtime dependency or implemented ACP wire; older/unknown servers unverified |
 
 ## Pinned E1 sources and representation
 

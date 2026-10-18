@@ -19,12 +19,12 @@ func TestTreeV2CreatedWithoutThreadStarted(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			raw, err := f.c.Subscribe(context.Background())
+			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,17 +68,16 @@ func TestTreeV2CreatedWithoutThreadStarted(t *testing.T) {
 			if created != 1 || children != 2 || spawns != 1 {
 				t.Fatalf("created=%d children=%d spawns=%d", created, children, spawns)
 			}
-			for _, frame := range frames {
-				e := nextEvent(t, raw)
-				var expected struct {
-					Method string          `json:"method"`
-					Params json.RawMessage `json:"params"`
+			others := treeUntilDone(t, raw)
+			if len(others) != len(events) {
+				t.Fatal("independent observers differ")
+			}
+			for i, e := range others {
+				if string(e.Raw) != string(events[i].Raw) || e.Kind != events[i].Kind {
+					t.Fatal("independent native envelope changed")
 				}
-				if err := json.Unmarshal([]byte(frame), &expected); err != nil {
-					t.Fatal(err)
-				}
-				if e.Method != expected.Method || string(e.Params) != string(expected.Params) {
-					t.Fatal("broadcast params changed")
+				if e.Native != nil && string(e.Native.Params) != string(events[i].Native.Params) {
+					t.Fatal("independent params changed")
 				}
 			}
 			calls := trace(t, f.trace)
@@ -100,7 +99,7 @@ func TestTreeV2HistorySuppressesCreation(t *testing.T) {
 				t.Fatal(err)
 			}
 			seed := json.RawMessage(`{"id":"native-thread-42","turns":[{"id":"old-turn","items":[` + string(n.Item) + `]}]}`)
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{History: []json.RawMessage{seed}})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{History: []json.RawMessage{seed}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,7 +131,7 @@ func TestTreeV2GraphOrderingAndConfirmation(t *testing.T) {
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{})
-			s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{})
+			s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -221,7 +220,7 @@ func TestTreeV2NonCreationEvidence(t *testing.T) {
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					f := startFake(t, "request-normal", codex.Limits{})
-					s, err := f.c.SubscribeTree(context.Background(), "native-thread-42", codex.TreeOptions{PendingEvents: 1})
+					s, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{PendingEvents: 1})
 					if err != nil {
 						t.Fatal(err)
 					}

@@ -45,7 +45,7 @@ func run(out io.Writer) error {
 	defer client.Close()
 	// Register before asking the fake peer to emit. PendingBytes forces the large
 	// unknown-source envelope to be released explicitly, without timer ordering.
-	live, err := client.SubscribeTree(ctx, "root", codex.TreeOptions{PendingBytes: 256})
+	live, err := client.Subscribe(ctx, "root", codex.TreeOptions{PendingBytes: 256})
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ history:
 		return err
 	}
 	fmt.Fprintln(out, "closed: err=nil; connection usable")
-	seeded, err := client.SubscribeTree(ctx, "root", codex.TreeOptions{History: []json.RawMessage{
+	seeded, err := client.Subscribe(ctx, "root", codex.TreeOptions{History: []json.RawMessage{
 		json.RawMessage(`{"id":"child","parentThreadId":"root"}`),
 		json.RawMessage(`{"id":"grand","parentThreadId":"child"}`),
 	}})

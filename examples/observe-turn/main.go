@@ -1,10 +1,9 @@
-// Observe one native turn on an explicitly chosen executable. This example may
+// Observe a managed root and descendants on an explicitly chosen executable. This example may
 // execute model work if run against an authenticated server; tests only compile it.
 package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -42,12 +41,12 @@ func run() error {
 		return err
 	}
 	// Registration is active here. StartTurn may finish after completion arrives.
-	events, err := client.Subscribe(ctx)
+	events, err := client.Subscribe(ctx, thread.Thread.ID, codex.TreeOptions{})
 	if err != nil {
 		return err
 	}
 	defer events.Close()
-	started, err := client.StartTurn(ctx, types.TurnStartParams{
+	_, err = client.StartTurn(ctx, types.TurnStartParams{
 		ThreadID: thread.Thread.ID,
 		Input:    []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}},
 	})
@@ -66,21 +65,22 @@ func run() error {
 			if err := events.Err(); err != nil {
 				return err
 			}
-			if event.DecodeError != nil {
-				return event.DecodeError
+			if event.Kind != codex.TreeNative {
+				fmt.Printf("%s %s %s\n", event.Kind, event.Source.ThreadID, event.Reason)
+				continue
 			}
-			switch value := event.Data.(type) {
+			native := event.Native
+			if native.DecodeError != nil {
+				return native.DecodeError
+			}
+			switch value := native.Data.(type) {
 			case *types.AgentMessageDeltaNotification:
-				if value.ThreadID == thread.Thread.ID && value.TurnID == started.Turn.ID {
-					fmt.Print(value.Delta)
-				}
+				fmt.Printf("[%s/%s/%s %s] %s", value.ThreadID, value.TurnID, value.ItemID, event.Scope, value.Delta)
 			case *types.TurnCompletedNotification:
-				if value.ThreadID == thread.Thread.ID && value.Turn.ID == started.Turn.ID {
-					fmt.Printf("\nturn %s: %s\n", value.Turn.ID, value.Turn.Status)
-					return events.Err()
-				}
+				fmt.Printf("\nthread %s turn %s: %s\n", value.ThreadID, value.Turn.ID, value.Turn.Status)
+				// Keep observing descendants and background work until the caller context ends.
 			}
-			// Unknown methods and unknown native variants remain in event.Params.
+			// Unknown methods and unknown native variants remain in native.Params.
 		}
 	}
 	// An explicit interruption would be a separate client.InterruptTurn(ctx,
@@ -91,5 +91,5 @@ func subscriptionEnd(events *codex.Subscription) error {
 	if err := events.Err(); err != nil {
 		return err
 	}
-	return errors.New("notification stream ended before matching completion")
+	return nil
 }

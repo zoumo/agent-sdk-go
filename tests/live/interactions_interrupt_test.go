@@ -77,7 +77,7 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 			}
 		}
 		t.Logf("scenario=%s native thread created read-only; inherited approval_policy=%s", sc.name, policy)
-		s, e := c.Subscribe(ctx)
+		s, e := c.Subscribe(ctx, id, codex.TreeOptions{})
 		if e != nil {
 			t.Fatal("subscribe failed")
 		}
@@ -180,10 +180,17 @@ func TestStdioInteractionsInterrupt(t *testing.T) {
 				}
 				t.Logf("scenario=%s request=%s native_identity_matched=%t single_response_written=true (not server acceptance)", sc.name, r.Method(), matched)
 			case ev, ok := <-s.Events():
-				if !ok || ev.DecodeError != nil {
+				if !ok {
+					t.Fatal("event stream closed")
+				}
+				if ev.Kind != codex.TreeNative {
+					continue
+				}
+				native := ev.Native
+				if native.DecodeError != nil {
 					t.Fatal("event loss/decode failure")
 				}
-				switch v := ev.Data.(type) {
+				switch v := native.Data.(type) {
 				case *types.TurnStartedNotification:
 					if v.ThreadID == id {
 						if turn != "" && turn != v.Turn.ID {

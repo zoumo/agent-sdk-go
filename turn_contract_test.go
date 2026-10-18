@@ -91,25 +91,31 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 
 func subscribe(t *testing.T, c *codex.Client, ctx context.Context) *codex.Subscription {
 	t.Helper()
-	s, err := c.Subscribe(ctx)
+	s, err := c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{PendingAge: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	if e := nextTree(t, s); e.Kind != codex.TreeObservationState {
+		t.Fatal("missing initial observation state")
+	}
 	return s
 }
 func nextEvent(t *testing.T, s *codex.Subscription) codex.Event {
 	t.Helper()
-	select {
-	case e, ok := <-s.Events():
-		if !ok {
-			t.Fatalf("events closed: %v", s.Err())
+	for {
+		select {
+		case e, ok := <-s.Events():
+			if !ok {
+				t.Fatalf("events closed: %v", s.Err())
+			}
+			if e.Kind == codex.TreeNative {
+				return *e.Native
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("event not delivered")
 		}
-		return e
-	case <-time.After(3 * time.Second):
-		t.Fatal("event not delivered")
 	}
-	return codex.Event{}
 }
 func awaitSubscription(t *testing.T, s *codex.Subscription, cause error) {
 	t.Helper()
@@ -139,23 +145,28 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 	params.RootTurnID = types.Some("chain-root-turn")
 	go func() { r, err := f.c.StartTurn(context.Background(), params); result <- outcome{r, err} }()
 	var events []codex.Event
+	other := false
 	for i := 0; i < 8; i++ {
 		e := nextEvent(t, s)
 		if e.DecodeError != nil || e.Data == nil {
 			t.Fatalf("event %d: %#v", i, e)
 		}
+		if v, ok := e.Data.(*types.TurnStartedNotification); ok && v.ThreadID == "other-thread" {
+			other = true
+			continue
+		}
 		events = append(events, e)
 	}
-	if events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || events[1].Data.(*types.TurnStartedNotification).ThreadID != "other-thread" || events[3].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn" {
+	if events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || !other || events[2].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn" {
 		t.Fatal("interleaved native identities changed")
 	}
-	if events[5].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID != "native-item-7" {
+	if events[4].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID != "native-item-7" {
 		t.Fatal("native item identity changed")
 	}
-	if string(events[6].Data.(*types.ItemCompletedNotification).Item.Unknown) != unknownItem {
+	if string(events[5].Data.(*types.ItemCompletedNotification).Item.Unknown) != unknownItem {
 		t.Fatal("unknown native variant lost")
 	}
-	if events[7].Data.(*types.TurnCompletedNotification).Turn.ID != "native-turn-response" {
+	if events[6].Data.(*types.TurnCompletedNotification).Turn.ID != "native-turn-response" {
 		t.Fatal("early completion lost")
 	}
 	select {
@@ -198,9 +209,32 @@ func TestNotificationRawAndDecodeErrors(t *testing.T) {
 		`{"threadId":"x","turnId":"x","completedAtMs":1,"item":{"type":"agentMessage","id":"missing-text"}}`,
 		`{"threadId":"x","threadId":"y","turnId":"x","itemId":"x","delta":"duplicate"}`,
 	}
-	for i, raw := range expected {
+	seen := make(map[string]codex.Event)
+	for i := 0; i < len(expected)+2; i++ {
 		e := nextEvent(t, s)
-		if string(e.Params) != raw || e.Data != nil {
+		if e.Method == "future/absent" {
+			seen["absent"] = e
+		} else if e.Method == "item/started" {
+			seen["item-absent"] = e
+		} else if e.Method == "turn/started" {
+			seen["turn-null"] = e
+		} else {
+			seen[string(e.Params)] = e
+		}
+	}
+	for i, raw := range expected {
+		key := raw
+		if i == 2 {
+			key = "absent"
+		}
+		if i == 5 {
+			key = "turn-null"
+		}
+		if i == 6 {
+			key = "item-absent"
+		}
+		e, ok := seen[key]
+		if !ok || string(e.Params) != raw || e.Data != nil {
 			t.Fatalf("raw event %d: %#v", i, e)
 		}
 		var de *codex.DecodeError
@@ -212,15 +246,15 @@ func TestNotificationRawAndDecodeErrors(t *testing.T) {
 			t.Fatalf("missing decode cause: %#v", e)
 		}
 	}
-	e := nextEvent(t, s)
+	e := seen[`{"threadId":"native-thread-42","turnId":"native-turn-response","willRetry":false,"error":{"message":"synthetic error","codexErrorInfo":{"futureError":{"n":9007199254740993}}}}`]
 	native := e.Data.(*types.ErrorNotification)
 	info, ok := native.Error.CodexErrorInfo.Get()
-	if !ok || e.DecodeError != nil || native.WillRetry || string(info.Unknown) != `{"futureError":{"n":9007199254740993}}` {
+	if !ok || native.WillRetry || string(info.Unknown) != `{"futureError":{"n":9007199254740993}}` {
 		t.Fatalf("error data lost: %#v", e)
 	}
-	e = nextEvent(t, s)
+	e = seen[turnDelta]
 	d := e.Data.(*types.AgentMessageDeltaNotification)
-	if e.DecodeError != nil || d.ItemID != "native-item-7" || string(d.UnknownFields["future"]) != `{"x":9007199254740993}` || string(e.Params) != turnDelta {
+	if d.ItemID != "native-item-7" || string(d.UnknownFields["future"]) != `{"x":9007199254740993}` {
 		t.Fatalf("valid event lost: %#v", e)
 	}
 	if s.Err() != nil || f.c.Err() != nil {
@@ -232,7 +266,7 @@ func TestSubscriptionOverflowIsolatedAndInspectable(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{EventQueue: 1, Subscriptions: 2})
 	slow := subscribe(t, f.c, context.Background())
 	healthy := subscribe(t, f.c, context.Background())
-	if _, err := f.c.Subscribe(context.Background()); !errors.Is(err, codex.ErrLimit) {
+	if _, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{}); !errors.Is(err, codex.ErrLimit) {
 		t.Fatalf("subscriber limit: %v", err)
 	}
 	for i := 0; i < 4; i++ {
@@ -404,6 +438,9 @@ func TestSubscriptionTerminalStatus(t *testing.T) {
 			if method == "turn-oversized-envelope" && !errors.Is(s.Err(), codex.ErrFrameTooLarge) {
 				t.Fatal(s.Err())
 			}
+			if e := nextTree(t, s); e.Kind != codex.TreeObservationState || e.Reason != "permanent-gap" {
+				t.Fatalf("missing gap: %+v", e)
+			}
 			if _, ok := <-s.Events(); ok {
 				t.Fatal("malformed envelope became event")
 			}
@@ -427,7 +464,7 @@ func TestSubscriptionTerminalStatus(t *testing.T) {
 		if _, ok := <-s.Events(); ok {
 			t.Fatal("events still open")
 		}
-		if _, err := f.c.Subscribe(context.Background()); !errors.Is(err, codex.ErrClosed) {
+		if _, err := f.c.Subscribe(context.Background(), "native-thread-42", codex.TreeOptions{}); !errors.Is(err, codex.ErrClosed) {
 			t.Fatal(err)
 		}
 	})
@@ -468,7 +505,7 @@ func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 		wg.Go(func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			s, err := f.c.Subscribe(ctx)
+			s, err := f.c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{})
 			if err != nil {
 				if !errors.Is(err, codex.ErrClosed) {
 					t.Error(err)
@@ -501,12 +538,12 @@ func TestSubscriptionAdmissionValidation(t *testing.T) {
 		}
 	}
 	f := startFake(t, "normal", codex.Limits{Subscriptions: 1})
-	if _, err := f.c.Subscribe(nil); err == nil {
+	if _, err := f.c.Subscribe(nil, "native-thread-42", codex.TreeOptions{}); err == nil {
 		t.Fatal("nil context accepted")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := f.c.Subscribe(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := f.c.Subscribe(ctx, "native-thread-42", codex.TreeOptions{}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	s := subscribe(t, f.c, context.Background())

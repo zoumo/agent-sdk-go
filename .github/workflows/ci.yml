@@ -2,27 +2,40 @@ name: Offline SDK checks
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sdk-checks-${{ github.workflow }}-${{ github.ref }}
+  group: sdk-checks-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    name: Offline (${{ matrix.os }}, Go 1.26.9)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     env:
       GOTOOLCHAIN: local
-      # No account, API key, real Codex binary, or live model is used by this job.
-      RUN_REAL_CODEX_TESTS: "0"
+      # These are the actual live harness switches. Never spend live budget in CI.
+      RUN_MAC_STDIO_LIVE: "0"
+      RUN_MAC_INTERACTIONS_LIVE: "0"
+      RUN_MAC_WEBSOCKET_LIVE: "0"
     steps:
-      - name: Check out source
+      - name: Check out source and comparison history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Install the pinned Go toolchain
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -30,18 +43,41 @@ jobs:
           go-version: '1.26.9'
           check-latest: false
           cache: true
+      - name: Install the pinned generator interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13.13'
+          check-latest: false
       - name: Verify the toolchain and dependencies
         run: |
           test "$(go env GOVERSION)" = "go1.26.9"
           go mod download
           go mod verify
-      - name: Unit and mock contract tests
-        run: go test -count=1 ./...
-      - name: Race-detector tests
-        run: go test -race -count=1 ./...
-      - name: Vet
-        run: go vet ./...
-      - name: Check protocol inventory and whitespace
+          git diff --exit-code -- go.mod go.sum
+      - name: Check changed whitespace
+        run: python3 scripts/check_whitespace.py
+      - name: Verify CI gate edge cases and negative fixtures
+        run: python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v
+      - name: Check protocol inventory and reproducible generation
         run: |
           python3 docs/protocol/verify_inventory.py
-          git diff --check
+          bash scripts/check_generated.sh
+      - name: Unit and mock contract tests (live tests visibly skip)
+        run: go test -v -count=1 ./...
+      - name: Race-detector tests (live tests visibly skip)
+        run: go test -race -v -count=1 ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Report offline scope
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Offline validation only
+          Unit, mock contracts, protocol, race, vet, modules, whitespace and regeneration
+          are separate gates; inspect their step results for pass/fail.
+          Real CLI/account/model scenarios are **SKIPPED**, not live passes:
+          - `RUN_MAC_STDIO_LIVE=0`
+          - `RUN_MAC_INTERACTIONS_LIVE=0`
+          - `RUN_MAC_WEBSOCKET_LIVE=0`
+          Regeneration uses the checked-in schema; it does not reverify upstream provenance.
+          SUMMARY

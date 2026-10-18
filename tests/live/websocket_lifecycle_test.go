@@ -26,7 +26,7 @@ import (
 // It inherits normal CLI login; no credentials or raw payloads are logged.
 func TestWebSocketLifecycleHistory(t *testing.T) {
 	if os.Getenv("RUN_MAC_WEBSOCKET_LIVE") != "1" {
-		t.Skip("explicit live opt-in required")
+		t.Skip("live scenario skipped: set RUN_MAC_WEBSOCKET_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
 	executable := os.Getenv("MAC_LIVE_CODEX")
 	if executable == "" {

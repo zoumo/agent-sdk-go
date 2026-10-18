@@ -17,7 +17,7 @@ import (
 // Read-only sandbox and inherited approval policy are never weakened.
 func TestStdioInteractionsInterrupt(t *testing.T) {
 	if os.Getenv("RUN_MAC_INTERACTIONS_LIVE") != "1" {
-		t.Skip("explicit ticket02 live opt-in required")
+		t.Skip("live scenario skipped: set RUN_MAC_INTERACTIONS_LIVE=1 and MAC_LIVE_CODEX to opt in; offline pass is not live evidence")
 	}
 	executable := os.Getenv("MAC_LIVE_CODEX")
 	if executable == "" {

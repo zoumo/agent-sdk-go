@@ -379,8 +379,8 @@ arbitrary Go code.
 ## Development and evidence
 
 ```sh
-mise exec go@1.26.9 -- go test ./...
-mise exec go@1.26.9 -- go test -race ./...
+mise exec go@1.26.9 -- go test -v -count=1 ./...
+mise exec go@1.26.9 -- go test -race -v -count=1 ./...
 mise exec go@1.26.9 -- go vet ./...
 python3 docs/protocol/verify_inventory.py
 ```
@@ -388,13 +388,20 @@ python3 docs/protocol/verify_inventory.py
 Default tests use synthetic helper processes, loopback WS peers, and local WSS
 peers with synthetic certificates and dummy tokens. The opt-in `tests/live`
 harnesses use a real CLI/account/model only when explicitly enabled. Keep
-`RUN_MAC_STDIO_LIVE`, `RUN_MAC_INTERACTIONS_LIVE`, `RUN_MAC_WEBSOCKET_LIVE`
-and `RUN_REAL_CODEX_TESTS` unset or `0` for offline checks. The completed Mac
-budget is 9/9; do not rerun live tests within it. The
-[CI workflow](.github/workflows/ci.yml) runs normal tests, race
-tests, vet, and inventory checks on pinned Go 1.26.9, with no service secrets or
-live-test step. Exact hosted results and the distinction between offline and live
-evidence are recorded in the [final Mac report](docs/evidence/mac-live-summary.md).
+`RUN_MAC_STDIO_LIVE`, `RUN_MAC_INTERACTIONS_LIVE`, and `RUN_MAC_WEBSOCKET_LIVE`
+unset or `0` for offline checks. Each requires the value `1` plus an explicit
+`MAC_LIVE_CODEX` executable to opt in. `RUN_REAL_CODEX_TESTS` is not a harness
+switch. The completed Mac budget is 9/9; do not rerun live tests within it.
+
+The [CI workflow](.github/workflows/ci.yml) runs uncached normal and race suites,
+vet, module verification, inventory, changed-whitespace checks, and reproducible
+schema generation on Ubuntu 24.04 and macOS 15, using Go 1.26.9 and Python 3.13.13.
+All three live switches are explicitly `0`; verbose output and job summaries
+identify real scenarios as **SKIPPED**, not live passes. Pushes to `main`, PRs,
+and manual dispatch run with read-only repository permissions and no service
+secrets. See [CI policy and validation evidence](docs/evidence/offline-ci.md)
+for comparison bases, action maintenance, regeneration limits, and local checks.
+Historical live results remain in the [final Mac report](docs/evidence/mac-live-summary.md).
 [Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
 [ticket 03](docs/evidence/ticket-03.md), [ticket 04](docs/evidence/ticket-04.md), and
 [ticket 05 evidence](docs/evidence/ticket-05.md) record scenarios and verification status.

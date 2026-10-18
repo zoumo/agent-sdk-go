@@ -1,7 +1,7 @@
 # Recorded test data
 
 Only the **real-sanitized** rows below contain captured provider traffic. Files
-are checked into this repository at their original migrated locations. No new
+are checked into this repository under the aligned native testdata directories. No new
 recording was made for the testify test migration. Sanitizer rules, manifests,
 file hashes, typed ID mappings, source commits and evidence limits remain intact.
 
@@ -48,7 +48,8 @@ transcript digests/ID references/secret canaries, and both native replay suites.
 The replay examples are `codex/examples/replay-recorded` and
 `claude/examples/recorded-replay`; both use local sanitized data.
 
-The migration inventory found **20 testdata files on disk, all tracked**;
+The migration inventory found **20 fixture assets, all tracked**; the two small
+Go embedding containers are separate from those assets.
 `git ls-files --others --exclude-standard '*testdata*'` and the corresponding
 ignored-file inventory were empty. Private raw captures, credentials and
 environment/configuration copies are not published. Do not add raw data or
@@ -56,10 +57,10 @@ reclassify synthetic fixtures to fill the missing real-subagent evidence.
 
 ## Directory responsibilities
 
-Each SDK uses the same three layers:
-
-- `codex/cmd/record-events` and `claude/cmd/record-transcript` are explicit, guarded CLI entry points. Tests and CI never record real agents.
-- `codex/tools/replay` and `claude/tools/replay` hold reusable protocol-specific capture, safety and offline replay helpers. SDK runtime packages do not import them.
-- `codex/testdata` and `claude/testdata` contain the single published fixture copies. `recordings/real-sanitized` is captured evidence; `synthetic-faults` is handwritten traffic. Tiny `embed.go` containers make fixtures available to offline tooling and examples without depending on source working directories.
+See the [layout standards](standards/code-layout.md) for the authoritative
+cmd/tools/testdata responsibilities. The current entry points are
+`codex/cmd/record-events` and `claude/cmd/record-transcript`; they delegate to
+their native `tools/recorder`, which uses native `tools/replay` helpers. The data
+links above point to the single published fixture copies.
 
 The example-local [Claude subagent events](../claude/examples/subagents-offline/testdata/events.ndjson) remain explicitly synthetic. The library package names `recording` and `transcript` remain protocol-specific even though their directory layouts align.

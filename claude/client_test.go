@@ -18,7 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/claude/tools/replay"
+	"github.com/stretchr/testify/require"
+	transcript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
 )
 
 // All fixtures are local re-executions of this test binary under a replacement
@@ -203,9 +204,7 @@ func runFixture(mode string) {
 func fixtureOptions(t *testing.T, mode string) Options {
 	t.Helper()
 	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dir := t.TempDir()
 	return Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_GO_FIXTURE=" + mode, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}
 }
@@ -216,9 +215,7 @@ func openFixture(t *testing.T, mode string, configure ...func(*Options)) *Client
 		fn(&opts)
 	}
 	c, err := Open(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
@@ -227,15 +224,14 @@ func receive(t *testing.T, c *Client) Event {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	event, err := nextNative(c, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return event
 }
 func send(t *testing.T, c *Client, text string) {
 	t.Helper()
-	if err := c.Send(context.Background(), text); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Send(context.Background(), text)
+		require.NoError(t, err)
 	}
 }
 func awaitDone(t *testing.T, c *Client) {
@@ -243,19 +239,21 @@ func awaitDone(t *testing.T, c *Client) {
 	select {
 	case <-c.Done():
 	case <-time.After(3 * time.Second):
-		t.Fatal("Done did not close")
+		require.FailNow(t, "verification failed", "Done did not close")
 	}
 }
 
-func TestOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T) {
+func (s *clientProtocolSuite) TestOpenUsesLiteralArgumentsAndMatchedInitialize() {
+	t := s.T()
 	t.Run("default temp directory", func(t *testing.T) {
 		testOpenUsesLiteralArgumentsAndMatchedInitialize(t, fixtureOptions(t, "echo"))
 	})
 	t.Run("symlink work directory", func(t *testing.T) {
 		opts := fixtureOptions(t, "echo")
 		alias := filepath.Join(t.TempDir(), "workdir")
-		if err := os.Symlink(opts.WorkDir, alias); err != nil {
-			t.Fatal(err)
+		{
+			err := os.Symlink(opts.WorkDir, alias)
+			require.NoError(t, err)
 		}
 		opts.WorkDir = alias
 		opts.Env[0] = "HOME=" + alias
@@ -269,50 +267,33 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	opts.Model = "--odd model; $(not-a-shell)"
 	c, err := Open(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	data, err := os.ReadFile(capture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	var captured struct {
 		Argv      []string
 		Init      map[string]json.RawMessage
 		CWD, Home string
 	}
-	if err := json.Unmarshal(data, &captured); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(data, &captured)
+		require.NoError(t, err)
 	}
 	want := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages", "--model=" + opts.Model}
-	if !reflect.DeepEqual(captured.Argv, want) {
-		t.Fatalf("argv = %#v", captured.Argv)
-	}
+	require.Truef(t, reflect.DeepEqual(captured.Argv, want), "argv = %#v", captured.Argv)
 	// Getwd may resolve symlink aliases (including macOS /var -> /private/var).
 	// Require the requested directory's identity, while keeping HOME literal.
 	cwdInfo, err := os.Stat(captured.CWD)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	workDirInfo, err := os.Stat(opts.WorkDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cwdInfo.IsDir() || !workDirInfo.IsDir() || !os.SameFile(cwdInfo, workDirInfo) {
-		t.Fatalf("cwd does not identify requested WorkDir: %s", data)
-	}
-	if captured.Home != opts.WorkDir {
-		t.Fatalf("HOME not preserved literally: %s", data)
-	}
-	if string(captured.Init["type"]) != `"control_request"` || len(captured.Init["request_id"]) < 3 {
-		t.Fatalf("initialize envelope: %s", data)
-	}
+	require.NoError(t, err)
+	require.Falsef(t, !cwdInfo.IsDir() || !workDirInfo.IsDir() || !os.SameFile(cwdInfo, workDirInfo), "cwd does not identify requested WorkDir: %s", data)
+	require.EqualValuesf(t, opts.WorkDir, captured.Home, "HOME not preserved literally: %s", data)
+	require.Falsef(t, string(captured.Init["type"]) != `"control_request"` || len(captured.Init["request_id"]) < 3, "initialize envelope: %s", data)
 	var request map[string]any
 	json.Unmarshal(captured.Init["request"], &request)
-	if request["subtype"] != "initialize" || request["hooks"] != nil {
-		t.Fatalf("initialize = %#v", request)
-	}
+	require.Falsef(t, request["subtype"] != "initialize" || request["hooks"] != nil, "initialize = %#v", request)
 	text := "a literal\nmessage with \"quotes\" and 雪"
 	send(t, c, text)
 	e := receive(t, c)
@@ -324,16 +305,16 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 			Session string          `json:"session_id"`
 		}
 	}
-	if err := json.Unmarshal(e.Raw, &echo); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(e.Raw, &echo)
+		require.NoError(t, err)
 	}
-	if echo.Wire.Type != "user" || echo.Wire.Message.Role != "user" || echo.Wire.Message.Content != text || string(echo.Wire.Parent) != "null" {
-		t.Fatalf("send frame: %s", e.Raw)
-	}
+	require.Falsef(t, echo.Wire.Type != "user" || echo.Wire.Message.Role != "user" || echo.Wire.Message.Content != text || string(echo.Wire.Parent) != "null", "send frame: %s", e.Raw)
 }
 
-func TestTypedViewsAndLosslessUnknowns(t *testing.T) {
-	c := openFixture(t, "frames")
+func (s *clientProtocolSuite) TestTypedViewsAndLosslessUnknowns() {
+	t := s.T()
+	c := s.client
 	send(t, c, "first")
 	events := make([]Event, 6)
 	for i := range events {
@@ -341,55 +322,35 @@ func TestTypedViewsAndLosslessUnknowns(t *testing.T) {
 	}
 	want := []string{"system", "assistant", "user", "stream_event", "result", "future_event"}
 	for i, event := range events {
-		if event.Type != want[i] {
-			t.Fatalf("event %d: %s", i, event.Type)
-		}
+		require.EqualValuesf(t, want[i], event.Type, "event %d: %s", i, event.Type)
 	}
-	if events[0].System.SessionID != "native-123" || !bytes.HasPrefix(events[0].Raw, []byte(" {")) || !bytes.Contains(events[0].Raw, []byte(`"new_field"`)) {
-		t.Fatalf("system/raw: %s", events[0].Raw)
-	}
+	require.Falsef(t, events[0].System.SessionID != "native-123" || !bytes.HasPrefix(events[0].Raw, []byte(" {")) || !bytes.Contains(events[0].Raw, []byte(`"new_field"`)), "system/raw: %s", events[0].Raw)
 	a := events[1].Assistant
-	if a.Content.Blocks[0].Text.Text != "hello\nworld" || a.Content.Blocks[1].Thinking.Signature != "sig" || a.Content.Blocks[2].ToolUse.Name != "AskUserQuestion" {
-		t.Fatalf("assistant = %#v", a)
-	}
+	require.Falsef(t, a.Content.Blocks[0].Text.Text != "hello\nworld" || a.Content.Blocks[1].Thinking.Signature != "sig" || a.Content.Blocks[2].ToolUse.Name != "AskUserQuestion", "assistant = %#v", a)
 	unknown := a.Content.Blocks[3]
-	if unknown.Type != "future_block" || string(unknown.Raw) != `{"type":"future_block","extra":[1,2]}` {
-		t.Fatalf("lost block: %s", unknown.Raw)
-	}
-	if !bytes.Contains(a.Raw, []byte(`"new_nested":true`)) {
-		t.Fatal("nested data lost")
-	}
+	require.Falsef(t, unknown.Type != "future_block" || string(unknown.Raw) != `{"type":"future_block","extra":[1,2]}`, "lost block: %s", unknown.Raw)
+	require.True(t, bytes.Contains(a.Raw, []byte(`"new_nested":true`)), "nested data lost")
 	toolResult := events[2].User.Content.Blocks[0].ToolResult
-	if toolResult.ToolUseID != "t1" || string(toolResult.Content) != `[{"type":"text","text":"answer"}]` {
-		t.Fatalf("tool result = %#v", toolResult)
-	}
-	if events[3].Stream.Delta.Type != "content_block_delta" || *events[3].Stream.Delta.Index != 0 {
-		t.Fatal("missing delta view")
-	}
-	if events[4].Result.Result != "done" || events[4].Result.NumTurns != 1 {
-		t.Fatal("missing result view")
-	}
-	if string(events[5].Raw) != `{"type":"future_event","nested":{"x":[true,1,"raw"]}}` {
-		t.Fatal("unknown event changed")
-	}
+	require.Falsef(t, toolResult.ToolUseID != "t1" || string(toolResult.Content) != `[{"type":"text","text":"answer"}]`, "tool result = %#v", toolResult)
+	require.False(t, events[3].Stream.Delta.Type != "content_block_delta" || *events[3].Stream.Delta.Index != 0, "missing delta view")
+	require.False(t, events[4].Result.Result != "done" || events[4].Result.NumTurns != 1, "missing result view")
+	require.EqualValues(t, `{"type":"future_event","nested":{"x":[true,1,"raw"]}}`, string(events[5].Raw), "unknown event changed")
 	// A result and an assistant AskUserQuestion block cause no implicit close or
 	// fabricated tool reply: a second user frame is still accepted by the peer.
 	send(t, c, "second")
-	if receive(t, c).Type != "system" {
-		t.Fatal("second turn missing")
-	}
+	require.EqualValues(t, "system", receive(t, c).Type, "second turn missing")
 }
 
-func TestFragmentedUnicodeAndLargeFrame(t *testing.T) {
-	c := openFixture(t, "fragmented")
+func (s *clientProtocolSuite) TestFragmentedUnicodeAndLargeFrame() {
+	t := s.T()
+	c := s.client
 	send(t, c, "go")
 	event := receive(t, c)
 	want := "start " + strings.Repeat("雪 ", 14000) + " end\nnext"
-	if event.User == nil || event.User.Content.Text == nil || *event.User.Content.Text != want {
-		t.Fatal("chunked content changed")
-	}
+	require.False(t, event.User == nil || event.User.Content.Text == nil || *event.User.Content.Text != want, "chunked content changed")
 }
 
+// Per-case startup failure deadlines keep their original native table harness.
 func TestStartupFailuresAreBounded(t *testing.T) {
 	for _, mode := range []string{"init_hang", "init_wrong", "init_error", "init_disconnect"} {
 		t.Run(mode, func(t *testing.T) {
@@ -397,36 +358,27 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 			opts.InitializeTimeout = 100 * time.Millisecond
 			start := time.Now()
 			c, err := Open(context.Background(), opts)
-			if c != nil || err == nil {
-				t.Fatalf("Open = %v, %v", c, err)
-			}
-			if time.Since(start) > 3*time.Second {
-				t.Fatal("startup cleanup was not bounded")
-			}
+			require.Falsef(t, c != nil || err == nil, "Open = %v, %v", c, err)
+			require.False(t, time.Since(start) > 3*time.Second, "startup cleanup was not bounded")
 			if mode == "init_hang" || mode == "init_wrong" {
-				if !errors.Is(err, context.DeadlineExceeded) {
-					t.Fatalf("timeout lost: %v", err)
-				}
+				require.ErrorIsf(t, err, context.DeadlineExceeded, "timeout lost: %v", err)
 			}
 			if mode == "init_error" {
 				var control *ControlError
-				if !errors.As(err, &control) || control.Message != "fixture refused initialization" {
-					t.Fatalf("control error lost: %v", err)
-				}
+				require.Falsef(t, !errors.As(err, &control) || control.Message != "fixture refused initialization", "control error lost: %v", err)
 			}
 		})
 	}
 }
 
-func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
+func (s *clientProtocolSuite) TestMalformedFramesRetainAcceptedEvents() {
+	t := s.T()
 	for _, mode := range []string{"malformed", "truncated", "oversize"} {
 		t.Run(mode, func(t *testing.T) {
 			c := openFixture(t, mode, func(o *Options) { o.Limits.FrameBytes = 1024 })
 			send(t, c, "go")
 			e := receive(t, c)
-			if e.Type != "accepted" {
-				t.Fatalf("first = %s", e.Type)
-			}
+			require.EqualValuesf(t, "accepted", e.Type, "first = %s", e.Type)
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			_, err := nextNative(c, ctx)
@@ -434,69 +386,58 @@ func TestMalformedFramesRetainAcceptedEvents(t *testing.T) {
 			if mode == "oversize" {
 				target = ErrResourceLimit
 			}
-			if !errors.Is(err, target) {
-				t.Fatalf("terminal = %v", err)
-			}
+			require.ErrorIsf(t, err, target, "terminal = %v", err)
 			awaitDone(t, c)
 		})
 	}
 	c := openFixture(t, "invalid_type")
 	send(t, c, "go")
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, ErrProtocol) {
-		t.Fatalf("invalid type = %v", err)
-	}
+	require.ErrorIsf(t, err, ErrProtocol, "invalid type = %v", err)
 }
 
-func TestOverflowIsTerminalAndDoneDoesNotNeedConsumer(t *testing.T) {
+func (s *clientProtocolSuite) TestOverflowIsTerminalAndDoneDoesNotNeedConsumer() {
+	t := s.T()
 	c := openFixture(t, "overflow", func(o *Options) { o.Limits.EventBuffer = 2 })
 	send(t, c, "go")
 	awaitDone(t, c)
-	if !errors.Is(c.Err(), ErrResourceLimit) {
-		t.Fatalf("Err = %v", c.Err())
-	}
+	require.ErrorIsf(t, c.Err(), ErrResourceLimit, "Err = %v", c.Err())
 	for i := 0; i < 2; i++ {
 		event := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(event.Raw, &v)
-		if v.Seq != i {
-			t.Fatalf("got %d want %d", v.Seq, i)
-		}
+		require.EqualValuesf(t, i, v.Seq, "got %d want %d", v.Seq, i)
 	}
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, ErrResourceLimit) {
-		t.Fatalf("Receive = %v", err)
-	}
+	require.ErrorIsf(t, err, ErrResourceLimit, "Receive = %v", err)
 }
 
-func TestExitErrorFollowsLastEventWithBoundedDiagnostics(t *testing.T) {
+func (s *clientProtocolSuite) TestExitErrorFollowsLastEventWithBoundedDiagnostics() {
+	t := s.T()
 	c := openFixture(t, "exit_error", func(o *Options) { o.Limits.StderrBytes = 32 })
 	send(t, c, "go")
-	if event := receive(t, c); event.Result == nil || event.Result.Result != "last" {
-		t.Fatal("last result lost")
+	{
+		event := receive(t, c)
+		require.False(t, event.Result == nil || event.Result.Result != "last", "last result lost")
 	}
 	_, err := nextNative(c, context.Background())
-	if err == nil {
-		t.Fatal("exit error lost")
-	}
+	require.NotNil(t, err, "exit error lost")
 	var detail *Error
-	if !errors.As(err, &detail) || detail.ExitCode == nil || *detail.ExitCode != 17 || len(detail.Stderr) > 32 || !strings.HasSuffix(detail.Stderr, "tail-marker") {
-		t.Fatalf("error diagnostics = %#v", detail)
-	}
+	require.Falsef(t, !errors.As(err, &detail) || detail.ExitCode == nil || *detail.ExitCode != 17 || len(detail.Stderr) > 32 || !strings.HasSuffix(detail.Stderr, "tail-marker"), "error diagnostics = %#v", detail)
 }
 
-func TestUnexpectedEOFAfterAcceptedEvent(t *testing.T) {
-	c := openFixture(t, "eof")
+func (s *clientProtocolSuite) TestUnexpectedEOFAfterAcceptedEvent() {
+	t := s.T()
+	c := s.client
 	send(t, c, "go")
 	receive(t, c)
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, ErrUnexpectedEOF) {
-		t.Fatalf("EOF = %v", err)
-	}
+	require.ErrorIsf(t, err, ErrUnexpectedEOF, "EOF = %v", err)
 }
 
-func TestMissingPermissionHandlerDeniesAndUnknownControlErrors(t *testing.T) {
-	c := openFixture(t, "permissions")
+func (s *clientProtocolSuite) TestMissingPermissionHandlerDeniesAndUnknownControlErrors() {
+	t := s.T()
+	c := s.client
 	send(t, c, "go")
 	requests := 0
 	replies := map[string]map[string]any{}
@@ -509,54 +450,53 @@ func TestMissingPermissionHandlerDeniesAndUnknownControlErrors(t *testing.T) {
 		var echo struct {
 			Wire struct{ Response map[string]any }
 		}
-		if err := json.Unmarshal(e.Raw, &echo); err != nil {
-			t.Fatal(err)
+		{
+			err := json.Unmarshal(e.Raw, &echo)
+			require.NoError(t, err)
 		}
 		id, _ := echo.Wire.Response["request_id"].(string)
 		replies[id] = echo.Wire.Response
 	}
-	if requests != 2 {
-		t.Fatalf("observed requests = %d", requests)
-	}
+	require.EqualValuesf(t, 2, requests, "observed requests = %d", requests)
 	deny := replies["permission-1"]
-	if deny["subtype"] != "success" || deny["response"].(map[string]any)["behavior"] != "deny" {
-		t.Fatalf("permission = %#v", deny)
-	}
-	if replies["unsupported-2"]["subtype"] != "error" || !strings.Contains(replies["unsupported-2"]["error"].(string), "future_control") {
-		t.Fatalf("unsupported = %#v", replies)
-	}
+	require.Falsef(t, deny["subtype"] != "success" || deny["response"].(map[string]any)["behavior"] != "deny", "permission = %#v", deny)
+	require.Falsef(t, replies["unsupported-2"]["subtype"] != "error" || !strings.Contains(replies["unsupported-2"]["error"].(string), "future_control"), "unsupported = %#v", replies)
 }
 
-func TestReceiveCancellationDoesNotCancelSession(t *testing.T) {
-	c := openFixture(t, "echo")
+func (s *clientProtocolSuite) TestReceiveCancellationDoesNotCancelSession() {
+	t := s.T()
+	c := s.client
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := nextNative(c, ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Receive = %v", err)
+	{
+		_, err := nextNative(c, ctx)
+		require.ErrorIsf(t, err, context.Canceled, "Receive = %v", err)
 	}
 	select {
 	case <-c.Done():
-		t.Fatal("receive cancellation closed client")
+		require.FailNow(t, "verification failed", "receive cancellation closed client")
 	default:
 	}
 	send(t, c, "still usable")
 	receive(t, c)
 }
 
-func TestSendCancellationBeforeWriteDoesNotClose(t *testing.T) {
-	c := openFixture(t, "echo")
+func (s *clientProtocolSuite) TestSendCancellationBeforeWriteDoesNotClose() {
+	t := s.T()
+	c := s.client
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := c.Send(ctx, "must not send"); !errors.Is(err, context.Canceled) || errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("Send = %v", err)
+	{
+		err := c.Send(ctx, "must not send")
+		require.Falsef(t, !errors.Is(err, context.Canceled) || errors.Is(err, ErrUnknownOutcome), "Send = %v", err)
 	}
 	send(t, c, "only frame")
 	e := receive(t, c)
-	if !bytes.Contains(e.Raw, []byte("only frame")) {
-		t.Fatalf("canceled frame was sent: %s", e.Raw)
-	}
+	require.Truef(t, bytes.Contains(e.Raw, []byte("only frame")), "canceled frame was sent: %s", e.Raw)
 }
 
+// Keep the tight write-deadline matrix native: suite dispatch adds no value to
+// this per-case process setup and the original timing boundaries stay intact.
 func TestWriteFailuresAreReturnedDirectly(t *testing.T) {
 	for _, mode := range []string{"closed_stdin", "blocked_write"} {
 		t.Run(mode, func(t *testing.T) {
@@ -565,13 +505,9 @@ func TestWriteFailuresAreReturnedDirectly(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 			err := c.Send(ctx, strings.Repeat("x", 1<<20))
-			if err == nil || !errors.Is(err, ErrUnknownOutcome) {
-				t.Fatalf("Send = %v", err)
-			}
+			require.Falsef(t, err == nil || !errors.Is(err, ErrUnknownOutcome), "Send = %v", err)
 			awaitDone(t, c)
-			if mode == "blocked_write" && !errors.Is(err, context.DeadlineExceeded) {
-				t.Fatalf("blocked Send = %v", err)
-			}
+			require.Falsef(t, mode == "blocked_write" && !errors.Is(err, context.DeadlineExceeded), "blocked Send = %v", err)
 		})
 	}
 }
@@ -580,27 +516,28 @@ func TestConcurrentSendPreservesFrames(t *testing.T) {
 	c := openFixture(t, "echo")
 	var wg sync.WaitGroup
 	const count = 24
+	workerErrors := make(chan error, count)
 	for i := range count {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := c.Send(context.Background(), fmt.Sprintf("message-%d", i)); err != nil {
-				t.Error(err)
-			}
+			workerErrors <- c.Send(context.Background(), fmt.Sprintf("message-%d", i))
 		}()
 	}
 	wg.Wait()
+	close(workerErrors)
+	for err := range workerErrors {
+		require.NoError(t, err)
+	}
 	got := map[string]bool{}
 	for range count {
 		var echo struct {
 			Wire struct{ Message struct{ Content string } }
 		}
-		json.Unmarshal(receive(t, c).Raw, &echo)
+		require.NoError(t, json.Unmarshal(receive(t, c).Raw, &echo))
 		got[echo.Wire.Message.Content] = true
 	}
-	if len(got) != count {
-		t.Fatalf("got %d unique frames", len(got))
-	}
+	require.EqualValuesf(t, count, len(got), "got %d unique frames", len(got))
 }
 
 func TestConcurrentCloseAndReceiveWake(t *testing.T) {
@@ -608,93 +545,103 @@ func TestConcurrentCloseAndReceiveWake(t *testing.T) {
 	result := make(chan error, 1)
 	go func() { _, err := nextNative(c, context.Background()); result <- err }()
 	var wg sync.WaitGroup
+	workerErrors := make(chan error, 12)
 	for range 12 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := c.Close(); err != nil {
-				t.Error(err)
-			}
+			workerErrors <- c.Close()
 		}()
 	}
 	wg.Wait()
-	if err := <-result; !errors.Is(err, io.EOF) {
-		t.Fatalf("Receive after Close = %v", err)
+	close(workerErrors)
+	for err := range workerErrors {
+		require.NoError(t, err)
 	}
-	if err := c.Send(context.Background(), "after"); !errors.Is(err, ErrClosed) {
-		t.Fatalf("Send after Close = %v", err)
+	{
+		err := <-result
+		require.ErrorIsf(t, err, io.EOF, "Receive after Close = %v", err)
+	}
+	{
+		err := c.Send(context.Background(), "after")
+		require.ErrorIsf(t, err, ErrClosed, "Send after Close = %v", err)
 	}
 	awaitDone(t, c)
 }
 
-func TestCloseRetainsBufferedEvents(t *testing.T) {
-	c := openFixture(t, "echo")
+func (s *clientProtocolSuite) TestCloseRetainsBufferedEvents() {
+	t := s.T()
+	c := s.client
 	send(t, c, "retained")
 	// The fixture's EOF handling writes any in-flight echo before exiting; Close
 	// drains stdout before it returns instead of exec.Wait dropping pipe bytes.
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
-	if e := receive(t, c); !bytes.Contains(e.Raw, []byte("retained")) {
-		t.Fatalf("lost echo: %s", e.Raw)
+	{
+		e := receive(t, c)
+		require.Truef(t, bytes.Contains(e.Raw, []byte("retained")), "lost echo: %s", e.Raw)
 	}
-	if _, err := nextNative(c, context.Background()); !errors.Is(err, io.EOF) {
-		t.Fatalf("Receive = %v", err)
+	{
+		_, err := nextNative(c, context.Background())
+		require.ErrorIsf(t, err, io.EOF, "Receive = %v", err)
 	}
 }
 
-func TestLocalOversizeRejectedWithoutWriting(t *testing.T) {
+func (s *clientProtocolSuite) TestLocalOversizeRejectedWithoutWriting() {
+	t := s.T()
 	c := openFixture(t, "echo", func(o *Options) { o.Limits.FrameBytes = 512 })
-	if err := c.Send(context.Background(), strings.Repeat("x", 1024)); !errors.Is(err, ErrResourceLimit) {
-		t.Fatalf("Send = %v", err)
+	{
+		err := c.Send(context.Background(), strings.Repeat("x", 1024))
+		require.ErrorIsf(t, err, ErrResourceLimit, "Send = %v", err)
 	}
 	send(t, c, "small")
-	if !bytes.Contains(receive(t, c).Raw, []byte("small")) {
-		t.Fatal("connection unusable after local rejection")
-	}
+	require.True(t, bytes.Contains(receive(t, c).Raw, []byte("small")), "connection unusable after local rejection")
 }
 
-func TestStderrIsDrainedDuringInitialize(t *testing.T) {
+func (s *clientProtocolSuite) TestStderrIsDrainedDuringInitialize() {
+	t := s.T()
 	c := openFixture(t, "init_stderr", func(o *Options) { o.Limits.StderrBytes = 16 })
 	send(t, c, "ready")
 	receive(t, c)
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
 }
 
-func TestOversizeFrameFailsBeforeNewline(t *testing.T) {
+func (s *clientProtocolSuite) TestOversizeFrameFailsBeforeNewline() {
+	t := s.T()
 	c := openFixture(t, "oversize_without_newline", func(o *Options) { o.Limits.FrameBytes = 1024 })
 	send(t, c, "go")
 	awaitDone(t, c)
-	if !errors.Is(c.Err(), ErrResourceLimit) {
-		t.Fatalf("Err = %v", c.Err())
-	}
+	require.ErrorIsf(t, c.Err(), ErrResourceLimit, "Err = %v", c.Err())
 }
 
-func TestInvalidUTF8IsProtocolError(t *testing.T) {
-	c := openFixture(t, "invalid_utf8")
+func (s *clientProtocolSuite) TestInvalidUTF8IsProtocolError() {
+	t := s.T()
+	c := s.client
 	send(t, c, "go")
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, ErrProtocol) {
-		t.Fatalf("Receive = %v", err)
-	}
+	require.ErrorIsf(t, err, ErrProtocol, "Receive = %v", err)
 }
 
-func TestCloseAfterDoneRetainsFinalProtocolError(t *testing.T) {
-	c := openFixture(t, "truncated")
+func (s *clientProtocolSuite) TestCloseAfterDoneRetainsFinalProtocolError() {
+	t := s.T()
+	c := s.client
 	send(t, c, "go")
 	awaitDone(t, c)
-	if err := c.Close(); !errors.Is(err, ErrProtocol) {
-		t.Fatalf("Close = %v", err)
+	{
+		err := c.Close()
+		require.ErrorIsf(t, err, ErrProtocol, "Close = %v", err)
 	}
-	if e := receive(t, c); e.Type != "accepted" {
-		t.Fatal("accepted event lost")
+	{
+		e := receive(t, c)
+		require.EqualValues(t, "accepted", e.Type, "accepted event lost")
 	}
 	_, err := nextNative(c, context.Background())
-	if !errors.Is(err, ErrProtocol) {
-		t.Fatalf("Receive = %v", err)
-	}
+	require.ErrorIsf(t, err, ErrProtocol, "Receive = %v", err)
 }
 
 // nextNative is deliberately test-only: native contract tests skip SDK records.

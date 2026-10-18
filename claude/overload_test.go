@@ -16,6 +16,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These original subprocess cases extend the official test_subprocess_buffering.py,
@@ -84,98 +87,102 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 				opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 				reflect.ValueOf(&opts.Limits).Elem().FieldByName(field).SetInt(int64(value))
 				c, err := Open(context.Background(), opts)
-				if c != nil || err == nil || !strings.Contains(err.Error(), field) {
-					t.Fatalf("invalid limit: %v, %v", c, err)
-				}
-				if _, err := os.Stat(capture); !errors.Is(err, os.ErrNotExist) {
-					t.Fatalf("invalid options spawned child: %v", err)
+				require.Nilf(t, c, "invalid limit: %v, %v", c, err)
+				require.Errorf(t, err, "invalid limit: %v, %v", c, err)
+				require.Containsf(t, err.Error(), field, "invalid limit: %v, %v", c, err)
+				{
+					_, err := os.Stat(capture)
+					require.ErrorIsf(t, err, os.ErrNotExist, "invalid options spawned child: %v", err)
 				}
 			})
 		}
 	}
 }
 
-func TestFullEventQueueStillDispatchesControlResponses(t *testing.T) {
-	c := openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 3 })
+func (s *controlInteractionSuite) TestFullEventQueueStillDispatchesControlResponses() {
+	t := s.T()
+	c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 3 })
 	send(t, c, "fill")
 	// The reply is emitted after all three events, proving stdout crossed the
 	// entire full queue while the application has not called Receive.
-	if err := c.Interrupt(context.Background()); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Interrupt(context.Background())
+		require.NoError(t, err)
 	}
 	select {
 	case <-c.Done():
-		t.Fatalf("full but not exceeded queue closed: %v", c.Err())
+		require.FailNowf(t, "unexpected test outcome", "full but not exceeded queue closed: %v", c.Err())
 	default:
 	}
 	for i := 0; i < 3; i++ {
 		e := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(e.Raw, &v)
-		if e.Type != "sequence" || v.Seq != i {
-			t.Fatalf("order: %s", e.Raw)
-		}
+		require.EqualValuesf(t, "sequence", e.Type, "order: %s", e.Raw)
+		require.EqualValuesf(t, i, v.Seq, "order: %s", e.Raw)
 	}
 }
 
-func TestOverloadWakesInterruptAndPermissionWithRetainedOrder(t *testing.T) {
+func (s *controlInteractionSuite) TestOverloadWakesInterruptAndPermissionWithRetainedOrder() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
 	defer close(release)
-	c := openFixture(t, "overload_controls", func(o *Options) {
+	c := s.openFixture(t, "overload_controls", func(o *Options) {
 		o.Limits.EventBuffer = 3
 		o.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release }
 	})
 	send(t, c, "permission")
-	if receive(t, c).Control == nil {
-		t.Fatal("missing permission")
-	}
+	require.NotNil(t, receive(t, c).Control, "missing permission")
 	p := awaitPermission(t, requests)
 	pending := interruptAsync(c, context.Background())
 	receiveInterrupt(t, c)
 	send(t, c, "fill")
 	send(t, c, "overflow")
 	awaitDone(t, c)
-	if !errors.Is(context.Cause(p.Context()), ErrResourceLimit) {
-		t.Fatalf("handle cause: %v", context.Cause(p.Context()))
-	}
-	if err := awaitInterrupt(t, pending); !errors.Is(err, ErrResourceLimit) || !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("interrupt: %v", err)
+	require.ErrorIsf(t, context.Cause(p.Context()), ErrResourceLimit, "handle cause: %v", context.Cause(p.Context()))
+	{
+		err := awaitInterrupt(t, pending)
+		require.ErrorIsf(t, err, ErrResourceLimit, "interrupt: %v", err)
+		require.ErrorIsf(t, err, ErrUnknownOutcome, "interrupt: %v", err)
 	}
 	var wg sync.WaitGroup
+	closeResults := make(chan error, 8)
 	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := c.Close(); !errors.Is(err, ErrResourceLimit) {
-				t.Errorf("Close: %v", err)
-			}
+			closeResults <- c.Close()
 		}()
 	}
 	complete := make(chan struct{})
 	go func() { wg.Wait(); close(complete) }()
 	awaitSignal(t, complete)
+	close(closeResults)
+	for err := range closeResults {
+		assert.ErrorIs(t, err, ErrResourceLimit, "Close")
+	}
 	for i := 0; i < 3; i++ {
 		e := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(e.Raw, &v)
-		if e.Type != "sequence" || v.Seq != i {
-			t.Fatalf("accepted order: %s", e.Raw)
-		}
+		require.EqualValuesf(t, "sequence", e.Type, "accepted order: %s", e.Raw)
+		require.EqualValuesf(t, i, v.Seq, "accepted order: %s", e.Raw)
 	}
 	_, err := nextNative(c, context.Background())
 	var limit *ResourceLimitError
-	if !errors.As(err, &limit) || limit.Resource != "event buffer" || limit.Limit != 3 {
-		t.Fatalf("terminal: %v", err)
-	}
+	require.ErrorAsf(t, err, &limit, "terminal: %v", err)
+	require.EqualValuesf(t, "event buffer", limit.Resource, "terminal: %v", err)
+	require.EqualValuesf(t, 3, limit.Limit, "terminal: %v", err)
 	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "waiting", ErrClosed)
 }
 
-func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
+func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
+	t := s.T()
 	for _, mode := range []string{"malformed", "oversize", "truncated", "eof", "exit"} {
 		t.Run(mode, func(t *testing.T) {
 			requests := make(chan *PermissionRequest, 1)
-			c := openFixture(t, "overload_controls", func(o *Options) {
+			c := s.openFixture(t, "overload_controls", func(o *Options) {
 				o.Limits.FrameBytes = 2048
 				o.Limits.StderrBytes = 32
 				o.PermissionHandler = func(p *PermissionRequest) { requests <- p }
@@ -192,14 +199,14 @@ func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 			send(t, c, mode)
 			awaitDone(t, c)
 			for _, call := range pending {
-				if err := awaitInterrupt(t, call); err == nil || !errors.Is(err, ErrUnknownOutcome) {
-					t.Fatalf("pending control: %v", err)
+				{
+					err := awaitInterrupt(t, call)
+					require.Errorf(t, err, "pending control: %v", err)
+					require.ErrorIsf(t, err, ErrUnknownOutcome, "pending control: %v", err)
 				}
 			}
 			awaitSignal(t, p.Context().Done())
-			if context.Cause(p.Context()) == nil {
-				t.Fatal("missing handle cancellation cause")
-			}
+			require.NotNil(t, context.Cause(p.Context()), "missing handle cancellation cause")
 			closed := c.Close()
 			want := ErrProtocol
 			if mode == "oversize" {
@@ -208,55 +215,53 @@ func TestTransportFailuresWakeAllPendingWork(t *testing.T) {
 			if mode == "eof" {
 				want = ErrUnexpectedEOF
 			}
-			if mode != "exit" && !errors.Is(closed, want) {
-				t.Fatalf("final cause: %v", closed)
-			}
+			require.Falsef(t, mode != "exit" && !errors.Is(closed, want), "final cause: %v", closed)
 			if mode == "exit" {
 				var detail *Error
-				if !errors.As(closed, &detail) || detail.ExitCode == nil || *detail.ExitCode != 23 || len(detail.Stderr) > 32 || !strings.HasSuffix(detail.Stderr, "last-diagnostic") {
-					t.Fatalf("exit diagnostics: %#v", detail)
-				}
+				require.ErrorAsf(t, closed, &detail, "exit diagnostics: %#v", detail)
+				require.NotNilf(t, detail.ExitCode, "exit diagnostics: %#v", detail)
+				require.EqualValuesf(t, 23, *detail.ExitCode, "exit diagnostics: %#v", detail)
+				require.Falsef(t, len(detail.Stderr) > 32, "exit diagnostics: %#v", detail)
+				require.Truef(t, strings.HasSuffix(detail.Stderr, "last-diagnostic"), "exit diagnostics: %#v", detail)
 			}
 			for i := 0; i < 3; i++ {
 				e := receive(t, c)
 				var v struct{ Seq int }
 				json.Unmarshal(e.Raw, &v)
-				if e.Type != "sequence" || v.Seq != i {
-					t.Fatalf("retained order: %s", e.Raw)
-				}
+				require.EqualValuesf(t, "sequence", e.Type, "retained order: %s", e.Raw)
+				require.EqualValuesf(t, i, v.Seq, "retained order: %s", e.Raw)
 			}
-			if _, err := nextNative(c, context.Background()); err == nil {
-				t.Fatal("missing terminal error")
+			{
+				_, err := nextNative(c, context.Background())
+				require.Error(t, err, "missing terminal error")
 			}
 			assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "waiting", ErrClosed)
 		})
 	}
 }
 
-func TestShutdownDoesNotWaitForIgnoringCallback(t *testing.T) {
+func (s *controlInteractionSuite) TestShutdownDoesNotWaitForIgnoringCallback() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
 	returned := make(chan struct{})
 	defer close(release)
-	c := openFixture(t, "overload_controls", func(o *Options) {
+	c := s.openFixture(t, "overload_controls", func(o *Options) {
 		o.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release; close(returned) }
 	})
 	send(t, c, "permission")
 	receive(t, c)
 	p := awaitPermission(t, requests)
 	start := time.Now()
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
-	if time.Since(start) > 3*time.Second {
-		t.Fatal("Close waited for callback")
-	}
-	if !errors.Is(context.Cause(p.Context()), ErrClosed) {
-		t.Fatalf("callback context: %v", context.Cause(p.Context()))
-	}
+	require.False(t, time.Since(start) > 3*time.Second, "Close waited for callback")
+	require.ErrorIsf(t, context.Cause(p.Context()), ErrClosed, "callback context: %v", context.Cause(p.Context()))
 	select {
 	case <-returned:
-		t.Fatal("callback unexpectedly returned")
+		require.FailNow(t, "callback unexpectedly returned")
 	default:
 	}
 }

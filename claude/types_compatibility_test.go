@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
@@ -45,27 +47,37 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 		Env: []string{"FIXTURE=1"}, InitializeTimeout: 13 * time.Second, ShutdownTimeout: 7 * time.Second,
 		Limits: types.Limits{EventBuffer: 2, FrameBytes: 1000, PendingControls: 3, ControlBuffer: 4, StderrBytes: 5, PendingPermissions: 6, PermissionWorkers: 7, PermissionHistory: 8},
 	}
-	o := OptionsFromTypes(config)
-	if o.PermissionHandler != nil || !reflect.DeepEqual(o.Types(), config) {
-		t.Fatalf("configuration changed: %#v", o)
+	for _, tc := range []struct {
+		name     string
+		decorate bool
+	}{{"plain", false}, {"callback and observation options", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := OptionsFromTypes(config)
+			require.Nil(t, o.PermissionHandler)
+			assert.Equal(t, config, o.Types(), "configuration changed")
+			if tc.decorate {
+				o.PermissionHandler = func(*PermissionRequest) {}
+				o.Subagents = SubagentOptions{MaxNodes: 7, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}}}
+			}
+			assert.Equal(t, config, o.Types(), "callback affected pure configuration")
+		})
 	}
-	o.PermissionHandler = func(*PermissionRequest) {}
-	o.Subagents = SubagentOptions{MaxNodes: 7, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}}}
-	if !reflect.DeepEqual(o.Types(), config) {
-		t.Fatal("callback affected pure configuration")
-	}
-	if OptionsFromTypes(types.Options{}).Env != nil || OptionsFromTypes(types.Options{Env: []string{}}).Env == nil {
-		t.Fatal("nil versus empty environment lost")
+	for _, tc := range []struct {
+		name string
+		env  []string
+	}{{"nil", nil}, {"empty", []string{}}} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.env, OptionsFromTypes(types.Options{Env: tc.env}).Env, "nil versus empty environment lost")
+		})
 	}
 }
 
-func TestOptionsAdapterRunsExistingSubprocessProtocol(t *testing.T) {
+func (s *clientProtocolSuite) TestOptionsAdapterRunsExistingSubprocessProtocol() {
+	t := s.T()
 	// Exercise the existing isolated initialize/send/receive protocol via the adapter.
 	o := OptionsFromTypes(fixtureOptions(t, "echo").Types())
 	c, err := Open(context.Background(), o)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	send(t, c, "adapter")
 	var event types.Event = receive(t, c)
@@ -75,37 +87,34 @@ func TestOptionsAdapterRunsExistingSubprocessProtocol(t *testing.T) {
 			Message struct{ Role, Content string }
 		}
 	}
-	if err := json.Unmarshal(event.Raw, &echo); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(event.Raw, &echo)
+		require.NoError(t, err)
 	}
-	if echo.Wire.Type != "user" || echo.Wire.Message.Role != "user" || echo.Wire.Message.Content != "adapter" {
-		t.Fatalf("adapter send frame = %s", event.Raw)
-	}
+	require.Falsef(t, echo.Wire.Type != "user" || echo.Wire.Message.Role != "user" || echo.Wire.Message.Content != "adapter", "adapter send frame = %s", event.Raw)
 }
 
 // Both public entry points own the same codec, including constructed frames.
 func TestMessageCodecAliases(t *testing.T) {
-	frame := []byte(`{"type":"result","subtype":"success","is_error":true,"modelUsage":{"fixture":{"inputTokens":0}},"api_error_status":429}`)
-	root, err := ParseEvent(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := types.ParseEvent(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var same Event = data
-	same.Result.ModelUsage["fixture"] = ModelUsage{InputTokens: 3, Fields: map[string]FieldState{"inputTokens": Present}}
-	b, err := json.Marshal(same)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var decoded types.Event
-	if err = json.Unmarshal(b, &decoded); err != nil {
-		t.Fatal(err)
-	}
-	if !root.Result.IsError || decoded.Result.ModelUsage["fixture"].InputTokens != 3 {
-		t.Fatal("root/type codecs differ")
+	for _, tc := range []struct{ name, frame string }{{"result model usage", `{"type":"result","subtype":"success","is_error":true,"modelUsage":{"fixture":{"inputTokens":0}},"api_error_status":429}`}} {
+		t.Run(tc.name, func(t *testing.T) {
+			frame := []byte(tc.frame)
+			root, err := ParseEvent(frame)
+			require.NoError(t, err)
+			data, err := types.ParseEvent(frame)
+			require.NoError(t, err)
+			var same Event = data
+			same.Result.ModelUsage["fixture"] = ModelUsage{InputTokens: 3, Fields: map[string]FieldState{"inputTokens": Present}}
+			b, err := json.Marshal(same)
+			require.NoError(t, err)
+			var decoded types.Event
+			{
+				err = json.Unmarshal(b, &decoded)
+				require.NoError(t, err)
+			}
+			assert.True(t, root.Result.IsError, "root/type codecs differ")
+			assert.EqualValues(t, 3, decoded.Result.ModelUsage["fixture"].InputTokens, "root/type codecs differ")
+		})
 	}
 }
 
@@ -122,17 +131,15 @@ func TestPermissionDataAliases(t *testing.T) {
 		{QuestionAnswer{}, types.QuestionAnswer{}},
 	}
 	for _, pair := range values {
-		if reflect.TypeOf(pair[0]) != reflect.TypeOf(pair[1]) {
-			t.Fatal("alias identity changed")
-		}
+		t.Run(reflect.TypeOf(pair[0]).Name(), func(t *testing.T) {
+			assert.Equal(t, reflect.TypeOf(pair[1]), reflect.TypeOf(pair[0]), "alias identity changed")
+		})
 	}
 	frame := []byte(`{"type":"control_response","response":{"subtype":"success","request_id":"r","response":{"behavior":"deny","message":"no"}}}`)
 	root, err := ParseEvent(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	data, err := types.ParseEvent(frame)
-	if err != nil || !reflect.DeepEqual(root, data) || root.Response == nil {
-		t.Fatal("entry point mismatch", err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, root, data, "entry point mismatch")
+	assert.NotNil(t, root.Response)
 }

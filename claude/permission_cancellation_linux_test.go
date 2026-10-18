@@ -8,12 +8,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // Linux FIFOs provide deterministic cross-process barriers without network
@@ -23,15 +24,14 @@ func permissionWireBarrier(t *testing.T) (*Client, <-chan *PermissionRequest, *o
 	t.Helper()
 	dir := t.TempDir()
 	fifoPath, transcript := filepath.Join(dir, "gate"), filepath.Join(dir, "stdin.ndjson")
-	if err := syscall.Mkfifo(fifoPath, 0600); err != nil {
-		t.Fatal(err)
+	{
+		err := syscall.Mkfifo(fifoPath, 0600)
+		require.NoError(t, err)
 	}
 	// Linux permits opening both ends at once. The fixture opens only its read
 	// end, and test writes are one byte, so neither endpoint can fill the FIFO.
 	gate, err := os.OpenFile(fifoPath, os.O_RDWR, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = gate.Close() })
 	requests := make(chan *PermissionRequest, 2)
 	c := openFixture(t, "permission_controls", func(opts *Options) {
@@ -43,17 +43,16 @@ func permissionWireBarrier(t *testing.T) (*Client, <-chan *PermissionRequest, *o
 
 func releasePermissionWire(t *testing.T, gate *os.File, action byte) {
 	t.Helper()
-	if _, err := gate.Write([]byte{action}); err != nil {
-		t.Fatal(err)
+	{
+		_, err := gate.Write([]byte{action})
+		require.NoError(t, err)
 	}
 }
 
 func expectPermissionWireEvent(t *testing.T, c *Client, kind string) Event {
 	t.Helper()
 	event := receive(t, c)
-	if event.Type != kind {
-		t.Fatalf("expected %s, got %s", kind, event.Raw)
-	}
+	require.EqualValuesf(t, kind, event.Type, "expected %s, got %s", kind, event.Raw)
 	return event
 }
 
@@ -71,24 +70,22 @@ func startBlockedPermissionWriter(t *testing.T, c *Client, id string, p *Permiss
 	}()
 	event := expectPermissionWireEvent(t, c, "writer_prefix")
 	var wire struct{ Prefix string }
-	if err := json.Unmarshal(event.Raw, &wire); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(event.Raw, &wire)
+		require.NoError(t, err)
 	}
-	if p != nil && (!strings.HasPrefix(wire.Prefix, `{"response":`) || !strings.Contains(wire.Prefix, `"request_id":"`+id+`"`)) {
-		t.Fatalf("expected actual answer prefix, got %q", wire.Prefix)
-	}
-	if p == nil && !strings.HasPrefix(wire.Prefix, `{"message":`) {
-		t.Fatalf("expected actual user prefix, got %q", wire.Prefix)
-	}
+	require.Falsef(t, p != nil && (!strings.HasPrefix(wire.Prefix, `{"response":`) || !strings.Contains(wire.Prefix, `"request_id":"`+id+`"`)), "expected actual answer prefix, got %q", wire.Prefix)
+	require.Falsef(t, p == nil && !strings.HasPrefix(wire.Prefix, `{"message":`), "expected actual user prefix, got %q", wire.Prefix)
 	select {
 	case err := <-results:
-		t.Fatalf("large frame completed before read barrier: %v", err)
+		require.FailNowf(t, "unexpected test outcome", "large frame completed before read barrier: %v", err)
 	default:
 	}
 	return results
 }
 
-func TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes() {
+	t := s.T()
 	c, requests, gate, path := permissionWireBarrier(t)
 	emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`))
 	p := awaitPermission(t, requests)
@@ -98,32 +95,36 @@ func TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes(t *testing.T) 
 	go func() { answers <- p.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow}) }()
 	awaitSignal(t, ctx.reserved)
 	releasePermissionWire(t, gate, 'q')
-	if event := expectPermissionWireEvent(t, c, "control_cancel_request"); event.Cancel.RequestID != p.RequestID() {
-		t.Fatal("wrong cancellation ID")
+	{
+		event := expectPermissionWireEvent(t, c, "control_cancel_request")
+		require.EqualValues(t, p.RequestID(), event.Cancel.RequestID, "wrong cancellation ID")
 	}
 	err := awaitPermissionError(t, answers)
 	assertPermissionError(t, err, p.RequestID(), ErrPermissionCancelled)
-	if errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("never-authorized answer falsely ambiguous: %v", err)
-	}
+	require.NotErrorIsf(t, err, ErrUnknownOutcome, "never-authorized answer falsely ambiguous: %v", err)
 	releasePermissionWire(t, gate, 'd')
 	expectPermissionWireEvent(t, c, "writer_finished")
-	if err := awaitPermissionError(t, blockedSend); err != nil {
-		t.Fatalf("queued cancellation interrupted unrelated write: %v", err)
+	{
+		err := awaitPermissionError(t, blockedSend)
+		require.NoErrorf(t, err, "queued cancellation interrupted unrelated write: %v", err)
 	}
 	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), ErrPermissionCancelled)
-	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 0 {
-		t.Fatalf("cancelled queued answer reached wire: %#v", got)
+	{
+		got := permissionResponses(t, permissionSnapshot(t, c))
+		require.EqualValuesf(t, 0, len(got), "cancelled queued answer reached wire: %#v", got)
 	}
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
-	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
-		t.Fatalf("late response after snapshot: %#v", got)
+	{
+		got := permissionResponses(t, permissionTranscript(t, path))
+		require.EqualValuesf(t, 0, len(got), "late response after snapshot: %#v", got)
 	}
 }
 
-func TestPermissionQueuedWriterCloseOrCallerCancel(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionQueuedWriterCloseOrCallerCancel() {
+	t := s.T()
 	for _, callerCancels := range []bool{false, true} {
 		t.Run(map[bool]string{false: "close", true: "caller cancellation"}[callerCancels], func(t *testing.T) {
 			c, requests, gate, path := permissionWireBarrier(t)
@@ -146,12 +147,11 @@ func TestPermissionQueuedWriterCloseOrCallerCancel(t *testing.T) {
 			}
 			err := awaitPermissionError(t, answers)
 			assertPermissionError(t, err, p.RequestID(), want)
-			if errors.Is(err, ErrUnknownOutcome) {
-				t.Fatalf("queued answer inherited another write's ambiguity: %v", err)
-			}
+			require.NotErrorIsf(t, err, ErrUnknownOutcome, "queued answer inherited another write's ambiguity: %v", err)
 			awaitDone(t, c)
-			if err := awaitPermissionError(t, blockedSend); err == nil {
-				t.Fatal("blocked user write unexpectedly completed")
+			{
+				err := awaitPermissionError(t, blockedSend)
+				require.Error(t, err, "blocked user write unexpectedly completed")
 			}
 			releasePermissionWire(t, gate, 'x')
 			if callerCancels {
@@ -161,17 +161,14 @@ func TestPermissionQueuedWriterCloseOrCallerCancel(t *testing.T) {
 			}
 			assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{}), p.RequestID(), want)
 			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if bytes.Contains(data, []byte(`{"response":`)) {
-				t.Fatal("queued answer emitted any response bytes")
-			}
+			require.NoError(t, err)
+			require.False(t, bytes.Contains(data, []byte(`{"response":`)), "queued answer emitted any response bytes")
 		})
 	}
 }
 
-func TestPermissionStartedWriteCancellationAndCloseAreAmbiguous(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionStartedWriteCancellationAndCloseAreAmbiguous() {
+	t := s.T()
 	for _, cliCancels := range []bool{false, true} {
 		t.Run(map[bool]string{false: "close", true: "CLI cancellation"}[cliCancels], func(t *testing.T) {
 			c, requests, gate, path := permissionWireBarrier(t)
@@ -189,9 +186,7 @@ func TestPermissionStartedWriteCancellationAndCloseAreAmbiguous(t *testing.T) {
 			}
 			err := awaitPermissionError(t, answers)
 			assertPermissionError(t, err, p.RequestID(), want)
-			if !errors.Is(err, ErrUnknownOutcome) {
-				t.Fatalf("started response falsely known not written: %v", err)
-			}
+			require.ErrorIsf(t, err, ErrUnknownOutcome, "started response falsely known not written: %v", err)
 			awaitDone(t, c)
 			releasePermissionWire(t, gate, 'x')
 			if cliCancels {
@@ -203,44 +198,44 @@ func TestPermissionStartedWriteCancellationAndCloseAreAmbiguous(t *testing.T) {
 				assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), want)
 			}
 			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			// A partial response was really emitted; no second envelope can be
 			// appended by retry or by the callback returning after shutdown.
-			if bytes.Count(data, []byte(`{"response":`)) != 1 {
-				t.Fatalf("expected one partial response prefix, got %d", bytes.Count(data, []byte(`{"response":`)))
-			}
+			require.EqualValuesf(t, 1, bytes.Count(data, []byte(`{"response":`)), "expected one partial response prefix, got %d", bytes.Count(data, []byte(`{"response":`)))
 			last := data[bytes.LastIndexByte(data, '\n')+1:]
-			if !bytes.HasPrefix(last, []byte(`{"response":`)) || json.Valid(last) {
-				t.Fatal("fixture did not preserve an interrupted response on stdin")
-			}
+			require.True(t, bytes.HasPrefix(last, []byte(`{"response":`)), "fixture did not preserve an interrupted response on stdin")
+			require.False(t, json.Valid(last), "fixture did not preserve an interrupted response on stdin")
 		})
 	}
 }
 
-func TestPermissionStartedWriteCanFinishBeforeCancellation(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionStartedWriteCanFinishBeforeCancellation() {
+	t := s.T()
 	c, requests, gate, path := permissionWireBarrier(t)
 	emitPermission(t, c, "completed", "Read", json.RawMessage(`{}`))
 	p := awaitPermission(t, requests)
 	answers := startBlockedPermissionWriter(t, c, p.RequestID(), p)
 	releasePermissionWire(t, gate, 'd')
 	expectPermissionWireEvent(t, c, "writer_finished")
-	if err := awaitPermissionError(t, answers); err != nil {
-		t.Fatal(err)
+	{
+		err := awaitPermissionError(t, answers)
+		require.NoError(t, err)
 	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": p.RequestID()})
 	expectPermissionWireEvent(t, c, "control_cancel_request")
 	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{}), p.RequestID(), ErrPermissionUsed)
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
-	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 1 {
-		t.Fatalf("completed answer was duplicated: %d", len(got))
+	{
+		got := permissionResponses(t, permissionTranscript(t, path))
+		require.EqualValuesf(t, 1, len(got), "completed answer was duplicated: %d", len(got))
 	}
 }
 
-func TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity(t *testing.T) {
+func (s *controlInteractionSuite) TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity() {
+	t := s.T()
 	c, _, gate, _ := permissionWireBarrier(t)
 	started := startBlockedPermissionWriter(t, c, "unused", nil)
 	sendCtx := &answerReservationContext{Context: context.Background(), reserved: make(chan struct{})}
@@ -254,35 +249,34 @@ func TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity(t *testing.T) {
 	go func() { closeResults <- c.Close() }()
 	for _, result := range []<-chan error{queuedSend, queuedControl} {
 		err := awaitPermissionError(t, result)
-		if !errors.Is(err, ErrClosed) || errors.Is(err, ErrUnknownOutcome) {
-			t.Fatalf("queued operation inherited ambiguity: %v", err)
-		}
+		require.ErrorIsf(t, err, ErrClosed, "queued operation inherited ambiguity: %v", err)
+		require.NotErrorIsf(t, err, ErrUnknownOutcome, "queued operation inherited ambiguity: %v", err)
 	}
-	if err := awaitPermissionError(t, started); !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("started write outcome: %v", err)
+	{
+		err := awaitPermissionError(t, started)
+		require.ErrorIsf(t, err, ErrUnknownOutcome, "started write outcome: %v", err)
 	}
 	releasePermissionWire(t, gate, 'x')
-	if err := awaitPermissionError(t, closeResults); !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("Close lost started write failure: %v", err)
+	{
+		err := awaitPermissionError(t, closeResults)
+		require.ErrorIsf(t, err, ErrUnknownOutcome, "Close lost started write failure: %v", err)
 	}
-	if !errors.Is(c.Err(), ErrUnknownOutcome) {
-		t.Fatalf("Err lost original cause: %v", c.Err())
-	}
+	require.ErrorIsf(t, c.Err(), ErrUnknownOutcome, "Err lost original cause: %v", c.Err())
 }
 
-func TestAutomaticResponseQueueOverflowUnblocksStartedWriter(t *testing.T) {
+func (s *controlInteractionSuite) TestAutomaticResponseQueueOverflowUnblocksStartedWriter() {
+	t := s.T()
 	dir := t.TempDir()
 	fifo := filepath.Join(dir, "gate")
 	path := filepath.Join(dir, "stdin.ndjson")
-	if err := syscall.Mkfifo(fifo, 0600); err != nil {
-		t.Fatal(err)
+	{
+		err := syscall.Mkfifo(fifo, 0600)
+		require.NoError(t, err)
 	}
 	gate, err := os.OpenFile(fifo, os.O_RDWR, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer gate.Close()
-	c := openFixture(t, "permission_controls", func(o *Options) {
+	c := s.openFixture(t, "permission_controls", func(o *Options) {
 		o.Limits.ControlBuffer = 2
 		o.Limits.EventBuffer = 32
 		o.Env = append(o.Env, "CLAUDE_GO_WRITE_BARRIER="+fifo, "CLAUDE_GO_TRANSCRIPT="+path)
@@ -290,18 +284,18 @@ func TestAutomaticResponseQueueOverflowUnblocksStartedWriter(t *testing.T) {
 	started := startBlockedPermissionWriter(t, c, "unused", nil)
 	releasePermissionWire(t, gate, 'r')
 	awaitDone(t, c)
-	if err := awaitPermissionError(t, started); !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("blocked writer: %v", err)
+	{
+		err := awaitPermissionError(t, started)
+		require.ErrorIsf(t, err, ErrUnknownOutcome, "blocked writer: %v", err)
 	}
 	var limit *ResourceLimitError
-	if err := c.Close(); !errors.As(err, &limit) || limit.Resource != "incoming control queue" || limit.Limit != 2 {
-		t.Fatalf("response queue bound: %v", err)
+	{
+		err := c.Close()
+		require.ErrorAsf(t, err, &limit, "response queue bound: %v", err)
+		require.EqualValuesf(t, "incoming control queue", limit.Resource, "response queue bound: %v", err)
+		require.EqualValuesf(t, 2, limit.Limit, "response queue bound: %v", err)
 	}
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(data, []byte(`{"response":`)) {
-		t.Fatal("queued automatic reply reached blocked stdin")
-	}
+	require.NoError(t, err)
+	require.False(t, bytes.Contains(data, []byte(`{"response":`)), "queued automatic reply reached blocked stdin")
 }

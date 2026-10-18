@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	claude "github.com/zoumo/agent-sdk-go/claude"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -26,8 +28,9 @@ func TestMain(m *testing.M) {
 
 func TestOfflineExample(t *testing.T) {
 	var output bytes.Buffer
-	if err := run(&output); err != nil {
-		t.Fatal(err)
+	{
+		err := run(&output)
+		require.NoError(t, err)
 	}
 	expected := strings.Split(strings.TrimSpace(frames), "\n")
 	associated := make(map[string]bool)
@@ -38,8 +41,9 @@ func TestOfflineExample(t *testing.T) {
 			Type string `json:"type"`
 			claude.SubagentInfo
 		}
-		if err := json.Unmarshal([]byte(line), &header); err != nil {
-			t.Fatal(err)
+		{
+			err := json.Unmarshal([]byte(line), &header)
+			require.NoError(t, err)
 		}
 		switch header.Type {
 		case "subagent_associated":
@@ -48,21 +52,17 @@ func TestOfflineExample(t *testing.T) {
 				nested = true
 			}
 		case "subagent_created":
-			if !associated[header.Source.AssociationID] || created[header.Source.TaskID] {
-				t.Fatal(header)
-			}
+			require.True(t, associated[header.Source.AssociationID], header)
+			require.False(t, created[header.Source.TaskID], header)
 			created[header.Source.TaskID] = true
 		case "observation_state":
 			closed = closed || header.State == "closed"
 		default:
-			if nativeCount >= len(expected) || line != expected[nativeCount] {
-				t.Fatalf("native changed: %s", line)
-			}
+			require.Falsef(t, nativeCount >= len(expected), "native changed: %s", line)
+			require.EqualValuesf(t, expected[nativeCount], line, "native changed: %s", line)
 			nativeCount++
 			e, err := claude.ParseEvent([]byte(line))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			if e.Result != nil {
 				rootResult = true
 			}
@@ -74,7 +74,15 @@ func TestOfflineExample(t *testing.T) {
 			}
 		}
 	}
-	if nativeCount != len(expected) || !rootResult || !childAfter || !nested || !terminal || !closed || len(created) != 2 {
-		t.Fatalf("native=%d root=%t after=%t nested=%t terminal=%t closed=%t created=%v", nativeCount, rootResult, childAfter, nested, terminal, closed, created)
+	require.Equal(t, len(expected), nativeCount, "native frame count")
+	for _, tc := range []struct {
+		name     string
+		observed bool
+	}{
+		{"root result", rootResult}, {"child after root result", childAfter},
+		{"nested association", nested}, {"terminal patch", terminal}, {"closed state", closed},
+	} {
+		t.Run(tc.name, func(t *testing.T) { require.True(t, tc.observed) })
 	}
+	require.Len(t, created, 2, "created agents")
 }

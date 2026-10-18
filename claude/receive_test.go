@@ -4,23 +4,21 @@ package claude
 import (
 	"context"
 	"encoding/json"
-	"reflect"
-	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestReceiveConcreteEventsAndNativeJSON(t *testing.T) {
-	c := openFixture(t, "tree")
+func (s *controlInteractionSuite) TestReceiveConcreteEventsAndNativeJSON() {
+	t := s.T()
+	c := s.openFixture(t, "tree")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	first, err := c.Receive(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	state, ok := first.(ObservationState)
-	if !ok || state.State != "unverified" {
-		t.Fatalf("first=%#v", first)
-	}
+	require.Truef(t, ok, "first=%#v", first)
+	require.EqualValuesf(t, "unverified", state.State, "first=%#v", first)
 	associated, created := false, false
 	frames := []string{creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false")}
 	for _, origin := range []string{"", `,"origin":null`, `,"origin":{"kind":"future","extra":7}`} {
@@ -30,48 +28,36 @@ func TestReceiveConcreteEventsAndNativeJSON(t *testing.T) {
 		treeEmit(t, c, frame)
 		for {
 			received, err := c.Receive(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			encoded, err := json.Marshal(received)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			switch event := received.(type) {
 			case Event:
-				if string(event.Raw) != frame {
-					t.Fatalf("Raw changed: %q", event.Raw)
-				}
+				require.EqualValuesf(t, frame, string(event.Raw), "Raw changed: %q", event.Raw)
 				var before, after any
-				if json.Unmarshal([]byte(frame), &before) != nil || json.Unmarshal(encoded, &after) != nil || !reflect.DeepEqual(before, after) {
-					t.Fatalf("native JSON changed: %s", encoded)
-				}
-				if event.Subtype == "task_started" && (!associated || !created) {
-					t.Fatal("child preceded relationship notifications")
-				}
+				require.Nilf(t, json.Unmarshal([]byte(frame), &before), "native JSON changed: %s", encoded)
+				require.Nilf(t, json.Unmarshal(encoded, &after), "native JSON changed: %s", encoded)
+				require.Equalf(t, before, after, "native JSON changed: %s", encoded)
+				require.False(t, event.Subtype == "task_started" && (!associated || !created), "child preceded relationship notifications")
 				goto nextFrame
 			case SubagentAssociated:
 				associated = true
-				if event.Source.TaskID != "child" {
-					t.Fatal(event)
-				}
+				require.EqualValues(t, "child", event.Source.TaskID, event)
 			case SubagentCreated:
-				if !associated {
-					t.Fatal("creation preceded association")
-				}
+				require.True(t, associated, "creation preceded association")
 				created = true
 			case ObservationState:
 			default:
-				t.Fatalf("unexpected public event %T", received)
+				require.FailNowf(t, "unexpected test outcome", "unexpected public event %T", received)
 			}
 			var fields map[string]json.RawMessage
-			if json.Unmarshal(encoded, &fields) != nil || fields["origin"] != nil || fields["native"] != nil || fields["kind"] != nil {
-				t.Fatalf("derived envelope classification survived: %s", encoded)
-			}
+			require.Nilf(t, json.Unmarshal(encoded, &fields), "derived envelope classification survived: %s", encoded)
+			require.Nilf(t, fields["origin"], "derived envelope classification survived: %s", encoded)
+			require.Nilf(t, fields["native"], "derived envelope classification survived: %s", encoded)
+			require.Nilf(t, fields["kind"], "derived envelope classification survived: %s", encoded)
 		}
 	nextFrame:
 	}
-	if !associated || !created {
-		t.Fatal("missing derived convenience events")
-	}
+	require.True(t, associated, "missing derived convenience events")
+	require.True(t, created, "missing derived convenience events")
 }

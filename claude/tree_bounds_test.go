@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func openBoundedTree(t *testing.T, bounds SubagentOptions, configure ...func(*Options)) *Client {
@@ -23,12 +25,11 @@ func openBoundedTree(t *testing.T, bounds SubagentOptions, configure ...func(*Op
 		f(&opts)
 	}
 	c, err := openWithTree(context.Background(), opts, bounds)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
-	if r := treeReceive(t, c); r.State != "unverified" {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.EqualValues(t, "unverified", r.State, r)
 	}
 	return c
 }
@@ -36,60 +37,50 @@ func openBoundedTree(t *testing.T, bounds SubagentOptions, configure ...func(*Op
 const heldChild = ` {"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"},{"type":"thinking","thinking":"private","signature":"sig"}],"usage":{"output_tokens":7}},"future":null} `
 const rootTool = `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`
 
-func TestTreeBufferedSourceResolvesBeforeNativeWithoutReplay(t *testing.T) {
+func (s *treeObservationSuite) TestTreeBufferedSourceResolvesBeforeNativeWithoutReplay() {
+	t := s.T()
 	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Second})
 	treeEmit(t, c, heldChild)
 	first := treeReceive(t, c)
-	if first.Kind != "SubagentAssociated" || first.Scope != "unresolved" {
-		t.Fatal(first)
-	}
+	require.False(t, first.Kind != "SubagentAssociated" || first.Scope != "unresolved", first)
 	// The call timeout neither discards the held frame nor stops the process.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	if _, err := c.tree.receive(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
+	{
+		_, err := c.tree.receive(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded, err)
 	}
 	treeEmit(t, c, rootTool)
 	enriched := treeReceive(t, c)
-	if enriched.Kind != "SubagentAssociated" || enriched.Scope != "child" || enriched.Reason != "identity-enriched" {
-		t.Fatal(enriched)
-	}
+	require.False(t, enriched.Kind != "SubagentAssociated" || enriched.Scope != "child" || enriched.Reason != "identity-enriched", enriched)
 	child := treeReceive(t, c)
-	if child.Kind != "Native" || child.Scope != "child" || child.Source.TaskID != "a" || child.Source.ToolUseID != "spawn" || string(child.Native.Raw) != heldChild || child.Sequence <= enriched.Sequence {
-		t.Fatal(child)
-	}
+	require.False(t, child.Kind != "Native" || child.Scope != "child" || child.Source.TaskID != "a" || child.Source.ToolUseID != "spawn" || string(child.Native.Raw) != heldChild || child.Sequence <= enriched.Sequence, child)
 	parent := treeReceive(t, c)
-	if parent.Native == nil || string(parent.Native.Raw) != rootTool {
-		t.Fatal(parent)
-	}
+	require.False(t, parent.Native == nil || string(parent.Native.Raw) != rootTool, parent)
 	treeFrame(t, c, `{"type":"marker"}`) // no replay ahead of the marker
 }
 
-func TestTreeUnresolvedExpiryPreservesRawAndOnlyEnrichesLater(t *testing.T) {
+func (s *treeObservationSuite) TestTreeUnresolvedExpiryPreservesRawAndOnlyEnrichesLater() {
+	t := s.T()
 	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: 30 * time.Millisecond})
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c) // association
 	d := treeReceive(t, c)
-	if d.Kind != "ObservationState" || d.State != "incomplete" || d.Reason != "unresolved-source" || d.Scope != "unresolved" {
-		t.Fatal(d)
-	}
+	require.False(t, d.Kind != "ObservationState" || d.State != "incomplete" || d.Reason != "unresolved-source" || d.Scope != "unresolved", d)
 	r := treeReceive(t, c)
-	if r.Scope != "unresolved" || r.Reason != "unresolved-source" || string(r.Native.Raw) != heldChild {
-		t.Fatal(r)
-	}
+	require.False(t, r.Scope != "unresolved" || r.Reason != "unresolved-source" || string(r.Native.Raw) != heldChild, r)
 	ds, _ := treeFrame(t, c, rootTool)
-	if !treeHas(ds, "SubagentAssociated", "identity-enriched") {
-		t.Fatal(ds)
-	}
+	require.True(t, treeHas(ds, "SubagentAssociated", "identity-enriched"), ds)
 	treeFrame(t, c, `{"type":"marker"}`)
 	select {
 	case <-c.Done():
-		t.Fatal(c.Err())
+		require.FailNow(t, "verification failed", c.Err())
 	default:
 	}
 }
 
-func TestTreeUnresolvedCapacityFailsVisiblyWithoutPartialFanout(t *testing.T) {
+func (s *treeObservationSuite) TestTreeUnresolvedCapacityFailsVisiblyWithoutPartialFanout() {
+	t := s.T()
 	for _, mode := range []string{"count", "bytes", "single-frame"} {
 		t.Run(mode, func(t *testing.T) {
 			opts := SubagentOptions{MaxUnresolvedWait: time.Minute, MaxUnresolvedEvents: 1}
@@ -104,87 +95,68 @@ func TestTreeUnresolvedCapacityFailsVisiblyWithoutPartialFanout(t *testing.T) {
 			treeEmit(t, c, heldChild)
 			expected := map[string]int{heldChild: 1}
 			if mode != "single-frame" {
-				if r := treeReceive(t, c); r.Kind != "SubagentAssociated" {
-					t.Fatal(r)
+				{
+					r := treeReceive(t, c)
+					require.EqualValues(t, "SubagentAssociated", r.Kind, r)
 				}
 				next := `{"type":"assistant","session_id":"s","agent_id":"b","message":{"content":"overflow"}}`
 				expected[next] = 1
 				treeEmit(t, c, next)
 			}
 			d := treeReceive(t, c)
-			if d.State != "incomplete" || d.Reason != "unresolved-source" {
-				t.Fatal("partial fanout or missing diagnostic", d)
-			}
+			require.False(t, d.State != "incomplete" || d.Reason != "unresolved-source", "partial fanout or missing diagnostic", d)
 			<-c.Done()
-			if !errors.Is(c.Err(), ErrResourceLimit) {
-				t.Fatal(c.Err())
-			}
+			require.ErrorIs(t, c.Err(), ErrResourceLimit, c.Err())
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			var nativeOrder []string
 			for {
 				r, err := c.tree.receive(ctx)
 				if err != nil {
-					if !errors.Is(err, ErrResourceLimit) {
-						t.Fatal(err)
-					}
+					require.ErrorIs(t, err, ErrResourceLimit, err)
 					break
 				}
-				if r.Kind == "SubagentAssociated" {
-					t.Fatal("rejected association published", r)
-				}
+				require.NotEqualValues(t, "SubagentAssociated", r.Kind, "rejected association published", r)
 				if r.Native != nil {
 					nativeOrder = append(nativeOrder, string(r.Native.Raw))
 					expected[string(r.Native.Raw)]--
-					if r.Scope != "unresolved" {
-						t.Fatal(r)
-					}
+					require.EqualValues(t, "unresolved", r.Scope, r)
 				}
 			}
-			if len(nativeOrder) == 0 || nativeOrder[0] != heldChild {
-				t.Fatal("overflow overtook held native", nativeOrder)
-			}
+			require.False(t, len(nativeOrder) == 0 || nativeOrder[0] != heldChild, "overflow overtook held native", nativeOrder)
 			for frame, n := range expected {
-				if n != 0 {
-					t.Fatalf("native delivered other than once: %d %s", n, frame)
-				}
+				require.EqualValuesf(t, 0, n, "native delivered other than once: %d %s", n, frame)
 			}
 		})
 	}
 }
 
-func TestTreeAtomicFanoutAndHistoryBounds(t *testing.T) {
+func (s *treeObservationSuite) TestTreeAtomicFanoutAndHistoryBounds() {
+	t := s.T()
 	for _, limit := range []int{1, 2} {
 		t.Run(fmt.Sprint(limit), func(t *testing.T) {
 			c := openBoundedTree(t, SubagentOptions{MaxPendingRecords: limit})
 			frame := `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"1"}`
 			treeEmit(t, c, frame) // association + run-observed + native = 3
 			r := treeReceive(t, c)
-			if r.Reason != "fanout-limit" {
-				t.Fatal("partial association escaped", r)
-			}
-			if r = treeReceive(t, c); r.Native == nil || string(r.Native.Raw) != frame || r.Scope != "unresolved" {
-				t.Fatal(r)
+			require.EqualValues(t, "fanout-limit", r.Reason, "partial association escaped", r)
+			{
+				r = treeReceive(t, c)
+				require.False(t, r.Native == nil || string(r.Native.Raw) != frame || r.Scope != "unresolved", r)
 			}
 			for {
 				r, err := c.tree.receive(context.Background())
 				if err != nil {
-					if !errors.Is(err, ErrResourceLimit) {
-						t.Fatal(err)
-					}
+					require.ErrorIs(t, err, ErrResourceLimit, err)
 					break
 				}
-				if r.Kind == "SubagentAssociated" {
-					t.Fatal(r)
-				}
+				require.NotEqualValues(t, "SubagentAssociated", r.Kind, r)
 			}
 		})
 	}
 	opts := fixtureOptions(t, "tree")
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxPendingRecords: 1, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}})
-	if c != nil || !errors.Is(err, ErrResourceLimit) {
-		t.Fatal(c, err)
-	}
+	require.False(t, c != nil || !errors.Is(err, ErrResourceLimit), c, err)
 }
 
 func TestTreeNewBoundsRejectBeforeStartup(t *testing.T) {
@@ -198,16 +170,16 @@ func TestTreeNewBoundsRejectBeforeStartup(t *testing.T) {
 		capture := filepath.Join(opts.WorkDir, "capture")
 		opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 		c, err := openWithTree(context.Background(), opts, bounds)
-		if c != nil || err == nil {
-			t.Fatal(bounds, c, err)
-		}
-		if _, err := os.Stat(capture); !errors.Is(err, os.ErrNotExist) {
-			t.Fatal("started child", err)
+		require.False(t, c != nil || err == nil, bounds, c, err)
+		{
+			_, err := os.Stat(capture)
+			require.ErrorIs(t, err, os.ErrNotExist, "started child", err)
 		}
 	}
 }
 
-func TestTreeFullQueueControlResponseAndOriginalQuestionAuthority(t *testing.T) {
+func (s *treeObservationSuite) TestTreeFullQueueControlResponseAndOriginalQuestionAuthority() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	c := openBoundedTree(t, SubagentOptions{MaxPendingRecords: 1}, func(o *Options) {
 		o.Limits.EventBuffer = 3
@@ -222,38 +194,36 @@ func TestTreeFullQueueControlResponseAndOriginalQuestionAuthority(t *testing.T) 
 	treeEmit(t, c, `{"type":"marker","seq":2}`)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := c.Interrupt(ctx); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Interrupt(ctx)
+		require.NoError(t, err)
 	}
-	if r := treeReceive(t, c); r.Reason != "fanout-limit" {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.EqualValues(t, "fanout-limit", r.Reason, r)
 	} // association+native cannot fit
 	awaitSignal(t, c.Done())
-	if !errors.Is(context.Cause(p.Context()), ErrResourceLimit) {
-		t.Fatal(context.Cause(p.Context()))
-	}
-	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrClosed) {
-		t.Fatal(err)
+	require.ErrorIs(t, context.Cause(p.Context()), ErrResourceLimit, context.Cause(p.Context()))
+	{
+		err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+		require.ErrorIs(t, err, ErrClosed, err)
 	}
 	var raws []string
 	for {
 		r, err := c.tree.receive(ctx)
 		if err != nil {
-			if !errors.Is(err, ErrResourceLimit) {
-				t.Fatal(err)
-			}
+			require.ErrorIs(t, err, ErrResourceLimit, err)
 			break
 		}
 		if r.Native != nil {
 			raws = append(raws, string(r.Native.Raw))
 		}
 	}
-	if len(raws) != 3 || raws[0] != frame {
-		t.Fatal(raws)
-	}
+	require.False(t, len(raws) != 3 || raws[0] != frame, raws)
 }
 
-func TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput(t *testing.T) {
+func (s *treeObservationSuite) TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 2)
 	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedEvents: 1, MaxUnresolvedWait: time.Minute}, func(o *Options) { o.PermissionHandler = func(p *PermissionRequest) { requests <- p } })
 	treeEmit(t, c, heldChild)
@@ -265,35 +235,33 @@ func TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput(t *testing.T) {
 	for {
 		r := treeReceive(t, c)
 		if r.Native != nil {
-			if string(r.Native.Raw) != frame || r.Source.AgentID != "a" || r.Source.ToolUseID != "question" {
-				t.Fatal(r)
-			}
+			require.False(t, string(r.Native.Raw) != frame || r.Source.AgentID != "a" || r.Source.ToolUseID != "question", r)
 			break
 		}
 	}
-	if p.RequestID() != "original" || p.ToolUseID() != "question" || string(p.Input()) != input {
-		t.Fatal(p.RequestID(), p.ToolUseID(), string(p.Input()))
-	}
+	require.False(t, p.RequestID() != "original" || p.ToolUseID() != "question" || string(p.Input()) != input, p.RequestID(), p.ToolUseID(), string(p.Input()))
 	var q AskUserQuestionInput
-	if err := json.Unmarshal(p.Input(), &q); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(p.Input(), &q)
+		require.NoError(t, err)
 	}
 	answer := "custom"
 	updated, err := q.WithAnswers(map[string]QuestionAnswer{"Which?": {Text: &answer}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := p.Answer(cancelled, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated}); !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
+	{
+		err := p.Answer(cancelled, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated})
+		require.ErrorIs(t, err, context.Canceled, err)
 	}
-	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated}); err != nil {
-		t.Fatal(err)
+	{
+		err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated})
+		require.NoError(t, err)
 	}
 	copyHandle := *p
-	if err := copyHandle.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}); !errors.Is(err, ErrPermissionUsed) {
-		t.Fatal(err)
+	{
+		err := copyHandle.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny})
+		require.ErrorIs(t, err, ErrPermissionUsed, err)
 	}
 	echo := treeReceive(t, c)
 	var wire struct {
@@ -307,27 +275,25 @@ func TestTreeQuestionWithHeldChildUsesSoleHandleAndKeepsInput(t *testing.T) {
 			}
 		}
 	}
-	if err := json.Unmarshal(echo.Native.Raw, &wire); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(echo.Native.Raw, &wire)
+		require.NoError(t, err)
 	}
-	if wire.Wire.Response.RequestID != "original" || wire.Wire.Response.Response.Behavior != "allow" {
-		t.Fatal(string(echo.Native.Raw))
-	}
+	require.False(t, wire.Wire.Response.RequestID != "original" || wire.Wire.Response.Response.Behavior != "allow", string(echo.Native.Raw))
 	var got, want any
 	json.Unmarshal(wire.Wire.Response.Response.UpdatedInput, &got)
 	json.Unmarshal(updated, &want)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatal(got, want)
-	}
+	require.True(t, reflect.DeepEqual(got, want), got, want)
 	// No queued reply is minted from any displayed or copied metadata.
 	select {
 	case <-requests:
-		t.Fatal("second authority")
+		require.FailNow(t, "verification failed", "second authority")
 	default:
 	}
 }
 
-func TestTreeCancelledQuestionOldEpochAndCloseRace(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCancelledQuestionOldEpochAndCloseRace() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 2)
 	config := func(o *Options) { o.PermissionHandler = func(p *PermissionRequest) { requests <- p } }
 	c := openBoundedTree(t, SubagentOptions{}, config)
@@ -337,21 +303,22 @@ func TestTreeCancelledQuestionOldEpochAndCloseRace(t *testing.T) {
 	old := awaitPermission(t, requests)
 	treeEmit(t, c, `{"type":"control_cancel_request","request_id":"same"}`)
 	treeReceive(t, c)
-	if err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrPermissionCancelled) {
-		t.Fatal(err)
+	{
+		err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+		require.ErrorIs(t, err, ErrPermissionCancelled, err)
 	}
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
 	fresh := openBoundedTree(t, SubagentOptions{}, config)
 	treeEmit(t, fresh, frame)
 	r := treeReceive(t, fresh)
 	p := awaitPermission(t, requests)
-	if old.Epoch() == p.Epoch() || r.Epoch != p.Epoch() {
-		t.Fatal("epoch reused")
-	}
-	if err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrPermissionCancelled) {
-		t.Fatal(err)
+	require.False(t, old.Epoch() == p.Epoch() || r.Epoch != p.Epoch(), "epoch reused")
+	{
+		err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+		require.ErrorIs(t, err, ErrPermissionCancelled, err)
 	}
 	var wg sync.WaitGroup
 	for range 8 {
@@ -360,19 +327,19 @@ func TestTreeCancelledQuestionOldEpochAndCloseRace(t *testing.T) {
 	for {
 		_, err := fresh.tree.receive(context.Background())
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				t.Fatal(err)
-			}
+			require.ErrorIs(t, err, io.EOF, err)
 			break
 		}
 	}
 	wg.Wait()
-	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrClosed) {
-		t.Fatal(err)
+	{
+		err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+		require.ErrorIs(t, err, ErrClosed, err)
 	}
 }
 
-func TestTreeParentResultChildThinkingAndUsageStaySeparate(t *testing.T) {
+func (s *treeObservationSuite) TestTreeParentResultChildThinkingAndUsageStaySeparate() {
+	t := s.T()
 	c := openBoundedTree(t, SubagentOptions{})
 	treeFrame(t, c, rootTool)
 	frames := []string{
@@ -384,82 +351,78 @@ func TestTreeParentResultChildThinkingAndUsageStaySeparate(t *testing.T) {
 	}
 	for i, frame := range frames {
 		_, r := treeFrame(t, c, frame)
-		if string(r.Native.Raw) != frame || r.UsageScope != "unknown" {
-			t.Fatal(r)
-		}
+		require.False(t, string(r.Native.Raw) != frame || r.UsageScope != "unknown", r)
 		if i == 4 {
-			if r.Scope != "root" || r.Source.AgentID != "" || r.Native.Result.Result != "parent only" {
-				t.Fatal(r)
-			}
-		} else if r.Scope != "child" {
-			t.Fatal(r)
+			require.False(t, r.Scope != "root" || r.Source.AgentID != "" || r.Native.Result.Result != "parent only", r)
+		} else {
+			require.EqualValues(t, "child", r.Scope, r)
 		}
 	}
 }
 
-func TestTreeTransportOverflowWakesPendingInterruptAndQuestion(t *testing.T) {
+func (s *treeObservationSuite) TestTreeTransportOverflowWakesPendingInterruptAndQuestion() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	opts := fixtureOptions(t, "overload_controls")
 	opts.Limits.EventBuffer = 3
 	opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	treeReceive(t, c)
 	treeEmit(t, c, "permission")
-	if r := treeReceive(t, c); r.Native.Control == nil {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.NotNil(t, r.Native.Control, r)
 	}
 	p := awaitPermission(t, requests)
 	pending := make(chan error, 1)
 	go func() { pending <- c.Interrupt(context.Background()) }()
-	if r := treeReceive(t, c); r.Native.Type != "control_seen" {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.EqualValues(t, "control_seen", r.Native.Type, r)
 	}
 	treeEmit(t, c, "fill")
 	treeEmit(t, c, "overflow")
 	awaitSignal(t, c.Done())
-	if !errors.Is(c.Err(), ErrResourceLimit) || !errors.Is(context.Cause(p.Context()), ErrResourceLimit) {
-		t.Fatal(c.Err(), context.Cause(p.Context()))
-	}
+	require.False(t, !errors.Is(c.Err(), ErrResourceLimit) || !errors.Is(context.Cause(p.Context()), ErrResourceLimit), c.Err(), context.Cause(p.Context()))
 	select {
 	case err := <-pending:
-		if !errors.Is(err, ErrResourceLimit) || !errors.Is(err, ErrUnknownOutcome) {
-			t.Fatal(err)
-		}
+		require.False(t, !errors.Is(err, ErrResourceLimit) || !errors.Is(err, ErrUnknownOutcome), err)
 	case <-time.After(3 * time.Second):
-		t.Fatal("interrupt was not woken")
+		require.FailNow(t, "verification failed", "interrupt was not woken")
 	}
 	for i := 0; i < 3; i++ {
 		r := treeReceive(t, c)
 		var wire struct{ Seq int }
 		json.Unmarshal(r.Native.Raw, &wire)
-		if wire.Seq != i || r.Native.Type != "sequence" {
-			t.Fatal(r)
-		}
+		require.False(t, wire.Seq != i || r.Native.Type != "sequence", r)
 	}
-	if r := treeReceive(t, c); r.State != "incomplete" {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.EqualValues(t, "incomplete", r.State, r)
 	}
-	if _, err := c.tree.receive(context.Background()); !errors.Is(err, ErrResourceLimit) {
-		t.Fatal(err)
+	{
+		_, err := c.tree.receive(context.Background())
+		require.ErrorIs(t, err, ErrResourceLimit, err)
 	}
-	if err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}); !errors.Is(err, ErrClosed) {
-		t.Fatal(err)
+	{
+		err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+		require.ErrorIs(t, err, ErrClosed, err)
 	}
 }
 
-func TestTreeHeldFramesDoNotRelaxDenyOrUnknownControlPolicy(t *testing.T) {
+func (s *treeObservationSuite) TestTreeHeldFramesDoNotRelaxDenyOrUnknownControlPolicy() {
+	t := s.T()
 	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Minute})
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c)
 	for _, subtype := range []string{"can_use_tool", "future_control"} {
 		frame := fmt.Sprintf(`{"type":"control_request","request_id":%q,"request":{"subtype":%q,"tool_name":"Read","agent_id":"a","input":{}}}`, subtype, subtype)
 		treeEmit(t, c, frame)
-		if r := treeReceive(t, c); r.Native == nil || r.Native.Control.RequestID != subtype {
-			t.Fatal(r)
+		{
+			r := treeReceive(t, c)
+			require.False(t, r.Native == nil || r.Native.Control.RequestID != subtype, r)
 		}
 		echo := treeReceive(t, c)
 		var wire struct {
@@ -472,26 +435,22 @@ func TestTreeHeldFramesDoNotRelaxDenyOrUnknownControlPolicy(t *testing.T) {
 				}
 			}
 		}
-		if echo.Native == nil {
-			t.Fatal(echo)
+		require.NotNil(t, echo.Native, echo)
+		{
+			err := json.Unmarshal(echo.Native.Raw, &wire)
+			require.NoError(t, err)
 		}
-		if err := json.Unmarshal(echo.Native.Raw, &wire); err != nil {
-			t.Fatal(err)
-		}
-		if wire.Wire.Response.RequestID != subtype {
-			t.Fatal(string(echo.Native.Raw))
-		}
+		require.EqualValues(t, subtype, wire.Wire.Response.RequestID, string(echo.Native.Raw))
 		if subtype == "can_use_tool" {
-			if wire.Wire.Response.Response.Behavior != "deny" {
-				t.Fatal(string(echo.Native.Raw))
-			}
-		} else if wire.Wire.Response.Subtype != "error" || wire.Wire.Response.Error == "" {
-			t.Fatal(string(echo.Native.Raw))
+			require.EqualValues(t, "deny", wire.Wire.Response.Response.Behavior, string(echo.Native.Raw))
+		} else {
+			require.False(t, wire.Wire.Response.Subtype != "error" || wire.Wire.Response.Error == "", string(echo.Native.Raw))
 		}
 	}
 }
 
-func TestTreeHeldFrameCloseDoesNotWaitForAssociationDeadline(t *testing.T) {
+func (s *treeObservationSuite) TestTreeHeldFrameCloseDoesNotWaitForAssociationDeadline() {
+	t := s.T()
 	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Minute})
 	treeEmit(t, c, heldChild)
 	treeReceive(t, c)
@@ -503,28 +462,21 @@ func TestTreeHeldFrameCloseDoesNotWaitForAssociationDeadline(t *testing.T) {
 	for {
 		r, err := c.tree.receive(ctx)
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				t.Fatal(err)
-			}
+			require.ErrorIs(t, err, io.EOF, err)
 			break
 		}
 		if r.Native != nil {
 			natives++
-			if string(r.Native.Raw) != heldChild || r.Scope != "unresolved" {
-				t.Fatal(r)
-			}
+			require.False(t, string(r.Native.Raw) != heldChild || r.Scope != "unresolved", r)
 		}
-		if r.RunTerminal {
-			t.Fatal("close inferred child completion", r)
-		}
+		require.False(t, r.RunTerminal, "close inferred child completion", r)
 	}
 	awaitSignal(t, closed)
-	if natives != 1 {
-		t.Fatal(natives)
-	}
+	require.EqualValues(t, 1, natives, natives)
 }
 
-func TestTreeBufferedSourceOrderAcrossUnrelatedUnresolvedSource(t *testing.T) {
+func (s *treeObservationSuite) TestTreeBufferedSourceOrderAcrossUnrelatedUnresolvedSource() {
+	t := s.T()
 	c := openBoundedTree(t, SubagentOptions{MaxUnresolvedWait: time.Minute})
 	unrelated := `{"type":"assistant","session_id":"s","agent_id":"other","message":{"content":"unresolved"}}`
 	treeEmit(t, c, unrelated)
@@ -535,14 +487,17 @@ func TestTreeBufferedSourceOrderAcrossUnrelatedUnresolvedSource(t *testing.T) {
 	// via already observed parent ownership. It must not overtake the early frame,
 	// even though an unrelated unresolved frame is at the head of the held queue.
 	treeEmit(t, c, rootTool)
-	if r := treeReceive(t, c); r.Kind != "SubagentAssociated" || r.Source.TaskID != "a" || r.Scope != "child" {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.False(t, r.Kind != "SubagentAssociated" || r.Source.TaskID != "a" || r.Scope != "child", r)
 	}
-	if r := treeReceive(t, c); r.Native == nil || string(r.Native.Raw) != heldChild {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.False(t, r.Native == nil || string(r.Native.Raw) != heldChild, r)
 	}
-	if r := treeReceive(t, c); r.Native == nil || string(r.Native.Raw) != rootTool {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.False(t, r.Native == nil || string(r.Native.Raw) != rootTool, r)
 	}
 	treeFrame(t, c, `{"type":"assistant","session_id":"s","agent_id":"a","message":{"content":"later"}}`)
 }

@@ -11,23 +11,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
-func TestTreeRunTerminalsAndBackgroundLevel(t *testing.T) {
-	c := openTreeFixture(t)
+func (s *treeObservationSuite) TestTreeRunTerminalsAndBackgroundLevel() {
+	t := s.T()
+	c := s.client
 	treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"001","is_backgrounded":false}`)
 	_, newer := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"002"}`)
 	for _, status := range []string{"pending", "running", "paused", "future"} {
 		ds, r := treeFrame(t, c, fmt.Sprintf(`{"type":"system","subtype":"task_updated","session_id":"s","task_id":"a","run_id":"002","patch":{"status":%q}}`, status))
-		if r.RunStatus != status || r.RunTerminal || treeHas(ds, "ObservationState", "native-task-terminal") {
-			t.Fatal(ds, r)
-		}
+		require.False(t, r.RunStatus != status || r.RunTerminal || treeHas(ds, "ObservationState", "native-task-terminal"), ds, r)
 	}
 	ds, old := treeFrame(t, c, `{"type":"system","subtype":"task_updated","session_id":"s","task_id":"a","run_id":"001","patch":{"status":"killed"}}`)
-	if !old.Stale || !old.RunTerminal || old.RunStatus != "killed" || old.CurrentRunTerminal || old.CurrentRunStatus != "future" || !treeHas(ds, "ObservationState", "native-task-terminal") {
-		t.Fatal(ds, old)
-	}
+	require.False(t, !old.Stale || !old.RunTerminal || old.RunStatus != "killed" || old.CurrentRunTerminal || old.CurrentRunStatus != "future" || !treeHas(ds, "ObservationState", "native-task-terminal"), ds, old)
 	for _, frame := range []string{
 		`{"type":"system","subtype":"background_tasks_changed","session_id":"s","tasks":[]}`,
 		`{"type":"system","subtype":"background_tasks_changed","session_id":"s","tasks":[{"task_id":"a","run_id":"001","task_type":"local_agent","ambient":true}]}`,
@@ -35,39 +33,28 @@ func TestTreeRunTerminalsAndBackgroundLevel(t *testing.T) {
 		`{"type":"result","session_id":"s","subtype":"success","result":"parent only"}`,
 	} {
 		ds, _ := treeFrame(t, c, frame)
-		if len(ds) != 0 {
-			t.Fatal(ds)
-		}
+		require.EqualValues(t, 0, len(ds), ds)
 	}
 	_, progress := treeFrame(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"002"}`)
-	if progress.RunTerminal || progress.RunStatus != "future" || progress.Source.AssociationID != newer.Source.AssociationID {
-		t.Fatal(progress)
-	}
+	require.False(t, progress.RunTerminal || progress.RunStatus != "future" || progress.Source.AssociationID != newer.Source.AssociationID, progress)
 	ds, killed := treeFrame(t, c, `{"type":"system","subtype":"task_updated","session_id":"s","task_id":"a","run_id":"002","patch":{"status":"killed","is_backgrounded":true,"future":null}}`)
-	if !killed.RunTerminal || !killed.CurrentRunTerminal || killed.RunStatus != "killed" || killed.RunBackgrounded == nil || !*killed.RunBackgrounded || !treeHas(ds, "ObservationState", "native-task-terminal") {
-		t.Fatal(ds, killed)
-	}
+	require.False(t, !killed.RunTerminal || !killed.CurrentRunTerminal || killed.RunStatus != "killed" || killed.RunBackgrounded == nil || !*killed.RunBackgrounded || !treeHas(ds, "ObservationState", "native-task-terminal"), ds, killed)
 	for _, frame := range []string{
 		`{"type":"system","subtype":"task_updated","session_id":"s","task_id":"a","run_id":"002","patch":{"status":"killed"}}`,
 		`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"a","run_id":"002","status":"stopped"}`,
 		`{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"002"}`,
 	} {
 		ds, r := treeFrame(t, c, frame)
-		if r.RunStatus != "killed" || !r.RunTerminal || treeHas(ds, "ObservationState", "native-task-terminal") {
-			t.Fatal(ds, r)
-		}
+		require.False(t, r.RunStatus != "killed" || !r.RunTerminal || treeHas(ds, "ObservationState", "native-task-terminal"), ds, r)
 	}
 	_, fresh := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"003"}`)
-	if fresh.RunTerminal || fresh.RunStatus != "running" || fresh.Source.AssociationID != newer.Source.AssociationID {
-		t.Fatal(fresh)
-	}
+	require.False(t, fresh.RunTerminal || fresh.RunStatus != "running" || fresh.Source.AssociationID != newer.Source.AssociationID, fresh)
 	_, legacy := treeFrame(t, c, `{"type":"system","subtype":"task_notification","session_id":"s","task_id":"a","status":"completed"}`)
-	if !legacy.RunTerminal || legacy.RunScope != "legacy-unknown" || legacy.CurrentRunTerminal || legacy.CurrentRunStatus != "running" {
-		t.Fatal(legacy)
-	}
+	require.False(t, !legacy.RunTerminal || legacy.RunScope != "legacy-unknown" || legacy.CurrentRunTerminal || legacy.CurrentRunStatus != "running", legacy)
 }
 
-func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
+func (s *treeObservationSuite) TestTreeTerminalKindsAndReceiveCancellation() {
+	t := s.T()
 	for _, sub := range []string{"task_updated", "task_notification"} {
 		statuses := []string{"completed", "failed", "killed"}
 		if sub == "task_notification" {
@@ -81,9 +68,7 @@ func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
 					payload = `"patch":{` + payload + `}`
 				}
 				ds, r := treeFrame(t, c, fmt.Sprintf(`{"type":"system","subtype":%q,"session_id":"s","task_id":"unclassified","run_id":"1",%s}`, sub, payload))
-				if !r.RunTerminal || r.RunStatus != status || !treeHas(ds, "ObservationState", "native-task-terminal") || treeHas(ds, "SubagentAssociated", "first-observed") {
-					t.Fatal(ds, r)
-				}
+				require.False(t, !r.RunTerminal || r.RunStatus != status || !treeHas(ds, "ObservationState", "native-task-terminal") || treeHas(ds, "SubagentAssociated", "first-observed"), ds, r)
 			})
 		}
 	}
@@ -91,70 +76,59 @@ func TestTreeTerminalKindsAndReceiveCancellation(t *testing.T) {
 	treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"1"}`)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := c.tree.receive(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
+	{
+		_, err := c.tree.receive(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded, err)
 	}
 	select {
 	case <-c.Done():
-		t.Fatal("receive timeout stopped client")
+		require.FailNow(t, "verification failed", "receive timeout stopped client")
 	default:
 	}
 	_, r := treeFrame(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"1"}`)
-	if r.RunTerminal || r.RunStatus != "running" {
-		t.Fatal(r)
-	}
+	require.False(t, r.RunTerminal || r.RunStatus != "running", r)
 	treeEmit(t, c, "disconnect")
 	end := treeReceive(t, c)
-	if end.State != "incomplete" {
-		t.Fatal(end)
-	}
-	if _, err := c.tree.receive(context.Background()); err == nil || errors.Is(err, io.EOF) {
-		t.Fatal(err)
+	require.EqualValues(t, "incomplete", end.State, end)
+	{
+		_, err := c.tree.receive(context.Background())
+		require.False(t, err == nil || errors.Is(err, io.EOF), err)
 	}
 }
 
-func TestTreeHistorySeedAndFreshEpoch(t *testing.T) {
+func (s *treeObservationSuite) TestTreeHistorySeedAndFreshEpoch() {
+	t := s.T()
 	opts := fixtureOptions(t, "tree")
 	opts.ResumeID = "s"
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b", ParentTaskID: "a"}}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	startup := treeReceive(t, c)
 	for _, task := range []string{"a", "b"} {
 		r := treeReceive(t, c)
-		if r.Kind != "SubagentAssociated" || r.Reason != "history" || r.Provenance != "history" || r.Source.TaskID != task {
-			t.Fatal(r)
-		}
+		require.False(t, r.Kind != "SubagentAssociated" || r.Reason != "history" || r.Provenance != "history" || r.Source.TaskID != task, r)
 	}
-	if r := treeReceive(t, c); r.Reason != "history-gap" || r.State != "incomplete" {
-		t.Fatal(r)
+	{
+		r := treeReceive(t, c)
+		require.False(t, r.Reason != "history-gap" || r.State != "incomplete", r)
 	}
 	ds, r := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"2"}`)
-	if treeHas(ds, "SubagentAssociated", "first-observed") || r.Source.TaskID != "a" {
-		t.Fatal(ds, r)
-	}
+	require.False(t, treeHas(ds, "SubagentAssociated", "first-observed") || r.Source.TaskID != "a", ds, r)
 	fresh := openTreeFixture(t)
 	_, newRecord := treeFrame(t, fresh, `{"type":"assistant","session_id":"s","agent_id":"a","message":{"content":"fresh"}}`)
-	if newRecord.Epoch == startup.Epoch {
-		t.Fatal("epoch reused")
-	}
+	require.NotEqualValues(t, startup.Epoch, newRecord.Epoch, "epoch reused")
 }
 
-func TestTreeRunLedgerBound(t *testing.T) {
+func (s *treeObservationSuite) TestTreeRunLedgerBound() {
+	t := s.T()
 	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxRuns: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	treeReceive(t, c)
 	treeFrame(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"1"}`)
 	treeEmit(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"2"}`)
 	r := treeReceive(t, c)
-	if r.State != "incomplete" {
-		t.Fatal(r)
-	}
+	require.EqualValues(t, "incomplete", r.State, r)
 	treeReceive(t, c) // accepted native frame survives overflow
 	for {
 		_, err = c.tree.receive(context.Background())
@@ -162,9 +136,7 @@ func TestTreeRunLedgerBound(t *testing.T) {
 			break
 		}
 	}
-	if !errors.Is(err, ErrResourceLimit) {
-		t.Fatal(err)
-	}
+	require.ErrorIs(t, err, ErrResourceLimit, err)
 }
 
 func TestSessionStateAndBackgroundSnapshotCodec(t *testing.T) {
@@ -179,27 +151,22 @@ func TestSessionStateAndBackgroundSnapshotCodec(t *testing.T) {
 		`{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"a","run_id":null,"task_type":"local_agent","ambient":false,"future":42}]}`,
 	} {
 		var event types.SystemEvent
-		if err := json.Unmarshal([]byte(raw), &event); err != nil {
-			t.Fatal(err)
+		{
+			err := json.Unmarshal([]byte(raw), &event)
+			require.NoError(t, err)
 		}
 		var wire struct {
 			State *string           `json:"state"`
 			Tasks []json.RawMessage `json:"tasks"`
 		}
 		json.Unmarshal([]byte(raw), &wire)
-		if !reflect.DeepEqual(event.State, wire.State) || !reflect.DeepEqual(event.Tasks, wire.Tasks) {
-			t.Fatal(event)
-		}
+		require.False(t, !reflect.DeepEqual(event.State, wire.State) || !reflect.DeepEqual(event.Tasks, wire.Tasks), event)
 		encoded, err := json.Marshal(event)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		var a, b any
 		json.Unmarshal([]byte(raw), &a)
 		json.Unmarshal(encoded, &b)
-		if !reflect.DeepEqual(a, b) {
-			t.Fatal(raw, string(encoded))
-		}
+		require.True(t, reflect.DeepEqual(a, b), raw, string(encoded))
 	}
 	var e types.SystemEvent
 	json.Unmarshal([]byte(`{"subtype":"session_state_changed","state":"idle","future":null}`), &e)
@@ -208,17 +175,14 @@ func TestSessionStateAndBackgroundSnapshotCodec(t *testing.T) {
 	encoded, _ := json.Marshal(e)
 	var fields map[string]json.RawMessage
 	json.Unmarshal(encoded, &fields)
-	if string(fields["state"]) != `"running"` || string(fields["future"]) != "null" {
-		t.Fatal(string(encoded))
-	}
+	require.False(t, string(fields["state"]) != `"running"` || string(fields["future"]) != "null", string(encoded))
 }
 
-func TestTreeUnclassifiedRunCannotRegressAgentMetadata(t *testing.T) {
-	c := openTreeFixture(t)
+func (s *treeObservationSuite) TestTreeUnclassifiedRunCannotRegressAgentMetadata() {
+	t := s.T()
+	c := s.client
 	treeFrame(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"003"}`)
 	treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"001","tool_use_id":"original"}`)
 	ds, r := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","run_id":"002","tool_use_id":"late"}`)
-	if !r.Stale || r.CurrentRunID != "003" || r.Source.ToolUseID != "original" || treeHas(ds, "SubagentAssociated", "identity-enriched") {
-		t.Fatal(ds, r)
-	}
+	require.False(t, !r.Stale || r.CurrentRunID != "003" || r.Source.ToolUseID != "original" || treeHas(ds, "SubagentAssociated", "identity-enriched"), ds, r)
 }

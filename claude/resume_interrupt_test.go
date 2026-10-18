@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // These original public-boundary scenarios use the official Python SDK's
@@ -123,7 +125,7 @@ func awaitInterrupt(t *testing.T, result <-chan error) error {
 	case err := <-result:
 		return err
 	case <-time.After(3 * time.Second):
-		t.Fatal("Interrupt did not return")
+		require.FailNow(t, "verification failed", "Interrupt did not return")
 		return nil
 	}
 }
@@ -131,25 +133,27 @@ func awaitInterrupt(t *testing.T, result <-chan error) error {
 func receiveInterrupt(t *testing.T, c *Client) string {
 	t.Helper()
 	event := receive(t, c)
-	if event.Type != "control_seen" {
-		t.Fatalf("expected control_seen, got %s: %s", event.Type, event.Raw)
-	}
+	require.EqualValuesf(t, "control_seen", event.Type, "expected control_seen, got %s: %s", event.Type, event.Raw)
 	var observed struct {
 		Wire map[string]json.RawMessage `json:"wire"`
 	}
-	if err := json.Unmarshal(event.Raw, &observed); err != nil {
-		t.Fatal(err)
+	{
+		err := json.Unmarshal(event.Raw, &observed)
+		require.NoError(t, err)
 	}
 	var id, typ string
 	var request map[string]any
-	if err := json.Unmarshal(observed.Wire["request_id"], &id); err != nil || id == "" {
-		t.Fatalf("missing request ID: %s", event.Raw)
+	{
+		err := json.Unmarshal(observed.Wire["request_id"], &id)
+		require.Falsef(t, err != nil || id == "", "missing request ID: %s", event.Raw)
 	}
-	if err := json.Unmarshal(observed.Wire["type"], &typ); err != nil || typ != "control_request" {
-		t.Fatalf("incorrect control type: %s", event.Raw)
+	{
+		err := json.Unmarshal(observed.Wire["type"], &typ)
+		require.Falsef(t, err != nil || typ != "control_request", "incorrect control type: %s", event.Raw)
 	}
-	if err := json.Unmarshal(observed.Wire["request"], &request); err != nil || !reflect.DeepEqual(request, map[string]any{"subtype": "interrupt"}) || len(observed.Wire) != 3 {
-		t.Fatalf("incorrect interrupt envelope: %s", event.Raw)
+	{
+		err := json.Unmarshal(observed.Wire["request"], &request)
+		require.Falsef(t, err != nil || !reflect.DeepEqual(request, map[string]any{"subtype": "interrupt"}) || len(observed.Wire) != 3, "incorrect interrupt envelope: %s", event.Raw)
 	}
 	return id
 }
@@ -158,24 +162,22 @@ func sessionCommand(t *testing.T, c *Client, command, wantType string) Event {
 	t.Helper()
 	send(t, c, command)
 	event := receive(t, c)
-	if event.Type != wantType {
-		t.Fatalf("%s: got %s, want %s: %s", command, event.Type, wantType, event.Raw)
-	}
+	require.EqualValuesf(t, wantType, event.Type, "%s: got %s, want %s: %s", command, event.Type, wantType, event.Raw)
 	return event
 }
 
 func assertSessionID(t *testing.T, c *Client, want string, known bool) {
 	t.Helper()
-	if got, ok := c.SessionID(); got != want || ok != known {
-		t.Fatalf("SessionID = (%q, %t), want (%q, %t)", got, ok, want, known)
+	{
+		got, ok := c.SessionID()
+		require.Falsef(t, got != want || ok != known, "SessionID = (%q, %t), want (%q, %t)", got, ok, want, known)
 	}
 }
 
-func TestSessionIdentityDistinguishesRequestAndObservation(t *testing.T) {
+func (s *sessionControlSuite) TestSessionIdentityDistinguishesRequestAndObservation() {
+	t := s.T()
 	c := openFixture(t, "session_controls", func(opts *Options) { opts.ResumeID = "requested-native" })
-	if c.RequestedResumeID() != "requested-native" {
-		t.Fatal("requested resume ID was changed")
-	}
+	require.EqualValues(t, "requested-native", c.RequestedResumeID(), "requested resume ID was changed")
 	assertSessionID(t, c, "", false)
 	sessionCommand(t, c, "unknown:untrusted-future", "future_event")
 	sessionCommand(t, c, "assistant:untrusted-assistant", "assistant")
@@ -183,28 +185,27 @@ func TestSessionIdentityDistinguishesRequestAndObservation(t *testing.T) {
 	for _, kind := range []string{"system", "result"} {
 		event := sessionCommand(t, c, kind+":observed-"+kind, kind)
 		assertSessionID(t, c, "observed-"+kind, true)
-		if event.SessionID != "observed-"+kind || !strings.Contains(string(event.Raw), `"future":"kept"`) {
-			t.Fatalf("native identity or raw data was lost: %s", event.Raw)
-		}
-		if kind == "system" && event.System.SessionID != event.SessionID || kind == "result" && event.Result.SessionID != event.SessionID {
-			t.Fatal("typed native session ID was lost")
-		}
+		require.Falsef(t, event.SessionID != "observed-"+kind || !strings.Contains(string(event.Raw), `"future":"kept"`), "native identity or raw data was lost: %s", event.Raw)
+		require.False(t, kind == "system" && event.System.SessionID != event.SessionID || kind == "result" && event.Result.SessionID != event.SessionID, "typed native session ID was lost")
 		sessionCommand(t, c, kind+":", kind)
 		assertSessionID(t, c, "observed-"+kind, true)
 	}
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
 	assertSessionID(t, c, "observed-result", true)
 }
 
-func TestSessionIdentityObservedBeforeReceiveAndWithoutSystemInit(t *testing.T) {
-	c := openFixture(t, "session_identity_at_initialize")
+func (s *sessionControlSuite) TestSessionIdentityObservedBeforeReceiveAndWithoutSystemInit() {
+	t := s.T()
+	c := s.client
 	// The system frame precedes initialize's acknowledgment. Identity does not
 	// depend on the application having called Receive yet.
 	assertSessionID(t, c, "native-at-initialize", true)
-	if event := receive(t, c); event.System == nil || event.System.SessionID != "native-at-initialize" {
-		t.Fatalf("initial system event was consumed internally: %s", event.Raw)
+	{
+		event := receive(t, c)
+		require.Falsef(t, event.System == nil || event.System.SessionID != "native-at-initialize", "initial system event was consumed internally: %s", event.Raw)
 	}
 	resultOnly := openFixture(t, "session_controls")
 	assertSessionID(t, resultOnly, "", false)
@@ -212,27 +213,23 @@ func TestSessionIdentityObservedBeforeReceiveAndWithoutSystemInit(t *testing.T) 
 	assertSessionID(t, resultOnly, "native-result-only", true)
 }
 
-func TestResumeUsesFreshProcessLiteralArgAndNoReplay(t *testing.T) {
+func (s *sessionControlSuite) TestResumeUsesFreshProcessLiteralArgAndNoReplay() {
+	t := s.T()
 	firstOptions := fixtureOptions(t, "session_resume")
 	firstOptions.Env = append(firstOptions.Env, "CLAUDE_GO_SESSION_ID=native-before")
 	first, err := Open(context.Background(), firstOptions)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = first.Close() })
-	if first.RequestedResumeID() != "" {
-		t.Fatal("fresh session has requested identity")
-	}
+	require.EqualValues(t, "", first.RequestedResumeID(), "fresh session has requested identity")
 	assertSessionID(t, first, "", false)
 	send(t, first, "old prompt that must never replay")
 	_ = receive(t, first) // Echo of this explicit Send.
 	_ = receive(t, first) // Native system frame.
 	id, ok := first.SessionID()
-	if !ok || id != "native-before" {
-		t.Fatal("first native ID was not captured")
-	}
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
+	require.False(t, !ok || id != "native-before", "first native ID was not captured")
+	{
+		err := first.Close()
+		require.NoError(t, err)
 	}
 
 	// Each Open is an independent subprocess. Only an explicit Send may appear
@@ -245,126 +242,119 @@ func TestResumeUsesFreshProcessLiteralArgAndNoReplay(t *testing.T) {
 			opts.ResumeID = requested
 			opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture, "CLAUDE_GO_TRANSCRIPT="+transcript, "CLAUDE_GO_SESSION_ID=native-after")
 			resumed, err := Open(context.Background(), opts)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			t.Cleanup(func() { _ = resumed.Close() })
 			assertSessionID(t, resumed, "", false)
-			if resumed.RequestedResumeID() != requested {
-				t.Fatal("resume request was changed")
-			}
+			require.EqualValues(t, requested, resumed.RequestedResumeID(), "resume request was changed")
 			data, err := os.ReadFile(capture)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			var recorded struct{ Argv []string }
-			if err := json.Unmarshal(data, &recorded); err != nil {
-				t.Fatal(err)
+			{
+				err := json.Unmarshal(data, &recorded)
+				require.NoError(t, err)
 			}
 			count := 0
 			for _, arg := range recorded.Argv {
 				if arg == "--resume="+requested {
 					count++
 				}
-				if arg == "--resume" || arg == requested {
-					t.Fatalf("resume value became separate argv: %#v", recorded.Argv)
-				}
+				require.Falsef(t, arg == "--resume" || arg == requested, "resume value became separate argv: %#v", recorded.Argv)
 			}
-			if count != 1 {
-				t.Fatalf("literal resume option count = %d: %#v", count, recorded.Argv)
-			}
+			require.EqualValuesf(t, 1, count, "literal resume option count = %d: %#v", count, recorded.Argv)
 			send(t, resumed, "new prompt")
 			_ = receive(t, resumed)
 			_ = receive(t, resumed)
 			assertSessionID(t, resumed, "native-after", true)
-			if err := resumed.Close(); err != nil {
-				t.Fatal(err)
+			{
+				err := resumed.Close()
+				require.NoError(t, err)
 			}
 			data, err = os.ReadFile(transcript)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			var messages []map[string]any
 			scanner := bufio.NewScanner(strings.NewReader(string(data)))
 			for scanner.Scan() {
 				var wire map[string]any
-				if err := json.Unmarshal(scanner.Bytes(), &wire); err != nil {
-					t.Fatal(err)
+				{
+					err := json.Unmarshal(scanner.Bytes(), &wire)
+					require.NoError(t, err)
 				}
 				messages = append(messages, wire)
 			}
-			if err := scanner.Err(); err != nil {
-				t.Fatal(err)
+			{
+				err := scanner.Err()
+				require.NoError(t, err)
 			}
-			if len(messages) != 1 || messages[0]["type"] != "user" || messages[0]["message"].(map[string]any)["content"] != "new prompt" {
-				t.Fatalf("unexpected replay or extra stdin writes: %s", data)
-			}
+			require.Falsef(t, len(messages) != 1 || messages[0]["type"] != "user" || messages[0]["message"].(map[string]any)["content"] != "new prompt", "unexpected replay or extra stdin writes: %s", data)
 		})
 	}
 }
 
-func TestInterruptCorrelatesOutOfOrderAndUnknownResponses(t *testing.T) {
-	c := openFixture(t, "session_controls")
+func (s *sessionControlSuite) TestInterruptCorrelatesOutOfOrderAndUnknownResponses() {
+	t := s.T()
+	c := s.client
 	first := interruptAsync(c, context.Background())
 	firstID := receiveInterrupt(t, c)
 	second := interruptAsync(c, context.Background())
 	secondID := receiveInterrupt(t, c)
-	if firstID == secondID {
-		t.Fatal("request IDs were reused")
-	}
+	require.NotEqualValues(t, secondID, firstID, "request IDs were reused")
 	sessionCommand(t, c, "error:unknown-id", "barrier")
 	sessionCommand(t, c, "error:"+secondID, "barrier")
 	var controlErr *ControlError
-	if err := awaitInterrupt(t, second); !errors.As(err, &controlErr) || controlErr.RequestID != secondID || controlErr.Subtype != "interrupt" || controlErr.Message != "fixture rejected interrupt" {
-		t.Fatalf("wrong second response: %v", err)
+	{
+		err := awaitInterrupt(t, second)
+		require.Falsef(t, !errors.As(err, &controlErr) || controlErr.RequestID != secondID || controlErr.Subtype != "interrupt" || controlErr.Message != "fixture rejected interrupt", "wrong second response: %v", err)
 	}
 	sessionCommand(t, c, "error:"+secondID, "barrier") // Duplicate/stale response.
 	sessionCommand(t, c, "ack:"+firstID, "barrier")
-	if err := awaitInterrupt(t, first); err != nil {
-		t.Fatalf("first request received an unrelated error: %v", err)
+	{
+		err := awaitInterrupt(t, first)
+		require.Nilf(t, err, "first request received an unrelated error: %v", err)
 	}
-	if c.Err() != nil {
-		t.Fatal(c.Err())
-	}
+	require.Nil(t, c.Err(), c.Err())
 }
 
-func TestInterruptAcknowledgmentIsSeparateFromTurnResult(t *testing.T) {
-	c := openFixture(t, "session_controls")
+func (s *sessionControlSuite) TestInterruptAcknowledgmentIsSeparateFromTurnResult() {
+	t := s.T()
+	c := s.client
 	pending := interruptAsync(c, context.Background())
 	id := receiveInterrupt(t, c)
 	result := sessionCommand(t, c, "result:native-turn", "result")
-	if result.Result == nil || result.Result.Result != "turn ended" || result.Result.TerminalReason != "aborted_streaming" {
-		t.Fatal("turn result was not delivered")
-	}
+	require.False(t, result.Result == nil || result.Result.Result != "turn ended" || result.Result.TerminalReason != "aborted_streaming", "turn result was not delivered")
 	// A result alone cannot complete this request. Its matching error must win.
 	sessionCommand(t, c, "error:"+id, "barrier")
 	var controlErr *ControlError
-	if err := awaitInterrupt(t, pending); !errors.As(err, &controlErr) {
-		t.Fatalf("turn result resolved the interrupt: %v", err)
+	{
+		err := awaitInterrupt(t, pending)
+		require.ErrorAsf(t, err, &controlErr, "turn result resolved the interrupt: %v", err)
 	}
 	pending = interruptAsync(c, context.Background())
 	id = receiveInterrupt(t, c)
 	sessionCommand(t, c, "ack:"+id, "barrier")
-	if err := awaitInterrupt(t, pending); err != nil {
-		t.Fatal(err)
+	{
+		err := awaitInterrupt(t, pending)
+		require.NoError(t, err)
 	}
 	// The acknowledged interrupt does not close stdin or discard later results.
 	sessionCommand(t, c, "result:later-turn", "result")
 	assertSessionID(t, c, "later-turn", true)
 }
 
-func TestInterruptImmediateAcknowledgments(t *testing.T) {
-	c := openFixture(t, "session_immediate")
+func (s *sessionControlSuite) TestInterruptImmediateAcknowledgments() {
+	t := s.T()
+	c := s.client
 	for range 32 {
 		pending := interruptAsync(c, context.Background())
 		receiveInterrupt(t, c)
-		if err := awaitInterrupt(t, pending); err != nil {
-			t.Fatalf("immediate response missed its waiter: %v", err)
+		{
+			err := awaitInterrupt(t, pending)
+			require.Nilf(t, err, "immediate response missed its waiter: %v", err)
 		}
 	}
 }
 
-func TestInterruptCancellationAndStaleResponse(t *testing.T) {
+func (s *sessionControlSuite) TestInterruptCancellationAndStaleResponse() {
+	t := s.T()
 	c := openFixture(t, "session_controls", func(opts *Options) { opts.Limits.PendingControls = 1 })
 	ctx, cancel := context.WithCancel(context.Background())
 	first := interruptAsync(c, ctx)
@@ -373,27 +363,32 @@ func TestInterruptCancellationAndStaleResponse(t *testing.T) {
 	// known to occur during the response wait rather than the original OS write.
 	sessionCommand(t, c, "echo", "echo")
 	cancel()
-	if err := awaitInterrupt(t, first); !errors.Is(err, context.Canceled) || !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("canceled written request must have unknown outcome: %v", err)
+	{
+		err := awaitInterrupt(t, first)
+		require.Falsef(t, !errors.Is(err, context.Canceled) || !errors.Is(err, ErrUnknownOutcome), "canceled written request must have unknown outcome: %v", err)
 	}
 	second := interruptAsync(c, context.Background())
 	secondID := receiveInterrupt(t, c) // Also proves cancellation freed capacity.
 	sessionCommand(t, c, "error:"+id, "barrier")
 	sessionCommand(t, c, "ack:"+secondID, "barrier")
-	if err := awaitInterrupt(t, second); err != nil {
-		t.Fatalf("stale response affected a new control: %v", err)
+	{
+		err := awaitInterrupt(t, second)
+		require.Nilf(t, err, "stale response affected a new control: %v", err)
 	}
-	if err := c.Err(); err != nil {
-		t.Fatalf("canceling the response wait terminated the connection: %v", err)
+	{
+		err := c.Err()
+		require.Nilf(t, err, "canceling the response wait terminated the connection: %v", err)
 	}
 }
 
-func TestInterruptTimeoutAndPreCanceledContext(t *testing.T) {
+func (s *sessionControlSuite) TestInterruptTimeoutAndPreCanceledContext() {
+	t := s.T()
 	c := openFixture(t, "session_controls", func(opts *Options) { opts.Limits.PendingControls = 1 })
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := c.Interrupt(ctx); !errors.Is(err, context.Canceled) || errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("pre-canceled interrupt: %v", err)
+	{
+		err := c.Interrupt(ctx)
+		require.Falsef(t, !errors.Is(err, context.Canceled) || errors.Is(err, ErrUnknownOutcome), "pre-canceled interrupt: %v", err)
 	}
 	// A deterministic stdin barrier proves a canceled call emitted no control.
 	sessionCommand(t, c, "echo", "echo")
@@ -401,30 +396,33 @@ func TestInterruptTimeoutAndPreCanceledContext(t *testing.T) {
 	defer cancel()
 	pending := interruptAsync(c, ctx)
 	id := receiveInterrupt(t, c)
-	if err := awaitInterrupt(t, pending); !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("timed-out written interrupt: %v", err)
+	{
+		err := awaitInterrupt(t, pending)
+		require.Falsef(t, !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrUnknownOutcome), "timed-out written interrupt: %v", err)
 	}
 	sessionCommand(t, c, "ack:"+id, "barrier")
-	if c.Err() != nil {
-		t.Fatal(c.Err())
-	}
+	require.Nil(t, c.Err(), c.Err())
 }
 
-func TestInterruptPendingLimitRejectsWithoutWriting(t *testing.T) {
+func (s *sessionControlSuite) TestInterruptPendingLimitRejectsWithoutWriting() {
+	t := s.T()
 	c := openFixture(t, "session_controls", func(opts *Options) { opts.Limits.PendingControls = 1 })
 	pending := interruptAsync(c, context.Background())
 	id := receiveInterrupt(t, c)
-	if err := c.Interrupt(context.Background()); !errors.Is(err, ErrResourceLimit) || errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("limit rejection: %v", err)
+	{
+		err := c.Interrupt(context.Background())
+		require.Falsef(t, !errors.Is(err, ErrResourceLimit) || errors.Is(err, ErrUnknownOutcome), "limit rejection: %v", err)
 	}
 	sessionCommand(t, c, "echo", "echo")
 	sessionCommand(t, c, "ack:"+id, "barrier")
-	if err := awaitInterrupt(t, pending); err != nil {
-		t.Fatal(err)
+	{
+		err := awaitInterrupt(t, pending)
+		require.NoError(t, err)
 	}
 }
 
-func TestInterruptWaitersWakeOnTermination(t *testing.T) {
+func (s *sessionControlSuite) TestInterruptWaitersWakeOnTermination() {
+	t := s.T()
 	for _, mode := range []string{"close", "disconnect", "malformed", "malformed_exit"} {
 		t.Run(mode, func(t *testing.T) {
 			c := openFixture(t, "session_controls")
@@ -436,8 +434,9 @@ func TestInterruptWaitersWakeOnTermination(t *testing.T) {
 			want := ErrClosed
 			switch mode {
 			case "close":
-				if err := c.Close(); err != nil {
-					t.Fatal(err)
+				{
+					err := c.Close()
+					require.NoError(t, err)
 				}
 			case "disconnect":
 				want = ErrUnexpectedEOF
@@ -454,35 +453,38 @@ func TestInterruptWaitersWakeOnTermination(t *testing.T) {
 					// decode adds the more specific error. Cleanup must retain it.
 					matches = matches || errors.Is(err, ErrUnexpectedEOF)
 				}
-				if !matches || !errors.Is(err, ErrUnknownOutcome) {
-					t.Fatalf("pending interrupt on %s: %v", mode, err)
-				}
+				require.Falsef(t, !matches || !errors.Is(err, ErrUnknownOutcome), "pending interrupt on %s: %v", mode, err)
 			}
 			awaitDone(t, c)
 			if mode != "close" {
-				if err := c.Close(); !errors.Is(err, want) || !errors.Is(c.Err(), want) {
-					t.Fatalf("final diagnostic lost after %s: Close = %v, Err = %v", mode, err, c.Err())
+				{
+					err := c.Close()
+					require.Falsef(t, !errors.Is(err, want) || !errors.Is(c.Err(), want), "final diagnostic lost after %s: Close = %v, Err = %v", mode, err, c.Err())
 				}
 			}
-			if err := c.Interrupt(context.Background()); !errors.Is(err, ErrClosed) || errors.Is(err, ErrUnknownOutcome) {
-				t.Fatalf("interrupt after termination: %v", err)
+			{
+				err := c.Interrupt(context.Background())
+				require.Falsef(t, !errors.Is(err, ErrClosed) || errors.Is(err, ErrUnknownOutcome), "interrupt after termination: %v", err)
 			}
 		})
 	}
 }
 
-func TestInterruptWriteFailureWakesOtherWaiters(t *testing.T) {
-	c := openFixture(t, "session_controls")
+func (s *sessionControlSuite) TestInterruptWriteFailureWakesOtherWaiters() {
+	t := s.T()
+	c := s.client
 	pending := interruptAsync(c, context.Background())
 	receiveInterrupt(t, c)
 	sessionCommand(t, c, "close_stdin", "ready")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := c.Interrupt(ctx); err == nil || !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("closed stdin interrupt: %v", err)
+	{
+		err := c.Interrupt(ctx)
+		require.Falsef(t, err == nil || !errors.Is(err, ErrUnknownOutcome), "closed stdin interrupt: %v", err)
 	}
-	if err := awaitInterrupt(t, pending); err == nil || !errors.Is(err, ErrUnknownOutcome) {
-		t.Fatalf("other waiter did not observe write failure: %v", err)
+	{
+		err := awaitInterrupt(t, pending)
+		require.Falsef(t, err == nil || !errors.Is(err, ErrUnknownOutcome), "other waiter did not observe write failure: %v", err)
 	}
 	awaitDone(t, c)
 }
@@ -502,12 +504,11 @@ func TestInterruptResponseCancellationAndCloseRaces(t *testing.T) {
 		go func() { defer wg.Done(); <-start; _ = c.Close() }()
 		close(start)
 		err := awaitInterrupt(t, pending)
-		if err != nil && !errors.Is(err, ErrUnknownOutcome) {
-			t.Fatalf("unexpected race outcome: %v", err)
-		}
+		require.Falsef(t, err != nil && !errors.Is(err, ErrUnknownOutcome), "unexpected race outcome: %v", err)
 		wg.Wait()
-		if err := c.Interrupt(context.Background()); !errors.Is(err, ErrClosed) && !errors.Is(err, ErrUnknownOutcome) {
-			t.Fatalf("closed client accepted a new interrupt: %v", err)
+		{
+			err := c.Interrupt(context.Background())
+			require.Falsef(t, !errors.Is(err, ErrClosed) && !errors.Is(err, ErrUnknownOutcome), "closed client accepted a new interrupt: %v", err)
 		}
 		for {
 			_, err := nextNative(c, context.Background())
@@ -517,9 +518,7 @@ func TestInterruptResponseCancellationAndCloseRaces(t *testing.T) {
 			if err != nil {
 				// Close can overlap the fixture-release Send's OS write. That
 				// separate write failure remains observable after draining.
-				if !errors.Is(err, ErrUnknownOutcome) {
-					t.Fatal(err)
-				}
+				require.ErrorIs(t, err, ErrUnknownOutcome, err)
 				break
 			}
 		}

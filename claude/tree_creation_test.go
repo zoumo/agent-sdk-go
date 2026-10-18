@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const creationInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258","tools":["Agent","Task","SendMessage"]}`
@@ -51,9 +53,7 @@ func creationFrames(t *testing.T, c *Client, frames ...string) []relationshipRec
 			r := treeReceive(t, c)
 			got = append(got, r)
 			if r.Kind == "Native" {
-				if string(r.Native.Raw) != frame {
-					t.Fatalf("Raw changed: %s != %s", r.Native.Raw, frame)
-				}
+				require.EqualValuesf(t, frame, string(r.Native.Raw), "Raw changed: %s != %s", r.Native.Raw, frame)
 				break
 			}
 		}
@@ -77,7 +77,8 @@ func creations(records []relationshipRecord) []relationshipRecord {
 	}
 	return result
 }
-func TestTreeCreatedForegroundAndLateBackground(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreatedForegroundAndLateBackground() {
+	t := s.T()
 	for _, background := range []bool{false, true} {
 		t.Run(fmt.Sprint(background), func(t *testing.T) {
 			c := openTreeFixture(t)
@@ -94,46 +95,37 @@ func TestTreeCreatedForegroundAndLateBackground(t *testing.T) {
 			if background {
 				want = 0
 			}
-			if len(creations(initial)) != want {
-				t.Fatal(initial)
-			}
+			require.EqualValues(t, want, len(creations(initial)), initial)
 			// Native child output continues after parent result, before background proof.
 			middle := creationFrames(t, c, `{"type":"result","subtype":"success","session_id":"s","result":"parent done"}`, `{"type":"assistant","session_id":"s","parent_tool_use_id":"call","message":{"role":"assistant","content":"child continues"}}`)
-			if len(creations(middle)) != 0 {
-				t.Fatal(middle)
-			}
+			require.EqualValues(t, 0, len(creations(middle)), middle)
 			lateFrame := `{"type":"system","subtype":"task_updated","session_id":"s","task_id":"child","patch":{"status":"running"}}`
 			if background {
 				lateFrame = creationTask("child", "call", "true")
 			}
 			late := creationFrames(t, c, lateFrame)
 			if background {
-				if len(creations(late)) != 1 {
-					t.Fatal(late)
-				}
-			} else if len(creations(late)) != 0 {
-				t.Fatal(late)
+				require.EqualValues(t, 1, len(creations(late)), late)
+			} else {
+				require.EqualValues(t, 0, len(creations(late)), late)
 			}
 			all := append(append(initial, middle...), late...)
 			created := creations(all)[0]
-			if created.Provenance != "live" || created.Source.TaskID != "child" || created.Source.RunID != "" || created.RunScope != "legacy-unknown" || created.Parent == nil || created.Parent.SessionID != "s" || created.Scope != "child" || created.Native != nil || created.Evidence == "" {
-				t.Fatal(created)
-			}
+			require.False(t, created.Provenance != "live" || created.Source.TaskID != "child" || created.Source.RunID != "" || created.RunScope != "legacy-unknown" || created.Parent == nil || created.Parent.SessionID != "s" || created.Scope != "child" || created.Native != nil || created.Evidence == "", created)
 			associated := false
 			for _, r := range all {
 				if r.Kind == "SubagentAssociated" && r.Source.TaskID == "child" {
 					associated = true
 				}
-				if r.Kind == "SubagentCreated" && !associated {
-					t.Fatal("Created before association")
-				}
+				require.False(t, r.Kind == "SubagentCreated" && !associated, "Created before association")
 			}
 		})
 	}
 }
 
 // Synthetic permutations test matcher robustness, not legal native producer order.
-func TestTreeCreatedCorroborationOrders(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreatedCorroborationOrders() {
+	t := s.T()
 	req := creationRequest("call", "Agent", creationInput, "")
 	task := creationTask("child", "call", "true")
 	result := creationResult("call", "child", "completed")
@@ -141,13 +133,12 @@ func TestTreeCreatedCorroborationOrders(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			c := openTreeFixture(t)
 			got := creationFrames(t, c, append([]string{creationInit}, frames...)...)
-			if len(creations(got)) != 1 {
-				t.Fatal(got)
-			}
+			require.EqualValues(t, 1, len(creations(got)), got)
 		})
 	}
 }
-func TestTreeCreatedConservativeGates(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreatedConservativeGates() {
+	t := s.T()
 	req := creationRequest("call", "Agent", creationInput, "")
 	task := creationTask("child", "call", "true")
 	result := creationResult("call", "child", "async_launched")
@@ -190,13 +181,12 @@ func TestTreeCreatedConservativeGates(t *testing.T) {
 			if name == "foreground" {
 				want = 1
 			}
-			if len(creations(got)) != want {
-				t.Fatalf("Created=%d want %d: %+v", len(creations(got)), want, got)
-			}
+			require.EqualValuesf(t, want, len(creations(got)), "Created=%d want %d: %+v", len(creations(got)), want, got)
 		})
 	}
 }
-func TestTreeCreatedHistoryAndRootResume(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreatedHistoryAndRootResume() {
+	t := s.T()
 	for _, history := range []bool{false, true} {
 		t.Run(fmt.Sprint(history), func(t *testing.T) {
 			opts := fixtureOptions(t, "tree")
@@ -207,46 +197,36 @@ func TestTreeCreatedHistoryAndRootResume(t *testing.T) {
 				opts.ResumeID = "s"
 			}
 			c, err := openWithTree(context.Background(), opts, bounds)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			defer c.Close()
 			// Drain startup and seed/gap records through the init frame.
 			treeReceive(t, c)
 			got := creationFrames(t, c, creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false"), creationResult("call", "child", "completed"))
-			if len(creations(got)) != 0 {
-				t.Fatal(got)
-			}
+			require.EqualValues(t, 0, len(creations(got)), got)
 		})
 	}
 }
-func TestTreeCreatedNestedParallelAndEntityDedup(t *testing.T) {
-	c := openTreeFixture(t)
+func (s *treeObservationSuite) TestTreeCreatedNestedParallelAndEntityDedup() {
+	t := s.T()
+	c := s.client
 	got := creationFrames(t, c, creationInit,
 		creationRequest("outer", "Agent", creationInput, ""), creationTask("parent", "outer", "false"),
 		creationRequest("nested", "Task", creationInput, "parent"), creationTask("grandchild", "nested", "false"),
 		creationRequest("parallel", "Agent", creationInput, ""), creationTask("sibling", "parallel", "false"))
-	if len(creations(got)) != 3 {
-		t.Fatal(got)
-	}
+	require.EqualValues(t, 3, len(creations(got)), got)
 	for _, r := range creations(got) {
-		if r.Source.TaskID == "grandchild" && (r.Parent == nil || r.Parent.TaskID != "parent") {
-			t.Fatal(r)
-		}
+		require.False(t, r.Source.TaskID == "grandchild" && (r.Parent == nil || r.Parent.TaskID != "parent"), r)
 	}
 	// Same names have no role in identity. Later work and tool references cannot
 	// create the same entity twice; no UUID is needed.
 	later := creationFrames(t, c, `{"type":"assistant","session_id":"s","parent_tool_use_id":"nested","message":{"role":"assistant","content":"enrich alias"}}`, creationRequest("again", "Agent", creationInput, "parent"), creationTask("grandchild", "again", "false"), creationResult("again", "grandchild", "completed"))
-	if len(creations(later)) != 0 {
-		t.Fatal(later)
-	}
+	require.EqualValues(t, 0, len(creations(later)), later)
 }
-func TestTreeCreationEvidenceBound(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreationEvidenceBound() {
+	t := s.T()
 	opts := fixtureOptions(t, "tree")
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxCreationEntries: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	treeReceive(t, c)
 	creationFrames(t, c, creationInit, creationRequest("one", "Agent", creationInput, ""))
@@ -258,25 +238,22 @@ func TestTreeCreationEvidenceBound(t *testing.T) {
 			limit = true
 		}
 		if r.Kind == "Native" {
-			if !limit {
-				t.Fatal(r)
-			}
+			require.True(t, limit, r)
 			return
 		}
 	}
-	t.Fatal("missing bounded failure")
+	require.FailNow(t, "verification failed", "missing bounded failure")
 }
 
 // Existing codecs preserve additional raw identity fields even though 2.1.258
 // does not promise to emit them. Merge must retain the entity's creation bit.
-func TestTreeCreatedSurvivesAliasMerge(t *testing.T) {
-	c := openTreeFixture(t)
+func (s *treeObservationSuite) TestTreeCreatedSurvivesAliasMerge() {
+	t := s.T()
+	c := s.client
 	got := creationFrames(t, c, creationInit,
 		`{"type":"future_source","session_id":"s","agent_id":"child"}`,
 		creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false"))
-	if len(creations(got)) != 1 {
-		t.Fatal(got)
-	}
+	require.EqualValues(t, 1, len(creations(got)), got)
 	later := creationFrames(t, c,
 		`{"type":"assistant","session_id":"s","agent_id":"child","parent_tool_use_id":"call","message":{"content":"bridge"}}`,
 		creationTask("child", "call", "false"), creationResult("call", "child", "completed"))
@@ -286,55 +263,46 @@ func TestTreeCreatedSurvivesAliasMerge(t *testing.T) {
 			merged = true
 		}
 	}
-	if !merged || len(creations(later)) != 0 {
-		t.Fatal(later)
-	}
+	require.False(t, !merged || len(creations(later)) != 0, later)
 }
-func TestTreeCreatedUUIDCapacityDoesNotEvictEntity(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreatedUUIDCapacityDoesNotEvictEntity() {
+	t := s.T()
 	opts := fixtureOptions(t, "tree")
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxDedupEntries: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer c.Close()
 	treeReceive(t, c)
 	got := creationFrames(t, c, creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false"),
 		`{"type":"assistant","session_id":"s","uuid":"one","message":{"content":"first"}}`)
-	if len(creations(got)) != 1 {
-		t.Fatal(got)
-	}
+	require.EqualValues(t, 1, len(creations(got)), got)
 	treeEmit(t, c, strings.Replace(creationTask("child", "call", "false"), `"type":"system"`, `"uuid":"two","type":"system"`, 1))
 	limited := false
 	for i := 0; i < 4; i++ {
 		r := treeReceive(t, c)
-		if r.Kind == "SubagentCreated" {
-			t.Fatal("cache exhaustion recreated entity")
-		}
+		require.NotEqualValues(t, "SubagentCreated", r.Kind, "cache exhaustion recreated entity")
 		if r.Reason == "subagent-resource-limit" {
 			limited = true
 		}
 		if r.Kind == "Native" {
-			if !limited {
-				t.Fatal(r)
-			}
+			require.True(t, limited, r)
 			return
 		}
 	}
-	t.Fatal("no bounded failure")
+	require.FailNow(t, "verification failed", "no bounded failure")
 }
-func TestTreeCreatedDuplicateInitBoundary(t *testing.T) {
-	c := openTreeFixture(t)
+func (s *treeObservationSuite) TestTreeCreatedDuplicateInitBoundary() {
+	t := s.T()
+	c := s.client
 	init := strings.Replace(creationInit, `"type":"system"`, `"uuid":"init","type":"system"`, 1)
 	creationFrames(t, c, init, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "true"))
 	// The duplicate init has no Native delivery, but must invalidate trust.
 	treeEmit(t, c, init)
 	got := creationFrames(t, c, creationResult("call", "child", "completed"))
-	if len(creations(got)) != 0 {
-		t.Fatal(got)
-	}
+	require.EqualValues(t, 0, len(creations(got)), got)
 }
 
-func TestTreeCreatedNestedBackgroundCaller(t *testing.T) {
+func (s *treeObservationSuite) TestTreeCreatedNestedBackgroundCaller() {
+	t := s.T()
 	for _, matching := range []bool{true, false} {
 		t.Run(fmt.Sprint(matching), func(t *testing.T) {
 			c := openTreeFixture(t)
@@ -348,9 +316,7 @@ func TestTreeCreatedNestedBackgroundCaller(t *testing.T) {
 			if matching {
 				want = 1
 			}
-			if len(creations(got)) != want {
-				t.Fatal(got)
-			}
+			require.EqualValues(t, want, len(creations(got)), got)
 		})
 	}
 }

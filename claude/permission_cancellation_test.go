@@ -3,11 +3,11 @@
 package claude
 
 import (
-	"bufio"
 	"bytes"
+
+	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // Original public-boundary tests informed by the pinned official Python
@@ -103,27 +105,29 @@ func awaitSignal(t *testing.T, signal <-chan struct{}) {
 	select {
 	case <-signal:
 	case <-time.After(3 * time.Second):
-		t.Fatal("synchronization barrier was not reached")
+		require.FailNow(t, "synchronization barrier was not reached")
 	}
 }
 
 func assertPermissionError(t *testing.T, err error, id string, reason error) {
 	t.Helper()
 	var permissionErr *PermissionError
-	if !errors.Is(err, reason) || !errors.As(err, &permissionErr) || permissionErr.RequestID != id {
-		t.Fatalf("expected permission %q with %v, got %v", id, reason, err)
-	}
+	require.ErrorIsf(t, err, reason, "expected permission %q with %v, got %v", id, reason, err)
+	require.ErrorAsf(t, err, &permissionErr, "expected permission %q with %v, got %v", id, reason, err)
+	require.EqualValuesf(t, id, permissionErr.RequestID, "expected permission %q with %v, got %v", id, reason, err)
 }
 
-func TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 2)
-	c := openFixture(t, "permission_controls", func(opts *Options) {
+	c := s.openFixture(t, "permission_controls", func(opts *Options) {
 		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
 	emitPermission(t, c, "completed", "Read", json.RawMessage(`{}`))
 	completed := awaitPermission(t, requests)
-	if err := completed.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}); err != nil {
-		t.Fatal(err)
+	{
+		err := completed.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny})
+		require.NoError(t, err)
 	}
 	assertPermissionReply(t, c, "completed", map[string]any{"behavior": "deny", "message": ""})
 	emitPermission(t, c, "pending", "Read", json.RawMessage(`{}`))
@@ -131,33 +135,37 @@ func TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs(t *testing.T)
 	for _, id := range []string{"pending", "unknown", "completed", "pending", "unknown"} {
 		emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": id, "future": map[string]any{"preserved": true}})
 		event := receive(t, c)
-		if event.Type != "control_cancel_request" || event.Cancel == nil || event.Cancel.RequestID != id || !bytes.Equal(event.Cancel.Raw, event.Raw) || !strings.Contains(string(event.Cancel.Raw), `"preserved":true`) {
-			t.Fatalf("lost typed cancellation: %#v %s", event.Cancel, event.Raw)
-		}
+		require.EqualValuesf(t, "control_cancel_request", event.Type, "lost typed cancellation: %#v %s", event.Cancel, event.Raw)
+		require.NotNilf(t, event.Cancel, "lost typed cancellation: %#v %s", event.Cancel, event.Raw)
+		require.EqualValuesf(t, id, event.Cancel.RequestID, "lost typed cancellation: %#v %s", event.Cancel, event.Raw)
+		require.Truef(t, bytes.Equal(event.Cancel.Raw, event.Raw), "lost typed cancellation: %#v %s", event.Cancel, event.Raw)
+		require.Containsf(t, string(event.Cancel.Raw), `"preserved":true`, "lost typed cancellation: %#v %s", event.Cancel, event.Raw)
 		event.Cancel.RequestID = "changed-by-consumer"
 	}
 	assertPermissionError(t, pending.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "pending", ErrPermissionCancelled)
 	assertPermissionError(t, completed.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "completed", ErrPermissionUsed)
-	if !errors.Is(context.Cause(completed.Context()), ErrPermissionUsed) || !errors.Is(context.Cause(pending.Context()), ErrPermissionCancelled) {
-		t.Fatal("late cancellation overwrote a completed outcome")
+	require.ErrorIs(t, context.Cause(completed.Context()), ErrPermissionUsed, "late cancellation overwrote a completed outcome")
+	require.ErrorIs(t, context.Cause(pending.Context()), ErrPermissionCancelled, "late cancellation overwrote a completed outcome")
+	{
+		got := permissionResponses(t, permissionSnapshot(t, c))
+		require.EqualValuesf(t, 1, len(got), "cancel or retry produced extra response: %#v", got)
 	}
-	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 1 {
-		t.Fatalf("cancel or retry produced extra response: %#v", got)
-	}
-	if err := c.Close(); err != nil {
-		t.Fatal(err)
+	{
+		err := c.Close()
+		require.NoError(t, err)
 	}
 	// Closing the transport cannot erase already terminal per-handle outcomes.
 	assertPermissionError(t, pending.Answer(context.Background(), PermissionAnswer{}), "pending", ErrPermissionCancelled)
 	assertPermissionError(t, completed.Answer(context.Background(), PermissionAnswer{}), "completed", ErrPermissionUsed)
 }
 
-func TestPermissionFailedAttemptRemainsDistinctAfterClose(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionFailedAttemptRemainsDistinctAfterClose() {
+	t := s.T()
 	for _, invalid := range []bool{false, true} {
 		t.Run(map[bool]string{false: "oversized", true: "invalid"}[invalid], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
 			requests := make(chan *PermissionRequest, 1)
-			c := openFixture(t, "permission_controls", func(opts *Options) {
+			c := s.openFixture(t, "permission_controls", func(opts *Options) {
 				opts.Limits.FrameBytes = 4096
 				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 				opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
@@ -172,29 +180,28 @@ func TestPermissionFailedAttemptRemainsDistinctAfterClose(t *testing.T) {
 			}
 			err := p.Answer(context.Background(), answer)
 			assertPermissionError(t, err, "failed", ErrPermissionWriteFailed)
-			if !errors.Is(err, underlying) || errors.Is(err, ErrUnknownOutcome) {
-				t.Fatalf("pre-write failure lost known outcome: %v", err)
-			}
+			require.ErrorIsf(t, err, underlying, "pre-write failure lost known outcome: %v", err)
+			require.NotErrorIsf(t, err, ErrUnknownOutcome, "pre-write failure lost known outcome: %v", err)
 			awaitDone(t, c)
 			_ = c.Close()
 			for range 2 {
 				err = p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
 				assertPermissionError(t, err, "failed", ErrPermissionWriteFailed)
-				if errors.Is(err, ErrClosed) {
-					t.Fatal("failed answer was hidden by transport closure")
-				}
+				require.NotErrorIs(t, err, ErrClosed, "failed answer was hidden by transport closure")
 			}
-			if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
-				t.Fatalf("consumed failure was retried: %#v", got)
+			{
+				got := permissionResponses(t, permissionTranscript(t, path))
+				require.EqualValuesf(t, 0, len(got), "consumed failure was retried: %#v", got)
 			}
 		})
 	}
 }
 
-func TestPermissionCancelOverflowInvalidatesOtherHandles(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionCancelOverflowInvalidatesOtherHandles() {
+	t := s.T()
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
 	requests := make(chan *PermissionRequest, 2)
-	c := openFixture(t, "permission_controls", func(opts *Options) {
+	c := s.openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Limits.EventBuffer = 1
 		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
@@ -207,53 +214,54 @@ func TestPermissionCancelOverflowInvalidatesOtherHandles(t *testing.T) {
 	emitPermissionFrame(t, c, map[string]any{"type": "accepted-before-overflow"})
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "cancelled"})
 	awaitDone(t, c)
-	if !errors.Is(context.Cause(cancelled.Context()), ErrPermissionCancelled) || other.Context().Err() == nil {
-		t.Fatal("cancel/overflow left a handle live")
-	}
-	if receive(t, c).Type != "accepted-before-overflow" {
-		t.Fatal("accepted output lost")
-	}
+	require.ErrorIs(t, context.Cause(cancelled.Context()), ErrPermissionCancelled, "cancel/overflow left a handle live")
+	require.NotNil(t, other.Context().Err(), "cancel/overflow left a handle live")
+	require.EqualValues(t, "accepted-before-overflow", receive(t, c).Type, "accepted output lost")
 	_, err := nextNative(c, context.Background())
 	var limit *ResourceLimitError
-	if !errors.Is(err, ErrResourceLimit) || !errors.As(err, &limit) || limit.Resource != "event buffer" {
-		t.Fatalf("overflow was not terminal: %v", err)
-	}
+	require.ErrorIsf(t, err, ErrResourceLimit, "overflow was not terminal: %v", err)
+	require.ErrorAsf(t, err, &limit, "overflow was not terminal: %v", err)
+	require.EqualValuesf(t, "event buffer", limit.Resource, "overflow was not terminal: %v", err)
 	assertPermissionError(t, cancelled.Answer(context.Background(), PermissionAnswer{}), "cancelled", ErrPermissionCancelled)
 	assertPermissionError(t, other.Answer(context.Background(), PermissionAnswer{}), "other", ErrClosed)
 	_ = c.Close()
-	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
-		t.Fatalf("overflowed cancellation allowed response: %#v", got)
+	{
+		got := permissionResponses(t, permissionTranscript(t, path))
+		require.EqualValuesf(t, 0, len(got), "overflowed cancellation allowed response: %#v", got)
 	}
 }
 
-func TestPermissionUnknownCancelHistoryExhaustionIsExplicit(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionUnknownCancelHistoryExhaustionIsExplicit() {
+	t := s.T()
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
-	c := openFixture(t, "permission_controls", func(opts *Options) {
+	c := s.openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Limits.PermissionHistory = 1
 		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 	})
 	for range 2 {
 		emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "first"})
-		if receive(t, c).Cancel.RequestID != "first" {
-			t.Fatal("duplicate cancellation was hidden")
-		}
+		require.EqualValues(t, "first", receive(t, c).Cancel.RequestID, "duplicate cancellation was hidden")
 	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "excess"})
 	awaitDone(t, c)
 	var limit *ResourceLimitError
-	if err := c.Close(); !errors.As(err, &limit) || limit.Resource != "permission request history" {
-		t.Fatalf("history exhaustion was not explicit: %v", err)
+	{
+		err := c.Close()
+		require.ErrorAsf(t, err, &limit, "history exhaustion was not explicit: %v", err)
+		require.EqualValuesf(t, "permission request history", limit.Resource, "history exhaustion was not explicit: %v", err)
 	}
-	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
-		t.Fatalf("unknown cancellation responded: %#v", got)
+	{
+		got := permissionResponses(t, permissionTranscript(t, path))
+		require.EqualValuesf(t, 0, len(got), "unknown cancellation responded: %#v", got)
 	}
 }
 
-func TestPermissionCancelledIgnoringHandlerCannotAnswerLater(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionCancelledIgnoringHandlerCannotAnswerLater() {
+	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
 	results := make(chan error, 1)
-	c := openFixture(t, "permission_controls", func(opts *Options) {
+	c := s.openFixture(t, "permission_controls", func(opts *Options) {
 		opts.PermissionHandler = func(p *PermissionRequest) {
 			requests <- p
 			<-release // Deliberately ignores cancellation until the test releases it.
@@ -263,20 +271,20 @@ func TestPermissionCancelledIgnoringHandlerCannotAnswerLater(t *testing.T) {
 	emitPermission(t, c, "ignores-context", "Read", json.RawMessage(`{}`))
 	p := awaitPermission(t, requests)
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": p.RequestID()})
-	if receive(t, c).Cancel.RequestID != p.RequestID() {
-		t.Fatal("cancellation missing")
-	}
+	require.EqualValues(t, p.RequestID(), receive(t, c).Cancel.RequestID, "cancellation missing")
 	close(release)
 	assertPermissionError(t, awaitPermissionError(t, results), p.RequestID(), ErrPermissionCancelled)
-	if got := permissionResponses(t, permissionSnapshot(t, c)); len(got) != 0 {
-		t.Fatalf("uncooperative callback answered: %#v", got)
+	{
+		got := permissionResponses(t, permissionSnapshot(t, c))
+		require.EqualValuesf(t, 0, len(got), "uncooperative callback answered: %#v", got)
 	}
 }
 
-func TestPermissionDisconnectInvalidatesPendingHandle(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionDisconnectInvalidatesPendingHandle() {
+	t := s.T()
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
 	requests := make(chan *PermissionRequest, 1)
-	c := openFixture(t, "permission_controls", func(opts *Options) {
+	c := s.openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	})
@@ -284,19 +292,19 @@ func TestPermissionDisconnectInvalidatesPendingHandle(t *testing.T) {
 	p := awaitPermission(t, requests)
 	send(t, c, "disconnect")
 	awaitDone(t, c)
-	if p.Context().Err() == nil {
-		t.Fatal("disconnect left a permission context live")
-	}
+	require.NotNil(t, p.Context().Err(), "disconnect left a permission context live")
 	_ = c.Close()
 	for range 2 {
 		assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), ErrClosed)
 	}
-	if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
-		t.Fatalf("disconnected handle responded: %#v", got)
+	{
+		got := permissionResponses(t, permissionTranscript(t, path))
+		require.EqualValuesf(t, 0, len(got), "disconnected handle responded: %#v", got)
 	}
 }
 
-func TestPermissionMalformedCancellationIsProtocolFailure(t *testing.T) {
+func (s *controlInteractionSuite) TestPermissionMalformedCancellationIsProtocolFailure() {
+	t := s.T()
 	for _, frame := range []string{
 		`{"type":"control_cancel_request"}`,
 		`{"type":"control_cancel_request","request_id":""}`,
@@ -305,16 +313,18 @@ func TestPermissionMalformedCancellationIsProtocolFailure(t *testing.T) {
 	} {
 		t.Run(frame, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
-			c := openFixture(t, "permission_controls", func(opts *Options) {
+			c := s.openFixture(t, "permission_controls", func(opts *Options) {
 				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
 			})
 			emitPermissionFrame(t, c, json.RawMessage(frame))
 			awaitDone(t, c)
-			if err := c.Close(); !errors.Is(err, ErrProtocol) {
-				t.Fatalf("malformed cancellation silently accepted: %v", err)
+			{
+				err := c.Close()
+				require.ErrorIsf(t, err, ErrProtocol, "malformed cancellation silently accepted: %v", err)
 			}
-			if got := permissionResponses(t, permissionTranscript(t, path)); len(got) != 0 {
-				t.Fatalf("malformed cancel responded: %#v", got)
+			{
+				got := permissionResponses(t, permissionTranscript(t, path))
+				require.EqualValuesf(t, 0, len(got), "malformed cancel responded: %#v", got)
 			}
 		})
 	}

@@ -37,7 +37,7 @@ type Subscription struct {
 	closed        bool
 	stop          func() bool
 	batching      bool
-	batch         []subscriptionEvent
+	batch         []types.Event
 	seeding       bool
 	historyIDs    map[string]struct{}
 	maxNodes      int
@@ -129,9 +129,9 @@ func (c *Client) Subscribe(ctx context.Context, rootThreadID string, options typ
 	t := &Subscription{client: c, root: rootThreadID, events: make(chan types.Event, options.EventQueue+1), done: make(chan struct{}), maxNodes: options.MaxNodes, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
 	c.subscriptions[t] = struct{}{}
 	t.stop = context.AfterFunc(ctx, func() { c.mu.Lock(); defer c.mu.Unlock(); t.finishLocked(ctx.Err()) })
-	t.emitLocked(subscriptionEvent{Kind: subscriptionState, State: "incomplete", Reason: "best-effort-auto-attach-unverified"})
+	t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "best-effort-auto-attach-unverified"}})
 	if len(options.History) > 0 {
-		t.emitLocked(subscriptionEvent{Kind: subscriptionState, State: "incomplete", Reason: "history-recovery-gap"})
+		t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "history-recovery-gap"}})
 		t.seeding = true
 		for _, snapshot := range options.History {
 			t.seedLocked(snapshot)
@@ -192,11 +192,11 @@ func (t *Subscription) disconnectLocked(cause error) {
 	if t.closed {
 		return
 	}
-	t.enqueueLocked(subscriptionEvent{Kind: subscriptionState, State: "disconnected", Reason: "permanent-gap"})
+	t.enqueueLocked(types.Event{Data: &types.ObservationState{State: "disconnected", Reason: "permanent-gap"}})
 	t.finishLocked(cause)
 }
 
-func (t *Subscription) emitLocked(e subscriptionEvent) {
+func (t *Subscription) emitLocked(e types.Event) {
 	if t.closed {
 		return
 	}
@@ -226,32 +226,29 @@ func (t *Subscription) commitBatchLocked() {
 	}
 }
 
-func (t *Subscription) enqueueLocked(e subscriptionEvent) {
+func (t *Subscription) enqueueLocked(e types.Event) {
 	if t.closed {
 		return
 	}
-	cloneEvidence := func(e *types.SubagentEvidence) *types.SubagentEvidence {
-		if e == nil {
-			return nil
-		}
-		copy := *e
-		copy.ReceiverThreadIDs = append([]string(nil), e.ReceiverThreadIDs...)
-		if e.Activity != nil {
-			activity := *e.Activity
-			if e.Activity.UnknownFields != nil {
-				activity.UnknownFields = make(map[string]json.RawMessage, len(e.Activity.UnknownFields))
-				for key, raw := range e.Activity.UnknownFields {
-					activity.UnknownFields[key] = append(json.RawMessage(nil), raw...)
-				}
-			}
-			copy.Activity = &activity
-		}
-		return &copy
+	// Derived evidence points into retained relation state. Copy it only when
+	// admitting the event, so consumers cannot mutate later observations.
+	switch data := e.Data.(type) {
+	case *types.SubagentCreated:
+		copy := *data
+		copy.Evidence = cloneSubagentEvidence(data.Evidence)
+		e.Data = &copy
+	case *types.SubagentAssociated:
+		copy := *data
+		copy.Evidence = cloneSubagentEvidence(data.Evidence)
+		e.Data = &copy
+	case *types.ObservationState:
+		copy := *data
+		copy.Evidence = cloneSubagentEvidence(data.Evidence)
+		copy.PreviousEvidence = cloneSubagentEvidence(data.PreviousEvidence)
+		e.Data = &copy
 	}
-	e.Evidence = cloneEvidence(e.Evidence)
-	e.PreviousEvidence = cloneEvidence(e.PreviousEvidence)
 	select {
-	case t.events <- e.event():
+	case t.events <- e:
 	default:
 		t.finishLocked(&SubscriptionOverflowError{Capacity: t.options.EventQueue})
 	}
@@ -340,7 +337,7 @@ func (t *Subscription) member(id string) bool {
 }
 
 func (t *Subscription) diagnostic(reason, child, parent string, evidence *types.SubagentEvidence) {
-	t.emitLocked(subscriptionEvent{Kind: subscriptionState, State: "incomplete", Reason: reason, Source: types.EventIdentity{ThreadID: child}, ParentThreadID: parent, Evidence: evidence})
+	t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: reason, UnresolvedThreadID: child, ParentThreadID: parent, Evidence: evidence}})
 }
 
 func (t *Subscription) relationLocked(child, parent string, evidence types.SubagentEvidence, created bool) {
@@ -376,7 +373,7 @@ func (t *Subscription) relationLocked(child, parent string, evidence types.Subag
 	}
 	r := t.children[child]
 	if r != nil && r.parent != parent {
-		t.emitLocked(subscriptionEvent{Kind: subscriptionState, State: "incomplete", Reason: "relation-conflict", Source: types.EventIdentity{ThreadID: child}, ParentThreadID: parent, Evidence: &evidence, PreviousEvidence: &r.evidence})
+		t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "relation-conflict", UnresolvedThreadID: child, ParentThreadID: parent, Evidence: &evidence, PreviousEvidence: &r.evidence}})
 		return
 	}
 	if r == nil {
@@ -428,19 +425,16 @@ func (t *Subscription) announceLocked() {
 		announce(r.parent)
 		if !r.announced {
 			r.announced = true
-			kind, reason, evidence := subscriptionAssociated, "discovered", &r.evidence
-			if r.evidence.Provenance == "history" {
-				reason = "history"
-			}
 			if r.createdEvidence != nil {
-				kind, reason, evidence = subscriptionCreated, "successful-live-spawn", r.createdEvidence
 				r.createdAnnounced = true
+				t.emitLocked(types.Event{Data: &types.SubagentCreated{ThreadID: child, ParentThreadID: r.parent, Evidence: r.createdEvidence}})
+			} else {
+				t.emitLocked(types.Event{Data: &types.SubagentAssociated{ThreadID: child, ParentThreadID: r.parent, Evidence: &r.evidence}})
 			}
-			t.emitLocked(subscriptionEvent{Kind: kind, Source: types.EventIdentity{ThreadID: child}, ParentThreadID: r.parent, Reason: reason, Evidence: evidence})
 		}
 		if r.createdEvidence != nil && !r.createdAnnounced {
 			r.createdAnnounced = true
-			t.emitLocked(subscriptionEvent{Kind: subscriptionCreated, Source: types.EventIdentity{ThreadID: child}, ParentThreadID: r.parent, Reason: "creation-confirmed", Evidence: r.createdEvidence})
+			t.emitLocked(types.Event{Data: &types.SubagentCreated{ThreadID: child, ParentThreadID: r.parent, Evidence: r.createdEvidence}})
 		}
 	}
 	// Stable insertion order also makes multi-receiver discovery deterministic.
@@ -580,7 +574,8 @@ func (t *Subscription) deliverLocked(method string, params json.RawMessage, raw 
 		t.seen[key] = struct{}{}
 		t.seenOrder = append(t.seenOrder, key)
 	}
-	t.emitLocked(subscriptionEvent{Kind: subscriptionNative, Native: &native, Raw: append(json.RawMessage(nil), raw...)})
+	native.Raw = append(json.RawMessage(nil), raw...)
+	t.emitLocked(native)
 }
 
 func (t *Subscription) unresolvedLocked(method string, params json.RawMessage, raw []byte) {

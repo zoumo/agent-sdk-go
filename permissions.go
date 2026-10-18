@@ -78,6 +78,18 @@ func (p *PermissionRequest) Raw() json.RawMessage {
 	return bytes.Clone(p.state.raw)
 }
 
+// Metadata returns an owned, detached data snapshot. It carries no answer
+// authority; edits cannot change this handle's IDs, original input or state.
+// A nil/zero handle returns ErrInvalidPermissionRequest.
+func (p *PermissionRequest) Metadata() (types.PermissionMetadata, error) {
+	if p == nil || p.state == nil {
+		return types.PermissionMetadata{}, ErrInvalidPermissionRequest
+	}
+	var metadata types.PermissionMetadata
+	err := json.Unmarshal(p.state.raw, &metadata)
+	return metadata, err
+}
+
 // Epoch identifies this client instance within this Go process. It is not a
 // native session ID and is never sent to the CLI or reused for resume.
 func (p *PermissionRequest) Epoch() uint64 {

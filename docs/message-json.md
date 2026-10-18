@@ -1,4 +1,4 @@
-# Message, content and result JSON contract (ticket02)
+# Message, content, result and permission JSON contract
 
 This contract describes the source-reviewed, synthetic-tested Go subset at the
 [pinned sources](type-sources.md). It does not assert live CLI interoperability.
@@ -118,11 +118,117 @@ over a branch's fields. Prefer editing metadata on `Event` and subtype on the
 system/result view. Content block `Type` and event `Type` are mandatory and
 cannot be removed by a field override.
 
-`ControlRequest`, cancellation handles, permissions, lifecycle and transport
-remain the existing implementations. Control frames retain unknown envelope
-fields, but ticket02 does not add new permission schemas, question handling,
-control methods, generators, hosted MCP or hooks. No real Agent, account,
-credential or Mac test is part of this ticket.
+Ticket03 extends this contract with the detached permission and question data
+below. Answer handles, cancellation, lifecycle and transport remain in the
+runtime. No new control sending method, generator, hosted MCP, hook or permission
+persistence API is introduced. No real Agent, account, credential or Mac test
+is part of this evidence.
+
+## Detached permission data (ticket03)
+
+`PermissionMetadata` describes the **nested** `can_use_tool` request, including
+tool name/input/use ID, agent ID, suggestions, blocked path, decision reason and
+display fields. `ControlRequest.PermissionMetadata()` decodes the raw nested
+request; runtime `PermissionRequest.Metadata()` returns an owned snapshot with
+the same schema. Neither can answer a request. The request ID remains on the
+outer control event and on the runtime handle's `RequestID()` accessor. Metadata
+has no connection, epoch, cancellation registry or answer state.
+
+The nested request requires subtype `can_use_tool`, nonempty `tool_name` and
+object `input`. The tool-use ID remains optional for compatibility with existing
+sparse fixtures. Optional suggestions accept an object array or null and remain
+opaque data; they do not install rules. Unknown metadata and input fields remain
+in Raw. A zero/nil runtime handle returns `ErrInvalidPermissionRequest` from
+`Metadata()`. An unsupported raw control subtype returns a metadata decode error.
+
+`ControlResponse` models the complete envelope and `ControlResponseData` its
+correlated body. `Event.Response` exposes this view through both `ParseEvent`
+entry points. The shape is:
+
+```json
+{"type":"control_response","response":{"subtype":"success","request_id":"original-id","response":{"behavior":"allow","updatedInput":{}}}}
+```
+
+The body requires a nonempty request ID and subtype `success` or `error`.
+Success accepts absent/null/object response data and rejects an `error` field.
+Error requires a string `error` (including empty string) and rejects a response
+payload. A flat top-level request ID/subtype cannot replace this nested body.
+Unknown envelope and body fields survive round trips. These are codecs, not a
+generic API for sending control frames or recovering pending answer authority.
+
+`PermissionResult` models the innermost wire decision. `allow` accepts absent
+or object `updatedInput` and rejects `message`; `deny` requires string `message`
+and rejects `updatedInput`. Null/array/scalar updated inputs and `ask` decisions
+are invalid. New denials emit `message:""` if no message was supplied. The wire
+key is camelCase `updatedInput`, not Python's `updated_input` attribute.
+Python callback objects and flattened message objects are not wire envelopes.
+
+`PermissionAnswer` remains the existing runtime command accepted by
+`PermissionRequest.Answer`. It is distinct from the detached `PermissionResult`
+wire view: nil UpdatedInput means use the handle's original input; `{}` replaces
+it explicitly. Runtime replies retain the existing allow/updatedInput and
+deny/message subset. Unknown wire result fields are inspectable/preservable in
+the data codec, not additional runtime answer options or permission persistence.
+The runtime continues to reject contradictory/invalid answers after consuming
+the sole attempt, with the existing visible failure semantics.
+
+## AskUserQuestion data and answering (ticket03)
+
+`AskUserQuestionInput` contains `Questions []Question`, optional `Answers`
+and optional general `Response`. Questions expose text, header, ordered options
+and multiSelect; options expose label, description and optional preview. All
+three object levels use the same Raw/typed/Fields rules above. A question must
+have nonempty text and an options array; an option must have a nonempty label.
+The questions array must exist; empty arrays are structurally accepted. Duplicate
+question texts are rejected because an answers map cannot distinguish them.
+Header/description and multiSelect may be absent. These are structural checks,
+not CLI UI policy validation (question count, header length, option count or
+whether a label was offered). Future fields remain raw, including nested values.
+
+Each `QuestionAnswer` sets exactly one of `Text *string` or `Labels []string`.
+Text supports selected labels, joined multiple labels or custom free text.
+Labels emits an array and requires a question with multiSelect true. Empty text
+and empty label arrays are supported; null, numbers, objects, nonstring array
+elements and simultaneous Text/Labels are rejected. Answer keys must equal
+the complete question text, including punctuation and Unicode. `q_0`, a header,
+or any other unrecognized key is rejected. Partial maps and explicit `{}` are
+accepted; the codec does not invent missing answers. An explicit null answers
+object is invalid. Optional Response is a separate general reply; it does not
+change answer key validation.
+
+`WithAnswers` replaces the answers map and returns detached JSON while retaining
+the input's original questions and unknown fields. It rejects nil maps, validates
+the resulting input, and does not mutate the receiver or send anything:
+
+```go
+// p is the original *claude.PermissionRequest received by PermissionHandler.
+// Handle each error before proceeding; first check p.ToolName().
+var input types.AskUserQuestionInput
+if err := json.Unmarshal(p.Input(), &input); err != nil { return err }
+text := "Summary"
+updated, err := input.WithAnswers(map[string]types.QuestionAnswer{
+    input.Questions[0].Question: {Text: &text},
+})
+if err != nil { return err }
+return p.Answer(ctx, types.PermissionAnswer{
+    Behavior: types.PermissionAllow, UpdatedInput: updated,
+})
+```
+
+Check that the input contains the expected questions before indexing in an
+application. Only the original `can_use_tool` handle may answer. An assistant
+`tool_use` block named AskUserQuestion may be decoded for display but carries
+no answer authority. No public constructor converts metadata/events/tool-use
+IDs into a handle. Prepared JSON cannot bypass cancellation, close, consumed
+attempts, timeout/error propagation or uncertain-write handling. Returning from
+the permission handler still does not answer; the application may retain the
+handle while collecting input, respecting its Context.
+
+For every new data object, repeated decode resets the receiver and failed decode
+leaves it zero. Required fields cannot be removed or nulled via Fields; the final
+JSON is structurally validated. Presence overrides may remove optional fields,
+but cannot make contradictory decisions valid. Unknown fields are retained
+without assigning them supported operations.
 
 ## Evidence
 
@@ -132,3 +238,10 @@ presence, nested typed mutation, repeated decode and illegal unions.
 `types_compatibility_test.go` checks the same codec through root and `types`
 imports. Existing synthetic runtime, cancellation, single-answer, failure,
 bounded-queue and lifecycle tests remain in the full suite.
+
+`types/permission_data_test.go` adds synthetic permission/response/question
+round trips, edits, presence, owned metadata, invalid shapes and answer keys.
+`question_interaction_test.go` exercises real Go client handles against a mock
+subprocess, checking response nesting, unknown input preservation, display-only
+assistant events, single-use answers and cancellation after answer preparation.
+These mocks are not live CLI validation.

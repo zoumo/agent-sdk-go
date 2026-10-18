@@ -281,6 +281,7 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	choose(e.Result != nil, e.Result, "result")
 	choose(e.Stream != nil, e.Stream, "stream_event")
 	choose(e.Control != nil, e.Control, "control_request")
+	choose(e.Response != nil, e.Response, "control_response")
 	choose(e.Cancel != nil, e.Cancel, "control_cancel_request")
 	choose(e.RateLimit != nil, e.RateLimit, "rate_limit_event")
 	choose(e.Reset != nil, e.Reset, "conversation_reset")
@@ -289,7 +290,7 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	}
 	if count == 0 {
 		switch e.Type {
-		case "assistant", "user", "system", "result", "stream_event", "control_request", "control_cancel_request", "rate_limit_event", "conversation_reset":
+		case "assistant", "user", "system", "result", "stream_event", "control_request", "control_response", "control_cancel_request", "rate_limit_event", "conversation_reset":
 			return nil, fmt.Errorf("known event requires typed branch")
 		}
 	}

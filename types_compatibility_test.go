@@ -108,3 +108,31 @@ func TestMessageCodecAliases(t *testing.T) {
 		t.Fatal("root/type codecs differ")
 	}
 }
+
+func TestPermissionDataAliases(t *testing.T) {
+	var _ func() (types.PermissionMetadata, error) = (*claude.PermissionRequest)(nil).Metadata
+	values := [][2]any{
+		{claude.PermissionMetadata{}, types.PermissionMetadata{}},
+		{claude.PermissionResult{}, types.PermissionResult{}},
+		{claude.ControlResponse{}, types.ControlResponse{}},
+		{claude.ControlResponseData{}, types.ControlResponseData{}},
+		{claude.AskUserQuestionInput{}, types.AskUserQuestionInput{}},
+		{claude.Question{}, types.Question{}},
+		{claude.QuestionOption{}, types.QuestionOption{}},
+		{claude.QuestionAnswer{}, types.QuestionAnswer{}},
+	}
+	for _, pair := range values {
+		if reflect.TypeOf(pair[0]) != reflect.TypeOf(pair[1]) {
+			t.Fatal("alias identity changed")
+		}
+	}
+	frame := []byte(`{"type":"control_response","response":{"subtype":"success","request_id":"r","response":{"behavior":"deny","message":"no"}}}`)
+	root, err := claude.ParseEvent(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := types.ParseEvent(frame)
+	if err != nil || !reflect.DeepEqual(root, data) || root.Response == nil {
+		t.Fatal("entry point mismatch", err)
+	}
+}

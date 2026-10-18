@@ -33,6 +33,7 @@ type Event struct {
 	Result          *ResultEvent            `json:"-"`
 	Stream          *StreamEvent            `json:"-"`
 	Control         *ControlRequest         `json:"-"`
+	Response        *ControlResponse        `json:"-"`
 	Cancel          *ControlCancelRequest   `json:"-"`
 	RateLimit       *RateLimitEvent         `json:"-"`
 	Reset           *ConversationResetEvent `json:"-"`
@@ -251,6 +252,9 @@ func ParseEvent(frame []byte) (Event, error) {
 	case "conversation_reset":
 		event.Reset = new(ConversationResetEvent)
 		err = json.Unmarshal(frame, event.Reset)
+	case "control_response":
+		event.Response = new(ControlResponse)
+		err = json.Unmarshal(frame, event.Response)
 	case "control_cancel_request":
 		event.Cancel = new(ControlCancelRequest)
 		err = json.Unmarshal(frame, event.Cancel)

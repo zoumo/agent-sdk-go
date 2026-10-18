@@ -299,7 +299,7 @@ func TestDeferredPermissionRetainedHandleUsesExactUpdatedInput(t *testing.T) {
 		{"original", "Read", nil, map[string]any{"original": true}},
 		{"empty object", "Read", json.RawMessage(`{}`), map[string]any{}},
 		{"updated", "Write", json.RawMessage(`{"replacement":"safe","future":7}`), map[string]any{"replacement": "safe", "future": float64(7)}},
-		{"question", "AskUserQuestion", json.RawMessage(`{"questions":[],"answers":{"choice":"user-supplied"}}`), map[string]any{"questions": []any{}, "answers": map[string]any{"choice": "user-supplied"}}},
+		{"question", "AskUserQuestion", json.RawMessage(`{"questions":[{"question":"Which format?","options":[]}],"answers":{"Which format?":"user-supplied"}}`), map[string]any{"questions": []any{map[string]any{"question": "Which format?", "options": []any{}}}, "answers": map[string]any{"Which format?": "user-supplied"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			requests := make(chan *claude.PermissionRequest, 1)

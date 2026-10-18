@@ -54,6 +54,16 @@ semantic JSON round trips. See [the JSON contract](message-json.md) for exact
 scope, construction, Raw/typed precedence and absent/null/zero behavior, and
 [type provenance and licenses](type-sources.md). Aggregate usage remains raw JSON.
 
+Ticket03 adds detached `PermissionMetadata`, `PermissionResult`, nested
+`ControlResponse`/`ControlResponseData`, and AskUserQuestion input, question,
+option and string/array answer data with the same Raw/typed/presence contract.
+`Event.Response` exposes control responses. `PermissionRequest.Metadata()`
+returns an owned snapshot; it cannot create or transfer answer authority.
+`AskUserQuestionInput.WithAnswers` validates full question-text keys and retains
+questions/unknown input. Runtime answers still use the original connection-local
+handle and the existing `PermissionAnswer` subset. Suggestions and unknown result
+fields do not enable persistent updates. See [ticket03 evidence](evidence/type-ticket03.md).
+
 The root aliases these types and permission constants. Compile-time tests cover
 cross-package event/answer method signatures, content literals, and original
 keyed `Options`/`Limits` literals. Named-type reflection now reports the
@@ -92,7 +102,7 @@ Verified on 2026-10-18 with Go 1.26.9 on Linux/amd64. “PASS” below refers on
 | Matched interrupt, stale/out-of-order replies, independent turn result | Yes | PASS | PASS | UNKNOWN | `resume_interrupt_test.go`: `TestInterruptCorrelatesOutOfOrderAndUnknownResponses`, `TestInterruptAcknowledgmentIsSeparateFromTurnResult`, `TestInterruptImmediateAcknowledgments` |
 | Deferred permission handles, original IDs/context, allow/update/deny | Yes | PASS | PASS | UNKNOWN | `permissions_test.go`: `TestDeferredPermissionHumanWaitKeepsTransportMoving`, `TestDeferredPermissionRetainedHandleUsesExactUpdatedInput`, `TestPermissionAnswerConcurrentSingleUse` |
 | Default deny and explicit unsupported-control errors | Yes | PASS | PASS | UNKNOWN | `client_test.go`: `TestMissingPermissionHandlerDeniesAndUnknownControlErrors` |
-| AskUserQuestion control input versus assistant tool-use event | Generic control only | PASS | PASS | UNKNOWN | `permissions_test.go`: `TestAssistantQuestionIsOnlyAnEvent`, `TestDeferredPermissionRetainedHandleUsesExactUpdatedInput`; no typed question schema or live question claim |
+| AskUserQuestion data and control input versus assistant tool-use event | Typed input/questions/options/string or array answers; original control handle only | PASS | PASS | UNKNOWN | `types/permission_data_test.go`, `question_interaction_test.go`: full-text keys, unknown input retention, nested response, cancellation; `permissions_test.go`: `TestAssistantQuestionIsOnlyAnEvent`; no live question claim |
 | Per-request cancellation, unknown/finished IDs, late-answer rejection | Yes | PASS | PASS | UNKNOWN | `permission_cancellation_test.go`: `TestPermissionTypedCancellationIncludesUnknownAndCompletedIDs`, `TestPermissionCancelledIgnoringHandlerCannotAnswerLater` |
 | Epoch-bound handles, single attempt, retired-ID protection | Yes | PASS | PASS | UNKNOWN | `permissions_test.go`: `TestPermissionCloseInvalidatesAndFreshClientHasNewEpoch`, `TestIncomingControlHistoryRejectsRetiredIDReuse`, `TestPermissionRegistryBoundsFailClosed` |
 | Known pre-write rejection versus started-write unknown outcome | Yes | PASS (Linux FIFO) | PASS | UNKNOWN | `permission_cancellation_linux_test.go`: `TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity`, `TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes`, `TestPermissionStartedWriteCancellationAndCloseAreAmbiguous` |

@@ -1,4 +1,4 @@
-# Ticket02 type sources and license review
+# Type sources and license review (tickets02–03)
 
 Reviewed 2026-10-18 UTC. These are schema/organization references, not runtime
 validation. The Go codecs and synthetic fixtures are original implementation;
@@ -33,3 +33,30 @@ Reproducible SHA256 of downloaded reference bytes:
 The first implementation was made from clean main after ticket01; the unavailable
 WIP and its fixtures were not used. Mock fixtures assert this documented subset
 and do not establish parity with every field in either official SDK.
+
+## Ticket03 revalidation
+
+The same pinned Python `types.py` control schemas and `_internal/query.py`
+permission conversion were fetched again on 2026-10-18; byte hashes match the
+compatibility baseline. The pinned TS `sdk.d.ts`, npm archive and LICENSE.md
+were fetched again and match the hashes above. Python and both reference Go
+licenses were independently fetched again and match the above hashes and
+copyright holders. severity1 `internal/shared/message.go` and Roasbeef
+`messages.go` were inspected for type organization only. No third-party lifecycle
+code, generated schemas, package dependency or source text was copied.
+
+The [official user-input documentation](https://code.claude.com/docs/en/agent-sdk/user-input)
+was reviewed via web retrieval on 2026-10-18 (mutable page; direct shell fetch
+returned HTTP 403, so no file-byte hash is claimed). It was used to check full
+question-text answer keys and preservation of the question list. The SDK source
+pins determine wire nesting/casing. Documentation examples are guidance rather
+than proof that any installed CLI accepts this Go implementation. The new
+fixtures are original synthetic data and do not invoke a model. The TypeScript
+package remains **non-MIT**; its contents are not redistributed.
+
+Additional inspected type-organization file bytes (same pinned commits):
+
+| File | SHA256 |
+| --- | --- |
+| severity1 `internal/shared/message.go` | `a4220bc169d58c9e500f308fda19598b9703a1671a37c5bd17634c4cfe46f216` |
+| Roasbeef `messages.go` | `762f11f74d05dcb231084dced650876b2d04be999476ac34a61c9156d05d555c` |

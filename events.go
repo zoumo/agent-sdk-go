@@ -29,6 +29,14 @@ type (
 	StreamEvent            = types.StreamEvent
 	StreamDelta            = types.StreamDelta
 	ControlRequest         = types.ControlRequest
+	ControlResponse        = types.ControlResponse
+	ControlResponseData    = types.ControlResponseData
+	PermissionMetadata     = types.PermissionMetadata
+	PermissionResult       = types.PermissionResult
+	AskUserQuestionInput   = types.AskUserQuestionInput
+	Question               = types.Question
+	QuestionOption         = types.QuestionOption
+	QuestionAnswer         = types.QuestionAnswer
 	ControlCancelRequest   = types.ControlCancelRequest
 )
 

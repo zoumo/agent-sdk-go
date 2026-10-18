@@ -615,7 +615,54 @@ func TestExplicitCommandEnvironmentAndDirectory(t *testing.T) {
 	}
 	expected, _ := json.Marshal(args)
 	actual, _ := json.Marshal(got.Args)
-	if !bytes.Equal(expected, actual) || got.Cwd != dir || got.Literal != "literal-$HOME" || got.Inherited != "" {
+	if !bytes.Equal(expected, actual) || !sameTestDirectory(t, got.Cwd, dir) || got.Literal != "literal-$HOME" || got.Inherited != "" {
 		t.Fatalf("command was transformed: %s", raw)
+	}
+}
+
+// sameTestDirectory compares filesystem identity: a child may report a physical
+// path while its configured directory uses a symlink (such as /var on macOS).
+// Missing or inaccessible paths fail the assertion instead of comparing equal.
+func sameTestDirectory(t *testing.T, actual, expected string) bool {
+	t.Helper()
+	actualInfo, err := os.Stat(actual)
+	if err != nil {
+		t.Fatalf("stat actual cwd %q: %v", actual, err)
+	}
+	expectedInfo, err := os.Stat(expected)
+	if err != nil {
+		t.Fatalf("stat expected cwd %q: %v", expected, err)
+	}
+	return actualInfo.IsDir() && expectedInfo.IsDir() && os.SameFile(actualInfo, expectedInfo)
+}
+
+func TestSameTestDirectory(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "first", "cwd")
+	other := filepath.Join(root, "second", "cwd")
+	child := filepath.Join(dir, "child")
+	for _, path := range []string{dir, other, child} {
+		if err := os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(dir, alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name, actual string
+		want         bool
+	}{
+		{"same", dir, true},
+		{"symlink alias", alias, true},
+		{"same basename different directory", other, false},
+		{"child directory", child, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sameTestDirectory(t, tt.actual, dir); got != tt.want {
+				t.Fatalf("sameTestDirectory(%q, %q) = %v, want %v", tt.actual, dir, got, tt.want)
+			}
+		})
 	}
 }

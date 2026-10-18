@@ -1,0 +1,11 @@
+{
+  "provenance": "real-capture-metadata",
+  "sdk_close_error": false,
+  "original_recorder_exit_code": 0,
+  "recorded_cli_pid_no_longer_exists": true,
+  "owned_recorder_proxy_remaining": false,
+  "stderr_bytes": 0,
+  "wire_frames": 11,
+  "stdout_and_stderr_separate": true,
+  "original_recorder_bug": "native is_error was not treated as process failure; fixed without a retry"
+}

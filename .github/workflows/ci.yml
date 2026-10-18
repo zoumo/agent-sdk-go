@@ -15,6 +15,7 @@ concurrency:
 
 env:
   CLAUDE_GO_LIVE: '0'
+  SDK_REAL_AGENT_E2E: '0'
 
 jobs:
   synthetic-tests:
@@ -54,25 +55,28 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/sdk-home" "$RUNNER_TEMP/sdk-cache"
-          for check in live-status test race vet example; do
+          for check in live-status test race vet example recorded-example; do
             case "$check" in
               live-status) args=(test -v -count=1 -run '^TestLiveCLIInitialization$' ./...) ;;
               test) args=(test -count=1 -timeout 180s ./...) ;;
               race) args=(test -race -count=1 -timeout 300s ./...) ;;
               vet) args=(vet ./...) ;;
               example) args=(run ./examples/subagents-offline) ;;
+              recorded-example) args=(run ./examples/recorded-replay) ;;
             esac
             env -i PATH="$PATH" HOME="$RUNNER_TEMP/sdk-home" \
               GOCACHE="$RUNNER_TEMP/sdk-cache" GOTOOLCHAIN=local GOENV=off \
-              GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 \
+              GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 SDK_REAL_AGENT_E2E=0 \
               GORACE=atexit_sleep_ms=0 go "${args[@]}"
           done
+      - name: Check sanitized transcripts and sanitizer canaries
+        run: python3 scripts/check-transcripts.py
       - name: Compile independent managed consumer (offline)
         shell: bash
         run: |
           env -i PATH="$PATH" HOME="$RUNNER_TEMP/sdk-home" \
             GOCACHE="$RUNNER_TEMP/sdk-cache" GOTOOLCHAIN=local GOENV=off \
-            GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 \
+            GOPROXY=off GOSUMDB=off CLAUDE_GO_LIVE=0 SDK_REAL_AGENT_E2E=0 \
             bash scripts/check-managed-consumer.sh
       - name: Report live coverage boundary
         if: always()
@@ -82,6 +86,6 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ### Live checks: SKIPPED
           `CLAUDE_GO_LIVE=0`: no real Agent/CLI or model calls in this job.
-          Unit/subprocess/compatibility and race tests use synthetic fixtures.
+          Unit/subprocess/compatibility and race tests use synthetic fixtures and an offline real CLI authentication-failure transcript. No successful model/tool live coverage is claimed.
           Full live interoperability remains a separately authorized manual checklist.
           SUMMARY

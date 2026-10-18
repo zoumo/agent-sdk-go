@@ -205,3 +205,5 @@ forwarding is always requested. Native `Event.Origin` remains the official
 `*MessageOrigin` object; the wrapper Origin string is separate. See the
 [complete migration](docs/default-managed-migration.md) and independent
 [derived definitions](derived_events.go). `Options.Types()` omits runtime-only Tree.
+
+[Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.

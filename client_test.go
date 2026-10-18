@@ -19,11 +19,19 @@ import (
 	"time"
 
 	claude "github.com/zoumo/claude-agent-sdk-go"
+	"github.com/zoumo/claude-agent-sdk-go/internal/transcript"
 )
 
 // All fixtures are local re-executions of this test binary under a replacement
 // environment and temporary HOME. No installed CLI or account is ever used.
 func TestMain(m *testing.M) {
+	if os.Getenv(transcript.PeerEnvironment) == "1" {
+		if err := transcript.Peer(os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
 	if mode := os.Getenv("CLAUDE_GO_FIXTURE"); mode != "" {
 		runFixture(mode)
 		os.Exit(0)

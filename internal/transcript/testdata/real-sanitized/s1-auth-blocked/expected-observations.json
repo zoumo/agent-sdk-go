@@ -1,0 +1,13 @@
+{
+  "provenance": "offline-assertions",
+  "native_records": 8,
+  "subagent_created_records": 0,
+  "result": {
+    "subtype": "success",
+    "is_error": true,
+    "terminal_reason": "api_error"
+  },
+  "result_before_idle": true,
+  "raw": "exact sanitized native bytes",
+  "all_capture_frames_consumed": true
+}

@@ -1,0 +1,11 @@
+# Pre-recording story cards
+
+Base/API/documentation: 282f85aed93c571d4aaa500751d6786b021897b6; parent reports Linux/macOS run 39105548229 passed. Open -> Send -> Receive(TreeRecord); PermissionRequest.Answer is the sole permission authority.
+
+S1: numbers.txt = `7\n11\n`; read then write summary.txt = `total=18\n`. Prompt is the s1 constant in cmd/record-transcript. Read/Write only; restricted working-directory confinement, safe-mode, no hooks/skills/MCP/Chrome/session persistence, minimal system prompt, settings sources empty. Ask policy on Read and Write; handler canonical exact paths, no symlinks, exact write content, at most two approvals; default deny. No Agent/Bash/network tools. Expected initialize -> user; tool_use -> matching tool_result -> root result; native idle when emitted. No fixed wording/delta count. Continue Receive through root result to idle, otherwise 120s deadline. One attempt, no retries, 2MiB combined wire and 256KiB stderr, $1 official print budget (not precise subscription accounting).
+
+S2: one AskUserQuestion: Which synthetic color? Blue/Green. Only AskUserQuestion enabled; same isolation. Handler accepts first matching original request and answers Blue once, otherwise deny. Expected tool_use -> can_use_tool -> exactly one original-handle answer -> tool_result -> root result; ordering of observer vs handler is unconstrained. Same bounds as S1; no child.
+
+S3: blocked before any call unless direct-child count, depth and child-tool restrictions can be enforced. No prompt-only enforcement, no additional call to probe. Existing public SDK only exposes permission interception; safe-mode disables custom agent definitions. This implementation therefore leaves S3 unattempted rather than enabling unconstrained builtin Agent. Parent-result/child late events remain synthetic coverage in existing tree suites.
+
+Private capture: stdio proxy, a single SDK reader, stdout/control marked separately with total ordinals, stderr separate. No credential/header/environment recording. Raw is 0700/0600 local temporary data; no raw diagnostic output. Publication requires structure whitelist, typed ID/path remapping, canary scan and relationship verification before repository files are created.

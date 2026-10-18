@@ -338,3 +338,7 @@ sequenceDiagram
 
 完整字段与边界见 [API 与资源界限](subagent-events.md)、[能力矩阵](subagent-compatibility.md)
 和 [默认托管 API 迁移](default-managed-migration.md)。
+
+## 有限真实尝试的补充证据
+
+后续[独立录制票](record-replay.md)只取得一次 CLI 2.1.258 认证失败样本，未取得成功模型/工具或子流证据。实际 result 的 `subtype=success` 与 `is_error=true` 同时出现，且随后发出原生 idle。因此判断成功还必须检查错误字段；初始化接受、result subtype 和 idle 都不能单独证明模型工作成功。以上九故事的成功路径、工具与子任务交错仍不因该失败样本升级为真实验证通过。

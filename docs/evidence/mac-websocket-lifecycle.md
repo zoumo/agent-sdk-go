@@ -9,7 +9,7 @@ covers only the exact local scenarios below, not a supported version range.
 - SDK base/main `b6a42a4a3746488464fc9ee19dedc8f3d9e70346`; clean worktree.
   Authoritative remote main matched before editing. Prerequisite hosted CI
   `39086088795` was read back as completed/success at this exact SHA.
-- Darwin arm64; `/Users/jim/.bun/bin/codex`, `codex-cli 0.162.1`.
+- Darwin arm64; `/path/to/codex`, `codex-cli 0.162.1`.
 - mise-managed `go1.26.9 darwin/arm64`, asserted before live execution.
   Ticket 01 records official archive/hash verification; no reinstall here.
 - SDK protocol target remains 0.160.1 at
@@ -113,7 +113,7 @@ Live command (safe output redirected to `/tmp/ticket03-websocket-sanitized.txt`;
 no raw wire or child stderr retained):
 
 ```sh
-rtk proxy sh -ec 'test "$(mise exec go@1.26.9 -- go env GOVERSION)" = go1.26.9; RUN_MAC_WEBSOCKET_LIVE=1 MAC_LIVE_CODEX=/Users/jim/.bun/bin/codex mise exec go@1.26.9 -- go test -v -count=1 -run "^TestWebSocketLifecycleHistory$" -timeout=10m ./tests/live'
+rtk proxy sh -ec 'test "$(mise exec go@1.26.9 -- go env GOVERSION)" = go1.26.9; RUN_MAC_WEBSOCKET_LIVE=1 MAC_LIVE_CODEX=/path/to/codex mise exec go@1.26.9 -- go test -v -count=1 -run "^TestWebSocketLifecycleHistory$" -timeout=10m ./tests/live'
 ```
 
 ## Limits and ticket 04 handoff

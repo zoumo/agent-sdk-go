@@ -1,4 +1,10 @@
-# Final live smoke attempt
+# Live validation evidence
+
+The current [final Mac report](mac-live-summary.md) records the later CLI 0.162.1
+results and coverage limits. The Linux attempt below is retained at its original
+revision and remains blocked; it is not the current overall result.
+
+## Historical Linux attempt
 
 ## Exact scope
 

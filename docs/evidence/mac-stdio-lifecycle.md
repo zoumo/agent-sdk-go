@@ -10,7 +10,7 @@ by the commit containing this report. No SDK implementation or protocol changed.
 | Item | Observed value |
 | --- | --- |
 | OS / architecture | Darwin / arm64 |
-| CLI executable | `/Users/jim/.bun/bin/codex` |
+| CLI executable | `/path/to/codex` |
 | CLI version | `codex-cli 0.162.1` |
 | SDK protocol source target | `0.160.1`, revision `d27764b82f7118f674371e6d6e76271d9d606edb` |
 | Go | `go1.26.9 darwin/arm64`, managed by mise |
@@ -45,7 +45,7 @@ Go toolchain are the authorized local changes outside Git.
 Run from the repository, explicitly opting into real account/model use:
 
 ```sh
-rtk proxy sh -ec 'test "$(mise exec go@1.26.9 -- go env GOVERSION)" = go1.26.9; RUN_MAC_STDIO_LIVE=1 MAC_LIVE_CODEX=/Users/jim/.bun/bin/codex mise exec go@1.26.9 -- go test -v -count=1 -timeout=10m ./tests/live'
+rtk proxy sh -ec 'test "$(mise exec go@1.26.9 -- go env GOVERSION)" = go1.26.9; RUN_MAC_STDIO_LIVE=1 MAC_LIVE_CODEX=/path/to/codex mise exec go@1.26.9 -- go test -v -count=1 -timeout=10m ./tests/live'
 ```
 
 The executed command redirected its safe test output to

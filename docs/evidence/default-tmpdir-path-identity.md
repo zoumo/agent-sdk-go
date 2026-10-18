@@ -3,7 +3,7 @@
 Date: 2026-10-18 UTC. Base: `1d15d9d2dd8d7499a2e6b350880cf43a14b20ffa`.
 Toolchain: mise Go 1.26.9, Darwin/arm64, `GOTOOLCHAIN=local`.
 
-The inherited TMPDIR was `/var/folders/v7/hcm12_5x49lf7szbrsz4p_p80000gp/T/`.
+The inherited TMPDIR was `/var/folders/<private>/T/`.
 It was not normalized or overridden for any test below.
 
 ## Reproduction and repair

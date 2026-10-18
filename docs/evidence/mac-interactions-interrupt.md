@@ -12,7 +12,7 @@ without detected transport/decode/stream errors, not that every capability passe
   Local and authoritative remote main matched before editing; worktree was clean.
 - Prerequisite CI independently read back: `39085256828`, that exact SHA,
   completed/success.
-- Darwin 25.2.0 arm64; CLI `/Users/jim/.bun/bin/codex`, `codex-cli 0.162.1`.
+- Darwin 25.2.0 arm64; CLI `/path/to/codex`, `codex-cli 0.162.1`.
 - mise-selected `go1.26.9 darwin/arm64`, explicitly asserted before live dispatch.
   Ticket 01 records official archive verification; no reinstall here.
 - Protocol target remains 0.160.1 at
@@ -41,7 +41,7 @@ compared in memory and excluded from public output.
 The separate opt-in avoids repeating ticket 01:
 
 ```sh
-rtk proxy sh -ec 'test "$(mise exec go@1.26.9 -- go env GOVERSION)" = go1.26.9; RUN_MAC_INTERACTIONS_LIVE=1 MAC_LIVE_CODEX=/Users/jim/.bun/bin/codex mise exec go@1.26.9 -- go test -v -count=1 -run "^TestStdioInteractionsInterrupt$" -timeout=10m ./tests/live'
+rtk proxy sh -ec 'test "$(mise exec go@1.26.9 -- go env GOVERSION)" = go1.26.9; RUN_MAC_INTERACTIONS_LIVE=1 MAC_LIVE_CODEX=/path/to/codex mise exec go@1.26.9 -- go test -v -count=1 -run "^TestStdioInteractionsInterrupt$" -timeout=10m ./tests/live'
 ```
 
 Do not rerun within the completed budget. The actual command redirected safe

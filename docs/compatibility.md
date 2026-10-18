@@ -50,8 +50,9 @@ workflows are outside this typed wrapper's strict-ID contract even though their
 full parameter/result schemas are exposed. The raw escape hatch does not confer
 support. `UnsubscribeThread` sends one native request and returns its status; it
 is independent of local subscription cancellation and never sends an interrupt.
-Two fake connections establish explicit reinitialization and unchanged native-ID
-handling, not real-server durable history or persistence compatibility.
+Fake-peer connection tests establish explicit reinitialization and unchanged
+native-ID handling. Separate Mac live evidence below establishes durable history
+and explicit fresh-connection resume only for its exact scenarios and CLI version.
 
 Subscriptions preserve all valid notifications as raw method and parameter JSON.
 Seven methods also have typed payloads: `turn/started`, `turn/completed`,
@@ -112,7 +113,9 @@ Each inventory row keeps unit, fake-peer/mock, race, and live evidence separatel
 Ticket 05 passed final working-tree normal unit/mock, five-repeat normal, full
 race, vet, dependency, generation, and inventory checks; exact revision/scope is
 recorded in [evidence.json](protocol/evidence.json). Implementation status alone is
-not a test pass. Hosted CI is configured but was not run as part of this work.
+not a test pass. That historical ticket did not run hosted CI. Current Mac
+evidence and exact subsequent offline CI readback are recorded in the final
+report below.
 Empty evidence arrays mean no result has been recorded for that row. Evidence
 records and reproducible commands belong in [evidence.json](protocol/evidence.json).
 Official tests inspected as design references are described in
@@ -141,14 +144,21 @@ is not guaranteed. See the exported `Limits` and README for finite defaults.
 
 ## Live validation
 
-**Attempted, blocked before initialization completed.** The final opt-in stdio
-smoke attempt used SDK revision `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c`
-and installed official Codex `0.159.2`. `NewStdio` returned
-`initialize (outcome-unknown): EOF`; no thread or model turn was dispatched.
-A separate zero-message startup diagnostic established that the installed CLI
-exited with a SQLite state-runtime initialization failure before protocol traffic.
-No request was replayed and no auth or permission workaround was attempted. See [final live attempt](evidence/final-live.md)
-for the exact scenario and limitations. Live model and durable-resume behavior
-remain unverified; no capability row is promoted to a live pass. Source inspection,
-synthetic child processes, loopback fixtures, and race-detector passes cannot be
-promoted to live evidence.
+The [final Mac report](evidence/mac-live-summary.md) consolidates real CLI
+**0.162.1** on Darwin/arm64, Go 1.26.9, against this SDK's official **0.160.1**
+protocol target. Exact tested bases and delivery commits are listed separately.
+Stdio and authenticated loopback WS passed two-turn events, durable history,
+fresh-connection same-ID resume and bounded lifecycle assertions. Stdio user
+input passed BLUE answer → exact native resolution → BLUE result → completion.
+
+Command/file/permissions approvals were **untriggered**. A synthetic command
+effect passed independently. The interrupt command guard did not match, so no
+InterruptTurn was sent and interruption is **untriggered**, not passed. Public
+WSS, JWT issuer/signed bearer, proxies and cross-host operation are **not covered**.
+Mock WSS and schema/typed representation do not replace live workflow evidence.
+All 9/9 authorized model attempts were used; this summary adds zero model calls.
+
+The [historical Linux attempt](evidence/final-live.md#historical-linux-attempt)
+at SDK `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c` / CLI 0.159.2 remains
+blocked by SQLite startup before initialization completed, with zero model turns.
+No version range, live CLI 0.160.1 pass or complete-protocol certification is claimed.

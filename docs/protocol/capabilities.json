@@ -42,7 +42,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v1::InitializeParams",
       "response_rust_type": "v1::InitializeResponse",
@@ -224,7 +227,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::ThreadStartParams",
       "response_rust_type": "v2::ThreadStartResponse",
@@ -262,7 +268,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::ThreadResumeParams",
       "response_rust_type": "v2::ThreadResumeResponse",
@@ -381,7 +390,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::ThreadUnsubscribeParams",
       "response_rust_type": "v2::ThreadUnsubscribeResponse",
@@ -1559,7 +1571,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::ThreadReadParams",
       "response_rust_type": "v2::ThreadReadResponse",
@@ -2539,7 +2554,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::TurnStartParams",
       "response_rust_type": "v2::TurnStartResponse",
@@ -4620,7 +4638,9 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac02-user-input-live"
+        ]
       },
       "params_rust_type": "v2::ToolRequestUserInputParams",
       "response_rust_type": "v2::ToolRequestUserInputResponse",
@@ -5435,7 +5455,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::TurnStartedNotification",
       "stable_schema_params": {
@@ -5498,7 +5521,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::TurnCompletedNotification",
       "stable_schema_params": {
@@ -5728,7 +5754,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::ItemCompletedNotification",
       "stable_schema_params": {
@@ -5805,7 +5834,10 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "params_rust_type": "v2::AgentMessageDeltaNotification",
       "stable_schema_params": {
@@ -6050,7 +6082,9 @@
           "ticket05-remote-contract-race",
           "ticket05-model-race"
         ],
-        "live": []
+        "live": [
+          "mac02-user-input-live"
+        ]
       },
       "params_rust_type": "v2::ServerRequestResolvedNotification",
       "stable_schema_params": {
@@ -7174,7 +7208,10 @@
           "ticket01-contract-race",
           "ticket05-remote-contract-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live",
+          "mac03-loopback-ws-live"
+        ]
       },
       "stable_schema_params": null,
       "in_experimental_schema": true,
@@ -7285,7 +7322,9 @@
         "race": [
           "ticket01-contract-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live"
+        ]
       }
     },
     {
@@ -7302,7 +7341,9 @@
         "race": [
           "ticket01-contract-race"
         ],
-        "live": []
+        "live": [
+          "mac01-stdio-live"
+        ]
       }
     },
     {
@@ -7319,7 +7360,9 @@
         "race": [
           "ticket05-remote-contract-race"
         ],
-        "live": []
+        "live": [
+          "mac03-loopback-ws-live"
+        ]
       }
     },
     {
@@ -7370,7 +7413,9 @@
         "race": [
           "ticket05-remote-contract-race"
         ],
-        "live": []
+        "live": [
+          "mac03-loopback-ws-live"
+        ]
       }
     },
     {

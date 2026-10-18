@@ -3,8 +3,10 @@
 A native Go client for the Codex app-server protocol.
 
 **Start with [compatibility and the complete official capability inventory](docs/compatibility.md).**
-The protocol source is pinned to one exact official commit. Mock tests are not
-live certification, and no supported-version range is claimed.
+The protocol target is official **0.160.1** at one exact commit. The
+[Mac live report](docs/evidence/mac-live-summary.md) records limited real CLI
+**0.162.1** stdio/loopback WS and user-input passes. Approvals and interrupt were
+untriggered; public WSS/JWT remain uncovered. No supported-version range is claimed.
 
 ## Local thread example
 
@@ -383,11 +385,16 @@ mise exec go@1.26.9 -- go vet ./...
 python3 docs/protocol/verify_inventory.py
 ```
 
-Tests use only synthetic helper processes, loopback WS peers, and local WSS peers
-with synthetic certificates and dummy tokens. They never require an account or
-call a model. The [CI workflow](.github/workflows/ci.yml) runs normal tests, race
+Default tests use synthetic helper processes, loopback WS peers, and local WSS
+peers with synthetic certificates and dummy tokens. The opt-in `tests/live`
+harnesses use a real CLI/account/model only when explicitly enabled. Keep
+`RUN_MAC_STDIO_LIVE`, `RUN_MAC_INTERACTIONS_LIVE`, `RUN_MAC_WEBSOCKET_LIVE`
+and `RUN_REAL_CODEX_TESTS` unset or `0` for offline checks. The completed Mac
+budget is 9/9; do not rerun live tests within it. The
+[CI workflow](.github/workflows/ci.yml) runs normal tests, race
 tests, vet, and inventory checks on pinned Go 1.26.9, with no service secrets or
-live-test step. Configuring CI is not evidence that a hosted CI run has passed.
+live-test step. Exact hosted results and the distinction between offline and live
+evidence are recorded in the [final Mac report](docs/evidence/mac-live-summary.md).
 [Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
 [ticket 03](docs/evidence/ticket-03.md), [ticket 04](docs/evidence/ticket-04.md), and
 [ticket 05 evidence](docs/evidence/ticket-05.md) record scenarios and verification status.

@@ -121,6 +121,8 @@ type TreeSubscription struct {
 	closed        bool
 	stop          func() bool
 	sequence      uint64
+	batching      bool
+	batch         []TreeEvent
 	seeding       bool
 	historyIDs    map[string]struct{}
 	maxNodes      int
@@ -163,6 +165,11 @@ func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options
 	}
 	if options.EventQueue == 0 {
 		options.EventQueue = c.limits.EventQueue
+	}
+	// Leave room for the reserved disconnect record, including a queue default
+	// inherited from Client limits. Reject arithmetic overflow before allocation.
+	if options.EventQueue == int(^uint(0)>>1) {
+		return nil, errors.New("codex: tree event capacity overflows reserved slot")
 	}
 	if options.MaxNodes == 0 {
 		options.MaxNodes = 4096
@@ -247,6 +254,8 @@ func (t *TreeSubscription) finishLocked(cause error) {
 		t.timer.Stop()
 	}
 	t.pending = nil
+	t.pendingBytes = 0
+	t.batch = nil
 	t.seen = nil
 	t.seenOrder = nil
 	t.children = nil
@@ -270,11 +279,30 @@ func (t *TreeSubscription) emitLocked(e TreeEvent) {
 	if t.closed {
 		return
 	}
-	if len(t.events) >= t.options.EventQueue {
+	if len(t.events)+len(t.batch) >= t.options.EventQueue {
 		t.finishLocked(&SubscriptionOverflowError{Capacity: t.options.EventQueue})
 		return
 	}
+	if t.batching {
+		t.batch = append(t.batch, e)
+		return
+	}
 	t.enqueueLocked(e)
+}
+
+// Stage one bounded notification fanout (including newly resolved pending
+// records) before admitting any of it. Overflow preserves earlier accepted
+// records, without exposing an association whose native event was rejected.
+func (t *TreeSubscription) commitBatchLocked() {
+	batch := t.batch
+	t.batch = nil
+	t.batching = false
+	if t.closed {
+		return
+	}
+	for _, e := range batch {
+		t.enqueueLocked(e)
+	}
 }
 
 func (t *TreeSubscription) enqueueLocked(e TreeEvent) {
@@ -347,6 +375,8 @@ func (t *TreeSubscription) publishLocked(method string, params json.RawMessage, 
 	if t.closed {
 		return
 	}
+	t.batching = true
+	defer t.commitBatchLocked()
 	t.flushLocked(true)
 	if t.closed {
 		return
@@ -671,7 +701,9 @@ func (t *TreeSubscription) scheduleLocked() {
 		defer t.client.mu.Unlock()
 		t.timer = nil
 		if !t.closed {
+			t.batching = true
 			t.flushLocked(true)
+			t.commitBatchLocked()
 		}
 	})
 }

@@ -797,6 +797,94 @@
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
       "report": "../evidence/subagent-03.md"
+    },
+    {
+      "id": "subagent04-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=1 ./...",
+      "tested_sdk_base": "94b7ba6cceec55ca8a56493313d9fbae58988fcd",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e"
+      },
+      "test_files": [
+        "tree.go",
+        "tree_bounds_requests_test.go"
+      ],
+      "test_names": [
+        "TestTreeFanoutAdmissionIsAtomic",
+        "TestTreePendingDeadlineFanoutIsAtomic",
+        "TestTreeFullQueuePreservesOriginalRequestAuthority",
+        "TestTreeObservationCancellationDoesNotCancelRequest",
+        "TestTreeRequestTerminalAndEpochIsolation",
+        "TestTreeTextThinkingAndUsageStayAtNativeSource",
+        "TestTreeQueueCapacityOverflowIsRejected"
+      ],
+      "coverage": "Original synthetic public API stdio/WS/WSS fixtures: all-or-none association/multi-receiver/pending fanout, pending-expiry atomicity, full event queue with original approval/question handles and RPC replies, 12 concurrent one-shot answers, unchanged other tree/native subscriber, observation cancel/Close/publication races, cancel/expiry/resolution/Client.Close late answers and reused IDs across epochs, identical deltas, source-separated thinking/usage/parent final answer, explicit/inherited capacity arithmetic overflow. Existing contracts retain count/byte/age, graph/depth/cache, history and disconnect limits. No E3/E4 validation.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Final full normal suite; all live opt-ins explicitly SKIP. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "../evidence/subagent-04.md",
+      "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-test-final.log"
+    },
+    {
+      "id": "subagent04-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 ./...",
+      "tested_sdk_base": "94b7ba6cceec55ca8a56493313d9fbae58988fcd",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "tree_bounds_requests_test.go": "1656a7852d98db18c160858cb2b32708bac441705a205d5458901ff47a16eb70"
+      },
+      "test_files": [
+        "tree.go",
+        "tree_bounds_requests_test.go"
+      ],
+      "test_names": [
+        "TestTreeFanoutAdmissionIsAtomic",
+        "TestTreePendingDeadlineFanoutIsAtomic",
+        "TestTreeFullQueuePreservesOriginalRequestAuthority",
+        "TestTreeObservationCancellationDoesNotCancelRequest",
+        "TestTreeRequestTerminalAndEpochIsolation",
+        "TestTreeTextThinkingAndUsageStayAtNativeSource",
+        "TestTreeQueueCapacityOverflowIsRejected"
+      ],
+      "coverage": "Original synthetic public API stdio/WS/WSS fixtures: all-or-none association/multi-receiver/pending fanout, pending-expiry atomicity, full event queue with original approval/question handles and RPC replies, 12 concurrent one-shot answers, unchanged other tree/native subscriber, observation cancel/Close/publication races, cancel/expiry/resolution/Client.Close late answers and reused IDs across epochs, identical deltas, source-separated thinking/usage/parent final answer, explicit/inherited capacity arithmetic overflow. Existing contracts retain count/byte/age, graph/depth/cache, history and disconnect limits. No E3/E4 validation.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Full race suite passed with final production code. The thinking/usage synthetic payloads were subsequently completed with pinned native fields; the final fixture revision is separately retested below. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "../evidence/subagent-04.md",
+      "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race.log"
+    },
+    {
+      "id": "subagent04-final-fixture-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -race -v -count=1 -run '^TestTree(TextThinkingAndUsageStayAtNativeSource|QueueCapacityOverflowIsRejected)$' ./...",
+      "tested_sdk_base": "94b7ba6cceec55ca8a56493313d9fbae58988fcd",
+      "tested_source_sha256": {
+        "tree.go": "909758ab261e4d3677b29437a30654bf2ab191f678ba46299c94f40bef40f54f",
+        "tree_bounds_requests_test.go": "fd451b9994a43d549c55c82dc7f218430d461754703ceae285288e7baecfa77e"
+      },
+      "test_files": [
+        "tree.go",
+        "tree_bounds_requests_test.go"
+      ],
+      "test_names": [
+        "TestTreeTextThinkingAndUsageStayAtNativeSource",
+        "TestTreeQueueCapacityOverflowIsRejected"
+      ],
+      "coverage": "Original synthetic public API stdio/WS/WSS fixtures: all-or-none association/multi-receiver/pending fanout, pending-expiry atomicity, full event queue with original approval/question handles and RPC replies, 12 concurrent one-shot answers, unchanged other tree/native subscriber, observation cancel/Close/publication races, cancel/expiry/resolution/Client.Close late answers and reused IDs across epochs, identical deltas, source-separated thinking/usage/parent final answer, explicit/inherited capacity arithmetic overflow. Existing contracts retain count/byte/age, graph/depth/cache, history and disconnect limits. No E3/E4 validation.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9",
+      "revision_note": "Focused final-fixture race rerun after adding native contentIndex and complete token counters; final explicit/inherited capacity check included. Exact delivered source/test hashes. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
+      "report": "../evidence/subagent-04.md",
+      "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race-final-fixtures.log"
     }
   ],
   "verification_commands": [
@@ -859,6 +947,41 @@
       "command": "git diff --check",
       "status": "passed",
       "scope": "Mac ticket 04 documentation delivery on source/test tree e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78; Go 1.26.9, default inherited TMPDIR, all four live flags 0. All three opt-in live tests explicitly SKIP. No protocol regeneration."
+    },
+    {
+      "command": "mise exec -- go vet ./...",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "mise exec -- go mod download",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "mise exec -- go mod verify",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "python3 docs/protocol/verify_inventory.py",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "mise exec -- bash scripts/check_generated.sh",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
     }
   ],
   "hosted_ci": {

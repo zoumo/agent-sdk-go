@@ -503,6 +503,11 @@ remain unverified; the SDK does not probe them with execution RPCs. See
 edges. `PendingEvents`, `PendingBytes`, `PendingAge` and `DedupEntries` default to
 128, 4 MiB (stored envelope plus params), 5 seconds and 8192. Zero selects defaults;
 negative values are invalid. The age limit only bounds association waiting.
+Each live notification and its derived associations/resolved pending records enter
+the queue as one bounded batch. If the entire batch cannot fit, none of that batch
+is accepted. Pending-expiry diagnostics and unresolved Native records use the same
+admission rule. Earlier accepted records remain drainable; Done/Err do not need
+queue space. A reserved extra slot retains the disconnect diagnostic.
 Queue overflow terminates only that observer with `SubscriptionOverflowError`;
 graph/depth exhaustion ends it with `ErrLimit`. Each tree uses one shared admission
 slot. `Close` ends local observation without interrupting provider work. Parent

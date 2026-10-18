@@ -236,3 +236,16 @@ not establish subagent runtime coverage.
 Ticket 02 validation and API defaults: [recursive ordering evidence](evidence/subagent-02.md).
 
 Ticket 03 lifecycle and recovery limits: [offline evidence](evidence/subagent-03.md).
+
+Ticket 04 admits each live notification fanout atomically, including related
+associations and resolved pending records. Expiry diagnostics and unresolved native
+records are also admitted together. Overflow preserves previously accepted records
+and terminates only that observer; Done/Err remain independent of queue capacity.
+Control replies and original Requests handles continue on their existing paths.
+Observation cancellation/Close does not invalidate a request; request cancellation,
+expiry, native resolution and Client.Close retain the original handle semantics.
+Repeated request IDs on new Clients cannot reuse old answer authority. Parent
+final text, child deltas/thinking and each native usage payload keep their source
+and exact Raw; UsageScope stays unknown and no tree total is produced.
+
+Ticket 04 bounds and original request authority: [offline evidence](evidence/subagent-04.md).

@@ -4,7 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/zoumo/agent-sdk-go/codex/internal/recording"
+	recording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
 	"os"
 	"time"
 )

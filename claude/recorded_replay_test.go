@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/zoumo/agent-sdk-go/claude/internal/transcript"
+	"github.com/zoumo/agent-sdk-go/claude/tools/replay"
 	"os"
 	"path/filepath"
 	"strings"

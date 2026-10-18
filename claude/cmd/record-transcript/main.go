@@ -16,7 +16,7 @@ import (
 	"time"
 
 	claude "github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/claude/internal/transcript"
+	transcript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
 )
 
 const s1 = "Read only numbers.txt (two lines: 7 and 11), then use Write once to create summary.txt containing exactly total=18 followed by a newline. Use no other tools or files. Give one short final sentence."

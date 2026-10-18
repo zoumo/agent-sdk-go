@@ -9,11 +9,11 @@ file hashes, typed ID mappings, source commits and evidence limits remain intact
 
 | Capture | Native wire data | Provenance and file hashes | Expected observations | ID mappings / transport |
 |---|---|---|---|---|
-| Codex S1: successful root task with two dynamic tool calls | [protocol.jsonl](../codex/internal/recording/testdata/transcripts/real-sanitized/s1/protocol.jsonl) | [manifest.json](../codex/internal/recording/testdata/transcripts/real-sanitized/s1/manifest.json) | [expected-observations.json](../codex/internal/recording/testdata/transcripts/real-sanitized/s1/expected-observations.json) | [id-relations.json](../codex/internal/recording/testdata/transcripts/real-sanitized/s1/id-relations.json) |
-| Codex S2: successful user-question request and original correlated answer | [protocol.jsonl](../codex/internal/recording/testdata/transcripts/real-sanitized/s2/protocol.jsonl) | [manifest.json](../codex/internal/recording/testdata/transcripts/real-sanitized/s2/manifest.json) | [expected-observations.json](../codex/internal/recording/testdata/transcripts/real-sanitized/s2/expected-observations.json) | [id-relations.json](../codex/internal/recording/testdata/transcripts/real-sanitized/s2/id-relations.json) |
-| Claude S1: real CLI authentication failure, **no successful model or tool execution** | [wire.jsonl](../claude/internal/transcript/testdata/real-sanitized/s1-auth-blocked/wire.jsonl) | [manifest.json](../claude/internal/transcript/testdata/real-sanitized/s1-auth-blocked/manifest.json) | [expected-observations.json](../claude/internal/transcript/testdata/real-sanitized/s1-auth-blocked/expected-observations.json) | [id-relations.json](../claude/internal/transcript/testdata/real-sanitized/s1-auth-blocked/id-relations.json), [transport.json](../claude/internal/transcript/testdata/real-sanitized/s1-auth-blocked/transport.json) |
+| Codex S1: successful root task with two dynamic tool calls | [protocol.jsonl](../codex/testdata/recordings/real-sanitized/s1/protocol.jsonl) | [manifest.json](../codex/testdata/recordings/real-sanitized/s1/manifest.json) | [expected-observations.json](../codex/testdata/recordings/real-sanitized/s1/expected-observations.json) | [id-relations.json](../codex/testdata/recordings/real-sanitized/s1/id-relations.json) |
+| Codex S2: successful user-question request and original correlated answer | [protocol.jsonl](../codex/testdata/recordings/real-sanitized/s2/protocol.jsonl) | [manifest.json](../codex/testdata/recordings/real-sanitized/s2/manifest.json) | [expected-observations.json](../codex/testdata/recordings/real-sanitized/s2/expected-observations.json) | [id-relations.json](../codex/testdata/recordings/real-sanitized/s2/id-relations.json) |
+| Claude S1: real CLI authentication failure, **no successful model or tool execution** | [wire.jsonl](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/wire.jsonl) | [manifest.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/manifest.json) | [expected-observations.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/expected-observations.json) | [id-relations.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/id-relations.json), [transport.json](../claude/testdata/recordings/real-sanitized/s1-auth-blocked/transport.json) |
 
-Codex's [recording summary](../codex/internal/recording/testdata/transcripts/real-sanitized/recording-summary.json)
+Codex's [recording summary](../codex/testdata/recordings/real-sanitized/recording-summary.json)
 describes the original capture activity. Both Codex captures used CLI 0.162.1;
 Claude used CLI 2.1.258. These are historical observations of those captures,
 not current live compatibility claims. Codex S1 does not cover native shell or
@@ -30,8 +30,8 @@ synthetic tests; these tests do not establish successful real-agent behavior.
 
 | Fixture | Files | Meaning |
 |---|---|---|
-| Codex synthetic lifecycle/faults | [protocol.jsonl](../codex/internal/recording/testdata/synthetic-faults/lifecycle/protocol.jsonl), [manifest.json](../codex/internal/recording/testdata/synthetic-faults/lifecycle/manifest.json) | Handwritten fault/lifecycle traffic; not captured provider output |
-| Claude synthetic control protocol | [controls.jsonl](../claude/internal/transcript/testdata/synthetic-faults/controls.jsonl), [README](../claude/internal/transcript/testdata/synthetic-faults/README.md) | Handwritten control/permission/cancellation cases |
+| Codex synthetic lifecycle/faults | [protocol.jsonl](../codex/testdata/synthetic-faults/lifecycle/protocol.jsonl), [manifest.json](../codex/testdata/synthetic-faults/lifecycle/manifest.json) | Handwritten fault/lifecycle traffic; not captured provider output |
+| Claude synthetic control protocol | [controls.jsonl](../claude/testdata/synthetic-faults/controls.jsonl), [README](../claude/testdata/synthetic-faults/README.md) | Handwritten control/permission/cancellation cases |
 | Claude offline subagent example | [events.ndjson](../claude/examples/subagents-offline/testdata/events.ndjson) | Synthetic nested/background task sequence |
 | Shared story protocol peers | [peer_test.go](../tests/stories/peer_test.go) | Generated in-process/self-executed native peers, not recordings |
 
@@ -53,3 +53,13 @@ The migration inventory found **20 testdata files on disk, all tracked**;
 ignored-file inventory were empty. Private raw captures, credentials and
 environment/configuration copies are not published. Do not add raw data or
 reclassify synthetic fixtures to fill the missing real-subagent evidence.
+
+## Directory responsibilities
+
+Each SDK uses the same three layers:
+
+- `codex/cmd/record-events` and `claude/cmd/record-transcript` are explicit, guarded CLI entry points. Tests and CI never record real agents.
+- `codex/tools/replay` and `claude/tools/replay` hold reusable protocol-specific capture, safety and offline replay helpers. SDK runtime packages do not import them.
+- `codex/testdata` and `claude/testdata` contain the single published fixture copies. `recordings/real-sanitized` is captured evidence; `synthetic-faults` is handwritten traffic. Tiny `embed.go` containers make fixtures available to offline tooling and examples without depending on source working directories.
+
+The example-local [Claude subagent events](../claude/examples/subagents-offline/testdata/events.ndjson) remain explicitly synthetic. The library package names `recording` and `transcript` remain protocol-specific even though their directory layouts align.

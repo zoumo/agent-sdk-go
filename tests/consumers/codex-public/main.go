@@ -1,4 +1,4 @@
-// Publicconsumer checks the SDK import boundary without connecting to a server.
+// This consumer checks public API imports and configuration without opening a client.
 package main
 
 import (

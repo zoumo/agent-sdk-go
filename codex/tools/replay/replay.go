@@ -1,11 +1,10 @@
-// Package recording contains internal offline transcript tooling, not a production transport.
+// Package recording provides protocol-specific capture and offline replay tooling.
 package recording
 
 import (
 	"bufio"
 	"bytes"
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,11 +14,12 @@ import (
 	"time"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
+	fixturedata "github.com/zoumo/agent-sdk-go/codex/testdata"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-//go:embed testdata
-var fixtures embed.FS
+// fixtures is the shared embedded fixture source used by offline tooling.
+var fixtures = fixturedata.Files
 
 type Frame struct {
 	Ordinal   int             `json:"ordinal"`
@@ -34,7 +34,7 @@ func Load(story string) ([]Frame, error) {
 	if story != "s1" && story != "s2" {
 		return nil, errors.New("unknown story")
 	}
-	b, err := fixtures.ReadFile("testdata/transcripts/real-sanitized/" + story + "/protocol.jsonl")
+	b, err := fixtures.ReadFile("recordings/real-sanitized/" + story + "/protocol.jsonl")
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ func Replay(ctx context.Context, executable, story string, out io.Writer) error 
 	if err = c.Call(ctx, "replay/assert", nil, nil); err != nil {
 		return err
 	}
-	expectedRaw, err := fixtures.ReadFile("testdata/transcripts/real-sanitized/" + story + "/expected-observations.json")
+	expectedRaw, err := fixtures.ReadFile("recordings/real-sanitized/" + story + "/expected-observations.json")
 	if err != nil {
 		return err
 	}

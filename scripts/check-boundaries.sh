@@ -23,6 +23,15 @@ if [[ "$production_deps" == *github.com/stretchr/* ]]; then
   echo "testify dependencies must remain test-only" >&2
   exit 1
 fi
+# Recording/replay utilities and embedded fixtures are tooling, never SDK
+# runtime dependencies. Inspect only the four supported SDK/data entry points.
+sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' ./codex ./codex/types ./claude ./claude/types)
+for native in codex claude; do
+  if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tools* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/testdata* ]]; then
+    echo "SDK production packages must not import recording tools or fixtures" >&2
+    exit 1
+  fi
+done
 python3 - <<'PY'
 import json, subprocess
 rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...'], text=True)

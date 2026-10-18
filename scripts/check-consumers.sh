@@ -93,10 +93,13 @@ GO
 python3 - "$module_dir" <<'PY'
 import pathlib, shutil, sys
 source = pathlib.Path(sys.argv[1])
+# Copy the fetched module's pure API/configuration consumer separately from SDK demos.
+target = pathlib.Path('consumers/codex-public')
+target.mkdir(parents=True)
+shutil.copyfile(source / 'tests/consumers/codex-public/main.go', target / 'main.go')
 # Compile consumer copies of the fetched module's public examples, excluding
 # example tests and all examples that import implementation-only packages.
 for name, relative in (
-    ('codex-public', 'codex/examples/publicconsumer/main.go'),
     ('codex-api', 'codex/examples/apiusage/usage.go'),
     ('codex-observe', 'codex/examples/observe-turn/main.go'),
     ('codex-resume', 'codex/examples/resume-thread/main.go'),
@@ -124,7 +127,7 @@ go mod tidy
 go mod verify
 go mod edit -json | python3 -c 'import json, sys; assert not json.load(sys.stdin).get("Replace"), "consumer unexpectedly contains a replace directive"'
 test ! -e go.work
-# Downloads are complete: compile/examples and synthetic runtime now run offline.
+# Downloads are complete: consumer/example compilation and pure checks now run offline.
 GOPROXY=off GOSUMDB=off go test -count=1 ./...
-GOPROXY=off GOSUMDB=off go run ./examples/codex-public
+GOPROXY=off GOSUMDB=off go run ./consumers/codex-public
 printf 'External consumer verified pushed commit %s\n' "$revision"

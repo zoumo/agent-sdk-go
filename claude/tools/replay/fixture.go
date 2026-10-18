@@ -3,22 +3,28 @@ package transcript
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+
+	fixturedata "github.com/zoumo/agent-sdk-go/claude/testdata"
 )
 
 const PeerEnvironment = "CLAUDE_GO_RECORDED_PEER"
 
 // This is a real CLI authentication failure, not a successful model recording.
-//
-//go:embed testdata/real-sanitized/s1-auth-blocked/wire.jsonl
-var Wire []byte
+var Wire = fixtureBytes("recordings/real-sanitized/s1-auth-blocked/wire.jsonl")
 
-//go:embed testdata/real-sanitized/s1-auth-blocked/manifest.json
-var Manifest []byte
+var Manifest = fixtureBytes("recordings/real-sanitized/s1-auth-blocked/manifest.json")
+
+func fixtureBytes(path string) []byte {
+	data, err := fixturedata.Files.ReadFile(path)
+	if err != nil {
+		panic(err) // A missing embedded fixture is a build/package integrity error.
+	}
+	return data
+}
 
 func Prompt() (string, error) {
 	frames := bytes.Split(bytes.TrimSpace(Wire), []byte{'\n'})

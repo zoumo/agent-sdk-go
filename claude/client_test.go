@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/claude/internal/transcript"
+	"github.com/zoumo/agent-sdk-go/claude/tools/replay"
 )
 
 // All fixtures are local re-executions of this test binary under a replacement

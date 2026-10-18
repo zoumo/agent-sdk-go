@@ -9,7 +9,7 @@ from recording_sanitize import SCHEMA, scan, validate
 
 def check(root):
     for story in ('s1', 's2'):
-        directory = root/'internal/recording/testdata/transcripts/real-sanitized'/story
+        directory = root/'testdata/recordings/real-sanitized'/story
         manifest = json.loads((directory/'manifest.json').read_text())
         scan(manifest)
         assert manifest['provenance'] == 'real-sanitized'

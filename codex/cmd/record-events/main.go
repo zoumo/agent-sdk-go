@@ -12,7 +12,7 @@ import (
 	"time"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/internal/recording"
+	recording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 

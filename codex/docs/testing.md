@@ -24,14 +24,16 @@ mise exec -- bash scripts/check_generated.sh
 python3 -m unittest discover -s scripts -p 'test_ci_checks.py' -v
 python3 -m unittest discover -s scripts -p 'test_recording_sanitize.py' -v
 python3 scripts/check_recordings.py
-mise exec -- go run ./examples/publicconsumer
+mise exec -- go run ../tests/consumers/codex-public
 mise exec -- go run ./examples/observe-subagents-offline
 mise exec -- go run ./examples/replay-recorded
 git diff --check
 ```
 
 Use `GOPROXY=off GOSUMDB=off` when dependencies are already cached to prohibit
-module network access. The API usage package and documentation examples in Go
+module network access. The [pure API/configuration consumer](../../tests/consumers/codex-public/main.go) is
+a repository validation check, separate from SDK demonstrations. The API usage
+package and documentation examples in Go
 test files compile with `go test ./...`; examples that require a real service
 are not executed. The synthetic observation example checks its expected
 transcript, and replay validates complete fixture consumption with no live fallback.

@@ -16,7 +16,11 @@ compatibility boundaries and recorded fixture provenance. Shared operating and
 migration documentation lives here.
 
 The [shared stories](stories/index.md) describe common acceptance criteria while
-keeping native capability and evidence records separate. The [glossary](glossary.md)
+keeping native capability and evidence records separate. Acceptance checks and
+private detached facts live directly in
+[`tests/stories/acceptance_test.go`](../tests/stories/acceptance_test.go) on
+`CommonStoriesSuite`; each native adapter retains its client lifecycle and answer
+handles. These checks have no production package or shared answer implementation. The [glossary](glossary.md)
 defines their terms. [Confirmed relationship bookkeeping](lineage.md) is the
 private shared implementation; native event parsing and answer authority remain
 in their SDKs. [Release preparation](releasing.md) covers one version for all

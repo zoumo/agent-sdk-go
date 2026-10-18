@@ -32,7 +32,7 @@ not a claim of every native message being published.
 ```sh
 python3 -m unittest discover -s scripts -p 'test_recording_sanitize.py' -v
 python3 scripts/check_recordings.py
-go test -count=1 -run 'TestRecorded|TestSyntheticManaged' ./internal/recording
+go test -count=1 -run 'TestManagedRecording' ./tools/replay
 go run ./examples/replay-recorded
 ```
 
@@ -55,8 +55,8 @@ Text and delta boundaries are evidence of this capture, not requirements on futu
 models. A parent result never proves whole-tree completion. No child behavior is
 claimed from S1 or S2; existing synthetic tree contracts cover that boundary.
 
-`internal/recording/testdata/transcripts/real-sanitized` holds recorded evidence;
-`internal/recording/testdata/synthetic-faults` holds explicitly synthetic protocol
+`testdata/recordings/real-sanitized` holds recorded evidence;
+`testdata/synthetic-faults` holds explicitly synthetic protocol
 preparation/fault inputs. Each real manifest records source revisions, binary
 digest, prompt/input digests, retained coverage frame indices, exclusions,
 budgets, actual transport duration, cleanup and file hashes. ID relations publish
@@ -68,7 +68,7 @@ before publication. Unknown structures quarantine the capture.
 The independent maintenance entry point is never called by the workflow:
 
 ```sh
-go build -o /tmp/record-events ./internal/cmd/record-events
+go build -o /tmp/record-events ./cmd/record-events
 SDK_REAL_AGENT_E2E=1 python3 scripts/record_real.py --record \
   --cli /absolute/path/to/pinned/native/codex \
   --runner /tmp/record-events --session-root /tmp/new-private-recording

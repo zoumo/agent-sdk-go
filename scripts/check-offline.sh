@@ -15,6 +15,8 @@ python3 -m unittest discover -s codex/scripts -p 'test_recording_sanitize.py' -v
 python3 codex/scripts/check_recordings.py
 python3 claude/scripts/check-transcripts.py
 go test -p=1 -count=1 -timeout 180s ./...
-for example in codex/examples/publicconsumer codex/examples/observe-subagents-offline codex/examples/replay-recorded claude/examples/subagents-offline claude/examples/recorded-replay; do
+# The pure public API/configuration consumer is a validation check, not an SDK demo.
+go run ./tests/consumers/codex-public
+for example in codex/examples/observe-subagents-offline codex/examples/replay-recorded claude/examples/subagents-offline claude/examples/recorded-replay; do
   go run "./$example"
 done

@@ -20,7 +20,7 @@ The peer replays captured direction/order dependencies without sleeps. It suppor
 
 ## Evidence and scope
 
-[Manifest](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/manifest.json), [wire](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/wire.jsonl), [ID relations](../internal/transcript/testdata/real-sanitized/s1-auth-blocked/id-relations.json).
+[Manifest](../testdata/recordings/real-sanitized/s1-auth-blocked/manifest.json), [wire](../testdata/recordings/real-sanitized/s1-auth-blocked/wire.jsonl), [ID relations](../testdata/recordings/real-sanitized/s1-auth-blocked/id-relations.json).
 
 | Story | Real attempts | Children | Seconds | Result |
 | --- | ---: | ---: | ---: | --- |
@@ -38,7 +38,7 @@ Frame 9 is a native synthetic authentication-error assistant, frame 10 has `subt
 
 Private raw wire, derived observations and stderr were created outside the repository with directory/file modes 0700/0600. The publisher validates a reviewed field allowlist, preserves absent/null and structure, maps IDs consistently, replaces the synthetic root/runtime socket/PID, resets timestamps to a neutral epoch while retaining offsets, checks each ID occurrence/equality class, then scans token/header/home/email canaries. Ambiguous values shared across ID namespaces are quarantined rather than merged. Unknown fields or sensitive free text fail before creating a public directory. The allowlist is specific to this CLI/sample, not a general-purpose safe JSON sanitizer. No original ID mapping or environment values are published. Public Raw means sanitized wire bytes. Protocol/control have separate channel tags and one ordinal stream; stderr and derived expectations remain separate.
 
-`expected-observations.json` contains offline assertions, not invented recorded model/tool events. Additional malformed/control fixtures have `provenance=synthetic` under [synthetic-faults](../internal/transcript/testdata/synthetic-faults/README.md). Existing tree terminal/lineage/bounds and permission cancellation tests cover parent-result/late-child, unknown frames, EOF, cancellation and resource limits; none are counted as live observations.
+`expected-observations.json` contains offline assertions, not invented recorded model/tool events. Additional malformed/control fixtures have `provenance=synthetic` under [synthetic-faults](../testdata/synthetic-faults/README.md). Existing tree terminal/lineage/bounds and permission cancellation tests cover parent-result/late-child, unknown frames, EOF, cancellation and resource limits; none are counted as live observations.
 
 ## Recording scenarios
 

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	claude "github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/claude/internal/transcript"
+	transcript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
 	"io"
 	"os"
 	"time"

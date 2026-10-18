@@ -154,3 +154,7 @@ Tests exercise exported APIs against a scripted subprocess with a replacement en
 Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
 
 See the [compatibility inventory](docs/compatibility.md) for every official export, client method, option and wire-control boundary, and [the design](docs/design/sdk-design.md) for the implemented core contract and deferred scope. Source/test provenance is recorded there and in [NOTICE](NOTICE).
+
+Message construction, JSON round trips, optional values and Raw/typed editing
+rules are documented in [the message JSON contract](docs/message-json.md).
+See [type source and license review](docs/type-sources.md) for pinned references.

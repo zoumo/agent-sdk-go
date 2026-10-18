@@ -82,3 +82,29 @@ func TestOptionsAdapterRunsExistingSubprocessProtocol(t *testing.T) {
 		t.Fatalf("adapter send frame = %s", event.Raw)
 	}
 }
+
+// Both public entry points own the same codec, including constructed frames.
+func TestMessageCodecAliases(t *testing.T) {
+	frame := []byte(`{"type":"result","subtype":"success","is_error":true,"modelUsage":{"fixture":{"inputTokens":0}},"api_error_status":429}`)
+	root, err := claude.ParseEvent(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := types.ParseEvent(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var same claude.Event = data
+	same.Result.ModelUsage["fixture"] = claude.ModelUsage{InputTokens: 3, Fields: map[string]claude.FieldState{"inputTokens": claude.Present}}
+	b, err := json.Marshal(same)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded types.Event
+	if err = json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !root.Result.IsError || decoded.Result.ModelUsage["fixture"].InputTokens != 3 {
+		t.Fatal("root/type codecs differ")
+	}
+}

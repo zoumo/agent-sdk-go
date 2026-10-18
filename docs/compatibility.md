@@ -43,12 +43,16 @@ Source file hashes below refer to exact file bytes from that commit. Paths are r
 The canonical definitions for existing events, messages, content blocks,
 results, stream views, raw incoming controls/cancellations, permission answers,
 permission behaviors, and resource limits live in
-`github.com/zoumo/claude-agent-sdk-go/types`. Usage remains `json.RawMessage`;
-this extraction introduces no message fields or permission features.
-`types.ParseEvent` owns the existing frame decoder; the runtime delegates to
-that same implementation. `Content` and `ContentBlock` retain their existing
-`UnmarshalJSON` methods. This move does not add JSON marshaling guarantees or
-change unknown-field retention.
+`github.com/zoumo/claude-agent-sdk-go/types`. Ticket01 established the package
+boundary and compatible aliases without adding permission features.
+`types.ParseEvent` owns the frame decoder; the runtime delegates to that same
+implementation. Ticket02 adds public `ParseEvent` at the root, bidirectional
+message/content/result codecs, explicit JSON presence overrides, envelope
+metadata, server tool content, init/task system fields, model usage, rate limits
+and conversation reset views. Unknown fields and open discriminators survive
+semantic JSON round trips. See [the JSON contract](message-json.md) for exact
+scope, construction, Raw/typed precedence and absent/null/zero behavior, and
+[type provenance and licenses](type-sources.md). Aggregate usage remains raw JSON.
 
 The root aliases these types and permission constants. Compile-time tests cover
 cross-package event/answer method signatures, content literals, and original
@@ -65,6 +69,7 @@ process state, locks, registries, queues, and callback execution remain in the
 runtime package; `types` has no root import and only standard-library
 dependencies. `Open` retains all existing defaults and resource checks.
 
+`types/json_test.go` covers bidirectional wire contracts, presence, edits and union validation.
 `types/events_test.go` exercises the independently imported decoder, raw byte
 ownership, unknown shapes, malformed existing shapes, and content codecs.
 `types_compatibility_test.go` verifies aliases, configuration conversion, and
@@ -303,25 +308,25 @@ This exhaustive list follows all 159 names in `__init__.__all__` at the pinned c
 | `SystemInitPluginError` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `FastModeState` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `FastModeDisabledReason` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `TaskStartedMessage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `TaskProgressMessage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `TaskUpdatedMessage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `TaskNotificationMessage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
+| `TaskStartedMessage` | Shared typed SystemEvent task fields; raw unknown metadata retained |
+| `TaskProgressMessage` | Shared typed SystemEvent task fields; usage remains raw JSON |
+| `TaskUpdatedMessage` | Shared typed SystemEvent task_id and raw patch; no computed lifecycle state |
+| `TaskNotificationMessage` | Shared typed SystemEvent task fields; usage remains raw JSON |
 | `TaskNotificationStatus` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `TaskUpdatedStatus` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `TERMINAL_TASK_STATUSES` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `TaskUsage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `ResultMessage` | CLI data type: partial typed/raw equivalent |
-| `ModelUsage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `DeferredToolUse` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `RateLimitEvent` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `RateLimitInfo` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
+| `ModelUsage` | Typed map under wire modelUsage, camelCase fields and unknown retention |
+| `DeferredToolUse` | Typed ToolUseBlock result field, without execution API |
+| `RateLimitEvent` | Typed RateLimitEvent view |
+| `RateLimitInfo` | Typed core wire fields with raw unknown retention |
 | `RateLimitStatus` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `RateLimitType` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `StreamEvent` | CLI data type: partial typed/raw equivalent |
-| `ConversationResetMessage` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
+| `ConversationResetMessage` | Typed ConversationResetEvent view; no session-store action |
 | `Message` | CLI data type: partial typed/raw equivalent |
-| `MessageOrigin` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
+| `MessageOrigin` | Typed open Kind with remaining keys raw |
 | `MessageOriginKind` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `TaskNotificationOriginSubkind` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
 | `ClaudeAgentOptions` | Configuration: partial, see exhaustive option inventory |
@@ -335,8 +340,8 @@ This exhaustive list follows all 159 names in `__init__.__all__` at the pinned c
 | `ToolUseBlock` | CLI data type: partial typed/raw equivalent |
 | `ToolResultBlock` | CLI data type: partial typed/raw equivalent |
 | `ServerToolName` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `ServerToolUseBlock` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
-| `ServerToolResultBlock` | CLI data/schema: raw preservation only; dedicated typed parity unsupported |
+| `ServerToolUseBlock` | Typed server tool branch, no client answer API |
+| `ServerToolResultBlock` | Typed server result identifiers with opaque content |
 | `ContentBlock` | CLI data type: partial typed/raw equivalent |
 | `ContextUsageCategory` | Configuration/control schema: unsupported; see option/control inventories |
 | `ContextUsageResponse` | Configuration/control schema: unsupported; see option/control inventories |
@@ -450,7 +455,7 @@ These names are defined in the pinned types module but are not all re-exported b
 | `PermissionBehavior` | Only allow/deny answers supported; no ask/update-rule API |
 | `HookEvent`, `HookSpecificOutput`, `AsyncHookJSONOutput`, `SyncHookJSONOutput` | Unsupported |
 | `McpStdioServerConfig`, `McpSSEServerConfig`, `McpHttpServerConfig`, `McpSdkServerConfigStatus`, `McpClaudeAIProxyServerConfig` | Unsupported SDK configuration/status schemas |
-| `AssistantMessageError` | Retained in raw JSON; dedicated enum unsupported |
+| `AssistantMessageError` | Open optional Event.Error string; dedicated closed enum unsupported |
 | `ThinkingDisplay` | Unsupported configuration schema |
 | `SDKControlInterruptRequest`, `SDKControlPermissionRequest`, `SDKControlInitializeRequest` | Implemented P0 wire subset; see control inventory |
 | `SDKControlSetPermissionModeRequest`, `SDKHookCallbackRequest`, `SDKControlMcpMessageRequest`, `SDKControlRewindFilesRequest`, `SDKControlMcpReconnectRequest`, `SDKControlMcpToggleRequest`, `SDKControlStopTaskRequest` | Unsupported operations; incoming unsupported requests get an error |

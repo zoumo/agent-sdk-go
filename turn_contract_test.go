@@ -134,7 +134,10 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 		err error
 	}
 	result := make(chan outcome, 1)
-	go func() { r, err := f.c.StartTurn(context.Background(), startParams()); result <- outcome{r, err} }()
+	params := startParams()
+	params.ParentTurnID = protocol.Some("causing-turn")
+	params.RootTurnID = protocol.Some("chain-root-turn")
+	go func() { r, err := f.c.StartTurn(context.Background(), params); result <- outcome{r, err} }()
 	var events []codex.Event
 	for i := 0; i < 8; i++ {
 		e := nextEvent(t, s)
@@ -173,7 +176,7 @@ func TestTurnEarlyEventsKeepResponseIdentity(t *testing.T) {
 			starts++
 			var p map[string]json.RawMessage
 			_ = json.Unmarshal(m.Params, &p)
-			if string(p["threadId"]) != `"native-thread-42"` || string(p["serviceTier"]) != "null" || string(p["disabledPluginIds"]) != "[]" || string(p["outputSchema"]) != `{"type":"string"}` {
+			if string(p["threadId"]) != `"native-thread-42"` || string(p["serviceTier"]) != "null" || string(p["disabledPluginIds"]) != "[]" || string(p["outputSchema"]) != `{"type":"string"}` || string(p["parentTurnId"]) != `"causing-turn"` || string(p["rootTurnId"]) != `"chain-root-turn"` {
 				t.Fatalf("native params changed: %s", m.Params)
 			}
 		}

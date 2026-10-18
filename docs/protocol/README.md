@@ -4,7 +4,7 @@ The [canonical compatibility record](../compatibility.md) distinguishes
 implementation from test evidence. Its complete machine-readable matrix is
 [capabilities.json](capabilities.json). All source records in
 [sources.json](sources.json) point to the same immutable official Codex revision,
-`d27764b82f7118f674371e6d6e76271d9d606edb` (workspace version `0.160.1`).
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d` (workspace version `0.162.1`).
 
 ## What was inspected
 
@@ -57,8 +57,8 @@ JSON Schema validator: native minimum/maximum and `additionalProperties`
 constraints are not all enforced, and unknown enum/union/extensions are preserved
 where representable. Loss preservation is distinct from server acceptance. Annotation-only schema
 nodes, such as `outputSchema`, remain arbitrary JSON instead of an invented
-JSON-Schema model. The current closure has 154 definitions, generating 397 Go
-types and 744 synthetic model round-trip cases. Mixed string/object approval
+JSON-Schema model. The current closure has 154 definitions, generating 399 Go
+types and 750 synthetic model round-trip cases. Mixed string/object approval
 decisions retain their native wire representations; permission-path variants
 retain their native `kind` discriminator. `RequestID` uses distinct string and
 signed 64-bit integer variants without passing numbers through floating point.
@@ -70,17 +70,17 @@ an inspected source, not the source of the final generated bindings.
 
 ## Server request resolution
 
-The pinned [request registry](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/common.rs#L1761-L1831)
+The pinned [request registry](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1780-L1850)
 declares the four modern request methods `item/commandExecution/requestApproval`,
 `item/fileChange/requestApproval`, `item/permissions/requestApproval`, and
 `item/tool/requestUserInput`, plus deprecated `applyPatchApproval` and
 `execCommandApproval`. Model availability does not imply a feature is enabled
 by a server or that legacy methods are emitted by its current execution paths.
 
-The [resolved notification definition](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/notification.rs#L71-L77)
-contains only `threadId` and `requestId`. The [emitter](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L864-L888)
+The [resolved notification definition](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/notification.rs#L71-L77)
+contains only `threadId` and `requestId`. The [emitter](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L887-L911)
 sends the original native request ID to connections subscribed to that thread.
-The [response handlers](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/bespoke_event_handling.rs#L1632-L1684)
+The [response handlers](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L1637-L1689)
 emit resolution after their response wait finishes, including an error or an
 interrupted-turn transition, before applying the result. Thus `serverRequest/resolved`
 means that a pending server request has ceased to require an answer; it does not
@@ -88,7 +88,7 @@ prove that the client approved it, that a command succeeded, or that a result wa
 accepted. It has no native turn ID or resolution-reason member.
 
 Legacy approval parameters use `conversationId: ThreadId` in the
-[v1 definitions](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v1.rs#L141-L181).
+[v1 definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v1.rs#L141-L181).
 That field can provide thread identity for matching a received resolution, but
 source inspection did not find a current production sender/response handler for
 the legacy approval wire methods. Legacy resolution emission is not verified.
@@ -100,14 +100,14 @@ Neither should be invented or sent as a side effect of canceling a local wait.
 
 ## Remote transport and authentication
 
-The exact pinned [WebSocket writer](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-transport/src/transport/websocket.rs#L290-L327)
+The exact pinned [WebSocket writer](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-transport/src/transport/websocket.rs#L290-L327)
 serializes each outgoing JSON envelope into one complete text message. Its
-[reader](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-transport/src/transport/websocket.rs#L331-L389)
+[reader](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-transport/src/transport/websocket.rs#L331-L389)
 forwards a complete text message for JSON decoding, replies to Ping with the same
 Pong payload, accepts Pong, and exits on Close. Binary messages are unsupported:
 the server drops them, while this SDK terminates its connection with `ErrProtocol`
 rather than silently losing unexpected application data. The official
-[test client](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L906-L927)
+[test client](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L907-L928)
 also rejects incoming binary. Newline-delimited stdio framing is not reused for WS.
 
 An independently authored streaming guard enforces the server masking and
@@ -117,9 +117,9 @@ nonminimal extended lengths, and 64-bit lengths with their high bit set, includi
 otherwise-valid JSON payloads. The dependency still owns fragmentation, control
 frames, and message limits. No RFC code or third-party implementation was copied.
 
-The [upgrade handler](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-transport/src/transport/websocket.rs#L89-L125)
+The [upgrade handler](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-transport/src/transport/websocket.rs#L89-L125)
 rejects browser Origin headers and invokes the pinned
-[bearer policy](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/websocket-auth/src/lib.rs#L286-L318).
+[bearer policy](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/websocket-auth/src/lib.rs#L286-L318).
 Capability-token and signed-bearer modes are server policy; this client forwards
 only the caller's explicit token in the Authorization header. It does not issue,
 refresh, validate claims for, or discover credentials. The native source checks
@@ -178,3 +178,13 @@ delta and token-usage notifications. No typed notification root was added for
 these methods. SDK-derived records stay outside protocol. The native schema
 closure, generator roots and provenance hashes remain unchanged; method-level
 raw evidence and the managed-tree control are recorded separately in the inventory.
+
+## Current installed-version target
+
+The active schema is official 0.162.1, matching the installed CLI version checked
+with --version only. Previous 0.160.1 records are historical. The current closure
+adds typed activity model/reasoningEffort, turn-chain IDs, partial_answer and the
+open native error union. The generator preserves the official string/object raw
+fallback in CodexErrorInfo rather than inventing protocol variants. See the
+[current-version evidence](../evidence/subagent-05-current.md); no model or
+real app-server workflow was run for this refresh.

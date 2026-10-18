@@ -22,7 +22,7 @@ func treeSpawnParams(tool, status string) string {
 	return `{"threadId":"native-thread-42","turnId":"root-turn","completedAtMs":8,"item":{"type":"collabAgentToolCall","id":"spawn-1","agentsStates":{"child-1":{"status":"running","message":null}},"receiverThreadIds":["child-1","child-1","child-2"],"senderThreadId":"native-thread-42","status":"` + status + `","tool":"` + tool + `","prompt":null,"model":null,"reasoningEffort":null,"future":null}}`
 }
 
-// Independently authored synthetic 0.160.1 collab/auto-attach fixture. All child
+// Independently authored synthetic collab/auto-attach fixture (rechecked at 0.162.1). All child
 // events arrive on the original connection before the root start RPC response.
 // No model, real CLI, credentials, or extra socket is used by the SDK.
 func handleTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {

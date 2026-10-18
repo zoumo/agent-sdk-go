@@ -1,24 +1,24 @@
 # Official test patterns inspected
 
-Source inspection date: 2026-10-17. Every link below is pinned to official Codex
-revision `d27764b82f7118f674371e6d6e76271d9d606edb`. Exact Git blob and SHA-256
+Source inspection recheck: 2026-10-18 (current CLI 0.162.1). Every link below is pinned to official Codex
+revision `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`. Exact Git blob and SHA-256
 checksums are in [sources.json](sources.json). None of these upstream suites was
 run during SDK implementation, and no test source was copied into this SDK.
 
 ## Rust: app-server integration boundary
 
-The official [TestAppServer helper](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/common/test_app_server.rs)
+The official [TestAppServer helper](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/common/test_app_server.rs)
 launches a real test app-server subprocess with piped stdin/stdout/stderr, an
 isolated Codex home, a separately drained diagnostic stream, correlation IDs, and
 explicit initialization. It checks the initialize response ID before writing
 `initialized`. Helpers distinguish responses from notifications and use deadlines.
 
-The [stdio connection suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_stdio_tests.rs)
+The [stdio connection suite](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/connection_handling_stdio_tests.rs)
 exercises EOF/SIGTERM cleanup, open pipes, unread stderr, blocked writes, and bounded
 exit. These tests verify the server's shutdown behavior; they do not prove this
 Go client's ownership or cleanup behavior.
 
-The [mock model server](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/common/mock_model_server.rs)
+The [mock model server](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/common/mock_model_server.rs)
 uses a local HTTP Responses endpoint, ordered synthetic SSE responses, and exact
 request-count expectations. This replaces the model service while leaving the
 app-server implementation real. It is a different boundary from a scripted fake
@@ -26,17 +26,17 @@ app-server peer.
 
 ## TypeScript: exec SDK boundary
 
-The official [TypeScript exec implementation](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/typescript/src/exec.ts)
+The official [TypeScript exec implementation](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/typescript/src/exec.ts)
 launches `codex exec --experimental-json`. It is not the bidirectional app-server
 JSON-RPC transport. Its event/result behavior cannot be used as app-server wire
 conformance evidence.
 
-[exec.test.ts](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/typescript/tests/exec.test.ts)
+[exec.test.ts](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/typescript/tests/exec.test.ts)
 mocks process spawn with an event-emitting fake child and independent stdin,
 stdout, and stderr streams. It tests early exit before stream close and inspects
-exact argument construction. [codexExecSpy.ts](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/typescript/tests/codexExecSpy.ts)
+exact argument construction. [codexExecSpy.ts](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/typescript/tests/codexExecSpy.ts)
 records arguments and environment while preserving the configured spawn behavior.
-[responsesProxy.ts](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/typescript/tests/responsesProxy.ts)
+[responsesProxy.ts](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/typescript/tests/responsesProxy.ts)
 provides a local model-response HTTP/SSE fixture and captured request bodies/headers.
 
 Useful transferable ideas are independent stream lifecycle controls, exact
@@ -48,19 +48,19 @@ requests. The Go tests implement those ideas at their own exported-client seam.
 The pinned official tree contains both `sdk/python` and `sdk/python-runtime`.
 Python SDK tests are present; no absence claim is made.
 
-[app_server_harness.py](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/python/tests/app_server_harness.py)
+[app_server_harness.py](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/python/tests/app_server_harness.py)
 starts a local queued Responses HTTP/SSE fixture, records requests, creates an
 isolated workspace/Codex home, and configures a real app-server binary.
-[test_app_server_lifecycle.py](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/python/tests/test_app_server_lifecycle.py)
+[test_app_server_lifecycle.py](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/python/tests/test_app_server_lifecycle.py)
 uses public synchronous and asynchronous clients to exercise initialization,
 thread metadata, and persisted history. Again, a real app-server with a mock model
 is not a fake app-server contract test.
 
-[test_async_client_behavior.py](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/python/tests/test_async_client_behavior.py)
+[test_async_client_behavior.py](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/python/tests/test_async_client_behavior.py)
 stubs wrapped synchronous methods and checks overlapping async calls and delegated
 notification registration. That is a unit-test seam, not wire coverage.
 
-[test_real_app_server_integration.py](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/python/tests/test_real_app_server_integration.py)
+[test_real_app_server_integration.py](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/python/tests/test_real_app_server_integration.py)
 is separately gated by `RUN_REAL_CODEX_TESTS=1`, prepares a pinned runtime, and
 includes actual turn/model examples. Its presence does not mean those tests ran,
 that all tests are offline, or that its runtime/schema pair matches this Go SDK.
@@ -104,23 +104,23 @@ transport distinctions and separate live-test boundary continue to apply.
 
 ## Ticket 03: resume identity and detachment patterns
 
-The Rust [resume suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_resume.rs#L2809-L2843)
+The Rust [resume suite](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/thread_resume.rs#L2809-L2843)
 checks metadata-only resume and unchanged native identity. Its
-[alternate-selector cases](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_resume.rs#L5987-L6107)
+[alternate-selector cases](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/thread_resume.rs#L5993-L6113)
 show that native history/path selection can supersede a supplied ID. This SDK's
 typed wrapper deliberately rejects a returned-ID mismatch under its approved
 strict identity contract; that restriction is documented rather than attributed
 to the native protocol. The Rust
-[unsubscribe suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/thread_unsubscribe.rs#L200)
+[unsubscribe suite](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/thread_unsubscribe.rs#L200)
 checks that detaching does not interrupt an active turn. The Go fake-peer tests
 assert absence of any outgoing interrupt and keep local observers independent;
 they do not prove that a real server continues executing a turn.
 
-The already-inspected [Python lifecycle cases](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/python/tests/test_app_server_lifecycle.py#L147-L184)
+The already-inspected [Python lifecycle cases](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/python/tests/test_app_server_lifecycle.py#L147-L184)
 resume a server-returned ID and compare it with the original. The Go test carries
 only that native string across two independently initialized fake peers. It does
 not reconstruct history or use SDK persistence. The TypeScript
-[resume argument assertions](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/sdk/typescript/tests/exec.test.ts#L76-L100)
+[resume argument assertions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/sdk/typescript/tests/exec.test.ts#L76-L100)
 informed exact outbound-method/parameter checks, with no reuse of its different
 `codex exec` wire transport.
 
@@ -132,19 +132,19 @@ unverified.
 
 ## Ticket 04: server requests, answers, and resolution
 
-The Rust [command approval case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_start.rs#L3090-L3155)
+The Rust [command approval case](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L3020-L3085)
 captures an incoming request's native ID, answers that ID with the native command
 decision, and checks the matching `serverRequest/resolved` before turn completion.
-The [file approval case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_start.rs#L3953-L4009)
+The [file approval case](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L3887-L3943)
 similarly requires resolution before file-item completion. The
-[user-input case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/request_user_input.rs#L124-L174)
+[user-input case](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/request_user_input.rs#L124-L174)
 keeps question IDs in an answer map and checks thread, turn, item, blocking mode,
 and the unchanged native request ID. The
-[permissions case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/request_permissions.rs#L345-L418)
+[permissions case](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/request_permissions.rs#L839-L912)
 returns native granted-permission profiles rather than an invented boolean
 approval. Its resolution matcher ignores other request IDs in the same thread.
 
-The [interrupt case](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/turn_interrupt.rs#L283-L328)
+The [interrupt case](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_interrupt.rs#L283-L328)
 interrupts a turn with an outstanding command approval, then checks resolution of
 that request before the interrupted terminal event. Therefore resolution is a
 lifecycle signal, not proof of a successful answer or approval. No generic
@@ -163,13 +163,13 @@ apply.
 
 ## Ticket 05: the same public contract over WS and WSS
 
-The pinned Rust [WebSocket suite](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L68-L110)
+The pinned Rust [WebSocket suite](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L68-L110)
 initializes each connection independently and checks that equal request IDs on
 separate connections cannot receive each other's replies. Its
-[bearer cases](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L269-L299)
+[bearer cases](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L269-L299)
 reject missing/invalid tokens before a valid authenticated initialization.
-[Exact outgoing text messages](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L818-L824)
-and [control-frame handling](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L906-L927)
+[Exact outgoing text messages](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L819-L825)
+and [control-frame handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/connection_handling_websocket.rs#L907-L928)
 are inspected as transport evidence. These tests launch the real Rust server
 against a mock model; none was executed during this SDK work.
 

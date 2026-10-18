@@ -7,14 +7,14 @@ this document, not a separate supported-version claim.
 ## Protocol target
 
 - Official repository: [openai/codex](https://github.com/openai/codex).
-- Exact revision: [`d27764b82f7118f674371e6d6e76271d9d606edb`](https://github.com/openai/codex/tree/d27764b82f7118f674371e6d6e76271d9d606edb).
-- Workspace version label: `0.160.1`, verified in the pinned `codex-rs/Cargo.toml`.
+- Exact revision: [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d).
+- Workspace version label: `0.162.1`, verified in the pinned `codex-rs/Cargo.toml`.
 - Pinned experimental export archive SHA-256:
-  `63028565f715c584c2dad98163de85dcb03801f9a7c096f5ef07d4769a900984`.
+  `41d34da4227eadccf971272b9a02dfc6679e23a9992cce1d265ac01a20ab38e3`.
 - Extracted experimental aggregate schema SHA-256:
-  `7243ba241962af92ca60581f1a81808ebda4212a800f8b205f54703bcfd508c5`.
+  `e4e7f0c7d3fd77c48cd8619cad2bf2b315d860ab006ad5a7ebe44f6e32e666c1`.
 - Selected SDK schema snapshot SHA-256:
-  `6ded28b43afae0a5fa4f6b944458224f6286eacc51857e40425fcc8f9596778d`.
+  `4f129fdc2bbaebf4b1752dd8f7bfb22180849736d0c064a7ac0052b111e0733a`.
 - This target is not a version range. Other revisions, including other releases
   carrying similar version labels, have unknown compatibility.
 - Original source hashes, extraction details, and notices are recorded in
@@ -93,11 +93,11 @@ There is no Unix-socket, remote-control, embedded-runtime, turn runner,
 or login management in these slices. A generated type or a successful raw `Call`
 does not change an endpoint's support status. Unknown extensions are caller-managed and uncertified.
 
-The inventory enumerates **170 client requests, 11 server requests, 85 server
+The inventory enumerates **173 client requests, 11 server requests, 86 server
 notifications, and 1 client notification**, including experimental, legacy, and
 internal registry entries. It also records 24 framing, transport, and capability
 controls. It covers the app-server surface, not every Codex CLI command, model API,
-or MCP endpoint. The stable aggregate schema has 104/10/83/1 entries and is not a
+or MCP endpoint. The stable aggregate schema has 105/10/84/1 entries and is not a
 complete inventory. Even the experimental aggregate omits three legacy requests
 and two internal notifications; the exact Rust registry supplies those entries.
 
@@ -145,8 +145,9 @@ is not guaranteed. See the exported `Limits` and README for finite defaults.
 ## Live validation
 
 The [final Mac report](evidence/mac-live-summary.md) consolidates real CLI
-**0.162.1** on Darwin/arm64, Go 1.26.9, against this SDK's official **0.160.1**
-protocol target. Exact tested bases and delivery commits are listed separately.
+**0.162.1** on Darwin/arm64, Go 1.26.9, against the SDK's then-current **0.160.1**
+protocol target. That historical run does not validate the refreshed bindings or
+managed subagent API. Exact tested bases and delivery commits are listed separately.
 Stdio and authenticated loopback WS passed two-turn events, durable history,
 fresh-connection same-ID resume and bounded lifecycle assertions. Stdio user
 input passed BLUE answer → exact native resolution → BLUE result → completion.
@@ -161,7 +162,7 @@ All 9/9 authorized model attempts were used; this summary adds zero model calls.
 The [historical Linux attempt](evidence/final-live.md#historical-linux-attempt)
 at SDK `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c` / CLI 0.159.2 remains
 blocked by SQLite startup before initialization completed, with zero model turns.
-No version range, live CLI 0.160.1 pass or complete-protocol certification is claimed.
+No new live pass, version range or complete-protocol certification is claimed.
 
 ## Managed direct-child observation (ticket 01)
 
@@ -214,9 +215,9 @@ records and the connection failure in Err, and never synthesizes work completion
 Explicit new Clients have fresh epochs and occurrence caches; there is no seamless
 recovery or exactly-once claim. No live/model validation was run.
 
-Pinned lifecycle source: [TurnComplete handling](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/bespoke_event_handling.rs#L185-L202)
-awaits note_turn_completed before handle_turn_complete; [thread status](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_status.rs#L148-L158)
-clears only that thread, and [publication](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_status.rs#L223-L248)
+Pinned lifecycle source: [TurnComplete handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L186-L203)
+awaits note_turn_completed before handle_turn_complete; [thread status](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L148-L158)
+clears only that thread, and [publication](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L223-L248)
 uses the shared outbound sender. Idle change (when applicable) precedes that
 thread's turn/completed enqueue; child status is not aggregated. Waiting for
 wait_agent does not complete the parent turn; completing the parent does not
@@ -225,8 +226,8 @@ source facts do not promise cross-thread order or successful result arrival firs
 
 | Capability | Native availability / source evidence (E1) | SDK implementation | Offline evidence (E2) | Live evidence |
 | --- | --- | --- | --- | --- |
-| New-thread notification routing | Pinned [server lib.rs lines 1282–1310](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/lib.rs#L1282-L1310) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
-| Independent creation / association | Pinned [collab item schema](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1125) | Derived Created or Associated precedes child native events | Success, failure, resume and repeated receiver cases | Not run |
+| New-thread notification routing | Pinned [server lib.rs lines 1291–1319](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
+| Independent creation / association | Pinned [collab item schema](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1131) | Derived Created or Associated precedes child native events | Success, failure, resume and repeated receiver cases | Not run |
 | Native compatibility and isolation | Existing raw/typed notification transport | Recursive membership and bounded unresolved routing, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
 | History and disconnect boundaries | Native snapshots expose lineage; new-thread attach is distinct from cold recovery | History-only Associated; disconnected/permanent-gap; explicit new epochs, zero recovery RPCs | Seed/live distinction, repeated IDs across epochs, full-queue EOF, close/cancel shared-source race | Not run |
 | Bounded local observation | Existing SDK subscription limits | Independent queue, shared admission cap, graph-node bound, idempotent local close | Slow observer isolation, node/admission bounds, concurrent close; Go race suite | Not run |
@@ -260,3 +261,11 @@ Runnable model-free scenario: [offline tree example](../examples/observe-tree-of
 Ticket 05 publication and final validation: [evidence](evidence/subagent-05.md).
 ACP subagent proposals remain drafts; no ACP wire or stable-standard compliance
 is claimed. No subagent E3/E4 test was run.
+
+Current installed CLI **0.162.1** is the sole active target; the previous
+0.160.1 pin is historical provenance, not a maintained compatibility mode.
+See the [current-version follow-up](evidence/subagent-05-current.md) for the
+actual schema changes, local binary identity and current E1/E2 validation.
+
+[事件时序](event-sequences.md) explains the current V1/V2 spawn and wait modes.
+V2 activity Started alone cannot prove creation; native lineage yields Associated.

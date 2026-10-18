@@ -3,10 +3,12 @@
 A native Go client for the Codex app-server protocol.
 
 **Start with [compatibility and the complete official capability inventory](docs/compatibility.md).**
-The protocol target is official **0.160.1** at one exact commit. The
+The protocol target is official **0.162.1** at one exact commit. The
 [Mac live report](docs/evidence/mac-live-summary.md) records limited real CLI
 **0.162.1** stdio/loopback WS and user-input passes. Approvals and interrupt were
 untriggered; public WSS/JWT remain uncovered. No supported-version range is claimed.
+Those historical runs do not validate the refreshed bindings or managed subagents.
+Current-version adaptation uses source inspection and offline tests only.
 
 ## Local thread example
 
@@ -415,6 +417,9 @@ Go SDK.
 
 ### Observe a root and its live descendants
 
+Read [事件时序（当前 0.162.1）](docs/event-sequences.md) for native/model/RPC
+boundaries, interleaving, lifecycle and gap examples.
+
 See the [per-capability matrix](docs/subagent-compatibility.md) and the
 [runnable offline example](examples/observe-tree-offline/README.md), which starts
 only its own synthetic peer. Subagent E3/E4 tests were not run; ACP subagent
@@ -495,7 +500,7 @@ Notifications without an identifiable source are preserved as `unscoped` and do
 not establish membership. `UsageScope` remains `unknown`; child text and usage are
 never combined with parent answers or usage.
 
-At pinned Codex 0.160.1, native server source automatically attempts to attach
+At pinned Codex 0.162.1, native server source automatically attempts to attach
 initialized connections to newly created threads, best-effort. The SDK uses
 notifications already on its connection and sends **zero** child resume/start/
 subscribe RPCs or additional connections. This is source evidence and offline
@@ -520,7 +525,7 @@ completion does not close it. Parent and child statuses are independent: parent
 idle may coexist with child active; child turn/activity completed or interrupted
 does not destroy the agent or prevent later turns. The SDK forwards native states
 and identities without synthesizing child completion. While a parent waits in
-wait_agent, its turn remains active. At pinned 0.160.1, TurnComplete awaits
+wait_agent, its turn remains active. At pinned 0.162.1, TurnComplete awaits
 note_turn_completed (publishing that thread's idle change when applicable) before
 handle_turn_complete enqueues turn/completed on the same outbound queue. Status
 is per thread, with no child aggregation. This is not a cross-thread ordering or

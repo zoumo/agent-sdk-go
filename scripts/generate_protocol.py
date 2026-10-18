@@ -14,8 +14,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PIN = 'd27764b82f7118f674371e6d6e76271d9d606edb'
-BLOB = '0a35c5522fa525a5c2d6a2138c244c9d5b88815d'
+PIN = '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d'
+BLOB = 'eef430182091bfc6f120c98dda3a3246771de8d1'
 SOURCE = 'codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst'
 ROOTS = ['InitializeParams', 'InitializeResponse', 'v2/ThreadStartParams',
          'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',
@@ -179,6 +179,9 @@ def object_type(name, node):
 def union_type(name, node):
     variants = node.get('oneOf', node.get('anyOf'))
     fields = []
+    # Current native error unions explicitly admit raw string/object fallbacks.
+    # Preserve them through Unknown instead of manufacturing a typed variant.
+    raw_kinds = set()
     string_variants = [branch for branch in variants if branch.get('type') == 'string']
     object_variants = [branch for branch in variants if branch.get('type') == 'object']
     tag_name = next((key for key in ('type', 'kind') if object_variants and all(
@@ -190,6 +193,9 @@ def union_type(name, node):
     string_seen = False
     for i, branch in enumerate(variants):
         typ = branch.get('type')
+        if isinstance(typ, list) and set(branch) == {'type'} and set(typ) <= {'string', 'object'}:
+            raw_kinds.update(typ)
+            continue
         if typ == 'string':
             if string_seen:
                 continue
@@ -243,17 +249,21 @@ def union_type(name, node):
     tag_arg = ', ' + json.dumps(tag_name) if tag_name != 'type' else ''
     code += f'\tvar out {name}\n\tkind, tag, fields, err := inspectUnion(data{tag_arg})\n\tif err != nil {{ return err }}\n\t_, _, _ = kind, tag, fields\n'
     has_tag = any(k == 'tag' for _, _, k, _, _ in fields)
-    allowed_kinds = sorted(set('object' if k in ('key', 'tag') else k for _, _, k, _, _ in fields))
+    allowed_kinds = sorted(set('object' if k in ('key', 'tag') else k for _, _, k, _, _ in fields) | raw_kinds)
     code += '\tif ' + ' && '.join('kind != ' + json.dumps(k) for k in allowed_kinds) + ' { return fmt.Errorf("protocol: invalid JSON kind for ' + name + '") }\n'
     external_keys = [value for _, _, kind, value, _ in fields if kind == 'key']
     if external_keys:
         code += '\tif kind == "object" {\n\t\tmatches := 0\n'
         for key in external_keys:
             code += '\t\tif fields[' + json.dumps(key) + '] != nil { matches++ }\n'
-        code += '\t\tif matches > 1 || len(fields) == 0 { return fmt.Errorf("protocol: ambiguous or empty external union object") }\n\t}\n'
+        if 'object' in raw_kinds:
+            code += '\t\tif matches > 1 || len(fields) == 0 { out.Unknown = append(json.RawMessage(nil), data...); *v = out; return nil }\n\t}\n'
+        else:
+            code += '\t\tif matches > 1 || len(fields) == 0 { return fmt.Errorf("protocol: ambiguous or empty external union object") }\n\t}\n'
     for field, typ, kind, value, _ in fields:
         cond = {'string': 'kind == "string"', 'number': 'kind == "number"', 'array': 'kind == "array"', 'tag': 'kind == "object" && tag == ' + json.dumps(value), 'key': 'kind == "object" && fields[' + json.dumps(value) + '] != nil'}[kind]
-        code += f'\tif {cond} {{\n\t\tvar value {typ}\n\t\tif err := json.Unmarshal(data, &value); err != nil {{ return err }}\n\t\tout.{field} = &value\n\t\t*v = out\n\t\treturn nil\n\t}}\n'
+        failure = 'out.Unknown = append(json.RawMessage(nil), data...); *v = out; return nil' if ('object' if kind in ('tag', 'key') else kind) in raw_kinds else 'return err'
+        code += f'\tif {cond} {{\n\t\tvar value {typ}\n\t\tif err := json.Unmarshal(data, &value); err != nil {{ {failure} }}\n\t\tout.{field} = &value\n\t\t*v = out\n\t\treturn nil\n\t}}\n'
     if has_tag:
         code += '\tif kind == "object" && tag == "" { return fmt.Errorf("protocol: missing union ' + tag_name + ' discriminator") }\n'
     code += '\tout.Unknown = append(json.RawMessage(nil), data...)\n\t*v = out\n\treturn nil\n}\n'
@@ -305,6 +315,8 @@ def sample(node, full=False):
     if 'enum' in node:
         return node['enum'][0]
     typ = node.get('type')
+    if isinstance(typ, list):
+        return sample(dict(node, type=typ[0]), full)
     if typ == 'string':
         return 'synthetic-value'
     if typ in ('integer', 'number'):

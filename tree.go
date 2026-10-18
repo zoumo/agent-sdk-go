@@ -140,7 +140,7 @@ type TreeSubscription struct {
 // starting or resuming any thread. It shares the connection reader, with its own
 // buffers and queue. It consumes one Limits.Subscriptions slot.
 // The initial ObservationState is incomplete: native auto-attach is best-effort
-// at the pinned 0.160.1 source and runtime coverage is unverified. It
+// at the pinned 0.162.1 source and runtime coverage is unverified. It
 // cannot guarantee recovery across disconnects or missed server notifications.
 func (c *Client) SubscribeTree(ctx context.Context, rootThreadID string, options TreeOptions) (*TreeSubscription, error) {
 	if ctx == nil {

@@ -1,4 +1,9 @@
-# Ticket 05 — compatibility publication and final offline acceptance
+# Ticket 05 — original compatibility publication (historical)
+
+The active target is now the locally installed CLI 0.162.1. See the
+[current-version follow-up](subagent-05-current.md). The report below records
+original delivery c0d7201 and its historical 0.160.1 schema evidence; it is not
+a maintained older-version compatibility claim.
 
 Baseline: clean main `40438a66bc4b6539ac97f993d704dae4684a45f8` (ticket 04).
 Before editing, origin/main matched this exact SHA and hosted run

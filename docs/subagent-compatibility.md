@@ -1,7 +1,7 @@
 # Managed subagent compatibility contract
 
-Protocol target: Codex **0.160.1**, official revision
-`d27764b82f7118f674371e6d6e76271d9d606edb`. `Client.SubscribeTree` observes one
+Protocol target: Codex **0.162.1**, official revision
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`. `Client.SubscribeTree` observes one
 existing connection. Native server auto-attach to newly created threads is
 **best-effort**. Every observation begins incomplete; source inspection and a
 synthetic peer cannot prove runtime coverage. No subagent live pass or supported
@@ -16,8 +16,10 @@ categories, not cumulative certifications. Test names below refer to the public
 API fixtures in [tree contract](../tree_contract_test.go),
 [nested](../tree_nested_test.go), [lifecycle](../tree_lifecycle_test.go), and
 [bounds/requests](../tree_bounds_requests_test.go) tests. Commands, revision
-hashes and results are in [ticket 05 evidence](evidence/subagent-05.md) and
-[the evidence manifest](protocol/evidence.json), records `subagent05-*`.
+hashes and results are in [current-version evidence](evidence/subagent-05-current.md) and
+[the evidence manifest](protocol/evidence.json), records `subagent05-current-*` (earlier records retain their historical schema pin).
+
+Read [事件时序](event-sequences.md) for the current native/model/RPC ordering.
 
 ## Capability matrix
 
@@ -27,7 +29,7 @@ workflow. E1 source keys link to immutable official code below.
 
 | Capability | Native availability / E1 | SDK implementation | Executed E2 contract | Limits / unverified runtime |
 | --- | --- | --- | --- | --- |
-| Current creation | C: completed collab item, spawnAgent and receiver IDs | SDK-derived SubagentCreated once per live entity, supporting thread/turn/item evidence retained | TestTreeLiveChildStream; TestTreeFailedSpawnAndResumeAreNotCreated | Started activity, failed spawn and non-spawn calls cannot prove creation; E3/E4 not run |
+| Current creation | C: current V1 completed collab item, spawnAgent and receiver IDs | SDK-derived SubagentCreated once per live entity, supporting thread/turn/item evidence retained | TestTreeLiveChildStream; TestTreeFailedSpawnAndResumeAreNotCreated | Current V2 emits activity Started rather than observable collab completion; lineage yields Associated, never Created from Started. Failed/non-spawn calls cannot prove creation; E3/E4 not run |
 | Association | T/C: native parent, thread_spawn source and successful completed collab evidence | Associated precedes child Native; later live spawn confirms same relation key once | TestTreeNestedOrderingAndIdentity | First accepted parent retained; conflicts/cycles diagnostic; agentPath is display only |
 | Text / thinking | N/I: native message and reasoning notifications/items | Raw/Params retained at native source; message delta and item payloads typed where implemented | TestTreeTextThinkingAndUsageStayAtNativeSource; TestTreeLiveChildStream | Reasoning deltas can remain raw-only; no guarantee of provider thinking emission |
 | Tools / extensions | C/I/N: native tool items, unknown methods and fields | Original events, native IDs, UnknownFields/unknown unions, null/absence and DecodeError retained | TestTreeLiveChildStream; TestTreeNestedOrderingAndIdentity | Unknown methods have no invented typed payload; malformed lineage cannot establish membership |
@@ -47,19 +49,19 @@ workflow. E1 source keys link to immutable official code below.
 
 ## Pinned E1 sources and representation
 
-- **A**: [new-thread attach / lag without resync](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/lib.rs#L1282-L1310)
-  and [best-effort per-connection listener](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/request_processors/thread_processor.rs#L3607-L3639).
-- **C/I**: [collab tool and native item definitions](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/item.rs).
-- **T**: [native Thread definitions](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs#L204-L271).
-- **N/R**: [notification / reverse-request registry](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/common.rs).
-- **L**: [TurnComplete handling](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/bespoke_event_handling.rs#L185-L202)
-  and [per-thread idle publication](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/thread_status.rs#L148-L158).
+- **A**: [new-thread attach / lag without resync](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319)
+  and [best-effort per-connection listener](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_processor.rs#L3607-L3639).
+- **C/I**: [collab tool and native item definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs).
+- **T**: [native Thread definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs#L204-L271).
+- **N/R**: [notification / reverse-request registry](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs).
+- **L**: [TurnComplete handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L186-L203)
+  and [per-thread idle publication](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L148-L158).
 
 Native thread/started, thread/status/changed, reasoning deltas and token usage
 are currently **raw-only notifications**. The native Thread and item objects
 already occur in the generated closure; relation extraction reads only their
 native fields and never inserts SDK fields into protocol. No generated root was
-added in this round. The 33 roots, 154 definitions, 397 types and 744 synthetic
+added in this round. The 33 roots, 154 definitions, 399 types and 750 synthetic
 round-trip cases remain as documented in [generation provenance](protocol/README.md).
 The machine inventory records method-level raw/typed scope separately from the
 managed-tree control and its E2 evidence. Exact Raw is the envelope without the
@@ -86,3 +88,26 @@ All five tickets are accepted at E1/E2 for the explicitly scoped contract:
 lifecycle/history/gaps; 04 bounded admission/original authority/source preservation;
 05 compatibility publication and runnable offline evidence. This is an offline
 acceptance conclusion, not certification of live subagent support or ACP.
+
+## Current 0.162.1 fields
+
+The active target matches the locally installed CLI, not a compatibility range.
+SubAgentActivity model/reasoningEffort, Turn.rootTurnId, and
+TurnStartParams.parentTurnId/rootTurnId are typed and retain omission/null/value.
+Turn-chain IDs stay in their native payloads; they are not renamed to agent IDs
+or used to infer thread membership. The new partial_answer phase is retained
+without becoming final completion. Current CodexErrorInfo admits raw string/object
+fallbacks; arbitrary objects remain Unknown when they cannot decode as one known
+variant. The current schema also includes reviewTarget and additional_tools,
+which are represented without certifying a new workflow.
+
+TestTreeCurrentVersionMetadata exercises these fields over synthetic stdio/WS/WSS;
+TestCurrentOpenErrorInfo verifies the current raw fallback. Existing tree tests
+revalidate the five-ticket behavior against the refreshed generated closure.
+No old-version negotiation or compatibility branch is maintained.
+
+Current V1/V2 are feature modes in 0.162.1, not older-version compatibility.
+V2 spawn tracks its collab item in analytics and emits SubAgentActivity Started
+to the execution stream. Under the evidence contract, that activity alone cannot
+produce Created. Native lineage can establish Associated. See the event-sequence
+document for the two different model-tool results and wait semantics.

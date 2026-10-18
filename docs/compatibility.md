@@ -95,7 +95,7 @@ does not change an endpoint's support status. Unknown extensions are caller-mana
 
 The inventory enumerates **170 client requests, 11 server requests, 85 server
 notifications, and 1 client notification**, including experimental, legacy, and
-internal registry entries. It also records 23 framing, transport, and capability
+internal registry entries. It also records 24 framing, transport, and capability
 controls. It covers the app-server surface, not every Codex CLI command, model API,
 or MCP endpoint. The stable aggregate schema has 104/10/83/1 entries and is not a
 complete inventory. Even the experimental aggregate omits three legacy requests
@@ -162,3 +162,33 @@ The [historical Linux attempt](evidence/final-live.md#historical-linux-attempt)
 at SDK `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c` / CLI 0.159.2 remains
 blocked by SQLite startup before initialization completed, with zero model turns.
 No version range, live CLI 0.160.1 pass or complete-protocol certification is claimed.
+
+## Managed direct-child observation (ticket 01)
+
+`Client.SubscribeTree` adds a local, bounded stream for a root and direct children
+identified by successful completed collab items. Only successful live spawnAgent
+confirms SDK-derived Created; successful non-spawn collab evidence is Associated.
+SDK wrapper names are outside `protocol`; native Event and protocol generation
+remain unchanged. Native envelopes and parameter bytes are retained independently
+for each observer. Request handles remain exclusively on `Client.Requests()`.
+
+The initial derived observation state is incomplete: direct-child scope,
+pre-relation event gap, best-effort server attach and unverified runtime coverage.
+Unknown-source notifications are explicitly unscoped; known unrelated sources are
+filtered. Recursive graph discovery, early-child buffering, history seed, event-ID
+deduplication and reconnect recovery belong to later tickets and are not claimed.
+Text deltas without an event identity are never deduplicated. No final answer or
+usage aggregation is added. Graph and queue exhaustion terminate only the local
+observer with an inspectable error.
+
+| Capability | Native availability / source evidence (E1) | SDK implementation | Offline evidence (E2) | Live evidence |
+| --- | --- | --- | --- | --- |
+| New-thread notification routing | Pinned [server lib.rs lines 1282–1310](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server/src/lib.rs#L1282-L1310) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
+| Independent creation / association | Pinned [collab item schema](https://github.com/openai/codex/blob/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1125) | Derived Created or Associated precedes child native events | Success, failure, resume and repeated receiver cases | Not run |
+| Native compatibility and isolation | Existing raw/typed notification transport | Root/direct-child filter, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
+| Bounded local observation | Existing SDK subscription limits | Independent queue, shared admission cap, graph-node bound, idempotent local close | Slow observer isolation, node/admission bounds, concurrent close; Go race suite | Not run |
+
+Offline commands and fixture scope are recorded under `subagent01-*` in
+[protocol/evidence.json](protocol/evidence.json). Real CLI/model tests and auth
+changes were excluded. Existing live evidence elsewhere in this document does
+not establish subagent runtime coverage.

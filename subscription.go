@@ -54,7 +54,7 @@ func (c *Client) Subscribe(ctx context.Context) (*Subscription, error) {
 	if !c.ready {
 		return nil, ErrProtocol
 	}
-	if len(c.subscriptions) >= c.limits.Subscriptions {
+	if len(c.subscriptions)+len(c.trees) >= c.limits.Subscriptions {
 		return nil, ErrLimit
 	}
 	s := &Subscription{client: c, events: make(chan Event, c.limits.EventQueue), done: make(chan struct{})}
@@ -100,7 +100,10 @@ func (s *Subscription) finishLocked(cause error) {
 
 // All work here is bounded SDK decoding and nonblocking delivery, never caller
 // callbacks. Each accepted event gets separate storage for every subscriber.
-func (c *Client) publishLocked(method string, params json.RawMessage) {
+func (c *Client) publishLocked(method string, params json.RawMessage, raw []byte) {
+	for t := range c.trees {
+		t.publishLocked(method, params, raw)
+	}
 	for s := range c.subscriptions {
 		if len(s.events) == cap(s.events) {
 			s.finishLocked(&SubscriptionOverflowError{Capacity: cap(s.events)})

@@ -121,7 +121,7 @@ func (c *Client) routeFrame(raw []byte) error {
 		if method == "serverRequest/resolved" {
 			c.resolveRequestLocked(f["params"])
 		}
-		c.publishLocked(method, f["params"])
+		c.publishLocked(method, f["params"], raw)
 		c.mu.Unlock()
 		return nil
 	}

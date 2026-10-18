@@ -617,6 +617,68 @@
       "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
       "command": "mise exec go@1.26.9 -- go test -race -count=1 ./...",
       "coverage": "Full current race suite with all four live flags 0 and inherited default macOS TMPDIR. No real CLI. Historical live revisions unchanged."
+    },
+    {
+      "id": "subagent01-contract-mock",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 mise exec -- go test -count=1 ./...",
+      "test_files": [
+        "tree_contract_test.go",
+        "client_contract_test.go",
+        "remote_contract_test.go"
+      ],
+      "test_names": [
+        "TestTreeLiveChildStream",
+        "TestTreeFailedSpawnAndResumeAreNotCreated",
+        "TestTreeBoundsAndLocalClose",
+        "TestTreeAdmissionAndNodeBound"
+      ],
+      "coverage": "Original synthetic fake-peer fixtures over owned stdio and loopback WS/WSS. Successful live-shaped spawn, failed spawn, resume association, duplicate relations, early child notifications before root response, unchanged native broadcast/bytes/null/unknown fields, independent buffers, zero child/subscribe RPCs, admission/graph bounds, queue isolation, concurrent local close. Full offline repository suite; live switches explicitly disabled. Does not prove real provider runtime support.",
+      "tested_sdk_base": "8f35ee30394fd8724303e1aabdd4b581f305d2dc",
+      "tested_source_sha256": {
+        "tree.go": "9f578e3f66c55f9ccf59a6e76ffe13418590e4675dd67601aeda2b4da3be78b6",
+        "tree_contract_test.go": "4bdb7fa9a67c657255fc56856f53923e3088720e0ef745de2c4fdbe15ccae3ae",
+        "client.go": "f5b187b288ec42f662dc4eb85a01e63a91d7ad9f94f312262ab2a8c1f3419666",
+        "client_contract_test.go": "4ca1e5b4e7c49fca1a5f2444728b53e606dc30e8b801e674ded697b8cfe20ba2",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "wire.go": "7abc30ef4989ade7b9309d9a169e51b8f4e038a20c9fa83275756f75dbdcb57f"
+      },
+      "revision_note": "Working source/test snapshot identified by hashes; delivered in the commit containing this record. Exact delivery SHA and hosted CI result are reported separately. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9"
+    },
+    {
+      "id": "subagent01-contract-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 mise exec -- go test -race -count=1 ./...",
+      "test_files": [
+        "tree_contract_test.go",
+        "client_contract_test.go",
+        "remote_contract_test.go"
+      ],
+      "test_names": [
+        "TestTreeLiveChildStream",
+        "TestTreeFailedSpawnAndResumeAreNotCreated",
+        "TestTreeBoundsAndLocalClose",
+        "TestTreeAdmissionAndNodeBound"
+      ],
+      "coverage": "Original synthetic fake-peer fixtures over owned stdio and loopback WS/WSS. Successful live-shaped spawn, failed spawn, resume association, duplicate relations, early child notifications before root response, unchanged native broadcast/bytes/null/unknown fields, independent buffers, zero child/subscribe RPCs, admission/graph bounds, queue isolation, concurrent local close. Full offline repository suite; live switches explicitly disabled. Does not prove real provider runtime support.",
+      "tested_sdk_base": "8f35ee30394fd8724303e1aabdd4b581f305d2dc",
+      "tested_source_sha256": {
+        "tree.go": "9f578e3f66c55f9ccf59a6e76ffe13418590e4675dd67601aeda2b4da3be78b6",
+        "tree_contract_test.go": "4bdb7fa9a67c657255fc56856f53923e3088720e0ef745de2c4fdbe15ccae3ae",
+        "client.go": "f5b187b288ec42f662dc4eb85a01e63a91d7ad9f94f312262ab2a8c1f3419666",
+        "client_contract_test.go": "4ca1e5b4e7c49fca1a5f2444728b53e606dc30e8b801e674ded697b8cfe20ba2",
+        "subscription.go": "c2495918158dfc62740c62e20a671792a70e4358ef9feb5e40323a3d73de301f",
+        "wire.go": "7abc30ef4989ade7b9309d9a169e51b8f4e038a20c9fa83275756f75dbdcb57f"
+      },
+      "revision_note": "Working source/test snapshot identified by hashes; delivered in the commit containing this record. Exact delivery SHA and hosted CI result are reported separately. E3/E4 not run.",
+      "platform": "Darwin arm64",
+      "toolchain": "mise Go 1.26.9"
     }
   ],
   "verification_commands": [

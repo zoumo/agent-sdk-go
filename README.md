@@ -412,3 +412,60 @@ Licensed under [Apache-2.0](LICENSE). See [NOTICE](NOTICE) for official protocol
 attribution and [dependency provenance](docs/protocol/README.md#licensing) for the
 WebSocket transport library. This is an independent SDK, not an OpenAI-maintained
 Go SDK.
+
+### Observe a root and its live direct children
+
+Register before starting root work:
+
+```go
+stream, err := client.SubscribeTree(ctx, rootThreadID, codex.TreeOptions{})
+if err != nil {
+    return err
+}
+defer stream.Close()
+// Now start root work through the usual StartTurn API.
+for record := range stream.Events() {
+    // record.Kind distinguishes Native from SDK-derived relation/state records.
+    // record.Native retains Event.Params, Data and DecodeError unchanged.
+    // record.Raw retains the native notification envelope bytes.
+    _ = record
+}
+return stream.Err()
+```
+
+`SubagentCreated` requires a live successful `spawnAgent` completed item with
+receiver identities. Other successful collab calls can establish
+`SubagentAssociated`; association alone does not confirm creation. A later spawn
+confirmation uses the same relation key. Relations precede child notifications;
+all native notifications that establish relations are also delivered. Repeated
+relations do not duplicate creation; identical text deltas remain separate events.
+Source thread/turn/item IDs, direct parent, provider, connection epoch and local
+sequence accompany delivery. Unknown fields, methods, explicit null and absent
+parameters remain available. Each observer owns its buffers.
+
+This first slice follows **direct children only** after their collab evidence
+arrives. Its initial `ObservationState(incomplete)` explicitly reports this
+scope, the pre-relation gap, and unverified best-effort runtime coverage. Known
+source IDs outside the root/direct-child set are filtered; this includes child
+events arriving before the relation. No pending-event replay, recursive discovery,
+history seed, recovery or complete-tree guarantee is provided in this slice.
+Notifications without an identifiable source are preserved as `unscoped` and do
+not establish membership. `UsageScope` remains `unknown`; child text and usage are
+never combined with parent answers or usage.
+
+At pinned Codex 0.160.1, native server source automatically attempts to attach
+initialized connections to newly created threads, best-effort. The SDK uses
+notifications already on its connection and sends **zero** child resume/start/
+subscribe RPCs or additional connections. This is source evidence and offline
+fake-peer validation, not real-server subagent validation. Older/unknown runtimes
+remain unverified; the SDK does not probe them with execution RPCs. See
+[compatibility and evidence](docs/compatibility.md#managed-direct-child-observation-ticket-01).
+
+`TreeOptions.EventQueue` defaults to `Limits.EventQueue`; `MaxNodes` defaults to
+4096 including the root. Both require positive values or zero for defaults. Queue
+overflow terminates only that observer with `SubscriptionOverflowError`; graph
+exhaustion ends it with `ErrLimit`. Each tree uses one shared subscription-admission
+slot. `Close` ends local observation without interrupting provider work. Parent
+completion does not close it. Permission and question answers still go through
+original `Client.Requests()` handles, with no second answer authority in records.
+The existing `Subscribe` API remains a connection-wide native broadcast.

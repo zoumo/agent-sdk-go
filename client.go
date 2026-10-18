@@ -55,6 +55,8 @@ type Client struct {
 	reverse       map[ID]*requestState
 	requests      chan Request
 	subscriptions map[*Subscription]struct{}
+	trees         map[*TreeSubscription]struct{}
+	epoch         uint64
 	nextID        int64
 	ready         bool
 	cause         error
@@ -148,7 +150,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), trees: make(map[*TreeSubscription]struct{}), epoch: connectionEpoch.Add(1), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 }
 
 func (c *Client) initialize(ctx context.Context, params protocol.InitializeParams) (*Client, error) {
@@ -455,6 +457,13 @@ func (c *Client) fail(cause error) {
 			terminal = nil
 		}
 		s.finishLocked(terminal)
+	}
+	for t := range c.trees {
+		terminal := cause
+		if cause == ErrClosed {
+			terminal = nil
+		}
+		t.finishLocked(terminal)
 	}
 	close(c.done)
 	c.mu.Unlock()

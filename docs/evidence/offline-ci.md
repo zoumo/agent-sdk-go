@@ -90,3 +90,26 @@ The negative fixtures use isolated temporary Git repositories. Bad whitespace an
 committed generated drift are expected failures of the real gates, asserted by
 successful regression tests; they are never inserted into the delivery commits.
 Private logs and temporary drafts remain under ignored `.scratch`.
+
+## Hosted readback
+
+Implementation commit `48fd6701712c10f5ec75933126cf516c1065d669` passed
+[run 39092259072](https://github.com/zoumo/codex-sdk-go/actions/runs/39092259072)
+on its first attempt. The API returned `completed/success` for the run and both
+jobs: [Ubuntu](https://github.com/zoumo/codex-sdk-go/actions/runs/39092259072/job/117571301985)
+and [macOS](https://github.com/zoumo/codex-sdk-go/actions/runs/39092259072/job/117571301788).
+The jobs completed at 2026-10-18 03:06:15 UTC and 03:07:19 UTC respectively.
+
+Both hosted logs confirm comparison from the approved baseline
+`ded7084385223dd573a1f268963e0e5a8f0a7044` to the exact implementation SHA,
+six successful CI fixture tests, the stated inventory counts, and regeneration of
+397 types / 744 cases. All three real scenarios explicitly SKIP in both normal
+and race suites on each platform (12 scenario-skip records total).
+All other named gates actually ran successfully; no failed-job rerun was used.
+
+This readback documents the implementation commit. The evidence-only follow-up
+must also pass at its own exact pushed HEAD; its final SHA/run disposition is
+provided in the execution handoff rather than implying an ancestor's CI covers it.
+PR/zero-before/manual event selection is validated by isolated regression fixtures;
+this hosted run exercises a normal push, not those other event types. No live
+model or complete upstream provenance validation is claimed.

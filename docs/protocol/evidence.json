@@ -7,7 +7,7 @@
     "manager": "mise",
     "GOTOOLCHAIN": "local"
   },
-  "live_validation": "Historical partial CLI 0.162.1 Mac coverage only at original SDK/schema bases. Current installed-version schema refresh and managed subagents have no E3/E4 pass. See ../evidence/subagent-05-current.md and historical ../evidence/mac-live-summary.md.",
+  "live_validation": "Historical partial CLI 0.162.1 coverage at original SDK/schema bases; current bindings and managed subagents have no E3/E4 pass. See ../compatibility.md#live-validation and ../recorded-events.md.",
   "records": [
     {
       "id": "ticket01-model-unit",
@@ -575,7 +575,7 @@
       "status": "passed",
       "tested_sdk_commit": "c3842e2516e8caf383447379557b3bc8702e530a",
       "delivery_commit": "cd5ed954e880ae468f56cdbe1b42122f216a1127",
-      "report": "../evidence/mac-stdio-lifecycle.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-stdio-lifecycle.md",
       "cli_version": "0.162.1",
       "go_version": "1.26.9",
       "platform": "darwin/arm64",
@@ -590,7 +590,7 @@
       "status": "passed",
       "tested_sdk_commit": "cd5ed954e880ae468f56cdbe1b42122f216a1127",
       "delivery_commit": "b6a42a4a3746488464fc9ee19dedc8f3d9e70346",
-      "report": "../evidence/mac-interactions-interrupt.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-interactions-interrupt.md",
       "cli_version": "0.162.1",
       "go_version": "1.26.9",
       "platform": "darwin/arm64",
@@ -605,7 +605,7 @@
       "status": "passed",
       "tested_sdk_commit": "b6a42a4a3746488464fc9ee19dedc8f3d9e70346",
       "delivery_commit": "7e6468edb701d76f9fdedff53aeb09e45a031c6c",
-      "report": "../evidence/mac-websocket-lifecycle.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-websocket-lifecycle.md",
       "cli_version": "0.162.1",
       "go_version": "1.26.9",
       "platform": "darwin/arm64",
@@ -620,7 +620,7 @@
       "status": "environment-blocked",
       "tested_sdk_commit": "a83ab64915e0bb7e7290d74ca3ac0204d11ec61c",
       "cli_version": "0.159.2",
-      "report": "../evidence/final-live.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/final-live.md",
       "turn_start_attempts": 0,
       "coverage": "Initialization outcome-unknown EOF; separate zero-message startup diagnostic found SQLite state-runtime failure. No retry or model turn. Historical evidence only.",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
@@ -734,7 +734,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
-      "report": "../evidence/subagent-02.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-02.md",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
     {
@@ -763,7 +763,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. E3/E4 not run.",
-      "report": "../evidence/subagent-02.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-02.md",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
     {
@@ -795,7 +795,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
-      "report": "../evidence/subagent-03.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-03.md",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
     {
@@ -827,7 +827,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final source/test hashes; delivered in the commit containing this record. Exact commit and hosted Linux/macOS CI reported separately. No live/model/auth changes.",
-      "report": "../evidence/subagent-03.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-03.md",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
     {
@@ -858,7 +858,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Final full normal suite; all live opt-ins explicitly SKIP. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
-      "report": "../evidence/subagent-04.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-04.md",
       "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-test-final.log",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
@@ -890,7 +890,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Full race suite passed with final production code. The thinking/usage synthetic payloads were subsequently completed with pinned native fields; the final fixture revision is separately retested below. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
-      "report": "../evidence/subagent-04.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-04.md",
       "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race.log",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
@@ -917,7 +917,7 @@
       "platform": "Darwin arm64",
       "toolchain": "mise Go 1.26.9",
       "revision_note": "Focused final-fixture race rerun after adding native contentIndex and complete token counters; final explicit/inherited capacity check included. Exact delivered source/test hashes. Delivery commit, remote SHA and exact hosted Linux/macOS CI reported separately. No live/model/auth changes.",
-      "report": "../evidence/subagent-04.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-04.md",
       "log": "/Users/jim/Documents/Codex/2026-10-18/task-20/ticket04-race-final-fixtures.log",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
@@ -957,7 +957,7 @@
       "toolchain": "mise Go 1.26.9",
       "coverage": "Full offline suite including all four tree fixture contracts and runnable example transcript; original synthetic stdio/loopback WS/WSS. Full queue/request authority, lifecycle/history/permanent-gap, nested ordering/narrow dedup and source-separated text/thinking/usage. All three live tests visibly SKIP; no E3/E4.",
       "revision_note": "Pre-commit working tree on the stated base; production code unchanged in ticket05, new example identified by hashes. Initial concurrent normal run failed one existing WS flood 3-second deadline; concurrent race failed existing blocked-writer prefix waits. Final serial full reruns and focused normal repetition passed without changing code or deadline. Hosted exact-delivery SHA/run checked separately in handoff.",
-      "report": "../evidence/subagent-05.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
       "sdk_package_seconds": 46.415,
       "additional_command": "RUN_MAC_STDIO_LIVE=0 RUN_MAC_INTERACTIONS_LIVE=0 RUN_MAC_WEBSOCKET_LIVE=0 GOPROXY=off GOSUMDB=off mise exec -- go test -v -count=3 -run '^TestRemotePublicContractParity$/(ws|wss)/TestSlowSubscriberNeverBlocksResponse$' .",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
@@ -998,7 +998,7 @@
       "toolchain": "mise Go 1.26.9",
       "coverage": "Full offline suite including all four tree fixture contracts and runnable example transcript; original synthetic stdio/loopback WS/WSS. Full queue/request authority, lifecycle/history/permanent-gap, nested ordering/narrow dedup and source-separated text/thinking/usage. All three live tests visibly SKIP; no E3/E4.",
       "revision_note": "Pre-commit working tree on the stated base; production code unchanged in ticket05, new example identified by hashes. Initial concurrent normal run failed one existing WS flood 3-second deadline; concurrent race failed existing blocked-writer prefix waits. Final serial full reruns and focused normal repetition passed without changing code or deadline. Hosted exact-delivery SHA/run checked separately in handoff.",
-      "report": "../evidence/subagent-05.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
       "sdk_package_seconds": 218.265,
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
@@ -1007,7 +1007,7 @@
       "kind": "unit",
       "status": "passed",
       "evidence_level": "E2",
-      "command": "See commands below and ../evidence/subagent-05.md",
+      "command": "See commands below and https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
       "commands": [
         "mise exec -- go vet ./...",
         "mise exec -- go mod download",
@@ -1036,7 +1036,7 @@
         "examples/observe-subagents-offline/main_test.go"
       ],
       "coverage": "33 unchanged schema/generator roots; 154 definitions/397 types/744 round-trip cases; 170/11/85/1 registry plus 24 controls. Fixed-source E1 hashes/registry/schema separately verified using installed zstd CLI. No dependency download, model, real CLI, authentication or budget changes.",
-      "report": "../evidence/subagent-05.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05.md",
       "schema_protocol_commit": "d27764b82f7118f674371e6d6e76271d9d606edb"
     },
     {
@@ -1088,7 +1088,7 @@
       "toolchain": "mise Go 1.26.9",
       "coverage": "Full current-version offline suite: 399 generated types/750 round-trip cases, current activity metadata, native turn-chain IDs, partial_answer, open CodexErrorInfo raw objects, existing managed-tree ordering/history/gaps/bounds/original authority, stdio/loopback WS/WSS and runnable example. Three live tests visibly SKIP. Current V2 Started is not evidence for Created; lineage Associated only.",
       "revision_note": "Pre-commit current-version working tree; exact hashes identify tested changes. First current full race attempt failed existing prefix/construction timing assertions on shared loaded host, no race report. Original failed assertions passed two focused race repetitions and this resource-bounded full race; no timeout/assertion was weakened. Exact-delivery CI is independently reported in handoff.",
-      "report": "../evidence/subagent-05-current.md"
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
     },
     {
       "id": "subagent05-current-contract-race",
@@ -1139,7 +1139,7 @@
       "toolchain": "mise Go 1.26.9",
       "coverage": "Full current-version offline suite: 399 generated types/750 round-trip cases, current activity metadata, native turn-chain IDs, partial_answer, open CodexErrorInfo raw objects, existing managed-tree ordering/history/gaps/bounds/original authority, stdio/loopback WS/WSS and runnable example. Three live tests visibly SKIP. Current V2 Started is not evidence for Created; lineage Associated only.",
       "revision_note": "Pre-commit current-version working tree; exact hashes identify tested changes. First current full race attempt failed existing prefix/construction timing assertions on shared loaded host, no race report. Original failed assertions passed two focused race repetitions and this resource-bounded full race; no timeout/assertion was weakened. Exact-delivery CI is independently reported in handoff.",
-      "report": "../evidence/subagent-05-current.md"
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
     },
     {
       "id": "subagent05-current-model-unit",
@@ -1175,7 +1175,7 @@
         "turn_contract_test.go"
       ],
       "coverage": "Current schema metadata/turn linkage/partial phase/open error fallback; 750 current synthetic round trips and public fake transport fixtures. Initial fixture-only nonexistent enum reference corrected before pass.",
-      "report": "../evidence/subagent-05-current.md"
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
     },
     {
       "id": "subagent05-current-offline-gates",
@@ -1198,7 +1198,7 @@
         "scripts/test_ci_checks.py"
       ],
       "coverage": "Six CI gate self-tests include current generator reproducibility and negative committed drift. Source bytes/registry/schema matched exact official pin; all 65 blobs independently matched official Git tree. Six Chinese Mermaid figures rendered and visually checked; 16 JSON lines parsed; local links and STC style checked. No model/auth/CLI upgrade.",
-      "report": "../evidence/subagent-05-current.md"
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-05-current.md"
     },
     {
       "id": "subagent-v2-created-unit",
@@ -1214,7 +1214,7 @@
         "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
         "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
       },
-      "report": "../evidence/subagent-v2-created.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
       "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
       "log_sha256": "54ec2a8a7657899b1caf8a8cea4a8829a5e0454185a83ac7c60a02c4d83ae107"
     },
@@ -1232,7 +1232,7 @@
         "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
         "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
       },
-      "report": "../evidence/subagent-v2-created.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
       "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run."
     },
     {
@@ -1249,7 +1249,7 @@
         "tree.go": "bead8b0ab88b3962f67a59de9d44f44360b8a42ed09f7dfe025fb6e595e61eb0",
         "tree_v2_contract_test.go": "822e8dcde9b94ac0f8bdbbdb119096df2edec8861f194782e18a77c13c19cf36"
       },
-      "report": "../evidence/subagent-v2-created.md",
+      "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
       "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
       "log_sha256": "4cf3cae1d279421eb4074d59a4db1032818add6c040ac9544f148c14efcd4f70"
     }
@@ -1363,7 +1363,7 @@
     "monetary_cost": "not measured"
   },
   "untriggered_live_scenarios": {
-    "report": "../evidence/mac-interactions-interrupt.md",
+    "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/mac-interactions-interrupt.md",
     "delivery_commit": "b6a42a4a3746488464fc9ee19dedc8f3d9e70346",
     "command_approval": "untriggered; command effect passed separately",
     "file_approval": "untriggered; no file-effect pass",
@@ -1392,13 +1392,13 @@
   },
   "subagent_v2_creation": {
     "tested_sdk_base": "6fa450ed92b0b2f30eb3b42e356f4cdcd8de913a",
-    "report": "../evidence/subagent-v2-created.md",
+    "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
     "revision_note": "Validated source hashes in subagent-v2-created-* records; final delivery SHA and hosted Linux/macOS CI verified in handoff. Native types/schema unchanged.",
     "live": "E3/E4 not run; no model/authentication changes."
   },
   "native_subscription_migration": {
     "base": "885bf4de79c9bde75c342c807a9e3e45f098187c",
-    "report": "../evidence/native-subscription.md",
+    "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/native-subscription.md",
     "note": "Historical source hash keys remain unchanged. test_files paths follow relocated current coverage; direct-native events replace the public Tree wrapper. Official generated native JSON and sanitized recordings are unchanged."
   }
 }

@@ -1,277 +1,522 @@
-# Compatibility
+# Compatibility and official API gaps
 
-This is the canonical compatibility record for this SDK. The complete per-method
-matrix is [capabilities.json](protocol/capabilities.json); its records are part of
-this document, not a separate supported-version claim.
+This Go SDK implements **7 of 173** pinned app-server client RPC paths (6 supported,
+1 partial), **6 of 11** typed server-request decoders/reply models, and **7 of 86**
+typed notification decoders. All remaining client methods lack a dedicated Go API;
+all valid notifications can travel through the bounded raw receive path. Raw
+`Call`, generated fields and unknown-frame preservation do **not** establish
+feature support.
 
-## Protocol target
+The largest missing controls are dedicated **steering and all six queue APIs**,
+thread listing/search/fork/archive/delete and paginated history, runtime settings,
+MCP administration, hooks/plugins/skills management, background terminals/processes,
+account/login, realtime and remote-control APIs. Managed child **observation** is
+implemented; child control, reliable attachment/recovery and combined completion
+are not. Go has no TypeScript-style run accumulator or exec transport.
 
-- Official repository: [openai/codex](https://github.com/openai/codex).
-- Exact revision: [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d).
-- Workspace version label: `0.162.1`, verified in the pinned `codex-rs/Cargo.toml`.
-- Pinned experimental export archive SHA-256:
-  `41d34da4227eadccf971272b9a02dfc6679e23a9992cce1d265ac01a20ab38e3`.
-- Extracted experimental aggregate schema SHA-256:
-  `e4e7f0c7d3fd77c48cd8619cad2bf2b315d860ab006ad5a7ebe44f6e32e666c1`.
-- Selected SDK schema snapshot SHA-256:
-  `4f129fdc2bbaebf4b1752dd8f7bfb22180849736d0c064a7ac0052b111e0733a`.
-- This target is not a version range. Other revisions, including other releases
-  carrying similar version labels, have unknown compatibility.
-- Original source hashes, extraction details, and notices are recorded in
-  [protocol provenance](protocol/README.md) and [sources.json](protocol/sources.json).
+## Version scope
 
-## Current implementation
+The sole source/schema target is official **0.162.1** at
+[`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d).
+A version label identifies source availability, not tested runtime compatibility.
+There is no supported-version range, negotiation or maintained older-version mode.
+Current bindings and managed descendants have source/offline evidence; historical
+live scenarios below used separately identified SDK bases. They do not certify the
+current implementation or all methods at the version label.
 
-The implemented slices own one explicitly selected local child process or connect
-to one caller-selected remote WS/WSS endpoint. They expose transport-correct
-framing, the `initialize` / `initialized` handshake, typed `thread/start`,
-`thread/read`, `thread/resume`, `thread/unsubscribe`, `turn/start`, and
-`turn/interrupt`, raw `Call`, bounded local subscriptions, one-shot reverse-request
-answers, and bounded cleanup. Protocol models cover the complete selected
-experimental-schema definition closure, with omitted/null/value handling and
-unknown-field and unknown-union preservation. The bindings are loss-preserving
-models, not full JSON Schema validators: not every native minimum/maximum or
-`additionalProperties` constraint is enforced, and unknown enum/union/extensions
-can be retained. A representable value is not a promise that a server accepts it.
+The denominator below was extracted from that pinned Rust registry, including
+experimental, deprecated and internal entries, and reconciles to **173 client
+requests, 11 server requests, 86 server notifications and 1 client notification**.
+The stable schema is smaller and cannot define the full denominator. Public Go
+constructors/methods and the actual decoder switches define implementation status.
+The complete machine inventory remains [capabilities.json](protocol/capabilities.json);
+[source identities and hashes](protocol/sources.json), [generation details](protocol/README.md)
+and [historical test provenance](protocol/evidence.json) are retained separately.
 
-Thread/turn methods expose their complete selected parameter/result shapes.
-Interactive approvals and user input can now be answered explicitly. Other
-capability-dependent workflows (attestation, elicitation, dynamic tools, accounts)
-remain caller-managed through raw extensions and are not certified by typed
-request support. Do not infer their support from reachability or generated fields.
-`turn/interrupt` exposes the native request and acknowledgement; it does not prove
-execution completion.
+## How to read the matrices
 
-`ResumeThread` strictly checks the supplied native thread ID against the returned
-ID, retaining correlation and responded-error evidence on mismatch. It never
-falls back to `thread/start`, replays a failed request, or reconnects. Native
-history/path selectors can deliberately return another identity; those native
-workflows are outside this typed wrapper's strict-ID contract even though their
-full parameter/result schemas are exposed. The raw escape hatch does not confer
-support. `UnsubscribeThread` sends one native request and returns its status; it
-is independent of local subscription cancellation and never sends an interrupt.
-Fake-peer connection tests establish explicit reinitialization and unchanged
-native-ID handling. Separate Mac live evidence below establishes durable history
-and explicit fresh-connection resume only for its exact scenarios and CLI version.
+- **Supported**: the stated Go API or decoder exists for the stated operation;
+  this is not full workflow or live certification.
+- **Partial**: the stated subset exists, with the specific missing behavior shown.
+- **Unsupported**: no dedicated supported Go feature. A caller may write raw
+  extension code around `Call`; its behavior is outside the supported workflow.
+- **Offline** means synthetic contract/model tests. **Historical live** is limited
+  to the exact scenarios/bases below. **Unverified** means no per-feature execution
+  evidence. Generic raw transport tests never count as a missing feature's pass.
+- **X** marks a method-level experimental gate. **F** marks inspection of some
+  experimental fields; it does not mean all fields are experimental or available.
+  Unmarked entries may still be deprecated/internal or have runtime prerequisites.
 
-Subscriptions preserve all valid notifications as raw method and parameter JSON.
-Seven methods also have typed payloads: `turn/started`, `turn/completed`,
-`item/started`, `item/completed`, `item/agentMessage/delta`, `error`, and
-`serverRequest/resolved`. Malformed known payloads retain their raw bytes with `DecodeError`. A subscriber's full queue
-terminates only that stream with an inspectable loss cause outside its queue.
-There is no filtering, replay, native-ID replacement, or event-driven turn state.
-The remaining notification inventory rows are partial raw receive paths, with no
-per-method typed/workflow evidence unless explicitly recorded. Envelope emission
-timestamps are not exposed.
+Source links in every registry row point to the exact pinned declaration. All
+client RPCs not mapped to a helper below share the same concrete gap: no named
+operation or feature-specific API/behavior tests. Selected nested native types
+may still be present as dependencies of other models.
+A nested type that happens to exist does not remove that gap.
 
-Reverse requests expose immutable method/parameters/exact tagged IDs and opaque
-one-shot handles. Modern command/file/permissions approvals, user input, and two
-legacy approvals have complete typed payload/results; every other method remains
-raw. Legacy approval schemas are modeled, but the pinned modern production
-handlers do not establish those legacy workflows as live-supported. Legacy
-conversationId has the native ThreadId type and is used for resolution correlation
-if a matching notification is received. Queue/active-capacity exhaustion explicitly
-terminates the connection without
-inventing an approval or denial. Local cancel/expiry does not cancel server work.
-Native resolution matches both requestId and thread identity; an answer already
-admitted wins over later local cancellation, expiry, or resolution.
+## Client RPCs: complete official surface
 
-Remote clients use an explicit bearer header, verified TLS, bounded complete JSON
-text messages, and the same initialization, methods, subscriptions, and answer
-handles. They reject URL credentials/query/fragment, redirects, and disabled TLS
-verification. Non-loopback plaintext WS requires explicit opt-in. No reconnect,
-replay, token lookup/refresh, or remote process ownership is added. The official
-server drops unsupported inbound binary messages; this client instead fails its
-connection on received binary data, making the loss observable. Remote errors
-redact a peer-reflected bearer from diagnostic message/data/raw fields, including
-supported encoded echoes. This deliberate exception to raw error preservation
-replaces only affected diagnostic lexical values; unaffected bytes, duplicate
-members, native error codes, and correlation stay unchanged. Successful results and notification/request
-payloads remain caller-sensitive data, not a universal redaction facility.
+Native `turn/start` can start a turn or add input to an active turn; Go preserves
+that native behavior. It is not an SDK scheduling policy. Dedicated `turn/steer`
+requires `expectedTurnId` and is missing, as are `thread/queue/add`, `list`,
+`update`, `delete`, `reorder`, and `start` (all experimental). Local outbound/RPC
+queues are transport bounds, not these provider work queues. Defaults and
+omission remain server-owned; Go does not silently insert schema defaults. Active-turn start behavior is
+source-backed; it has no feature-specific Go runtime test.
+See [native start/steer parameters](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/turn.rs#L167-L337).
 
-There is no Unix-socket, remote-control, embedded-runtime, turn runner,
-or login management in these slices. A generated type or a successful raw `Call`
-does not change an endpoint's support status. Unknown extensions are caller-managed and uncertified.
+### Connection and other operations
 
-The inventory enumerates **173 client requests, 11 server requests, 86 server
-notifications, and 1 client notification**, including experimental, legacy, and
-internal registry entries. It also records 24 framing, transport, and capability
-controls. It covers the app-server surface, not every Codex CLI command, model API,
-or MCP endpoint. The stable aggregate schema has 105/10/84/1 entries and is not a
-complete inventory. Even the experimental aggregate omits three legacy requests
-and two internal notifications; the exact Rust registry supplies those entries.
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `initialize` | supported | [NewStdio](../client.go) / [NewRemote](../remote.go) | Constructors complete initialize then initialized; no second public initializer. | Offline handshake; historical live | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L500) |
+| `server/diagnostics` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L508) |
+| `memory/status` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L711) |
+| `memory/reset` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L717) |
+| `rollout/compress` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L724) |
+| `review/start` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1109) |
+| `mock/experimentalMethod` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1206) |
+| `mcpServerStatus/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1245) |
+| `feedback/upload` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1358) |
+| `externalAgentConfig/detect` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1423) |
+| `externalAgentConfig/import` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1428) |
+| `externalAgentConfig/import/recordHistory` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1433) |
+| `externalAgentConfig/import/readHistories` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1438) |
+| `getConversationSummary` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1469) |
+| `gitDiffToRemote` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1474) |
+| `getAuthStatus` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1480) |
+| `fuzzyFileSearch` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1487) |
+| `fuzzyFileSearch/sessionStart` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1493) |
+| `fuzzyFileSearch/sessionUpdate` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1499) |
+| `fuzzyFileSearch/sessionStop` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1505) |
 
-### Status and evidence are different
+### Accounts and user verification
 
-- **Supported**: the stated SDK behavior is implemented. This does not imply a
-  real server was tested or every capability-dependent workflow is available.
-- **Partial**: only the explicit subset in the record is implemented.
-- **Unsupported**: no supported SDK workflow; raw transport reachability does not
-  confer support.
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `userVerification/status` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L515) |
+| `userVerification/enroll` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L522) |
+| `userVerification/delete` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L529) |
+| `userVerification/verify` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L536) |
+| `userVerification/cancel` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L543) |
+| `account/gatewayOAuth/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1120) |
+| `account/gatewayOAuth/login` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1125) |
+| `account/gatewayOAuth/cancel` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1130) |
+| `account/login/start` **F** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1288) |
+| `account/bedrock/discover` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1296) |
+| `account/bedrock/setup` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1303) |
+| `account/bedrock/checkGovCloudRequirements` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1310) |
+| `account/login/cancel` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1316) |
+| `account/logout` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1322) |
+| `account/rateLimits/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1328) |
+| `account/rateLimitResetCredit/consume` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1334) |
+| `account/usage/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1340) |
+| `account/workspaceMessages/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1346) |
+| `account/sendAddCreditsNudgeEmail` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1352) |
+| `account/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1462) |
 
-Each inventory row keeps unit, fake-peer/mock, race, and live evidence separately.
-Ticket 05 passed final working-tree normal unit/mock, five-repeat normal, full
-race, vet, dependency, generation, and inventory checks; exact revision/scope is
-recorded in [evidence.json](protocol/evidence.json). Implementation status alone is
-not a test pass. That historical ticket did not run hosted CI. Current Mac
-evidence and exact subsequent offline CI readback are recorded in the final
-report below.
-Empty evidence arrays mean no result has been recorded for that row. Evidence
-records and reproducible commands belong in [evidence.json](protocol/evidence.json).
-Official tests inspected as design references are described in
-[testing patterns](protocol/testing-patterns.md); their existence is not test
-execution evidence for this SDK.
+### Threads, history and metadata
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `thread/start` **F** | supported | [StartThread](../client.go) | Full selected native params; server capability/policy still governs acceptance. | Offline; historical live | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L552) |
+| `thread/resume` **F** | partial | [ResumeThread](../thread.go) | Requires returned ID to equal input; history/path alternate identities are outside helper contract. No reconnect/fallback. | Offline; historical same-ID live | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L558) |
+| `thread/fork` **F** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L564) |
+| `thread/archive` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L570) |
+| `thread/delete` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L575) |
+| `thread/unsubscribe` | supported | [UnsubscribeThread](../thread.go) | Server detachment only; does not close observers or interrupt work. | Offline; historical live | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L580) |
+| `thread/increment_elicitation` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L590) |
+| `thread/decrement_elicitation` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L599) |
+| `thread/name/set` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L604) |
+| `thread/prediction/request` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L610) |
+| `thread/goal/set` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L615) |
+| `thread/goal/get` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L620) |
+| `thread/goal/clear` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L625) |
+| `thread/metadata/update` **F** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L666) |
+| `thread/attachment/add` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L672) |
+| `thread/attachment/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L677) |
+| `thread/attachmentOwner/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L682) |
+| `thread/attachment/remove` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L687) |
+| `thread/section/move` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L692) |
+| `thread/settings/update` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L698) |
+| `thread/memoryMode/set` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L705) |
+| `thread/unarchive` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L729) |
+| `thread/compact/start` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L734) |
+| `thread/shellCommand` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L739) |
+| `thread/approveGuardianDeniedAction` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L744) |
+| `thread/revert` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L767) |
+| `thread/list` **F** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L772) |
+| `thread/search` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L841) |
+| `thread/searchOccurrences` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L847) |
+| `thread/loaded/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L853) |
+| `thread/read` | supported | [ReadThread](../client.go) | Read one ID; not a paginated history/search API. | Offline; historical live | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L858) |
+| `thread/turns/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L863) |
+| `thread/items/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L869) |
+| `thread/inject_items` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L876) |
+
+### Thread work queues
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `thread/queue/add` **X** | unsupported | None (`Call` extension only) | No work-queue API, queue policy or queue-state model/decoder. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L631) |
+| `thread/queue/list` **X** | unsupported | None (`Call` extension only) | No work-queue API, queue policy or queue-state model/decoder. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L637) |
+| `thread/queue/update` **X** | unsupported | None (`Call` extension only) | No work-queue API, queue policy or queue-state model/decoder. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L643) |
+| `thread/queue/delete` **X** | unsupported | None (`Call` extension only) | No work-queue API, queue policy or queue-state model/decoder. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L649) |
+| `thread/queue/reorder` **X** | unsupported | None (`Call` extension only) | No work-queue API, queue policy or queue-state model/decoder. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L655) |
+| `thread/queue/start` **X** | unsupported | None (`Call` extension only) | No work-queue API, queue policy or queue-state model/decoder. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L661) |
+
+### Background terminals
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `thread/backgroundTerminals/clean` **X** | unsupported | None (`Call` extension only) | No terminal list/cleanup/termination control; output observation is separate. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L750) |
+| `thread/backgroundTerminals/list` **X** | unsupported | None (`Call` extension only) | No terminal list/cleanup/termination control; output observation is separate. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L756) |
+| `thread/backgroundTerminals/terminate` **X** | unsupported | None (`Call` extension only) | No terminal list/cleanup/termination control; output observation is separate. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L762) |
+
+### Projects and sections
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `project/list` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L779) |
+| `project/read` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L785) |
+| `project/create` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L791) |
+| `project/import` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L797) |
+| `project/update` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L803) |
+| `project/move` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L809) |
+| `project/delete` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L815) |
+| `threadSection/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L820) |
+| `threadSection/create` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L825) |
+| `threadSection/update` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L830) |
+| `threadSection/delete` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L835) |
+
+### Tools, skills, hooks, plugins and Apps
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `skills/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L881) |
+| `skills/extraRoots/set` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L886) |
+| `hooks/list` | unsupported | None (`Call` extension only) | No hook discovery API or Go callback registration/runner. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L891) |
+| `marketplace/add` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L896) |
+| `marketplace/remove` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L901) |
+| `marketplace/upgrade` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L906) |
+| `plugin/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L911) |
+| `plugin/search` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L917) |
+| `plugin/installed` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L922) |
+| `plugin/reconcile` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L927) |
+| `plugin/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L932) |
+| `plugin/skill/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L937) |
+| `plugin/share/save` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L942) |
+| `plugin/share/updateTargets` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L947) |
+| `plugin/share/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L952) |
+| `plugin/share/checkout` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L957) |
+| `plugin/share/delete` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L962) |
+| `app/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L967) |
+| `app/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L972) |
+| `app/installed` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L977) |
+| `skills/config/write` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1029) |
+| `plugin/install` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1034) |
+| `plugin/uninstall` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1039) |
+
+### Commands, processes and filesystem
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `fs/readFile` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L984) |
+| `fs/writeFile` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L989) |
+| `fs/createDirectory` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L994) |
+| `fs/getMetadata` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L999) |
+| `fs/readDirectory` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1004) |
+| `fs/remove` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1009) |
+| `fs/copy` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1014) |
+| `fs/watch` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1019) |
+| `fs/unwatch` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1024) |
+| `command/exec` **F** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1365) |
+| `command/exec/write` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1372) |
+| `command/exec/terminate` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1378) |
+| `command/exec/resize` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1384) |
+| `process/spawn` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1391) |
+| `process/writeStdin` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1398) |
+| `process/kill` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1405) |
+| `process/resizePty` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1412) |
+
+### Turns and steering
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `turn/start` **F** | supported | [StartTurn](../client.go) | Full native params; active-turn input behavior is source-only. No SDK queue policy/expected-turn steering contract. | Offline; historical live/recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1044) |
+| `turn/settings/update` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1051) |
+| `turn/steer` **F** | unsupported | None (`Call` extension only) | No expectedTurnId steering helper or selected steer models. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1056) |
+| `turn/interrupt` | supported | [InterruptTurn](../client.go) | Acknowledgment only; wait for native terminal state. Context cancel does not send it. | Offline; live untriggered | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1062) |
+
+### Realtime and timeline
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `thread/realtime/start` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1068) |
+| `thread/realtime/appendAudio` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1074) |
+| `thread/realtime/appendText` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1080) |
+| `thread/realtime/appendSpeech` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1086) |
+| `thread/realtime/stop` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1092) |
+| `thread/timeline/list` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1098) |
+| `thread/realtime/listVoices` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1104) |
+
+### Configuration, models, permissions and environments
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `model/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1115) |
+| `modelProvider/capabilities/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1135) |
+| `experimentalFeature/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1140) |
+| `permissionProfile/list` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1145) |
+| `experimentalFeature/enablement/set` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1150) |
+| `collaborationMode/list` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1199) |
+| `environment/add` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1213) |
+| `environment/info` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1220) |
+| `environment/status` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1227) |
+| `windowsSandbox/setupStart` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1277) |
+| `windowsSandbox/readiness` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1282) |
+| `config/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1418) |
+| `config/value/write` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1443) |
+| `config/batchWrite` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1449) |
+| `configRequirements/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1456) |
+
+### Remote control
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `remoteControl/enable` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1156) |
+| `remoteControl/disable` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1162) |
+| `remoteControl/status/read` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1168) |
+| `remoteControl/pairing/start` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1174) |
+| `remoteControl/pairing/status` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1180) |
+| `remoteControl/client/list` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1186) |
+| `remoteControl/client/revoke` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1192) |
+
+### MCP
+
+| Official capability | Go status | Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `mcpServer/oauth/login` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1233) |
+| `config/mcpServer/reload` | unsupported | None (`Call` extension only) | No MCP configuration reload API; thread Config values are not administration. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1239) |
+| `mcpServer/resource/read` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1251) |
+| `mcpServer/event/stream/start` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1258) |
+| `mcpServer/event/stream/stop` **X** | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1265) |
+| `mcpServer/tool/call` | unsupported | None (`Call` extension only) | No dedicated operation or workflow tests. | Offline: generic transport only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1271) |
+
+## Supplementary: server requests
+
+`Requests()` is the only original answer authority. `Request.Data()` decodes the
+six methods below; all others expose raw `Params()`. Every original handle can
+write a caller-supplied result/error once, but generic reply transport does not
+provide a typed tool/MCP/token/attestation implementation. There are no automatic
+decisions, handler workers, credential refresh or execution of caller tools.
+See [request contracts](../request_contract_test.go) and [model tests](../types/requests_test.go).
+
+| Official capability | Go status | Go decoder / reply entry | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `item/commandExecution/requestApproval` | supported | `Request.Data → types.CommandExecutionRequestApprovalParams`; `Handle.Answer/Reject` | Caller chooses native response; no automatic policy. | Offline typed/handle tests; live: untriggered | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1784) |
+| `item/fileChange/requestApproval` | supported | `Request.Data → types.FileChangeRequestApprovalParams`; `Handle.Answer/Reject` | Caller chooses native response; no automatic policy. | Offline typed/handle tests; live: untriggered | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1791) |
+| `item/tool/requestUserInput` | supported | `Request.Data → types.ToolRequestUserInputParams`; `Handle.Answer/Reject` | Caller chooses native response; no automatic policy. | Offline; historical live and recorded question | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1797) |
+| `mcpServer/elicitation/request` | partial | Raw `Request.Params`; `Handle.Answer/Reject` | No typed decoder/result workflow; caller must implement native contract. | Offline raw routing only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1803) |
+| `item/permissions/requestApproval` | supported | `Request.Data → types.PermissionsRequestApprovalParams`; `Handle.Answer/Reject` | Caller chooses native response; no automatic policy. | Offline typed/handle tests; live: untriggered | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1809) |
+| `item/tool/call` | partial | Raw `Request.Params`; `Handle.Answer/Reject` | No typed decoder/result workflow; caller must implement native contract. | Offline raw routing; recorded dynamic tools only | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1815) |
+| `account/chatgptAuthTokens/refresh` | partial | Raw `Request.Params`; `Handle.Answer/Reject` | No typed decoder/result workflow; caller must implement native contract. | Offline raw routing only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1820) |
+| `attestation/generate` | partial | Raw `Request.Params`; `Handle.Answer/Reject` | No typed decoder/result workflow; caller must implement native contract. | Offline raw routing only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1826) |
+| `currentTime/read` **X** | partial | Raw `Request.Params`; `Handle.Answer/Reject` | No typed decoder/result workflow; caller must implement native contract. | Offline raw routing only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1833) |
+| `applyPatchApproval` | supported | `Request.Data → types.ApplyPatchApprovalParams`; `Handle.Answer/Reject` | Legacy models/replies only; no verified current production sender. | Offline; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1841) |
+| `execCommandApproval` | supported | `Request.Data → types.ExecCommandApprovalParams`; `Handle.Answer/Reject` | Legacy models/replies only; no verified current production sender. | Offline; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1847) |
+
+## Supplementary: server notifications
+
+`Subscribe(ctx, rootID, types.SubscriptionOptions{})` returns `types.Event`.
+Raw rows mean `Method/Params/Raw` preservation only; the corresponding control,
+configuration or workflow API is **not** thereby supported. Native identity stays
+in the payload. Scope is root/proven descendants, bounded unresolved and source-less
+records; this is not an unfiltered global broadcast or replay feed. Decode failures
+remain observable. A slow observer fails explicitly; reader/RPC routing continues.
+
+| Official capability | Go status | Go decoder / entry | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `error` | supported | `types.ErrorNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline typed tests; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1937) |
+| `thread/started` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline relation/source tests; scoped recordings retain raw frames | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1938) |
+| `thread/status/changed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline relation/source tests; scoped recordings retain raw frames | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1939) |
+| `thread/archived` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1940) |
+| `thread/deleted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1941) |
+| `thread/unarchived` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1942) |
+| `thread/closed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1943) |
+| `thread/reverted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1944) |
+| `skills/changed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1945) |
+| `thread/name/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1946) |
+| `thread/attachment/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1947) |
+| `thread/goal/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1948) |
+| `thread/prediction/updated` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1950) |
+| `thread/goal/cleared` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1951) |
+| `thread/queue/changed` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1953) |
+| `project/changed` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1955) |
+| `thread/project/updated` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1957) |
+| `thread/environment/connected` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1959) |
+| `thread/environment/disconnected` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1961) |
+| `thread/settings/updated` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1963) |
+| `thread/tokenUsage/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline relation/source tests; scoped recordings retain raw frames | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1964) |
+| `turn/started` | supported | `types.TurnStartedNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline; historical live / scoped recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1965) |
+| `hook/started` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1966) |
+| `turn/completed` | supported | `types.TurnCompletedNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline; historical live / scoped recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1967) |
+| `hook/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1968) |
+| `turn/diff/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1969) |
+| `turn/plan/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1970) |
+| `item/started` | supported | `types.ItemStartedNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline; historical live / scoped recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1971) |
+| `item/autoApprovalReview/started` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1972) |
+| `item/autoApprovalReview/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1973) |
+| `autoApprovalReview/strictReviewRequired` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1975) |
+| `item/completed` | supported | `types.ItemCompletedNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline; historical live / scoped recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1976) |
+| `rawResponseItem/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1978) |
+| `rawResponse/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1980) |
+| `item/agentMessage/delta` | supported | `types.AgentMessageDeltaNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline; historical live / scoped recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1981) |
+| `item/plan/delta` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1983) |
+| `command/exec/outputDelta` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1985) |
+| `process/outputDelta` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1988) |
+| `process/exited` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1991) |
+| `item/commandExecution/outputDelta` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1992) |
+| `item/commandExecution/terminalInteraction` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1993) |
+| `item/fileChange/outputDelta` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1995) |
+| `item/fileChange/patchUpdated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1996) |
+| `serverRequest/resolved` | supported | `types.ServerRequestResolvedNotification` via [Subscribe](../subscription.go) | Receive/decoding only; no inferred execution success. | Offline; historical live / scoped recordings | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1997) |
+| `item/mcpToolCall/progress` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1998) |
+| `mcpServer/oauthLogin/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1999) |
+| `mcpServer/startupStatus/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2000) |
+| `mcpServer/event/stream/notification` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2002) |
+| `account/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2003) |
+| `account/gatewayOAuth/changed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2004) |
+| `account/rateLimits/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2005) |
+| `app/list/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2006) |
+| `remoteControl/status/changed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2007) |
+| `externalAgentConfig/import/progress` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2008) |
+| `externalAgentConfig/import/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2009) |
+| `fs/changed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2010) |
+| `item/reasoning/summaryTextDelta` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2011) |
+| `item/reasoning/summaryPartAdded` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2012) |
+| `item/reasoning/textDelta` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2013) |
+| `thread/compacted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2015) |
+| `model/rerouted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2016) |
+| `model/verification` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2017) |
+| `modelProvider/authRecoveryStarted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2018) |
+| `modelProvider/authRecoveryCompleted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2019) |
+| `turn/moderationMetadata` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2021) |
+| `model/safetyBuffering/updated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2022) |
+| `warning` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2023) |
+| `guardianWarning` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2024) |
+| `deprecationNotice` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2025) |
+| `configWarning` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2026) |
+| `fuzzyFileSearch/sessionUpdated` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2027) |
+| `fuzzyFileSearch/sessionCompleted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2028) |
+| `thread/realtime/started` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2030) |
+| `thread/realtime/itemAdded` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2032) |
+| `thread/realtime/item/started` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2034) |
+| `thread/realtime/item/transcript/delta` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2036) |
+| `thread/realtime/item/completed` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2038) |
+| `thread/realtime/transcript/delta` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2040) |
+| `thread/realtime/transcript/done` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2042) |
+| `thread/realtime/outputAudio/delta` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2044) |
+| `thread/realtime/sdp` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2046) |
+| `thread/realtime/error` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2048) |
+| `thread/realtime/closed` **X** | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2050) |
+| `windows/worldWritableWarning` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2053) |
+| `windowsSandbox/setupCompleted` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2054) |
+| `account/login/completed` | partial | [Subscribe](../subscription_management.go): raw `types.Event` | No typed notification decoder or associated feature/control guarantee. | Offline generic raw receive only; live: unverified | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2059) |
+
+## Supplementary: client notifications
+
+| Official capability | Go status | Go entrypoint | Limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| `initialized` | supported | Constructors send after initialize response | No public generic Notify API | Offline handshake; historical live | [native](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L2083) |
+
+## Configuration and cross-cutting capabilities
+
+| Official capability | Go status | Actual Go entrypoint | Exact gap / limitation | Verification | Source |
+| --- | --- | --- | --- | --- | --- |
+| Explicit process/environment/cwd and initialization capabilities | supported | NewStdio(StdioOptions), NewRemote(RemoteOptions), ServerInfo | No executable discovery/download, login or global configuration manager; nil Env inherits | Offline stdio/WS/WSS; historical stdio/WS live | [Go options](../options.go), [native initialization](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-client/src/lib.rs) |
+| Model/provider, instructions, cwd, approval/sandbox, service tier and config overrides | partial | types.ThreadStartParams / ThreadResumeParams / TurnStartParams | Selected native fields preserved; no catalog, requirements/profile discovery, config read/write/reload or validation against deployment policy | Offline model round trips; only scoped live scenarios | [native thread fields](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/thread.rs), [Go bindings](../types/types_generated.go) |
+| Structured output and native input/tool definitions | partial | TurnStartParams.OutputSchema, UserInput, ThreadStartParams.DynamicTools | Field transport is implemented; no run result/schema validator or automatic dynamic-tool execution; tool replies raw | Offline models; recorded file tools only | [native turn fields](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/turn.rs), [recordings](recorded-events.md) |
+| Managed child observation | partial | Subscribe; SubagentCreated / Associated / ObservationState | Observation only; best-effort attach, no child control RPCs, replay, whole-tree completion or usage aggregation; History imports relations only | Offline stdio/WS/WSS and race; live descendants unverified | [contract/source links](subagent-compatibility.md) |
+| Background command output vs process control | partial | Native item decoding and raw outputDelta | No dedicated background terminal/process manager; silence/parent completion does not prove process exit | Offline source contracts; live boundary unverified | [event sequences](event-sequences.md), RPC rows above |
+| MCP and hooks | unsupported | No dedicated entrypoint | Native item payloads and config maps do not implement MCP discovery/tools/resources/OAuth/elicitation or a hook runner | Offline raw/model transport only; workflows unverified | MCP and hooks RPC rows above |
+| Native cancellation vs local waiting | partial | InterruptTurn; context; AnswerHandle.Cancel | Context/handle cancellation is local only. No generic cancellation RPC, userVerification/cancel helper or execution rollback | Offline dispatch/handle tests; interrupt live untriggered | [Go errors](../errors.go), [native turn parameters](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/turn.rs) |
+| Stdio and remote WS/WSS | supported | NewStdio / NewRemote | Explicit executable/endpoint/bearer; WS messages differ from stdio JSONL; binary/malformed/oversized frames fail explicitly; no proxy discovery | Offline stdio/WS/WSS; historical stdio/loopback WS live; public WSS unverified | [transport provenance](protocol/README.md#remote-transport-and-authentication), [Go options](../options.go) |
+| Rust Unix-socket/local-daemon/in-process connections | unsupported | None | Go has no Unix socket, managed-daemon or embedded-runtime constructor | Unverified | [Rust endpoints](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-client/src/remote.rs), [in-process client](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-client/src/lib.rs) |
+| Recovery/reconnect | unsupported | Explicit new Client + ResumeThread only | No auto-reconnect/replay, durable cursor, token refresh, gap filling or restored observer state | Offline explicit reconnect contracts; historical same-ID resume only | [resume implementation](../thread.go), [history/gap contract](subagent-compatibility.md) |
+| Error correlation, finite bounds and ownership | supported | CallError, AnswerError, RPCError, Limits, Done/Err/Close | No retries; outcome unknown requires reconciliation; remote bearer reflection redacted; only owned stdio child reaped, not arbitrary descendants | Offline normal/race and synthetic hostile peers; limited historical cleanup live | [errors](../errors.go), [limits](../options.go), [tests](testing.md) |
+| Loss-preserving native models | partial | types.Optional, UnknownFields, unknown union/raw fallbacks | Selected closure only, not every registry model; not strict JSON Schema validation; no version compatibility inferred | Offline 399 types / 750 round-trip cases; no full live schema pass | [schema/generator provenance](protocol/README.md#generated-material) |
 
 ## Wire and lifecycle boundaries
 
-The pinned protocol deliberately omits `"jsonrpc":"2.0"`. Request identifiers
-are either strings or signed 64-bit integers; integer `1` and string `"1"` are
-different identities. The SDK does not coerce IDs through floating point.
+The app-server dialect omits `jsonrpc`. Integer and string RPC IDs are distinct;
+native thread/turn/item IDs are never fabricated. Response correlation and
+notification arrival are independent: a turn can finish before StartTurn returns.
+Subscribe before starting work. Interrupt acknowledgment, request resolution,
+parent idle/final text, EOF and local cancellation are separate boundaries.
+No implicit interrupt, retry or combined turn runner is provided.
 
-A context cancels local waiting. It does not send a fictional generic cancellation
-notification and does not establish that the server stopped. `turn/interrupt`
-and `userVerification/cancel` are separate native methods, listed individually.
-`serverRequest/resolved` is a server notification sent after answers or pending
-request resolution during interruption; it is not a success acknowledgment.
-Errors after possible dispatch
-carry outcome-unknown evidence and are never automatically replayed.
+Remote clients send only the explicitly supplied bearer header, verify WSS
+certificates/hostnames, reject redirects and URL credentials/query/fragment, and
+require opt-in for non-loopback plaintext. Remote Close releases only the
+connection; stdio Close bounds graceful EOF/kill/reap of its owned child.
+Successful results/events remain caller-sensitive; error redaction is not a
+universal logging redactor. See [usage and defaults](../README.md).
 
-Closing a stdio client closes its owned child connection, then bounds waiting
-and forceful termination. Closing a remote client closes only its WebSocket
-connection. Neither sends the managed daemon shutdown protocol or takes ownership
-of an existing service. Arbitrary descendant process cleanup
-is not guaranteed. See the exported `Limits` and README for finite defaults.
+## Separate official SDK surfaces
+
+The matrices above use the app-server Rust registry as their sole denominator.
+The official Rust client exposes generic typed registry requests and also has
+Unix-socket/local-daemon and in-process constructors absent from Go.
+The TypeScript SDK at the same source pin instead runs
+`codex exec --experimental-json`, with lazy thread objects, `run`/`runStreamed`,
+AbortSignal and dotted exec events. Those APIs are not app-server RPCs or Go APIs.
+See the [separate official SDK comparison and architecture](design/native-sdk-comparison.md)
+for source-linked examples; no npm release version or TS test pass is inferred.
 
 ## Live validation
 
-The [final Mac report](evidence/mac-live-summary.md) consolidates real CLI
-**0.162.1** on Darwin/arm64, Go 1.26.9, against the SDK's then-current **0.160.1**
-protocol target. That historical run does not validate the refreshed bindings or
-managed subagent API. Exact tested bases and delivery commits are listed separately.
-Stdio and authenticated loopback WS passed two-turn events, durable history,
-fresh-connection same-ID resume and bounded lifecycle assertions. Stdio user
-input passed BLUE answer → exact native resolution → BLUE result → completion.
+Live observations are limited to the following scenarios. Historical lifecycle
+runs used CLI **0.162.1**, Darwin/arm64 and Go 1.26.9, with the SDK's former
+**0.160.1** schema pin `d27764b82f7118f674371e6d6e76271d9d606edb`.
+They do not validate the current bindings or descendant routing. CLI 0.160.1
+itself was not run. Tested SDK bases and harness deliveries are distinct:
 
-Command/file/permissions approvals were **untriggered**. A synthetic command
-effect passed independently. The interrupt command guard did not match, so no
-InterruptTurn was sent and interruption is **untriggered**, not passed. Public
-WSS, JWT issuer/signed bearer, proxies and cross-host operation are **not covered**.
-Mock WSS and schema/typed representation do not replace live workflow evidence.
-All 9/9 authorized model attempts were used; this summary adds zero model calls.
+| Scope | Tested SDK base | Harness delivery |
+| --- | --- | --- |
+| Stdio lifecycle | `c3842e2516e8caf383447379557b3bc8702e530a` | `cd5ed954e880ae468f56cdbe1b42122f216a1127` |
+| Stdio interactions | `cd5ed954e880ae468f56cdbe1b42122f216a1127` | `b6a42a4a3746488464fc9ee19dedc8f3d9e70346` |
+| Loopback WS lifecycle | `b6a42a4a3746488464fc9ee19dedc8f3d9e70346` | `7e6468edb701d76f9fdedff53aeb09e45a031c6c` |
 
-The [historical Linux attempt](evidence/final-live.md#historical-linux-attempt)
-at SDK `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c` / CLI 0.159.2 remains
-blocked by SQLite startup before initialization completed, with zero model turns.
-No new live pass, version range or complete-protocol certification is claimed.
+| Scenario | Observed coverage / limitation |
+| --- | --- |
+| Stdio and loopback WS lifecycle | Two-turn native events, durable history, explicit fresh-connection same-ID resume, unsubscribe and bounded cleanup passed. Remote Close left the service available. |
+| Loopback WS authentication | Wrong dummy token rejected with HTTP 401; supplied capability token initialized. |
+| Stdio user input | One BLUE answer, exact request/thread resolution, BLUE result and same-turn completion passed. |
+| Synthetic command effect | Expected output, exit 0 and turn completion passed; no approval was emitted. |
+| Command/file/permissions approvals | Untriggered. No file-change or permission-expansion pass. Approval decisions and pending-approval interruption remain unverified live. |
+| Interrupt | Exact command guard never matched; no InterruptTurn was sent. No interrupted-terminal or stopped-process pass. |
+| Public/cross-host WSS, TLS proxies, JWT issuer/signed bearer, expiry/revocation | Not covered. Synthetic TLS tests do not certify deployments. |
+| Legacy approvals, active-turn/crash recovery, managed descendants | No live workflow validation. |
 
-## Managed direct-child observation (ticket 01)
+A Linux attempt at SDK `a83ab64915e0bb7e7290d74ca3ac0204d11ec61c`
+with CLI 0.159.2 failed before initialization completed (EOF); a separate
+zero-message diagnostic identified SQLite state-runtime startup failure.
+Zero model turns were sent. This remains environment-blocked, not a pass.
+The historical lifecycle budget is exhausted at 9/9 turn attempts; it grants no
+further runs. Usage and cost were not measured for those attempts.
 
-The current [per-capability contract](subagent-compatibility.md) covers the full
-five-ticket recursive API. The sections below preserve its implementation and
-evidence history; no subagent live validation is claimed.
+Separate [real sanitized recordings](recorded-events.md) at SDK
+`d465677969cf968c6245e0adeaf7e32c42356913` cover two dynamic file tools and
+one native user question. Their manifests retain exact binary/source identities.
+They do not cover native shell approvals, child creation or background boundaries.
+No supported-version range or complete-protocol certification follows from either
+set of observations.
 
-`Client.Subscribe` adds a local, bounded stream for a root and direct children
-identified by explicit native evidence. Successful live spawnAgent collab and
-live decoded V2 item/completed SubAgentActivity kind started confirm SDK-derived
-Created; successful non-spawn collab evidence is Associated. V2 derives parent
-from notification threadId and child from activity.agentThreadId, retaining the
-actual activity in types.SubagentEvidence.Activity without requiring thread/started.
-Subscriptions now deliver `types.Event` directly. SDK convenience data lives
-separately in `types/derived_events.go`; generated native JSON remains unchanged. Native envelopes and parameter bytes are retained independently
-for each observer. Request handles remain exclusively on `Client.Requests()`.
+## Managed descendant observation
 
-Ticket 02 extends this API to recursive relations and bounded early-event
-routing. Native Thread parent/source, completed collab and V2 Started evidence establish
-edges; no path inference or child RPC is used. Conflicts retain the original
-parent and emit both accepted and rejected evidence; cycles emit diagnostics. Related ancestors
-precede buffered descendants. Associated can later receive one Created
-confirmation with its original supporting native identity and the same child
-thread ID. Entity identity remains distinct from each turn.
-
-The initial derived state remains incomplete due to best-effort auto-attach and
-unverified runtime coverage. Unknown sources are buffered within configurable
-count/bytes/age bounds, then explicitly delivered as unresolved with an incomplete
-diagnostic. They are never replayed after later association. Source-less events
-do not establish membership. Deduplication only covers successfully decoded known-type terminal
-item/completed identities scoped to thread/turn/method/item and this connection;
-cache eviction permits old replays. Identical deltas, unknown occurrence IDs and
-partial versus complete items are preserved. Graph, depth, queue, pending storage
-and identity cache are bounded independently.
-
-Ticket 03 adds explicit native Thread snapshots through `types.SubscriptionOptions.History`.
-Seeded parent/source, successful historical collab and V2 Started relations are history
-Associated only; they never create entities or replay notifications. Their evidence
-has history provenance and no notification method. Seeded entities cannot later
-be reclassified as newly created. New live children can still be Created. Snapshot
-count/bytes use MaxNodes/PendingBytes, with ordinary graph/depth/queue bounds.
-No current work state is inferred from a snapshot. History seeds explicitly emit
-an incomplete recovery-gap record; cold reconnect attachment to old threads and
-missed/lagged auto-attach remain unverified. Unknown versions remain incomplete,
-with no speculative resume or read/list fallback.
-
-Parent idle and child active can coexist. Root turn completion, child activity
-completion/interruption and entity lifetime are separate. Closing/canceling one
-observation leaves other subscriptions intact, including another
-root sharing a child source. Unexpected disconnect appends a disconnected /
-permanent-gap record using a reserved terminal queue slot, preserves accepted
-records and the connection failure in Err, and never synthesizes work completion.
-Explicit new Clients have fresh occurrence caches; there is no seamless
-recovery or exactly-once claim. No live/model validation was run.
-
-Pinned lifecycle source: [TurnComplete handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L186-L203)
-awaits note_turn_completed before handle_turn_complete; [thread status](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L148-L158)
-clears only that thread, and [publication](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L223-L248)
-uses the shared outbound sender. Idle change (when applicable) precedes that
-thread's turn/completed enqueue; child status is not aggregated. Waiting for
-wait_agent does not complete the parent turn; completing the parent does not
-invoke close_agent on children. Native IDs/notifications are retained. These
-source facts do not promise cross-thread order or successful result arrival first.
-
-| Capability | Native availability / source evidence (E1) | SDK implementation | Offline evidence (E2) | Live evidence |
-| --- | --- | --- | --- | --- |
-| New-thread notification routing | Pinned [server lib.rs lines 1291–1319](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319) auto-attaches initialized connections; lagged notifications skip resync | Existing connection only; zero child RPCs/connections | Synthetic stdio/WS/WSS auto-attach fixture | Not run |
-| Independent creation / association | V2 [successful spawn / Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239) and pinned [collab item schema](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L1131) | Derived Created or Associated precedes child native events | V1 success/failure/resume/repeated receivers; TestTreeV2CreatedWithoutThreadStarted, TestTreeV2GraphOrderingAndConfirmation, TestTreeV2HistorySuppressesCreation, TestTreeV2NonCreationEvidence | Not run |
-| Native compatibility and isolation | Existing raw/typed notification transport | Recursive membership and bounded unresolved routing, per-observer buffers, exact envelope bytes | Early delivery before root response, unknown fields/methods/null, malformed typed payloads, unchanged broadcast | Not run |
-| History and disconnect boundaries | Native snapshots expose lineage; new-thread attach is distinct from cold recovery | History-only Associated; disconnected/permanent-gap; explicit new epochs, zero recovery RPCs | Seed/live distinction, repeated IDs across epochs, full-queue EOF, close/cancel shared-source race | Not run |
-| Bounded local observation | Existing SDK subscription limits | Independent queue, shared admission cap, graph-node bound, idempotent local close | Slow observer isolation, node/admission bounds, concurrent close; Go race suite | Not run |
-
-Offline commands and fixture scope are recorded under `subagent01-*`,
-`subagent02-*` and `subagent03-*` in
-[protocol/evidence.json](protocol/evidence.json). Real CLI/model tests and auth
-changes were excluded. Existing live evidence elsewhere in this document does
-not establish subagent runtime coverage.
-
-Ticket 02 validation and API defaults: [recursive ordering evidence](evidence/subagent-02.md).
-
-Ticket 03 lifecycle and recovery limits: [offline evidence](evidence/subagent-03.md).
-
-Ticket 04 admits each live notification fanout atomically, including related
-associations and resolved pending records. Expiry diagnostics and unresolved native
-records are also admitted together. Overflow preserves previously accepted records
-and terminates only that observer; Done/Err remain independent of queue capacity.
-Control replies and original Requests handles continue on their existing paths.
-Observation cancellation/Close does not invalidate a request; request cancellation,
-expiry, native resolution and Client.Close retain the original handle semantics.
-Repeated request IDs on new Clients cannot reuse old answer authority. Parent
-final text, child deltas/thinking and each native usage payload keep their source
-and exact Raw; No usage total is produced.
-
-Ticket 04 bounds and original request authority: [offline evidence](evidence/subagent-04.md).
-
-Final per-capability contract, including raw-only representation, E1/E2 evidence
-and all five tickets: [managed subagent matrix](subagent-compatibility.md).
-Runnable model-free scenario: [offline subagent example](../examples/observe-subagents-offline/README.md).
-Ticket 05 publication and final validation: [evidence](evidence/subagent-05.md).
-ACP subagent proposals remain drafts; no ACP wire or stable-standard compliance
-is claimed. No subagent E3/E4 test was run.
-
-Current installed CLI **0.162.1** is the sole active target; the previous
-0.160.1 pin is historical provenance, not a maintained compatibility mode.
-See the [current-version follow-up](evidence/subagent-05-current.md) for the
-actual schema changes, local binary identity and current E1/E2 validation.
-
-[事件时序](event-sequences.md) explains the current V1/V2 spawn and wait modes.
-V2 live decoded completed Started proves creation; other activity kinds and
-item/started prove neither creation nor parentage. Historical Started yields
-Associated only. [Correction evidence](evidence/subagent-v2-created.md) records
-the fixed-source reasoning and public regression coverage.
+The [managed subagent contract](subagent-compatibility.md) and
+[event stories](event-sequences.md) specify the source/identity, gap, bounds and
+history rules. These are SDK observation guarantees, not extra native control
+APIs. Real-provider/mock-backend (E3) and real-model (E4) subagent tests have not
+run. ACP proposals are drafts; this SDK implements no ACP wire or stable ACP
+subagent standard. Unknown server revisions remain unverified.

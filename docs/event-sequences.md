@@ -1,6 +1,6 @@
 # 从用户动作看 Codex 事件时序
 
-本文固定 **Codex CLI 0.162.1**，源码为 [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d)。以下是源码与离线假服务端合约支持的故事，不是真实录制；本票不运行模型。真实录制另票执行。[当前来源核对](evidence/subagent-05-current.md)、[兼容矩阵](subagent-compatibility.md)区分源码、离线与 live 证据。
+本文固定 **Codex CLI 0.162.1**，源码为 [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d)。以下故事依据固定源码与离线假服务端合约。[兼容矩阵](subagent-compatibility.md)区分源码、离线与 live 证据；[真实录制与回放](recorded-events.md)单独说明实际捕获范围。
 
 每个图是一种允许的顺序，不是跨线程全序。RPC result 只回答相同 `id` 的调用，可以晚于执行通知。模型工具结果进入模型上下文，不是客户端 RPC result。以下图中的「原生」通知直接通过 types.Event 交付；「派生」使用独立的 Data 类型，不是服务端 method。
 
@@ -162,11 +162,11 @@ V2 模型工具结果形如 `{"task_name":"/root/research","nickname":"Maple"}`�
 
 **结束依据：** C1/CT1、C2/CT2 和 G/GT1 分别从各自原生 turn 终态确定结果。父模型 wait_agent 的返回不是整棵树完成：V1 可只收到部分终态，V2 可因邮箱、新输入或超时返回。
 
-**客户端更新：** 用 RelationKey 建树，用 Evidence 展示直接父证据；按 Source.ThreadID 分别显示文本、工具、状态、usage，不聚合 token 或拼接答案。冲突保留已接纳关系并显示 incomplete。关系节点在活动结束后仍保留，可继续接收新 turn。
+**客户端更新：** 用派生数据的 ThreadID 和 ParentThreadID 建树，用 Evidence 展示直接父证据；按原生 payload 的 threadId 分别显示文本、工具、状态、usage，不聚合 token 或拼接答案。冲突保留已接纳关系并显示 incomplete。关系节点在活动结束后仍保留，可继续接收新 turn。
 
 **禁止推断：** `item/started`、活动 Interacted/Interrupted/Completed 不证明创建或父关系；历史 Started 只关联，不成为实时 Created。`item/completed` 加 `kind=started` 是活动项结束，不是子 turn 结束。路径、缺失 thread/started、父答案和 wait 返回都不能推断全树完成。SDK 不新增 child start/resume/turn/read/list/subscribe RPC 或额外连接。
 
-依据：[V2 成功 Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239)、[首次输入接纳](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L923-L959)、[官方无 collab 测试源码](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593)、[离线 V2 正负例](../tree_v2_contract_test.go)、[嵌套与去重](../tree_nested_test.go)。本票未运行官方 Rust 测试。
+依据：[V2 成功 Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239)、[首次输入接纳](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/spawn.rs#L923-L959)、[官方无 collab 测试源码](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593)、[离线 V2 正负例](../tree_v2_contract_test.go)、[嵌套与去重](../tree_nested_test.go)。官方 Rust 测试仅作为源码依据，未在本 SDK 检查中执行。
 
 ## 5. 用户启动耗时命令，持续查看后台输出
 
@@ -202,7 +202,7 @@ sequenceDiagram
 
 **禁止推断：** delta 配额耗尽或输出静默不代表进程结束；模型不再读取也不代表 watcher 停止。SDK 缓冲有界不等于 provider 输出无限可靠，断线后不补齐输出。
 
-依据：[后台与 exit watcher](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/unified_exec/async_watcher.rs)、[delta 数量上限](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/exec.rs)、[进程管理与 write_stdin](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/unified_exec/process_manager.rs)。这些是固定源码依据，本票没有后台 shell live 录制。
+依据：[后台与 exit watcher](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/unified_exec/async_watcher.rs)、[delta 数量上限](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/exec.rs)、[进程管理与 write_stdin](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/unified_exec/process_manager.rs)。这些是固定源码依据，尚无后台 shell live 录制。
 
 ## 6. 用户看到父答案，但后台工作尚未结束
 
@@ -284,4 +284,4 @@ sequenceDiagram
 | Client.Close | 所有权范围内连接/进程 | stdio 关闭拥有的子进程；远端只关闭连接 |
 | 原生 thread/delete | 持久线程数据 | SDK 无专用 wrapper，不从父 idle 推断删除 |
 
-所有故事的保证仅限显式 ID 关联、已证关系先于归属后代 Native、独立原句柄与有界可见失败。原生 auto-attach 在固定版本为 best-effort。SDK 不提供树级完成保证、自动恢复或新增子任务控制流程。参见 [API 迁移](default-managed-migration.md)。
+所有故事的保证仅限显式 ID 关联、已证关系先于归属后代 Native、独立原句柄与有界可见失败。原生 auto-attach 在固定版本为 best-effort。SDK 不提供树级完成保证、自动恢复或新增子任务控制流程。参见 [当前 API 用法](../README.md#observe-a-root-and-its-live-descendants)。

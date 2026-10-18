@@ -1,12 +1,11 @@
 # Recorded native events and offline replay
 
-The recording ticket starts from SDK and story-doc commit
-`d465677969cf968c6245e0adeaf7e32c42356913`, including the V2 Started creation
-fix. Only the public `StartThread` → `Subscribe(ctx, root, types.SubscriptionOptions{})` →
+The real sanitized fixtures were captured at SDK revision
+`d465677969cf968c6245e0adeaf7e32c42356913`. Only the public `StartThread` → `Subscribe(ctx, root, types.SubscriptionOptions{})` →
 `StartTurn` flow is used. `Requests` and the original answer handle service
 reverse requests while the managed observation drains.
 
-## Story cards fixed before recording
+## Recorded scenario scope
 
 | Story | Synthetic input and allowed operations | Expected partial order | Limits |
 | --- | --- | --- | --- |
@@ -50,7 +49,7 @@ their original ID exactly once. Extra requests, missing responses, early EOF and
 unconsumed frames fail. A private final assertion verifies complete consumption.
 Deadlines bound deadlock; replay never sleeps to imitate wall-clock timestamps.
 
-Native JSON, Params and Raw remain separate from SDK Kind/Origin observations.
+Native JSON, Params and Raw remain separate from SDK convenience event data.
 Sanitized Raw is the sanitized wire representation, not the original live bytes.
 Text and delta boundaries are evidence of this capture, not requirements on future
 models. A parent result never proves whole-tree completion. No child behavior is
@@ -91,20 +90,15 @@ failure, not permission to retry. Token usage is retained when observed; exact
 monetary cost and a dollar hard stop are unavailable and remain unknown. No
 provider retry configuration is changed or claimed as a token/cost limit.
 
-## Captured results
+## Captured coverage
 
-| Story | Root/child calls | Native process duration | Retained / excluded frames | Actual coverage |
-| --- | --- | --- | --- | --- |
-| S1 | 1 / 0 | 28.892 s | 66 / 23 | Text, two dynamic file tools, lifecycle and native usage |
-| S2 | 1 / 0 | 21.144 s | 28 / 17 | One native question, original-handle answer, resolved notification, lifecycle and usage |
-| S3 | 0 / 0 | Not run | None | Cumulative child/depth guard not established; no child/background claim |
-
-The two scene invocations took approximately 51.45 seconds including startup and
-cleanup. Both ended after root completion with EOF and confirmed process reaping.
-The final native cumulative usage payloads report 27,980 and 18,372 total tokens
-(including 18,176 and 8,960 cached input tokens). This exceeds the planning-only
-24,000-token estimate; that estimate was not an execution limit. Monetary cost
-remains unknown. No additional scene was run to improve coverage.
+S1 retains 66 frames with 23 exclusions: text, two dynamic file tools, lifecycle
+and native usage. S2 retains 28 frames with 17 exclusions: one native question,
+original-handle answer, resolution, lifecycle and usage. S3 was not run.
+Both captures ended after root completion with EOF and confirmed process reaping.
+The manifests retain durations, usage, cleanup and per-frame publication provenance.
+Exact monetary cost is unknown; the planning token estimate was not an execution
+limit. Captured usage does not establish a reusable token or cost hard stop.
 
 Existing `TestTreeParentIdleChildActive`, `TestTreeCloseCancelSharedSource`,
 `TestTreeDisconnectFullQueueAndSeedBounds`, and the V2 creation/noncreation tests

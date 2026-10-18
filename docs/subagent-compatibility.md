@@ -15,9 +15,8 @@ backend) and E4 (real model) were **not run** for any row. These are evidence
 categories, not cumulative certifications. Test names below refer to the public
 API fixtures in [tree contract](../tree_contract_test.go),
 [nested](../tree_nested_test.go), [lifecycle](../tree_lifecycle_test.go), and
-[bounds/requests](../tree_bounds_requests_test.go) tests. Commands, revision
-hashes and results are in [current-version evidence](evidence/subagent-05-current.md) and
-[the evidence manifest](protocol/evidence.json), records `subagent05-current-*` (earlier records retain their historical schema pin).
+[bounds/requests](../tree_bounds_requests_test.go) tests. Historical revisions and results remain in [the evidence manifest](protocol/evidence.json);
+current commands are in [testing and CI](testing.md). Earlier records retain their historical schema pin.
 
 Read [事件时序](event-sequences.md) for the current native/model/RPC ordering.
 
@@ -63,8 +62,7 @@ workflow. E1 source keys link to immutable official code below.
 Native thread/started, thread/status/changed, reasoning deltas and token usage
 are currently **raw-only notifications**. The native Thread and item objects
 already occur in the generated closure; relation extraction reads only their
-native fields and never inserts SDK fields into protocol. No generated root was
-added in this round. The 33 roots, 154 definitions, 399 types and 750 synthetic
+native fields and never inserts SDK fields into protocol. The 33 roots, 154 definitions, 399 types and 750 synthetic
 round-trip cases remain as documented in [generation provenance](protocol/README.md).
 The machine inventory records method-level raw/typed scope separately from the
 internal descendant management and its E2 evidence. Exact Raw is the envelope without the
@@ -73,7 +71,7 @@ transport delimiter; typed re-encoding can normalize whitespace/key order.
 Applications may record local delivery order and connection identity; these are not durable provider cursors. Native Events have no SDK sequence or epoch fields. Thread, turn and item identity
 are kept distinct; no task/run identity is invented. Usage scope remains unknown.
 Each subscription retains independently owned buffers and its own bounds, as detailed in
-[ticket 04](evidence/subagent-04.md). Limits constrain observation, not work time.
+[README bounds](../README.md#observe-a-root-and-its-live-descendants). Limits constrain observation, not work time.
 
 ## Run without a model
 
@@ -85,15 +83,9 @@ unresolved-source diagnostics and local close, and checks a deterministic transc
 GOPROXY=off GOSUMDB=off mise exec -- go run ./examples/observe-subagents-offline
 ```
 
-All five tickets are accepted at E1/E2 for the explicitly scoped contract:
-01 direct creation/association; 02 recursive ordering/deduplication; 03 independent
-lifecycle/history/gaps; 04 bounded admission/original authority/source preservation;
-05 compatibility publication and runnable offline evidence. This is an offline
-acceptance conclusion, not certification of live subagent support or ACP.
-
 ## Current 0.162.1 fields
 
-The active target matches the locally installed CLI, not a compatibility range.
+The active target is one pinned official revision, not a compatibility range.
 SubAgentActivity model/reasoningEffort, Turn.rootTurnId, and
 TurnStartParams.parentTurnId/rootTurnId are typed and retain omission/null/value.
 Turn-chain IDs stay in their native payloads; they are not renamed to agent IDs
@@ -105,7 +97,7 @@ which are represented without certifying a new workflow.
 
 TestTreeCurrentVersionMetadata exercises these fields over synthetic stdio/WS/WSS;
 TestCurrentOpenErrorInfo verifies the current raw fallback. Existing tree tests
-revalidate the five-ticket behavior against the refreshed generated closure.
+validate the managed subscription behavior against the refreshed generated closure.
 No old-version negotiation or compatibility branch is maintained.
 
 Current V1/V2 are feature modes in 0.162.1, not older-version compatibility.
@@ -116,5 +108,4 @@ notification threadId (parent) to activity.agentThreadId (child), without
 thread/started. types.SubagentEvidence.Activity retains the native item, including unknown
 fields; Tool and ReceiverThreadIDs stay collab-only. Interacted, Interrupted,
 Completed and item/started establish no edge. Historical Started seeds Associated
-only. See [V2 correction evidence](evidence/subagent-v2-created.md) and the
-event-sequence document for model-tool results, wait semantics and remaining gaps.
+only. See the [event-sequence document](event-sequences.md) for model-tool results, wait semantics and remaining gaps.

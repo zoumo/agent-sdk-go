@@ -1,16 +1,34 @@
 # SDK comparison — CLI 0.162.1
 
-Official source pin: [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d). Go baseline: [`885bf4de79c9bde75c342c807a9e3e45f098187c`](https://github.com/zoumo/codex-sdk-go/tree/885bf4de79c9bde75c342c807a9e3e45f098187c). All seven linked official implementation files were fetched without credentials at that exact pin and matched the local sources byte-for-byte. Examples describe source contracts; no live model calls were made. The source pin identifies the official SDK code; this does not assert an npm release version.
+Official source pin: [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d). Examples describe the pinned source contracts; this does not assert an npm release version or live workflow coverage.
 
-| Operation | Go baseline | Implemented Go | Official TypeScript exec SDK | Official Rust app-server client |
-|---|---|---|---|---|
-| Configuration | NewStdio(StdioOptions), NewRemote(RemoteOptions) | Same | new Codex(CodexOptions) | RemoteAppServerClient::connect(RemoteAppServerConnectArgs), or InProcessAppServerClient::start |
-| Create / resume | StartThread / ResumeThread, native types | Same | startThread / resumeThread; execution starts lazily during run | request_typed with ClientRequest::ThreadStart / ThreadResume |
-| Send | StartTurn(native TurnStartParams) | Same | thread.run / runStreamed | request_typed with ClientRequest::TurnStart |
-| Receive | Subscribe(ctx, id, TreeOptions), TreeEvent.Native | Subscribe(ctx, id, types.SubscriptionOptions), types.Event directly | AsyncGenerator of exec ThreadEvent, not app-server notifications | next_event → AppServerEvent |
-| Approvals / user questions | Requests → Data → Handle().Answer / Reject | Same | No public bidirectional server-request channel; approvalPolicy is configuration | ServerRequest; resolve_server_request / reject_server_request |
-| Children | Automatic bounded discovery and forwarding | Internal bookkeeping; typed convenience events in Data | Collab exec items; no recursive subscription or per-child app-server stream API | Native notification stream; native server auto-attach is best-effort, no Go convenience event equivalents |
-| Close | Subscription.Close, Client.Close; UnsubscribeThread is separate | Same | No client/thread close method; AbortSignal on run options | shutdown(self); native ThreadUnsubscribe is separate |
+| Operation | Implemented Go | Official TypeScript exec SDK | Official Rust app-server client |
+|---|---|---|---|
+| Configuration | NewStdio(StdioOptions), NewRemote(RemoteOptions) | new Codex(CodexOptions) | RemoteAppServerClient::connect(RemoteAppServerConnectArgs), or InProcessAppServerClient::start |
+| Create / resume | StartThread / ResumeThread, native types | startThread / resumeThread; execution starts lazily during run | request_typed with ClientRequest::ThreadStart / ThreadResume |
+| Send | StartTurn(native TurnStartParams) | thread.run / runStreamed | request_typed with ClientRequest::TurnStart |
+| Receive | Subscribe(ctx, id, types.SubscriptionOptions), types.Event directly | AsyncGenerator of exec ThreadEvent, not app-server notifications | next_event → AppServerEvent |
+| Approvals / user questions | Requests → Data → Handle().Answer / Reject | No public bidirectional server-request channel; approvalPolicy is configuration | ServerRequest; resolve_server_request / reject_server_request |
+| Children | Internal bookkeeping; typed convenience events in Data | Collab exec items; no recursive subscription or per-child app-server stream API | Native notification stream; native server auto-attach is best-effort, no Go convenience event equivalents |
+| Close | Subscription.Close, Client.Close; UnsubscribeThread is separate | No client/thread close method; AbortSignal on run options | shutdown(self); native ThreadUnsubscribe is separate |
+
+## Architecture
+
+The root `codex` package owns one explicit connection, transport framing,
+handshake, RPC correlation, bounded routing and cleanup. Public `types` contains
+native models, loss-preserving JSON values, direct events and subscription options.
+SDK convenience event data is defined separately from generated native structures.
+
+The reader routes responses without waiting on event consumers. Subscriptions own
+independent buffers and internal descendant relations. Reverse requests use a
+separate bounded queue and connection-bound one-shot handles. Applications service
+that queue concurrently, choose answers, select observation stop conditions and
+reconcile unknown outcomes. The SDK has no turn runner, implicit replay, reconnect,
+credential management or combined parent/child result.
+
+See [wire/lifecycle boundaries](../compatibility.md#wire-and-lifecycle-boundaries),
+[subscription contracts](../subagent-compatibility.md), and
+[offline verification](../testing.md).
 
 ## Official TypeScript: actual exec surface
 
@@ -62,18 +80,6 @@ The caller supplies `RemoteAppServerConnectArgs` with endpoint, client name/vers
 
 ## Go signatures
 
-Baseline receive:
-
-```go
-sub, err := client.Subscribe(ctx, rootID, codex.TreeOptions{})
-// handle err
-for record := range sub.Events() {
-    if record.Native != nil { consume(record.Native.Method, record.Native.Data) }
-}
-```
-
-Implemented receive:
-
 ```go
 sub, err := client.Subscribe(ctx, rootID, types.SubscriptionOptions{})
 // handle err
@@ -89,7 +95,7 @@ for event := range sub.Events() {
 
 Go ResumeThread enforces that the returned native thread ID matches the requested ID. Generic Rust ThreadResume can carry native history/path selectors; that broader selector behavior is not certified by the Go strict-ID helper.
 
-The proposal was adopted: there is no second proposed mode or wrapper. Go examples are compiled by `go test ./...`; [complete configuration, create/resume, send/receive, request and close code](../../examples/apiusage/usage.go) is part of that check. The TypeScript and Rust fragments are verified against pinned source, but were not compiled by the Go checks.
+Go examples are compiled by `go test ./...`; [complete configuration, create/resume, send/receive, request and close code](../../examples/apiusage/usage.go) is part of that check. The TypeScript and Rust fragments are verified against pinned source, but were not compiled by the Go checks.
 
 ### Go configuration, create/resume, send and close
 

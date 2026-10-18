@@ -40,7 +40,7 @@ membership flag is not an SDK support or server-runtime availability guarantee.
 `v2/TurnStart` and `v2/TurnInterrupt` parameter/response pairs, and six notification
 roots: `v2/TurnStartedNotification`, `v2/TurnCompletedNotification`,
 `v2/ItemStartedNotification`, `v2/ItemCompletedNotification`,
-`v2/AgentMessageDeltaNotification`, and `v2/ErrorNotification`. Ticket 04 adds
+`v2/AgentMessageDeltaNotification`, and `v2/ErrorNotification`. The closure also includes
 the parameter/response roots for `CommandExecutionRequestApproval`,
 `FileChangeRequestApproval`, `PermissionsRequestApproval`,
 `ToolRequestUserInput`, `ApplyPatchApproval`, and `ExecCommandApproval`
@@ -179,12 +179,12 @@ these methods. SDK-derived records stay outside protocol. The native schema
 closure, generator roots and provenance hashes remain unchanged; method-level
 raw evidence and the internal descendant-management control are recorded separately in the inventory.
 
-## Current installed-version target
+## Current schema target
 
-The active schema is official 0.162.1, matching the installed CLI version checked
-with --version only. Previous 0.160.1 records are historical. The current closure
+The active schema is official 0.162.1, identified by the source revision above.
+Previous 0.160.1 records are historical. The current closure
 adds typed activity model/reasoningEffort, turn-chain IDs, partial_answer and the
 open native error union. The generator preserves the official string/object raw
 fallback in CodexErrorInfo rather than inventing protocol variants. See the
-[current-version evidence](../evidence/subagent-05-current.md); no model or
-real app-server workflow was run for this refresh.
+[current field contract](../subagent-compatibility.md#current-01621-fields);
+these bindings have source and offline evidence, without a live workflow pass.

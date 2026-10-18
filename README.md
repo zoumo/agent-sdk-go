@@ -2,16 +2,26 @@
 
 A native Go client for the Codex app-server protocol.
 
-Native data lives in `github.com/zoumo/codex-sdk-go/types`. Existing callers should
-read the [package migration guide](docs/migrations/protocol-to-types.md).
+Connections and execution live in the root `codex` package. Events, native models,
+optional values and subscription options live in `github.com/zoumo/codex-sdk-go/types`.
 
 **Start with [compatibility and the complete official capability inventory](docs/compatibility.md).**
 The protocol target is official **0.162.1** at one exact commit. The
-[Mac live report](docs/evidence/mac-live-summary.md) records limited real CLI
+[live coverage summary](docs/compatibility.md#live-validation) records limited real CLI
 **0.162.1** stdio/loopback WS and user-input passes. Approvals and interrupt were
 untriggered; public WSS/JWT remain uncovered. No supported-version range is claimed.
 Those historical runs do not validate the refreshed bindings or managed subagents.
 Current-version adaptation uses source inspection and offline tests only.
+
+## Documentation
+
+- [Compatibility, protocol target and live coverage](docs/compatibility.md)
+- [Managed subagent API and limitations](docs/subagent-compatibility.md)
+- [Event sequences and user stories](docs/event-sequences.md)
+- [Testing, offline examples and CI](docs/testing.md)
+- [Recorded native events and replay](docs/recorded-events.md)
+- [Architecture and official SDK comparison](docs/design/native-sdk-comparison.md)
+- [Protocol generation, sources and licensing](docs/protocol/README.md)
 
 ## Local thread example
 
@@ -388,7 +398,7 @@ the background `Wait` still owns reaping. User-defined JSON marshal/unmarshal
 implementations run in the caller and must cooperate; the SDK cannot interrupt
 arbitrary Go code.
 
-## Development and evidence
+## Development and testing
 
 ```sh
 mise exec go@1.26.9 -- go test -v -count=1 ./...
@@ -411,12 +421,8 @@ schema generation on Ubuntu 24.04 and macOS 15, using Go 1.26.9 and Python 3.13.
 All three live switches are explicitly `0`; verbose output and job summaries
 identify real scenarios as **SKIPPED**, not live passes. Pushes to `main`, PRs,
 and manual dispatch run with read-only repository permissions and no service
-secrets. See [CI policy and validation evidence](docs/evidence/offline-ci.md)
-for comparison bases, action maintenance, regeneration limits, and local checks.
-Historical live results remain in the [final Mac report](docs/evidence/mac-live-summary.md).
-[Ticket 01](docs/evidence/ticket-01.md), [ticket 02](docs/evidence/ticket-02.md),
-[ticket 03](docs/evidence/ticket-03.md), [ticket 04](docs/evidence/ticket-04.md), and
-[ticket 05 evidence](docs/evidence/ticket-05.md) record scenarios and verification status.
+secrets. See [testing and CI](docs/testing.md) for all offline commands, comparison
+bases, generation limits and action maintenance.
 [Official testing patterns](docs/protocol/testing-patterns.md) distinguishes
 app-server harnesses from the TypeScript SDK's `codex exec` transport.
 
@@ -526,7 +532,7 @@ notifications already on its connection and sends **zero** child resume/start/
 subscribe RPCs or additional connections. This is source evidence and offline
 fake-peer validation, not real-server subagent validation. Older/unknown runtimes
 remain unverified; the SDK does not probe them with execution RPCs. See
-[compatibility and evidence](docs/compatibility.md#managed-direct-child-observation-ticket-01).
+[compatibility and evidence](docs/compatibility.md#managed-descendant-observation).
 
 `types.SubscriptionOptions.EventQueue` defaults to `Limits.EventQueue`; `MaxNodes` defaults to
 4096 including the root and unresolved relation nodes; `MaxDepth` defaults to 32
@@ -561,8 +567,7 @@ unsubscribed by observation teardown. Permission and question answers still go
 through original `Client.Requests()` handles.
 `Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})` is the sole subscription entry.
 It always manages relations and descendant routing; there is no observation mode switch.
-See [breaking migration](docs/default-managed-migration.md) and the
-[pinned official SDK comparison](docs/design/native-sdk-comparison.md).
+See the [pinned official SDK comparison](docs/design/native-sdk-comparison.md).
 
 
 ### Recorded event replay
@@ -571,4 +576,4 @@ Run `go run ./examples/replay-recorded` without Codex, credentials or network.
 The embedded real sanitized S1/S2 transcripts cover two bounded dynamic file
 tools and one native user question. Default CI validates and replays them offline.
 Native shell approvals, subagent creation and background boundaries were not
-observed. See [recording evidence and explicit real-agent maintenance](docs/recorded-events.md).
+observed. See [recorded coverage and explicit real-agent maintenance](docs/recorded-events.md).

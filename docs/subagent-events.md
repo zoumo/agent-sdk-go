@@ -82,7 +82,7 @@ Those frames and ordinary associations still flow normally.
 | Observation | SDK result | Evidence required |
 | --- | --- | --- |
 | `local_agent` task_started with explicitly false `is_backgrounded` | Foreground Created | Nonempty native task/tool IDs, complete observed builtin Agent/Task request, attributable ancestry, no contradictions. Fixed 0.3.258 declaration says resumed subagents always register in background. Missing/null/true does not satisfy this route. |
-| Successful Agent structured result | Possibly late Created | Complete builtin request; exactly one successful matching tool_result in the user frame; structured tool_use_result status completed/async_launched and nonempty agentId; matching local_agent task/tool identity. Request, result and task may arrive in any order. |
+| Successful Agent structured result | Possibly late Created | Complete builtin request; exactly one successful matching tool_result in the user frame; structured tool_use_result status completed/async_launched and nonempty agentId; matching local_agent task/tool identity. Matcher tolerates synthetic reordered evidence; this is not a producer-order guarantee. |
 | Ordinary task start, first task ID, name, depth, input alone, hook | Associated only | These alone do not establish creation. No hook is installed. |
 | SendMessage, resume key (including null), remote_launched, error/malformed/missing result, ambiguous result blocks or contradictory IDs | No Created from that invocation | Hooks can replace input; absence of resume in a request is never the sole proof. |
 
@@ -95,7 +95,10 @@ graph conflicts conservatively disable all later creation claims in this epoch.
 Created confirms that creation occurred; it supplies no invented timestamp.
 Associated precedes attributed Native as before. Child Native continues while
 waiting for background confirmation, including after a parent result. A late
-Created can therefore follow child text. Created is emitted once per merged
+Created can therefore follow child text when later task/ancestry evidence completes
+the proof. In current 0.3.258, a root turn result follows that turn's
+assistant/user/stream_event messages: its own tool-result receipt must not be
+illustrated after its result. Created is emitted once per merged
 entity, across tool aliases and later work, without depending on UUID history.
 The evidence ledger has no eviction: MaxCreationEntries defaults to 8192,
 ceiling 131072. Exhaustion uses the existing visible terminal ResourceLimit

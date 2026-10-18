@@ -35,6 +35,8 @@ func TestOfflineExample(t *testing.T) {
 	associated := make(map[string]bool)
 	native, rootResult, childAfter, nested, patchTerminal, closed := 0, false, false, false, false, false
 	created := make(map[string]bool)
+	childBeforeCreation := false
+	rootReceipt := false
 	for {
 		var r struct {
 			claude.TreeRecord
@@ -51,7 +53,7 @@ func TestOfflineExample(t *testing.T) {
 			if created[r.Source.TaskID] || !associated[r.Source.AssociationID] || r.Source.RunID != "" || r.RunScope != "legacy-unknown" {
 				t.Fatal(r)
 			}
-			if r.Source.TaskID == "child" && !childAfter {
+			if r.Source.TaskID == "child" && (!rootResult || !childBeforeCreation) {
 				t.Fatal("background creation blocked or preceded child output")
 			}
 			created[r.Source.TaskID] = true
@@ -76,7 +78,19 @@ func TestOfflineExample(t *testing.T) {
 			t.Fatal("native preceded association")
 		}
 		if r.Native.Result != nil {
+			if !rootReceipt {
+				t.Fatal("same-turn tool receipt must precede root result")
+			}
 			rootResult = true
+		}
+		if r.Native.User != nil && len(r.Native.ToolUseResult) > 0 {
+			if rootResult {
+				t.Fatal("same-turn tool receipt followed root result")
+			}
+			rootReceipt = true
+		}
+		if r.Source.ToolUseID == "spawn-child" && r.Native.Assistant != nil {
+			childBeforeCreation = true
 		}
 		if r.Source.TaskID == "child" && r.Native.Assistant != nil && rootResult {
 			childAfter = true

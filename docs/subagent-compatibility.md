@@ -89,7 +89,8 @@ Source.RunID, CurrentRunID, status, scope and a native_raw string containing the
 exact Native.Raw bytes. Association precedes attributed child Native. It uses
 the current 2.1.258 shape (no invented run/message-agent/parent-task IDs), emits
 foreground grandchild Created and late background child Created after child
-output. The empty snapshot does not mark either task terminal.
+output, with the root tool receipt before root result and later task evidence
+completing creation proof. The empty snapshot does not mark either task terminal.
 
 The demo explicitly calls Close at scripted idle and drains the closed record
 and EOF. That is a demo policy, not an inference that idle means all tasks ended.

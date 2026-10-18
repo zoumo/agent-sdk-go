@@ -83,7 +83,15 @@ func TestTreeCreatedForegroundAndLateBackground(t *testing.T) {
 	for _, background := range []bool{false, true} {
 		t.Run(fmt.Sprint(background), func(t *testing.T) {
 			c := openTreeFixture(t)
-			initial := creationFrames(t, c, creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", fmt.Sprint(background)))
+			initialFrames := []string{creationInit, creationRequest("call", "Agent", creationInput, "")}
+			status := "async_launched"
+			if !background {
+				initialFrames = append(initialFrames, creationTask("child", "call", "false"))
+				status = "completed"
+			}
+			// A root tool receipt belongs before that root turn's result.
+			initialFrames = append(initialFrames, creationResult("call", "child", status))
+			initial := creationFrames(t, c, initialFrames...)
 			want := 1
 			if background {
 				want = 0
@@ -92,11 +100,15 @@ func TestTreeCreatedForegroundAndLateBackground(t *testing.T) {
 				t.Fatal(initial)
 			}
 			// Native child output continues after parent result, before background proof.
-			middle := creationFrames(t, c, `{"type":"result","subtype":"success","session_id":"s","result":"parent done"}`, `{"type":"assistant","session_id":"s","agent_id":"child","parent_tool_use_id":"call","message":{"role":"assistant","content":"child continues"}}`)
+			middle := creationFrames(t, c, `{"type":"result","subtype":"success","session_id":"s","result":"parent done"}`, `{"type":"assistant","session_id":"s","parent_tool_use_id":"call","message":{"role":"assistant","content":"child continues"}}`)
 			if len(creations(middle)) != 0 {
 				t.Fatal(middle)
 			}
-			late := creationFrames(t, c, creationResult("call", "child", "async_launched"))
+			lateFrame := `{"type":"system","subtype":"task_updated","session_id":"s","task_id":"child","patch":{"status":"running"}}`
+			if background {
+				lateFrame = creationTask("child", "call", "true")
+			}
+			late := creationFrames(t, c, lateFrame)
 			if background {
 				if len(creations(late)) != 1 {
 					t.Fatal(late)
@@ -121,6 +133,8 @@ func TestTreeCreatedForegroundAndLateBackground(t *testing.T) {
 		})
 	}
 }
+
+// Synthetic permutations test matcher robustness, not legal native producer order.
 func TestTreeCreatedCorroborationOrders(t *testing.T) {
 	req := creationRequest("call", "Agent", creationInput, "")
 	task := creationTask("child", "call", "true")

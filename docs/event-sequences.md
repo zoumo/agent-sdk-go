@@ -65,8 +65,14 @@ local_agent 证据吻合时，才可作为另一条创建确认路径。
 并非任务最终报告。父模型可以继续调用其他工具、派第二个 Agent，或先返回根 result。
 应用需要继续调用 Receive，才能看到后续子文本、任务终态和待回答请求。
 
-下面刻意画出 SDK 允许处理的**晚确认**：关联与子 Native 已经交付，完整结构化结果
-随后才凑齐证明。实际原生回执经常更早到；该图不宣称每次后台调用都这样到达。
+当前 0.3.258 的 SDKResultMessage 明确规定：result 在**该 turn 自己的**
+assistant/user/stream_event 之后。因此，根 Agent 的结构化工具回执应在根 result 之前；
+不能用“没有跨来源全序”放宽同一 turn 的这个约束。子 turn 或后续后台工作的消息是另一范围。
+
+下面用**后续任务证据补齐**说明 Created 晚确认：工具回执已经在根 result 前到达，
+子流按工具关联继续交付；随后 task_started 系统事件补齐 local_agent 交叉证明。
+这表示 SDK 可处理的合成观察次序，不声称真实 CLI 必然延迟 task_started；
+也可能因稍后建立的祖先/工具归属证据而晚确认。
 
 ```mermaid
 sequenceDiagram
@@ -79,17 +85,19 @@ sequenceDiagram
     C-->>G: 完整 assistant tool_use
     C->>S: 派发后台工作
     C-->>P: tool_result，后台启动回执
-    C-->>G: task_started，local_agent，background=true
-    G-->>A: SubagentAssociated，然后 Native
+    C-->>G: user，tool_use_result async_launched 与 agentId
+    G-->>A: Native，根工具回执先于根 result
     S-->>C: 子文本或子工具事件
     C-->>G: 已转发的子事件
-    G-->>A: Native，等待证明也继续转发
+    G-->>A: SubagentAssociated，工具关联
+    G-->>A: Native，等待任务证明也继续转发
     P-->>C: 父最终答案
     C-->>G: 根 result
     G-->>A: Native，继续 Receive
-    C-->>G: user，tool_use_result async_launched 与 agentId
-    G-->>A: SubagentCreated，交叉证明现在齐全
-    G-->>A: Native，原始 user
+    C-->>G: 后续 task_started，local_agent，background=true
+    G-->>A: SubagentAssociated，身份补充
+    G-->>A: SubagentCreated，任务交叉证明现在齐全
+    G-->>A: Native，原始 task_started
     S-->>C: 后台工作结束
     C-->>G: task_notification 或 task_updated 终态
     G-->>A: Native，仅结束对应任务状态
@@ -99,7 +107,8 @@ sequenceDiagram
 
 创建证明按 session + tool_use_id 匹配完整 builtin 请求与**唯一一个**成功的 tool_result，
 读取同 envelope 的结构化 tool_use_result，再用同调用 local_agent task_id 交叉核验 agentId。
-请求、结果和 task_started 任意先后都可以；同名、同 description 的并行任务仍按 ID 区分。
+SDK 的匹配器对请求、结果和 task_started 做乱序健壮性测试；这不代表原生生产者
+允许任意排列同一 turn 的消息。同名、同 description 的并行任务仍按 ID 区分。
 `remote_launched`、SendMessage、resume 键、错误结果、多个结果块或身份冲突均不能用于该证明。
 PreToolUse/PermissionRequest 可以替换 input，不能因为请求里没有 resume 就断言新建成功。
 
@@ -208,6 +217,9 @@ SDK 不因自动跟随子流而自动批准工具。
   不按内容去重。有可靠原生身份的重复才在当前 epoch/来源范围内去重。
 - 未归属事件只在数量、字节和等待时限内暂存；到限后报告 incomplete，再交付 unresolved
   Native。控制请求和底层应答服务保持独立。因此“原生到达顺序”和“包装交付顺序”不能等同。
+
+当前原生契约保证同 turn 的 result 在该 turn 的 assistant/user/stream_event 之后；
+后续系统通知仍可到达。SDK 缓冲/派生包装的交付顺序与这条原生生产顺序是不同层次。
 
 以下没有保证：不同子源之间的全局顺序、task_started 一定先于第一段子文本、
 所有终态/工具回答/最后文本之间的全序、Created 一定早于子输出，以及跨连接 exactly-once。

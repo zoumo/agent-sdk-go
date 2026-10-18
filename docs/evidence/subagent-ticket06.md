@@ -100,8 +100,11 @@ capacity fails visibly instead of risking duplicate creation. No automatic
 restart/replay exists. Unmarked history from an arbitrary producer cannot be
 recognized, and cross-epoch exactly-once remains unsupported.
 
-Created does not delay Associated or child Native. A background result may
-confirm creation after child text and root result. Parent answer, task terminal,
+Created does not delay Associated or child Native. A background creation may be
+confirmed after child text and root result when
+later task/ancestry evidence completes the proof. The root turn's tool receipt
+precedes its result; it is not a later same-turn user message. Parent answer,
+task terminal,
 idle and creation are independent; Raw and original request handles are intact.
 
 ## Offline tests (E2)
@@ -112,7 +115,7 @@ OpenTree/Send/Receive and isolated environments. Named coverage:
 - TestTreeCreatedForegroundAndLateBackground: explicit foreground; background
   confirmation after root result and uninterrupted child output; separate kinds,
   evidence, identity, known parent and exact native bytes.
-- TestTreeCreatedCorroborationOrders: all six request/task/result permutations.
+- TestTreeCreatedCorroborationOrders: all six synthetic request/task/result permutations for matcher robustness, not native producer-order guarantees.
 - TestTreeCreatedConservativeGates: false/true/missing/null background, version
   gates, missing init/version/input/result/status/identity, resume/SendMessage,
   remote, MCP names, error and ambiguous results, replay/restart/session/identity
@@ -129,9 +132,9 @@ OpenTree/Send/Receive and isolated environments. Named coverage:
   13 original Native.Raw frames and 2 Created records, nested parent, late
   background proof, patch-only killed terminal, Close/closed/EOF.
 
-The example emits 21 wrapper records, 13 Native and 2 Created (grandchild
+The example emits 23 wrapper records, 13 Native and 2 Created (grandchild
 foreground and child late background). Fixture SHA256:
-`c8876854893748e37bed52b348daeb7fc0a39ee8aa2fdc490bb862e15111f720`.
+`4caf5ebb0911339be7b6b5bcf821e55f61755f0361a2a62d244ad39ebe0570dd`.
 
 Validation environment: macOS darwin/arm64, existing mise Go **1.26.9**;
 replacement HOME/GOCACHE under /tmp, GOTOOLCHAIN=local, GOENV=off, GOPROXY=off,
@@ -164,12 +167,12 @@ answer concatenation is claimed. See the complete compatibility matrix.
 
 | Check on final production code | Result |
 | --- | --- |
-| Full `go test -count=1 -timeout 180s ./...` | PASS; final serial root 11.537s, example 1.867s, types 1.481s |
-| Full `go test -race -count=1 -timeout 300s ./...` | PASS; root 30.543s, example 2.748s, types 3.456s; no race report |
+| Full `go test -count=1 -timeout 180s ./...` | PASS; order-corrected serial root 16.703s, example 1.935s, types 1.298s |
+| Full `go test -race -count=1 -timeout 300s ./...` | PASS; order-corrected root 15.459s, example 1.299s, types 1.919s; no race report |
 | `go vet ./...` | PASS, exit 0 |
 | Explicit TestLiveCLIInitialization gate | PASS with LIVE SKIPPED: CLAUDE_GO_LIVE=0; no session/model initialization |
 | `go list -deps` on types | Only nonstandard dependency: the types package itself |
-| `go run ./examples/subagents-offline` | PASS; 21 wrappers, 13 Native, 2 Created |
+| `go run ./examples/subagents-offline` | PASS; 23 wrappers, 13 Native, 2 Created |
 | `git diff --check` and relative documentation links | PASS |
 | Mermaid source match/render/visual review | Three diagrams PASS; github-light SVG/PNG previews rendered under /tmp, no renderer dependency added to repo |
 | Committed check-changes gate and Linux/macOS CI | Exact commit/run outcome returned in delivery report |
@@ -188,3 +191,19 @@ sources live under docs/diagrams and match the embedded blocks. Diagrams are
 illustrative permissible orders, not live traces or a promised global order.
 Current local binary static offset 160562614 confirms session-state emission is
 gated by CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS; no live emission was tested.
+
+## Same-turn order correction
+
+The fixed 0.3.258 sdk.d.ts SDKResultMessage comment (line 4914) says that a turn's
+result follows that turn's assistant/user/stream_event messages; informational
+system messages may follow. The original background diagram and synthetic
+fixture placed a root Agent user/tool_use_result after its own root result. That
+was inaccurate as a native sequence. The corrected guide/diagram/example place
+the root receipt before root result and use later task_started evidence for
+late Created. The public test also follows this order; synthetic permutation
+tests are explicitly matcher-robustness inputs, not legal native sequence claims.
+No production behavior changed. The 13 Native / 2 Created count remains the same;
+the updated fixture SHA256 is recorded above. It now emits 23 wrappers because
+later task identity also enriches two existing associations. Full test/race/vet,
+example execution and diagram render/visual checks passed after this correction;
+exact follow-up commit and CI outcomes accompany delivery.

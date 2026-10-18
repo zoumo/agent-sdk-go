@@ -55,6 +55,10 @@ type SystemEvent struct {
 	Skills            []string        `json:"skills,omitempty"`
 	Plugins           json.RawMessage `json:"plugins,omitempty"`
 	Capabilities      []string        `json:"capabilities,omitempty"`
+	RunID             *string         `json:"run_id,omitempty"`
+	ParentTaskID      *string         `json:"parent_task_id,omitempty"`
+	SpawnDepth        *int            `json:"spawn_depth,omitempty"`
+	IsBackgrounded    *bool           `json:"is_backgrounded,omitempty"`
 	TaskID            string          `json:"task_id,omitempty"`
 	Description       string          `json:"description,omitempty"`
 	ToolUseID         *string         `json:"tool_use_id,omitempty"`

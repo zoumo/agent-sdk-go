@@ -229,6 +229,12 @@ func TestTreeUnresolvedAndNonAgentTask(t *testing.T) {
 	} {
 		treeEmit(t, c, frame)
 		r := treeReceive(t, c)
+		if r.Kind == "SubagentAssociated" {
+			if r.Source.AgentID != "" || r.Source.TaskID != "" || r.Source.ToolUseID != "legacy-tool" {
+				t.Fatal(r)
+			}
+			r = treeReceive(t, c)
+		}
 		if r.Kind != "Native" || string(r.Native.Raw) != frame {
 			t.Fatal(r)
 		}

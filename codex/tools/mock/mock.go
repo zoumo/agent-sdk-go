@@ -113,9 +113,9 @@ func Run(ctx context.Context, in io.ReadCloser, out io.WriteCloser, scenario Sce
 	if ctx == nil || in == nil || out == nil {
 		return errors.New("mock requires context and streams")
 	}
-	defer in.Close()
-	defer out.Close()
 	if err := scenario.Validate(); err != nil {
+		_ = in.Close()
+		_ = out.Close()
 		return err
 	}
 	timeout := 30 * time.Second

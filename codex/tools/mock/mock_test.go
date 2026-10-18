@@ -20,6 +20,13 @@ import (
 
 type output struct{ bytes.Buffer }
 
+type trackedStream struct {
+	bytes.Buffer
+	closes int
+}
+
+func (s *trackedStream) Close() error { s.closes++; return nil }
+
 type shortOutput struct{}
 
 func (shortOutput) Write(p []byte) (int, error) { return len(p) - 1, nil }
@@ -41,6 +48,32 @@ func scenario(fs []recording.Frame) mock.Scenario {
 type MockSuite struct{ suite.Suite }
 
 func TestMock(t *testing.T) { suite.Run(t, new(MockSuite)) }
+
+func (s *MockSuite) TestOwnedStreamsCloseOnce() {
+	for _, tc := range []struct {
+		name      string
+		version   int
+		wantError bool
+	}{
+		{"invalid version", 2, true},
+		{"complete scenario", mock.Version, false},
+	} {
+		s.Run(tc.name, func() {
+			in, out := new(trackedStream), new(trackedStream)
+			sc := scenario(frames(`s2c {"method":"event"}`))
+			sc.Version = tc.version
+			err := mock.Run(context.Background(), in, out, sc)
+			if tc.wantError {
+				assert.ErrorContains(s.T(), err, "unsupported mock scenario version")
+				assert.Empty(s.T(), out.String())
+			} else {
+				assert.NoError(s.T(), err)
+			}
+			assert.Equal(s.T(), 1, in.closes, "owned input must close exactly once")
+			assert.Equal(s.T(), 1, out.closes, "owned output must close exactly once")
+		})
+	}
+}
 
 func (s *MockSuite) TestTranscript() {
 	for _, tc := range []struct {

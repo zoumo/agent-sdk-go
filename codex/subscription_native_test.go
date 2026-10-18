@@ -17,6 +17,7 @@ func (obs *observationSuite) TestSubscriptionNativeDeliveryAndConvenienceData() 
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-success", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			treeStart(t, f.c)

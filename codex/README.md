@@ -259,20 +259,27 @@ Other methods remain raw.
 Malformed supported payloads remain observable with `*DecodeError`; an invalid
 JSON envelope instead terminates the connection.
 
-`Done()` closes immediately on subscription termination, independently of the
-bounded event queue. Accepted queued events remain readable after termination.
-After `Done`, inspect `Err()`:
+`Done()` closes immediately on subscription termination, independently of event
+consumption. `Close()` and subscription context cancellation stop local observation;
+accepted events remain readable in FIFO order, and `Events()` closes after they
+drain. After `Done`, inspect `Err()`:
 
 - nil: explicit subscription or normal client close
 - `context.Canceled` / `context.DeadlineExceeded`: local subscription cancellation
-- `*SubscriptionOverflowError` / `ErrSubscriptionOverflow`: the stream lost events
-- Another error: the underlying terminal connection failure
+- Another error: the underlying terminal connection failure or observation limit
 
-A full queue terminates only that subscriber, without waiting for it or preventing
-RPC response routing. Check terminal status even when a queued completion is
-available; an incomplete stream is not evidence of a complete observation.
-`Close()` releases local observation without waiting for a consumer. Subscription
-cancellation does not call `thread/unsubscribe` or `turn/interrupt`.
+Unread delivery grows dynamically in memory and does not block connection readers,
+RPC responses, or server-request routing. `EventQueue` is deprecated and ignored;
+negative values remain invalid. This backlog has no item capacity and can exhaust
+machine memory if consumers do not keep up. It is not durable across crashes or OOM.
+The public channel is an unbuffered bridge with at most one additional in-flight
+event, so `len(Events())` does not measure backlog.
+
+`Close()` returns without waiting for consumers. Continue draining `Events()`, or
+call `Abort()` to discard unread events and release the delivery goroutine when
+abandoning observation. `Abort()` also works after `Close()` and preserves the first
+terminal cause. A receive racing `Abort()` may receive the in-flight event. Neither
+operation sends `thread/unsubscribe` or `turn/interrupt` or changes answer handles.
 
 To request execution interruption explicitly, pass the exact native identities:
 
@@ -372,7 +379,7 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 
 - Incoming and outgoing JSON payload: 8 MiB, excluding stdio newline or WS framing
 - Queued outbound frames: 32; pending calls: 128
-- Active local subscriptions: 32; queued events per subscriber: 128
+- Active local subscriptions: 32; accepted event backlog grows with memory
 - Active reverse requests: 128; queued reverse requests: 32
 - Unanswered handle lifetime: 5 minutes (local expiry, no protocol cancellation)
 - Diagnostic tail: 64 KiB; all stderr content is replaced with redaction markers
@@ -384,7 +391,7 @@ Earlier caller deadlines win. Resource admission fails with `ErrLimit` before
 sending where possible. An oversized outgoing frame is not sent; malformed or
 oversized incoming frames terminate the connection with an explicit cause.
 Bounded diagnostic counters record unmatched responses and notifications without
-retaining diagnostic payloads. Subscription storage scales with queue capacity,
+retaining diagnostic payloads. Subscription storage scales with unread events,
 frame size, and subscriber count, including independent typed payload copies; use
 smaller limits for large events or many observers. SDK decoding runs on the reader,
 but caller callbacks never do. Stderr is drained independently of the reader.
@@ -453,7 +460,7 @@ stream, err := client.Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})
 if err != nil {
     return err
 }
-defer stream.Close()
+defer stream.Abort()
 // Now start root work through the usual StartTurn API.
 for event := range stream.Events() {
     switch data := event.Data.(type) {
@@ -514,7 +521,7 @@ later live evidence repeats their spawn. History does not replay native events,
 seed occurrence deduplication, or establish current execution state. A new live
 child can still emit Created. Seed count is bounded by MaxNodes and total snapshot
 bytes by PendingBytes; invalid snapshot IDs fail admission. Snapshots are not
-retained. Graph/depth and event queue limits also apply during seeding.
+retained. Graph/depth limits also apply during seeding.
 
 A seed emits `ObservationState(incomplete, history-recovery-gap)`: new-thread
 auto-attach does not prove attachment to old threads on a cold connection. The SDK
@@ -539,18 +546,22 @@ fake-peer validation, not real-server subagent validation. Older/unknown runtime
 remain unverified; the SDK does not probe them with execution RPCs. See
 [compatibility and evidence](docs/compatibility.md#managed-descendant-observation).
 
-`types.SubscriptionOptions.EventQueue` defaults to `Limits.EventQueue`; `MaxNodes` defaults to
-4096 including the root and unresolved relation nodes; `MaxDepth` defaults to 32
-edges. `PendingEvents`, `PendingBytes`, `PendingAge` and `DedupEntries` default to
-128, 4 MiB (stored envelope plus params), 5 seconds and 8192. Zero selects defaults;
-negative values are invalid. The age limit only bounds association waiting.
+`types.SubscriptionOptions.EventQueue` and `Limits.EventQueue` are deprecated,
+validated as nonnegative, and ignored without preallocating their configured size.
+`MaxNodes` defaults to 4096 including the root and unresolved relation nodes;
+`MaxDepth` defaults to 32 edges. `PendingEvents`, `PendingBytes`, `PendingAge` and
+`DedupEntries` default to 128, 4 MiB (stored envelope plus params), 5 seconds and
+8192. Zero selects defaults; negative values are invalid. The age limit only bounds
+association waiting. Frame, reverse-request, graph, pending-association, and dedup
+limits remain separate from dynamic delivery storage.
+
 Each live notification and its derived associations/resolved pending records enter
-the queue as one bounded batch. If the entire batch cannot fit, none of that batch
-is accepted. Pending-expiry diagnostics and unresolved Native records use the same
-admission rule. Earlier accepted records remain drainable; Done/Err do not need
-queue space. A reserved extra slot retains the disconnect diagnostic.
-Queue overflow terminates only that observer with `SubscriptionOverflowError`;
-graph/depth exhaustion ends it with `ErrLimit`. Each subscription uses one shared admission slot. `Close` ends local observation without interrupting provider work. Parent
+the FIFO atomically as one contiguous batch, as do pending-expiry diagnostics and
+unresolved native records. A single connection reader preserves notification order;
+concurrent producers are ordered at admission, without inventing global protocol
+order. `Done`/`Err` never wait for queue space or consumer drain. Graph/depth
+exhaustion still ends observation with `ErrLimit`.
+Each subscription uses one shared admission slot. `Close` ends local observation without interrupting provider work. Parent
 completion does not close it. Parent and child statuses are independent: parent
 idle may coexist with child active; child turn/activity completed or interrupted
 does not destroy the agent or prevent later turns. The SDK forwards native states
@@ -562,10 +573,9 @@ is per thread, with no child aggregation. This is not a cross-thread ordering or
 success-result-first promise.
 
 Unexpected connection termination preserves queued records, then emits
-`ObservationState(disconnected, permanent-gap)` and closes Events/Done with the
-original connection cause in Err. This observation remains incomplete; EOF is not
-work success. One extra queue slot is reserved for this terminal record, including
-when EventQueue accepted records are unread. Close/cancel are idempotent, do not
+`ObservationState(disconnected, permanent-gap)`. Done closes immediately, Events
+closes after drain, and Err retains the original connection cause. This observation remains incomplete; EOF is not
+work success. Close/cancel are idempotent, do not
 wait for consumers, preserve accepted records and the first terminal cause, and
 release only this local observation. The shared server attachment is never
 unsubscribed by observation teardown. Permission and question answers still go

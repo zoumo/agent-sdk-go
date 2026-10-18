@@ -3,7 +3,6 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -52,22 +51,24 @@ func (obs *observationSuite) TestTreeFanoutAdmissionIsAtomic() {
 				t.Run(tc.name, func(t *testing.T) {
 					f := obs.fixture(t, "request-normal", codex.Limits{})
 					s, err := f.c.Subscribe(context.Background(), "native-thread-42", tc.options)
+					cleanupSubscription(t, s)
 					require.NoError(t, err, err)
-					// Keep the initial accepted diagnostic queued: fanout has one slot too few.
+					// Leave the initial diagnostic unread while admitting a complete fanout.
 					if len(tc.before) > 0 {
 						emitRequests(t, f.c, tc.before...)
 					}
 					emitRequests(t, f.c, tc.incoming)
-					awaitTreeCause(t, s, codex.ErrSubscriptionOverflow)
-					var overflow *codex.SubscriptionOverflowError
-					require.False(t, !errors.As(s.Err(), &overflow) || overflow.Capacity != tc.options.EventQueue, s.Err())
-					count := 0
+					require.NoError(t, s.Err())
+					require.NoError(t, s.Close())
+					awaitTreeCause(t, s, nil)
+					var events []subscriptionRecord
 					for event := range s.Events() {
-						e := recordView(event)
-						count++
-						require.Equal(t, "best-effort-auto-attach-unverified", e.Reason, "partial fanout admitted: %+v", e)
+						events = append(events, recordView(event))
 					}
-					require.Equal(t, 1, count, "accepted queue changed: %d", count)
+					require.Equal(t, "best-effort-auto-attach-unverified", events[0].Reason)
+					expected := map[string]int{"relation": 3, "receivers": 4, "pending": 4, "unresolved": 3}[tc.name]
+					require.Len(t, events, expected)
+					require.NotNil(t, events[len(events)-1].Native, "derived fanout lost its native record")
 					responseBarrier(t, f)
 				})
 			}
@@ -79,16 +80,18 @@ func (obs *observationSuite) TestTreePendingDeadlineFanoutIsAtomic() {
 	t := obs.T()
 	f := obs.fixture(t, "request-normal", codex.Limits{})
 	s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 2, PendingAge: 10 * time.Millisecond})
+	cleanupSubscription(t, s)
 	require.NoError(t, err, err)
 	emitRequests(t, f.c, treeChildRaw)
-	awaitTreeCause(t, s, codex.ErrSubscriptionOverflow)
-	count := 0
-	for event := range s.Events() {
-		e := recordView(event)
-		count++
-		require.Equal(t, "best-effort-auto-attach-unverified", e.Reason, "partial expiry: %+v", e)
-	}
-	require.Equal(t, 1, count, count)
+	initial := nextTree(t, s)
+	require.Equal(t, "best-effort-auto-attach-unverified", initial.Reason)
+	diagnostic := nextTree(t, s)
+	require.Equal(t, "unresolved-source", diagnostic.Reason)
+	native := nextTree(t, s)
+	require.NotNil(t, native.Native)
+	require.Equal(t, treeChildRaw, string(native.Raw))
+	require.NoError(t, s.Close())
+	awaitTreeCause(t, s, nil)
 	responseBarrier(t, f)
 }
 
@@ -98,11 +101,14 @@ func (obs *observationSuite) TestTreeFullQueuePreservesOriginalRequestAuthority(
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			slow, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 3})
+			cleanupSubscription(t, slow)
 			require.NoError(t, err, err)
 			healthy, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, healthy)
 			require.NoError(t, err, err)
 			defer healthy.Close()
 			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, raw)
 			require.NoError(t, err, err)
 			defer raw.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation)) // fills slow's three slots
@@ -145,12 +151,13 @@ func (obs *observationSuite) TestTreeFullQueuePreservesOriginalRequestAuthority(
 				}
 			}
 			emitRequests(t, f.c, treeChildRaw, treeFrame("future/done", `{"threadId":"native-thread-42"}`))
-			awaitTreeCause(t, slow, codex.ErrSubscriptionOverflow)
+			require.NoError(t, slow.Close())
+			awaitTreeCause(t, slow, nil)
 			queued := 0
 			for range slow.Events() {
 				queued++
 			}
-			require.Equal(t, 3, queued, "queue drain=%d", queued)
+			require.Equal(t, 5, queued, "queue drain=%d", queued)
 			events := treeUntilDone(t, healthy)
 			native := 0
 			for _, e := range events {
@@ -176,6 +183,7 @@ func (obs *observationSuite) TestTreeObservationCancellationDoesNotCancelRequest
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{EventQueue: 3})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation), requestFrame(`17`, "item/tool/requestUserInput", childQuestion))
 			r := nextRequest(t, f.c)
@@ -210,6 +218,7 @@ func (obs *observationSuite) TestTreeRequestTerminalAndEpochIsolation() {
 					}
 					old := obs.fixture(t, "request-normal", limits)
 					s, err := old.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
+					cleanupSubscription(t, s)
 					require.NoError(t, err, err)
 					emitRequests(t, old.c, requestFrame(`"reused"`, "item/tool/requestUserInput", childQuestion))
 					r := nextRequest(t, old.c)
@@ -235,6 +244,7 @@ func (obs *observationSuite) TestTreeRequestTerminalAndEpochIsolation() {
 					awaitAnswer(t, r.Handle(), cause)
 					next := obs.fixture(t, "request-normal", codex.Limits{})
 					other, err := next.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
+					cleanupSubscription(t, other)
 					require.NoError(t, err, err)
 					defer other.Close()
 					nextTree(t, s)
@@ -262,6 +272,7 @@ func (obs *observationSuite) TestTreeTextThinkingAndUsageStayAtNativeSource() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation))
@@ -311,7 +322,9 @@ func (obs *observationSuite) TestTreeQueueCapacityOverflowIsRejected() {
 		f := obs.fixture(t, "request-normal", limits)
 		{
 			s, err := f.c.Subscribe(context.Background(), "root", options)
-			require.False(t, err == nil || s != nil, "overflowing reserved capacity accepted")
+			cleanupSubscription(t, s)
+			require.NoError(t, err, "deprecated capacity must not allocate storage")
+			require.NoError(t, s.Abort())
 		}
 	}
 }

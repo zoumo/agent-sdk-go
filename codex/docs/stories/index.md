@@ -52,7 +52,7 @@ ToolRequestUserInputParams 使用原生题目 ID q，响应 answers[q] 保留文
 
 ## US-009
 
-Subscription EventQueue 超出终止该观察并报告 ErrSubscriptionOverflow；连接生命周期独立。
+Subscription 接纳的事件进入动态 FIFO，慢消费不会因 EventQueue 容量终止观察或阻塞 RPC；EventQueue 已弃用并忽略。Close 保留事件供排空，放弃消费时用 Abort 释放积压。连接生命周期独立，积压仍受机器内存限制。
 
 自动化：`TestCommonStories/TestNativeAdapters/US-009/codex`；源码证据为以上公开 API 和本包协议测试，离线证据为实际运行结果，真实运行均未验证。
 

@@ -22,9 +22,11 @@ func (obs *observationSuite) TestTreeV2CreatedWithoutThreadStarted() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, raw)
 			require.NoError(t, err, err)
 			defer raw.Close()
 			spawn := treeFrame("item/completed", v2Activity("native-thread-42", "child-1", "v2-spawn", "started"))
@@ -82,6 +84,7 @@ func (obs *observationSuite) TestTreeV2HistorySuppressesCreation() {
 			}
 			seed := json.RawMessage(`{"id":"native-thread-42","turns":[{"id":"old-turn","items":[` + string(n.Item) + `]}]}`)
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{History: []json.RawMessage{seed}})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("item/completed", v2Activity("native-thread-42", "child-1", "history-spawn", "started")), treeChildRaw, treeFrame("future/done", `{"threadId":"native-thread-42"}`))
@@ -107,6 +110,7 @@ func (obs *observationSuite) TestTreeV2GraphOrderingAndConfirmation() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			// A grandchild and its creation evidence arrive before its parent's edge.
@@ -181,6 +185,7 @@ func (obs *observationSuite) TestTreeV2NonCreationEvidence() {
 				t.Run(tc.name, func(t *testing.T) {
 					f := obs.fixture(t, "request-normal", codex.Limits{})
 					s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{PendingEvents: 1})
+					cleanupSubscription(t, s)
 					require.NoError(t, err, err)
 					defer s.Close()
 					frame := treeFrame(tc.method, tc.params)

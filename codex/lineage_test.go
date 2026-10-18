@@ -14,7 +14,10 @@ func lineageSubscription(t *testing.T, maxNodes int) *Subscription {
 	g, err := lineage.New[string](lineage.Limits{MaxNodes: maxNodes, MaxRelations: maxNodes - 1, MaxDepth: 4})
 	require.NoError(t, err)
 	require.NoError(t, g.Root("root"))
-	return &Subscription{client: &Client{}, root: "root", lineage: g, children: make(map[string]*treeRelation), events: make(chan types.Event, 32), done: make(chan struct{}), options: types.SubscriptionOptions{EventQueue: 31, MaxDepth: 4}}
+	s := &Subscription{client: &Client{}, root: "root", lineage: g, children: make(map[string]*treeRelation), events: make(chan types.Event), done: make(chan struct{}), options: types.SubscriptionOptions{EventQueue: 31, MaxDepth: 4}}
+	s.startDelivery()
+	t.Cleanup(func() { _ = s.Abort() })
+	return s
 }
 
 func TestSubscriptionSharedLineageResolvesLateAncestors(t *testing.T) {

@@ -3,7 +3,6 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -99,12 +98,15 @@ func (obs *observationSuite) TestTreeLiveChildStream() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-success", codex.Limits{})
 			raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, raw)
 			require.NoError(t, err, err)
 			defer raw.Close()
 			a, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, a)
 			require.NoError(t, err, err)
 			defer a.Close()
 			b, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, b)
 			require.NoError(t, err, err)
 			defer b.Close()
 			// Reader emits to registered observers even before this RPC returns.
@@ -180,6 +182,7 @@ func (obs *observationSuite) TestTreeFailedSpawnAndResumeAreNotCreated() {
 		t.Run(mode, func(t *testing.T) {
 			f := obs.fixture(t, mode, codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			treeStart(t, f.c)
@@ -210,19 +213,19 @@ func (obs *observationSuite) TestTreeBoundsAndLocalClose() {
 	t := obs.T()
 	f := obs.fixture(t, "tree-success", codex.Limits{})
 	slow, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
+	cleanupSubscription(t, slow)
 	require.NoError(t, err, err)
 	nextTree(t, slow) // consume initial diagnostic
 	healthy, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+	cleanupSubscription(t, healthy)
 	require.NoError(t, err, err)
 	treeStart(t, f.c)
 	treeUntilDone(t, healthy)
-	select {
-	case <-slow.Done():
-	case <-time.After(time.Second):
-		require.FailNow(t, "test invariant", "overflow not signaled")
-	}
-	var overflow *codex.SubscriptionOverflowError
-	require.True(t, errors.As(slow.Err(), &overflow), "overflow: %v", slow.Err())
+	require.NoError(t, slow.Err())
+	slowRecords := treeUntilDone(t, slow)
+	require.NotEmpty(t, slowRecords)
+	require.NoError(t, slow.Close())
+	awaitSubscription(t, slow, nil)
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Add(1)
@@ -269,6 +272,7 @@ func (obs *observationSuite) TestTreeAdmissionAndNodeBound() {
 		require.ErrorIs(t, err, context.Canceled, err)
 	}
 	s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{MaxNodes: 1})
+	cleanupSubscription(t, s)
 	require.NoError(t, err, err)
 	{
 		_, err = f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
@@ -282,6 +286,7 @@ func (obs *observationSuite) TestTreeAdmissionAndNodeBound() {
 	}
 	require.ErrorIs(t, s.Err(), codex.ErrLimit, s.Err())
 	raw, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+	cleanupSubscription(t, raw)
 	require.NoError(t, err, "tree did not release slot:", err)
 	defer raw.Close()
 }

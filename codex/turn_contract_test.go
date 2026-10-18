@@ -91,11 +91,18 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 	return true
 }
 
+func cleanupSubscription(t *testing.T, s *codex.Subscription) {
+	t.Helper()
+	if s != nil {
+		t.Cleanup(func() { _ = s.Abort() })
+	}
+}
+
 func subscribe(t *testing.T, c *codex.Client, ctx context.Context) *codex.Subscription {
 	t.Helper()
 	s, err := c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{PendingAge: 10 * time.Millisecond})
+	cleanupSubscription(t, s)
 	require.NoError(t, err, err)
-	t.Cleanup(func() { _ = s.Close() })
 	{
 		e := nextTree(t, s)
 		require.Equal(t, stateRecord, e.Kind, "missing initial observation state")
@@ -253,16 +260,16 @@ func (obs *observationSuite) TestSubscriptionOverflowIsolatedAndInspectable() {
 		}
 		require.Equal(t, "item/agentMessage/delta", nextEvent(t, healthy).Method, "healthy stream reordered")
 	}
-	// The terminal state must be observable before reading the still-full queue.
-	awaitSubscription(t, slow, codex.ErrSubscriptionOverflow)
-	var overflow *codex.SubscriptionOverflowError
-	require.False(t, !errors.As(slow.Err(), &overflow) || overflow.Capacity != 1, "overflow not inspectable: %v", slow.Err())
-	require.Equal(t, 1, len(slow.Events()), "accepted event discarded")
-	nextEvent(t, slow)
-	{
-		_, ok := <-slow.Events()
-		require.False(t, ok, "overflow stream continued after loss")
+	// Both readers retain every accepted event regardless of the deprecated capacity.
+	require.NoError(t, slow.Err())
+	require.NoError(t, slow.Close())
+	awaitSubscription(t, slow, nil)
+	for i := 0; i < 4; i++ {
+		require.Equal(t, "item/agentMessage/delta", nextEvent(t, slow).Method)
 	}
+	_, ok := <-slow.Events()
+	require.False(t, ok)
+	require.NoError(t, healthy.Close())
 	require.NoError(t, healthy.Err(), healthy.Err())
 	replacement := subscribe(t, f.c, context.Background())
 	{
@@ -283,7 +290,19 @@ func (obs *observationSuite) TestSlowSubscriberNeverBlocksResponse() {
 		err := f.c.Call(ctx, "turn-flood", nil, &answer)
 		require.False(t, err != nil || answer != "reader-still-routing", "reader blocked: %s %v", answer, err)
 	}
-	awaitSubscription(t, s, codex.ErrSubscriptionOverflow)
+	require.NoError(t, s.Err())
+	require.NoError(t, s.Close())
+	awaitSubscription(t, s, nil)
+	for i := 0; i < 4096; i++ {
+		e := nextEvent(t, s)
+		var params struct {
+			Sequence int `json:"sequence"`
+		}
+		require.NoError(t, json.Unmarshal(e.Params, &params))
+		require.Equal(t, i, params.Sequence)
+	}
+	_, ok := <-s.Events()
+	require.False(t, ok)
 	require.Equal(t, uint64(4096), f.c.Diagnostics().Notifications, "reader failed to consume complete flood")
 }
 
@@ -445,7 +464,6 @@ func (obs *observationSuite) TestSubscriptionTerminalStatus() {
 		}
 		cancel()
 		awaitSubscription(t, s, context.Canceled)
-		require.Equal(t, 1, len(s.Events()), "cancel discarded queued event")
 		nextEvent(t, s)
 		{
 			_, ok := <-s.Events()
@@ -474,6 +492,7 @@ func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			if err != nil {
 				if !errors.Is(err, codex.ErrClosed) {
 					failures <- err

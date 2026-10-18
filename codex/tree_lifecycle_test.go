@@ -59,6 +59,7 @@ func (obs *observationSuite) TestTreeParentIdleChildActive() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-lifecycle", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			treeStart(t, f.c)
@@ -118,15 +119,19 @@ func (obs *observationSuite) TestTreeCloseCancelSharedSource() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-lifecycle", codex.Limits{})
 			a, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{History: []json.RawMessage{json.RawMessage(`{"id":"child-1","parentThreadId":"native-thread-42"}`)}})
+			cleanupSubscription(t, a)
 			require.NoError(t, err, err)
 			b, err := f.c.Subscribe(context.Background(), "child-1", types.SubscriptionOptions{})
+			cleanupSubscription(t, b)
 			require.NoError(t, err, err)
 			defer b.Close()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			canceled, err := f.c.Subscribe(ctx, "child-1", types.SubscriptionOptions{})
+			cleanupSubscription(t, canceled)
 			require.NoError(t, err, err)
 			raw, err := f.c.Subscribe(context.Background(), "child-1", types.SubscriptionOptions{})
+			cleanupSubscription(t, raw)
 			require.NoError(t, err, err)
 			defer raw.Close()
 			nextTree(t, a)
@@ -194,6 +199,7 @@ func (obs *observationSuite) TestTreeDisconnectHistoryEpoch() {
 			for epoch := 0; epoch < 2; epoch++ {
 				f := obs.fixture(t, "tree-history", codex.Limits{})
 				s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{History: history})
+				cleanupSubscription(t, s)
 				require.NoError(t, err, err)
 				treeStart(t, f.c)
 				associated, created, terminals, gap := 0, 0, 0, false
@@ -265,6 +271,7 @@ func (obs *observationSuite) TestTreeDisconnectFullQueueAndSeedBounds() {
 		}
 	}
 	s, err := f.c.Subscribe(context.Background(), "child-1", types.SubscriptionOptions{EventQueue: 1})
+	cleanupSubscription(t, s)
 	require.NoError(t, err, err)
 	nextTree(t, s)
 	{

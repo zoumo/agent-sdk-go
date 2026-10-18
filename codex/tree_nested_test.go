@@ -79,9 +79,11 @@ func (obs *observationSuite) TestTreeNestedOrderingAndIdentity() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-nested", codex.Limits{})
 			a, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, a)
 			require.NoError(t, err, err)
 			defer a.Close()
 			b, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, b)
 			require.NoError(t, err, err)
 			defer b.Close()
 			treeStart(t, f.c)
@@ -154,6 +156,7 @@ func (obs *observationSuite) TestTreePendingLimitsAndNoReplay() {
 			} {
 				f := obs.fixture(t, "tree-pending", codex.Limits{})
 				s, err := f.c.Subscribe(context.Background(), "native-thread-42", options)
+				cleanupSubscription(t, s)
 				require.NoError(t, err, err)
 				treeStart(t, f.c)
 				count := 0
@@ -184,6 +187,7 @@ func (obs *observationSuite) TestTreeDepthAndDedupBounds() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-nested", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{MaxDepth: 1})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			treeStart(t, f.c)
 			select {
@@ -195,6 +199,7 @@ func (obs *observationSuite) TestTreeDepthAndDedupBounds() {
 			// A tiny cache permits older terminal identities to be delivered again; it
 			// never trades bounded memory for a cross-epoch exactly-once claim.
 			s, err = f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{DedupEntries: 1})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			treeStart(t, f.c)

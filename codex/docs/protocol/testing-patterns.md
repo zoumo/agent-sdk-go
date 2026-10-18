@@ -93,9 +93,10 @@ this SDK deliberately has no Python-style per-turn registration or waiting state
 second RPC until the caller has observed eight notifications, including stale and
 interleaved identities and immediate completion. This uses a deterministic barrier,
 not a sleep. `TestSubscriptionOverflowIsolatedAndInspectable` paces a healthy
-observer while another queue stays full; `TestSlowSubscriberNeverBlocksResponse`
+observer while another leaves all events unread; `TestSlowSubscriberNeverBlocksResponse`
 sends 4,096 notifications before a normal response. The separate terminal signal
-must remain observable before any full queue is drained. Exact request transcripts
+must remain observable before the event backlog is drained. Both observers retain
+all admitted events in order; capacity-driven termination is no longer expected. Exact request transcripts
 check one explicit interrupt and no implicit interrupt or start replay.
 
 These are original Go scenarios, not copied official tests or claims that the

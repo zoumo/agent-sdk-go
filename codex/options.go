@@ -12,10 +12,12 @@ import (
 // are rejected. Incoming and outgoing frame limits bound JSON payload bytes, excluding
 // stdio delimiters and WebSocket frame headers.
 type Limits struct {
-	MaxFrameBytes   int
-	OutboundQueue   int
-	PendingCalls    int
-	Subscriptions   int
+	MaxFrameBytes int
+	OutboundQueue int
+	PendingCalls  int
+	Subscriptions int
+	// EventQueue is ignored; event delivery grows with unread backlog.
+	// Deprecated: retained for source compatibility; negative values remain invalid.
 	EventQueue      int
 	DiagnosticBytes int
 	// ActiveRequests bounds received server requests until a terminal state.

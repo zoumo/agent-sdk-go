@@ -6,7 +6,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-// publishLocked shares the connection reader across bounded root observations.
+// publishLocked shares the connection reader across independent root observations.
 // Each subscription decodes into independently owned native storage.
 func (c *Client) publishLocked(method string, params json.RawMessage, raw []byte) {
 	for s := range c.subscriptions {

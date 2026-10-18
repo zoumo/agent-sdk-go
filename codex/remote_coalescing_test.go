@@ -96,6 +96,7 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 				}
 				c := securityOpen(t, options)
 				sub, err := c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+				cleanupSubscription(t, sub)
 				require.NoError(t, err)
 				nextTree(t, sub) // initial incomplete observation
 				var result string

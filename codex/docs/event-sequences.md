@@ -262,15 +262,15 @@ sequenceDiagram
 
 **原生与派生序列：** 不同 source 交错；不明确来源的通知有界等待，超限/到期发布 `ObservationState(incomplete, unresolved-source)` ，诊断中的 UnresolvedThreadID 标识来源，随后原样交付原生通知。无 source 的通知也原样交付，不证明成员关系。相同无 ID 文本 delta 可以重复两次；窄范围 item 终态去重不是全局 exactly-once。后续建立关系不会重放已交付原生通知。冲突、循环和资源限制有诊断或终止错误。
 
-观察仍活动时，非预期断线使用预留槽交付 `ObservationState(disconnected, permanent-gap)`，Done/Events 关闭，Err 保留原始原因；已接纳记录可排空。队列满先终止的观察不再继续收事件。新观察从 incomplete 开始，History 只导入 Associated 与 history-recovery-gap，从不把快照当实时创建或 Native 重放。
+观察仍活动时，非预期断线在已接纳事件后交付 `ObservationState(disconnected, permanent-gap)`。Done 立即关闭，Events 排空后关闭，Err 保留原始原因。动态 FIFO 不因慢消费而终止观察；积压可耗尽机器内存，不能保证进程崩溃或 OOM 后交付。新观察从 incomplete 开始，History 只导入 Associated 与 history-recovery-gap，从不把快照当实时创建或 Native 重放。
 
-**结束依据：** Done/Err 是观察结束依据，不是工作成功/失败依据。单个慢订阅的 overflow/ErrLimit 只结束该观察，不阻塞连接、其他订阅或审批。Close/cancel 与断线保留第一终止原因。
+**结束依据：** Done/Err 是观察结束依据，不是工作成功/失败依据。图与未归属事件等资源限制仍独立生效，ErrLimit 可结束该观察；慢消费不阻塞连接、其他订阅或审批。Close/cancel 与断线保留第一终止原因，且不等待消费排空；放弃消费须调用 Abort 丢弃积压并释放交付协程。
 
 **客户端更新：** 显示永久缺口，由应用分别记录连接和本地接收顺序。保存 Raw/Params 供未知协议和损坏载荷排查；不要用 Marshal(Data) 代替收到的原始字节。重连后显式合并应用快照，保持「状态未知」而非假装完整恢复。
 
 **禁止推断：** 本地接收顺序不是 provider cursor；新连接上的相同原生 ID 不提供 exactly-once。缺失通知、静默、EOF 或新的历史关系不证明任务结束或旧缺口已修复。Unknown 原生保留不等于支持其他服务端版本。
 
-依据：[有界与原子 fanout](../tree_bounds_requests_test.go)、[断线、历史与 epoch](../tree_lifecycle_test.go)、[Raw、未知、缺失/null 与独立所有权](../tree_contract_test.go)、[离线示例](../examples/observe-subagents-offline/README.md)。
+依据：[独立资源限制与原子 fanout](../tree_bounds_requests_test.go)、[断线、历史与 epoch](../tree_lifecycle_test.go)、[Raw、未知、缺失/null 与独立所有权](../tree_contract_test.go)、[离线示例](../examples/observe-subagents-offline/README.md)。
 
 ## 用户主动停止与关闭的边界
 

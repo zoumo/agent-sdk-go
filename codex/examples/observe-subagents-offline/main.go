@@ -49,7 +49,7 @@ func run(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer live.Close()
+	defer live.Abort()
 	if err = client.Call(ctx, "fixture/emit", nil, nil); err != nil {
 		return err
 	}

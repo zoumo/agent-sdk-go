@@ -42,7 +42,7 @@ separate explicit maintenance entry point.
 
 The public contract seam exercises exported APIs against controllable peers:
 handshake, exact IDs, notifications before responses, unknown data, strict resume,
-reverse-request authority, dispatch uncertainty, bounded queues, observer isolation
+reverse-request authority, dispatch uncertainty, bounded control queues, dynamic event backlog, observer isolation
 and cleanup. Controlled-time tests isolate call deadlines and handle expiry from
 process scheduling. Directory checks compare filesystem identity, including macOS
 path aliases, while retaining strict argument/environment assertions. These

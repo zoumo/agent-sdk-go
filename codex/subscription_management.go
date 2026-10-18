@@ -8,6 +8,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/lineage"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 type treeRelation struct {
@@ -23,32 +24,36 @@ type treePending struct {
 	arrived time.Time
 }
 
-// Subscription is a bounded, local recursive observation on the existing
+// Subscription is a local recursive observation on the existing
 // connection. Subscribe registers synchronously, before the caller starts
 // root work. Closing it never interrupts work or sends unsubscribe/resume RPCs.
-// Events closes on termination; queued events remain readable. Done and Err work
-// even when the event queue is full. Requests() remains the only answer authority.
+// Events closes after accepted events drain. Done and Err report termination
+// independently of consumers. Abort releases an abandoned event stream.
+// Requests() remains the only answer authority.
 type Subscription struct {
-	client        *Client
-	root          string
-	events        chan types.Event
-	done          chan struct{}
-	cause         error
-	closed        bool
-	stop          func() bool
-	batching      bool
-	batch         []types.Event
-	seeding       bool
-	historyIDs    map[string]struct{}
-	lineage       *lineage.Graph[string]
-	children      map[string]*treeRelation
-	relationOrder []string
-	options       types.SubscriptionOptions
-	pending       []treePending
-	pendingBytes  int
-	timer         *time.Timer
-	seen          map[string]struct{}
-	seenOrder     []string
+	client         *Client
+	root           string
+	events         chan types.Event
+	queue          queue.Queue[types.Event]
+	deliveryCancel context.CancelFunc
+	deliveryDone   chan struct{}
+	done           chan struct{}
+	cause          error
+	closed         bool
+	stop           func() bool
+	batching       bool
+	batch          []types.Event
+	seeding        bool
+	historyIDs     map[string]struct{}
+	lineage        *lineage.Graph[string]
+	children       map[string]*treeRelation
+	relationOrder  []string
+	options        types.SubscriptionOptions
+	pending        []treePending
+	pendingBytes   int
+	timer          *time.Timer
+	seen           map[string]struct{}
+	seenOrder      []string
 }
 
 // Subscribe observes root and proven descendant notifications without
@@ -80,14 +85,6 @@ func (c *Client) Subscribe(ctx context.Context, rootThreadID string, options typ
 	}
 	if len(c.subscriptions) >= c.limits.Subscriptions {
 		return nil, ErrLimit
-	}
-	if options.EventQueue == 0 {
-		options.EventQueue = c.limits.EventQueue
-	}
-	// Leave room for the reserved disconnect record, including a queue default
-	// inherited from Client limits. Reject arithmetic overflow before allocation.
-	if options.EventQueue == int(^uint(0)>>1) {
-		return nil, errors.New("codex: subscription event capacity overflows reserved slot")
 	}
 	if options.MaxNodes == 0 {
 		options.MaxNodes = 4096
@@ -133,7 +130,8 @@ func (c *Client) Subscribe(ctx context.Context, rootThreadID string, options typ
 	if err := graph.Root(rootThreadID); err != nil {
 		return nil, err
 	}
-	t := &Subscription{client: c, root: rootThreadID, events: make(chan types.Event, options.EventQueue+1), done: make(chan struct{}), lineage: graph, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
+	t := &Subscription{client: c, root: rootThreadID, events: make(chan types.Event), done: make(chan struct{}), lineage: graph, children: make(map[string]*treeRelation), options: options, seen: make(map[string]struct{}), historyIDs: historyIDs}
+	t.startDelivery()
 	c.subscriptions[t] = struct{}{}
 	t.stop = context.AfterFunc(ctx, func() { c.mu.Lock(); defer c.mu.Unlock(); t.finishLocked(ctx.Err()) })
 	t.emitLocked(types.Event{Data: &types.ObservationState{State: "incomplete", Reason: "best-effort-auto-attach-unverified"}})
@@ -191,11 +189,10 @@ func (t *Subscription) finishLocked(cause error) {
 	t.historyIDs = nil
 	t.relationOrder = nil
 	close(t.done)
-	close(t.events)
+	_ = t.queue.Close(cause)
 }
 
-// One reserved slot ensures disconnect remains observable even at queue capacity.
-// It never evicts accepted native records or changes the connection failure cause.
+// Disconnect follows all accepted native records and preserves the connection cause.
 func (t *Subscription) disconnectLocked(cause error) {
 	if t.closed {
 		return
@@ -208,10 +205,6 @@ func (t *Subscription) emitLocked(e types.Event) {
 	if t.closed {
 		return
 	}
-	if len(t.events)+len(t.batch) >= t.options.EventQueue {
-		t.finishLocked(&SubscriptionOverflowError{Capacity: t.options.EventQueue})
-		return
-	}
 	if t.batching {
 		t.batch = append(t.batch, e)
 		return
@@ -219,9 +212,8 @@ func (t *Subscription) emitLocked(e types.Event) {
 	t.enqueueLocked(e)
 }
 
-// Stage one bounded notification fanout (including newly resolved pending
-// records) before admitting any of it. Overflow preserves earlier accepted
-// records, without exposing an association whose native event was rejected.
+// Admit one notification fanout (including newly resolved pending records)
+// atomically and contiguously, preserving derived/native relationships.
 func (t *Subscription) commitBatchLocked() {
 	batch := t.batch
 	t.batch = nil
@@ -229,8 +221,13 @@ func (t *Subscription) commitBatchLocked() {
 	if t.closed {
 		return
 	}
-	for _, e := range batch {
-		t.enqueueLocked(e)
+	items := make([]queue.Item[types.Event], len(batch))
+	for i, e := range batch {
+		e = cloneSubscriptionEvent(e)
+		items[i] = queue.Item[types.Event]{Value: e, Bytes: int64(len(e.Raw)) + int64(len(e.Params))}
+	}
+	if err := t.queue.PushBatch(items); err != nil {
+		t.finishLocked(err)
 	}
 }
 
@@ -238,8 +235,14 @@ func (t *Subscription) enqueueLocked(e types.Event) {
 	if t.closed {
 		return
 	}
-	// Derived evidence points into retained relation state. Copy it only when
-	// admitting the event, so consumers cannot mutate later observations.
+	e = cloneSubscriptionEvent(e)
+	if err := t.queue.Push(e, int64(len(e.Raw))+int64(len(e.Params))); err != nil {
+		t.finishLocked(err)
+	}
+}
+
+func cloneSubscriptionEvent(e types.Event) types.Event {
+	// Derived evidence points into retained relation state; copy on admission.
 	switch data := e.Data.(type) {
 	case *types.SubagentCreated:
 		copy := *data
@@ -255,11 +258,44 @@ func (t *Subscription) enqueueLocked(e types.Event) {
 		copy.PreviousEvidence = cloneSubagentEvidence(data.PreviousEvidence)
 		e.Data = &copy
 	}
-	select {
-	case t.events <- e:
-	default:
-		t.finishLocked(&SubscriptionOverflowError{Capacity: t.options.EventQueue})
-	}
+	return e
+}
+
+// startDelivery owns the channel independently of the connection reader and its
+// workers. One in-flight event may sit outside the FIFO while awaiting a receiver.
+func (t *Subscription) startDelivery() {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.deliveryCancel = cancel
+	t.deliveryDone = make(chan struct{})
+	go func() {
+		defer close(t.deliveryDone)
+		defer close(t.events)
+		for {
+			e, err := t.queue.Pop(ctx)
+			if err != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case t.events <- e:
+			}
+			e = types.Event{} // Release the delivered payload before waiting for more.
+		}
+	}()
+}
+
+// Abort ends local observation and discards unread events. Use it when abandoning
+// Events instead of draining it after Close. It never interrupts provider work.
+// A channel receive racing Abort may still receive the in-flight event.
+func (t *Subscription) Abort() error {
+	t.client.mu.Lock()
+	t.finishLocked(nil)
+	_ = t.queue.Abort(t.cause)
+	t.deliveryCancel()
+	t.client.mu.Unlock()
+	<-t.deliveryDone
+	return nil
 }
 
 // Extract only native identity fields; unknown methods remain routable without

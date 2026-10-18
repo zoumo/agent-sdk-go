@@ -45,7 +45,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer events.Close()
+	defer events.Abort()
 	_, err = client.StartTurn(ctx, types.TurnStartParams{
 		ThreadID: thread.Thread.ID,
 		Input:    []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}},

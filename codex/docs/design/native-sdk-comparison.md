@@ -138,7 +138,7 @@ func Observe(ctx context.Context, client *codex.Client, id, prompt string) error
 	if err != nil {
 		return err
 	}
-	defer sub.Close()
+	defer sub.Abort()
 	_, err = client.StartTurn(ctx, types.TurnStartParams{
 		ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}},
 	})

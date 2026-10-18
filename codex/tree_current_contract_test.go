@@ -17,6 +17,7 @@ func (obs *observationSuite) TestTreeCurrentVersionMetadata() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
+			cleanupSubscription(t, s)
 			require.NoError(t, err, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation))

@@ -102,7 +102,7 @@ func (s *treeObservationSuite) TestTreeHistorySeedAndFreshEpoch() {
 	opts.ResumeID = "s"
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b", ParentTaskID: "a"}}})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	startup := treeReceive(t, c)
 	for _, task := range []string{"a", "b"} {
 		r := treeReceive(t, c)
@@ -123,7 +123,7 @@ func (s *treeObservationSuite) TestTreeRunLedgerBound() {
 	t := s.T()
 	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxRuns: 1})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	treeReceive(t, c)
 	treeFrame(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"1"}`)
 	treeEmit(t, c, `{"type":"system","subtype":"task_progress","session_id":"s","task_id":"a","run_id":"2"}`)

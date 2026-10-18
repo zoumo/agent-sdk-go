@@ -163,7 +163,7 @@ func TestTreeAdditionalBounds(t *testing.T) {
 			}
 			c, err := openWithTree(context.Background(), fixtureOptions(t, "tree"), opts)
 			require.NoError(t, err)
-			defer c.Close()
+			defer c.Abort()
 			treeReceive(t, c)
 			treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","uuid":"a"}`)
 			ds, _ := treeFrame(t, c, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"b","task_type":"local_agent","parent_task_id":"a","uuid":"b"}`)

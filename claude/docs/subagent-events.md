@@ -22,7 +22,7 @@ client, err := claude.Open(ctx, claude.Options{
 if err != nil {
     return err
 }
-defer client.Close()
+defer client.Abort()
 if err := client.Send(ctx, "Inspect the project"); err != nil {
     return err
 }
@@ -222,8 +222,10 @@ negative/above-ceiling values fail before startup. Alias entries count against
 the native index bound; no stale identity history is silently evicted. Overflow uses
 the owned client's terminal ResourceLimit path and emits incomplete plus the
 already accepted native frame with unresolved scope. Derived-event fanout and pending
-source attribution have their own bounds below; the underlying bounded event/control
-transport remains unchanged. A disconnect reports incomplete, then the original
+source attribution have their own bounds below. Native consumption uses a dynamic
+FIFO shared by root and child events within this client, independent of bounded
+control/permission work queues. Derived records use bounded inline transaction
+staging, not a second event stream. A disconnect reports incomplete, then the original
 terminal error; explicit Close reports closed, never child success.
 
 The retained official TS 0.3.302 declaration file SHA256 is
@@ -346,8 +348,9 @@ authentication change or transcript completeness is claimed.
 | MaxUnresolvedWait | 5 seconds | 1 minute |
 
 Zero selects defaults; negative values and values above a ceiling fail before
-startup. Native transport buffering and frame size remain bounded by
-`Options.Limits.EventBuffer` / `FrameBytes`. Decoded views share each frame's
+startup. Native event buffering grows dynamically; the deprecated
+`Options.Limits.EventBuffer` is ignored (0..65,536 is still validated). Incoming
+frame size remains bounded by `FrameBytes`. Decoded views share each frame's
 lifetime; MaxUnresolvedBytes measures wire bytes, not total Go heap allocation.
 Graph, alias, depth, run and UUID bounds continue to apply independently.
 

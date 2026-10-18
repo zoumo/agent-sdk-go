@@ -35,7 +35,7 @@ func (s *recordedObservationSuite) TestRecordedAuthenticationFailureReplay() {
 	defer cancel()
 	client, err := Open(ctx, Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
 	require.NoError(t, err)
-	defer client.Close()
+	defer client.Abort()
 	prompt, err := transcript.Prompt()
 	require.NoError(t, err)
 	{

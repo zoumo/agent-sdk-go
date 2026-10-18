@@ -40,7 +40,7 @@ func run(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer client.Abort()
 	prompt, err := transcript.Prompt()
 	if err != nil {
 		return err

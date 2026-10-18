@@ -4,13 +4,15 @@ package types
 
 import "time"
 
-// Limits bounds transport memory. Zero fields select defaults. A bound exceeded
+// Limits bounds protocol and control resources. Zero fields select defaults. A bound exceeded
 // by incoming traffic terminates the connection explicitly; frames are not
 // silently discarded and the stdout reader never waits for an event consumer.
 // Queue/count limits must be at most 65,536, except PermissionWorkers (1,024)
 // and PermissionHistory (1,048,576). FrameBytes is at most 64 MiB and StderrBytes
 // at most 16 MiB. Invalid configuration is rejected before starting a process.
 type Limits struct {
+	// EventBuffer values outside 0..65,536 are rejected before process startup.
+	// Deprecated: ignored; Receive backlog grows dynamically.
 	EventBuffer     int
 	FrameBytes      int
 	PendingControls int

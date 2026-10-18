@@ -198,7 +198,7 @@ func (s *treeObservationSuite) TestTreeCreatedHistoryAndRootResume() {
 			}
 			c, err := openWithTree(context.Background(), opts, bounds)
 			require.NoError(t, err)
-			defer c.Close()
+			defer c.Abort()
 			// Drain startup and seed/gap records through the init frame.
 			treeReceive(t, c)
 			got := creationFrames(t, c, creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false"), creationResult("call", "child", "completed"))
@@ -227,7 +227,7 @@ func (s *treeObservationSuite) TestTreeCreationEvidenceBound() {
 	opts := fixtureOptions(t, "tree")
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxCreationEntries: 1})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	treeReceive(t, c)
 	creationFrames(t, c, creationInit, creationRequest("one", "Agent", creationInput, ""))
 	treeEmit(t, c, creationRequest("two", "Agent", creationInput, ""))
@@ -270,7 +270,7 @@ func (s *treeObservationSuite) TestTreeCreatedUUIDCapacityDoesNotEvictEntity() {
 	opts := fixtureOptions(t, "tree")
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxDedupEntries: 1})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	treeReceive(t, c)
 	got := creationFrames(t, c, creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false"),
 		`{"type":"assistant","session_id":"s","uuid":"one","message":{"content":"first"}}`)

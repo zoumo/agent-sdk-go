@@ -16,7 +16,7 @@ Record UTC date, OS/architecture, Go version, this repository commit, exact CLI 
 6. Exercise AskUserQuestion's actual path. Record whether it arrives as `can_use_tool` or assistant content. Only the former may be answered through this SDK's generic handle. Do not inject an invented tool-result message.
 7. Cancel while a permission is waiting. Observe cancellation, reject a late answer, and verify no extra response. Include concurrent cancel/answer and close/answer cases without claiming retraction of bytes already being written.
 8. Disconnect after a user/control write but before an acknowledgment. Verify pending calls terminate and report an unknown outcome where appropriate. Never automatically resend.
-9. Stall the event consumer under controlled bounded output. Verify explicit overflow, retained accepted-event order and independent terminal signaling.
+9. Stall the event consumer under controlled bounded output. Verify retained accepted-event FIFO order, continued control/permission routing and independent terminal signaling.
 10. Check failed initialization, process exit, blocked writes and shutdown, including descendants holding pipes on each platform claimed supported. Verify process ownership and reaping.
 11. Inspect bounded stderr diagnostics without automatically exposing secrets. Record useful error classification and redact sensitive content before sharing.
 

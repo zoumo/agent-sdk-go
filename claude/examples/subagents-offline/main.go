@@ -56,7 +56,7 @@ func run(output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer client.Abort()
 	if err := client.Send(ctx, "emit synthetic children"); err != nil {
 		return err
 	}

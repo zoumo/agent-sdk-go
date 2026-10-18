@@ -18,7 +18,7 @@ func ExampleOpen() {
 		log.Print(err)
 		return
 	}
-	defer client.Close()
+	defer client.Abort()
 	if err := client.Send(ctx, "Explain what this directory contains."); err != nil {
 		log.Print(err)
 		return
@@ -57,7 +57,7 @@ func ExampleClient_RequestedResumeID() {
 		log.Print(err)
 		return
 	}
-	defer client.Close()
+	defer client.Abort()
 	fmt.Println("Requested:", client.RequestedResumeID())
 	if id, observed := client.SessionID(); observed {
 		fmt.Println("Observed:", id)
@@ -85,7 +85,7 @@ func ExamplePermissionRequest_Answer() {
 		log.Print(err)
 		return
 	}
-	defer client.Close()
+	defer client.Abort()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	if err := client.Send(ctx, "Read the requested project file."); err != nil {

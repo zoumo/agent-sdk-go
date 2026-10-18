@@ -78,7 +78,7 @@ func (s *clientProtocolSuite) TestOptionsAdapterRunsExistingSubprocessProtocol()
 	o := OptionsFromTypes(fixtureOptions(t, "echo").Types())
 	c, err := Open(context.Background(), o)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Abort() })
 	send(t, c, "adapter")
 	var event types.Event = receive(t, c)
 	var echo struct {

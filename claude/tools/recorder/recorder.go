@@ -164,7 +164,7 @@ func Run() error {
 		if modelError && runErr == nil {
 			runErr = fmt.Errorf("native error result")
 		}
-		closeErr := client.Close()
+		closeErr := client.Abort()
 		if closeErr != nil {
 			runErr = closeErr
 		}

@@ -164,7 +164,7 @@ func (s *sdkSuite) SetupTest() {
 }
 func (s *sdkSuite) TearDownTest() {
 	if s.client != nil {
-		s.client.Close()
+		s.client.Abort()
 		s.client = nil
 	}
 	s.cancel()

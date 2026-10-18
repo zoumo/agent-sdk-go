@@ -58,7 +58,7 @@ func openTreeFixture(t *testing.T, configure ...func(*Options)) *Client {
 	}
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Abort() })
 	r := treeReceive(t, c)
 	require.Falsef(t, r.Kind != "ObservationState" || r.State != "unverified" || r.Reason != "forwarding-not-confirmed", "startup: %+v", r)
 	return c
@@ -94,7 +94,7 @@ func (s *treeObservationSuite) TestForwardSubagentTextHandshakeAndOptions() {
 	opts.ResumeID = "--resume with ; literal"
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	assertForwardCapture(t, capture, true)
 	data, _ := os.ReadFile(capture)
 	var captured struct{ Argv []string }
@@ -245,7 +245,7 @@ func (s *treeObservationSuite) TestTreeBoundsRejectionAndCloseRace() {
 	opts := fixtureOptions(t, "tree")
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{MaxUnresolvedWait: time.Nanosecond, MaxNodes: 1})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	treeReceive(t, c)
 	for _, id := range []string{"a", "b"} {
 		frame := fmt.Sprintf(`{"type":"assistant","session_id":"root","agent_id":%q,"message":{"content":"fixture"}}`, id)
@@ -316,7 +316,7 @@ func (s *treeObservationSuite) TestTreeForwardingBeforeFirstNativeAndDisconnect(
 	t := s.T()
 	c, err := openWithTree(context.Background(), fixtureOptions(t, "tree_early"), SubagentOptions{MaxUnresolvedWait: time.Nanosecond})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	{
 		r := treeReceive(t, c)
 		require.EqualValues(t, "unverified", r.State, r)
@@ -384,7 +384,7 @@ func (s *treeObservationSuite) TestDefaultManagedOpenAndNativeOriginBoundary() {
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	c, err := Open(context.Background(), opts)
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	assertForwardCapture(t, capture, true)
 	first := treeReceive(t, c)
 	require.False(t, first.Kind != "ObservationState" || first.State != "unverified" || first.Native != nil, first)

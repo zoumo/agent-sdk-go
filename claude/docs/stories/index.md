@@ -52,7 +52,7 @@ AskUserQuestionInput.WithAnswers 使用原始完整题目文本，UpdatedInput �
 
 ## US-009
 
-Limits.EventBuffer 超出终止客户端并报告 ResourceLimitError；不静默丢消息。
+慢消费者的事件积压使用动态 FIFO，保持已接纳事件顺序，不阻塞控制回复与权限分发；Limits.EventBuffer 已弃用且忽略。机器内存仍是边界，持续积压可能耗尽内存。帧、控制、权限及关系观察资源限制独立生效。
 
 自动化：`TestCommonStories/TestNativeAdapters/US-009/claude`；源码证据为以上公开 API 和本包协议测试，离线证据为实际运行结果，真实运行均未验证。
 

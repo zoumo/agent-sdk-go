@@ -56,7 +56,7 @@ func consume(ctx context.Context, resume string,
         },
     })
     if err != nil { return err }
-    defer client.Close()
+    defer client.Abort()
     if err := client.Send(ctx, "Explain this directory."); err != nil { return err }
     for {
         message, err := client.Receive(ctx)
@@ -90,7 +90,7 @@ func answerQuestions(request *claude.PermissionRequest,
 ```
 
 `client.SessionID()` returns the observed ID for a later `Open` with ResumeID.
-`client.Close()` explicitly closes and reaps the owned process; the defer covers
+`client.Close()` explicitly closes and reaps the owned process while preserving accepted events; deferred `Abort` releases any unconsumed native backlog and covers
 all exits here. [Compiling examples](../example_test.go) also show create/resume,
 interrupt and permission denial. The [executed offline child example](../examples/subagents-offline/main.go)
 shows continued output after the parent result, creation and explicit close at

@@ -235,7 +235,7 @@ unknown field/subtype preservation, semantic round trips, decoded and constructe
 presence, nested typed mutation, repeated decode and illegal unions.
 `types_compatibility_test.go` checks the same codec through root and `types`
 imports. Existing synthetic runtime, cancellation, single-answer, failure,
-bounded-queue and lifecycle tests remain in the full suite.
+dynamic-event-queue, bounded-control and lifecycle tests remain in the full suite.
 
 `types/permission_data_test.go` adds synthetic permission/response/question
 round trips, edits, presence, owned metadata, invalid shapes and answer keys.

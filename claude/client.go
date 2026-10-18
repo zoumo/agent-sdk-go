@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 // Limits is the callback-free resource configuration shared with types.
@@ -92,7 +93,7 @@ type Client struct {
 	opts                                Options
 	cmd                                 *exec.Cmd
 	stdin, stdout, stderr               *os.File
-	events                              chan Event
+	events                              queue.Queue[Event]
 	responses                           chan incomingControl
 	permissionJobs                      chan *PermissionRequest
 	writeGate                           chan struct{}
@@ -104,6 +105,7 @@ type Client struct {
 	mu                                  sync.Mutex
 	terminal                            error
 	closing                             bool
+	aborted                             bool
 	stopped                             bool
 	processErr                          error
 	cleanupErr                          error
@@ -176,7 +178,7 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	outputW.Close()
 	errorW.Close()
 	c := &Client{tree: tree, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
-		events: make(chan Event, options.Limits.EventBuffer), responses: make(chan incomingControl, options.Limits.ControlBuffer),
+		responses:      make(chan incomingControl, options.Limits.ControlBuffer),
 		permissionJobs: make(chan *PermissionRequest, options.Limits.ControlBuffer), epoch: connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
@@ -197,7 +199,7 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	initialize := map[string]any{"subtype": "initialize", "hooks": nil, "forwardSubagentText": true}
 	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
 		c.fail(&Error{Op: "initialize", Err: err})
-		_ = c.Close()
+		_ = c.Abort()
 		final := c.Err()
 		startup := &Error{Op: "initialize", Err: errors.Join(err, final)}
 		var diagnostics *Error
@@ -209,7 +211,7 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	}
 	select {
 	case <-c.done:
-		_ = c.Close()
+		_ = c.Abort()
 		return nil, c.operationError()
 	default:
 	}
@@ -257,9 +259,19 @@ func (c *Client) Interrupt(ctx context.Context) error {
 // Receive returns a direct Event, SubagentAssociated, SubagentCreated or
 // ObservationState value. The first value reports unverified forwarding. A root result or idle does not
 // end observation. Canceling ctx cancels only this wait; call Close to release the process.
+// A nil context returns an error without consuming any event.
 func (c *Client) Receive(ctx context.Context) (ReceivedEvent, error) {
+	if ctx == nil {
+		return nil, queue.ErrNilContext
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	c.mu.Lock()
+	aborted := c.aborted
+	c.mu.Unlock()
+	if aborted {
+		return nil, c.operationError()
 	}
 	record, err := c.tree.receive(ctx)
 	if err != nil {
@@ -269,24 +281,13 @@ func (c *Client) Receive(ctx context.Context) (ReceivedEvent, error) {
 }
 
 func (c *Client) receiveNative(ctx context.Context) (Event, error) {
-	select {
-	case event, ok := <-c.events:
-		if ok {
-			return event, nil
-		}
+	event, err := c.events.Pop(ctx)
+	if errors.Is(err, io.EOF) {
 		return c.receiveEnd(ctx)
-	default:
 	}
-	select {
-	case event, ok := <-c.events:
-		if ok {
-			return event, nil
-		}
-		return c.receiveEnd(ctx)
-	case <-ctx.Done():
-		return Event{}, ctx.Err()
-	}
+	return event, err
 }
+
 func (c *Client) receiveEnd(ctx context.Context) (Event, error) {
 	select {
 	case <-c.cleaned:
@@ -300,7 +301,7 @@ func (c *Client) receiveEnd(ctx context.Context) (Event, error) {
 }
 
 // Done closes as soon as shutdown or a terminal failure is observed, independent
-// of event capacity. Already accepted events can still be drained by Receive.
+// of consumer progress. Already accepted events can still be drained by Receive.
 func (c *Client) Done() <-chan struct{} { return c.done }
 
 // Err returns the currently known terminal error, with a snapshot of the bounded
@@ -342,6 +343,20 @@ func (c *Client) Close() error {
 	<-c.cleaned
 	return c.Err()
 }
+
+// Abort shuts down the process like Close, then discards the unconsumed native
+// backlog. Later Receive calls return the terminal error or ErrClosed. A Receive
+// already in progress may deliver an event before Abort takes effect.
+// Bounded relationship state remains owned by Client until it is collected.
+func (c *Client) Abort() error {
+	err := c.Close()
+	c.mu.Lock()
+	c.aborted = true
+	c.mu.Unlock()
+	_ = c.events.Abort(nil)
+	return err
+}
+
 func (c *Client) fail(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -520,17 +535,10 @@ func (c *Client) route(event Event) error {
 			return err
 		}
 	}
-	// This reader is the only event producer. A free slot cannot disappear
-	// before the final send, so a handler is never dispatched for an event
-	// already known to exceed capacity.
-	if len(c.events) == cap(c.events) {
-		return &ResourceLimitError{Resource: "event buffer", Limit: c.opts.Limits.EventBuffer}
-	}
 	if event.Control != nil {
 		permission, err := c.registerIncoming(event.Control)
 		if errors.Is(err, ErrClosed) {
-			c.events <- event
-			return nil
+			return c.events.Push(event, int64(len(event.Raw)))
 		}
 		if err != nil {
 			return err
@@ -550,17 +558,12 @@ func (c *Client) route(event Event) error {
 			}
 		}
 	}
-	select {
-	case c.events <- event:
-		return nil
-	default:
-		return &ResourceLimitError{Resource: "event buffer", Limit: c.opts.Limits.EventBuffer}
-	}
+	return c.events.Push(event, int64(len(event.Raw)))
 }
 
 func (c *Client) readStdout() {
 	defer close(c.stdoutDone)
-	defer close(c.events)
+	defer c.events.Close(nil)
 	reader := bufio.NewReaderSize(c.stdout, min(c.opts.Limits.FrameBytes+1, 32<<10))
 	var frame []byte
 	for {

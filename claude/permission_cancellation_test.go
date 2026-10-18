@@ -197,7 +197,7 @@ func (s *controlInteractionSuite) TestPermissionFailedAttemptRemainsDistinctAfte
 	}
 }
 
-func (s *controlInteractionSuite) TestPermissionCancelOverflowInvalidatesOtherHandles() {
+func (s *controlInteractionSuite) TestPermissionCancellationCrossesBacklogAndCloseInvalidatesOtherHandles() {
 	t := s.T()
 	path := filepath.Join(t.TempDir(), "transcript.ndjson")
 	requests := make(chan *PermissionRequest, 2)
@@ -210,24 +210,26 @@ func (s *controlInteractionSuite) TestPermissionCancelOverflowInvalidatesOtherHa
 	cancelled := awaitPermission(t, requests)
 	emitPermission(t, c, "other", "Read", json.RawMessage(`{}`))
 	other := awaitPermission(t, requests)
-	// Neither event is consumed: stdout ordering fills the queue before cancel.
-	emitPermissionFrame(t, c, map[string]any{"type": "accepted-before-overflow"})
+	// Neither event is consumed: cancellation must cross the legacy capacity.
+	emitPermissionFrame(t, c, map[string]any{"type": "accepted-before-cancel"})
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "cancelled"})
+	awaitSignal(t, cancelled.Context().Done())
+	require.ErrorIs(t, context.Cause(cancelled.Context()), ErrPermissionCancelled)
+	require.NoError(t, c.Interrupt(context.Background()), "control reply blocked behind backlog")
+	require.Nil(t, other.Context().Err(), "backlog invalidated unrelated permission")
+	require.NoError(t, c.Close())
 	awaitDone(t, c)
-	require.ErrorIs(t, context.Cause(cancelled.Context()), ErrPermissionCancelled, "cancel/overflow left a handle live")
-	require.NotNil(t, other.Context().Err(), "cancel/overflow left a handle live")
-	require.EqualValues(t, "accepted-before-overflow", receive(t, c).Type, "accepted output lost")
+	require.ErrorIs(t, context.Cause(other.Context()), ErrClosed)
+	require.EqualValues(t, "accepted-before-cancel", receive(t, c).Type)
+	require.Equal(t, "cancelled", receive(t, c).Cancel.RequestID)
 	_, err := nextNative(c, context.Background())
-	var limit *ResourceLimitError
-	require.ErrorIsf(t, err, ErrResourceLimit, "overflow was not terminal: %v", err)
-	require.ErrorAsf(t, err, &limit, "overflow was not terminal: %v", err)
-	require.EqualValuesf(t, "event buffer", limit.Resource, "overflow was not terminal: %v", err)
+	require.ErrorIs(t, err, io.EOF)
 	assertPermissionError(t, cancelled.Answer(context.Background(), PermissionAnswer{}), "cancelled", ErrPermissionCancelled)
 	assertPermissionError(t, other.Answer(context.Background(), PermissionAnswer{}), "other", ErrClosed)
 	_ = c.Close()
 	{
 		got := permissionResponses(t, permissionTranscript(t, path))
-		require.EqualValuesf(t, 0, len(got), "overflowed cancellation allowed response: %#v", got)
+		require.EqualValuesf(t, 0, len(got), "cancelled or closed handle allowed response: %#v", got)
 	}
 }
 

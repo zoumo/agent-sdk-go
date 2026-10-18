@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -83,11 +84,13 @@ func runFixture(mode string) {
 		fmt.Fprint(os.Stderr, "startup disconnected")
 		return
 	case "init_error":
+		fixtureEmit(map[string]any{"type": "unexpected-before-initialize"})
 		fmt.Fprint(os.Stderr, "initialize rejected")
 		fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "error", "request_id": init["request_id"], "error": "fixture refused initialization"}})
 		io.Copy(io.Discard, reader)
 		return
 	case "init_wrong":
+		fixtureEmit(map[string]any{"type": "unexpected-before-initialize"})
 		fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": "not-the-request", "response": map[string]any{}}})
 		io.Copy(io.Discard, reader)
 		return
@@ -216,7 +219,7 @@ func openFixture(t *testing.T, mode string, configure ...func(*Options)) *Client
 	}
 	c, err := Open(context.Background(), opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Abort() })
 	return c
 }
 func receive(t *testing.T, c *Client) Event {
@@ -268,7 +271,7 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 	opts.Model = "--odd model; $(not-a-shell)"
 	c, err := Open(context.Background(), opts)
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	data, err := os.ReadFile(capture)
 	require.NoError(t, err)
 	var captured struct {
@@ -396,20 +399,26 @@ func (s *clientProtocolSuite) TestMalformedFramesRetainAcceptedEvents() {
 	require.ErrorIsf(t, err, ErrProtocol, "invalid type = %v", err)
 }
 
-func (s *clientProtocolSuite) TestOverflowIsTerminalAndDoneDoesNotNeedConsumer() {
+func (s *clientProtocolSuite) TestSlowConsumerDrainsDynamicBacklogAfterClose() {
 	t := s.T()
 	c := openFixture(t, "overflow", func(o *Options) { o.Limits.EventBuffer = 2 })
 	send(t, c, "go")
+	// Explicit close waits for the reader, never for Receive to drain the burst.
+	require.NoError(t, c.Close())
 	awaitDone(t, c)
-	require.ErrorIsf(t, c.Err(), ErrResourceLimit, "Err = %v", c.Err())
-	for i := 0; i < 2; i++ {
+	require.NoError(t, c.Err())
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := c.Receive(canceled)
+	require.ErrorIs(t, err, context.Canceled)
+	for i := 0; i < 20; i++ {
 		event := receive(t, c)
 		var v struct{ Seq int }
-		json.Unmarshal(event.Raw, &v)
-		require.EqualValuesf(t, i, v.Seq, "got %d want %d", v.Seq, i)
+		require.NoError(t, json.Unmarshal(event.Raw, &v))
+		require.EqualValues(t, i, v.Seq)
 	}
-	_, err := nextNative(c, context.Background())
-	require.ErrorIsf(t, err, ErrResourceLimit, "Receive = %v", err)
+	_, err = nextNative(c, context.Background())
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func (s *clientProtocolSuite) TestExitErrorFollowsLastEventWithBoundedDiagnostics() {
@@ -655,4 +664,28 @@ func nextNative(c *Client, ctx context.Context) (Event, error) {
 			return event, nil
 		}
 	}
+}
+
+// Failed Open returns no client to drain or abort; accepted startup output must
+// therefore be discarded before return, allowing the ChannX manager to exit.
+func TestStartupFailureReleasesUnconsumedNativeQueue(t *testing.T) {
+	managers := func() int {
+		stacks := make([]byte, 1<<20)
+		n := runtime.Stack(stacks, true)
+		return bytes.Count(stacks[:n], []byte("github.com/zoumo/golib/channx.(*ChannX).process("))
+	}
+	before := managers()
+	for range 3 {
+		opts := fixtureOptions(t, "init_error")
+		// This peer deterministically emits an event before its correlated error.
+		// Use the usual startup budget: the assertion concerns teardown, not timing.
+		opts.InitializeTimeout = 3 * time.Second
+		c, err := Open(context.Background(), opts)
+		require.Nil(t, c)
+		var control *ControlError
+		require.ErrorAs(t, err, &control)
+		require.Equal(t, "fixture refused initialization", control.Message)
+	}
+	require.Eventually(t, func() bool { return managers() <= before }, time.Second, 10*time.Millisecond,
+		"failed initialization retained an undrainable ChannX manager")
 }

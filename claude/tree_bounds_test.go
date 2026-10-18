@@ -26,7 +26,7 @@ func openBoundedTree(t *testing.T, bounds SubagentOptions, configure ...func(*Op
 	}
 	c, err := openWithTree(context.Background(), opts, bounds)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Abort() })
 	{
 		r := treeReceive(t, c)
 		require.EqualValues(t, "unverified", r.State, r)
@@ -360,7 +360,7 @@ func (s *treeObservationSuite) TestTreeParentResultChildThinkingAndUsageStaySepa
 	}
 }
 
-func (s *treeObservationSuite) TestTreeTransportOverflowWakesPendingInterruptAndQuestion() {
+func (s *treeObservationSuite) TestTreeBacklogThenProtocolFailureWakesPendingInterruptAndQuestion() {
 	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	opts := fixtureOptions(t, "overload_controls")
@@ -368,7 +368,7 @@ func (s *treeObservationSuite) TestTreeTransportOverflowWakesPendingInterruptAnd
 	opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
 	c, err := openWithTree(context.Background(), opts, SubagentOptions{})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Abort()
 	treeReceive(t, c)
 	treeEmit(t, c, "permission")
 	{
@@ -384,11 +384,12 @@ func (s *treeObservationSuite) TestTreeTransportOverflowWakesPendingInterruptAnd
 	}
 	treeEmit(t, c, "fill")
 	treeEmit(t, c, "overflow")
+	treeEmit(t, c, "malformed")
 	awaitSignal(t, c.Done())
-	require.False(t, !errors.Is(c.Err(), ErrResourceLimit) || !errors.Is(context.Cause(p.Context()), ErrResourceLimit), c.Err(), context.Cause(p.Context()))
+	require.False(t, !errors.Is(c.Err(), ErrProtocol) || !errors.Is(context.Cause(p.Context()), ErrProtocol), c.Err(), context.Cause(p.Context()))
 	select {
 	case err := <-pending:
-		require.False(t, !errors.Is(err, ErrResourceLimit) || !errors.Is(err, ErrUnknownOutcome), err)
+		require.False(t, !errors.Is(err, ErrProtocol) || !errors.Is(err, ErrUnknownOutcome), err)
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "verification failed", "interrupt was not woken")
 	}
@@ -400,11 +401,15 @@ func (s *treeObservationSuite) TestTreeTransportOverflowWakesPendingInterruptAnd
 	}
 	{
 		r := treeReceive(t, c)
+		require.Equal(t, "rejected", r.Native.Type)
+	}
+	{
+		r := treeReceive(t, c)
 		require.EqualValues(t, "incomplete", r.State, r)
 	}
 	{
 		_, err := c.tree.receive(context.Background())
-		require.ErrorIs(t, err, ErrResourceLimit, err)
+		require.ErrorIs(t, err, ErrProtocol, err)
 	}
 	{
 		err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})

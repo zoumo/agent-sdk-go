@@ -99,19 +99,20 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 	}
 }
 
-func (s *controlInteractionSuite) TestFullEventQueueStillDispatchesControlResponses() {
+func (s *controlInteractionSuite) TestEventBacklogStillDispatchesControlResponses() {
 	t := s.T()
 	c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 3 })
 	send(t, c, "fill")
-	// The reply is emitted after all three events, proving stdout crossed the
-	// entire full queue while the application has not called Receive.
+	send(t, c, "overflow")
+	// The reply is emitted after four events, proving stdout crossed the
+	// backlog beyond EventBuffer while the application has not called Receive.
 	{
 		err := c.Interrupt(context.Background())
 		require.NoError(t, err)
 	}
 	select {
 	case <-c.Done():
-		require.FailNowf(t, "unexpected test outcome", "full but not exceeded queue closed: %v", c.Err())
+		require.FailNowf(t, "unexpected test outcome", "event backlog closed: %v", c.Err())
 	default:
 	}
 	for i := 0; i < 3; i++ {
@@ -121,9 +122,10 @@ func (s *controlInteractionSuite) TestFullEventQueueStillDispatchesControlRespon
 		require.EqualValuesf(t, "sequence", e.Type, "order: %s", e.Raw)
 		require.EqualValuesf(t, i, v.Seq, "order: %s", e.Raw)
 	}
+	require.Equal(t, "rejected", receive(t, c).Type)
 }
 
-func (s *controlInteractionSuite) TestOverloadWakesInterruptAndPermissionWithRetainedOrder() {
+func (s *controlInteractionSuite) TestBacklogThenProtocolFailureWakesInterruptAndPermissionWithRetainedOrder() {
 	t := s.T()
 	requests := make(chan *PermissionRequest, 1)
 	release := make(chan struct{})
@@ -139,11 +141,12 @@ func (s *controlInteractionSuite) TestOverloadWakesInterruptAndPermissionWithRet
 	receiveInterrupt(t, c)
 	send(t, c, "fill")
 	send(t, c, "overflow")
+	send(t, c, "malformed")
 	awaitDone(t, c)
-	require.ErrorIsf(t, context.Cause(p.Context()), ErrResourceLimit, "handle cause: %v", context.Cause(p.Context()))
+	require.ErrorIsf(t, context.Cause(p.Context()), ErrProtocol, "handle cause: %v", context.Cause(p.Context()))
 	{
 		err := awaitInterrupt(t, pending)
-		require.ErrorIsf(t, err, ErrResourceLimit, "interrupt: %v", err)
+		require.ErrorIsf(t, err, ErrProtocol, "interrupt: %v", err)
 		require.ErrorIsf(t, err, ErrUnknownOutcome, "interrupt: %v", err)
 	}
 	var wg sync.WaitGroup
@@ -160,7 +163,7 @@ func (s *controlInteractionSuite) TestOverloadWakesInterruptAndPermissionWithRet
 	awaitSignal(t, complete)
 	close(closeResults)
 	for err := range closeResults {
-		assert.ErrorIs(t, err, ErrResourceLimit, "Close")
+		assert.ErrorIs(t, err, ErrProtocol, "Close")
 	}
 	for i := 0; i < 3; i++ {
 		e := receive(t, c)
@@ -169,11 +172,9 @@ func (s *controlInteractionSuite) TestOverloadWakesInterruptAndPermissionWithRet
 		require.EqualValuesf(t, "sequence", e.Type, "accepted order: %s", e.Raw)
 		require.EqualValuesf(t, i, v.Seq, "accepted order: %s", e.Raw)
 	}
+	require.Equal(t, "rejected", receive(t, c).Type, "extra event beyond legacy capacity survived")
 	_, err := nextNative(c, context.Background())
-	var limit *ResourceLimitError
-	require.ErrorAsf(t, err, &limit, "terminal: %v", err)
-	require.EqualValuesf(t, "event buffer", limit.Resource, "terminal: %v", err)
-	require.EqualValuesf(t, 3, limit.Limit, "terminal: %v", err)
+	require.ErrorIs(t, err, ErrProtocol)
 	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "waiting", ErrClosed)
 }
 

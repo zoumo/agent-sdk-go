@@ -390,11 +390,11 @@ prove a hook-free launch; successful recording remains blocked as documented.
 
 These are Go bounds, not official feature parity. Zero selects defaults;
 negative/above-ceiling values fail before spawn. Accepted events drain before
-terminal errors. Queue bounds are not a fixed total heap/RSS guarantee.
+terminal errors. Event consumption backlog grows dynamically and does not block the stdout reader, control replies or permission dispatch. It is limited by available machine memory: sustained imbalance can cause OOM, and crash delivery is not guaranteed. Other queue bounds are not a fixed total heap/RSS guarantee.
 
 | Go Limits field | Default | Ceiling | Behavior |
 | --- | ---: | ---: | --- |
-| `EventBuffer` | 128 | 65,536 | Incoming overflow terminal |
+| `EventBuffer` | Ignored | 65,536 (validation only) | Deprecated; dynamic FIFO backlog, no capacity allocation |
 | `FrameBytes` | 4 MiB | 64 MiB | Incoming excess terminal; local Send excess rejected before write |
 | `PendingControls` | 32 | 65,536 | Local excess rejected before write |
 | `ControlBuffer` | 32 each | 65,536 each | Separate automatic-response/handler queues; overflow terminal |

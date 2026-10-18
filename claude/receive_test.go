@@ -4,9 +4,11 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 func (s *controlInteractionSuite) TestReceiveConcreteEventsAndNativeJSON() {
@@ -60,4 +62,77 @@ func (s *controlInteractionSuite) TestReceiveConcreteEventsAndNativeJSON() {
 	}
 	require.True(t, associated, "missing derived convenience events")
 	require.True(t, created, "missing derived convenience events")
+}
+
+func (s *controlInteractionSuite) TestReceiveInvalidWaitDoesNotConsumeStartup() {
+	t := s.T()
+	c := s.openFixture(t, "tree")
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+		want error
+	}{
+		{"nil", nil, queue.ErrNilContext},
+		{"canceled", canceled, context.Canceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := c.Receive(tc.ctx)
+			require.ErrorIs(t, err, tc.want)
+		})
+	}
+	event, err := c.Receive(context.Background())
+	require.NoError(t, err)
+	state, ok := event.(ObservationState)
+	require.True(t, ok)
+	require.Equal(t, "unverified", state.State)
+}
+
+func (s *controlInteractionSuite) TestAbortDiscardsNativeBacklogAndRejectsReceive() {
+	t := s.T()
+	for _, terminal := range []bool{false, true} {
+		name := "explicit shutdown"
+		if terminal {
+			name = "protocol failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 1 })
+			send(t, c, "fill")
+			send(t, c, "overflow")
+			// The control reply follows the entire burst without consuming any events.
+			require.NoError(t, c.Interrupt(context.Background()))
+			require.Equal(t, 4, c.events.Stats().Items)
+			if terminal {
+				send(t, c, "malformed")
+				awaitDone(t, c)
+			}
+			err := c.Abort()
+			if terminal {
+				require.ErrorIs(t, err, ErrProtocol)
+			} else {
+				require.NoError(t, err)
+			}
+			awaitDone(t, c)
+			require.Zero(t, c.events.Stats().Items)
+			require.Zero(t, c.events.Stats().Bytes)
+			require.True(t, c.events.Stats().Closed)
+			_, err = c.Receive(context.Background())
+			if terminal {
+				require.ErrorIs(t, err, ErrProtocol)
+			} else {
+				require.ErrorIs(t, err, ErrClosed)
+			}
+			canceled, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err = c.Receive(canceled)
+			require.ErrorIs(t, err, context.Canceled)
+			// Repeated and concurrent shutdown remains harmless.
+			if terminal {
+				require.ErrorIs(t, c.Abort(), ErrProtocol)
+			} else {
+				require.NoError(t, c.Abort())
+			}
+		})
+	}
 }

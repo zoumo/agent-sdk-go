@@ -1,7 +1,7 @@
 {
   "protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
-  "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
-  "sdk_revision_note": "Current offline gate uses the source/test tree at e558ef11; this documentation-only delivery consolidates Mac live evidence at its original tested bases. Historical records retain their exact revisions. No new live calls or protocol changes. Current schema target refreshed to installed CLI 0.162.1 in the ticket05 follow-up. Existing records retain their historical schema_protocol_commit; current test evidence is separate.",
+  "tested_sdk_commit": "1f11440e157cf7b31ab89cdde85d540542950ada",
+  "sdk_revision_note": "Current source/test files were validated in the pre-commit working tree on c0d7201 and committed unchanged at 1f11440e157cf7b31ab89cdde85d540542950ada; hashes and exact commands are in subagent05-current-* records. The active schema target is installed CLI 0.162.1. Historical Mac/source evidence retains its original SDK and schema revisions and does not validate this refresh or managed subagents. The final evidence-only delivery is checked by CI at its own exact SHA and reported in handoff; no new live workflow was run.",
   "toolchain": {
     "go": "1.26.9",
     "manager": "mise",
@@ -1298,15 +1298,6 @@
       "scope": "Subagent ticket 04 working tree; Darwin arm64, mise Go 1.26.9, GOPROXY/GOSUMDB off and all live opt-ins 0. Six gate self-tests; inventory 170/11/85/1; reproducible 397 types/744 cases/154 definitions."
     }
   ],
-  "hosted_ci": {
-    "status": "passed",
-    "workflow": ".github/workflows/ci.yml",
-    "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
-    "run_id": 39088440655,
-    "url": "https://github.com/zoumo/codex-sdk-go/actions/runs/39088440655",
-    "verified_updated_at": "2026-10-18T02:02:02Z",
-    "scope": "Independently read back completed/success. Offline only. Final documentation delivery CI must be checked at its own exact HEAD and is returned in handoff."
-  },
   "model_budget": {
     "limit": 9,
     "used": 9,
@@ -1333,6 +1324,17 @@
     "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
     "revision_note": "Current follow-up working tree hashes in subagent05-current-*; delivery SHA/hosted CI reported in handoff. Prior schema records remain historical.",
     "report": "../subagent-compatibility.md",
-    "live": "Current subagent E3/E4 not run. Read-only --version is binary identity, not workflow validation."
+    "live": "Current subagent E3/E4 not run. Read-only --version is binary identity, not workflow validation.",
+    "tested_sdk_source_commit": "1f11440e157cf7b31ab89cdde85d540542950ada"
+  },
+  "historical_tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
+  "historical_hosted_ci": {
+    "status": "passed",
+    "workflow": ".github/workflows/ci.yml",
+    "tested_sdk_commit": "e558ef11c8cc3d2a5be6e0da6f58ef4cbc769b78",
+    "run_id": 39088440655,
+    "url": "https://github.com/zoumo/codex-sdk-go/actions/runs/39088440655",
+    "verified_updated_at": "2026-10-18T02:02:02Z",
+    "scope": "Independently read back completed/success. Offline only. Final documentation delivery CI must be checked at its own exact HEAD and is returned in handoff."
   }
 }

@@ -215,3 +215,17 @@ history; `Options.Types()` omits this runtime configuration. See the
 [derived definitions](derived_events.go).
 
 [Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.
+
+## Read stored history
+
+`LoadHistory(ctx, HistoryOptions{SessionID: id, CWD: absoluteCWD,
+ConfigDir: absoluteClaudeConfigDir})` returns an asynchronous `History` handle.
+Drain `Records()`, then check `Err()`; `Close()` cancels and waits. The load context
+controls the entire replay lifetime. No Claude process or model is started.
+Records retain native raw JSON, message content, UUID, parent and timestamp.
+This is the selected retained main chain, including compaction summaries, not
+all branches or reconstructed live stream chunks. Unknown message blocks remain
+raw; corrupt/unsupported transcript records fail explicitly. Local transcript
+loading currently supports Unix, exact project keys up to 200 characters, and
+quiescent regular files. It does not load separate subagent files or search all
+projects. See the [history contract](../docs/specs/async-history.md).

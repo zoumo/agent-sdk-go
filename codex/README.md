@@ -592,3 +592,17 @@ The embedded real sanitized S1/S2 transcripts cover two bounded dynamic file
 tools and one native user question. Default CI validates and replays them offline.
 Native shell approvals, subagent creation and background boundaries were not
 observed. See [recorded coverage and explicit real-agent maintenance](docs/recorded-events.md).
+
+## Read stored history
+
+`client.LoadHistory(ctx, HistoryOptions{ThreadID: id, CWD: absoluteCWD,
+CodexHome: expectedAbsoluteCodexHome})` returns an asynchronous `History` handle.
+Drain `Records()`, then check `Err()`; `Close()` cancels and waits without closing
+the client. The load context controls the entire replay lifetime. Replay reads
+full turns oldest-first through native pagination; it does not resume, subscribe,
+send prompts or execute tools. Each record retains exact turn JSON and decoded
+native items. `ListThreadTurns` and `ListThreadItems` also expose native pages.
+The server must support pagination; unsupported RPC errors are not hidden by a
+legacy fallback. Active threads and observed metadata changes fail. External
+writers must be quiescent because native paging is not an atomic snapshot. See
+the [history contract](../docs/specs/async-history.md) for limits and evidence.

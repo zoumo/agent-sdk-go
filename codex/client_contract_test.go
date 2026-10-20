@@ -74,7 +74,7 @@ func TestFakeChild(t *testing.T) {
 		if json.Unmarshal(raw, &m) != nil {
 			os.Exit(81)
 		}
-		if handleTreePeer(mode, m, send) || requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
+		if handleHistoryPeer(mode, m, send) || handleTreePeer(mode, m, send) || requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
 			continue
 		}
 		switch m.Method {

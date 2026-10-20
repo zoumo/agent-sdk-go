@@ -19,6 +19,8 @@ BLOB = 'eef430182091bfc6f120c98dda3a3246771de8d1'
 SOURCE = 'codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst'
 ROOTS = ['InitializeParams', 'InitializeResponse', 'v2/ThreadStartParams',
          'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',
+         'v2/ThreadTurnsListParams', 'v2/ThreadTurnsListResponse',
+         'v2/ThreadItemsListParams', 'v2/ThreadItemsListResponse',
          'v2/ThreadResumeParams', 'v2/ThreadResumeResponse',
          'v2/ThreadUnsubscribeParams', 'v2/ThreadUnsubscribeResponse',
          'v2/TurnStartParams', 'v2/TurnStartResponse',
@@ -39,8 +41,9 @@ if len(sys.argv) > 1:
     digest = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
     if digest != BLOB:
         raise SystemExit('Input is not the verified upstream Git blob ' + BLOB)
-    import zstandard  # Only needed when refreshing from the upstream archive.
-    archive = json.loads(zstandard.ZstdDecompressor().stream_reader(raw).read())
+    # Only needed when refreshing; use the existing zstd CLI, no Python bridge.
+    import subprocess
+    archive = json.loads(subprocess.check_output(['zstd', '-dc', sys.argv[1]]))
     full = json.loads(archive['json_schema']['codex_app_server_protocol.schemas.json'])
     selected = {}
     def visit(node):
@@ -178,6 +181,17 @@ def object_type(name, node):
 
 def union_type(name, node):
     variants = node.get('oneOf', node.get('anyOf'))
+    # Native history cursors combine a string with a referenced tagged union.
+    # Expand those schema branches without changing the authoritative snapshot.
+    def expand(branch):
+        if '$ref' in branch:
+            target = snapshot['definitions'][branch['$ref'].removeprefix('#/definitions/')]
+            return expand(target)
+        nested = branch.get('oneOf', branch.get('anyOf'))
+        if nested and branch.get('type') != 'object':
+            return [v for child in nested for v in expand(child)]
+        return [branch]
+    variants = [v for branch in variants for v in expand(branch)]
     fields = []
     # Current native error unions explicitly admit raw string/object fallbacks.
     # Preserve them through Unknown instead of manufacturing a typed variant.

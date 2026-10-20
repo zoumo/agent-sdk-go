@@ -3168,6 +3168,137 @@ func (v *ThreadItem) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type ThreadItemEntry struct {
+	// Unix timestamp (milliseconds) when the item completed, if recorded by the producer.
+	CompletedAtMs Optional[int64] `json:"completedAtMs" protocol:"nullable"`
+	Item          ThreadItem      `json:"item" protocol:"required"`
+	// Unix timestamp (milliseconds) when the item started, if recorded by the producer.
+	StartedAtMs Optional[int64] `json:"startedAtMs" protocol:"nullable"`
+	// Turn containing this item.
+	TurnID string `json:"turnId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadItemEntry) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadItemEntry) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+// An exclusive item position within the requested visible turn.
+// ThreadItemsListAnchor contains exactly one typed variant or Unknown.
+type ThreadItemsListAnchor struct {
+	Item *ItemThreadItemsListAnchor
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ThreadItemsListAnchor) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Item)
+}
+func (v *ThreadItemsListAnchor) UnmarshalJSON(data []byte) error {
+	var out ThreadItemsListAnchor
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" {
+		return fmt.Errorf("protocol: invalid JSON kind for ThreadItemsListAnchor")
+	}
+	if kind == "object" && tag == "item" {
+		var value ItemThreadItemsListAnchor
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Item = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+// Starting position for an item-history page.
+// ThreadItemsListCursor contains exactly one typed variant or Unknown.
+type ThreadItemsListCursor struct {
+	Value                     *string
+	ItemThreadItemsListAnchor *ItemThreadItemsListAnchor
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ThreadItemsListCursor) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Value, v.ItemThreadItemsListAnchor)
+}
+func (v *ThreadItemsListCursor) UnmarshalJSON(data []byte) error {
+	var out ThreadItemsListCursor
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "object" && kind != "string" {
+		return fmt.Errorf("protocol: invalid JSON kind for ThreadItemsListCursor")
+	}
+	if kind == "string" {
+		var value string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Value = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "item" {
+		var value ItemThreadItemsListAnchor
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.ItemThreadItemsListAnchor = &value
+		*v = out
+		return nil
+	}
+	if kind == "object" && tag == "" {
+		return fmt.Errorf("protocol: missing union type discriminator")
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type ThreadItemsListParams struct {
+	// Opaque continuation cursor or an exclusive item anchor in the requested visible turn. An item anchor requires a non-empty `turnId`; ascending (the default) returns items after it, and descending returns items before it. Continue with the returned string cursor.
+	Cursor Optional[ThreadItemsListCursor] `json:"cursor" protocol:"nullable"`
+	// Optional item page size.
+	Limit Optional[uint32] `json:"limit" protocol:"nullable"`
+	// Optional item pagination direction; defaults to ascending.
+	SortDirection Optional[SortDirection] `json:"sortDirection" protocol:"nullable"`
+	ThreadID      string                  `json:"threadId" protocol:"required"`
+	// Optional turn id to filter by. When omitted, returns items across the thread.
+	TurnID Optional[string] `json:"turnId" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadItemsListParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadItemsListParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadItemsListResponse struct {
+	// Opaque cursor to pass as `cursor` when reversing `sortDirection`. This is only populated when the page contains at least one item.
+	BackwardsCursor Optional[string]  `json:"backwardsCursor" protocol:"nullable"`
+	Data            []ThreadItemEntry `json:"data" protocol:"required"`
+	// Opaque cursor to pass to the next call to continue after the last item. if None, there are no more items to return.
+	NextCursor Optional[string] `json:"nextCursor" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadItemsListResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadItemsListResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type ThreadReadParams struct {
 	// When true, include turns and their items from rollout history. Full-history hydration is deprecated for paginated threads; prefer a metadata-only read and page with `thread/turns/list` and `thread/items/list`.
 	IncludeTurns Optional[bool] `json:"includeTurns" protocol:""`
@@ -3468,6 +3599,36 @@ func (v *ThreadStatus) UnmarshalJSON(data []byte) error {
 	*v = out
 	return nil
 }
+
+type ThreadTurnsListParams struct {
+	// Opaque cursor to pass to the next call to continue after the last turn.
+	Cursor Optional[string] `json:"cursor" protocol:"nullable"`
+	// How much item detail to include for each returned turn; defaults to summary.
+	ItemsView Optional[TurnItemsView] `json:"itemsView" protocol:"nullable"`
+	// Optional turn page size.
+	Limit Optional[uint32] `json:"limit" protocol:"nullable"`
+	// Optional turn pagination direction; defaults to descending.
+	SortDirection Optional[SortDirection] `json:"sortDirection" protocol:"nullable"`
+	ThreadID      string                  `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadTurnsListParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadTurnsListParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadTurnsListResponse struct {
+	// Opaque cursor to pass as `cursor` when reversing `sortDirection`. This is only populated when the page contains at least one turn. Use it with the opposite `sortDirection` to include the anchor turn again and catch updates to that turn.
+	BackwardsCursor Optional[string] `json:"backwardsCursor" protocol:"nullable"`
+	Data            []Turn           `json:"data" protocol:"required"`
+	// Opaque cursor to pass to the next call to continue after the last turn. if None, there are no more turns to return.
+	NextCursor Optional[string] `json:"nextCursor" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadTurnsListResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadTurnsListResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 type ThreadUnsubscribeParams struct {
 	ThreadID string `json:"threadId" protocol:"required"`
@@ -5322,6 +5483,16 @@ func (v *ContextCompactionThreadItem) UnmarshalJSON(data []byte) error {
 	return unmarshalObject(data, v)
 }
 
+type ItemThreadItemsListAnchor struct {
+	ItemID string                        `json:"itemId" protocol:"required"`
+	Type   ItemThreadItemsListAnchorType `json:"type" protocol:"required,const=item"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ItemThreadItemsListAnchor) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ItemThreadItemsListAnchor) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type NotLoadedThreadStatus struct {
 	Type NotLoadedThreadStatusType `json:"type" protocol:"required,const=notLoaded"`
 	// UnknownFields preserves unrecognized members for forward-compatible round trips.
@@ -6177,6 +6348,12 @@ type ContextCompactionThreadItemType string
 
 const (
 	ContextCompactionThreadItemTypeContextCompaction ContextCompactionThreadItemType = "contextCompaction"
+)
+
+type ItemThreadItemsListAnchorType string
+
+const (
+	ItemThreadItemsListAnchorTypeItem ItemThreadItemsListAnchorType = "item"
 )
 
 type NotLoadedThreadStatusType string

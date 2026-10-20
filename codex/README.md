@@ -593,16 +593,31 @@ tools and one native user question. Default CI validates and replays them offlin
 Native shell approvals, subagent creation and background boundaries were not
 observed. See [recorded coverage and explicit real-agent maintenance](docs/recorded-events.md).
 
-## Read stored history
+## Load an existing session and replay history
 
-`client.Load(ctx, HistoryOptions{ThreadID: id, CWD: absoluteCWD,
-CodexHome: expectedAbsoluteCodexHome})` returns an asynchronous `History` handle.
-Drain `Records()`, then check `Err()`; `Close()` cancels and waits without closing
-the client. The load context controls the entire replay lifetime. Replay reads
-full turns oldest-first through native pagination; it does not resume, subscribe,
-send prompts or execute tools. Each record retains exact turn JSON and decoded
-native items. `ListThreadTurns` and `ListThreadItems` also expose native pages.
+```go
+loaded, err := client.Load(ctx, codex.HistoryOptions{
+    ThreadID: id, CWD: absoluteCWD, CodexHome: expectedAbsoluteCodexHome,
+})
+// Check err, then defer loaded.Close(). Subscribe to live events before Load.
+for record := range loaded.Records() {
+    // Convert record.Turn using its native items; record.Raw is original JSON.
+    _ = record
+}
+// Check loaded.Err() before continuing; Done includes resume and complete replay.
+// client.StartTurn(newContext, ...) can now continue the same native thread.
+```
+
+Load uses native resume plus oldest-first full-turn pagination. Ordinary
+ResumeThread does not perform this SDK replay. Input during replay is rejected;
+failed loads cannot continue. ResumeResponse returns the validated native result
+after successful completion. The load context ends with replay; canceling it
+later does not terminate the resumed session. Close unsubscribes the owned thread
+attachment and reports cleanup errors; it does not close the shared Client or
+interrupt native work. Raw Call bypasses the typed operation guards.
+
 The server must support pagination; unsupported RPC errors are not hidden by a
 legacy fallback. Active threads and observed metadata changes fail. External
-writers must be quiescent because native paging is not an atomic snapshot. See
-the [history contract](../docs/specs/async-history.md) for limits and evidence.
+writers must be quiescent because native paging is not an atomic snapshot.
+ListThreadTurns and ListThreadItems also expose native pages. See the
+[history contract](../docs/specs/async-history.md) for limits and evidence.

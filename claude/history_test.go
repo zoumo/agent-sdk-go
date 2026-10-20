@@ -63,7 +63,7 @@ func TestHistoryBranchAndFailureContracts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := transcript(t, tc.rows...)
-			h, e := claude.Load(context.Background(), o)
+			h, e := claude.Load(context.Background(), loadOptions(t, o))
 			require.NoError(t, e)
 			defer h.Close()
 			var ids []string
@@ -141,7 +141,7 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			h, e := claude.Load(ctx, o)
+			h, e := claude.Load(ctx, loadOptions(t, o))
 			require.NoError(t, e)
 			defer h.Close()
 			if mode == "cancel" || mode == "close" || mode == "mutation" {
@@ -190,10 +190,10 @@ func TestHistorySessionsAreIsolated(t *testing.T) {
 	second := o
 	second.SessionID = "00000000-0000-4000-8000-000000000002"
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), second.SessionID+".jsonl"), []byte(strings.ReplaceAll(strings.ReplaceAll(string(b), o.SessionID, second.SessionID), "first session", "second session")), 0600))
-	slow, e := claude.Load(context.Background(), o)
+	slow, e := claude.Load(context.Background(), loadOptions(t, o))
 	require.NoError(t, e)
 	defer slow.Close()
-	fast, e := claude.Load(context.Background(), second)
+	fast, e := claude.Load(context.Background(), loadOptions(t, second))
 	require.NoError(t, e)
 	defer fast.Close()
 	var count int
@@ -214,7 +214,7 @@ func TestHistoryLoadsOriginalMainChain(t *testing.T) {
 		map[string]any{"type": "assistant", "uuid": "a", "parentUuid": "u", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "tool-1", "name": "Read", "input": map[string]any{"file_path": "x"}}}}},
 		map[string]any{"type": "user", "uuid": "r", "parentUuid": "a", "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": "tool-1", "content": "done"}}}},
 	)
-	h, err := claude.Load(context.Background(), opts)
+	h, err := claude.Load(context.Background(), loadOptions(t, opts))
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string
@@ -229,4 +229,133 @@ func TestHistoryLoadsOriginalMainChain(t *testing.T) {
 	<-h.Done()
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"u", "a", "r"}, ids)
+}
+
+func loadOptions(t *testing.T, h claude.HistoryOptions) claude.LoadOptions {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	return claude.LoadOptions{History: h, Options: claude.Options{CLIPath: exe, Env: []string{"HOME=" + h.ConfigDir, "CLAUDE_GO_FIXTURE=session_load", "CLAUDE_GO_SESSION_ID=" + h.SessionID, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}}
+}
+
+func TestLoadResumesReplaysAndContinuesSameSession(t *testing.T) {
+	o := transcript(t, map[string]any{"type": "user", "uuid": "old-user", "parentUuid": nil, "message": map[string]any{"content": "old input"}}, map[string]any{"type": "assistant", "uuid": "old-answer", "parentUuid": "old-user", "message": map[string]any{"content": "old answer"}})
+	opts := loadOptions(t, o)
+	trace := filepath.Join(t.TempDir(), "stdin.jsonl")
+	opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_TRANSCRIPT="+trace)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, err := claude.Load(ctx, opts)
+	require.NoError(t, err)
+	defer h.Close()
+	_, err = h.Client()
+	require.ErrorIs(t, err, claude.ErrLoadPending)
+	var ids []string
+	for r := range h.Records() {
+		ids = append(ids, r.UUID)
+	}
+	<-h.Done()
+	require.NoError(t, h.Err())
+	require.Equal(t, []string{"old-user", "old-answer"}, ids)
+	c, err := h.Client()
+	require.NoError(t, err)
+	require.Equal(t, o.SessionID, c.RequestedResumeID())
+	observed, ok := c.SessionID()
+	require.False(t, ok)
+	require.Empty(t, observed)
+	cancel()
+	require.NoError(t, c.Send(context.Background(), "new input"))
+	receiveCtx, stop := context.WithTimeout(context.Background(), time.Second)
+	defer stop()
+	for {
+		r, e := c.Receive(receiveCtx)
+		require.NoError(t, e)
+		if event, ok := r.(claude.Event); ok && event.System != nil {
+			require.Equal(t, o.SessionID, event.SessionID)
+			break
+		}
+	}
+	data, err := os.ReadFile(trace)
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "old input")
+	require.Contains(t, string(data), "new input")
+	require.NoError(t, h.Close())
+	require.Error(t, c.Send(context.Background(), "after close"))
+}
+
+func TestLoadRejectsNativeResumeFailures(t *testing.T) {
+	for _, mode := range []string{"bad-id", "start-failure", "initialize-failure", "cancel-startup", "config-conflict"} {
+		t.Run(mode, func(t *testing.T) {
+			o := transcript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "stored"}})
+			opts := loadOptions(t, o)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			switch mode {
+			case "bad-id":
+				opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_FIXTURE=session_load_bad_id")
+			case "start-failure":
+				opts.Options.CLIPath = filepath.Join(t.TempDir(), "missing")
+			case "initialize-failure":
+				opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_FIXTURE=init_error")
+			case "cancel-startup":
+				opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_FIXTURE=init_hang")
+				opts.Options.InitializeTimeout = 100 * time.Millisecond
+			case "config-conflict":
+				opts.Options.ResumeID = "foreign"
+			}
+			h, e := claude.Load(ctx, opts)
+			if mode == "config-conflict" {
+				require.Error(t, e)
+				return
+			}
+			require.NoError(t, e)
+			defer h.Close()
+			var count int
+			for range h.Records() {
+				count++
+			}
+			<-h.Done()
+			require.Zero(t, count)
+			require.Error(t, h.Err())
+			_, e = h.Client()
+			require.Error(t, e)
+		})
+	}
+}
+
+func TestLoadAcceptsNativeResumeMetadata(t *testing.T) {
+	o := transcript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "retained"}})
+	opts := loadOptions(t, o)
+	opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_FIXTURE=session_load_metadata", "CLAUDE_GO_HISTORY_FILE="+historyPath(t, o))
+	h, e := claude.Load(context.Background(), opts)
+	require.NoError(t, e)
+	defer h.Close()
+	var ids []string
+	for r := range h.Records() {
+		ids = append(ids, r.UUID)
+	}
+	<-h.Done()
+	require.NoError(t, h.Err())
+	require.Equal(t, []string{"u"}, ids)
+	_, e = h.Client()
+	require.NoError(t, e)
+}
+
+func TestLoadRejectsResumeHistoryChanges(t *testing.T) {
+	for _, mode := range []string{"session_load_foreign_metadata", "session_load_conversation"} {
+		t.Run(mode, func(t *testing.T) {
+			o := transcript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "retained"}})
+			opts := loadOptions(t, o)
+			opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_FIXTURE="+mode, "CLAUDE_GO_HISTORY_FILE="+historyPath(t, o))
+			h, err := claude.Load(context.Background(), opts)
+			require.NoError(t, err)
+			defer h.Close()
+			for range h.Records() {
+			}
+			<-h.Done()
+			require.Error(t, h.Err())
+			_, err = h.Client()
+			require.Error(t, err)
+		})
+	}
 }

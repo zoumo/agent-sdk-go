@@ -111,6 +111,7 @@ type Client struct {
 	cleanupErr                          error
 	stderrTail                          []byte
 	sessionID                           string
+	strictResumeID                      string
 	pending                             map[string]pendingControl
 	nextID                              atomic.Uint64
 	epoch                               uint64
@@ -123,6 +124,10 @@ type Client struct {
 // cleanup before returning. No Claude CLI version probe or network call is made
 // by the SDK itself; starting a real CLI can use its configured account.
 func Open(ctx context.Context, options Options) (*Client, error) {
+	return open(ctx, options, "")
+}
+
+func open(ctx context.Context, options Options, expectedResumeID string) (*Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -177,7 +182,7 @@ func Open(ctx context.Context, options Options) (*Client, error) {
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &Client{tree: tree, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
+	c := &Client{tree: tree, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
 		responses:      make(chan incomingControl, options.Limits.ControlBuffer),
 		permissionJobs: make(chan *PermissionRequest, options.Limits.ControlBuffer), epoch: connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
@@ -494,6 +499,9 @@ func (c *Client) control(ctx context.Context, subtype string, request any) (json
 }
 
 func (c *Client) route(event Event) error {
+	if c.strictResumeID != "" && event.SessionID != "" && event.ParentToolUseID == nil && (event.System != nil || event.Result != nil) && event.SessionID != c.strictResumeID {
+		return fmt.Errorf("%w: loaded native session identity changed", ErrProtocol)
+	}
 	if (event.System != nil || event.Result != nil) && event.SessionID != "" {
 		c.mu.Lock()
 		c.sessionID = event.SessionID

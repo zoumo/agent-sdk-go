@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -9,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"regexp"
 
@@ -55,23 +53,18 @@ func (e *HistoryError) Error() string { return "claude history: " + e.Reason }
 var historyUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var projectUnsafe = regexp.MustCompile(`[^a-zA-Z0-9]`)
 
-// Load accepts asynchronous read-only replay. ctx remains the replay
-// lifetime; drain Records and check Err, or Close to cancel. No process is run.
-// Only the latest retained main parentUuid chain is selected. Native compaction
-// summaries replace earlier content; sidechain files and abandoned branches are
-// outside this API. Writers must be quiescent; observed file mutation fails.
-func Load(ctx context.Context, o HistoryOptions) (*History, error) {
+func prepareHistory(ctx context.Context, o HistoryOptions) (HistoryOptions, string, error) {
 	if ctx == nil {
-		return nil, errors.New("claude history: nil context")
+		return o, "", errors.New("claude history: nil context")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return o, "", err
 	}
 	if !historyUUID.MatchString(o.SessionID) || !filepath.IsAbs(o.CWD) || !filepath.IsAbs(o.ConfigDir) {
-		return nil, errors.New("claude history: native UUID and absolute cwd/config directory required")
+		return o, "", errors.New("claude history: native UUID and absolute cwd/config directory required")
 	}
 	if o.MaxBytes < 0 || o.MaxRecords < 0 || o.MaxRecordBytes < 0 {
-		return nil, errors.New("claude history: negative limit")
+		return o, "", errors.New("claude history: negative limit")
 	}
 	if o.MaxBytes == 0 {
 		o.MaxBytes = 512 << 20
@@ -84,18 +77,16 @@ func Load(ctx context.Context, o HistoryOptions) (*History, error) {
 	}
 	cwd, err := filepath.EvalSymlinks(o.CWD)
 	if err != nil {
-		return nil, err
+		return o, "", err
 	}
 	o.CWD = cwd
 	key := projectUnsafe.ReplaceAllString(cwd, "-")
 	// Do not prefix-search ambiguous truncated/native legacy project keys.
 	if len(key) > 200 {
-		return nil, errors.New("claude history: truncated project keys unsupported")
+		return o, "", errors.New("claude history: truncated project keys unsupported")
 	}
 	path := filepath.Join(o.ConfigDir, "projects", key, o.SessionID+".jsonl")
-	return history.Start(ctx, func(ctx context.Context, send func(HistoryRecord) error) error {
-		return replayTranscript(ctx, o, path, send)
-	}), nil
+	return o, path, nil
 }
 
 type transcriptLink struct {
@@ -107,7 +98,7 @@ type transcriptLink struct {
 	team       string
 }
 
-func replayTranscript(ctx context.Context, o HistoryOptions, path string, send func(HistoryRecord) error) error {
+func replayTranscript(ctx context.Context, o HistoryOptions, path string, send func(HistoryRecord) error, before func(context.Context) error) error {
 	f, err := openHistoryFile(path)
 	if err != nil {
 		return err
@@ -122,23 +113,16 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 	}
 	links := make(map[string]transcriptLink)
 	order := make([]string, 0)
-	scan := bufio.NewScanner(io.NewSectionReader(f, 0, initial.Size()))
-	scan.Buffer(make([]byte, min(4096, o.MaxRecordBytes)), o.MaxRecordBytes)
-	scan.Split(func(data []byte, atEOF bool) (int, []byte, error) {
-		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			return i + 1, data[:i], nil
-		}
-		if atEOF && len(data) > 0 {
-			return 0, nil, errors.New("claude history: incomplete final JSONL record")
-		}
-		return 0, nil, nil
-	})
+	scan := transcriptScanner(io.NewSectionReader(f, 0, initial.Size()), o.MaxRecordBytes)
+	prefixDigest := sha256.New()
 	var offset int64
 	for scan.Scan() {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		raw := scan.Bytes()
+		_, _ = prefixDigest.Write(raw)
+		_, _ = prefixDigest.Write([]byte{'\n'})
 		size := len(raw)
 		start := offset
 		offset += int64(size) + 1
@@ -165,9 +149,10 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 			if entry.UUID == "" {
 				return bad("missing chain UUID")
 			}
-		case "summary", "file-history-snapshot", "queue-operation", "last-prompt", "custom-title", "tag", "agent-name", "agent-color", "pr-link", "saved_hook_context":
-			continue // Native metadata, outside conversation-chain scope.
 		default:
+			if transcriptMetadata(entry.Type) {
+				continue
+			}
 			return bad("unsupported entry type: " + entry.Type)
 		}
 		if entry.SessionID != o.SessionID || entry.CWD != o.CWD {
@@ -304,6 +289,9 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 		chain = append(chain, id)
 		id = l.record.ParentUUID
 	}
+	if err := before(ctx); err != nil {
+		return err
+	}
 	for i := len(chain) - 1; i >= 0; i-- {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -328,16 +316,7 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 			return err
 		}
 	}
-	final, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	current, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !os.SameFile(initial, current) || final.Size() != initial.Size() || !final.ModTime().Equal(initial.ModTime()) {
-		return &HistoryError{Reason: "transcript changed during replay"}
-	}
-	return nil
+	var frozen [32]byte
+	copy(frozen[:], prefixDigest.Sum(nil))
+	return verifyTranscriptSnapshot(ctx, f, path, initial, frozen, o)
 }

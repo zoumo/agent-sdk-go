@@ -17,7 +17,7 @@ type Stream[T any] struct {
 
 // Start installs the receiving channel before starting production. The context
 // controls the complete replay lifetime, including blocked sends and source I/O.
-func Start[T any](ctx context.Context, run func(context.Context, func(T) error) error) *Stream[T] {
+func Start[T any](ctx context.Context, run func(context.Context, func(T) error) error, finish func(error) error) *Stream[T] {
 	ctx, cancel := context.WithCancel(ctx)
 	s := &Stream[T]{records: make(chan T), done: make(chan struct{}), cancel: cancel}
 	go func() {
@@ -35,6 +35,9 @@ func Start[T any](ctx context.Context, run func(context.Context, func(T) error) 
 		})
 		if err == nil {
 			err = ctx.Err()
+		}
+		if finish != nil {
+			err = finish(err)
 		}
 		s.mu.Lock()
 		s.err = err

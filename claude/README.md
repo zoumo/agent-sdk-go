@@ -216,16 +216,38 @@ history; `Options.Types()` omits this runtime configuration. See the
 
 [Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.
 
-## Read stored history
+## Load an existing session and replay history
 
-`Load(ctx, HistoryOptions{SessionID: id, CWD: absoluteCWD,
-ConfigDir: absoluteClaudeConfigDir})` returns an asynchronous `History` handle.
-Drain `Records()`, then check `Err()`; `Close()` cancels and waits. The load context
-controls the entire replay lifetime. No Claude process or model is started.
-Records retain native raw JSON, message content, UUID, parent and timestamp.
-This is the selected retained main chain, including compaction summaries, not
-all branches or reconstructed live stream chunks. Unknown message blocks remain
-raw; corrupt/unsupported transcript records fail explicitly. Local transcript
-loading currently supports Unix, exact project keys up to 200 characters, and
-quiescent regular files. It does not load separate subagent files or search all
-projects. See the [history contract](../docs/specs/async-history.md).
+```go
+loaded, err := claude.Load(ctx, claude.LoadOptions{
+    Options: claude.Options{CLIPath: claudePath},
+    History: claude.HistoryOptions{
+        SessionID: id, CWD: absoluteCWD, ConfigDir: absoluteClaudeConfigDir,
+    },
+})
+// Check err, then defer loaded.Close().
+for record := range loaded.Records() {
+    // record.Raw/Message retain native content, UUID, parent and timestamp.
+    _ = record
+}
+// Check loaded.Err(), then obtain the ordinary resumed Client:
+client, err := loaded.Client()
+// Check err; client.Send(newContext, text) and client.Receive continue the session.
+```
+
+Load validates the stored main chain and starts the normal CLI resume process
+before delivering records. It never sends historic content back as prompts.
+Client returns ErrLoadPending until replay finishes successfully. Open with
+Options.ResumeID remains ordinary resume without SDK history replay. The load
+context controls startup and replay; canceling it after success does not close
+the Client. LoadedSession.Close cancels replay and closes the owned child.
+
+The selected retained main chain includes compaction summaries, not abandoned
+branches, standalone subagent files or deleted content. Unknown blocks remain
+raw; corrupt/unsupported records fail explicitly. Local transcript loading
+supports Unix, exact project keys up to 200 characters and quiescent regular
+files. ConfigDir is also fixed in the child environment. RequestedResumeID stays
+separate from observed SessionID: native initialize does not itself report the
+session ID, and the SDK does not invent an observation from a request. Later
+known root system/result identity mismatches terminate the loaded Client.
+See the [history contract](../docs/specs/async-history.md).

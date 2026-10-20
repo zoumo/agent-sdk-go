@@ -67,6 +67,29 @@ func runFixture(mode string) {
 		}
 	}
 	switch mode {
+	case "session_load_metadata", "session_load_foreign_metadata", "session_load_conversation":
+		f, e := os.OpenFile(os.Getenv("CLAUDE_GO_HISTORY_FILE"), os.O_APPEND|os.O_WRONLY, 0600)
+		if e != nil {
+			os.Exit(12)
+		}
+		for _, kind := range []string{"atis-latch", "mode"} {
+			id := os.Getenv("CLAUDE_GO_SESSION_ID")
+			if mode == "session_load_foreign_metadata" {
+				id = "foreign-session"
+			}
+			if mode == "session_load_conversation" {
+				kind = "user"
+			}
+			b, _ := json.Marshal(map[string]any{"type": kind, "sessionId": id})
+			if _, e = f.Write(append(b, '\n')); e != nil {
+				os.Exit(13)
+			}
+		}
+		if f.Close() != nil {
+			os.Exit(14)
+		}
+	case "session_load_bad_id":
+		fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": "wrong-native-id"})
 	case "tree_early":
 		request, _ := init["request"].(map[string]any)
 		if request["forwardSubagentText"] != true {

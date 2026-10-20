@@ -62,7 +62,7 @@ func runSessionFixture(mode string, reader *bufio.Reader) {
 			}
 			continue
 		}
-		if mode == "session_resume" {
+		if mode == "session_resume" || mode == "session_load" {
 			fixtureEmit(map[string]any{"type": "echo", "wire": json.RawMessage(line)})
 			fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": os.Getenv("CLAUDE_GO_SESSION_ID"), "future": "preserved"})
 			continue

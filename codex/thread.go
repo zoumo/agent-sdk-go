@@ -14,6 +14,15 @@ import (
 // Native history/path selectors can select another identity; such a response is
 // an ErrProtocol failure under this method's strict identity contract.
 func (c *Client) ResumeThread(ctx context.Context, p types.ThreadResumeParams) (types.ThreadResumeResponse, error) {
+	finish, err := c.beginThreadOperation(p.ThreadID, true)
+	if err != nil {
+		return types.ThreadResumeResponse{}, err
+	}
+	defer finish()
+	return c.resumeThread(ctx, p)
+}
+
+func (c *Client) resumeThread(ctx context.Context, p types.ThreadResumeParams) (types.ThreadResumeResponse, error) {
 	r := resumeThreadResult{expectedID: p.ThreadID}
 	err := c.Call(ctx, "thread/resume", p, &r)
 	return r.response, err

@@ -14,11 +14,58 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
+var delayedLoadResume json.RawMessage // Owned by the single-threaded subprocess peer.
+
 func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
 	if !strings.HasPrefix(mode, "history") {
 		return false
 	}
 	switch m.Method {
+	case "echo":
+		if mode == "history-resume-blocked" && delayedLoadResume != nil {
+			send(delayedLoadResume, resumeResponseJSON("native-thread-42"))
+			delayedLoadResume = nil
+			send(m.ID, string(m.Params))
+			return true
+		}
+	case "thread/resume":
+		var p types.ThreadResumeParams
+		if json.Unmarshal(m.Params, &p) != nil {
+			os.Exit(89)
+		}
+		if !p.ExcludeTurns.ValueOr(false) {
+			send(m.ID, `{}`)
+			return true
+		}
+		switch mode {
+		case "history-resume-error":
+			fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32602,\"message\":\"resume missing\"}}\n", m.ID)
+			return true
+		case "history-resume-mismatch":
+			send(m.ID, resumeResponseJSON("different"))
+			return true
+		case "history-resume-cwd":
+			send(m.ID, strings.ReplaceAll(resumeResponseJSON(p.ThreadID), `/synthetic`, `/foreign`))
+			return true
+		case "history-resume-blocked":
+			delayedLoadResume = append(json.RawMessage(nil), m.ID...)
+			if os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".resume-blocked", []byte("received"), 0600) != nil {
+				os.Exit(90)
+			}
+			return true
+		}
+		send(m.ID, resumeResponseJSON(p.ThreadID))
+		return true
+	case "thread/unsubscribe":
+		if mode == "history-release-error" {
+			send(m.ID, `{"status":"unknown-future"}`)
+			return true
+		}
+		send(m.ID, `{"status":"unsubscribed"}`)
+		return true
+	case "turn/start":
+		send(m.ID, `{"turn":{"id":"continued","status":"inProgress","items":[]}}`)
+		return true
 	case "thread/read":
 		thread := strings.ReplaceAll(threadJSON, `"ephemeral":true`, `"ephemeral":false`)
 		if mode == "history-isolation" {
@@ -212,6 +259,91 @@ func TestHistoryPagesFullTurnsInOrder(t *testing.T) {
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"t1", "t2"}, ids)
 	for _, r := range trace(t, f.trace) {
-		require.NotContains(t, []string{"thread/resume", "turn/start", "thread/start"}, r.Method)
+		require.NotContains(t, []string{"turn/start", "thread/start"}, r.Method)
+	}
+}
+
+func TestLoadResumesReplaysAndContinuesSameThread(t *testing.T) {
+	f := startFake(t, "history", codex.Limits{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, e := f.c.Load(ctx, codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+	require.NoError(t, e)
+	defer h.Close()
+	p := types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{}}
+	_, e = f.c.StartTurn(context.Background(), p)
+	require.ErrorIs(t, e, codex.ErrLoadPending)
+	_, e = h.ResumeResponse()
+	require.ErrorIs(t, e, codex.ErrLoadPending)
+	var ids []string
+	for r := range h.Records() {
+		ids = append(ids, r.Turn.ID)
+	}
+	<-h.Done()
+	require.NoError(t, h.Err())
+	require.Equal(t, []string{"t1", "t2"}, ids)
+	resumed, e := h.ResumeResponse()
+	require.NoError(t, e)
+	require.Equal(t, "native-thread-42", resumed.Thread.ID)
+	cancel() // Successful load does not bind the ongoing session to this context.
+	turn, e := f.c.StartTurn(context.Background(), p)
+	require.NoError(t, e)
+	require.Equal(t, "continued", turn.Turn.ID)
+	methods := []string{}
+	for _, r := range trace(t, f.trace) {
+		methods = append(methods, r.Method)
+	}
+	require.Equal(t, []string{"initialize", "initialized", "thread/read", "thread/resume", "thread/read", "thread/turns/list", "thread/turns/list", "thread/read", "turn/start"}, methods)
+	require.NoError(t, h.Close())
+	var echoed string
+	require.NoError(t, f.c.Call(context.Background(), "echo", "shared connection usable", &echoed))
+}
+
+func TestLoadResumeFailureAndReleaseContracts(t *testing.T) {
+	for _, mode := range []string{"resume-error", "resume-mismatch", "resume-cwd", "resume-blocked", "release-error"} {
+		t.Run(mode, func(t *testing.T) {
+			f := startFake(t, "history-"+mode, codex.Limits{})
+			h, e := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+			require.NoError(t, e)
+			defer h.Close()
+			_, e = f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"})
+			require.ErrorIs(t, e, codex.ErrLoadConflict)
+			_, e = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: "native-thread-42"})
+			require.ErrorIs(t, e, codex.ErrLoadConflict)
+			if mode == "resume-blocked" {
+				require.Eventually(t, func() bool { _, e := os.Stat(f.trace + ".resume-blocked"); return e == nil }, time.Second, time.Millisecond)
+				require.ErrorContains(t, h.Close(), "unconfirmed")
+				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
+				require.ErrorIs(t, e, codex.ErrClosed)
+				_, e = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: "native-thread-42"})
+				require.ErrorIs(t, e, codex.ErrLoadConflict)
+				var echoed string
+				require.NoError(t, f.c.Call(context.Background(), "echo", "release late resume response", &echoed))
+				require.Equal(t, "release late resume response", echoed)
+				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
+				require.ErrorIs(t, e, codex.ErrClosed)
+			}
+			var count int
+			for range h.Records() {
+				count++
+			}
+			<-h.Done()
+			if mode == "release-error" {
+				require.NoError(t, h.Err())
+				require.Equal(t, 2, count)
+				require.ErrorContains(t, h.Close(), "unsubscribe")
+				require.ErrorContains(t, h.Close(), "unsubscribe")
+			} else {
+				require.Error(t, h.Err())
+				require.Zero(t, count)
+			}
+			if mode != "release-error" && mode != "resume-blocked" {
+				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
+				require.Error(t, e)
+			}
+			for _, entry := range trace(t, f.trace) {
+				require.NotEqual(t, "thread/start", entry.Method)
+			}
+		})
 	}
 }

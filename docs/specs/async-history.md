@@ -4,8 +4,8 @@ Status: implementation spec, 2026-10-21. Baseline: `6dbf3e9c8264`.
 
 ## Public API and agreed test seams
 
-The public seams are `codex.Client.LoadHistory(ctx, HistoryOptions)` and
-`claude.LoadHistory(ctx, HistoryOptions)`. Each returns a native `History`
+The public seams are `codex.Client.Load(ctx, HistoryOptions)` and
+`claude.Load(ctx, HistoryOptions)`. Each returns a native `History`
 handle before reading all history. The handle exposes `Records()`, `Done()`,
 `Err()` and idempotent `Close()`. Records are history snapshots, never live
 notifications, approval handles or current running-state transitions. The load

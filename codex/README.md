@@ -595,7 +595,7 @@ observed. See [recorded coverage and explicit real-agent maintenance](docs/recor
 
 ## Read stored history
 
-`client.LoadHistory(ctx, HistoryOptions{ThreadID: id, CWD: absoluteCWD,
+`client.Load(ctx, HistoryOptions{ThreadID: id, CWD: absoluteCWD,
 CodexHome: expectedAbsoluteCodexHome})` returns an asynchronous `History` handle.
 Drain `Records()`, then check `Err()`; `Close()` cancels and waits without closing
 the client. The load context controls the entire replay lifetime. Replay reads

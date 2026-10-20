@@ -18,7 +18,7 @@ func TestHistoryRejectsFIFOWithoutBlockingClose(t *testing.T) {
 	path := historyPath(t, o)
 	require.NoError(t, os.Remove(path))
 	require.NoError(t, syscall.Mkfifo(path, 0600))
-	h, e := claude.LoadHistory(context.Background(), o)
+	h, e := claude.Load(context.Background(), o)
 	require.NoError(t, e)
 	done := make(chan error, 1)
 	go func() { done <- h.Close() }()

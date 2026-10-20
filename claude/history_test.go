@@ -63,7 +63,7 @@ func TestHistoryBranchAndFailureContracts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := transcript(t, tc.rows...)
-			h, e := claude.LoadHistory(context.Background(), o)
+			h, e := claude.Load(context.Background(), o)
 			require.NoError(t, e)
 			defer h.Close()
 			var ids []string
@@ -141,7 +141,7 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			h, e := claude.LoadHistory(ctx, o)
+			h, e := claude.Load(ctx, o)
 			require.NoError(t, e)
 			defer h.Close()
 			if mode == "cancel" || mode == "close" || mode == "mutation" {
@@ -190,10 +190,10 @@ func TestHistorySessionsAreIsolated(t *testing.T) {
 	second := o
 	second.SessionID = "00000000-0000-4000-8000-000000000002"
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), second.SessionID+".jsonl"), []byte(strings.ReplaceAll(strings.ReplaceAll(string(b), o.SessionID, second.SessionID), "first session", "second session")), 0600))
-	slow, e := claude.LoadHistory(context.Background(), o)
+	slow, e := claude.Load(context.Background(), o)
 	require.NoError(t, e)
 	defer slow.Close()
-	fast, e := claude.LoadHistory(context.Background(), second)
+	fast, e := claude.Load(context.Background(), second)
 	require.NoError(t, e)
 	defer fast.Close()
 	var count int
@@ -214,7 +214,7 @@ func TestHistoryLoadsOriginalMainChain(t *testing.T) {
 		map[string]any{"type": "assistant", "uuid": "a", "parentUuid": "u", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "tool-1", "name": "Read", "input": map[string]any{"file_path": "x"}}}}},
 		map[string]any{"type": "user", "uuid": "r", "parentUuid": "a", "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": "tool-1", "content": "done"}}}},
 	)
-	h, err := claude.LoadHistory(context.Background(), opts)
+	h, err := claude.Load(context.Background(), opts)
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string

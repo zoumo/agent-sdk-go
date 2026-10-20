@@ -87,11 +87,11 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 func TestHistorySessionsAndNativeItemPage(t *testing.T) {
 	f := startFake(t, "history-isolation", codex.Limits{})
 	o := codex.HistoryOptions{ThreadID: "first", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}
-	slow, e := f.c.LoadHistory(context.Background(), o)
+	slow, e := f.c.Load(context.Background(), o)
 	require.NoError(t, e)
 	defer slow.Close()
 	o.ThreadID = "second"
-	fast, e := f.c.LoadHistory(context.Background(), o)
+	fast, e := f.c.Load(context.Background(), o)
 	require.NoError(t, e)
 	defer fast.Close()
 	var count int
@@ -127,7 +127,7 @@ func TestHistoryFailuresStayFailures(t *testing.T) {
 			case "limit":
 				o.MaxRecords = 3
 			}
-			h, e := f.c.LoadHistory(context.Background(), o)
+			h, e := f.c.Load(context.Background(), o)
 			if mode == "home" {
 				require.Error(t, e)
 				return
@@ -162,7 +162,7 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 			f := startFake(t, "history-blocked", codex.Limits{})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			h, e := f.c.LoadHistory(ctx, codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+			h, e := f.c.Load(ctx, codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
 			require.NoError(t, e)
 			defer h.Close()
 			if mode != "slow-close" && mode != "slow-client-close" {
@@ -199,7 +199,7 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 
 func TestHistoryPagesFullTurnsInOrder(t *testing.T) {
 	f := startFake(t, "history", codex.Limits{})
-	h, err := f.c.LoadHistory(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+	h, err := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string

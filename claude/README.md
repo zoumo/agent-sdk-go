@@ -218,7 +218,7 @@ history; `Options.Types()` omits this runtime configuration. See the
 
 ## Read stored history
 
-`LoadHistory(ctx, HistoryOptions{SessionID: id, CWD: absoluteCWD,
+`Load(ctx, HistoryOptions{SessionID: id, CWD: absoluteCWD,
 ConfigDir: absoluteClaudeConfigDir})` returns an asynchronous `History` handle.
 Drain `Records()`, then check `Err()`; `Close()` cancels and waits. The load context
 controls the entire replay lifetime. No Claude process or model is started.

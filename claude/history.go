@@ -55,12 +55,12 @@ func (e *HistoryError) Error() string { return "claude history: " + e.Reason }
 var historyUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 var projectUnsafe = regexp.MustCompile(`[^a-zA-Z0-9]`)
 
-// LoadHistory accepts asynchronous read-only replay. ctx remains the replay
+// Load accepts asynchronous read-only replay. ctx remains the replay
 // lifetime; drain Records and check Err, or Close to cancel. No process is run.
 // Only the latest retained main parentUuid chain is selected. Native compaction
 // summaries replace earlier content; sidechain files and abandoned branches are
 // outside this API. Writers must be quiescent; observed file mutation fails.
-func LoadHistory(ctx context.Context, o HistoryOptions) (*History, error) {
+func Load(ctx context.Context, o HistoryOptions) (*History, error) {
 	if ctx == nil {
 		return nil, errors.New("claude history: nil context")
 	}

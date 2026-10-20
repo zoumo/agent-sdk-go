@@ -45,13 +45,13 @@ func (c *Client) ListThreadItems(ctx context.Context, p types.ThreadItemsListPar
 	return r, err
 }
 
-// LoadHistory starts asynchronous, read-only, oldest-first full-turn replay.
+// Load starts asynchronous, read-only, oldest-first full-turn replay.
 // ctx owns the replay lifetime, not only admission. Drain Records then check Err;
 // Close cancels blocked delivery/pagination without closing the Client. Missing
 // or unsupported sources fail through Err; no fallback creates/resumes a thread.
 // Rejects active threads and observed metadata changes. Pagination is not an
 // atomic snapshot: callers must quiesce external writers for a stable view.
-func (c *Client) LoadHistory(ctx context.Context, o HistoryOptions) (*History, error) {
+func (c *Client) Load(ctx context.Context, o HistoryOptions) (*History, error) {
 	if ctx == nil {
 		return nil, errors.New("codex history: nil context")
 	}

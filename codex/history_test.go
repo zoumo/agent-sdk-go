@@ -233,7 +233,12 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 				select {
 				case r := <-h.Events():
 					require.Equal(t, "t1", r.History.TurnID)
-					<-h.Events() // Drain the first turn snapshot before the next page.
+					select {
+					case terminal := <-h.Events():
+						require.Equal(t, "turn/completed", terminal.Method)
+					case <-time.After(time.Second):
+						t.Fatal("first turn snapshot missing")
+					}
 				case <-time.After(time.Second):
 					t.Fatal("first event lost")
 				}
@@ -348,16 +353,13 @@ func TestLoadResumeFailureAndReleaseContracts(t *testing.T) {
 				require.ErrorIs(t, e, codex.ErrClosed)
 			}
 			var count int
-			for r := range h.Events() {
-				if r.Method != "turn/completed" {
-					continue
-				}
+			for range h.Events() {
 				count++
 			}
 			<-h.Done()
 			if mode == "release-error" {
 				require.NoError(t, h.Err())
-				require.Equal(t, 2, count)
+				require.Equal(t, 4, count)
 				require.ErrorContains(t, h.Close(), "unsubscribe")
 				require.ErrorContains(t, h.Close(), "unsubscribe")
 			} else {

@@ -4,10 +4,12 @@
 
 **Blocked by:** 01: Consume Codex Load through the real-time event type; 02: Consume Claude Load through the real-time event type.
 
-**Status:** in-progress
+**Status:** done
 
-- [ ] No public Load example or active contract requires separate snapshot consumption.
-- [ ] Shared handlers accept both replay and real-time provider-native event types.
-- [ ] Required pinned Go offline, race, vet, generation and dependency checks pass.
-- [ ] Standards and Spec reviews are completed and actionable findings resolved.
-- [ ] Only task files are committed on the current branch; no push or release.
+- [x] No public Load example or active contract requires separate snapshot consumption.
+- [x] Shared handlers accept both replay and real-time provider-native event types.
+- [x] Required pinned Go offline, race, vet, generation and dependency checks pass.
+- [x] Standards and Spec reviews are completed and actionable findings resolved.
+- [x] Only task files are committed on the current branch; no push or release.
+
+Offline validation, full race and vet passed. Standards review found two test regressions; both were fixed, passed focused regression tests and were independently rechecked. Spec review found no actionable issues. No push or release.

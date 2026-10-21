@@ -1,6 +1,6 @@
 # Load history through native event types
 
-Status: approved for implementation, 2026-10-22. Local file tickets are the configured tracker.
+Status: implemented and independently reviewed, 2026-10-22. Local file tickets are the configured tracker. See [validation evidence](history-events-validation.md).
 Supersedes the separate public snapshot-consumption contract in async-history.
 
 ## Problem Statement

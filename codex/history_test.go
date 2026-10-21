@@ -65,6 +65,9 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 		return true
 	case "turn/start":
 		send(m.ID, `{"turn":{"id":"continued","status":"inProgress","items":[]}}`)
+		if mode == "history-events" {
+			fmt.Fprintln(os.Stdout, `{"method":"item/completed","params":{"threadId":"native-thread-42","turnId":"continued","completedAtMs":123,"item":{"type":"agentMessage","id":"live-item","text":"live answer"}}}`)
+		}
 		return true
 	case "thread/read":
 		thread := strings.ReplaceAll(threadJSON, `"ephemeral":true`, `"ephemeral":false`)
@@ -89,6 +92,14 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 		_ = json.Unmarshal(m.Params, &p)
 		if p["sortDirection"] != "asc" || p["itemsView"] != "full" {
 			send(m.ID, `{"data":[],"nextCursor":"wrong-request"}`)
+			return true
+		}
+		if mode == "history-rich" {
+			send(m.ID, `{"data":[{"id":"t1","status":"interrupted","items":[{"id":"tool","type":"commandExecution","command":"never executed","commandActions":[],"cwd":"/synthetic","status":"failed","exitCode":7,"aggregatedOutput":"retained failure","future":true},{"id":"compact","type":"contextCompaction"},{"id":"future","type":"futureItem","opaque":{"retained":true}}],"error":null,"futureTurn":true}],"nextCursor":null}`)
+			return true
+		}
+		if mode == "history-future-status" {
+			send(m.ID, `{"data":[{"id":"t1","status":"futureStatus","items":[],"error":null,"opaque":true}],"nextCursor":null}`)
 			return true
 		}
 		if p["cursor"] == nil {
@@ -142,8 +153,11 @@ func TestHistorySessionsAndNativeItemPage(t *testing.T) {
 	require.NoError(t, e)
 	defer fast.Close()
 	var count int
-	for r := range fast.Records() {
-		require.Equal(t, "second", r.ThreadID)
+	for r := range fast.Events() {
+		if r.Method != "turn/completed" {
+			continue
+		}
+		require.Equal(t, "second", r.History.ThreadID)
 		count++
 	}
 	require.NoError(t, fast.Err())
@@ -182,11 +196,14 @@ func TestHistoryFailuresStayFailures(t *testing.T) {
 			require.NoError(t, e)
 			defer h.Close()
 			var ids []string
-			for r := range h.Records() {
-				ids = append(ids, r.Turn.ID)
-				if mode == "unknown" && r.Turn.ID == "t2" {
-					require.NotEmpty(t, r.Turn.Items[0].Unknown)
-					require.Contains(t, string(r.Raw), "futureItem")
+			for r := range h.Events() {
+				if r.Method != "turn/completed" {
+					continue
+				}
+				ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
+				if mode == "unknown" && r.Data.(*types.TurnCompletedNotification).Turn.ID == "t2" {
+					require.NotEmpty(t, r.Data.(*types.TurnCompletedNotification).Turn.Items[0].Unknown)
+					require.Contains(t, string(r.History.Raw), "futureItem")
 				}
 			}
 			<-h.Done()
@@ -214,8 +231,9 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 			defer h.Close()
 			if mode != "slow-close" && mode != "slow-client-close" {
 				select {
-				case r := <-h.Records():
-					require.Equal(t, "t1", r.Turn.ID)
+				case r := <-h.Events():
+					require.Equal(t, "t1", r.History.TurnID)
+					<-h.Events() // Drain the first turn snapshot before the next page.
 				case <-time.After(time.Second):
 					t.Fatal("first event lost")
 				}
@@ -250,10 +268,13 @@ func TestHistoryPagesFullTurnsInOrder(t *testing.T) {
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string
-	for r := range h.Records() {
-		ids = append(ids, r.Turn.ID)
-		require.True(t, json.Valid(r.Raw))
-		require.Equal(t, "native-thread-42", r.ThreadID)
+	for r := range h.Events() {
+		if r.Method != "turn/completed" {
+			continue
+		}
+		ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
+		require.True(t, json.Valid(r.History.Raw))
+		require.Equal(t, "native-thread-42", r.History.ThreadID)
 	}
 	<-h.Done()
 	require.NoError(t, h.Err())
@@ -276,8 +297,11 @@ func TestLoadResumesReplaysAndContinuesSameThread(t *testing.T) {
 	_, e = h.ResumeResponse()
 	require.ErrorIs(t, e, codex.ErrLoadPending)
 	var ids []string
-	for r := range h.Records() {
-		ids = append(ids, r.Turn.ID)
+	for r := range h.Events() {
+		if r.Method != "turn/completed" {
+			continue
+		}
+		ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
 	}
 	<-h.Done()
 	require.NoError(t, h.Err())
@@ -324,7 +348,10 @@ func TestLoadResumeFailureAndReleaseContracts(t *testing.T) {
 				require.ErrorIs(t, e, codex.ErrClosed)
 			}
 			var count int
-			for range h.Records() {
+			for r := range h.Events() {
+				if r.Method != "turn/completed" {
+					continue
+				}
 				count++
 			}
 			<-h.Done()

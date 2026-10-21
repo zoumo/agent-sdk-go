@@ -25,15 +25,7 @@ type HistoryOptions struct {
 	MaxIndexBytes int
 }
 
-// HistoryRecord preserves an entire native full turn, including item identities,
-// unknown variants and recorded timestamps. Raw is the original received turn
-// JSON, not a synthesized item/started or item/completed notification.
-type HistoryRecord struct {
-	ThreadID string
-	Turn     types.Turn
-	Raw      json.RawMessage
-}
-type History = history.Stream[HistoryRecord]
+type History = history.Stream[types.Event]
 
 var (
 	ErrLoadPending  = errors.New("codex: session load has not completed")
@@ -41,7 +33,7 @@ var (
 )
 
 // LoadedThread owns this connection's resumed-thread attachment and its replay.
-// Drain Records then check Err before StartTurn. Close releases the attachment;
+// Drain Events then check Err before StartTurn. Close releases the attachment;
 // it never closes the caller-owned Client or interrupts native work.
 type LoadedThread struct {
 	replay        *History
@@ -56,9 +48,9 @@ type LoadedThread struct {
 	closed        bool
 }
 
-func (h *LoadedThread) Records() <-chan HistoryRecord { return h.replay.Records() }
-func (h *LoadedThread) Done() <-chan struct{}         { return h.replay.Done() }
-func (h *LoadedThread) Err() error                    { return h.replay.Err() }
+func (h *LoadedThread) Events() <-chan types.Event { return h.replay.Records() }
+func (h *LoadedThread) Done() <-chan struct{}      { return h.replay.Done() }
+func (h *LoadedThread) Err() error                 { return h.replay.Err() }
 func (h *LoadedThread) ResumeResponse() (types.ThreadResumeResponse, error) {
 	select {
 	case <-h.Done():
@@ -166,7 +158,7 @@ func (c *Client) ListThreadItems(ctx context.Context, p types.ThreadItemsListPar
 
 // Load resumes the same native thread and asynchronously replays all retained
 // full turns oldest-first. Ordinary ResumeThread does not perform this replay.
-// ctx owns the replay lifetime, not only admission. Drain Records then check Err;
+// ctx owns the replay lifetime, not only admission. Drain Events then check Err;
 // Close cancels blocked delivery/pagination without closing the Client. Missing
 // or unsupported sources fail through Err; no fallback creates a thread.
 // Rejects active threads and observed metadata changes. Pagination is not an
@@ -218,7 +210,7 @@ func (c *Client) Load(ctx context.Context, o HistoryOptions) (*LoadedThread, err
 	}
 	h := &LoadedThread{client: c, threadID: o.ThreadID}
 	c.loads[o.ThreadID] = h
-	h.replay = history.Start(replayCtx, func(ctx context.Context, send func(HistoryRecord) error) (err error) {
+	h.replay = history.Start(replayCtx, func(ctx context.Context, send func(types.Event) error) (err error) {
 		if _, err = c.historyThread(ctx, o); err != nil {
 			return err
 		}
@@ -268,7 +260,7 @@ func (c *Client) historyThread(ctx context.Context, o HistoryOptions) (types.Thr
 	return t, nil
 }
 
-func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(HistoryRecord) error) error {
+func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(types.Event) error) error {
 	first, err := c.historyThread(ctx, o)
 	if err != nil {
 		return err
@@ -354,7 +346,7 @@ func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(
 				}
 				seenItems[item.ID] = true
 			}
-			if err := send(HistoryRecord{ThreadID: o.ThreadID, Turn: t, Raw: wire.Data[i]}); err != nil {
+			if err := replayTurn(o.ThreadID, wire.Data[i], send); err != nil {
 				return err
 			}
 		}
@@ -379,4 +371,51 @@ func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(
 		return errors.New("codex history: thread changed during replay")
 	}
 	return nil
+}
+
+// replayTurn projects retained snapshots without claiming live lifecycle timing.
+// Each delivered event owns its typed values and original source bytes.
+func replayTurn(threadID string, raw json.RawMessage, send func(types.Event) error) error {
+	var source struct {
+		ID    string            `json:"id"`
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &source); err != nil {
+		return err
+	}
+	for _, item := range source.Items {
+		n := &types.ItemCompletedNotification{ThreadID: threadID, TurnID: source.ID}
+		if err := json.Unmarshal(item, &n.Item); err != nil {
+			return err
+		}
+		var identity struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(item, &identity); err != nil {
+			return err
+		}
+		// completedAtMs is absent: a typed zero is not a recorded timestamp.
+		params, err := json.Marshal(map[string]any{"threadId": threadID, "turnId": source.ID, "item": n.Item})
+		if err != nil {
+			return err
+		}
+		if err := send(types.Event{Method: "item/completed", Params: params, Data: n, History: &types.HistorySource{ThreadID: threadID, TurnID: source.ID, ItemID: identity.ID, Raw: append(json.RawMessage(nil), item...), MissingFields: []string{"completedAtMs"}}}); err != nil {
+			return err
+		}
+	}
+	n := &types.TurnCompletedNotification{ThreadID: threadID}
+	if err := json.Unmarshal(raw, &n.Turn); err != nil {
+		return err
+	}
+	// Unknown future statuses cannot establish a terminal lifecycle event.
+	switch n.Turn.Status {
+	case types.TurnStatusCompleted, types.TurnStatusFailed, types.TurnStatusInterrupted:
+		params, err := json.Marshal(n)
+		if err != nil {
+			return err
+		}
+		return send(types.Event{Method: "turn/completed", Params: params, Data: n, History: &types.HistorySource{ThreadID: threadID, TurnID: source.ID, Raw: append(json.RawMessage(nil), raw...)}})
+	default:
+		return send(types.Event{Data: &n.Turn, History: &types.HistorySource{ThreadID: threadID, TurnID: source.ID, Raw: append(json.RawMessage(nil), raw...)}})
+	}
 }

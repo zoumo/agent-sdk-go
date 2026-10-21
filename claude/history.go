@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/history"
 )
 
@@ -26,9 +27,8 @@ type HistoryOptions struct {
 	MaxRecordBytes int
 }
 
-// HistoryRecord is a retained transcript entry, not a live Message. Message and
-// Raw preserve native blocks/unknown fields without manufacturing live events.
-type HistoryRecord struct {
+// historyRecord indexes retained transcript evidence before event projection.
+type historyRecord struct {
 	Type       string          `json:"type"`
 	UUID       string          `json:"uuid"`
 	ParentUUID string          `json:"parentUuid"`
@@ -39,7 +39,7 @@ type HistoryRecord struct {
 	Raw        json.RawMessage `json:"-"`
 }
 
-type History = history.Stream[HistoryRecord]
+type History = history.Stream[ReceivedEvent]
 
 // HistoryError retains the offending entry when a transcript cannot be loaded.
 // Raw can contain private transcript content; do not log it without redaction.
@@ -90,7 +90,7 @@ func prepareHistory(ctx context.Context, o HistoryOptions) (HistoryOptions, stri
 }
 
 type transcriptLink struct {
-	record     HistoryRecord
+	record     historyRecord
 	offset     int64
 	size       int
 	digest     [32]byte
@@ -98,7 +98,7 @@ type transcriptLink struct {
 	team       string
 }
 
-func replayTranscript(ctx context.Context, o HistoryOptions, path string, send func(HistoryRecord) error, before func(context.Context) error) error {
+func replayTranscript(ctx context.Context, o HistoryOptions, path string, send func(ReceivedEvent) error, before func(context.Context) error) error {
 	f, err := openHistoryFile(path)
 	if err != nil {
 		return err
@@ -127,7 +127,7 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 		start := offset
 		offset += int64(size) + 1
 		var entry struct {
-			HistoryRecord
+			historyRecord
 			IsSidechain bool   `json:"isSidechain"`
 			IsMeta      bool   `json:"isMeta"`
 			TeamName    string `json:"teamName"`
@@ -182,7 +182,7 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 			return bad("record limit exceeded")
 		}
 		// Retain only indexing metadata; payload is read again under backpressure.
-		indexRecord := HistoryRecord{Type: entry.Type, UUID: entry.UUID, ParentUUID: entry.ParentUUID}
+		indexRecord := historyRecord{Type: entry.Type, UUID: entry.UUID, ParentUUID: entry.ParentUUID}
 		links[entry.UUID] = transcriptLink{record: indexRecord, offset: start, size: size, digest: sha256.Sum256(raw), side: entry.IsSidechain, meta: entry.IsMeta, team: entry.TeamName}
 		order = append(order, entry.UUID)
 	}
@@ -304,7 +304,7 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 		if sha256.Sum256(raw) != l.digest {
 			return &HistoryError{Reason: "entry changed during replay", Raw: raw}
 		}
-		var r HistoryRecord
+		var r historyRecord
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return &HistoryError{Reason: "entry changed during replay", Raw: raw}
 		}
@@ -312,11 +312,41 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 			return &HistoryError{Reason: "entry identity changed during replay", Raw: raw}
 		}
 		r.Raw = raw
-		if err := send(r); err != nil {
+		event, err := transcriptEvent(r)
+		if err != nil {
+			return err
+		}
+		if err := send(event); err != nil {
 			return err
 		}
 	}
 	var frozen [32]byte
 	copy(frozen[:], prefixDigest.Sum(nil))
 	return verifyTranscriptSnapshot(ctx, f, path, initial, frozen, o)
+}
+
+// transcriptEvent uses the ordinary native decoder without feeding historical
+// data through the live client's permission, identity or execution reducers.
+func transcriptEvent(r historyRecord) (Event, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(r.Raw, &fields); err != nil {
+		return Event{}, &HistoryError{Reason: "invalid projection source", Raw: r.Raw}
+	}
+	if raw, ok := fields["session_id"]; ok {
+		var id string
+		if json.Unmarshal(raw, &id) != nil || id != r.SessionID {
+			return Event{}, &HistoryError{Reason: "conflicting native session identity", Raw: r.Raw}
+		}
+	}
+	fields["session_id"], _ = json.Marshal(r.SessionID)
+	frame, err := json.Marshal(fields)
+	if err != nil {
+		return Event{}, err
+	}
+	event, err := types.ParseEvent(frame)
+	if err != nil {
+		return Event{}, &HistoryError{Reason: "invalid native event projection", Raw: r.Raw}
+	}
+	event.History = &types.HistorySource{UUID: r.UUID, ParentUUID: r.ParentUUID, SessionID: r.SessionID, CWD: r.CWD, Timestamp: r.Timestamp, Raw: append(json.RawMessage(nil), r.Raw...)}
+	return event, nil
 }

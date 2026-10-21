@@ -1,6 +1,7 @@
 # Asynchronous native history loading
 
 Status: implementation spec, 2026-10-21. Resume-and-replay revision baseline: `7878e36`.
+Event-consumption contract revised 2026-10-22; see [history events](history-events.md).
 
 ## Public API and agreed test seams
 
@@ -12,8 +13,8 @@ reuse their existing native resume primitives and remain independent.
 
 Public seams: `codex.Client.Load(ctx, HistoryOptions) (*LoadedThread, error)` and
 `claude.Load(ctx, LoadOptions) (*LoadedSession, error)`. Claude LoadOptions contains
-normal process Options plus HistoryOptions. Both load handles expose Records,
-Done, Err and Close. Caller must drain the history stream then check Err. Done
+normal process Options plus HistoryOptions. Both load handles expose Events,
+Done, Err and Close. Events uses each provider's real-time event type. Caller must drain the history stream then check Err. Done
 means resume AND retained-history replay completed, not that the live client or
 Agent work ended. Load acceptance is asynchronous and is not readiness. Input
 before successful Done is rejected locally. Failure never permits continuation.
@@ -22,8 +23,9 @@ Codex's caller-owned connection remains the normal execution/notification seam;
 use StartTurn after the load completes. LoadedThread.ResumeResponse exposes the
 validated native resume result after successful Done. Claude's LoadedSession.Client
 returns its owned normal Client only after successful Done; Send/Receive and live
-permission handles stay on that Client. History is a separate, clearly typed
-snapshot stream, never fake live notifications or revived approval capabilities.
+permission handles stay on that Client. History uses the same event types and
+consumer as live delivery, with explicit SDK-only History source metadata. Its
+projected snapshots are not received wire notifications or revived approvals.
 
 The load context controls startup and replay only. After successful completion,
 canceling it does not stop the resumed session. Close cancels blocked delivery or
@@ -43,9 +45,13 @@ bounded number of retained handles. Subscribe to live notifications before Load
 when they matter; Load does not consume the caller's notification subscription.
 Raw Call is an advanced protocol escape hatch and does not implement these gates.
 
-Codex replays native turns oldest-first with itemsView=full until explicit
-pagination end. It preserves exact raw turn JSON, decoded native items, native
-IDs and timestamps. Reject active history, changed identity, nonadvancing/cyclic
+Codex pages native turns oldest-first with itemsView=full until explicit
+pagination end. Events projects retained items as item/completed snapshots and
+known terminal turns as turn/completed. Missing item timestamps remain explicitly
+unknown; no start/delta events are manufactured. Unknown turn statuses survive
+as Event with native Turn Data and no claimed notification method. It preserves
+exact raw turn JSON in History metadata, decoded native items, native IDs and
+recorded timestamps. Reject active history, changed identity, nonadvancing/cyclic
 cursors, repeated IDs, summary-only turns and observed source changes. Paging is
 not atomic; callers must quiesce external writers. Generated turns/items types
 remain sourced from the existing exact verified 0.162.1 schema blob.
@@ -62,7 +68,10 @@ an observed SessionID from request options or disk evidence.
 Claude selects the latest terminal-derived main user/assistant leaf, walks
 parentUuid root-to-leaf, excludes sidechain/team/meta leaves and does not follow
 logicalParentUuid across compaction. Retain compact summaries, tool-use/result
-blocks, UUID, parent, time and raw bytes. Do not replay abandoned branches or
+blocks, UUID, parent, time and raw bytes. Project retained entries through the
+normal native Event decoder, mapping validated transcript session identity to
+the native envelope and retaining exact original bytes in History metadata.
+Do not replay abandoned branches or
 separate subagent files. Unknown blocks survive raw; unknown transcript kinds,
 missing parents/messages, duplicate UUID/JSON keys, cycles or corrupt data fail
 with offending raw evidence. The original transcript prefix is immutable (SHA256
@@ -73,7 +82,7 @@ main-chain scope, not deleted pre-compaction content or absent token deltas.
 
 ## Resource and completion contract
 
-An unbuffered record channel provides backpressure. Codex retains one bounded
+An unbuffered event channel provides backpressure. Codex retains one bounded
 RPC page plus bounded ID/cursor tracking; Claude retains bounded offset metadata
 and one record, never a full transcript payload slice. Explicit record/page/count
 limits fail instead of truncating. Cancellation releases blocked sends and RPC

@@ -21,7 +21,7 @@ type LoadOptions struct {
 var ErrLoadPending = errors.New("claude: session load has not completed")
 
 // LoadedSession owns one resumed native Client and an asynchronous history
-// stream. Drain Records, check Err, then obtain Client for normal Send/Receive.
+// stream. Drain Events, check Err, then obtain Client for normal Send/Receive.
 // Close cancels replay and closes the owned child, including after success.
 type LoadedSession struct {
 	replay    *History
@@ -32,9 +32,9 @@ type LoadedSession struct {
 	closeErr  error
 }
 
-func (h *LoadedSession) Records() <-chan HistoryRecord { return h.replay.Records() }
-func (h *LoadedSession) Done() <-chan struct{}         { return h.replay.Done() }
-func (h *LoadedSession) Err() error                    { return h.replay.Err() }
+func (h *LoadedSession) Events() <-chan ReceivedEvent { return h.replay.Records() }
+func (h *LoadedSession) Done() <-chan struct{}        { return h.replay.Done() }
+func (h *LoadedSession) Err() error                   { return h.replay.Err() }
 
 // Client returns the normal resumed Client only after successful complete replay.
 // Later native failures are reported by Client.Err/Receive, not replay Err.
@@ -118,7 +118,7 @@ func Load(ctx context.Context, o LoadOptions) (*LoadedSession, error) {
 	replayCtx, cancel := context.WithCancel(ctx)
 	h := &LoadedSession{}
 	bound := make(chan struct{})
-	h.replay = history.Start(replayCtx, func(ctx context.Context, send func(HistoryRecord) error) error {
+	h.replay = history.Start(replayCtx, func(ctx context.Context, send func(ReceivedEvent) error) error {
 		<-bound
 		return replayTranscript(ctx, opts, path, send, func(ctx context.Context) error {
 			c, e := open(ctx, process, opts.SessionID)

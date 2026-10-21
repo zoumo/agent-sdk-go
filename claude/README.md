@@ -226,21 +226,33 @@ loaded, err := claude.Load(ctx, claude.LoadOptions{
     },
 })
 // Check err, then defer loaded.Close().
-for record := range loaded.Records() {
-    // record.Raw/Message retain native content, UUID, parent and timestamp.
-    _ = record
+for event := range loaded.Events() {
+    // Use the same func(claude.ReceivedEvent) handler as Client.Receive().
+    handleEvent(event)
 }
+<-loaded.Done()
 // Check loaded.Err(), then obtain the ordinary resumed Client:
 client, err := loaded.Client()
 // Check err; client.Send(newContext, text) and client.Receive continue the session.
 ```
 
 Load validates the stored main chain and starts the normal CLI resume process
-before delivering records. It never sends historic content back as prompts.
+before delivering events. It never sends historic content back as prompts.
 Client returns ErrLoadPending until replay finishes successfully. Open with
 Options.ResumeID remains ordinary resume without SDK history replay. The load
 context controls startup and replay; canceling it after success does not close
 the Client. LoadedSession.Close cancels replay and closes the owned child.
+
+Each replayed value is the normal native `claude.Event`, satisfying
+`claude.ReceivedEvent`. User/assistant content, thinking, tool blocks and retained
+system/progress/attachment data use the ordinary decoder and preserve unknown
+data. `event.History` marks replay and retains the exact original transcript
+bytes, parent UUID and recorded timestamp. `event.Raw` contains the projected
+native-shaped JSON with validated `session_id`; it is not an original live wire
+capture. SDK history metadata is excluded from native JSON serialization.
+History never passes through live permission or execution-state reducers and
+does not manufacture permission handles, tool execution or subagent creation.
+The old `Records` snapshot interface has been replaced by `Events`.
 
 The selected retained main chain includes compaction summaries, not abandoned
 branches, standalone subagent files or deleted content. Unknown blocks remain

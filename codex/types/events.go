@@ -9,8 +9,9 @@ import "encoding/json"
 // DecodeError is non-nil only for malformed supported payloads. Unknown fields
 // and union variants remain in the native Data and in Params.
 //
-// Each subscriber owns its event's buffers and typed data independently. There
-// is no replay. Thread identity stays in the native notification payload.
+// Each subscriber owns its event's buffers and typed data independently.
+// Load also delivers this type with History set; its projected events have no
+// received Raw envelope. Thread identity stays in the notification payload.
 type Event struct {
 	// Raw preserves the received notification envelope, excluding transport delimiters.
 	// SDK convenience events have only Data; Method, Params and Raw are empty.
@@ -19,4 +20,20 @@ type Event struct {
 	Params      json.RawMessage
 	Data        any
 	DecodeError error
+	// History is SDK-only source evidence for a projected retained snapshot.
+	// It is nil for notifications received on the live connection.
+	History *HistorySource `json:"-"`
+}
+
+// HistorySource preserves the exact original item JSON for an item snapshot,
+// or full turn JSON for a terminal/unknown turn snapshot. ItemID is empty for
+// turn snapshots. MissingFields lists notification fields not recorded in history;
+// their typed zero values are unknown, not observed values. In particular, full
+// turns do not contain the required live item completion timestamp.
+type HistorySource struct {
+	ThreadID      string
+	TurnID        string
+	ItemID        string
+	Raw           json.RawMessage
+	MissingFields []string
 }

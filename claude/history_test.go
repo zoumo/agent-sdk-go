@@ -67,7 +67,9 @@ func TestHistoryBranchAndFailureContracts(t *testing.T) {
 			require.NoError(t, e)
 			defer h.Close()
 			var ids []string
-			for r := range h.Records() {
+			for received := range h.Events() {
+				r, ok := received.(claude.Event)
+				require.True(t, ok)
 				ids = append(ids, r.UUID)
 				if tc.name == "unknown block retained" {
 					require.Contains(t, string(r.Raw), "future-block")
@@ -146,7 +148,9 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			defer h.Close()
 			if mode == "cancel" || mode == "close" || mode == "mutation" {
 				select {
-				case r := <-h.Records():
+				case received := <-h.Events():
+					r, ok := received.(claude.Event)
+					require.True(t, ok)
 					require.Equal(t, "u", r.UUID)
 				case <-time.After(time.Second):
 					t.Fatal("first record missing")
@@ -164,7 +168,9 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 				}
 			}
 			var ids []string
-			for r := range h.Records() {
+			for received := range h.Events() {
+				r, ok := received.(claude.Event)
+				require.True(t, ok)
 				ids = append(ids, r.UUID)
 			}
 			select {
@@ -197,9 +203,11 @@ func TestHistorySessionsAreIsolated(t *testing.T) {
 	require.NoError(t, e)
 	defer fast.Close()
 	var count int
-	for r := range fast.Records() {
+	for received := range fast.Events() {
+		r, ok := received.(claude.Event)
+		require.True(t, ok)
 		require.Equal(t, second.SessionID, r.SessionID)
-		require.Contains(t, string(r.Message), "second session")
+		require.Contains(t, string(r.History.Raw), "second session")
 		count++
 	}
 	require.NoError(t, fast.Err())
@@ -218,12 +226,14 @@ func TestHistoryLoadsOriginalMainChain(t *testing.T) {
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string
-	for r := range h.Records() {
+	for received := range h.Events() {
+		r, ok := received.(claude.Event)
+		require.True(t, ok)
 		ids = append(ids, r.UUID)
 		require.True(t, json.Valid(r.Raw))
 		if r.UUID == "r" {
-			require.Equal(t, "a", r.ParentUUID)
-			require.Contains(t, string(r.Message), "tool-1")
+			require.Equal(t, "a", r.History.ParentUUID)
+			require.Contains(t, string(r.History.Raw), "tool-1")
 		}
 	}
 	<-h.Done()
@@ -251,7 +261,9 @@ func TestLoadResumesReplaysAndContinuesSameSession(t *testing.T) {
 	_, err = h.Client()
 	require.ErrorIs(t, err, claude.ErrLoadPending)
 	var ids []string
-	for r := range h.Records() {
+	for received := range h.Events() {
+		r, ok := received.(claude.Event)
+		require.True(t, ok)
 		ids = append(ids, r.UUID)
 	}
 	<-h.Done()
@@ -311,7 +323,7 @@ func TestLoadRejectsNativeResumeFailures(t *testing.T) {
 			require.NoError(t, e)
 			defer h.Close()
 			var count int
-			for range h.Records() {
+			for range h.Events() {
 				count++
 			}
 			<-h.Done()
@@ -331,7 +343,9 @@ func TestLoadAcceptsNativeResumeMetadata(t *testing.T) {
 	require.NoError(t, e)
 	defer h.Close()
 	var ids []string
-	for r := range h.Records() {
+	for received := range h.Events() {
+		r, ok := received.(claude.Event)
+		require.True(t, ok)
 		ids = append(ids, r.UUID)
 	}
 	<-h.Done()
@@ -350,7 +364,7 @@ func TestLoadRejectsResumeHistoryChanges(t *testing.T) {
 			h, err := claude.Load(context.Background(), opts)
 			require.NoError(t, err)
 			defer h.Close()
-			for range h.Records() {
+			for range h.Events() {
 			}
 			<-h.Done()
 			require.Error(t, h.Err())

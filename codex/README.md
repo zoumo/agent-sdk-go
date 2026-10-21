@@ -600,10 +600,12 @@ loaded, err := client.Load(ctx, codex.HistoryOptions{
     ThreadID: id, CWD: absoluteCWD, CodexHome: expectedAbsoluteCodexHome,
 })
 // Check err, then defer loaded.Close(). Subscribe to live events before Load.
-for record := range loaded.Records() {
-    // Convert record.Turn using its native items; record.Raw is original JSON.
-    _ = record
+for event := range loaded.Events() {
+    // Use the same func(types.Event) handler as Subscription.Events().
+    // event.History contains the original item/turn JSON and source identity.
+    handleEvent(event)
 }
+<-loaded.Done()
 // Check loaded.Err() before continuing; Done includes resume and complete replay.
 // client.StartTurn(newContext, ...) can now continue the same native thread.
 ```
@@ -621,3 +623,20 @@ legacy fallback. Active threads and observed metadata changes fail. External
 writers must be quiescent because native paging is not an atomic snapshot.
 ListThreadTurns and ListThreadItems also expose native pages. See the
 [history contract](../docs/specs/async-history.md) for limits and evidence.
+
+History uses the normal `types.Event` and notification payloads: one
+`item/completed` snapshot per retained item followed by `turn/completed` for a
+known terminal turn. Item status is preserved, including failed or interrupted
+work; this is not a replay of execution. There are no invented starts, deltas,
+answer handles or live subagent-created events. An unknown future turn status
+is retained as an event with empty Method and `*types.Turn` Data.
+
+`event.History` is non-nil only for replay. Its Raw is the exact item JSON for
+item events and the exact full-turn JSON for terminal/unknown turn events.
+Projected events have no received wire envelope in `event.Raw`. Their Params
+omit fields not retained by the source, listed in `History.MissingFields`.
+Full turns lack item completion timestamps: typed `CompletedAtMs` is zero and
+unknown for replay, not a measured timestamp. Do not serialize projected Params
+as a captured, complete native notification. The history stream is separate from
+live observation, but both accept the same handler. The old `Records` snapshot
+interface has been replaced by `Events`.

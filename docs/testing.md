@@ -1,8 +1,8 @@
 # Offline validation
 
-The [testing standards](standards/testing.md) define test organization and safety;
+The [testing standards](../harness/testing.md) define test organization and safety;
 this guide contains the commands and validation scope. Directory responsibilities
-are defined in the [layout standards](standards/code-layout.md).
+are defined in the [layout standards](../harness/code-layout.md).
 
 See the [recorded test data index](recordings.md) for direct links to native wire
 files, manifests, expected observations and ID maps. Real Codex tool/question

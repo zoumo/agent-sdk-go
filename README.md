@@ -18,7 +18,7 @@ module import paths have no compatibility forwarding packages.
 - [Codex API, examples, protocol inventory and coverage](codex/README.md)
 - [Claude API, examples, native types and coverage](claude/README.md)
 - [Architecture](docs/architecture.md)
-- [Engineering standards](docs/standards/architecture.md) — [testing](docs/standards/testing.md), [code layout](docs/standards/code-layout.md)
+- [Engineering standards](harness/architecture.md) — [testing](harness/testing.md), [code layout](harness/code-layout.md)
 - [Migration and source history](docs/migration.md)
 - [Offline validation](docs/testing.md) and [pure public API consumer](tests/consumers/codex-public/main.go)
 - [Offline mock CLIs and programmable protocol peers](docs/mock.md)

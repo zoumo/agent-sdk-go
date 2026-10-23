@@ -57,7 +57,7 @@ reclassify synthetic fixtures to fill the missing real-subagent evidence.
 
 ## Directory responsibilities
 
-See the [layout standards](standards/code-layout.md) for the authoritative
+See the [layout standards](../harness/code-layout.md) for the authoritative
 cmd/tools/testdata responsibilities. The current entry points are
 `codex/cmd/record` and `claude/cmd/record`; they delegate to
 their native `tools/recorder`, which uses native `tools/replay` helpers. The data

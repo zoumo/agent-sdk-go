@@ -1,7 +1,13 @@
+---
+type: Development Standard
+title: SDK 测试规则
+status: stable
+---
+
 # Testing standards
 
 Apply these rules to Go tests and generated Go tests. Commands and validation
-scope are maintained in the [testing guide](../testing.md).
+scope are maintained in the [testing guide](../docs/testing.md).
 
 - Use `github.com/stretchr/testify/assert` and `require` for assertions. Use
   `require` when later steps depend on the check; use `assert` for independent
@@ -42,3 +48,5 @@ Use mise's pinned compiler and retain offline, race, vet, generation, inventory,
 fixture sanitization/hash, dependency-boundary and independent-consumer gates on
 Linux/macOS. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.
+
+通用验收、资源隔离和结果声明遵循[测试与验收原则](principles/testing.md)。

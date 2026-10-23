@@ -1,9 +1,9 @@
 # Architecture
 
-The [architecture standards](standards/architecture.md) are the authoritative
+The [architecture standards](../harness/architecture.md) are the authoritative
 module, native protocol, answer-authority and dependency rules. The
-[layout standards](standards/code-layout.md) define the SDK/cmd/tools/testdata
-separation; [testing standards](standards/testing.md) define suite/table and
+[layout standards](../harness/code-layout.md) define the SDK/cmd/tools/testdata
+separation; [testing standards](../harness/testing.md) define suite/table and
 worker-safety requirements. Humans and agents use the same standards.
 
 One module and version keep builds and releases coordinated while native SDKs

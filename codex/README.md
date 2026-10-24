@@ -25,6 +25,32 @@ Current-version adaptation uses source inspection and offline tests only.
 - [Architecture and official SDK comparison](docs/design/native-sdk-comparison.md)
 - [Protocol generation, sources and licensing](docs/protocol/README.md)
 
+## Session model and reasoning settings
+
+Creation uses `SessionOptions.Thread` (`types.ThreadStartParams`). Dynamic
+changes use `Session.SetModel(ctx, nativeModelID)` and
+`Session.SetThinking(ctx, ThinkingChange{Effort: types.Some[types.ReasoningEffort]("high")})`.
+The connection must opt in during initialization with
+`Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})`.
+Without that opt-in, setters return `ErrUnsupportedConfiguration` with `NotSent`.
+Empty model/effort selectors return `ErrInvalidInput` with `NotSent`; other native
+model identifiers and effort strings go to the server for validation.
+
+`ConfigurationReceipt` preserves the native request and empty settings response;
+`NativeAccepted` reports RPC acceptance only. Observe the separate
+`types.ThreadSettingsUpdatedNotification` through `Session.Receive` for native
+settings facts. Neither request nor ack establishes the currently executing
+model. At the pinned version, null/omitted effort both leave the override
+unchanged; neither means clear. Changes target the main thread's subsequent
+turns, without waiting for idle, changing children explicitly, or substituting
+turn/start, steer, resume or interrupt. Submit retains its independent native
+turn/start options and target.
+
+Native refusal remains a `CallError` wrapping `RPCError`; possible dispatch
+followed by cancellation, timeout or Close remains `OutcomeUnknown` and is never
+retried automatically. Validation is synthetic/offline; no real configuration
+effect, active-turn switch, or child inheritance is certified.
+
 ## Local thread example
 
 Go 1.26.9 is pinned with mise. Install the toolchain using your normal mise setup;

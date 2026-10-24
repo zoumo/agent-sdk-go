@@ -905,8 +905,8 @@
     {
       "kind": "client_request",
       "method": "thread/settings/update",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "partial",
+      "scope": "Session.SetModel and SetThinking send native model/optional effort to the fixed main thread. Requires experimentalApi opt-in; other settings have generated types only. Empty ack preserves requested values and native acceptance, not observed/current-turn state. No child propagation, idle gate, retry or simulated turn.",
       "source_variant": "ThreadSettingsUpdate",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 698,
@@ -914,9 +914,15 @@
       "field_experimental_gates": true,
       "in_stable_schema": false,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "session06-settings-model"
+        ],
+        "mock": [
+          "session06-settings-peer"
+        ],
+        "race": [
+          "session06-settings-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadSettingsUpdateParams",
@@ -5516,8 +5522,8 @@
     {
       "kind": "server_notification",
       "method": "thread/settings/updated",
-      "support": "partial",
-      "scope": "Raw method/parameter delivery through bounded local subscriptions. No typed binding or dedicated per-method workflow test; generic raw routing is not workflow certification.",
+      "support": "supported",
+      "scope": "Typed ThreadSettingsUpdatedNotification through Session.Receive or subscriptions, with original raw envelope/params and unknown fields. Independent native observation, not an acknowledgement barrier or proof of current-turn/child effect.",
       "source_variant": "ThreadSettingsUpdated",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1963,
@@ -5525,9 +5531,15 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "session06-settings-model"
+        ],
+        "mock": [
+          "session06-settings-peer"
+        ],
+        "race": [
+          "session06-settings-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadSettingsUpdatedNotification",

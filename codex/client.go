@@ -73,6 +73,7 @@ type Client struct {
 	threadOperations    map[string]int
 	nextID              int64
 	ready               bool
+	experimentalAPI     bool
 	cause               error
 	done                chan struct{}
 	cleaned             chan struct{}
@@ -168,6 +169,8 @@ func newClient(limits Limits) *Client {
 }
 
 func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {
+	capabilities, _ := params.Capabilities.Get()
+	c.experimentalAPI = capabilities.ExperimentalAPI.ValueOr(false)
 	var info types.InitializeResponse
 	err := c.call(ctx, "initialize", params, &info, true)
 	if err != nil {

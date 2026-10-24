@@ -1252,6 +1252,39 @@
       "report": "https://github.com/zoumo/codex-sdk-go/blob/81cb39457700d9955c14f08dad56024abd96e0fa/docs/evidence/subagent-v2-created.md",
       "coverage": "Public stdio/WS/WSS V2 completed Started creation without thread/started; early/nested child routing, Associated then once-only Created, duplicate/history suppression, malformed and non-creation evidence, conflict/cycle diagnostics, owned activity evidence, parent completion independence, exact Raw/Params and zero added RPC. E1/E2 only; no live provider/model run.",
       "log_sha256": "4cf3cae1d279421eb4074d59a4db1032818add6c040ac9544f148c14efcd4f70"
+    },
+    {
+      "id": "session06-settings-model",
+      "coverage": "Generated pinned native settings types round-trip through the public types API, including optional/null/unknown fields. Synthetic schema cases, no native execution.",
+      "test_files": [
+        "types/schema_generated_test.go"
+      ],
+      "kind": "unit",
+      "status": "passed",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- go test ./codex/types -count=1"
+    },
+    {
+      "id": "session06-settings-peer",
+      "coverage": "Public Session.SetModel/SetThinking/Receive/Submit against a synthetic stdio peer: native empty ack, requested vs independent notification, native refusal, experimental opt-in refusal, invalid empty selectors, nullable/omitted effort, cancellation/Close/timeout, shared-owner blocked writes, no implicit scheduling/child propagation. Not real model/configuration effect evidence.",
+      "test_files": [
+        "session_config_test.go"
+      ],
+      "kind": "mock",
+      "status": "passed",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- go test ./codex -run '^TestSessionConfiguration' -count=1"
+    },
+    {
+      "id": "session06-settings-race",
+      "coverage": "Same public settings and shared-write tests under the race detector. Synthetic peer only; no actual CLI/model or configuration-effect validation.",
+      "test_files": [
+        "session_config_test.go"
+      ],
+      "kind": "race",
+      "status": "passed",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- env GORACE=atexit_sleep_ms=0 GOMAXPROCS=2 go test -race ./codex -run '^TestSessionConfiguration' -count=1"
     }
   ],
   "verification_commands": [

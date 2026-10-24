@@ -64,7 +64,7 @@ func TestFakeChild(t *testing.T) {
 	}
 	var lateID json.RawMessage
 	sessions := new(sessionPeer)
- turns := new(turnPeer)
+	turns := new(turnPeer)
 	threads := new(resumePeer)
 	requests := &requestPeer{transcript: transcript}
 	for scan.Scan() {
@@ -75,7 +75,7 @@ func TestFakeChild(t *testing.T) {
 		if json.Unmarshal(raw, &m) != nil {
 			os.Exit(81)
 		}
-		if sessions.handle(mode,m,send) || handleHistoryPeer(mode, m, send) || handleTreePeer(mode, m, send) || requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
+		if sessions.handle(mode, m, send) || handleHistoryPeer(mode, m, send) || handleTreePeer(mode, m, send) || requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
 			continue
 		}
 		switch m.Method {
@@ -210,7 +210,11 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	env := append(os.Environ(), "CODEX_SDK_HELPER="+mode, "CODEX_SDK_TRACE="+f.trace, "CODEX_SDK_PID="+f.pid)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	f.c, err = codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: env, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "contract-test", Version: "1"}}, Limits: limits})
+	init := types.InitializeParams{ClientInfo: types.ClientInfo{Name: "contract-test", Version: "1"}}
+	if strings.Contains(mode, "config") && !strings.Contains(mode, "unsupported") {
+		init.Capabilities = types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})
+	}
+	f.c, err = codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: env, Initialize: init, Limits: limits})
 	return f, err
 }
 func trace(t *testing.T, path string) []fakeEnvelope {

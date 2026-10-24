@@ -19,6 +19,8 @@ func decodeEvent(method string, params json.RawMessage) types.Event {
 	event := types.Event{Method: method, Params: append(json.RawMessage(nil), params...)}
 	var data any
 	switch method {
+	case "thread/settings/updated":
+		data = new(types.ThreadSettingsUpdatedNotification)
 	case "serverRequest/resolved":
 		data = new(types.ServerRequestResolvedNotification)
 	case "turn/started":

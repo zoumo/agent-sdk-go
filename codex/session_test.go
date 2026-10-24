@@ -149,7 +149,7 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 		if mode == "session-owned-diagnostic" {
 			fmt.Fprintln(os.Stdout, `{"method":"future/unattributed","params":{"threadId":"unowned"},"unknown":true}`)
 		}
-		if (mode == "session-block-write" || mode == "session-block-answer" || mode == "session-resolve-answer") && p.starts == 2 {
+		if (mode == "session-block-write" || mode == "session-config-block-write" || mode == "session-block-answer" || mode == "session-resolve-answer") && p.starts == 2 {
 			if mode == "session-block-answer" || mode == "session-resolve-answer" {
 				fmt.Fprintln(os.Stdout, `{"id":"blocked-answer","method":"future/approval","params":{"threadId":"main-1"}}`)
 			}
@@ -192,7 +192,11 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 				os.Exit(95)
 			}
 			if submitted.Method != "" {
-				send(submitted.ID, `{"turn":`+nativeTurn+`}`)
+				if submitted.Method == "thread/settings/update" {
+					send(submitted.ID, `{}`)
+				} else {
+					send(submitted.ID, `{"turn":`+nativeTurn+`}`)
+				}
 			}
 		}
 
@@ -203,6 +207,19 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 		}
 		for _, frame := range frames {
 			fmt.Fprintln(os.Stdout, frame)
+		}
+		send(m.ID, `{}`)
+	case "thread/settings/update":
+		var settings types.ThreadSettingsUpdateParams
+		if json.Unmarshal(m.Params, &settings) != nil {
+			os.Exit(96)
+		}
+		switch settings.Model.ValueOr("") {
+		case "native-reject":
+			fmt.Fprintf(os.Stdout, `{"id":%s,"error":{"code":-32602,"message":"native restriction","future":1}}`+"\n", m.ID)
+			return true
+		case "native-withhold":
+			return true
 		}
 		send(m.ID, `{}`)
 	case "turn/start":

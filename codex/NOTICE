@@ -3,7 +3,7 @@ Copyright 2026 codex-sdk-go contributors
 
 This repository includes protocol schema material and independently generated
 bindings derived from OpenAI Codex, licensed under Apache License 2.0.
-Source revision: d27764b82f7118f674371e6d6e76271d9d606edb.
+Source revision: 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d.
 Source paths, checksums, and modifications: docs/protocol/sources.json.
 
 Upstream NOTICE follows verbatim:

@@ -3444,6 +3444,92 @@ type ThreadSectionAppearance struct {
 func (v ThreadSectionAppearance) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ThreadSectionAppearance) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type ThreadSettings struct {
+	ActivePermissionProfile Optional[ActivePermissionProfile] `json:"activePermissionProfile" protocol:"nullable"`
+	ApprovalPolicy          AskForApproval                    `json:"approvalPolicy" protocol:"required"`
+	ApprovalsReviewer       ApprovalsReviewer                 `json:"approvalsReviewer" protocol:"required"`
+	CollaborationMode       CollaborationMode                 `json:"collaborationMode" protocol:"required"`
+	Cwd                     AbsolutePathBuf                   `json:"cwd" protocol:"required"`
+	// Saved list of disabled plugin IDs. Does not yet filter plugin capabilities.
+	DisabledPluginIDs Optional[[]string]        `json:"disabledPluginIds" protocol:""`
+	Effort            Optional[ReasoningEffort] `json:"effort" protocol:"nullable"`
+	Model             string                    `json:"model" protocol:"required"`
+	ModelProvider     string                    `json:"modelProvider" protocol:"required"`
+	// @deprecated Always `explicitRequestOnly`. Use `effort` for Ultra behavior.
+	MultiAgentMode Optional[MultiAgentMode] `json:"multiAgentMode" protocol:""`
+	// @deprecated Reports the saved setting; `friendly` and `pragmatic` no longer select a style.
+	Personality   Optional[Personality]      `json:"personality" protocol:"nullable"`
+	SandboxPolicy SandboxPolicy              `json:"sandboxPolicy" protocol:"required"`
+	ServiceTier   Optional[string]           `json:"serviceTier" protocol:"nullable"`
+	Summary       Optional[ReasoningSummary] `json:"summary" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadSettings) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadSettings) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadSettingsUpdateParams struct {
+	// Override the approval policy for subsequent turns.
+	ApprovalPolicy Optional[AskForApproval] `json:"approvalPolicy" protocol:"nullable"`
+	// Override where approval requests are routed for subsequent turns.
+	ApprovalsReviewer Optional[ApprovalsReviewer] `json:"approvalsReviewer" protocol:"nullable"`
+	// EXPERIMENTAL - Set a pre-set collaboration mode for subsequent turns.
+	//
+	// For `collaboration_mode.settings.developer_instructions`, `null` means "use the built-in instructions for the selected mode".
+	CollaborationMode Optional[CollaborationMode] `json:"collaborationMode" protocol:"nullable"`
+	// Override the working directory for subsequent turns.
+	Cwd Optional[string] `json:"cwd" protocol:"nullable"`
+	// Replace this thread's disabled plugin IDs. Omitted/null preserves the list; [] clears it.
+	DisabledPluginIDs Optional[[]string] `json:"disabledPluginIds" protocol:"nullable"`
+	// Override the reasoning effort for subsequent turns.
+	Effort Optional[ReasoningEffort] `json:"effort" protocol:"nullable"`
+	// Override the model for subsequent turns.
+	Model Optional[string] `json:"model" protocol:"nullable"`
+	// @deprecated Ignored. Use `effort: "ultra"` for proactive multi-agent behavior.
+	MultiAgentMode Optional[MultiAgentMode] `json:"multiAgentMode" protocol:"nullable"`
+	// Select a named permissions profile id for subsequent turns. Cannot be combined with `sandboxPolicy`.
+	Permissions Optional[string] `json:"permissions" protocol:"nullable"`
+	// @deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions.
+	Personality Optional[Personality] `json:"personality" protocol:"nullable"`
+	// Override the sandbox policy for subsequent turns.
+	SandboxPolicy Optional[SandboxPolicy] `json:"sandboxPolicy" protocol:"nullable"`
+	// Override the service tier for subsequent turns. `null` clears the current service tier; omission leaves it unchanged.
+	ServiceTier Optional[string] `json:"serviceTier" protocol:"nullable"`
+	// Override the reasoning summary for subsequent turns.
+	Summary  Optional[ReasoningSummary] `json:"summary" protocol:"nullable"`
+	ThreadID string                     `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadSettingsUpdateParams) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ThreadSettingsUpdateParams) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ThreadSettingsUpdateResponse struct {
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadSettingsUpdateResponse) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ThreadSettingsUpdateResponse) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
+type ThreadSettingsUpdatedNotification struct {
+	ThreadID       string         `json:"threadId" protocol:"required"`
+	ThreadSettings ThreadSettings `json:"threadSettings" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadSettingsUpdatedNotification) MarshalJSON() ([]byte, error) { return marshalObject(v) }
+func (v *ThreadSettingsUpdatedNotification) UnmarshalJSON(data []byte) error {
+	return unmarshalObject(data, v)
+}
+
 type ThreadSource = string
 
 type ThreadStartParams struct {

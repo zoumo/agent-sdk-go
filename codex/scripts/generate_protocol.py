@@ -34,7 +34,9 @@ ROOTS = ['InitializeParams', 'InitializeResponse', 'v2/ThreadStartParams',
          'ToolRequestUserInputParams', 'ToolRequestUserInputResponse',
          'ApplyPatchApprovalParams', 'ApplyPatchApprovalResponse',
          'ExecCommandApprovalParams', 'ExecCommandApprovalResponse',
-         'v2/ServerRequestResolvedNotification']
+         'v2/ServerRequestResolvedNotification',
+         'v2/ThreadSettingsUpdateParams', 'v2/ThreadSettingsUpdateResponse',
+         'v2/ThreadSettingsUpdatedNotification']
 SNAPSHOT = ROOT / 'types/schema.json'
 if len(sys.argv) > 1:
     raw = pathlib.Path(sys.argv[1]).read_bytes()

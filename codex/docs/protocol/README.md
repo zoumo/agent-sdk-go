@@ -45,7 +45,8 @@ the parameter/response roots for `CommandExecutionRequestApproval`,
 `FileChangeRequestApproval`, `PermissionsRequestApproval`,
 `ToolRequestUserInput`, `ApplyPatchApproval`, and `ExecCommandApproval`
 (all top-level schema definitions), plus
-`v2/ServerRequestResolvedNotification`. The history addition includes `v2/ThreadTurnsList` and `v2/ThreadItemsList` parameter/response pairs. These 37 roots are extracted
+`v2/ServerRequestResolvedNotification`. The history addition includes `v2/ThreadTurnsList` and `v2/ThreadItemsList` parameter/response pairs. The settings addition includes `v2/ThreadSettingsUpdate` parameters/response and
+`v2/ThreadSettingsUpdatedNotification`. These 40 roots are extracted
 from the official experimental archive's
 `json_schema["codex_app_server_protocol.schemas.json"]` member.
 `types/types_generated.go` is independently generated from that snapshot by

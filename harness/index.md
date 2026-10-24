@@ -32,3 +32,4 @@ okf_version: "0.2"
 - [异步历史加载](contracts/async-history.md)
 - [原生历史事件](contracts/history-events.md)
 - [共同验收场景](contracts/stories/index.md)
+- [Session 深模块设计](modules/native-session/design.md)

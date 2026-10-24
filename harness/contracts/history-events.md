@@ -27,14 +27,15 @@ source evidence; it does not claim that projected history was received live.
 10. As a consumer, I want missing information left unknown so that the SDK does not invent lifecycle, timestamps, deltas or answer authority.
 11. As a consumer, I want late failures and cancellation visible so that partial replay is never mistaken for complete history.
 12. As a consumer, I want native resume completed before delivery so that Load still restores the same session before continuation.
-13. As a consumer, I want slow-consumer backpressure and cleanup preserved so that migration does not create an unbounded second backlog.
+13. As a consumer, I want bounded history reading and independent cleanup so that migration does not create a second growing backlog; the single Session backlog still has its declared memory limitation.
 14. As a consumer, I want sidechains and independent subagent histories kept outside the selected main conversation so that scope does not expand silently.
 
 ## Implementation Decisions
 
 - Keep Codex and Claude independent; introduce no provider-neutral public event model.
-- Each load handle exposes Events, Done, Err and Close. Events is the replay stream; the caller drains it, waits for Done and checks Err before continuation.
-- Codex Events yields the exact same Event type as Subscription.Events. Claude Events yields ReceivedEvent with the same native Event values used by Client.Receive.
+- Load history, live records and actual requests use the Session single consumption entry point. Native history event values remain compatible with their live counterparts; runtime handles and SDK evidence remain distinct from native JSON.
+- A separate inspectable load outcome is not a second stream. Success requires confirmed same-identity resume, full declared history admission and successful integrity checks. Ordinary input is gated until success; actual live answers, interrupt and close remain available.
+- History and live records may interleave, preserving each source order. No history-first or cross-source occurrence order is promised.
 - Deliver history through native event types rather than a separate public Records representation. Keep source indexing and validation private rather than making callers parse snapshots.
 - Attach SDK-only history-source metadata to replay events, excluded from native JSON codecs. It includes exact original source bytes and recorded identity/time evidence. Live events have no history-source metadata.
 - Codex projects each retained item, in native order, as an item/completed notification value carrying the original full item. This is a historical item snapshot, not proof that an interrupted or failed tool succeeded. Its native status remains authoritative.
@@ -48,7 +49,7 @@ source evidence; it does not claim that projected history was received live.
 
 ## Testing Decisions
 
-- Primary seams are public Load/Events/Done/Err/Close and the provider's existing live consumption interface. A single event handler must accept both historical and live event values without parsing a HistoryRecord.
+- Primary seams are public Load, Session consumption, load outcome, answers, interrupt and close. A single event handler accepts history and live values without parsing a separate HistoryRecord; tests cover interleaving, pending-input rejection, independent control and failed resume confirmation.
 - Use existing offline native protocol peers and transcript helpers; no real agent, model task or new recording.
 - Verify each native event-delivery path and the shared history contract through public behavior.
 - Verify content and order using literal expected native event values, including tools, unknown variants, interrupted status and compaction; preserve existing lifecycle, late-error, cancel, mutation and resource tests.

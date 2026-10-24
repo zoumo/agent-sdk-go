@@ -32,13 +32,18 @@ and dependency boundaries.
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib
   packages must not enter SDK production dependency trees. Native types remain
-  standard-library-only. Each Codex subscription and Claude client owns one
+  standard-library-only. Each native Session owns one
   ChannX; there is no process-wide queue, per-agent partition or second growing
-  derived-event FIFO. See [event delivery](contracts/event-delivery.md).
-- Each observer owns its graph. Native parsing, unknown data, identity aliases,
-  run state, deduplication, event caches, transport and process lifecycle stay
-  with the native SDK. Preserve explicit observation gaps and native subagent
-  association behavior.
+  derived/history-event FIFO. See [event delivery](contracts/event-delivery.md).
+- Each Session owns its membership evidence and optional parent graph. Graph
+  reachability is not the only membership proof and never a delivery prerequisite.
+  Native parsing, unknown data, aliases, execution identities, transport and
+  process lifecycle stay with the native SDK. Native facts are not suppressed
+  by entity-key deduplication or reordered for relationship attribution.
+- One connection and native main identity have one Session owner. Requests and
+  notifications use that Session's single consumption entry point; load outcome
+  is independent of termination. Unknown connection records are isolated with
+  explicit resource and coverage limits. See the [Session module design](modules/native-session/design.md).
 - Answers require their original native request/permission handle. Relationship
   records carry context only. Do not restore `TreeRecord`/`TreeEvent` APIs.
 
@@ -49,7 +54,7 @@ generation, inventory, provenance and sanitization responsibilities.
 
 ## 项目技术选型边界
 
-现有 SDK、原生工具和协议合同保持现状。
+原生协议、工具来源及依赖约束须保留；Session 组织与交付遵循本页及具体合同的目标设计。
 通用选型不要求迁移已有实现。
 新增能力须遵守本页、[代码布局](code-layout.md)和[测试规则](testing.md)。
 原生 types 包的生产依赖仍限于标准库。

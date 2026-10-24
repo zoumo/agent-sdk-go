@@ -11,6 +11,10 @@ status: stable
 | Term | Meaning and boundary |
 | --- | --- |
 | Session | A continuing native conversation context that can accept multiple inputs and expose events across multiple execution cycles. An individual execution result does not end the session; the term does not imply persistent recovery after an application restart. |
+| Connection reception | A native record has been read by the connection. This alone does not establish which Session owns it. |
+| Session reception | A record is accepted for a Session using available native membership evidence; optional parent knowledge is not an admission prerequisite. |
+| Isolated diagnostic material | Bounded retained connection records whose Session membership was unconfirmed at reception. Reading them does not replay a Session stream or create answer authority. |
+| Load outcome | Pending, successful or failed restoration and retained-main-history replay, independent of Session termination and event exhaustion. |
 | Session observation membership | Available native evidence establishes that an agent's events belong in a session's observation stream. Membership does not require a known direct parent or a complete agent tree. |
 | Submission | A native request or input was sent with the native API's documented outcome. A successful write does not establish model acceptance, execution or exactly-once delivery; ambiguous outcomes remain visible. |
 | Completion | A native turn/task result was observed. Root completion does not prove that children, background work, or the owned transport have stopped. The application chooses its stopping policy. |

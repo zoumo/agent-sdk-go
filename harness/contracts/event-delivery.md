@@ -6,105 +6,46 @@ status: stable
 
 # Event delivery
 
-Both SDKs retain accepted events in dynamically growing FIFO storage. A paused
-Codex `Subscription.Events()` reader or Claude `Receive` caller does not impose a
-fixed event-count ceiling, block protocol reading, or prevent RPC responses and
-permission requests from being routed. Each Codex subscription and each Claude
-client owns exactly one ChannX instance.
-The SDKs share the implementation, not an instance; there is no separate queue
-per agent or native event category.
-No preview events are dropped to make room for full events.
+本合同规定目标行为，不声明现有 SDK 已满足。共同语义见[通用架构](../sdk/architecture.md)，所有权取舍见[ADR-0003](../adr/0003-session-ownership-and-load-delivery.md)。
 
-The private generic `internal/queue` wrapper directly uses
-`github.com/zoumo/golib/channx.ChannX`, pinned by the root Go module. It adds
-typed envelopes, cancellation-aware waiting, batch admission and lifecycle
-handling. One wrapper goroutine owns all sends and Close operations, and ChannX
-owns its buffer pump. Their unbuffered command/acknowledgment handshake is a
-control rendezvous, not an additional event backlog. Codex also has its typed
-channel delivery bridge. The wrapper has no protocol knowledge. Native
-protocol parsing, relationship attribution, deduplication and permission authority
-remain in their SDKs. Native `types` packages still depend only on the standard
-library.
+## 接收范围与顺序
 
-## Order and admission
+连接接收是协议 reader 取得原生记录；Session 接收是根据当时可用原生证据，确认该记录属于其观察范围并接受交付。不能把全部连接记录算作每个 Session 的已接收事件。成员资格不要求已知直接父级或完整根路径。
 
-A protocol reader preserves its native arrival order at admission. Codex also has
-unresolved-event timer and lifecycle callbacks; their requests are serialized
-before the stream owner writes to ChannX. Claude publishes from its sole stdout
-reader. Each stream has one ChannX input owner, and there is no invented global
-order across separate streams. A batch is accepted as one envelope, contiguously
-and all or nothing, including
-validation of caller-supplied sizes before storage changes. Codex batches native
-events and their derived records into the same admission decision. Claude keeps
-its existing bounded transaction scratch for one derived fanout, consumed before
-reading the next native event; that scratch is not a second growing FIFO.
-This does not change existing relationship attribution:
-unresolved events may wait for relationship evidence, and released records follow
-the native observer's existing ordering rules.
+每个 Session 拥有一个消费入口和一个 FIFO。通知、真实交互请求及其原句柄、SDK 关联与加载证据从该入口交付。已确认属于同一 Session 的实时原生事实按接收顺序接受，不等待父级、创建公告或运行账本。后续关系只增补知识，不重排旧事实。SDK 派生证据与原生记录区分，不能阻止原生相对顺序或隐去原始数据。
 
-Canceling a queue wait or Claude `Receive(ctx)` cancels only that wait. A canceled
-wait does not delete an accepted event or stop the session. Cancellation racing a
-successful receive may still return the event already removed. Canceling the
-context passed to Codex `Subscribe` ends that observation; it is not a receive
-wait and does not interrupt provider work.
+不依据实体 ID、UUID、内容相同或未知 run ID 压掉原生事实；只有固定版本明确规定的原生重复规则可以限定处理。关系公告的幂等与原请求单次回答防护不等于原生消息去重。不同 Session、历史与实时之间不声称原始全局发生顺序。
 
-## Closing and draining
+批量接受须先验证大小，连续且全有或全无。控制回复、权限取消及故障处理不等应用消费。相同真实请求只能归属一个可确认的权限所有者；多个观察范围重叠不复制回答权，归属不明确时保持连接级待处理状态并报告缺口。一次等待取消只结束该等待，不删事件或结束 Session；取消与成功接收竞争时允许返回已取出的事件。
 
-Codex `Subscription.Close()` ends local observation and rejects new admission,
-while accepted events drain through `Events()`. The channel closes after draining.
-`Done()` and `Err()` report observation termination independently of that drain.
-Connection failure likewise preserves accepted events and reports its cause.
-Use `Subscription.Abort()` when abandoning the channel: it discards unread
-records, stops the delivery bridge and releases retained references. A receive
-racing `Abort` may still obtain the bridge's in-flight event. Neither method
-sends a provider interrupt. The bridge can hold one event outside the FIFO while
-waiting for a channel receiver; drain it or abort it when finished.
+## 未归属连接材料
 
-Claude `Close()` stops the owned process and waits for process/reader cleanup,
-without waiting for the caller to consume events. `Done()` closes on shutdown or
-terminal failure. Accepted records remain available through `Receive`, followed
-by the terminal error or `io.EOF` after successful shutdown. `Err()` can be read
-before draining; cleanup may add exit diagnostics. Root turn completion and idle
-are native events and do not close observation. Use `Client.Abort()` when
-abandoning Claude consumption: it closes the client and discards the native
-backlog; future `Receive` calls reject the abandoned stream. It does not mutate
-the bounded relationship scratch concurrently with an active `Receive`.
+未确认成员的记录留在连接级隔离诊断中，不作为任何 Session 的原生成员事件，也不因等待超时广播到全部 Session。隔离设置明确的记录数、字节数及保留期限制，超限、到期与材料可用范围可观察；不得为每个 Session 复制隔离区。
 
-Internally, closing a queue rejects pushes and wakes waiters, preserving the first
-terminal cause while allowing drain. Aborting clears pending storage, preserves
-an already established cause and wakes waiters. Abort actively drains and
-discards upstream envelopes and joins the input owner; it costs O(backlog) and
-does not need an external consumer. Close returns without joining the buffer
-pump, which exits after drain. Callers must drain after Close or explicitly Abort
-when abandoning a stream, so a blocked pump does not retain its backlog.
-Zero-value queues work without initialization; nil queue receivers and nil wait contexts return defined errors.
+诊断读取保留仍可用的原始材料与接收证据，并标记“未纳入 Session 实时流”。后续成员确认不把旧材料补插进实时流；归属未知区间及未保留部分仍是缺口。隔离材料不能创建回答权；真实未归属请求由连接权威 registry 持有并按原生规则失效，未知归属不自动批准、拒绝或授予某个 Session 权限。
 
-## Memory, limits and diagnostics
+隔离容量与到期策略只约束诊断材料；不得充当真实请求有效期或 Session FIFO 丢弃策略。已知成员但未知父级的事件不能被放入隔离区等待完整树。
 
-The event backlog has no configured count or byte ceiling. Available machine
-memory is the bound: sustained input faster than consumption can exhaust memory.
-This is in-memory delivery, with no crash, OOM or process-restart durability
-promise. Consume continuously where possible, stop unneeded observations and use
-`Abort` for abandoned streams.
+## Load 与单入口
 
-ChannX manages the dynamically growing ring; the wrapper does not copy its ring
-implementation or maintain a second metadata FIFO. Consumed envelope slots are
-cleared, and abort clears discarded envelopes. Buffer storage can shrink when
-empty. This releases queued event references; it does not measure or bound all
-memory reachable from a native event.
+历史保留明确 History 来源，按主历史顺序接受，与实时事件允许交错。加载完成边界在全部历史记录接受且完整性检查成功之后交付；不表示全部实时事件已读尽。独立加载状态可供查询，但不是第二个事件消费者。
 
-Codex `Limits.EventQueue` and `SubscriptionOptions.EventQueue`, and Claude
-`Limits.EventBuffer`, are deprecated and ignored for event storage. Their
-existing validation remains; their values neither allocate buffers nor limit
-backlog. Frame/protocol bounds, subscription and graph limits, unresolved-event
-count/byte/age limits, per-notification fanout bounds, deduplication storage,
-control and permission limits remain separate and continue to fail visibly.
-Changing event delivery does not change call timeouts or approval admission rules.
+回放生产者保留一页或一条等有界工作集，逐步让出生产机会，使实时交付和控制继续运行；不得建立第二条增长的历史 FIFO。Session backlog 的内存限制不因历史读取有界而消失。详细完成、输入门禁及失败清理见[异步历史加载](async-history.md)。
 
-The shared queue's internal snapshot reports pending item count, caller-estimated
-bytes and closed state. `OldestAge` is unavailable and always zero because
-ChannX does not expose the oldest envelope. Byte estimates come from callers;
-they are not heap measurements. Snapshots exclude values already popped into a
-native staging/delivery step, including the Codex bridge's in-flight event.
-These implementation diagnostics do not add a public SDK metrics API. Existing
-native diagnostics continue to describe native routing and process failures.
+## 关闭与排空
+
+关闭或终止故障停止新接受，失效本 Session 请求权限，唤醒挂起控制并释放所拥有资源；已接受记录仍可排空，包括交付步骤中已取出但尚未返回调用方的记录。排空后取得正常结束或终止错误。交互终止、清理完成与事件读尽独立表达，根执行结果不终止流。
+
+清理不等待消费。共享连接只释放该 Session 的注册与原生附着；自有进程按其有界回收规则处理。不得把关闭统一描述为递归停止所有 Agent。显式放弃消费的 Abort 可以丢弃 backlog、释放引用；与已经完成的接收竞争时允许该记录返回。普通 Close 不等于 Abort。
+
+## FIFO 机械合同与资源
+
+internal/queue 只共享 FIFO 机械逻辑，直接使用根模块固定的 ChannX，不认识原生类型、关系或权限。每个 Session 一份实例，不按 Agent 分区，无第二份增长的派生事件 FIFO。命令握手及有界单记录 staging 不是独立 backlog。wrapper 的单一输入拥有者负责入队与关闭，保持取消和批量接受语义。
+
+内部 queue 的零值可用，nil 接收者和 nil 等待 context 返回明确错误。Close 拒绝新入队并允许排空；Abort 清除保留引用、唤醒等待者并收拢输入拥有者，可随 backlog 大小产生线性清理成本。首个终止原因保持稳定，清理诊断另行保留。
+
+队列没有固定事件数或字节上限；可用内存是限制，持续慢消费可能耗尽内存。不承诺崩溃、OOM 或进程重启后交付，也不承诺一定能在 OOM 前报告错误。已消费和显式丢弃的引用须释放。停止消费时应排空或明确 Abort，避免 backlog 留存。
+
+帧、请求、观察索引、隔离材料及历史读取各自有显式资源限制；错误不能静默截断已接受事实。父级图深度限制只约束父级知识，不是 Session 的预设观察层数。Call/Write 的单次操作超时与审批等待有效期分开，无默认 SDK 审批倒计时。
+
+内部 snapshot 的 pending 数量和调用者估算字节不是 heap 测量，且不包含已取出的 staging；ChannX 不提供的最旧记录时间保持不可用。不能以诊断估计声称总内存受限，也不因此新增公共 metrics Interface。

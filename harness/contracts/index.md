@@ -7,3 +7,5 @@
 - [异步历史加载](async-history.md)
 - [原生历史事件](history-events.md)
 - [共同验收场景](stories/index.md)
+
+运行时职责及 Interface 见[Session 深模块设计](../modules/native-session/design.md)。

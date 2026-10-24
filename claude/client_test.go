@@ -240,7 +240,7 @@ func openFixture(t *testing.T, mode string, configure ...func(*Options)) *Client
 	for _, fn := range configure {
 		fn(&opts)
 	}
-	c, err := Open(context.Background(), opts)
+	c, err := NewClient(context.Background(), opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	return c
@@ -292,7 +292,7 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	opts.Model = "--odd model; $(not-a-shell)"
-	c, err := Open(context.Background(), opts)
+	c, err := NewClient(context.Background(), opts)
 	require.NoError(t, err)
 	defer c.Abort()
 	data, err := os.ReadFile(capture)
@@ -383,7 +383,7 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 			opts := fixtureOptions(t, mode)
 			opts.InitializeTimeout = 100 * time.Millisecond
 			start := time.Now()
-			c, err := Open(context.Background(), opts)
+			c, err := NewClient(context.Background(), opts)
 			require.Falsef(t, c != nil || err == nil, "Open = %v, %v", c, err)
 			require.False(t, time.Since(start) > 3*time.Second, "startup cleanup was not bounded")
 			if mode == "init_hang" || mode == "init_wrong" {
@@ -703,7 +703,7 @@ func TestStartupFailureReleasesUnconsumedNativeQueue(t *testing.T) {
 		// This peer deterministically emits an event before its correlated error.
 		// Use the usual startup budget: the assertion concerns teardown, not timing.
 		opts.InitializeTimeout = 3 * time.Second
-		c, err := Open(context.Background(), opts)
+		c, err := NewClient(context.Background(), opts)
 		require.Nil(t, c)
 		var control *ControlError
 		require.ErrorAs(t, err, &control)

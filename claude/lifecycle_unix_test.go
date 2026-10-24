@@ -28,7 +28,7 @@ func (s *processLifecycleSuite) TestCloseReapsUncooperativeChild() {
 	opts := fixtureOptions(t, "ignore_eof")
 	capture := filepath.Join(opts.WorkDir, "pid.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	c, err := Open(context.Background(), opts)
+	c, err := NewClient(context.Background(), opts)
 	require.NoError(t, err)
 	data, err := os.ReadFile(capture)
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ func (s *processLifecycleSuite) TestInitializationTimeoutReapsChild() {
 	opts.InitializeTimeout = 150 * time.Millisecond
 	capture := filepath.Join(opts.WorkDir, "pid.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	_, err := Open(context.Background(), opts)
+	_, err := NewClient(context.Background(), opts)
 	require.ErrorIsf(t, err, context.DeadlineExceeded, "Open = %v", err)
 	data, err := os.ReadFile(capture)
 	require.NoError(t, err)

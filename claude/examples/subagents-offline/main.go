@@ -47,7 +47,7 @@ func run(output io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	client, err := claude.Open(ctx, claude.Options{
+	client, err := claude.NewClient(ctx, claude.Options{
 		CLIPath: executable,
 		WorkDir: dir,
 		// Replacement environment: no account configuration is inherited.

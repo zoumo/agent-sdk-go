@@ -33,7 +33,7 @@ func (s *recordedObservationSuite) TestRecordedAuthenticationFailureReplay() {
 	marker := filepath.Join(dir, "consumed")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := Open(ctx, Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
+	client, err := NewClient(ctx, Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
 	require.NoError(t, err)
 	defer client.Abort()
 	prompt, err := transcript.Prompt()

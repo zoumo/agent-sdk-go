@@ -1,3 +1,7 @@
+> The new owned-process `Open(ctx, SessionOptions)` API and its current migration
+> limits are documented in [Session migration](docs/session-migration.md). The
+> examples below retain the temporary `NewClient` compatibility entry point.
+
 # Claude Agent SDK for Go
 
 Commands in this native documentation run from `claude/`; see [root validation](../docs/testing.md).
@@ -48,7 +52,7 @@ func main() {
     ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
     defer cancel()
 
-    client, err := claude.Open(ctx, claude.Options{CLIPath: "claude"})
+    client, err := claude.NewClient(ctx, claude.Options{CLIPath: "claude"})
     if err != nil { log.Fatal(err) }
     defer client.Abort()
 
@@ -142,7 +146,7 @@ options := claude.OptionsFromTypes(config)
 options.PermissionHandler = func(request *claude.PermissionRequest) {
     // Retain or answer the real request using the existing permission API.
 }
-// Pass options to claude.Open(ctx, options).
+// Pass options to claude.NewClient(ctx, options).
 // options.Types() returns the callback-free configuration again.
 ```
 

@@ -374,7 +374,7 @@ func (s *treeObservationSuite) TestTreeUnknownSystemSubtypeNeedsSourceEvidence()
 // Tests exercise the sole public entry point with resource/history configuration.
 func openWithTree(ctx context.Context, options Options, bounds SubagentOptions) (*Client, error) {
 	options.Subagents = bounds
-	return Open(ctx, options)
+	return NewClient(ctx, options)
 }
 
 func (s *treeObservationSuite) TestDefaultManagedOpenAndNativeOriginBoundary() {
@@ -382,7 +382,7 @@ func (s *treeObservationSuite) TestDefaultManagedOpenAndNativeOriginBoundary() {
 	opts := fixtureOptions(t, "tree")
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	c, err := Open(context.Background(), opts)
+	c, err := NewClient(context.Background(), opts)
 	require.NoError(t, err)
 	defer c.Abort()
 	assertForwardCapture(t, capture, true)
@@ -411,7 +411,7 @@ func TestDefaultManagedRejectsTreeBeforeSpawn(t *testing.T) {
 		capture := filepath.Join(opts.WorkDir, "capture.json")
 		opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 		opts.Subagents = bounds
-		if c, err := Open(context.Background(), opts); err == nil || c != nil {
+		if c, err := NewClient(context.Background(), opts); err == nil || c != nil {
 			if c != nil {
 				c.Close()
 			}

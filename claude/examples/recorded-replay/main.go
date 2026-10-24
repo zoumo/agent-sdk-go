@@ -36,7 +36,7 @@ func run(out io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	client, err := claude.Open(ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, transcript.PeerEnvironment + "=1", "GORACE=atexit_sleep_ms=0"}})
+	client, err := claude.NewClient(ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, transcript.PeerEnvironment + "=1", "GORACE=atexit_sleep_ms=0"}})
 	if err != nil {
 		return err
 	}

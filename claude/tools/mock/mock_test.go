@@ -177,7 +177,7 @@ func (s *sdkSuite) open(script mock.Scenario, handler claude.PermissionHandler) 
 	s.Require().NoError(os.WriteFile(path, data, 0600))
 	exe, err := os.Executable()
 	s.Require().NoError(err)
-	s.client, err = claude.Open(s.ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{mock.ScenarioEnvironment + "=" + path, "HOME=" + dir, "GORACE=atexit_sleep_ms=0"}, PermissionHandler: handler, ShutdownTimeout: time.Second})
+	s.client, err = claude.NewClient(s.ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{mock.ScenarioEnvironment + "=" + path, "HOME=" + dir, "GORACE=atexit_sleep_ms=0"}, PermissionHandler: handler, ShutdownTimeout: time.Second})
 	s.Require().NoError(err)
 }
 func (s *sdkSuite) nextNative(typ string) claude.Event {

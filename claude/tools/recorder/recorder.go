@@ -90,7 +90,7 @@ func Run() error {
 	}
 	defer observations.Close()
 	var handlerMu sync.Mutex
-	client, openErr := claude.Open(ctx, claude.Options{CLIPath: exe, WorkDir: project, Env: env, InitializeTimeout: 30 * time.Second, ShutdownTimeout: 3 * time.Second, Limits: claude.Limits{FrameBytes: 2 << 20, StderrBytes: 256 << 10, PermissionWorkers: 1}, PermissionHandler: func(p *claude.PermissionRequest) {
+	client, openErr := claude.NewClient(ctx, claude.Options{CLIPath: exe, WorkDir: project, Env: env, InitializeTimeout: 30 * time.Second, ShutdownTimeout: 3 * time.Second, Limits: claude.Limits{FrameBytes: 2 << 20, StderrBytes: 256 << 10, PermissionWorkers: 1}, PermissionHandler: func(p *claude.PermissionRequest) {
 		handlerMu.Lock()
 		defer handlerMu.Unlock()
 		callbacks++

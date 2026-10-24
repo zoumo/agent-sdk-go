@@ -164,7 +164,7 @@ func (s *consumerSuite) TestClaude() {
 			}
 			path := scenario(t, "claude", frames...)
 			permissions := make(chan *claude.PermissionRequest, 1)
-			client, err := claude.Open(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
+			client, err := claude.NewClient(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
 			require.NoError(t, err)
 			defer client.Abort()
 			require.NoError(t, client.Send(ctx, "hello"))
@@ -359,7 +359,7 @@ func (s *consumerSuite) TestSlowConsumerBurst() {
 				`>{"type":"user","message":{"role":"user","content":"release"},"parent_tool_use_id":null,"session_id":""}`, `!`)
 			path := scenario(t, native, frames...)
 			permissions := make(chan *claude.PermissionRequest, 1)
-			client, err := claude.Open(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, Limits: claude.Limits{EventBuffer: 1}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
+			client, err := claude.NewClient(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, Limits: claude.Limits{EventBuffer: 1}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
 			require.NoError(t, err)
 			defer client.Abort()
 			require.NoError(t, client.Send(ctx, "hello"))

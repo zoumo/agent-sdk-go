@@ -90,6 +90,7 @@ type pendingControl struct {
 // Receive is a single-consumer stream; callers must not call it concurrently.
 type Client struct {
 	tree                                *managedTree
+	session                             *Session
 	opts                                Options
 	cmd                                 *exec.Cmd
 	stdin, stdout, stderr               *os.File
@@ -119,27 +120,36 @@ type Client struct {
 	permissionIDs                       map[string]struct{}
 }
 
-// Open starts and initializes a local process. ctx bounds startup, not the
+// NewClient starts and initializes a local process. ctx bounds startup, not the
 // lifetime of the returned client. Initialization failures include bounded
 // cleanup before returning. No Claude CLI version probe or network call is made
 // by the SDK itself; starting a real CLI can use its configured account.
-func Open(ctx context.Context, options Options) (*Client, error) {
+// Deprecated: use Open for the Session FIFO. This compatibility path retains
+// the legacy tree/callback contract until its consumers are migrated.
+func NewClient(ctx context.Context, options Options) (*Client, error) {
 	return open(ctx, options, "")
 }
 
 func open(ctx context.Context, options Options, expectedResumeID string) (*Client, error) {
+	return openInteraction(ctx, options, expectedResumeID, nil)
+}
+
+func openInteraction(ctx context.Context, options Options, expectedResumeID string, session *Session) (*Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if err := options.defaults(); err != nil {
 		return nil, err
 	}
-	tree, err := newManagedTree(options)
-	if err != nil {
-		return nil, err
+	var tree *managedTree
+	var err error
+	if session == nil {
+		tree, err = newManagedTree(options)
+		if err != nil {
+			return nil, err
+		}
+		options.Subagents = tree.options
 	}
-	// History has already been consumed into bounded private state.
-	options.Subagents = tree.options
 	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
@@ -182,13 +192,18 @@ func open(ctx context.Context, options Options, expectedResumeID string) (*Clien
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &Client{tree: tree, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
+	c := &Client{session: session, tree: tree, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
 		responses:      make(chan incomingControl, options.Limits.ControlBuffer),
 		permissionJobs: make(chan *PermissionRequest, options.Limits.ControlBuffer), epoch: connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
-	tree.client = c
+	if tree != nil {
+		tree.client = c
+	}
+	if session != nil {
+		session.client = c
+	}
 	go c.readStdout()
 	go c.readStderr()
 	go c.respondControls()
@@ -391,6 +406,9 @@ func (c *Client) failLocked(err error) {
 		permission.cancel(cause)
 		delete(c.permissions, id)
 	}
+	if c.session != nil {
+		c.session.finish(err)
+	}
 	c.stopOnce.Do(func() { close(c.done); close(c.stop) })
 }
 
@@ -546,7 +564,7 @@ func (c *Client) route(event Event) error {
 	if event.Control != nil {
 		permission, err := c.registerIncoming(event.Control)
 		if errors.Is(err, ErrClosed) {
-			return c.events.Push(event, int64(len(event.Raw)))
+			return c.acceptEvent(event)
 		}
 		if err != nil {
 			return err
@@ -566,12 +584,16 @@ func (c *Client) route(event Event) error {
 			}
 		}
 	}
-	return c.events.Push(event, int64(len(event.Raw)))
+	return c.acceptEvent(event)
 }
 
 func (c *Client) readStdout() {
 	defer close(c.stdoutDone)
-	defer c.events.Close(nil)
+	defer func() {
+		if c.session == nil {
+			_ = c.events.Close(nil)
+		}
+	}()
 	reader := bufio.NewReaderSize(c.stdout, min(c.opts.Limits.FrameBytes+1, 32<<10))
 	var frame []byte
 	for {
@@ -678,6 +700,11 @@ func awaitUntil(ch <-chan struct{}, until time.Time) bool {
 
 func (c *Client) ownLifecycle() {
 	defer close(c.cleaned)
+	defer func() {
+		if c.session != nil {
+			c.session.finish(c.Err())
+		}
+	}()
 	select {
 	case <-c.stop:
 	case <-c.stdoutDone:

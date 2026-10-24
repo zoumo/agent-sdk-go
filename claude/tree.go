@@ -89,41 +89,9 @@ type managedTree struct {
 
 // newManagedTree validates and seeds state before a process is started.
 func newManagedTree(options Options) (*managedTree, error) {
-	treeOptions := options.Subagents
-	for _, bound := range []struct {
-		name              string
-		value             *int
-		fallback, ceiling int
-	}{
-		{"MaxNodes", &treeOptions.MaxNodes, 4096, 65536},
-		{"MaxDepth", &treeOptions.MaxDepth, 32, 256},
-		{"MaxDedupEntries", &treeOptions.MaxDedupEntries, 8192, 131072},
-		{"MaxRuns", &treeOptions.MaxRuns, 8192, 131072},
-		{"MaxCreationEntries", &treeOptions.MaxCreationEntries, 8192, 131072},
-		{"MaxPendingRecords", &treeOptions.MaxPendingRecords, 8192, 131072},
-		{"MaxUnresolvedEvents", &treeOptions.MaxUnresolvedEvents, 128, 65536},
-		{"MaxUnresolvedBytes", &treeOptions.MaxUnresolvedBytes, 4 << 20, 64 << 20},
-	} {
-		if *bound.value < 0 || *bound.value > bound.ceiling {
-			return nil, fmt.Errorf("claude: %s must be between 0 and %d", bound.name, bound.ceiling)
-		}
-		if *bound.value == 0 {
-			*bound.value = bound.fallback
-		}
-	}
-	if treeOptions.MaxUnresolvedWait < 0 || treeOptions.MaxUnresolvedWait > time.Minute {
-		return nil, fmt.Errorf("claude: MaxUnresolvedWait must be between 0 and 1 minute")
-	}
-	if treeOptions.MaxUnresolvedWait == 0 {
-		treeOptions.MaxUnresolvedWait = 5 * time.Second
-	}
-	if len(treeOptions.History) > treeOptions.MaxNodes {
-		return nil, fmt.Errorf("claude: history exceeds MaxNodes")
-	}
-	for _, seed := range treeOptions.History {
-		if seed.SessionID == "" || seed.TaskID == "" {
-			return nil, fmt.Errorf("claude: history requires session and task IDs")
-		}
+	treeOptions, err := normalizedSubagentOptions(options)
+	if err != nil {
+		return nil, err
 	}
 	graph, err := lineage.New[treeKey](lineage.Limits{MaxNodes: 2 * treeOptions.MaxNodes, MaxRelations: treeOptions.MaxNodes, MaxDepth: treeOptions.MaxDepth, UnknownDepth: 1})
 	if err != nil {
@@ -1128,4 +1096,44 @@ func (t *managedTree) trackRun(r *relationshipRecord, e Event) error {
 		t.stage(d)
 	}
 	return nil
+}
+
+func normalizedSubagentOptions(options Options) (SubagentOptions, error) {
+	treeOptions := options.Subagents
+	for _, bound := range []struct {
+		name              string
+		value             *int
+		fallback, ceiling int
+	}{
+		{"MaxNodes", &treeOptions.MaxNodes, 4096, 65536},
+		{"MaxDepth", &treeOptions.MaxDepth, 32, 256},
+		{"MaxDedupEntries", &treeOptions.MaxDedupEntries, 8192, 131072},
+		{"MaxRuns", &treeOptions.MaxRuns, 8192, 131072},
+		{"MaxCreationEntries", &treeOptions.MaxCreationEntries, 8192, 131072},
+		{"MaxPendingRecords", &treeOptions.MaxPendingRecords, 8192, 131072},
+		{"MaxUnresolvedEvents", &treeOptions.MaxUnresolvedEvents, 128, 65536},
+		{"MaxUnresolvedBytes", &treeOptions.MaxUnresolvedBytes, 4 << 20, 64 << 20},
+	} {
+		if *bound.value < 0 || *bound.value > bound.ceiling {
+			return SubagentOptions{}, fmt.Errorf("claude: %s must be between 0 and %d", bound.name, bound.ceiling)
+		}
+		if *bound.value == 0 {
+			*bound.value = bound.fallback
+		}
+	}
+	if treeOptions.MaxUnresolvedWait < 0 || treeOptions.MaxUnresolvedWait > time.Minute {
+		return SubagentOptions{}, fmt.Errorf("claude: MaxUnresolvedWait must be between 0 and 1 minute")
+	}
+	if treeOptions.MaxUnresolvedWait == 0 {
+		treeOptions.MaxUnresolvedWait = 5 * time.Second
+	}
+	if len(treeOptions.History) > treeOptions.MaxNodes {
+		return SubagentOptions{}, fmt.Errorf("claude: history exceeds MaxNodes")
+	}
+	for _, seed := range treeOptions.History {
+		if seed.SessionID == "" || seed.TaskID == "" {
+			return SubagentOptions{}, fmt.Errorf("claude: history requires session and task IDs")
+		}
+	}
+	return treeOptions, nil
 }

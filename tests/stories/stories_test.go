@@ -256,7 +256,7 @@ func claudeStory(t *testing.T, story string) (trace storyTrace) {
 		opts.ResumeID = "s"
 		opts.Subagents.History = []claude.SubagentHistory{{SessionID: "s", TaskID: "child"}}
 	}
-	c, err := claude.Open(ctx, opts)
+	c, err := claude.NewClient(ctx, opts)
 	must(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	readUntil := func(target string) {

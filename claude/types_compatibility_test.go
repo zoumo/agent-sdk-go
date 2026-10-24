@@ -76,7 +76,7 @@ func (s *clientProtocolSuite) TestOptionsAdapterRunsExistingSubprocessProtocol()
 	t := s.T()
 	// Exercise the existing isolated initialize/send/receive protocol via the adapter.
 	o := OptionsFromTypes(fixtureOptions(t, "echo").Types())
-	c, err := Open(context.Background(), o)
+	c, err := NewClient(context.Background(), o)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	send(t, c, "adapter")

@@ -13,7 +13,7 @@ import (
 func ExampleOpen() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client, err := Open(ctx, Options{CLIPath: "claude"})
+	client, err := NewClient(ctx, Options{CLIPath: "claude"})
 	if err != nil {
 		log.Print(err)
 		return
@@ -52,7 +52,7 @@ func ExampleOpen() {
 func ExampleClient_RequestedResumeID() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client, err := Open(ctx, Options{CLIPath: "claude", ResumeID: "previous-native-session-id"})
+	client, err := NewClient(ctx, Options{CLIPath: "claude", ResumeID: "previous-native-session-id"})
 	if err != nil {
 		log.Print(err)
 		return
@@ -72,7 +72,7 @@ func ExampleClient_RequestedResumeID() {
 // configured CLI and can incur account usage. The application owns the human UI.
 func ExamplePermissionRequest_Answer() {
 	requests := make(chan *PermissionRequest, 8)
-	client, err := Open(context.Background(), Options{
+	client, err := NewClient(context.Background(), Options{
 		CLIPath: "claude",
 		PermissionHandler: func(request *PermissionRequest) {
 			select {

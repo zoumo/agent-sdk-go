@@ -86,7 +86,7 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 				capture := filepath.Join(opts.WorkDir, "must-not-start.json")
 				opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 				reflect.ValueOf(&opts.Limits).Elem().FieldByName(field).SetInt(int64(value))
-				c, err := Open(context.Background(), opts)
+				c, err := NewClient(context.Background(), opts)
 				require.Nilf(t, c, "invalid limit: %v, %v", c, err)
 				require.Errorf(t, err, "invalid limit: %v, %v", c, err)
 				require.Containsf(t, err.Error(), field, "invalid limit: %v, %v", c, err)

@@ -29,7 +29,7 @@ func TestCLIInitialization(t *testing.T) {
 	require.True(t, filepath.IsAbs(path), "CLAUDE_E2E=1 requires an explicit absolute CLAUDE_E2E_CLI path")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := claude.Open(ctx, claude.Options{CLIPath: path, WorkDir: t.TempDir()})
+	client, err := claude.NewClient(ctx, claude.Options{CLIPath: path, WorkDir: t.TempDir()})
 	require.True(t, err == nil, "real CLI initialization failed (diagnostics withheld; inspect privately)")
 	{
 		err := client.Close()

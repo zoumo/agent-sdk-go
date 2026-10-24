@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrClosed                   = errors.New("claude: client is closed")
+	ErrUnsupported              = errors.New("claude: unsupported operation")
 	ErrProtocol                 = errors.New("claude: invalid protocol frame")
 	ErrResourceLimit            = errors.New("claude: resource limit exceeded")
 	ErrUnexpectedEOF            = errors.New("claude: unexpected end of stdout")
@@ -22,6 +23,28 @@ var (
 	ErrPermissionStale          = errors.New("claude: permission handle belongs to another connection epoch")
 	ErrPermissionHandlerPanic   = errors.New("claude: permission handler panicked")
 )
+
+// DispatchState distinguishes a local rejection from a possibly written answer.
+type DispatchState string
+
+const (
+	NotSent        DispatchState = "not-sent"
+	OutcomeUnknown DispatchState = "outcome-unknown"
+)
+
+type DispatchError struct {
+	Op    string
+	State DispatchState
+	Err   error
+}
+
+func (e *DispatchError) Error() string {
+	return fmt.Sprintf("claude: %s (%s): %v", e.Op, e.State, e.Err)
+}
+func (e *DispatchError) Unwrap() error { return e.Err }
+func (e *DispatchError) Is(target error) bool {
+	return target == ErrUnknownOutcome && e.State == OutcomeUnknown
+}
 
 // Error describes an operation or terminal failure. Stderr is a bounded tail,
 // never logged by the SDK, and may contain sensitive CLI diagnostics.

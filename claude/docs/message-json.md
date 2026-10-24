@@ -208,7 +208,7 @@ updated, err := input.WithAnswers(map[string]types.QuestionAnswer{
     input.Questions[0].Question: {Text: &text},
 })
 if err != nil { return err }
-return p.Answer(ctx, types.PermissionAnswer{
+return p.Answer(ctx, claude.PermissionAnswer{
     Behavior: types.PermissionAllow, UpdatedInput: updated,
 })
 ```

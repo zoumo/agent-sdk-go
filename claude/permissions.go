@@ -22,10 +22,21 @@ import (
 // The CLI may auto-approve operations before this handler; it is not a sandbox.
 type PermissionHandler func(*PermissionRequest)
 
-// PermissionBehavior and PermissionAnswer are canonical pure data in types.
+// PermissionBehavior is native decision data in types.
 type PermissionBehavior = types.PermissionBehavior
 
-type PermissionAnswer = types.PermissionAnswer
+// PermissionAnswer is a runtime command. A nil UpdatedInput uses the original
+// input; it is distinct from the detached native PermissionResult value.
+type PermissionAnswer struct {
+	Behavior           PermissionBehavior
+	UpdatedInput       json.RawMessage
+	UpdatedPermissions []types.PermissionUpdate
+	Message            string
+	Interrupt          *bool
+	// These native extensions are not connected to the runtime answer contract.
+	ToolUseID              string
+	DecisionClassification string
+}
 
 const (
 	PermissionAllow = types.PermissionAllow
@@ -121,7 +132,22 @@ func (p *PermissionRequest) Context() context.Context {
 // Cancellation cannot retract a write already authorized; such a race is
 // conservatively reported as ErrUnknownOutcome. Successful return establishes
 // only a complete local write, not execution or acceptance by the CLI.
-func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer) error {
+func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer) (result error) {
+	// The expand-contract Client retains its old failed-attempt semantics. The
+	// Session path reports a confirmed local rejection without destroying a live
+	// native wait. Both paths share the same reservation and writer authority.
+	session := p != nil && p.state != nil && p.state.owner.session != nil
+	if session {
+		defer func() {
+			if result != nil {
+				state := NotSent
+				if errors.Is(result, ErrUnknownOutcome) {
+					state = OutcomeUnknown
+				}
+				result = &DispatchError{Op: "permission answer", State: state, Err: result}
+			}
+		}()
+	}
 	if err := p.reserveAnswer(ctx); err != nil {
 		return err
 	}
@@ -134,6 +160,11 @@ func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer)
 			c.mu.Unlock()
 			return stateErr
 		}
+		if session {
+			s.status = permissionPending
+			c.mu.Unlock()
+			return err
+		}
 		failure := p.failAnswerLocked(err)
 		c.mu.Unlock()
 		return failure
@@ -144,6 +175,9 @@ func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer)
 func (p *PermissionRequest) reserveAnswer(ctx context.Context) error {
 	if p == nil || p.state == nil {
 		return ErrInvalidPermissionRequest
+	}
+	if ctx == nil {
+		return ErrInvalidPermissionAnswer
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -208,6 +242,10 @@ func (p *PermissionRequest) writeResponse(ctx context.Context, response map[stri
 			err = &PermissionError{RequestID: s.id, Err: err}
 		case !authorized && (s.status == permissionClosed || c.closing || c.stopped):
 			err = &PermissionError{RequestID: s.id, Err: ErrClosed}
+		case !authorized && c.session != nil && s.status == permissionAnswering:
+			// Local cancellation/encoding/size rejection before OS authorization
+			// does not consume the original native answer authority.
+			s.status = permissionPending
 		case authorized || s.status == permissionAnswering || s.status == permissionWriting:
 			// writeJSONChecked can already have closed the connection on error.
 			// Preserve the consumed attempt's failure instead of hiding it behind
@@ -240,9 +278,12 @@ func (p *PermissionRequest) failAnswerLocked(err error) error {
 }
 
 func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any, error) {
+	if answer.ToolUseID != "" || answer.DecisionClassification != "" {
+		return nil, ErrUnsupported
+	}
 	switch answer.Behavior {
 	case PermissionAllow:
-		if answer.Message != "" {
+		if answer.Message != "" || answer.Interrupt != nil {
 			return nil, ErrInvalidPermissionAnswer
 		}
 		input := answer.UpdatedInput
@@ -256,18 +297,88 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 		if !utf8.Valid(input) || !json.Valid(input) || len(input) == 0 || input[0] != '{' {
 			return nil, ErrInvalidPermissionAnswer
 		}
-		return map[string]any{"behavior": "allow", "updatedInput": json.RawMessage(bytes.Clone(input))}, nil
+		if p.state.owner.session != nil && p.ToolName() == "AskUserQuestion" {
+			var question types.AskUserQuestionInput
+			if err := json.Unmarshal(input, &question); err != nil {
+				return nil, errors.Join(ErrInvalidPermissionAnswer, err)
+			}
+			if question.Fields["response"] != types.Default || question.Response != nil {
+				return nil, ErrUnsupported
+			}
+			for _, a := range question.Answers {
+				if a.Labels != nil {
+					return nil, ErrUnsupported
+				}
+			}
+		}
+		data := map[string]any{"behavior": "allow", "updatedInput": json.RawMessage(bytes.Clone(input))}
+		if answer.UpdatedPermissions != nil {
+			if err := validatePermissionUpdates(answer.UpdatedPermissions); err != nil {
+				return nil, err
+			}
+			data["updatedPermissions"] = answer.UpdatedPermissions
+		}
+		return data, nil
 	case PermissionDeny:
-		if answer.UpdatedInput != nil || !utf8.ValidString(answer.Message) {
+		if answer.UpdatedInput != nil || answer.UpdatedPermissions != nil || !utf8.ValidString(answer.Message) {
 			return nil, ErrInvalidPermissionAnswer
 		}
 		if len(answer.Message) > p.state.owner.opts.Limits.FrameBytes {
 			return nil, &ResourceLimitError{Resource: "outbound frame bytes", Limit: p.state.owner.opts.Limits.FrameBytes}
 		}
-		return map[string]any{"behavior": "deny", "message": answer.Message}, nil
+		data := map[string]any{"behavior": "deny", "message": answer.Message}
+		if answer.Interrupt != nil {
+			data["interrupt"] = *answer.Interrupt
+		}
+		return data, nil
 	default:
 		return nil, ErrInvalidPermissionAnswer
 	}
+}
+
+func validatePermissionUpdates(updates []types.PermissionUpdate) error {
+	for _, u := range updates {
+		switch u.Destination {
+		case "userSettings", "projectSettings", "localSettings", "session", "cliArg":
+		default:
+			return ErrInvalidPermissionAnswer
+		}
+		switch u.Type {
+		case "addRules", "replaceRules", "removeRules":
+			if u.Rules == nil || u.Mode != "" || u.Directories != nil {
+				return ErrInvalidPermissionAnswer
+			}
+			if u.Behavior != "allow" && u.Behavior != "deny" && u.Behavior != "ask" {
+				return ErrInvalidPermissionAnswer
+			}
+			for _, r := range u.Rules {
+				if r.ToolName == "" || !utf8.ValidString(r.ToolName) || (r.RuleContent != nil && !utf8.ValidString(*r.RuleContent)) {
+					return ErrInvalidPermissionAnswer
+				}
+			}
+		case "setMode":
+			if u.Rules != nil || u.Directories != nil || u.Behavior != "" {
+				return ErrInvalidPermissionAnswer
+			}
+			switch u.Mode {
+			case "default", "acceptEdits", "bypassPermissions", "plan", "dontAsk", "auto":
+			default:
+				return ErrUnsupported
+			}
+		case "addDirectories", "removeDirectories":
+			if u.Directories == nil || u.Rules != nil || u.Mode != "" || u.Behavior != "" {
+				return ErrInvalidPermissionAnswer
+			}
+			for _, d := range u.Directories {
+				if d == "" || !utf8.ValidString(d) {
+					return ErrInvalidPermissionAnswer
+				}
+			}
+		default:
+			return ErrUnsupported
+		}
+	}
+	return nil
 }
 
 type permissionStatus uint8

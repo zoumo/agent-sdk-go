@@ -3,6 +3,14 @@
 This Go SDK implements a small local-process client. **It is not an API-compatible
 replacement for the official TypeScript SDK. No CLI version is fully live-validated.**
 
+The new Session request path is documented in [Session requests](session-requests.md).
+Its approvals use Receive and support permission updates and deny interruption;
+the callback/default-denial and unsupported-update entries below describe the
+temporary legacy Client path before that migration. Both paths now use the runtime
+`claude.PermissionAnswer`; Session rejects unsupported answer options before
+dispatch and retains a still-live handle on NotSent. Offline coverage is not live
+CLI validation.
+
 The largest gaps are:
 
 - **Input control:** `Send(ctx, text)` accepts text only. There is no public

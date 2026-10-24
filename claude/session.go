@@ -5,6 +5,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,14 +13,15 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
-// SessionOptions carries the native owned-process options. Approval delivery,
-// structured input and dynamic configuration are migrated separately.
+// SessionOptions carries native owned-process options. PermissionHandler is a
+// legacy Client option: Open rejects it; use Receive to obtain real requests.
 type SessionOptions Options
 
 type ReceivedKind string
 
 const (
 	ReceivedNative      ReceivedKind = "event"
+	ReceivedRequest     ReceivedKind = "request"
 	ReceivedObservation ReceivedKind = "observation"
 )
 
@@ -28,8 +30,10 @@ const (
 type Received struct {
 	Kind        ReceivedKind
 	Event       *Event
+	Request     *IncomingRequest
 	Observation *Observation
 	Raw         json.RawMessage
+	Params      json.RawMessage
 	Source      SubagentIdentity
 	Parent      *SubagentIdentity
 	Origin      string
@@ -78,6 +82,9 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 		return nil, queue.ErrNilContext
 	}
 	o := Options(options)
+	if o.PermissionHandler != nil {
+		return nil, &DispatchError{Op: "open", State: NotSent, Err: fmt.Errorf("%w: PermissionHandler is a legacy Client option; consume Session.Receive requests", ErrUnsupported)}
+	}
 	if err := o.defaults(); err != nil {
 		return nil, err
 	}

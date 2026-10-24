@@ -67,7 +67,7 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 	})
 	require.NoError(t, err)
 	{
-		err := p.Answer(context.Background(), types.PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated})
+		err := p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated})
 		require.NoError(t, err)
 	}
 	echo := receive(t, c)

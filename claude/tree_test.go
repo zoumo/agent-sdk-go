@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,10 +22,24 @@ import (
 
 // Original synthetic stream-json peer; never executes an installed model/CLI.
 func runTreeFixture(reader *bufio.Reader) {
+	var transcript *os.File
+	if path := os.Getenv("CLAUDE_GO_TRANSCRIPT"); path != "" {
+		var err error
+		transcript, err = os.Create(path)
+		if err != nil {
+			os.Exit(12)
+		}
+		defer transcript.Close()
+	}
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			return
+		}
+		if transcript != nil {
+			if _, err := transcript.Write(line); err != nil {
+				os.Exit(12)
+			}
 		}
 		var w struct {
 			Type      string
@@ -36,6 +51,13 @@ func runTreeFixture(reader *bufio.Reader) {
 		}
 		switch w.Type {
 		case "user":
+			if id, ok := strings.CutPrefix(w.Message.Content, "block_write:"); ok {
+				_, keepGoing := permissionBlockedWire(reader, transcript, id)
+				if !keepGoing {
+					return
+				}
+				continue
+			}
 			if w.Message.Content == "disconnect" {
 				return
 			}

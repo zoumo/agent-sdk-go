@@ -16,9 +16,9 @@ import (
 
 // Function signatures require identical types, not merely convertible structs.
 var (
-	_ func(context.Context) (ReceivedEvent, error)        = (*Client)(nil).Receive
-	_ func(context.Context, types.PermissionAnswer) error = (*PermissionRequest)(nil).Answer
-	_ types.Event                                         = Event{
+	_ func(context.Context) (ReceivedEvent, error)  = (*Client)(nil).Receive
+	_ func(context.Context, PermissionAnswer) error = (*PermissionRequest)(nil).Answer
+	_ types.Event                                   = Event{
 		System: &types.SystemEvent{},
 		Assistant: &types.Message{Content: types.Content{Blocks: []ContentBlock{{
 			Text: &types.TextBlock{}, Thinking: &types.ThinkingBlock{},

@@ -569,6 +569,9 @@ func (c *Client) route(event Event) error {
 		if err != nil {
 			return err
 		}
+		if c.session != nil && event.Control.Subtype == "can_use_tool" {
+			return c.session.acceptRequest(event, permission)
+		}
 		work := incomingControl{subtype: event.Control.Subtype, permission: permission}
 		if work.subtype == "can_use_tool" && c.opts.PermissionHandler != nil {
 			select {

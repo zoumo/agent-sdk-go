@@ -56,6 +56,7 @@ type Session struct {
 	mu               sync.Mutex
 	fifo             queue.Queue[Received]
 	root             string
+	nativeVersion    string
 	members          map[string]SubagentIdentity
 	parents          *lineage.Graph[string]
 	tools            map[string]string
@@ -131,6 +132,11 @@ func (s *Session) finish(cause error) {
 	}
 	s.closed = true
 	s.cause = cause
+	s.members = nil
+	s.parents = nil
+	s.tools = nil
+	s.childTools = nil
+	s.seeds = nil
 	_ = s.fifo.Close(cause)
 }
 func (c *Client) acceptEvent(e Event) error {
@@ -187,6 +193,12 @@ func (s *Session) accept(e Event) error {
 		s.isolate(e, "membership-unconfirmed")
 		return nil
 	}
+	if e.System != nil && e.Subtype == "init" && rootFrame && e.SessionID == s.root {
+		s.nativeVersion = e.System.ClaudeCodeVersion
+		if s.nativeVersion != "2.1.258" {
+			observations = append(observations, s.observation("relationship-version-unverified", "supported-native-version:2.1.258", SubagentIdentity{SessionID: s.root}, nil))
+		}
+	}
 	source := SubagentIdentity{SessionID: e.SessionID}
 	if e.AgentID != nil {
 		source.AgentID = *e.AgentID
@@ -197,7 +209,7 @@ func (s *Session) accept(e Event) error {
 	if isTreeTaskEvent(e) && e.System.TaskID != "" {
 		source.TaskID = e.System.TaskID
 		candidate := "task:" + source.TaskID
-		if e.Subtype == "task_started" && e.System.TaskType != nil && *e.System.TaskType == "local_agent" {
+		if e.Subtype == "task_started" && e.System.TaskType != nil && *e.System.TaskType == "local_agent" && s.nativeVersion == "2.1.258" {
 			key = candidate
 			source.AssociationID = key
 			if e.System.ToolUseID != nil {
@@ -251,7 +263,7 @@ func (s *Session) accept(e Event) error {
 	if e.System != nil && e.System.ParentTaskID != nil {
 		observations = append(observations, s.observation("parent-extension-unverified", "cli-2.1.258-does-not-declare-parent-task-id", source, s.parent(key)))
 	}
-	if e.Assistant != nil {
+	if e.Assistant != nil && s.nativeVersion == "2.1.258" {
 		// Root tool ownership needs the reviewed root envelope, or a verified task
 		// alias. An unknown agent extension cannot silently become a root owner.
 		ownerKnown := key != "" || rootFrame
@@ -365,7 +377,6 @@ func (s *Session) isolate(e Event, reason string) {
 func (s *Session) Unattributed() UnattributedSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.expire(time.Now())
 	records := append([]UnattributedRecord(nil), s.quarantine...)
 	// Parse a private copy so diagnostics cannot mutate retained native evidence.
 	for i := range records {

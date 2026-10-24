@@ -10,7 +10,7 @@ import (
 
 // This example compiles during tests but is not executed. Running it requires
 // your own installed Claude Code CLI and its configured account or provider.
-func ExampleOpen() {
+func ExampleNewClient() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	client, err := NewClient(ctx, Options{CLIPath: "claude"})

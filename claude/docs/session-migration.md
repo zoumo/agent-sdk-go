@@ -13,7 +13,9 @@ target selection. A result does not stop reception or future submission.
 
 The fixed declaration evidence is in [type sources](type-sources.md), especially
 SDK 0.3.258 / CLI 2.1.258. `task_started` with explicit `local_agent`, `task_id`
-and `tool_use_id` establishes a native local task/tool association. A forwarded
+and `tool_use_id` establishes a native local task/tool association only after
+an exact `claude_code_version: 2.1.258` init. Missing/other versions report a
+relationship coverage gap; same-session facts still deliver without these claims. A forwarded
 message/stream's `parent_tool_use_id` may use that already established alias.
 Message `agent_id` is retained as an **unverified extension**, never equated to
 `task_id`. `parent_task_id` and run_id extensions remain raw; they do not establish
@@ -28,7 +30,7 @@ Defaults are 128 records, 4 MiB and 5 seconds. Existing `Subagents` unresolved
 limits configure these bounds during migration. Oldest material is evicted to
 respect count/byte bounds; an oversized record is counted as dropped. A single
 active timer expires retained material even without further reads or traffic.
-Snapshots report retained bytes, limits, received timestamps, reasons, dropped
+Snapshots are read-only and report retained bytes, limits, received timestamps, reasons, dropped
 and expired counts, and a sticky coverage gap. Snapshots copy native values;
 they cannot mint answer handles. Later membership never backfills old frames.
 

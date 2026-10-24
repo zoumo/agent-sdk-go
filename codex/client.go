@@ -32,6 +32,8 @@ type pendingCall struct {
 	result   json.RawMessage
 	err      error
 	finished bool
+	accept   func(json.RawMessage) error
+	owner    *Session
 }
 type outbound struct {
 	frame   []byte
@@ -45,32 +47,40 @@ type outbound struct {
 // It never reconnects or replays requests. Calls are
 // safe concurrently; a context only cancels local waiting, never server execution.
 type Client struct {
-	mu               sync.Mutex
-	limits           Limits
-	cmd              *exec.Cmd
-	stdin            *os.File
-	stdout           *os.File
-	stderr           *os.File
-	remote           *websocket.Conn
-	remoteToken      string
-	queue            chan outbound
-	pending          map[ID]*pendingCall
-	reverse          map[ID]*requestState
-	requests         chan Request
-	subscriptions    map[*Subscription]struct{}
-	loads            map[string]*LoadedThread
-	threadOperations map[string]int
-	nextID           int64
-	ready            bool
-	cause            error
-	done             chan struct{}
-	cleaned          chan struct{}
-	reaped           chan struct{}
-	readDone         chan struct{}
-	closeErr         error
-	serverInfo       json.RawMessage
-	diag             DiagnosticSnapshot
-	workers          sync.WaitGroup
+	mu                  sync.Mutex
+	limits              Limits
+	cmd                 *exec.Cmd
+	stdin               *os.File
+	stdout              *os.File
+	stderr              *os.File
+	remote              *websocket.Conn
+	remoteToken         string
+	queue               chan outbound
+	pending             map[ID]*pendingCall
+	reverse             map[ID]*requestState
+	requests            chan Request
+	subscriptions       map[*Subscription]struct{}
+	sessions            map[string]*Session
+	sessionReservations int
+	quarantine          []UnattributedRecord
+	quarantineBytes     int
+	quarantineSequence  uint64
+	quarantineEvicted   uint64
+	quarantineExpired   uint64
+	quarantineTimer     *time.Timer
+	loads               map[string]*LoadedThread
+	threadOperations    map[string]int
+	nextID              int64
+	ready               bool
+	cause               error
+	done                chan struct{}
+	cleaned             chan struct{}
+	reaped              chan struct{}
+	readDone            chan struct{}
+	closeErr            error
+	serverInfo          json.RawMessage
+	diag                DiagnosticSnapshot
+	workers             sync.WaitGroup
 }
 
 // NewStdio starts the explicitly selected executable, completes initialize then
@@ -232,6 +242,14 @@ func (c *Client) Call(ctx context.Context, method string, params any, result any
 	return c.call(ctx, method, params, result, false)
 }
 func (c *Client) call(ctx context.Context, method string, params any, result any, initializing bool) error {
+	return c.callAccept(ctx, method, params, result, initializing, nil)
+}
+
+func (c *Client) callAccept(ctx context.Context, method string, params any, result any, initializing bool, accept func(json.RawMessage) error) error {
+	return c.callOwned(ctx, method, params, result, initializing, accept, nil)
+}
+
+func (c *Client) callOwned(ctx context.Context, method string, params any, result any, initializing bool, accept func(json.RawMessage) error, owner *Session) error {
 	fail := func(id ID, dispatch DispatchState, err error) error {
 		return c.safeError(&CallError{Method: method, ID: id, Dispatch: dispatch, Cause: err})
 	}
@@ -260,6 +278,10 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, err)
 	}
+	if owner != nil && owner.closed {
+		c.mu.Unlock()
+		return fail(ID{}, NotSent, ErrClosed)
+	}
 	if !initializing && !c.ready {
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, fmt.Errorf("%w: not initialized", ErrProtocol))
@@ -287,7 +309,7 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 		c.mu.Unlock()
 		return fail(id, NotSent, err)
 	}
-	p := &pendingCall{id: id, method: method, ctx: ctx, done: make(chan struct{})}
+	p := &pendingCall{id: id, method: method, ctx: ctx, done: make(chan struct{}), accept: accept, owner: owner}
 	c.pending[id] = p
 	select {
 	case c.queue <- outbound{frame: frame, call: p, ctx: ctx}:
@@ -469,6 +491,13 @@ func (c *Client) fail(cause error) {
 		} else {
 			t.finishLocked(nil)
 		}
+	}
+	for _, s := range c.sessions {
+		terminal := cause
+		if cause == ErrClosed {
+			terminal = nil
+		}
+		s.finishLocked(terminal)
 	}
 	close(c.done)
 	c.mu.Unlock()

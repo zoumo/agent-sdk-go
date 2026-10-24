@@ -12,10 +12,13 @@ import (
 // are rejected. Incoming and outgoing frame limits bound JSON payload bytes, excluding
 // stdio delimiters and WebSocket frame headers.
 type Limits struct {
-	MaxFrameBytes int
-	OutboundQueue int
-	PendingCalls  int
-	Subscriptions int
+	QuarantineRecords   int
+	QuarantineBytes     int
+	QuarantineRetention time.Duration
+	MaxFrameBytes       int
+	OutboundQueue       int
+	PendingCalls        int
+	Subscriptions       int
 	// EventQueue is ignored; event delivery grows with unread backlog.
 	// Deprecated: retained for source compatibility; negative values remain invalid.
 	EventQueue      int
@@ -34,6 +37,7 @@ type Limits struct {
 
 func DefaultLimits() Limits {
 	return Limits{
+		QuarantineRecords: 128, QuarantineBytes: 4 << 20, QuarantineRetention: 5 * time.Second,
 		MaxFrameBytes: 8 << 20, OutboundQueue: 32, PendingCalls: 128,
 		Subscriptions: 32, EventQueue: 128, DiagnosticBytes: 64 << 10,
 		ActiveRequests: 128, RequestQueue: 32, RequestTimeout: 5 * time.Minute,
@@ -46,7 +50,7 @@ func (l Limits) normalized() (Limits, error) {
 	ints := []struct {
 		v   *int
 		def int
-	}{{&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}, {&l.ActiveRequests, d.ActiveRequests}, {&l.RequestQueue, d.RequestQueue}}
+	}{{&l.QuarantineRecords, d.QuarantineRecords}, {&l.QuarantineBytes, d.QuarantineBytes}, {&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}, {&l.ActiveRequests, d.ActiveRequests}, {&l.RequestQueue, d.RequestQueue}}
 	for _, x := range ints {
 		if *x.v < 0 {
 			return l, fmt.Errorf("codex: limits must be nonnegative")
@@ -58,7 +62,7 @@ func (l Limits) normalized() (Limits, error) {
 	ds := []struct {
 		v   *time.Duration
 		def time.Duration
-	}{{&l.CallTimeout, d.CallTimeout}, {&l.WriteTimeout, d.WriteTimeout}, {&l.ShutdownTimeout, d.ShutdownTimeout}, {&l.RequestTimeout, d.RequestTimeout}}
+	}{{&l.QuarantineRetention, d.QuarantineRetention}, {&l.CallTimeout, d.CallTimeout}, {&l.WriteTimeout, d.WriteTimeout}, {&l.ShutdownTimeout, d.ShutdownTimeout}, {&l.RequestTimeout, d.RequestTimeout}}
 	for _, x := range ds {
 		if *x.v < 0 {
 			return l, fmt.Errorf("codex: timeouts must be nonnegative")

@@ -9,6 +9,7 @@ import (
 // publishLocked shares the connection reader across independent root observations.
 // Each subscription decodes into independently owned native storage.
 func (c *Client) publishLocked(method string, params json.RawMessage, raw []byte) {
+	c.publishSessionsLocked(method, params, raw)
 	for s := range c.subscriptions {
 		s.publishLocked(method, params, raw)
 	}

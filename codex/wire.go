@@ -171,6 +171,12 @@ func (c *Client) routeFrame(raw []byte) error {
 	if rpcErr != nil {
 		c.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: Responded, Cause: rpcErr})
 	} else {
+		if p.accept != nil {
+			if err := p.accept(result); err != nil {
+				c.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: Responded, Cause: err})
+				return nil
+			}
+		}
 		c.finishLocked(p, append(json.RawMessage(nil), result...), nil)
 	}
 	return nil

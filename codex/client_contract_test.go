@@ -63,7 +63,8 @@ func TestFakeChild(t *testing.T) {
 		fmt.Fprintf(os.Stdout, "{\"id\":%s,\"result\":%s}\n", id, result)
 	}
 	var lateID json.RawMessage
-	turns := new(turnPeer)
+	sessions := new(sessionPeer)
+ turns := new(turnPeer)
 	threads := new(resumePeer)
 	requests := &requestPeer{transcript: transcript}
 	for scan.Scan() {
@@ -74,7 +75,7 @@ func TestFakeChild(t *testing.T) {
 		if json.Unmarshal(raw, &m) != nil {
 			os.Exit(81)
 		}
-		if handleHistoryPeer(mode, m, send) || handleTreePeer(mode, m, send) || requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
+		if sessions.handle(mode,m,send) || handleHistoryPeer(mode, m, send) || handleTreePeer(mode, m, send) || requests.handle(mode, m, send) || threads.handle(mode, m, send) || turns.handle(mode, m, send) {
 			continue
 		}
 		switch m.Method {

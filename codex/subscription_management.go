@@ -83,6 +83,9 @@ func (c *Client) Subscribe(ctx context.Context, rootThreadID string, options typ
 	if !c.ready {
 		return nil, ErrProtocol
 	}
+	if c.sessions[rootThreadID] != nil {
+		return nil, ErrOwnershipConflict
+	}
 	if len(c.subscriptions) >= c.limits.Subscriptions {
 		return nil, ErrLimit
 	}

@@ -2,6 +2,8 @@
 
 设计合同见[共同验收场景](../../../harness/contracts/stories/index.md)，通用目标见[SDK 共同用户故事](../../../harness/sdk/user-stories.md)。本页记录具体实现的能力映射与验证，不作为通用设计来源。
 
+**当前 Session 验收见 [SDK-US-001～020 支持与证据矩阵](session-targets.md)**：全部新目标在 `CommonStoriesSuite.TestSessionTargets` 直接运行。下表是旧 US 编号，不是新目标的重命名；Claude Load 成功仍有明确原生能力缺口，不能宣称全部共同能力已满足。
+
 运行 `mise exec -- go test ./tests/stories -count=1`，或使用仓库 `scripts/check-offline.sh`。测试适配通过各自公开 API 连接到自执行的合成子进程；子进程替换完整环境，不启动真实 agent。共同验收直接位于 [`CommonStoriesSuite.checkStory`](../../../tests/stories/acceptance_test.go)，只检查脱离原始句柄的私有测试事实；原生适配和生命周期保留在 [`stories_test.go`](../../../tests/stories/stories_test.go)。没有独立 testkit 包、通用客户端、问答接口或回答状态机。
 
 能力“支持”指原生公开 API 可表达契约；“条件支持”依赖原生请求或转发证据；“不支持”须显式记录，不能用跳过测试伪装通过。源码、离线、真实运行证据分别记录。
@@ -17,7 +19,7 @@
 | [US-007](US-007.md) 回答选择题或文本题 | 答案映射回原始题目 | 支持 | 条件支持 |
 | [US-008](US-008.md) 回答期间发生取消 | 按原生契约报告回答结果 | 支持 | 支持 |
 | [US-009](US-009.md) 消费慢于事件产生 | 动态积压并完整有序交付，控制回复不等待消费 | 支持 | 支持 |
-| [US-010](US-010.md) 收到重复或未知事件 | 保留未知数据，遵守各自去重规则 | 支持 | 支持 |
+| [US-010](US-010.md) 收到重复或未知事件 | 保留未知数据和重复 native 到达，不按实体去重 | 支持 | 支持 |
 | [US-011](US-011.md) 断线后恢复观察 | 保留缺口，禁止自动重发输入和回答 | 条件支持 | 条件支持 |
 | [US-012](US-012.md) 中断任务或关闭观察 | 区分中断请求、观察结束与任务停止 | 支持 | 支持 |
 | [US-013](US-013.md) 列出当前 Session 的子 Agent | 原生查询发现成员，保留身份、未知状态及覆盖边界 | 待接入验收 | 待接入验收 |

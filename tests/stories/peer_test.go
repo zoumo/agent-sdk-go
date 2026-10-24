@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -22,20 +23,23 @@ func TestMain(m *testing.M) {
 // This self-reexecuting peer understands only fixture traffic. It never opens a
 // network connection, loads account configuration, or starts a native agent.
 func peer(provider, story string) error {
+	if strings.HasPrefix(story, "SDK-US-") {
+		return sessionTargetPeer(provider, story)
+	}
 	scanner := bufio.NewScanner(os.Stdin)
 	inputs, answers := 0, 0
 	emit := func(method, params string) {
 		if provider == "codex" {
 			fmt.Fprintf(os.Stdout, `{"method":%q,"params":%s}`+"\n", method, params)
 		} else {
-			fmt.Fprintln(os.Stdout, params)
+			fmt.Fprintln(os.Stdout, string(completeClaudeFixture(json.RawMessage(params))))
 		}
 	}
 	marker := func(kind string) {
 		if provider == "codex" {
 			emit("fixture/"+kind, `{"threadId":"root"}`)
 		} else {
-			emit("", `{"type":"fixture_`+kind+`","session_id":"s"}`)
+			emit("", `{"type":"system","subtype":"status","fixture":"fixture_`+kind+`","session_id":"s"}`)
 		}
 	}
 	complete := func() {
@@ -47,7 +51,7 @@ func peer(provider, story string) error {
 	}
 	association := func(child, parent string) {
 		if provider == "codex" {
-			emit("thread/started", `{"thread":{"id":"`+child+`","parentThreadId":"`+parent+`"}}`)
+			emit("thread/started", nativeParentFixture(child, parent))
 			return
 		}
 		// A root-owned Agent invocation is evidence for root ownership; nested
@@ -56,7 +60,8 @@ func peer(provider, story string) error {
 			emit("", `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn-`+child+`","name":"Agent","input":{}}]}}`)
 			emit("", `{"type":"system","subtype":"task_started","session_id":"s","task_id":"`+child+`","task_type":"local_agent","tool_use_id":"spawn-`+child+`"}`)
 		} else {
-			emit("", `{"type":"system","subtype":"task_started","session_id":"s","task_id":"`+child+`","task_type":"local_agent","parent_task_id":"`+parent+`"}`)
+			emit("", `{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn-`+parent+`","message":{"content":[{"type":"tool_use","id":"spawn-`+child+`","name":"Agent","input":{}}]}}`)
+			emit("", `{"type":"system","subtype":"task_started","session_id":"s","task_id":"`+child+`","task_type":"local_agent","tool_use_id":"spawn-`+child+`"}`)
 		}
 	}
 	native := func(child string) {
@@ -70,7 +75,7 @@ func peer(provider, story string) error {
 		if provider == "codex" {
 			emit("fixture/snapshot", fmt.Sprintf(`{"threadId":"root","inputs":%d,"answers":%d,"wire":%s}`, inputs, answers, wire))
 		} else {
-			emit("", fmt.Sprintf(`{"type":"fixture_snapshot","session_id":"s","inputs":%d,"answers":%d,"wire":%s}`, inputs, answers, wire))
+			emit("", fmt.Sprintf(`{"type":"system","subtype":"status","fixture":"fixture_snapshot","session_id":"s","inputs":%d,"answers":%d,"wire":%s}`, inputs, answers, wire))
 		}
 	}
 	start := func() {
@@ -125,7 +130,7 @@ func peer(provider, story string) error {
 				if provider == "codex" {
 					emit("fixture/unknown", `{"threadId":"root","future":{"big":9007199254740993,"nullable":null}}`)
 				} else {
-					emit("", `{"type":"fixture_unknown","session_id":"s","future":{"big":9007199254740993,"nullable":null}}`)
+					emit("", `{"type":"system","subtype":"status","fixture":"fixture_unknown","session_id":"s","future":{"big":9007199254740993,"nullable":null}}`)
 				}
 			}
 			marker("barrier")
@@ -158,6 +163,28 @@ func peer(provider, story string) error {
 		}
 		if frame.Type == "control_request" && frame.Request.Subtype == "initialize" {
 			reply(`{}`)
+			emit("", `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			if story == "US-011" {
+				association("child", "root")
+				snapshot(json.RawMessage(`null`))
+			}
+			continue
+		}
+
+		if frame.Method == "thread/start" {
+			reply(`{"thread":` + string(nativeStoryThread("root")) + `,"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}`)
+			continue
+		}
+		if frame.Method == "thread/unsubscribe" {
+			reply(`{"status":"unsubscribed"}`)
+			continue
+		}
+		if frame.Method == "thread/list" {
+			var r map[string]json.RawMessage
+			_ = json.Unmarshal(nativeStoryThread("child"), &r)
+			r["parentThreadId"] = json.RawMessage(`"root"`)
+			raw, _ := json.Marshal(r)
+			reply(`{"data":[` + string(raw) + `],"nextCursor":null}`)
 			continue
 		}
 		if frame.Method == "initialized" {
@@ -167,10 +194,6 @@ func peer(provider, story string) error {
 			if provider == "claude" && frame.Message.Content == "release" {
 				complete()
 				marker("end")
-				continue
-			}
-			if provider == "claude" && frame.Message.Content == "snapshot" {
-				snapshot(json.RawMessage(`null`))
 				continue
 			}
 			inputs++
@@ -203,4 +226,12 @@ func peer(provider, story string) error {
 		return fmt.Errorf("unexpected fixture request: %s", raw)
 	}
 	return scanner.Err()
+}
+
+func nativeParentFixture(child, parent string) string {
+	var t map[string]json.RawMessage
+	_ = json.Unmarshal(nativeStoryThread(child), &t)
+	t["parentThreadId"], _ = json.Marshal(parent)
+	b, _ := json.Marshal(map[string]any{"thread": t})
+	return string(b)
 }

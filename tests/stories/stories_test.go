@@ -34,6 +34,14 @@ func (s *CommonStoriesSuite) SetupSuite() {
 }
 
 func TestCommonStories(t *testing.T) { suite.Run(t, new(CommonStoriesSuite)) }
+func (s *CommonStoriesSuite) TestSessionTargets() {
+	for _, id := range []string{"SDK-US-001", "SDK-US-002", "SDK-US-003", "SDK-US-004", "SDK-US-005", "SDK-US-006", "SDK-US-007", "SDK-US-008", "SDK-US-009", "SDK-US-010", "SDK-US-011", "SDK-US-012", "SDK-US-013", "SDK-US-014", "SDK-US-015", "SDK-US-016", "SDK-US-017", "SDK-US-018", "SDK-US-019", "SDK-US-020"} {
+		s.Run(id, func() {
+			s.Run("codex", func() { codexSessionTarget(s.T(), id) })
+			s.Run("claude", func() { claudeSessionTarget(s.T(), id) })
+		})
+	}
+}
 func (s *CommonStoriesSuite) TestNativeAdapters() {
 	for _, story := range storyIDs {
 		s.Run(story, func() {
@@ -82,40 +90,50 @@ func codexStory(t *testing.T, story string) (trace storyTrace) {
 	ctx := deadline(t)
 	exe, err := os.Executable()
 	must(t, err)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"SDK_STORY_PEER=codex", "SDK_STORY=" + story, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "stories", Version: "synthetic"}}})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"SDK_STORY_PEER=codex", "SDK_STORY=" + story, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "stories", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}})
 	must(t, err)
 	t.Cleanup(func() { _ = c.Close() })
-	opts := ct.SubscriptionOptions{PendingBytes: 1}
-	if story == "US-009" {
-		opts.EventQueue = 2
-	}
-	if story == "US-011" {
-		opts.PendingBytes = 4096
-		opts.History = []json.RawMessage{json.RawMessage(`{"id":"child","parentThreadId":"root"}`)}
-	}
-	s, err := c.Subscribe(ctx, "root", opts)
+
+	s, err := codex.Open(ctx, codex.SessionOptions{Client: c})
 	must(t, err)
 	defer s.Abort()
 	readUntil := func(target string) {
 		for {
-			select {
-			case e, ok := <-s.Events():
-				require.True(t, ok, "observation ended: %v", s.Err())
-				codexFact(&trace, e)
-				if e.Method == "fixture/"+target {
+			r, e := s.Receive(ctx)
+			must(t, e)
+			if story == "US-003" {
+				require.Nil(t, r.Request, "relationship minted answer authority")
+			}
+			if r.Event != nil {
+				codexFact(&trace, *r.Event)
+				if r.Event.Method == "fixture/"+target {
 					return
 				}
-			case <-ctx.Done():
-				require.NoError(t, ctx.Err())
+			}
+			if r.Observation != nil {
+				v := r.Observation
+				if v.Reason == "parent-confirmed" {
+					trace.Events = append(trace.Events, storyObservation{Kind: "associated", ID: v.ThreadID, Parent: v.ParentThreadID})
+				}
+			}
+			if s.Unattributed().CoverageGap {
+				trace.Events = append(trace.Events, storyObservation{Kind: "gap"})
 			}
 		}
 	}
+
 	if story == "US-011" {
-		must(t, c.Call(ctx, "fixture/snapshot", nil, nil))
-		readUntil("snapshot")
+		page, e := s.ListSubagents(ctx, codex.SubagentQuery{})
+		must(t, e)
+		require.Len(t, page.Pages, 1)
+		for _, r := range page.Pages[0].Data {
+			trace.Events = append(trace.Events, storyObservation{Kind: "associated", ID: r.ID, Parent: "root"})
+		}
+		require.False(t, page.Coverage.Archived)
+		trace.Events = append(trace.Events, storyObservation{Kind: "gap", Raw: "non-archived records only; live observation unconfirmed"})
 		return
 	}
-	_, trace.SendError = c.StartTurn(ctx, ct.TurnStartParams{ThreadID: "root", Input: []ct.UserInput{}})
+	_, trace.SendError = s.Submit(ctx, codex.Input{})
 	if story == "US-009" {
 		must(t, trace.SendError) // reply follows the complete burst while Events is unread
 		readUntil("barrier")
@@ -123,17 +141,12 @@ func codexStory(t *testing.T, story string) (trace storyTrace) {
 		return
 	}
 	if story == "US-006" || story == "US-007" || story == "US-008" {
-		var r codex.Request
-		select {
-		case r = <-c.Requests():
-		case <-ctx.Done():
-			require.NoError(t, ctx.Err())
-		}
+		r := codexRequests(t, s, 1)[0]
 		require.NotEmpty(t, r.ID().String(), "missing native request identity")
 		_, err := r.Data()
 		must(t, err)
 		if strings.HasSuffix(mode, "-close") {
-			trace.CloseError = c.Close()
+			trace.CloseError = s.Close()
 			trace.AnswerError = r.Handle().Answer(ctx, nil)
 			trace.RetryError = r.Handle().Answer(ctx, nil)
 			return
@@ -162,16 +175,12 @@ func codexStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	readUntil("barrier")
 	if story == "US-003" {
-		select {
-		case <-c.Requests():
-			assert.Fail(t, "relationship minted answer authority")
-		default:
-		}
+
 		var forged codex.AnswerHandle
 		assert.Error(t, forged.Answer(ctx, nil), "zero handle answered")
 	}
 	if story == "US-012" {
-		_, trace.InterruptError = c.InterruptTurn(ctx, ct.TurnInterruptParams{ThreadID: "root", TurnID: "turn"})
+		trace.InterruptError = s.Interrupt(ctx, codex.InterruptOptions{TurnID: "turn"})
 	}
 	if story == "US-001" || story == "US-002" || story == "US-012" {
 		must(t, c.Call(ctx, "fixture/release", nil, nil))
@@ -186,16 +195,6 @@ func codexStory(t *testing.T, story string) (trace storyTrace) {
 func codexFact(trace *storyTrace, e ct.Event) {
 	add := func(kind, id, parent string) {
 		trace.Events = append(trace.Events, storyObservation{Kind: kind, ID: id, Parent: parent, Raw: string(e.Raw)})
-	}
-	switch v := e.Data.(type) {
-	case *ct.SubagentAssociated:
-		add("associated", v.ThreadID, v.ParentThreadID)
-	case *ct.SubagentCreated:
-		add("created", v.ThreadID, v.ParentThreadID)
-	case *ct.ObservationState:
-		if v.State == "incomplete" || strings.Contains(v.Reason, "unresolved") {
-			add("gap", v.UnresolvedThreadID, "")
-		}
 	}
 	var p struct {
 		ThreadID        string `json:"threadId"`
@@ -247,47 +246,67 @@ func claudeStory(t *testing.T, story string) (trace storyTrace) {
 	exe, err := os.Executable()
 	must(t, err)
 	dir := t.TempDir()
-	requests := make(chan *claude.PermissionRequest, 4)
-	opts := claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "SDK_STORY_PEER=claude", "SDK_STORY=" + story, "GORACE=atexit_sleep_ms=0"}, PermissionHandler: func(r *claude.PermissionRequest) { requests <- r }, Subagents: claude.SubagentOptions{MaxUnresolvedBytes: 1}}
-	if story == "US-009" {
-		opts.Limits.EventBuffer = 2
-	}
+
+	opts := claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "SDK_STORY_PEER=claude", "SDK_STORY=" + story, "GORACE=atexit_sleep_ms=0"}, Subagents: claude.SubagentOptions{MaxUnresolvedBytes: 1}}
 	if story == "US-011" {
-		opts.ResumeID = "s"
 		opts.Subagents.History = []claude.SubagentHistory{{SessionID: "s", TaskID: "child"}}
 	}
-	c, err := claude.NewClient(ctx, opts)
+	c, err := claude.Open(ctx, opts)
 	must(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	readUntil := func(target string) {
 		for {
-			e, err := c.Receive(ctx)
+			r, err := c.Receive(ctx)
 			must(t, err)
-			claudeFact(&trace, e)
-			if n, ok := e.(claude.Event); ok && n.Type == "fixture_"+target {
-				return
+			if story == "US-003" {
+				require.Nil(t, r.Request, "relationship minted answer authority")
+			}
+			if r.Event != nil {
+				n := *r.Event
+				claudeFact(&trace, n)
+				if fixtureKind(n.Raw) == "fixture_"+target {
+					return
+				}
+			}
+			if r.Observation != nil {
+				v := r.Observation
+				id := v.Source.TaskID
+				parent := ""
+				if v.Parent != nil {
+					parent = v.Parent.TaskID
+					if parent == "" {
+						parent = "root"
+					}
+				}
+				if v.Reason == "parent-confirmed" {
+					trace.Events = append(trace.Events, storyObservation{Kind: "associated", ID: id, Parent: parent})
+				}
+				if v.Reason == "member-confirmed" && story == "US-011" {
+					trace.Events = append(trace.Events, storyObservation{Kind: "associated", ID: id})
+				}
+				if strings.Contains(v.Reason, "unconfirmed") || strings.Contains(v.Reason, "unverified") || v.Reason == "forwarding-not-confirmed" {
+					trace.Events = append(trace.Events, storyObservation{Kind: "gap"})
+				}
+			}
+			if c.Unattributed().CoverageGap {
+				trace.Events = append(trace.Events, storyObservation{Kind: "gap"})
 			}
 		}
 	}
 	if story == "US-011" {
-		must(t, c.Send(ctx, "snapshot"))
 		readUntil("snapshot")
 		return
 	}
-	trace.SendError = c.Send(ctx, "start")
+	_, trace.SendError = c.Submit(ctx, claude.Input{Text: "start"})
 	if story == "US-009" {
-		must(t, c.Interrupt(ctx)) // control reply follows the complete unread burst
+		must(t, c.Interrupt(ctx, claude.InterruptOptions{})) // control reply follows the complete unread burst
 		readUntil("barrier")
 		trace.OverflowError = c.Err()
 		return
 	}
 	if story == "US-006" || story == "US-007" || story == "US-008" {
-		var r *claude.PermissionRequest
-		select {
-		case r = <-requests:
-		case <-ctx.Done():
-			require.NoError(t, ctx.Err())
-		}
+		incoming := claudeRequests(t, c, 1)[0]
+		r := incoming.Handle()
 		require.NotNil(t, r)
 		assert.Equal(t, "original", r.RequestID(), "request ID changed")
 		if strings.HasSuffix(mode, "-close") {
@@ -324,19 +343,16 @@ func claudeStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	readUntil("barrier")
 	if story == "US-003" {
-		select {
-		case <-requests:
-			assert.Fail(t, "relationship minted permission authority")
-		default:
-		}
+
 		var forged claude.PermissionRequest
 		assert.Error(t, forged.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny}), "zero permission handle answered")
 	}
 	if story == "US-012" {
-		trace.InterruptError = c.Interrupt(ctx)
+		trace.InterruptError = c.Interrupt(ctx, claude.InterruptOptions{})
 	}
 	if story == "US-001" || story == "US-002" || story == "US-012" {
-		must(t, c.Send(ctx, "release"))
+		_, err = c.Submit(ctx, claude.Input{Text: "release"})
+		must(t, err)
 		readUntil("end")
 	}
 	if story == "US-012" {
@@ -344,71 +360,47 @@ func claudeStory(t *testing.T, story string) (trace storyTrace) {
 	}
 	return
 }
-func claudeFact(trace *storyTrace, event claude.ReceivedEvent) {
+func claudeFact(trace *storyTrace, v claude.Event) {
 	add := func(kind, id, parent, raw string) {
 		trace.Events = append(trace.Events, storyObservation{Kind: kind, ID: id, Parent: parent, Raw: raw})
 	}
-	identity := func(i claude.SubagentIdentity) string {
-		if i.TaskID != "" {
-			return i.TaskID
-		}
-		if i.AgentID != "" {
-			return i.AgentID
-		}
-		return "root"
+	kind := v.Type
+	if fixtureKind(v.Raw) != "" {
+		kind = fixtureKind(v.Raw)
 	}
-	switch v := event.(type) {
-	case claude.SubagentAssociated:
-		parent := ""
-		if v.Parent != nil {
-			parent = identity(*v.Parent)
+	switch kind {
+	case "result":
+		add("complete", "root", "", string(v.Raw))
+	case "user":
+		if v.User != nil {
+			add("tool", "root", "", string(v.Raw))
 		}
-		add("associated", identity(v.Source), parent, "")
-	case claude.SubagentCreated:
-		parent := ""
-		if v.Parent != nil {
-			parent = identity(*v.Parent)
+	case "assistant":
+		if v.AgentID != nil {
+			add("native", *v.AgentID, "", string(v.Raw))
 		}
-		add("created", identity(v.Source), parent, "")
-	case claude.ObservationState:
-		if v.State == "incomplete" || v.Scope == "unresolved" {
-			add("gap", v.Source.AgentID, "", "")
+	case "fixture_burst":
+		add("burst", "", "", string(v.Raw))
+	case "fixture_barrier":
+		add("barrier", "", "", string(v.Raw))
+	case "fixture_unknown":
+		add("unknown", "", "", string(v.Raw))
+	case "fixture_snapshot":
+		var p struct {
+			Inputs, Answers int
+			Wire            clt.ControlResponse
 		}
-	case claude.Event:
-		switch v.Type {
-		case "result":
-			add("complete", "root", "", string(v.Raw))
-		case "user":
-			if v.User != nil {
-				add("tool", "root", "", string(v.Raw))
-			}
-		case "assistant":
-			if v.AgentID != nil {
-				add("native", *v.AgentID, "", string(v.Raw))
-			}
-		case "fixture_burst":
-			add("burst", "", "", string(v.Raw))
-		case "fixture_barrier":
-			add("barrier", "", "", string(v.Raw))
-		case "fixture_unknown":
-			add("unknown", "", "", string(v.Raw))
-		case "fixture_snapshot":
-			var p struct {
-				Inputs, Answers int
-				Wire            clt.ControlResponse
-			}
-			_ = json.Unmarshal(v.Raw, &p)
-			trace.InputCount = p.Inputs
-			trace.AnswerCount = p.Answers
-			trace.AnswerID = p.Wire.Response.RequestID
-			var result clt.PermissionResult
-			_ = json.Unmarshal(p.Wire.Response.Response, &result)
-			trace.AnswerDecision = string(result.Behavior)
-			var input clt.AskUserQuestionInput
-			_ = json.Unmarshal(result.UpdatedInput, &input)
-			if a := input.Answers["Choose?"].Text; a != nil {
-				trace.AnswerText = *a
-			}
+		_ = json.Unmarshal(v.Raw, &p)
+		trace.InputCount = p.Inputs
+		trace.AnswerCount = p.Answers
+		trace.AnswerID = p.Wire.Response.RequestID
+		var result clt.PermissionResult
+		_ = json.Unmarshal(p.Wire.Response.Response, &result)
+		trace.AnswerDecision = string(result.Behavior)
+		var input clt.AskUserQuestionInput
+		_ = json.Unmarshal(result.UpdatedInput, &input)
+		if a := input.Answers["Choose?"].Text; a != nil {
+			trace.AnswerText = *a
 		}
 	}
 }

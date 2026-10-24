@@ -1,4 +1,4 @@
-package claude_test
+package claude
 
 import (
 	"bytes"
@@ -9,31 +9,30 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/zoumo/agent-sdk-go/claude"
 )
 
-func TestLoadEventsUseRealtimeConsumer(t *testing.T) {
+func TestHistoryEventsPreserveNativeContent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	o := transcript(t,
+	o := historyTranscript(t,
 		map[string]any{"type": "assistant", "uuid": "tool", "parentUuid": nil, "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "thinking", "thinking": "retained thought", "signature": "sig"}, map[string]any{"type": "tool_use", "id": "read-1", "name": "Read", "input": map[string]any{"path": "not executed"}}, map[string]any{"type": "future_block", "opaque": true}}}},
 		map[string]any{"type": "user", "uuid": "result", "parentUuid": "tool", "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": "read-1", "content": "retained output", "is_error": true}}}},
 	)
 	source, err := os.ReadFile(historyPath(t, o))
 	require.NoError(t, err)
 	sourceLines := bytes.Split(bytes.TrimSpace(source), []byte{'\n'})
-	h, err := claude.Load(ctx, loadOptions(t, o))
+	h, err := readTranscriptForTest(ctx, o, nil)
 	require.NoError(t, err)
 	defer h.Close()
 	var kinds []string
-	consume := func(received claude.ReceivedEvent) {
-		if e, ok := received.(claude.Event); ok {
+	consume := func(received ReceivedEvent) {
+		if e, ok := received.(Event); ok {
 			kinds = append(kinds, e.Type)
 		}
 	}
 	i := 0
-	for received := range h.Events() {
-		e, ok := received.(claude.Event)
+	for received := range h.Records() {
+		e, ok := received.(Event)
 		require.True(t, ok)
 		require.NotNil(t, e.History)
 		require.Less(t, i, len(sourceLines))
@@ -57,17 +56,4 @@ func TestLoadEventsUseRealtimeConsumer(t *testing.T) {
 	<-h.Done()
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"assistant", "user"}, kinds)
-	c, err := h.Client()
-	require.NoError(t, err)
-	// The offline peer emits a normal init after input; no real CLI is started.
-	require.NoError(t, c.Send(ctx, "synthetic continuation"))
-	for len(kinds) < 4 {
-		received, err := c.Receive(ctx)
-		require.NoError(t, err)
-		if e, ok := received.(claude.Event); ok {
-			require.Nil(t, e.History)
-		}
-		consume(received)
-	}
-	require.Equal(t, []string{"assistant", "user", "echo", "system"}, kinds)
 }

@@ -211,7 +211,13 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 		tree.client = c
 	}
 	if session != nil {
-		session.client = c
+		if session.bindClient(c) {
+			// Close may precede process publication during asynchronous Load.
+			c.mu.Lock()
+			c.closing = true
+			c.failLocked(nil)
+			c.mu.Unlock()
+		}
 	}
 	if options.PermissionHandler != nil {
 		c.permissionJobs = make(chan *PermissionRequest, options.Limits.ControlBuffer)
@@ -230,8 +236,12 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	defer cancel()
 	initialize := map[string]any{"subtype": "initialize", "hooks": nil, "forwardSubagentText": true}
 	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
-		c.fail(&Error{Op: "initialize", Err: err})
-		_ = c.Abort()
+		c.mu.Lock()
+		if !c.closing {
+			c.failLocked(&Error{Op: "initialize", Err: err})
+		}
+		c.mu.Unlock()
+		c.cleanupFailedStartup()
 		final := c.Err()
 		startup := &Error{Op: "initialize", Err: errors.Join(err, final)}
 		var diagnostics *Error
@@ -243,11 +253,21 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	}
 	select {
 	case <-c.done:
-		_ = c.Abort()
+		c.cleanupFailedStartup()
 		return nil, c.operationError()
 	default:
 	}
 	return c, nil
+}
+
+// A failed legacy constructor returns no consumer, so discard its queue. Load
+// has already returned its Session and must preserve accepted facts for drain.
+func (c *Client) cleanupFailedStartup() {
+	if c.session == nil {
+		_ = c.Abort()
+	} else {
+		_ = c.Close()
+	}
 }
 
 // Send writes one complete user-message frame. Success proves only a completed
@@ -525,8 +545,14 @@ func (c *Client) controlRequest(ctx context.Context, subtype string, request any
 }
 
 func (c *Client) route(event Event) error {
-	if c.strictResumeID != "" && event.SessionID != "" && event.ParentToolUseID == nil && (event.System != nil || event.Result != nil) && event.SessionID != c.strictResumeID {
-		return fmt.Errorf("%w: loaded native session identity changed", ErrProtocol)
+	if c.strictResumeID != "" && event.SessionID != "" && (event.ParentToolUseID == nil || *event.ParentToolUseID == "") && (event.AgentID == nil || *event.AgentID == "") && (event.System != nil || event.Result != nil) && event.SessionID != c.strictResumeID {
+		if c.session != nil {
+			c.session.mu.Lock()
+			c.session.load.ObservedID = event.SessionID
+			c.session.root = event.SessionID
+			c.session.mu.Unlock()
+		}
+		return &IdentityMismatchError{RequestedID: c.strictResumeID, ObservedID: event.SessionID, Raw: append(json.RawMessage(nil), event.Raw...)}
 	}
 	if (event.System != nil || event.Result != nil) && event.SessionID != "" {
 		c.mu.Lock()
@@ -642,7 +668,7 @@ func (c *Client) readStdout() {
 		}
 		event, err := parseEvent(frame)
 		if err != nil {
-			c.fail(&Error{Op: "decode", Err: fmt.Errorf("%w: %v", ErrProtocol, err)})
+			c.fail(&Error{Op: "decode", Err: fmt.Errorf("%w: %w", ErrProtocol, err)})
 			return
 		}
 		if err := c.route(event); err != nil {
@@ -650,7 +676,7 @@ func (c *Client) readStdout() {
 				return
 			}
 			if !errors.Is(err, ErrResourceLimit) {
-				err = fmt.Errorf("%w: %v", ErrProtocol, err)
+				err = fmt.Errorf("%w: %w", ErrProtocol, err)
 			}
 			c.fail(err)
 			return

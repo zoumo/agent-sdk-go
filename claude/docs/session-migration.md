@@ -46,8 +46,9 @@ Temporary expansion: old consumers explicitly use `NewClient`, which retains
 the old tree/callback API until T13 removes that model. Normal `Open` does not
 construct its managed tree or enqueue its native FIFO. This is not a permanent
 compatibility promise. T05 still owns real same-stream request handles and
-removal of default deny; T07 implements [structured input/configuration](session-input-config.md); T09 owns
-record discovery; T11 owns Load. They are not implemented by placeholders here.
+removal of default deny; T07 implements [structured input/configuration](session-input-config.md); T09 implements
+record discovery; T11 implements the [strict Load failure path](session-load.md).
+Successful native recovery remains an explicit fixed-baseline capability gap.
 `SessionOptions` currently carries the existing native process `Options` fields.
 
 Validation is offline only. `session_test.go` uses the existing synthetic native

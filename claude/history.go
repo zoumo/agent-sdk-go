@@ -151,6 +151,9 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 			}
 		default:
 			if transcriptMetadata(entry.Type) {
+				if (entry.SessionID != "" && entry.SessionID != o.SessionID) || (entry.CWD != "" && entry.CWD != o.CWD) {
+					return bad("metadata session/cwd identity mismatch")
+				}
 				continue
 			}
 			return bad("unsupported entry type: " + entry.Type)

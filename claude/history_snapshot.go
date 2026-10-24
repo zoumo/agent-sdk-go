@@ -85,8 +85,9 @@ func verifyTranscriptSnapshot(ctx context.Context, f *os.File, path string, init
 		var entry struct {
 			Type      string `json:"type"`
 			SessionID string `json:"sessionId"`
+			CWD       string `json:"cwd"`
 		}
-		if json.Unmarshal(raw, &entry) != nil || !transcriptMetadata(entry.Type) || (entry.SessionID != "" && entry.SessionID != o.SessionID) {
+		if json.Unmarshal(raw, &entry) != nil || !transcriptMetadata(entry.Type) || (entry.SessionID != "" && entry.SessionID != o.SessionID) || (entry.CWD != "" && entry.CWD != o.CWD) {
 			return bad()
 		}
 	}

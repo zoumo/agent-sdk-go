@@ -1,87 +1,87 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package claude
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-
-	"github.com/zoumo/agent-sdk-go/internal/history"
 )
 
-// LoadOptions combines ordinary native resume options and bounded history input.
-// WorkDir and ResumeID may be omitted; if supplied they must match History.
+// LoadOptions fixes the native resume identity, data home and bounded history.
+// WorkDir and ResumeID may be omitted; supplied values must match History.
 type LoadOptions struct {
 	Options Options
 	History HistoryOptions
 }
 
-var ErrLoadPending = errors.New("claude: session load has not completed")
+var (
+	ErrLoadPending       = errors.New("claude: session load has not completed")
+	ErrLoadFailed        = errors.New("claude: session load failed")
+	ErrResumeUnconfirmed = errors.New("claude: native resume identity is unconfirmed")
+	ErrIdentityMismatch  = errors.New("claude: native resume identity mismatch")
+)
 
-// LoadedSession owns one resumed native Client and an asynchronous history
-// stream. Drain Events, check Err, then obtain Client for normal Send/Receive.
-// Close cancels replay and closes the owned child, including after success.
-type LoadedSession struct {
-	replay    *History
-	mu        sync.Mutex
-	client    *Client
-	closed    bool
-	closeOnce sync.Once
-	closeErr  error
+type LoadStatus string
+
+const (
+	LoadNotRequested LoadStatus = "not-requested"
+	LoadPending      LoadStatus = "pending"
+	LoadSucceeded    LoadStatus = "succeeded"
+	LoadFailed       LoadStatus = "failed"
+)
+
+// LoadState separates requested and actually observed identity. Evidence is a
+// resume confirmation source, not a statement that initialize confirmed it.
+type LoadState struct {
+	Status      LoadStatus
+	RequestedID string
+	ObservedID  string
+	Evidence    string
+	Err         error
 }
 
-func (h *LoadedSession) Events() <-chan ReceivedEvent { return h.replay.Records() }
-func (h *LoadedSession) Done() <-chan struct{}        { return h.replay.Done() }
-func (h *LoadedSession) Err() error                   { return h.replay.Err() }
-
-// Client returns the normal resumed Client only after successful complete replay.
-// Later native failures are reported by Client.Err/Receive, not replay Err.
-func (h *LoadedSession) Client() (*Client, error) {
-	select {
-	case <-h.Done():
-	default:
-		return nil, ErrLoadPending
-	}
-	if err := h.Err(); err != nil {
-		return nil, err
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.closed {
-		return nil, ErrClosed
-	}
-	select {
-	case <-h.client.Done():
-		return nil, h.client.operationError()
-	default:
-		return h.client, nil
-	}
-}
-func (h *LoadedSession) closeClient() error {
-	h.closeOnce.Do(func() {
-		h.mu.Lock()
-		c := h.client
-		h.mu.Unlock()
-		if c != nil {
-			h.closeErr = c.Close()
-		}
-	})
-	return h.closeErr
-}
-func (h *LoadedSession) Close() error {
-	h.mu.Lock()
-	h.closed = true
-	h.mu.Unlock()
-	_ = h.replay.Close()
-	return h.closeClient()
+// IdentityMismatchError retains the actual native frame for diagnosis. Raw may
+// contain private content; callers must redact it before logging.
+type IdentityMismatchError struct {
+	RequestedID, ObservedID string
+	Raw                     json.RawMessage
 }
 
-// Load resumes the same native session and replays its complete retained main
-// chain asynchronously. No prompts or historic tools are sent to the CLI.
-// The context bounds startup/replay; it does not own the Client after success.
-func Load(ctx context.Context, o LoadOptions) (*LoadedSession, error) {
+func (e *IdentityMismatchError) Error() string {
+	return "claude: loaded native session identity differs from requested identity"
+}
+func (e *IdentityMismatchError) Unwrap() []error { return []error{ErrIdentityMismatch, ErrProtocol} }
+
+func (s *Session) LoadState() LoadState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadSnapshotLocked()
+}
+
+// inputAllowed gates only normal input/configuration, never real request
+// answers or native interrupt. No deferred input or configuration queue exists.
+func (s *Session) inputAllowed() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch s.load.Status {
+	case LoadPending:
+		return ErrLoadPending
+	case LoadFailed:
+		return errors.Join(ErrLoadFailed, s.load.Err)
+	}
+	return nil
+}
+
+// Load returns a consumable Session before startup completes. The fixed local
+// TS SDK 0.3.258 / CLI 2.1.258 public contract has no proven no-input resume
+// confirmation path. After initialize, Load therefore fails explicitly, releases
+// the process and never admits history or ordinary input. See
+// docs/research/claude-session-native-evidence.md for the fixed evidence limits.
+func Load(ctx context.Context, o LoadOptions) (*Session, error) {
 	opts, path, err := prepareHistory(ctx, o.History)
 	if err != nil {
 		return nil, err
@@ -115,35 +115,110 @@ func Load(ctx context.Context, o LoadOptions) (*LoadedSession, error) {
 	if err := process.defaults(); err != nil {
 		return nil, err
 	}
-	replayCtx, cancel := context.WithCancel(ctx)
-	h := &LoadedSession{}
-	bound := make(chan struct{})
-	h.replay = history.Start(replayCtx, func(ctx context.Context, send func(ReceivedEvent) error) error {
-		<-bound
-		return replayTranscript(ctx, opts, path, send, func(ctx context.Context) error {
-			c, e := open(ctx, process, opts.SessionID)
-			if e != nil {
-				return e
-			}
-			h.mu.Lock()
-			h.client = c
-			h.mu.Unlock()
-			go func() {
-				select {
-				case <-c.Done():
-					cancel()
-				case <-h.Done():
-				}
-			}()
-			return nil
-		})
-	}, func(err error) error {
+	if process.PermissionHandler != nil {
+		return nil, dispatchFailure("load", ErrUnsupported)
+	}
+	s, err := newSession(process)
+	if err != nil {
+		return nil, err
+	}
+	loadCtx, cancel := context.WithCancel(ctx)
+	s.load = LoadState{Status: LoadPending, RequestedID: opts.SessionID}
+	s.requestedID = opts.SessionID
+	s.loadCancel = cancel
+	s.loadDone = make(chan struct{})
+	go func() {
+		defer close(s.loadDone)
 		defer cancel()
-		if err != nil {
-			return errors.Join(err, h.closeClient())
+		err := replayTranscript(loadCtx, opts, path, func(ReceivedEvent) error {
+			// No confirmed recovery route exists on this baseline. This callback is
+			// intentionally unreachable; a future route must admit to s.fifo directly.
+			return ErrResumeUnconfirmed
+		}, func(ctx context.Context) error {
+			_, err := openInteraction(ctx, process, opts.SessionID, s)
+			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return ErrResumeUnconfirmed
+		})
+		if err == nil {
+			err = ErrResumeUnconfirmed
 		}
-		return nil
-	})
-	close(bound)
-	return h, nil
+		s.mu.Lock()
+		c := s.client
+		s.mu.Unlock()
+		if c != nil {
+			c.mu.Lock()
+			if !c.stopped {
+				c.failLocked(err)
+			}
+			c.mu.Unlock()
+			_ = c.Close()
+		} else {
+			s.finish(err)
+		}
+	}()
+	return s, nil
+}
+
+// Snapshots detach mutable native diagnostics as well as the state value. A
+// caller inspecting a boundary must not change subsequent LoadState results.
+func (s *Session) loadSnapshotLocked() LoadState {
+	state := s.load
+	state.Err = snapshotLoadError(state.Err)
+	return state
+}
+
+type loadErrorCauses struct {
+	message string
+	causes  []error
+}
+
+func (e *loadErrorCauses) Error() string   { return e.message }
+func (e *loadErrorCauses) Unwrap() []error { return e.causes }
+
+func snapshotLoadError(err error) error {
+	switch e := err.(type) {
+	case *IdentityMismatchError:
+		copy := *e
+		copy.Raw = append(json.RawMessage(nil), e.Raw...)
+		return &copy
+	case *HistoryError:
+		copy := *e
+		copy.Raw = append(json.RawMessage(nil), e.Raw...)
+		return &copy
+	case *ControlError:
+		copy := *e
+		copy.Raw = append(json.RawMessage(nil), e.Raw...)
+		return &copy
+	case *Error:
+		copy := *e
+		copy.Err = snapshotLoadError(e.Err)
+		if e.ExitCode != nil {
+			code := *e.ExitCode
+			copy.ExitCode = &code
+		}
+		return &copy
+	case *ResourceLimitError:
+		copy := *e
+		return &copy
+	case *os.PathError:
+		copy := *e
+		copy.Err = snapshotLoadError(e.Err)
+		return &copy
+	case interface{ Unwrap() []error }:
+		causes := e.Unwrap()
+		copies := make([]error, len(causes))
+		for i, cause := range causes {
+			copies[i] = snapshotLoadError(cause)
+		}
+		return &loadErrorCauses{message: err.Error(), causes: copies}
+	case interface{ Unwrap() error }:
+		return &loadErrorCauses{message: err.Error(), causes: []error{snapshotLoadError(e.Unwrap())}}
+	default:
+		return err
+	}
 }

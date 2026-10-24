@@ -1,6 +1,6 @@
 //go:build linux || darwin || freebsd || openbsd || netbsd || dragonfly
 
-package claude_test
+package claude
 
 import (
 	"context"
@@ -10,15 +10,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/zoumo/agent-sdk-go/claude"
 )
 
 func TestHistoryRejectsFIFOWithoutBlockingClose(t *testing.T) {
-	o := transcript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "x"}})
+	o := historyTranscript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "x"}})
 	path := historyPath(t, o)
 	require.NoError(t, os.Remove(path))
 	require.NoError(t, syscall.Mkfifo(path, 0600))
-	h, e := claude.Load(context.Background(), loadOptions(t, o))
+	h, e := readTranscriptForTest(context.Background(), o, nil)
 	require.NoError(t, e)
 	done := make(chan error, 1)
 	go func() { done <- h.Close() }()

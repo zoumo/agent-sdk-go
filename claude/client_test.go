@@ -67,6 +67,9 @@ func runFixture(mode string) {
 		}
 	}
 	switch mode {
+	case "session_load_pending":
+		runLoadPendingFixture(reader, init["request_id"])
+		return
 	case "session_load_metadata", "session_load_foreign_metadata", "session_load_conversation":
 		f, e := os.OpenFile(os.Getenv("CLAUDE_GO_HISTORY_FILE"), os.O_APPEND|os.O_WRONLY, 0600)
 		if e != nil {
@@ -88,8 +91,12 @@ func runFixture(mode string) {
 		if f.Close() != nil {
 			os.Exit(14)
 		}
-	case "session_load_bad_id":
-		fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": "wrong-native-id"})
+	case "session_load_bad_id", "session_load_bad_id_empty_parent":
+		frame := map[string]any{"type": "system", "subtype": "init", "session_id": "wrong-native-id"}
+		if mode == "session_load_bad_id_empty_parent" {
+			frame["parent_tool_use_id"] = ""
+		}
+		fixtureEmit(frame)
 	case "tree_early":
 		request, _ := init["request"].(map[string]any)
 		if request["forwardSubagentText"] != true {

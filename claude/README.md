@@ -222,50 +222,52 @@ history; `Options.Types()` omits this runtime configuration. See the
 
 [Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.
 
-## Load an existing session and replay history
+## Load an existing session
 
 ```go
-loaded, err := claude.Load(ctx, claude.LoadOptions{
+session, err := claude.Load(ctx, claude.LoadOptions{
     Options: claude.Options{CLIPath: claudePath},
     History: claude.HistoryOptions{
         SessionID: id, CWD: absoluteCWD, ConfigDir: absoluteClaudeConfigDir,
     },
 })
-// Check err, then defer loaded.Close().
-for event := range loaded.Events() {
-    // Use the same func(claude.ReceivedEvent) handler as Client.Receive().
-    handleEvent(event)
+// Check err, then defer session.Close().
+for {
+    received, err := session.Receive(ctx)
+    if err != nil {
+        // Inspect err and session.LoadState().Err.
+        break
+    }
+    if received.Kind == claude.ReceivedLoad {
+        // Inspect received.Load: a boundary, independent of consumer drain.
+    }
 }
-<-loaded.Done()
-// Check loaded.Err(), then obtain the ordinary resumed Client:
-client, err := loaded.Client()
-// Check err; client.Send(newContext, text) and client.Receive continue the session.
 ```
 
-Load validates the stored main chain and starts the normal CLI resume process
-before delivering events. It never sends historic content back as prompts.
-Client returns ErrLoadPending until replay finishes successfully. Open with
-Options.ResumeID remains ordinary resume without SDK history replay. The load
-context controls startup and replay; canceling it after success does not close
-the Client. LoadedSession.Close cancels replay and closes the owned child.
+Load returns a consumable `*Session` while startup is pending. `LoadState`
+reports requested identity separately from actually observed identity. Pending
+ordinary Submit/SetModel/SetThinking return `ErrLoadPending` without sending;
+real IncomingRequest answers, Interrupt and Close remain available. Failure
+admits one `ReceivedLoad` failed boundary, terminates interaction, invalidates
+handles and releases the process without waiting for consumption. Accepted
+live facts and the boundary remain drainable; the first termination cause is
+stable. Open has `LoadNotRequested` and does not emit a load boundary.
 
-Each replayed value is the normal native `claude.Event`, satisfying
-`claude.ReceivedEvent`. User/assistant content, thinking, tool blocks and retained
-system/progress/attachment data use the ordinary decoder and preserve unknown
-data. `event.History` marks replay and retains the exact original transcript
-bytes, parent UUID and recorded timestamp. `event.Raw` contains the projected
-native-shaped JSON with validated `session_id`; it is not an original live wire
-capture. SDK history metadata is excluded from native JSON serialization.
-History never passes through live permission or execution-state reducers and
-does not manufacture permission handles, tool execution or subagent creation.
-The old `Records` snapshot interface has been replaced by `Events`.
+**Fixed baseline capability gap:** SDK 0.3.258 / CLI 2.1.258 public evidence has
+not established a no-input local resume identity confirmation. Initialize,
+requested/disk identity and remote transport getters cannot confirm it. Thus
+Load currently fails with `ErrResumeUnconfirmed` after successful initialize,
+never replays history or opens ordinary input, and performs cleanup. An actual
+wrong root identity returns `ErrIdentityMismatch` with diagnostic Raw; native
+rejection, cancellation, history integrity and transport failures retain their
+own causes. Load sends no extra prompt or guessed control to obtain identity.
+See the [fixed source investigation](../docs/research/claude-session-native-evidence.md)
+and [history contract](../harness/contracts/async-history.md).
 
-The selected retained main chain includes compaction summaries, not abandoned
-branches, standalone subagent files or deleted content. Unknown blocks remain
-raw; corrupt/unsupported records fail explicitly. Local transcript loading
-supports Unix, exact project keys up to 200 characters and quiescent regular
-files. ConfigDir is also fixed in the child environment. RequestedResumeID stays
-separate from observed SessionID: native initialize does not itself report the
-session ID, and the SDK does not invent an observation from a request. Later
-known root system/result identity mismatches terminate the loaded Client.
-See the [history contract](../harness/contracts/async-history.md).
+The independent bounded transcript reader/projection remains covered offline:
+main-chain selection, compaction summaries, tools, unknown blocks, exact source
+Raw, SHA256 snapshots and mutation checks remain intact. Four additional
+metadata names lack proven schemas/append safety and remain explicitly rejected.
+No synthetic peer is treated as proof of native recovery success. Successful
+history/live interleaving and post-success context lifetime remain unverified
+until a fixed native confirmation mechanism is established.

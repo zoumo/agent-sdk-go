@@ -57,8 +57,8 @@ import (
     claudetranscript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
 )
 
-var _ func(*codex.Client, context.Context, codextypes.ThreadStartParams) (codextypes.ThreadStartResponse, error) = (*codex.Client).StartThread
-var _ func(*claude.Client, context.Context) (claude.ReceivedEvent, error) = (*claude.Client).Receive
+var _ func(context.Context, codex.SessionOptions) (*codex.Session, error) = codex.Open
+var _ func(*claude.Session, context.Context) (claude.Received, error) = (*claude.Session).Receive
 
 // This executes only pure value/configuration operations; no client is opened.
 func TestNativeConfiguration(t *testing.T) {

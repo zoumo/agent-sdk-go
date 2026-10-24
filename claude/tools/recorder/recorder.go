@@ -6,12 +6,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -32,12 +34,18 @@ func Run() error {
 	cli := flag.String("cli", "", "absolute approved CLI")
 	ledger := flag.String("session-ledger", "", "absolute durable ledger directory shared by this recording session")
 	out := flag.String("private-dir", "", "new private capture directory")
+	sdkRevision := flag.String("sdk-revision", "", "explicit source revision when build provenance is unavailable")
 	flag.Parse()
 	if err := transcript.LiveGuard(*mode, os.Getenv("SDK_REAL_AGENT_E2E"), os.Getenv("CI"), *cli); err != nil {
 		return err
 	}
 	if (*story != "s1" && *story != "s2") || !filepath.IsAbs(*out) || !filepath.IsAbs(*ledger) {
 		return fmt.Errorf("invalid story/private directory")
+	}
+	buildInfo, _ := debug.ReadBuildInfo()
+	provenance, err := recordingRevision(buildInfo, *sdkRevision)
+	if err != nil {
+		return err
 	}
 	// Version probe is read-only; no account or credential queries.
 	version, err := exec.Command(*cli, "--version").Output()
@@ -89,10 +97,7 @@ func Run() error {
 		return err
 	}
 	defer observations.Close()
-	var handlerMu sync.Mutex
-	client, openErr := claude.NewClient(ctx, claude.Options{CLIPath: exe, WorkDir: project, Env: env, InitializeTimeout: 30 * time.Second, ShutdownTimeout: 3 * time.Second, Limits: claude.Limits{FrameBytes: 2 << 20, StderrBytes: 256 << 10, PermissionWorkers: 1}, PermissionHandler: func(p *claude.PermissionRequest) {
-		handlerMu.Lock()
-		defer handlerMu.Unlock()
+	answerRequest := func(p *claude.PermissionRequest) error {
 		callbacks++
 		answer := claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: "outside exact synthetic story policy"}
 		var input map[string]any
@@ -122,11 +127,12 @@ func Run() error {
 		}
 		answerCtx, stop := context.WithTimeout(p.Context(), 15*time.Second)
 		defer stop()
-		_ = p.Answer(answerCtx, answer)
-	}})
+		return p.Answer(answerCtx, answer)
+	}
+	client, openErr := claude.Open(ctx, claude.SessionOptions{CLIPath: exe, WorkDir: project, Env: env, InitializeTimeout: 30 * time.Second, ShutdownTimeout: 3 * time.Second, Limits: claude.Limits{FrameBytes: 2 << 20, StderrBytes: 256 << 10}})
 	runErr := openErr
 	if openErr == nil {
-		runErr = client.Send(ctx, prompt)
+		_, runErr = client.Submit(ctx, claude.Input{Text: prompt})
 		for runErr == nil {
 			record, e := client.Receive(ctx)
 			if e != nil {
@@ -137,7 +143,11 @@ func Run() error {
 				runErr = e
 				break
 			}
-			if native, ok := record.(claude.Event); ok {
+			if record.Request != nil {
+				runErr = answerRequest(record.Request.Handle())
+				continue
+			}
+			if native := record.Event; native != nil {
 				if native.Type == "result" {
 					result = true
 					if native.Result != nil {
@@ -166,12 +176,10 @@ func Run() error {
 		}
 		closeErr := client.Abort()
 		if closeErr != nil {
-			runErr = closeErr
+			runErr = errors.Join(runErr, closeErr)
 		}
 	}
-	handlerMu.Lock()
-	defer handlerMu.Unlock()
-	summary := map[string]any{"story": *story, "seconds": time.Since(start).Seconds(), "root_attempts": 1, "children": 0, "permission_callbacks": callbacks, "allowed": allowed, "result_observed": result, "idle_observed": idle, "error": runErr != nil, "prompt": prompt, "sdk_base": "282f85aed93c571d4aaa500751d6786b021897b6"}
+	summary := map[string]any{"story": *story, "seconds": time.Since(start).Seconds(), "root_attempts": 1, "children": 0, "permission_callbacks": callbacks, "allowed": allowed, "result_observed": result, "idle_observed": idle, "error": runErr != nil, "prompt": prompt, "sdk_revision": provenance.Revision, "sdk_revision_source": provenance.Source, "sdk_modified": provenance.Modified}
 	b, _ := json.MarshalIndent(summary, "", "  ")
 	if err := os.WriteFile(filepath.Join(*out, "status.json"), b, 0600); err != nil {
 		return err

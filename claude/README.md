@@ -1,9 +1,3 @@
-> The new owned-process `Open(ctx, SessionOptions)` API and its current migration
-> limits are documented in [Session migration](docs/session-migration.md).
-> Structured input and native configuration are described in
-> [Session input/configuration](docs/session-input-config.md). The
-> examples below retain the temporary `NewClient` compatibility entry point.
-
 # Claude Agent SDK for Go
 
 Commands in this native documentation run from `claude/`; see [root validation](../docs/testing.md).
@@ -20,254 +14,130 @@ An experimental, independent native Go client for a locally installed Claude Cod
 - [Event sequences / 用户故事](docs/event-sequences.md), [architecture](docs/design/sdk-design.md)
 - [Testing and CI](docs/ci.md), [offline recorded replay](docs/record-replay.md), [manual live checklist](docs/live-compatibility.md)
 
-## Implemented core
+## Session usage
 
-- Local process startup with literal argv, explicit CLI path/workdir/model, bounded and correlated initialization
-- Synchronous complete-frame `Send` and single-consumer `Receive`
-- Explicit native resume, separate requested/observed session identity, and correlated `Interrupt` acknowledgments
-- Typed system, assistant, user, result, stream-delta, tool-use and tool-result views, with lossless raw JSON for unknown types, fields and blocks
-- Deferred, single-use permission handles with original IDs/input/context, bounded asynchronous handlers, cancellation guards, and default deny
-- Typed cancellation events, including unknown/completed IDs, and request-specific terminal answer errors
-- Observable incoming control requests and explicit error replies for unsupported controls
-- Dynamic FIFO event delivery; bounded control queues, frame sizes and stderr tails; explicit resource and protocol errors
-- Independent `Done` and `Err`, retained accepted events, idempotent concurrent `Close`, and owned child reaping with bounded escalation
-
-The typed Go views are handwritten, with raw JSON preserving unknown exposed-event data; no automatic upstream type synchronization/code generation exists. Hooks, SDK-hosted MCP, full configuration parity, session-store helpers and dynamic model/permission controls are unsupported. A separately authorized [live compatibility checklist](docs/live-compatibility.md) is provided. Default tests and CI skip the opt-in live initialization probe; the full checklist remains manual.
-
-## Usage
-
-You must install and configure Claude Code separately. Running this example can use your configured account and incur model costs. Default offline tests never invoke the real CLI.
+A Session owns the native process and one FIFO. `Open` requests native forwarding;
+accepting initialize alone does not prove all children will be forwarded. Running
+this example uses your explicitly selected CLI and its configured account. Default
+tests compile it and use only offline peers for execution.
 
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "log"
-    "time"
-
-    claude "github.com/zoumo/agent-sdk-go/claude"
+ "context"
+ "fmt"
+ "log"
+ claude "github.com/zoumo/agent-sdk-go/claude"
 )
 
-func main() {
-    ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-    defer cancel()
-
-    client, err := claude.NewClient(ctx, claude.Options{CLIPath: "claude"})
-    if err != nil { log.Fatal(err) }
-    defer client.Abort()
-
-    if err := client.Send(ctx, "Explain this directory."); err != nil {
-        log.Print(err)
-        return
-    }
-    for {
-        received, err := client.Receive(ctx)
-        if err != nil { log.Print(err); return }
-        event, ok := received.(claude.Event)
-        if !ok {
-            // Handle relationship and observation records.
-            continue
-        }
-        if event.Assistant != nil {
-            for _, block := range event.Assistant.Content.Blocks {
-                if block.Text != nil { fmt.Println(block.Text.Text) }
-            }
-        }
-        if event.ParentToolUseID == nil && event.Result != nil { return } // App stop policy; children may still run.
-    }
+func main(){
+ ctx:=context.Background()
+ session,err:=claude.Open(ctx,claude.SessionOptions{CLIPath:"/explicit/path/to/claude",WorkDir:"/absolute/project"})
+ if err!=nil{log.Print(err);return}
+ defer session.Abort()
+ submitted,err:=session.Submit(ctx,claude.Input{Text:"Explain this directory."})
+ if err!=nil{log.Print(err);return}
+ fmt.Println("complete local write",submitted.Written)
+ for{
+  received,err:=session.Receive(ctx);if err!=nil{log.Print(err);return}
+  if received.Request!=nil{
+   fmt.Println("decision required",received.Request.ID(),received.Request.Handle().ToolName())
+   // Pass the original request to your UI. The SDK does not choose its answer.
+  }
+  if received.Event!=nil{fmt.Println(received.Event.Type,string(received.Event.Raw))}
+  if received.Observation!=nil{fmt.Println(received.Observation.Reason)}
+ }
 }
 ```
 
-A successful `Send` means only that the full NDJSON frame was written. It is not proof of acceptance, execution, or exactly-once delivery. `errors.Is(err, claude.ErrUnknownOutcome)` marks ambiguous writes/control waits; the SDK never automatically retries them. Canceling an in-flight write closes the connection to unblock that write. Canceling a `Receive` wait leaves the session running. Queued writes rejected before starting return a caller-context error or `ErrClosed`, without inheriting another write’s unknown outcome; inspect `Client.Err` for the connection’s terminal cause.
+`Submit` retains native text or structured user content: text, image, document and
+tool_result. Unknown input variants are explicitly rejected. Success proves a
+complete local write, with no invented CLI acceptance receipt or Claude Turn.
+The main envelope is fixed; session_id and parent_tool_use_id are not arbitrary
+input targets. A native result, including is_error, does not terminate Session.
 
-A result ends one turn, not the process. Always close the client. Use `Close` to retain accepted events for draining, or `Abort` to shut down and discard the unconsumed native backlog. After `Abort`, future `Receive` calls return the terminal error or `ErrClosed`; an already-running Receive may still complete. Bounded relationship state stays with the client until garbage collection. `Done` is independent of consumer progress; drain `Receive` to obtain accepted events before its terminal error. `Err` exposes the latest known failure, while `Close` waits for cleanup and final diagnostics. `Error.Stderr` contains a bounded diagnostic tail that may be sensitive; the SDK never logs it automatically.
+`Receive` is the sole consumption entry for native Event, real IncomingRequest,
+observation evidence and Load boundary. Concurrent calls compete for the same
+FIFO. Applications own UI/logging fan-out. Native Raw/unknown values and repeated
+UUIDs remain intact. Confirmed members do not wait for a complete parent path.
+Unknown envelopes and unconfirmed identities remain bounded `Unattributed`
+diagnostics with explicit coverage gaps; later evidence does not replay old facts.
+See [native task/tool evidence](docs/session-migration.md).
 
-Incoming `can_use_tool` requests are denied when no permission handler is configured. This is not a sandbox: CLI settings, previously granted permissions and operations that do not prompt still apply. An assistant `AskUserQuestion` content block is observable data and causes no synthetic reply.
+## Actual permission and question requests
 
-`Options.Env == nil` inherits the current environment; a non-nil slice replaces it. Defaults are 60 seconds for initialization, 3 seconds for shutdown escalation, dynamic event buffering, 4 MiB per frame, 32 pending outbound controls, 32 queued automatic responses, 32 queued permission-handler jobs, 128 unanswered incoming controls, 4 concurrent permission handlers, 4,096 distinct incoming control/cancellation IDs per connection, and an 8 KiB stderr tail. Request-ID history is never evicted; exhaustion terminates the connection rather than reviving stale requests. Zero-valued fields select defaults. Slow Receive consumers accumulate accepted native events in a dynamic FIFO without blocking control-response routing or permission dispatch. The backlog has no configured count ceiling and is limited by available machine memory; sustained producer/consumer imbalance can exhaust memory. Draining releases event references; shutdown does not wait for draining, and process crashes or OOM do not guarantee delivery. `Limits.EventBuffer` is deprecated and ignored; its existing 0..65,536 validation remains, with no allocation based on its value. Frame, control, permission and relationship bounds still fail visibly when exceeded. Oversized local sends and excess pending outbound controls are rejected before writing and do not close the connection. Values above documented [validated resource ceilings](docs/compatibility.md#resource-and-shutdown-contract) are rejected before process startup. Linux/macOS offline subprocess/race tests verify direct-child reaping and process-group teardown, including descendants holding stdout and descendants that close their pipes. Other platform runtimes are unverified; non-POSIX builds kill only the direct child, and escaped process groups are outside the guarantee. Close never waits for arbitrary user callbacks that ignore cancellation.
+Use the `IncomingRequest` delivered by Receive. `Approve(ApprovalOptions)` retains
+updatedInput and updatedPermissions. `Deny(DenialOptions)` retains message and
+interrupt. `Answer(QuestionAnswers)` answers a real AskUserQuestion using full
+question-text keys and preserves the original questions and unknown input fields.
+`Handle()` retains the original native PermissionRequest for explicit supported
+native responses. A parsed event, relationship or history record has no authority.
 
-## Native resume and interrupt
+No default answer or SDK approval deadline is imposed on Session requests. The
+registry enforces cancellation, single use and invalidation at close. A queued
+answer canceled before writing remains NotSent; a started write may be
+OutcomeUnknown and is never automatically retried. Refusing a permission is not
+a sandbox or an interception guarantee for every tool.
 
-`client.SessionID()` returns `(id, true)` only after a nonempty native ID arrives in a system or result frame. Before that it returns `("", false)`. It reports the most recently observed ID and remains available after closing. `client.RequestedResumeID()` separately returns the original request, which is never treated as observed identity.
+## Configuration and stored records
 
-To request resume, open a fresh process with `claude.Options{CLIPath: "claude", ResumeID: id}`. The ID is bound literally as `--resume=<value>`, including dash-leading values. Native history belongs to the CLI: the SDK does not replay earlier user messages, restore pending permission requests, adopt an old process, or provide durable recovery. Resume requires whatever persisted history and configuration the CLI itself needs. The fixture tests verify argv and observed IDs, not live persisted-history continuation.
+Creation `Model`/`Thinking` options are separate from dynamic SetModel/SetThinking.
+Native acceptance is distinct from observed configuration. Model nil omits the
+model field; empty non-nil strings are invalid. Thinking budget nil clears with
+null; zero remains zero. Display omission, summarized/omitted and explicit clear
+remain separate. See [input/configuration](docs/session-input-config.md).
 
-`client.Interrupt(ctx)` sends an interrupt control request and waits for that request's acknowledgment. Concurrent interrupts have independent IDs; unknown, duplicate, and stale response IDs cannot complete another waiter. An explicit rejection returns `*claude.ControlError`. Success acknowledges the control only: it does not promise tool rollback, close the process, or consume a later turn result. Continue receiving events to observe the turn's outcome.
+`ListSubagents` scans the fixed Session's ConfigDir/cwd/native identity with
+explicit count/byte bounds. Inspect coverage together with errors; a partial or
+unsupported scan is not a complete empty list. Querying stored records does not
+resume them, prove they are running or change observation membership.
 
-Cancellation before a write starts emits no request. Cancellation while waiting after a completed write returns an unknown-outcome error and leaves the connection available; cancellation during the write can terminate the connection to unblock it. Disconnect and write failure wake pending controls. The SDK never retries an interrupt automatically.
+`Load` requires an explicit native SessionID, absolute CWD and ConfigDir. Its
+LoadState is independent of Done and consumer drain. The fixed CLI 2.1.258 /
+SDK 0.3.258 baseline has no confirmed no-input recovery acknowledgment:
+initialize is insufficient, so Load explicitly fails with ErrResumeUnconfirmed.
+It never replays history as a successful recovery, submits an extra prompt, or
+falls back to a new session. Pending real requests and controls remain usable;
+ordinary input/configuration stay gated. See [Load](docs/session-load.md).
 
-## Deferred permissions
+## Cancellation, shutdown and resources
 
-Configure `Options.PermissionHandler` to receive a `*PermissionRequest` for each real `can_use_tool` control. The handler can retain the handle and return, or wait for a human while unrelated events and controls keep moving. Handler return never answers the request. Calls run on a bounded worker pool; exhausted queues fail visibly. Handlers should watch `request.Context().Done()`. Close does not wait for callbacks that ignore cancellation.
+Canceling Receive cancels only that wait. Interrupt waits for a matched native
+control acknowledgment, not execution completion or rollback. Close invalidates
+owned handles and reaps owned resources without waiting for event consumption.
+Done closes at interaction termination; Err preserves its first cause. Close
+reports cleanup separately. Accepted facts remain drainable; Abort explicitly
+abandons unread backlog. No automatic reconnect, resend or request restoration
+is implemented.
 
-`RequestID()`, `ToolUseID()`, `ToolName()`, and `Epoch()` expose immutable identifiers. `Input()` returns a copy of the original input. `Raw()` returns a copy of the entire nested request, preserving permission suggestions, agent/display context and unknown fields. An epoch identifies a client instance within the current Go process; it is not a native session ID.
+The Session FIFO grows with unread events and is limited by available memory;
+there is no crash/OOM delivery guarantee. Frame sizes, pending controls, request
+identities, tool/member indexes, diagnostic stderr and quarantine have independent
+limits. Zero resource options select defaults; invalid negative values fail.
+Subagents limits bound membership, optional parent knowledge and quarantine
+(default 128 records, 4 MiB, five seconds). Parent rejection does not discard
+already confirmed native facts. No occurrence/UUID ledger or ancestor-first
+sorting is required for normal Session delivery.
 
-Answer exactly once:
+Env=nil inherits the native environment; an explicit Env replaces it. Process
+options are literal argv, not shell commands. The SDK does not bundle a CLI or
+manage accounts. POSIX cleanup targets the owned process group; non-POSIX
+cleanup owns only the direct child. Escaped process groups remain outside that
+bound. See [compatibility](docs/compatibility.md) for native and evidence limits.
 
-```go
-err := request.Answer(ctx, claude.PermissionAnswer{
-    Behavior: claude.PermissionAllow, // nil UpdatedInput preserves original input
-})
-// Or provide UpdatedInput: json.RawMessage(`{"path":"approved.txt"}`).
-// An explicit {} replaces the input with an empty object.
-// To deny, use Behavior: claude.PermissionDeny, Message: "Not approved".
-```
+## Types, licensing and offline checks
 
-Only this handle can send its permission response, correlated to the original control request ID. Copying it does not create another authority. A second attempt after success, or while another attempt is running, returns `ErrPermissionUsed`. A failed response attempt returns `ErrPermissionWriteFailed`, preserving its original cause even after the connection closes. Rejected/failed attempts are `*PermissionError` values with the original request ID; use `errors.Is` for their classification. An already-canceled caller context consumes nothing; once an answer attempt is reserved, it cannot be retried. Failed reserved answers terminate the connection unless the CLI already canceled the request or the connection is closed. A handler panic or invalid answer produces an observable `PermissionError` and terminates the connection without granting permission. An earlier completed answer cannot be undone.
+Native pure data and codecs live in `claude/types` with standard-library-only
+production dependencies. Unknown JSON fields/blocks are retained; handwritten
+types do not imply full official SDK parity. Original code uses Apache-2.0; see
+[NOTICE](NOTICE), [LICENSE](LICENSE) and [type provenance](docs/type-sources.md).
 
-A real `control_cancel_request` immediately cancels the matching handle context and prevents a response not yet authorized for writing. The cancellation event has a typed `event.Cancel.RequestID` and lossless `event.Cancel.Raw`, including for unknown, repeated, or already-completed IDs. A late cancel does not overwrite an already-completed answer. If bounded permission/history capacity prevents delivery, `Done` and a terminal `ResourceLimitError` expose the loss and invalidate remaining handles. `ErrPermissionCancelled` identifies rejected late answers; `context.Cause(request.Context())` identifies cancellation, completed use, or shutdown/failure. Cancellation concurrent with an already-authorized write cannot retract bytes and may return `ErrUnknownOutcome`. Closing or disconnecting invalidates pending handles with `ErrClosed`; a new client has a new epoch, including when resuming a native session. Handles remain bound to their original client, so an old handle cannot answer an identically numbered request on a fresh client. `ErrPermissionStale` is the defensive cross-epoch guard; the handle-only API cannot redirect a handle to another client. These are connection-local safety guarantees, not durable exactly-once delivery.
+Use the mise-pinned Go 1.26.9 compiler and root offline gate. The subagent example
+runs its own synthetic peer; recorded replay preserves the original sanitized
+CLI authentication failure. That capture is not successful model/tool/child
+coverage. Default live initialization tests remain opt-in/skipped. No live
+compatibility follows from a passing synthetic or replay test.
 
-A real `can_use_tool` for `AskUserQuestion` uses this same API with caller-supplied updated input. There is no automatic question-schema mapping. An assistant `tool_use` named `AskUserQuestion` remains only an event and never creates a responder or synthetic `tool_result`. These semantics are tested against synthetic source-derived frames; live CLI question behavior remains unverified.
-
-## Data types and compatible imports
-
-Pure data and JSON decoders live in
-`github.com/zoumo/agent-sdk-go/claude/types`. Import that package alone to inspect
-frames with `types.ParseEvent`, build content/permission answers, or store CLI
-configuration without depending on the process client. It uses only the Go
-standard library. Usage and unknown data remain raw JSON.
-
-The native `claude` package aliases the event/content/result/control types,
-`PermissionBehavior`, `PermissionAnswer`, and `Limits`, including the existing
-permission constants. Literals, method sets and assignments work across both imports. The canonical
-named types belong to
-`types`: reflection `PkgPath` and type-name formatting (including `%T`) can
-change. Those strings are not a compatibility guarantee.
-
-`claude.Options` contains callback-free startup fields, runtime callbacks and
-`Subagents` bounds/history. `PermissionRequest` is a connection-bound answer handle, and
-`PermissionHandler` accepts that handle; both remain in the native `claude` package.
-`types.Options` contains only the callback-free startup fields. Adapt it
-explicitly, then attach a handler if needed:
-
-```go
-config := types.Options{CLIPath: "claude", Limits: types.Limits{FrameBytes: 4 << 20}}
-options := claude.OptionsFromTypes(config)
-options.PermissionHandler = func(request *claude.PermissionRequest) {
-    // Retain or answer the real request using the existing permission API.
-}
-// Pass options to claude.NewClient(ctx, options).
-// options.Types() returns the callback-free configuration again.
-```
-
-Conversions preserve fields, including nil versus empty `Env`, and share its
-backing slice just like an ordinary struct copy. Defaults and validation still
-run in `Open`. Runtime errors, process ownership, locks, permission registries,
-queues, and callback execution stay in the native `claude` implementation.
-
-## Development and verification
-
-Go is pinned to 1.26.9 in the root `mise.toml`. The native Claude packages are standard-library-only.
-
-```sh
-mise exec go@1.26.9 -- go version
-mise exec go@1.26.9 -- go test -count=1 -timeout 180s ./...
-mise exec go@1.26.9 -- go test -race -count=1 -timeout 300s ./...
-mise exec go@1.26.9 -- go vet ./...
-mise exec go@1.26.9 -- go list -deps ./types
-```
-
-See [CI checks and live gate](docs/ci.md) for the Linux/macOS matrix, committed-change checks, and explicit live skip status.
-
-Offline tests exercise exported APIs against a scripted subprocess with a replacement environment and isolated temporary HOME/workdir. They cover exact initialization/user/interrupt envelopes, literal resume without replay, requested versus observed native IDs, immediate and out-of-order control replies, unknown/stale IDs, timeout/response/close races, startup failures, preserved unknown data, Unicode/chunk framing, errors after accepted events, slow-consumer FIFO bursts, fail-closed permissions, direct write errors, cancellation, concurrent sends/close, POSIX child reaping, process-group descendants, ignored SIGTERM, event backlogs with pending interrupts/permissions, response-work overload and integer-limit rejection. Linux FIFO-barrier tests additionally check queued cancellation/close, interrupted partial response writes, preserved failure classification and no retry using actual subprocess stdin transcripts. The real-CLI examples are compiled, not executed. The subagents-offline example is executed against its own synthetic peer.
-
-Protocol and behavioral references: [official Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview), pinned Python SDK `query.py`, `subprocess_cli.py`, `types.py`, and its `test_query.py`, `test_message_parser.py`, `test_subprocess_buffering.py`, `test_close_cancellation.py`, `test_session_resume.py`, `test_streaming_client.py`, `test_tool_callbacks.py`, and `test_transport.py`. The implementation and Go tests are original, not copied from those sources or a rival Go SDK.
-
-See the [compatibility inventory](docs/compatibility.md) for official runtime exports, query methods, options, input/output variants and callback/control boundaries, and [the design](docs/design/sdk-design.md) for the implemented core contract and deferred scope. Source/test provenance is recorded there and in [NOTICE](NOTICE).
-
-Message construction, JSON round trips, optional values and Raw/typed editing
-rules are documented in [the message JSON contract](docs/message-json.md).
-See [type source and license review](docs/type-sources.md) for pinned references.
-
-### Subagent forwarding
-
-`Open` owns one native stream and enables `forwardSubagentText` during
-initialization. It exposes lossless native frames and explicitly marked SDK
-association/observation records. Forwarding support remains unverified until
-there is runtime evidence. **SubagentCreated is conditionally implemented for
-exact CLI 2.1.258**, the locally installed version checked with `--version`.
-Creation requires the fixed foreground or corroborated successful Agent result
-criterion; ordinary task start, tool input and SubagentStart alone do not prove
-creation. Associated remains separate. See the [creation rules](docs/subagent-events.md#creation-evidence).
-See the [per-capability matrix](docs/subagent-compatibility.md) for pinned versions,
-E1/E2 evidence and foreground/background/nested/legacy limits, plus the
-[API and current limits](docs/subagent-events.md). No E3/E4 subagent checks ran.
-
-A self-contained example uses only a local synthetic peer (no installed CLI or
-model):
-
-```sh
-mise exec go@1.26.9 -- env GOPROXY=off GOSUMDB=off CLAUDE_E2E=0 go run ./examples/subagents-offline
-```
-
-It prints source/parent/run records through a single Open/Receive consumer, continues
-after the parent result, observes patch-only terminals and explicitly closes.
-Session-state events need a native opt-in on applicable CLIs; background task
-snapshots replace a process-local set and do not prove termination. See the [offline checks](docs/ci.md).
-
-中文事件时序说明：[前台/后台任务、子流、审批和结束边界](docs/event-sequences.md)。
-
-### Native event stream
-
-`Open` returns `*Client`; `Receive` returns `ReceivedEvent`. Type-switch on
-`Event`, `SubagentAssociated`, `SubagentCreated`, or `ObservationState`.
-Native values arrive directly, with unchanged fields, JSON and `Raw` bytes.
-`Event.Origin` remains the official `*MessageOrigin` object. Relationship tracking
-and child forwarding are automatic. `Options.Subagents` sets bounds and verified
-history; `Options.Types()` omits this runtime configuration. See the
-[API comparison with pinned official examples](docs/api-comparison.md) and
-[derived definitions](derived_events.go).
-
-[Recorded wire replay](docs/record-replay.md) provides an offline real CLI authentication-failure sample. Successful model/tool recording remains blocked; it is not live E2E coverage.
-
-## Load an existing session
-
-```go
-session, err := claude.Load(ctx, claude.LoadOptions{
-    Options: claude.Options{CLIPath: claudePath},
-    History: claude.HistoryOptions{
-        SessionID: id, CWD: absoluteCWD, ConfigDir: absoluteClaudeConfigDir,
-    },
-})
-// Check err, then defer session.Close().
-for {
-    received, err := session.Receive(ctx)
-    if err != nil {
-        // Inspect err and session.LoadState().Err.
-        break
-    }
-    if received.Kind == claude.ReceivedLoad {
-        // Inspect received.Load: a boundary, independent of consumer drain.
-    }
-}
-```
-
-Load returns a consumable `*Session` while startup is pending. `LoadState`
-reports requested identity separately from actually observed identity. Pending
-ordinary Submit/SetModel/SetThinking return `ErrLoadPending` without sending;
-real IncomingRequest answers, Interrupt and Close remain available. Failure
-admits one `ReceivedLoad` failed boundary, terminates interaction, invalidates
-handles and releases the process without waiting for consumption. Accepted
-live facts and the boundary remain drainable; the first termination cause is
-stable. Open has `LoadNotRequested` and does not emit a load boundary.
-
-**Fixed baseline capability gap:** SDK 0.3.258 / CLI 2.1.258 public evidence has
-not established a no-input local resume identity confirmation. Initialize,
-requested/disk identity and remote transport getters cannot confirm it. Thus
-Load currently fails with `ErrResumeUnconfirmed` after successful initialize,
-never replays history or opens ordinary input, and performs cleanup. An actual
-wrong root identity returns `ErrIdentityMismatch` with diagnostic Raw; native
-rejection, cancellation, history integrity and transport failures retain their
-own causes. Load sends no extra prompt or guessed control to obtain identity.
-See the [fixed source investigation](../docs/research/claude-session-native-evidence.md)
-and [history contract](../harness/contracts/async-history.md).
-
-The independent bounded transcript reader/projection remains covered offline:
-main-chain selection, compaction summaries, tools, unknown blocks, exact source
-Raw, SHA256 snapshots and mutation checks remain intact. Four additional
-metadata names lack proven schemas/append safety and remain explicitly rejected.
-No synthetic peer is treated as proof of native recovery success. Successful
-history/live interleaving and post-success context lifetime remain unverified
-until a fixed native confirmation mechanism is established.
+See the [breaking migration guide](../docs/session-migration.md),
+[CI checks](docs/ci.md) and [recording provenance](docs/record-replay.md).

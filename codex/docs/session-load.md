@@ -70,12 +70,11 @@ provenance, independent lifetime/drain, interleaving/questions/controls, late
 failure, cancellation, unknown dispatch fences, and overlapping observers with
 unique answers and close isolation. Existing history/protocol/permission tests
 remain. These are offline protocol checks, not real resume or complete native
-observation certification. Client.Load/LoadedThread remain temporary legacy
-expand-contract compatibility for T13 removal. Its exclusive legacy owner
-rejects later Session observer admission with an explicit SDK coverage gap; this
-is a temporary compatibility restriction, not a native limitation. Applications
-should use package
-Load and Session.Receive.
+observation certification. The independent Client.Load/LoadedThread lifecycle has been removed. Package
+Load and Session.Receive own admission, replay, continued interaction and
+attachment cleanup. Both admission orders for overlapping child/ancestor ranges
+share attachment references; final release does not depend on discovery order.
+
 
 Contract: [async history](../../harness/contracts/async-history.md),
 [event delivery](../../harness/contracts/event-delivery.md), and

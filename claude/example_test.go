@@ -10,16 +10,16 @@ import (
 
 // This example compiles during tests but is not executed. Running it requires
 // your own installed Claude Code CLI and its configured account or provider.
-func ExampleNewClient() {
+func ExampleOpen() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client, err := NewClient(ctx, Options{CLIPath: "claude"})
+	client, err := Open(ctx, SessionOptions{CLIPath: "claude"})
 	if err != nil {
 		log.Print(err)
 		return
 	}
 	defer client.Abort()
-	if err := client.Send(ctx, "Explain what this directory contains."); err != nil {
+	if _, err := client.Submit(ctx, Input{Text: "Explain what this directory contains."}); err != nil {
 		log.Print(err)
 		return
 	}
@@ -29,8 +29,8 @@ func ExampleNewClient() {
 			log.Print(err)
 			return
 		}
-		event, ok := record.(Event)
-		if !ok {
+		event := record.Event
+		if event == nil {
 			// Handle relationship and observation records in the application UI.
 			continue
 		}
@@ -47,62 +47,45 @@ func ExampleNewClient() {
 	}
 }
 
-// This example compiles but does not run. The session must already exist in
-// your installed CLI's native storage; the SDK does not replay its history.
-func ExampleClient_RequestedResumeID() {
+// This example compiles without running a CLI. The fixed native baseline cannot
+// confirm recovery without execution; Load reports ErrResumeUnconfirmed.
+func ExampleLoad() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	client, err := NewClient(ctx, Options{CLIPath: "claude", ResumeID: "previous-native-session-id"})
+	session, err := Load(ctx, LoadOptions{Options: Options{CLIPath: "claude"}, History: HistoryOptions{SessionID: "previous-native-session-id", CWD: "/absolute/project", ConfigDir: "/absolute/config"}})
 	if err != nil {
 		log.Print(err)
 		return
 	}
-	defer client.Abort()
-	fmt.Println("Requested:", client.RequestedResumeID())
-	if id, observed := client.SessionID(); observed {
-		fmt.Println("Observed:", id)
+	defer session.Close()
+	for {
+		received, err := session.Receive(ctx)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+		if received.Load != nil {
+			fmt.Println(received.Load.Status, received.Load.Err)
+			return
+		}
 	}
-	if err := client.Interrupt(ctx); err != nil {
-		log.Print(err)
-	}
-	// Acknowledgment does not imply rollback. Receive still delivers turn results.
 }
 
-// This example is compiled but never executed by tests. A real run requires a
-// configured CLI and can incur account usage. The application owns the human UI.
-func ExamplePermissionRequest_Answer() {
-	requests := make(chan *PermissionRequest, 8)
-	client, err := NewClient(context.Background(), Options{
-		CLIPath: "claude",
-		PermissionHandler: func(request *PermissionRequest) {
-			select {
-			case requests <- request: // Retain the handle for the application UI.
-			case <-request.Context().Done():
+// The application obtains its decision before answering the actual request.
+// This example is compile-only and does not run a CLI or choose an approval.
+func ExampleIncomingRequest_Deny() {
+	consume := func(ctx context.Context, session *Session, userDecision func(*IncomingRequest) DenialOptions) error {
+		for {
+			record, err := session.Receive(ctx)
+			if err != nil {
+				return err
 			}
-		},
-	})
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	defer client.Abort()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if err := client.Send(ctx, "Read the requested project file."); err != nil {
-		log.Print(err)
-		return
-	}
-	// A real application concurrently drains Receive and displays requests.
-	select {
-	case request := <-requests:
-		fmt.Println(request.RequestID(), request.ToolName(), string(request.Input()))
-		if err := request.Answer(ctx, PermissionAnswer{
-			Behavior: PermissionDeny, Message: "The user declined this request",
-		}); err != nil {
-			log.Print(err)
+			if record.Request != nil {
+				if err := record.Request.Deny(ctx, userDecision(record.Request)); err != nil {
+					return err
+				}
+			}
 		}
-	case <-client.Done():
-		log.Print(client.Err())
-	case <-ctx.Done():
 	}
+	_ = consume
 }

@@ -11,7 +11,7 @@ CLI target **2.1.258**. Examples below are original usage examples, not copied u
 
 | Task | Go | Official TypeScript 0.3.258 | Official Python pinned commit |
 | --- | --- | --- | --- |
-| Configure | `Options{CLIPath, WorkDir, Model, ResumeID, Subagents, PermissionHandler}` | `query({prompt, options:{cwd, model, resume, canUseTool}})` | `ClaudeAgentOptions(cwd=..., model=..., resume=..., can_use_tool=...)` |
+| Configure | `SessionOptions{CLIPath, WorkDir, Model, Thinking, Subagents}`; explicit `LoadOptions` for recovery | `query({prompt, options:{cwd, model, resume, canUseTool}})` | `ClaudeAgentOptions(cwd=..., model=..., resume=..., can_use_tool=...)` |
 | Create | `Open(ctx, Options)` returns `*Client` | `query(...)` starts query/process | `await client.connect()` or async context manager |
 | Resume | `Open(ctx, Options{ResumeID:id})` | `options.resume` on new query | `ClaudeAgentOptions(resume=id)` on new client |
 | Send | `client.Send(ctx, text)` | string or async prompt iterable; `Query.streamInput` also declared | `await client.query(text)` |
@@ -25,77 +25,60 @@ Go does not expose the official `agents` configuration used in the examples belo
 ## Go: receiving events
 
 ```go
-message, err := client.Receive(ctx) // (ReceivedEvent, error)
+received, err := session.Receive(ctx) // (claude.Received, error)
 if err == nil {
-    switch event := message.(type) {
-    case claude.Event:
-        fmt.Println(event.Type, event.ParentToolUseID)
-    case claude.SubagentCreated:
-        fmt.Println(event.Source.TaskID)
-    }
+    if received.Event != nil { fmt.Println(received.Event.Type) }
+    if received.Request != nil { fmt.Println(received.Request.ID()) }
+    if received.Observation != nil { fmt.Println(received.Observation.Reason) }
 }
 ```
 
 ## Go: configuration, session, input, streaming and approvals
 
-The application supplies `decide`, which can wait for its human UI using the
-original request context. It returns `PermissionAllow` or `PermissionDeny` via
-`PermissionAnswer`; no `Allow`, `Deny` or `Questions` request methods exist.
-For questions, decode `request.Input()` into `AskUserQuestionInput`, collect
-answers keyed by full question text, call `input.WithAnswers(answers)`, and
-pass the result as `PermissionAnswer.UpdatedInput` to `request.Answer`.
+The application owns its decision UI. Requests arrive in the same FIFO as
+native events; a decision uses the actual IncomingRequest or its native handle.
+Load is explicit and cannot succeed at the fixed baseline without a confirmed
+non-executing recovery mechanism. It does not replace missing recovery with
+ordinary input.
 
 ```go
-func consume(ctx context.Context, resume string,
-    decide func(*claude.PermissionRequest) claude.PermissionAnswer) error {
-    client, err := claude.Open(ctx, claude.Options{
-        CLIPath: "claude", WorkDir: ".", ResumeID: resume, // empty creates a session
-        PermissionHandler: func(request *claude.PermissionRequest) {
-            answer := decide(request) // application-owned human UI
-            _ = request.Answer(request.Context(), answer)
-        },
-    })
+func consume(ctx context.Context, cwd string,
+    decide func(*claude.IncomingRequest) claude.PermissionAnswer) error {
+    session, err := claude.Open(ctx, claude.SessionOptions{CLIPath:"claude",WorkDir:cwd})
     if err != nil { return err }
-    defer client.Abort()
-    if err := client.Send(ctx, "Explain this directory."); err != nil { return err }
+    defer session.Abort()
+    if _,err=session.Submit(ctx,claude.Input{Text:"Explain this directory."});err!=nil{return err}
     for {
-        message, err := client.Receive(ctx)
-        if err != nil { return err }
-        switch event := message.(type) {
-        case claude.Event:
-            fmt.Println(event.Type, event.ParentToolUseID)
-            if event.Stream != nil { fmt.Println(event.Stream.Delta) }
-            // Native children use native IDs; keep receiving after root result
-            // when later child output matters. ctx/application policy ends this loop.
-        case claude.SubagentAssociated:
-            fmt.Println(event.Source, event.Parent)
-        case claude.SubagentCreated:
-            fmt.Println(event.Source.TaskID)
-        case claude.ObservationState:
-            fmt.Println(event.State, event.Reason)
+        received,err:=session.Receive(ctx)
+        if err!=nil{return err}
+        if received.Request!=nil{
+            answer:=decide(received.Request)
+            if err:=received.Request.Handle().Answer(received.Request.Context(),answer);err!=nil{return err}
         }
+        if event:=received.Event;event!=nil{
+            fmt.Println(event.Type,event.ParentToolUseID)
+            if event.Stream!=nil{fmt.Println(event.Stream.Delta)}
+        }
+        if received.Observation!=nil{fmt.Println(received.Observation.Reason)}
+        // Continue after root result when later child output matters.
     }
 }
 
-func answerQuestions(request *claude.PermissionRequest,
-    answers map[string]claude.QuestionAnswer) error { // answers come from the human UI
+func answerQuestions(request *claude.IncomingRequest,answers map[string]string)error{
+    // Pure decoding does not create authority. This is the original live request.
     var input claude.AskUserQuestionInput
-    if err := json.Unmarshal(request.Input(), &input); err != nil { return err }
-    updated, err := input.WithAnswers(answers)
-    if err != nil { return err }
-    return request.Answer(request.Context(), claude.PermissionAnswer{
-        Behavior: claude.PermissionAllow, UpdatedInput: updated,
-    })
+    if err:=json.Unmarshal(request.Handle().Input(),&input);err!=nil{return err}
+    fmt.Println("questions",len(input.Questions))
+    return request.Answer(request.Context(),claude.QuestionAnswers{Answers:answers})
 }
 ```
 
-`client.SessionID()` returns the observed ID for a later `Open` with ResumeID.
-`client.Close()` explicitly closes and reaps the owned process while preserving accepted events; deferred `Abort` releases any unconsumed native backlog and covers
-all exits here. [Compiling examples](../example_test.go) also show create/resume,
-interrupt and permission denial. The [executed offline child example](../examples/subagents-offline/main.go)
-shows continued output after the parent result, creation and explicit close at
-scripted idle. Source links: [client](../client.go), [permission handle](../permissions.go),
-[question edit helper](../types/questions.go), [separate derived types](../derived_events.go).
+SessionID reports observed identity separately from the requested resume ID.
+Close reaps the owned process and leaves accepted facts drainable; Abort explicitly
+abandons unread backlog. The [offline example](../examples/subagents-offline/main.go)
+retains exact native facts after a parent result, reports unconfirmed parent
+knowledge and closes at scripted idle. Native structures remain independent of
+Codex and no synthetic Claude Turn is introduced.
 
 ## Official TypeScript: create/resume, send, stream, approvals, children, close
 

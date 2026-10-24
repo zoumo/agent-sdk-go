@@ -20,8 +20,8 @@ func main() {
 	}
 }
 func run() error {
-	if len(os.Args) != 3 {
-		return fmt.Errorf("usage: resume-thread /path/to/codex native-thread-id")
+	if len(os.Args) != 5 {
+		return fmt.Errorf("usage: resume-thread /path/to/codex native-thread-id /absolute/cwd /absolute/codex-home")
 	}
 	ctx := context.Background()
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{
@@ -32,19 +32,28 @@ func run() error {
 		return err
 	}
 	defer client.Close()
-	resumed, err := client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: os.Args[2]})
+	session, err := codex.Load(ctx, codex.LoadOptions{Client: client, HistoryOptions: codex.HistoryOptions{ThreadID: os.Args[2], CWD: os.Args[3], CodexHome: os.Args[4]}})
 	if err != nil {
 		return err
 	}
-	read, err := client.ReadThread(ctx, types.ThreadReadParams{ThreadID: resumed.Thread.ID, IncludeTurns: types.Some(true)})
-	if err != nil {
-		return err
+	defer session.Close()
+	for {
+		record, err := session.Receive(ctx)
+		if err != nil {
+			return err
+		}
+		if record.Event != nil {
+			fmt.Println(record.Origin, record.Event.Method)
+		}
+		if record.Request != nil {
+			return fmt.Errorf("request %s requires an application decision", record.Request.Method())
+		}
+		if record.Load != nil {
+			if record.Load.Err != nil {
+				return record.Load.Err
+			}
+			fmt.Println(record.Load.Status)
+			return session.Close()
+		}
 	}
-	fmt.Println(read.Thread.ID)
-	detached, err := client.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: resumed.Thread.ID})
-	if err != nil {
-		return err
-	}
-	fmt.Println(detached.Status)
-	return client.Close()
 }

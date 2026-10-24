@@ -47,7 +47,7 @@ func run(output io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	client, err := claude.NewClient(ctx, claude.Options{
+	client, err := claude.Open(ctx, claude.SessionOptions{
 		CLIPath: executable,
 		WorkDir: dir,
 		// Replacement environment: no account configuration is inherited.
@@ -57,7 +57,7 @@ func run(output io.Writer) error {
 		return err
 	}
 	defer client.Abort()
-	if err := client.Send(ctx, "emit synthetic children"); err != nil {
+	if _, err := client.Submit(ctx, claude.Input{Text: "emit synthetic children"}); err != nil {
 		return err
 	}
 	encoder := json.NewEncoder(output)
@@ -71,15 +71,15 @@ func run(output io.Writer) error {
 		}
 		// Native frames are printed directly, with their exact original bytes.
 		// Derived events use their separate concrete JSON codecs.
-		if native, ok := record.(claude.Event); ok {
+		if native := record.Event; native != nil {
 			if _, err := fmt.Fprintln(output, string(native.Raw)); err != nil {
 				return err
 			}
-		} else if err := encoder.Encode(record); err != nil {
+		} else if err := encoder.Encode(record.Observation); err != nil {
 			return err
 		}
-		native, ok := record.(claude.Event)
-		if ok && native.System != nil && native.Subtype == "session_state_changed" &&
+		native := record.Event
+		if native != nil && native.System != nil && native.Subtype == "session_state_changed" &&
 			native.System.State != nil && *native.System.State == "idle" {
 			// A demo stop policy after all scripted frames. Idle is not proof that every
 			// task ended. In an application choose your own explicit Close policy.

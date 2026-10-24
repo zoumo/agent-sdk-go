@@ -174,77 +174,103 @@ type Result struct {
 	Completed    bool          `json:"completed"`
 }
 
-// Session uses only the final public managed API. Requests are answered on the
-// original handle while the subscription continues to drain independently.
-func Session(ctx context.Context, c *codex.Client, thread types.ThreadStartParams, turn types.TurnStartParams, h *Handler) (Result, error) {
+// Session consumes native facts and real requests through the Session FIFO.
+func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStartParams, h *Handler) (Result, error) {
 	var result Result
-	started, err := c.StartThread(ctx, thread)
-	if err != nil {
-		return result, err
+	if len(turn.UnknownFields) != 0 {
+		return result, fmt.Errorf("%w: replay turn execution extensions are unsupported", codex.ErrInvalidInput)
 	}
-	sub, err := c.Subscribe(ctx, started.Thread.ID, types.SubscriptionOptions{EventQueue: 2048})
-	if err != nil {
-		return result, err
+	input := codex.Input{
+		AdditionalContext:          turn.AdditionalContext,
+		ApprovalPolicy:             turn.ApprovalPolicy,
+		ApprovalsReviewer:          turn.ApprovalsReviewer,
+		ClientUserMessageID:        turn.ClientUserMessageID,
+		CollaborationMode:          turn.CollaborationMode,
+		Cwd:                        turn.Cwd,
+		CyberAccessProgram:         turn.CyberAccessProgram,
+		DisabledPluginIDs:          turn.DisabledPluginIDs,
+		Effort:                     turn.Effort,
+		Environments:               turn.Environments,
+		Input:                      turn.Input,
+		Model:                      turn.Model,
+		MultiAgentMode:             turn.MultiAgentMode,
+		OutputSchema:               turn.OutputSchema,
+		ParentTurnID:               turn.ParentTurnID,
+		Permissions:                turn.Permissions,
+		Personality:                turn.Personality,
+		ResponsesapiClientMetadata: turn.ResponsesapiClientMetadata,
+		RootTurnID:                 turn.RootTurnID,
+		RuntimeWorkspaceRoots:      turn.RuntimeWorkspaceRoots,
+		SandboxPolicy:              turn.SandboxPolicy,
+		ServiceTier:                turn.ServiceTier,
+		ServiceTierForTurn:         turn.ServiceTierForTurn,
+		Summary:                    turn.Summary,
+		ToolOutput:                 turn.ToolOutput,
+		TurnTrigger:                turn.TurnTrigger,
 	}
-	defer sub.Close()
-	turn.ThreadID = started.Thread.ID
-	turnResult := make(chan error, 1)
-	go func() { _, e := c.StartTurn(ctx, turn); turnResult <- e }()
-	turnResponded := false
-	for !result.Completed || !turnResponded {
-		select {
-		case e := <-turnResult:
-			if e != nil {
-				return result, e
-			}
-			turnResponded = true
-			turnResult = nil
-		case r, ok := <-c.Requests():
-			if !ok {
-				return result, errors.New("requests closed")
-			}
-			answerCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			e := h.Answer(answerCtx, r)
-			cancel()
-			if e != nil {
-				return result, e
-			}
-		case e, ok := <-sub.Events():
-			if !ok {
-				return result, errors.New("subscription closed early")
-			}
-			o := Observation{Sequence: uint64(len(result.Observations) + 1), Kind: "Native"}
-			if e.Raw != nil {
-				if e.DecodeError != nil {
-					return result, errors.New("native decode contract")
-				}
-				raw, parseErr := object(e.Raw)
-				if parseErr != nil || string(raw["method"]) != string(mustJSON(e.Method)) || !equal(canonical(raw["params"]), canonical(e.Params)) {
-					return result, errors.New("Raw/Params contract")
-				}
-				var params map[string]json.RawMessage
-				_ = json.Unmarshal(e.Params, &params)
-				_ = json.Unmarshal(params["threadId"], &o.ThreadID)
-				switch e.Method {
-				case "turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "serverRequest/resolved":
-					if e.Data == nil {
-						return result, errors.New("missing typed native data")
-					}
-				}
-				o.Method = e.Method
-				if o.Method == "turn/completed" {
-					result.Completed = true
-				}
-			} else {
-				if _, ok := e.Data.(*types.ObservationState); !ok || e.Method != "" || e.Params != nil {
-					return result, errors.New("unexpected convenience event in root-only story")
-				}
-				o.Kind = "ObservationState"
-			}
-			result.Observations = append(result.Observations, o)
-		case <-ctx.Done():
-			return result, ctx.Err()
+	receiveCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	submitted := make(chan error, 1)
+	go func() {
+		_, err := session.Submit(ctx, input)
+		submitted <- err
+		if err != nil {
+			cancel(err)
 		}
+	}()
+	for !result.Completed {
+		received, err := session.Receive(receiveCtx)
+		if err != nil {
+			if cause := context.Cause(receiveCtx); cause != nil {
+				return result, cause
+			}
+			return result, err
+		}
+		if received.Request != nil {
+			answerCtx, stop := context.WithTimeout(ctx, 15*time.Second)
+			err := h.Answer(answerCtx, received.Request.Request)
+			stop()
+			if err != nil {
+				return result, err
+			}
+			continue
+		}
+		e := types.Event{}
+		if received.Event != nil {
+			e = *received.Event
+		}
+		o := Observation{Sequence: uint64(len(result.Observations) + 1), Kind: "Native"}
+		if received.Event != nil {
+			if e.DecodeError != nil {
+				return result, errors.New("native decode contract")
+			}
+			raw, parseErr := object(e.Raw)
+			if parseErr != nil || string(raw["method"]) != string(mustJSON(e.Method)) || !equal(canonical(raw["params"]), canonical(e.Params)) {
+				return result, errors.New("Raw/Params contract")
+			}
+			var params map[string]json.RawMessage
+			_ = json.Unmarshal(e.Params, &params)
+			_ = json.Unmarshal(params["threadId"], &o.ThreadID)
+			switch e.Method {
+			case "turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "serverRequest/resolved":
+				if e.Data == nil {
+					return result, errors.New("missing typed native data")
+				}
+			}
+			o.Method = e.Method
+			if o.Method == "turn/completed" {
+				result.Completed = true
+			}
+		} else {
+			if received.Observation == nil {
+				return result, errors.New("unexpected convenience event in root-only story")
+			}
+			o.Kind = "ObservationState"
+		}
+		result.Observations = append(result.Observations, o)
+	}
+	if err := <-submitted; err != nil {
+		return result, err
 	}
 	result.Tools = h.Calls
 	result.Questions = h.Questions
@@ -330,7 +356,12 @@ func Replay(ctx context.Context, executable, story string, out io.Writer) error 
 		return err
 	}
 	defer c.Close()
-	result, err := Session(ctx, c, thread, turn, &Handler{Root: root, Story: story})
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.Close(); _ = session.Close() }()
+	result, err := RunSession(ctx, session, turn, &Handler{Root: root, Story: story})
 	if err != nil {
 		return err
 	}

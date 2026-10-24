@@ -14,7 +14,7 @@ import (
 // Native history/path selectors can select another identity; such a response is
 // an ErrProtocol failure under this method's strict identity contract.
 func (c *Client) ResumeThread(ctx context.Context, p types.ThreadResumeParams) (types.ThreadResumeResponse, error) {
-	finish, err := c.beginThreadOperation(p.ThreadID, true)
+	finish, err := c.beginThreadOperation(p.ThreadID)
 	if err != nil {
 		return types.ThreadResumeResponse{}, err
 	}
@@ -52,7 +52,7 @@ func (r *resumeThreadResult) UnmarshalJSON(data []byte) error {
 // values or imply interruption, deletion, or completion of a thread's work.
 func (c *Client) UnsubscribeThread(ctx context.Context, p types.ThreadUnsubscribeParams) (types.ThreadUnsubscribeResponse, error) {
 	c.mu.Lock()
-	if c.sessions[p.ThreadID] != nil || c.attachmentBusyLocked(p.ThreadID) || c.loads[p.ThreadID] != nil {
+	if c.sessions[p.ThreadID] != nil || c.attachmentBusyLocked(p.ThreadID) {
 		c.mu.Unlock()
 		return types.ThreadUnsubscribeResponse{}, &CallError{Method: "thread/unsubscribe", Dispatch: NotSent, Cause: ErrOwnershipConflict}
 	}

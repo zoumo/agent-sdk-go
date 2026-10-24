@@ -154,7 +154,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 // the identity before processing the next wire record, not after the RPC wakes.
 func (s *Session) bindLocked(id string) error {
 	c := s.client
-	if c.loads[id] != nil || c.threadOperations[id] > 0 || c.sessions[id] != nil {
+	if c.threadOperations[id] > 0 || c.sessions[id] != nil {
 		return ErrOwnershipConflict
 	}
 	for sub := range c.subscriptions {

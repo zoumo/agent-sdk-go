@@ -32,66 +32,42 @@ func run() error {
 		return err
 	}
 	defer client.Close()
-	thread, err := client.StartThread(ctx, types.ThreadStartParams{
-		Ephemeral:      types.Some(true),
-		Sandbox:        types.Some(types.SandboxModeReadOnly),
-		ApprovalPolicy: types.Some(types.AskForApproval{Value: types.Ptr(types.AskForApprovalValueNever)}),
-	})
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: client, Thread: types.ThreadStartParams{
+		Ephemeral: types.Some(true), Sandbox: types.Some(types.SandboxModeReadOnly), ApprovalPolicy: types.Some(types.AskForApproval{Value: types.Ptr(types.AskForApprovalValueNever)}),
+	}})
 	if err != nil {
 		return err
 	}
-	// Registration is active here. StartTurn may finish after completion arrives.
-	events, err := client.Subscribe(ctx, thread.Thread.ID, types.SubscriptionOptions{})
+	defer session.Abort()
+	submitted, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}}})
 	if err != nil {
 		return err
 	}
-	defer events.Abort()
-	_, err = client.StartTurn(ctx, types.TurnStartParams{
-		ThreadID: thread.Thread.ID,
-		Input:    []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}},
-	})
-	if err != nil {
-		return err
-	}
+	fmt.Println("native turn", submitted.Response.Turn.ID)
 	for {
-		select {
-		case <-events.Done():
-			return subscriptionEnd(events)
-		case event, ok := <-events.Events():
-			if !ok {
-				return subscriptionEnd(events)
-			}
-			// Loss status wins over a queued completion in this example.
-			if err := events.Err(); err != nil {
-				return err
-			}
-			native := event
-			if native.DecodeError != nil {
-				return native.DecodeError
-			}
-			switch value := native.Data.(type) {
-			case *types.AgentMessageDeltaNotification:
-				fmt.Printf("[%s/%s/%s] %s", value.ThreadID, value.TurnID, value.ItemID, value.Delta)
-			case *types.SubagentCreated:
-				fmt.Printf("child %s created by %s\n", value.ThreadID, value.ParentThreadID)
-			case *types.SubagentAssociated:
-				fmt.Printf("child %s associated with %s\n", value.ThreadID, value.ParentThreadID)
-			case *types.ObservationState:
-				fmt.Printf("observation %s: %s\n", value.State, value.Reason)
-			case *types.TurnCompletedNotification:
-				fmt.Printf("\nthread %s turn %s: %s\n", value.ThreadID, value.Turn.ID, value.Turn.Status)
-				// Keep observing descendants and background work until the caller context ends.
-			}
-			// Unknown methods and unknown native variants remain in native.Params.
+		record, err := session.Receive(ctx)
+		if err != nil {
+			return err
 		}
+		if record.Request != nil {
+			return fmt.Errorf("unexpected request %s requires an application decision", record.Request.Method())
+		}
+		if record.Observation != nil {
+			fmt.Println("observation", record.Observation.Reason)
+			continue
+		}
+		if record.Event == nil {
+			continue
+		}
+		if record.Event.DecodeError != nil {
+			return record.Event.DecodeError
+		}
+		switch value := record.Event.Data.(type) {
+		case *types.AgentMessageDeltaNotification:
+			fmt.Printf("[%s/%s/%s] %s", value.ThreadID, value.TurnID, value.ItemID, value.Delta)
+		case *types.TurnCompletedNotification:
+			fmt.Printf("\nthread %s turn %s: %s\n", value.ThreadID, value.Turn.ID, value.Turn.Status)
+		}
+		// A result does not close Session. Interrupt uses an explicit native TurnID.
 	}
-	// An explicit interruption would be a separate client.InterruptTurn(ctx,
-	// types.TurnInterruptParams{ThreadID: thread.Thread.ID, TurnID: started.Turn.ID}).
-	// Its acknowledgement does not replace waiting for native turn/completed.
-}
-func subscriptionEnd(events *codex.Subscription) error {
-	if err := events.Err(); err != nil {
-		return err
-	}
-	return nil
 }

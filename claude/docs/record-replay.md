@@ -80,3 +80,18 @@ SDK_REAL_AGENT_E2E=1 go run ./claude/cmd/record \
 Each supported story has a 120-second deadline including initialization, 30-second initialization bound, 3-second SDK shutdown, 2 MiB combined wire and 256 KiB stderr cap. There are at most two supported 120-second stories per ledger (less than the authorized 480-second ceiling). A deadline/limit aborts the process and marks failure. Read/Write and AskUserQuestion have exact synthetic policies; S1 completion requires two approvals and the exact output file, S2 requires one matching original question answered Blue. Unknown/outside/symlink paths are denied. The CLI restricted tool sandbox provides the directory boundary; the callback alone cannot constrain auto-approved tools, and the ask-policy behavior was **not** exercised by this failed attempt.
 
 Approved version is 2.1.258. The future entry point passes existing recognized authentication environment variables opaquely rather than inspecting/logging their values; the first attempt had retained only HOME/PATH/TMPDIR. No change was used for a second attempt. The explicit mode is not proof of a successful E2E run. Fixing authentication or managed-hook isolation is outside the recording workflow; do not rerun automatically. The public workflow keeps all live flags zero, uses no model secrets, and only runs offline replay/example/scans.
+
+## Source revision for new recordings
+
+The recorder reads Go build VCS metadata before attempting a recording. A clean
+build records its full revision with `sdk_revision_source=go-build-vcs` and
+`sdk_modified=false`; a modified checkout is rejected. When VCS metadata is absent,
+`-sdk-revision FULL_SHA` is required and is recorded as
+`caller-supplied-unverified`, with `sdk_modified=null`. A supplied revision that
+conflicts with build metadata is rejected. This is source evidence, not proof of
+native compatibility. Existing capture manifests keep their original revisions.
+The pure offline `TestRecordingRevisionEvidence` checks these cases without
+starting any CLI. Recording remains explicitly opt-in and is never run by the
+default tests. Request policy now consumes real `Session.Receive` requests;
+answer and cleanup failures remain observable without replacing the original
+run error.

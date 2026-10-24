@@ -73,6 +73,10 @@ var codexInit = []string{
 	`<{"id":91,"result":{"userAgent":"synthetic","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}}`,
 	`>{"method":"initialized"}`,
 }
+var codexOpen = []string{
+	`>{"id":100,"method":"thread/start","params":{}}`,
+	`<{"id":100,"result":{"thread":{"id":"root","sessionId":"synthetic","cliVersion":"0.162.1","createdAt":1,"updatedAt":1,"cwd":"/synthetic","ephemeral":true,"modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}}`,
+}
 var claudeInit = []string{
 	`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null,"forwardSubagentText":true}}`,
 	`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}`,
@@ -84,7 +88,7 @@ func (s *consumerSuite) TestCodex() {
 			t := s.T()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			frames := append([]string(nil), codexInit...)
+			frames := append(append([]string(nil), codexInit...), codexOpen...)
 			if mode == "question-and-interrupt" {
 				frames = append(frames,
 					`>{"id":92,"method":"consumer/ask","params":{}}`,
@@ -102,6 +106,9 @@ func (s *consumerSuite) TestCodex() {
 			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: os.Getenv("SDK_MOCK_CODEX_BIN"), Args: []string{"app-server"}, Env: []string{"CODEX_MOCK_SCENARIO=" + path}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
 			require.NoError(t, err)
 			defer client.Close()
+			session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
+			require.NoError(t, err)
+			defer func() { _ = client.Close(); _ = session.Close() }()
 			if mode != "question-and-interrupt" {
 				var result any
 				err = client.Call(ctx, "consumer/fault", map[string]any{}, &result)
@@ -123,19 +130,19 @@ func (s *consumerSuite) TestCodex() {
 				}
 				result <- err
 			}()
-			select {
-			case request := <-client.Requests():
-				require.Equal(t, "item/tool/requestUserInput", request.Method())
-				require.NoError(t, request.Handle().Answer(ctx, json.RawMessage(`{"answers":{"format":{"answers":["json"]}}}`)))
-			case <-ctx.Done():
-				t.Fatal(ctx.Err())
-			}
+			received, err := session.Receive(ctx)
+			require.NoError(t, err)
+			require.NotNil(t, received.Request)
+			request := received.Request
+			require.Equal(t, "item/tool/requestUserInput", request.Method())
+			require.NoError(t, request.Answer(ctx, codextypes.ToolRequestUserInputResponse{Answers: map[string]codextypes.ToolRequestUserInputAnswer{"format": {Answers: []string{"json"}}}}))
+
 			require.NoError(t, <-result)
 			canceled, stop := context.WithCancel(ctx)
 			stop()
-			_, err = client.InterruptTurn(canceled, codextypes.TurnInterruptParams{ThreadID: "root", TurnID: "turn"})
+			err = session.Interrupt(canceled, codex.InterruptOptions{TurnID: "turn"})
 			require.ErrorIs(t, err, context.Canceled)
-			_, err = client.InterruptTurn(ctx, codextypes.TurnInterruptParams{ThreadID: "root", TurnID: "turn"})
+			err = session.Interrupt(ctx, codex.InterruptOptions{TurnID: "turn"})
 			require.NoError(t, err)
 			require.NoError(t, client.Close())
 			assert.Zero(t, client.Diagnostics().StderrBytes)
@@ -152,8 +159,8 @@ func (s *consumerSuite) TestClaude() {
 			frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`)
 			if mode == "permission-and-interrupt" {
 				frames = append(frames,
-					`<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`,
-					`>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{"answers":{"format":"json"}}}}}`,
+					`<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which format?","options":[{"label":"json"}]}]},"tool_use_id":"tool"}}`,
+					`>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{"questions":[{"question":"Which format?","options":[{"label":"json"}]}],"answers":{"Which format?":"json"}}}}}`,
 					`<{"type":"result","subtype":"success","session_id":"synthetic","is_error":false,"result":"answered"}`,
 					`>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`,
 					`<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`)
@@ -163,11 +170,10 @@ func (s *consumerSuite) TestClaude() {
 				frames[len(frames)-1] = `>{"type":"user","message":{"role":"user","content":"different"},"parent_tool_use_id":null,"session_id":""}`
 			}
 			path := scenario(t, "claude", frames...)
-			permissions := make(chan *claude.PermissionRequest, 1)
-			client, err := claude.NewClient(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
+			client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}})
 			require.NoError(t, err)
 			defer client.Abort()
-			require.NoError(t, client.Send(ctx, "hello"))
+			require.NoError(t, submitClaude(ctx, client, "hello"))
 			if mode != "permission-and-interrupt" {
 				for {
 					_, err := client.Receive(ctx)
@@ -188,24 +194,21 @@ func (s *consumerSuite) TestClaude() {
 				}
 				return
 			}
-			select {
-			case permission := <-permissions:
-				require.NoError(t, permission.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: json.RawMessage(`{"answers":{"format":"json"}}`)}))
-			case <-ctx.Done():
-				t.Fatal(ctx.Err())
-			}
+			permission := receiveClaudeRequest(t, ctx, client)
+			require.NoError(t, permission.Answer(ctx, claude.QuestionAnswers{Answers: map[string]string{"Which format?": "json"}}))
+
 			for {
 				event, err := client.Receive(ctx)
 				require.NoError(t, err)
-				if event, ok := event.(claude.Event); ok && event.Result != nil {
+				if event := event.Event; event != nil && event.Result != nil {
 					assert.Equal(t, "answered", event.Result.Result)
 					break
 				}
 			}
 			canceled, stop := context.WithCancel(ctx)
 			stop()
-			require.ErrorIs(t, client.Interrupt(canceled), context.Canceled)
-			require.NoError(t, client.Interrupt(ctx))
+			require.ErrorIs(t, client.Interrupt(canceled, claude.InterruptOptions{}), context.Canceled)
+			require.NoError(t, client.Interrupt(ctx, claude.InterruptOptions{}))
 			require.NoError(t, client.Close())
 		})
 	}
@@ -273,8 +276,8 @@ func (s *consumerSuite) TestCommandExit() {
 	}
 }
 
-// The mock waits for real question/control answers after writing the entire burst.
-// Until those replies arrive the SDK consumer deliberately reads no events.
+// Each request is received before the unread burst. Native control and answering
+// remain available while the entire burst is retained in the single FIFO.
 func (s *consumerSuite) TestSlowConsumerBurst() {
 	const count = 2048
 	for _, native := range []string{"codex", "claude"} {
@@ -283,95 +286,69 @@ func (s *consumerSuite) TestSlowConsumerBurst() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			if native == "codex" {
-				frames := append([]string(nil), codexInit...)
-				frames = append(frames, `>{"id":92,"method":"consumer/burst","params":{}}`)
+				frames := append(append([]string(nil), codexInit...), codexOpen...)
+				frames = append(frames, `<{"id":"question","method":"item/tool/requestUserInput","params":{"threadId":"root","turnId":"turn","itemId":"item","questions":[]}}`)
 				for i := 0; i < count; i++ {
 					frames = append(frames, fmt.Sprintf(`<{"method":"fixture/burst","params":{"threadId":"root","index":%d}}`, i))
 				}
-				frames = append(frames,
-					`<{"id":"question","method":"item/tool/requestUserInput","params":{"threadId":"root","turnId":"turn","itemId":"item","questions":[]}}`,
-					`>{"id":"question","result":{"answers":{}}}`,
-					`<{"id":92,"result":{}}`,
-					`>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`,
-					`<{"id":93,"result":{}}`,
-					`>{"id":94,"method":"consumer/release","params":{}}`, `!`)
+				frames = append(frames, `>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`, `<{"id":93,"result":{}}`, `>{"id":"question","result":{"answers":{}}}`, `>{"id":94,"method":"consumer/release","params":{}}`, `!`)
 				path := scenario(t, native, frames...)
 				client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: os.Getenv("SDK_MOCK_CODEX_BIN"), Args: []string{"app-server"}, Env: []string{"CODEX_MOCK_SCENARIO=" + path}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
 				require.NoError(t, err)
 				defer client.Close()
-				sub, err := client.Subscribe(ctx, "root", codextypes.SubscriptionOptions{EventQueue: 1})
+				session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 				require.NoError(t, err)
-				defer sub.Abort()
-				response := make(chan error, 1)
-				go func() { response <- client.Call(ctx, "consumer/burst", map[string]any{}, nil) }()
-				select {
-				case request := <-client.Requests():
-					require.NoError(t, request.Handle().Answer(ctx, json.RawMessage(`{"answers":{}}`)))
-				case <-ctx.Done():
-					t.Fatal(ctx.Err())
-				}
-				require.NoError(t, <-response)
-				_, err = client.InterruptTurn(ctx, codextypes.TurnInterruptParams{ThreadID: "root", TurnID: "turn"})
+				defer session.Abort()
+				request, err := session.Receive(ctx)
 				require.NoError(t, err)
+				require.NotNil(t, request.Request)
+				require.NoError(t, session.Interrupt(ctx, codex.InterruptOptions{TurnID: "turn"}))
+				require.NoError(t, request.Request.Answer(ctx, codextypes.ToolRequestUserInputResponse{Answers: map[string]codextypes.ToolRequestUserInputAnswer{}}))
 				require.Error(t, client.Call(ctx, "consumer/release", map[string]any{}, nil))
 				select {
-				case <-sub.Done():
+				case <-session.Done():
 				case <-ctx.Done():
 					t.Fatal(ctx.Err())
 				}
-				require.Error(t, sub.Err()) // terminal transport error is visible before draining
+				require.Error(t, session.Err())
 				seen := 0
-				startup := 0
 				for {
-					select {
-					case event, ok := <-sub.Events():
-						if !ok {
-							require.Equal(t, count, seen)
-							require.Equal(t, 1, startup, "initial derived observation must survive the burst")
-							return
-						}
-						if state, ok := event.Data.(*codextypes.ObservationState); ok && state.Reason == "best-effort-auto-attach-unverified" {
-							require.Zero(t, seen, "initial derived observation must precede native events")
-							startup++
-						}
-						if event.Method != "fixture/burst" {
-							continue
-						}
-						var payload struct{ Index int }
-						require.NoError(t, json.Unmarshal(event.Params, &payload))
-						require.Equal(t, seen, payload.Index)
-						seen++
-					case <-ctx.Done():
-						t.Fatal(ctx.Err())
+					record, err := session.Receive(ctx)
+					if err != nil {
+						require.NotErrorIs(t, err, context.DeadlineExceeded)
+						require.Equal(t, count, seen)
+						break
 					}
+					require.NotNil(t, record.Event)
+					require.Equal(t, "fixture/burst", record.Event.Method)
+					var payload struct{ Index int }
+					require.NoError(t, json.Unmarshal(record.Params, &payload))
+					require.Equal(t, seen, payload.Index)
+					seen++
 				}
+				return
 			}
 			frames := append([]string(nil), claudeInit...)
-			frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`)
+			frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`, `<{"type":"system","subtype":"init","session_id":"synthetic","claude_code_version":"2.1.258"}`, `<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`)
 			for i := 0; i < count; i++ {
-				frames = append(frames, fmt.Sprintf(`<{"type":"fixture_burst","session_id":"synthetic","index":%d}`, i))
+				frames = append(frames, fmt.Sprintf(`<{"type":"assistant","session_id":"synthetic","message":{"content":[]},"index":%d}`, i))
 			}
-			frames = append(frames,
-				`<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`,
-				`>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{}}}}`,
-				`>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`,
-				`<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`,
-				`>{"type":"user","message":{"role":"user","content":"release"},"parent_tool_use_id":null,"session_id":""}`, `!`)
+			frames = append(frames, `>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`, `<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`, `>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{"questions":[]}}}}`, `>{"type":"user","message":{"role":"user","content":"release"},"parent_tool_use_id":null,"session_id":""}`, `!`)
 			path := scenario(t, native, frames...)
-			permissions := make(chan *claude.PermissionRequest, 1)
-			client, err := claude.NewClient(ctx, claude.Options{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}, Limits: claude.Limits{EventBuffer: 1}, PermissionHandler: func(p *claude.PermissionRequest) { permissions <- p }})
+			client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: os.Getenv("SDK_MOCK_CLAUDE_BIN"), Env: []string{"CLAUDE_MOCK_SCENARIO=" + path}})
 			require.NoError(t, err)
 			defer client.Abort()
-			require.NoError(t, client.Send(ctx, "hello"))
-			select {
-			case p := <-permissions:
-				require.NoError(t, p.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: json.RawMessage(`{}`)}))
-			case <-ctx.Done():
-				t.Fatal(ctx.Err())
-			}
-			require.NoError(t, client.Interrupt(ctx))
-			// The final input releases the fault only after the control ack is observed.
-			err = client.Send(ctx, "release")
+			first, err := client.Receive(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "forwarding-not-confirmed", first.Observation.Reason)
+			require.NoError(t, submitClaude(ctx, client, "hello"))
+			root, err := client.Receive(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "init", root.Event.Subtype)
+			permission := receiveClaudeRequest(t, ctx, client)
+			require.NoError(t, client.Interrupt(ctx, claude.InterruptOptions{}))
+			require.NoError(t, permission.Approve(ctx, claude.ApprovalOptions{}))
+			err = submitClaude(ctx, client, "release")
 			require.NotErrorIs(t, err, context.DeadlineExceeded)
 			select {
 			case <-client.Done():
@@ -384,32 +361,38 @@ func (s *consumerSuite) TestSlowConsumerBurst() {
 			_, err = client.Receive(canceled)
 			require.ErrorIs(t, err, context.Canceled)
 			seen := 0
-			startup := 0
 			for {
 				event, err := client.Receive(ctx)
 				if err != nil {
 					require.NotErrorIs(t, err, context.DeadlineExceeded)
 					require.Equal(t, count, seen)
-					require.Equal(t, 1, startup, "initial derived observation must survive the burst")
-					var terminal *claude.Error
-					require.ErrorAs(t, client.Close(), &terminal)
-					require.NotNil(t, terminal.ExitCode)
-					require.Equal(t, 4, *terminal.ExitCode)
 					break
 				}
-				if state, ok := event.(claude.ObservationState); ok && state.Reason == "forwarding-not-confirmed" {
-					require.Zero(t, seen, "initial derived observation must precede native events")
-					startup++
-				}
-				value, ok := event.(claude.Event)
-				if !ok || value.Type != "fixture_burst" {
-					continue
-				}
+				require.NotNil(t, event.Event)
+				require.Equal(t, "assistant", event.Event.Type)
 				var payload struct{ Index int }
-				require.NoError(t, json.Unmarshal(value.Raw, &payload))
+				require.NoError(t, json.Unmarshal(event.Raw, &payload))
 				require.Equal(t, seen, payload.Index)
 				seen++
 			}
+			var terminal *claude.Error
+			require.ErrorAs(t, client.Close(), &terminal)
+			require.NotNil(t, terminal.ExitCode)
+			require.Equal(t, 4, *terminal.ExitCode)
 		})
+	}
+}
+func submitClaude(ctx context.Context, session *claude.Session, text string) error {
+	_, err := session.Submit(ctx, claude.Input{Text: text})
+	return err
+}
+func receiveClaudeRequest(t *testing.T, ctx context.Context, session *claude.Session) *claude.IncomingRequest {
+	t.Helper()
+	for {
+		record, err := session.Receive(ctx)
+		require.NoError(t, err)
+		if record.Request != nil {
+			return record.Request
+		}
 	}
 }

@@ -68,40 +68,40 @@ below expands this matrix so omitted configuration and read-only support are vis
 | Official capability | Go status and entrypoint | Exact gap or limit | Offline verification | Live verification | Official source |
 | --- | --- | --- | --- | --- | --- |
 | Start an interactive local session | Supported: `Open` | One owned stdio process; no official query wrapper, custom process/transport or remote attachment | [client tests](../client_test.go) | Bounded initialization/reply observations only | `query`, `Options` |
-| Send text / stream multi-turn input | Partial: `Client.Send` | Complete local write only; text, root parent and empty session field are fixed; no structured/multimodal send | [client tests](../client_test.go) | Ordinary text observed | `query`, `Query.streamInput`, `SDKUserMessage` |
+| Send text / stream multi-turn input | Partial: `Session.Submit` | Complete local write only; text/image/document/tool_result input, fixed main envelope; no native acceptance receipt | [client tests](../client_test.go) | Ordinary text observed | `query`, `Query.streamInput`, `SDKUserMessage` |
 | Schedule/identify/append input | Unsupported | No `priority`, caller `uuid`, `shouldQuery:false`, typed steer or queue operation; CLI behavior is not selected or acknowledged by Go | No scheduler contract tests | Unverified | `SDKUserMessage` |
 | Consume messages and partial output | Partial: `Receive`, `ParseEvent` | One consumer; typed subset plus Raw; no dedicated iterator-per-turn helper; matching control replies consumed internally | [receive tests](../receive_test.go), [codec tests](../types/json_test.go) | Bounded 2.1.258 frames; no full message-union validation | `Query` async generator, `SDKMessage` |
-| Resume native history | Partial: `Options.ResumeID`, `SessionID`, `RequestedResumeID` | Fresh process only; native persistence must exist; no fork/truncation/history queries or automatic resend | [resume tests](../resume_interrupt_test.go) | One retained-history continuation observed | `Options.resume` |
+| Resume native history | Partial: explicit `Load`, `LoadState` | Fixed baseline cannot confirm no-input recovery; ErrResumeUnconfirmed, no replay/ordinary input; no fork/truncation or resend | [resume tests](../resume_interrupt_test.go) | One retained-history continuation observed | `Options.resume` |
 | Interrupt active work | Supported: `Interrupt` | Correlated acknowledgment only; discards `still_queued` receipt, cannot select `cancel_queued`; no rollback/task-terminal guarantee | [interrupt tests](../resume_interrupt_test.go) | Pending-question cancellation observed; active-tool rollback unverified | `Query.interrupt` |
 | Per-task stop and backgrounding | Unsupported | Native task/status reception does not implement `stopTask` or foreground-task backgrounding via `backgroundTasks` | Decoder/observer only | Unverified | `Query.stopTask`, `Query.backgroundTasks` |
-| Tool approval and questions | Partial: `PermissionHandler`, original `PermissionRequest.Answer`, `AskUserQuestionInput.WithAnswers` | Real `can_use_tool` only; no handler means deny; no rule persistence, deny interrupt, dialog or elicitation response | [permission tests](../permissions_test.go), [question tests](../question_interaction_test.go) | Allow/update/deny, delayed question and late-answer rejection observed with limits below | `CanUseTool`, `PermissionResult`, `Options` callbacks |
-| Set tool access/sandbox/policy | Unsupported | Permission callback sees only requests the CLI actually prompts for; it is not a sandbox or gate on auto-approved tools | Default-deny path only | Policy parity unverified | `Options.tools`, `permissionMode`, `sandbox`, settings |
+| Tool approval and questions | Partial: `Session.Receive` actual IncomingRequest and original native handle | Real `can_use_tool` only; no default decision; updated input/permissions and deny interrupt supported; no dialog/elicitation responder | [permission tests](../permissions_test.go), [question tests](../question_interaction_test.go) | Allow/update/deny, delayed question and late-answer rejection observed with limits below | `CanUseTool`, `PermissionResult`, `Options` callbacks |
+| Set tool access/sandbox/policy | Unsupported | IncomingRequest sees only requests the CLI actually prompts for; it is not a sandbox or gate on auto-approved tools | Explicit answer paths only | Policy parity unverified | `Options.tools`, `permissionMode`, `sandbox`, settings |
 | Agent definition and task execution control | Unsupported | No `agent`, `agents`, task budgets, per-task stop advertisement or delegation configuration | No configuration path | Unverified | `Options.agent`, `agents`, `taskBudget`, `perTaskStopAffordance` |
-| Child output / relationship observation | Partial: automatic forwarding, `Options.Subagents`, derived notifications | Conservative association/creation only; no child process attach; missing output cannot be recovered; exact 2.1.258 creation gate | [subagent matrix](subagent-compatibility.md) | All subagent capabilities unverified | `Options.forwardSubagentText`, task/message types |
+| Child output / relationship observation | Partial: Session forwarding and native task/tool evidence | Exact 2.1.258 native task/tool evidence, optional parent knowledge; unknown identity extensions remain unverified, no UUID dedup or inferred run order | [subagent matrix](subagent-compatibility.md) | All subagent capabilities unverified | `Options.forwardSubagentText`, task/message types |
 | Session idle and background snapshots | Partial: `Event.System.State` / `Tasks` | Emission may require CLI opt-in; snapshots replace sets, not terminal edges; root result does not mean all children finished | [terminal tests](../tree_terminal_test.go) | Successful/background paths unverified | Session-state/background message variants |
 | Hooks / custom tools / SDK-hosted MCP | Unsupported | Events may decode, but no callback registration, MCP server/tool host or success reply to these requests | Unsupported-control errors tested | Unverified | `hooks`, `HookCallback`, `tool`, `createSdkMcpServer` |
 | MCP connect/reconfigure/status | Unsupported | Init MCP metadata is read-only; inherited CLI MCP configuration is not Go management support | No management path | Unverified | `mcpServers`, Query MCP methods |
-| Runtime settings/model/thinking changes | Unsupported | `Options.Model` is launch-only; no corresponding setters or refresh | No control path | Unverified | Query settings/model methods |
+| Runtime settings/model/thinking changes | Partial: `Session.SetModel` / `SetThinking` | Native ack is separate from observed state; no refresh or arbitrary settings | Offline native control tests | Unverified | Query settings/model methods |
 | Budgets / structured output / thinking policy | Unsupported configuration; partial output data | Usage/structured output/raw thinking can be read if emitted; no budget enforcement, schema request or effort setting | [codec tests](../types/json_test.go) | No policy coverage | `Options`, result/content types |
 | File checkpoint/rewind and native read helpers | Unsupported | Received tool blocks are not `readFile`, `rewindFiles` or `seedReadState` APIs | No control path | Unverified | Query file methods, `enableFileCheckpointing` |
 | Session discovery/storage administration | Unsupported | Observed IDs and verified association seeds do not list/load/fork/store/delete sessions | Resume/history-seed tests only | No administration coverage | Session helper exports, `sessionStore` |
 | Account/model/command/agent/context/usage discovery | Unsupported | System-init metadata and result usage are read-only subsets; initialization response is not publicly returned | Consumed response correlation tested | No discovery coverage | Query discovery methods |
-| Cancel waits, close and reap owned process | Supported: contexts, `Close`, `Done`, `Err` | Receive cancellation only cancels its wait; callbacks ignoring context can outlive Close; platform limits below | [lifecycle tests](../lifecycle_unix_test.go), [overload tests](../overload_test.go) | No complete live lifecycle certification | `Query.close`, `Options.abortController`; P transport lifecycle |
+| Cancel waits, close and reap owned process | Supported: contexts, `Close`, `Done`, `Err` | Receive cancellation only cancels its wait; first termination cause and cleanup are separate; platform limits below | [lifecycle tests](../lifecycle_unix_test.go), [overload tests](../overload_test.go) | No complete live lifecycle certification | `Query.close`, `Options.abortController`; P transport lifecycle |
 | Errors and diagnostics | Partial: `Error`, `ControlError`, `PermissionError`, `ResourceLimitError` | Go classifications differ from official types; no automatic retry; result `is_error` must be inspected separately from Go transport errors | [client tests](../client_test.go), [replay](../recorded_replay_test.go) | Authentication failure recorded; other cases bounded/unverified | `AbortError`, result/error variants |
 | Reconnect / durable delivery | Unsupported | No reconnect/reinitialize, cursor, pending-request redelivery or cross-epoch exactly-once; ResumeID is not transport reconnection | Failure/no-retry paths tested | Unverified | T `Query.reinitialize`, `Transport` interface and browser transport; P custom `Transport` is separate |
 
 ## All Query methods (28)
 
 `Query` is an async generator of official messages. Go instead uses `Open`,
-`Send`, `Receive`, `Close`; API shapes and lifecycle semantics differ.
+`Session.Submit`, `Receive`, `Close`; API shapes and lifecycle semantics differ.
 
 | Official method(s) | Go status / entrypoint | Missing behavior |
 | --- | --- | --- |
 | `interrupt` | Supported: `Interrupt` | Acknowledgment only; no official queued-message receipt or rollback guarantee |
 | `close` | Supported: `Close` | Go returns cleanup errors and owns process reaping |
-| `streamInput` | Partial: repeated `Send` | No full `SDKUserMessage` async iterable or send controls |
+| `streamInput` | Partial: repeated `Session.Submit` | No full `SDKUserMessage` async iterable or send controls |
 | `setPermissionMode`, `setMcpPermissionModeOverride` | Unsupported | No dynamic global/per-server permission policy |
-| `setModel`, `setMaxThinkingTokens` | Unsupported | Model only at Open; no runtime thinking setter |
+| `setModel`, `setMaxThinkingTokens` | Partial: `Session.SetModel` / `SetThinking` | Native model omission and thinking budget/display control; ack is not observed state |
 | `applyFlagSettings`, `updateSettings`, `reinitialize` | Unsupported | No live flag/settings update or reinitialization |
 | `initializationResult`, `supportedCommands`, `supportedModels`, `supportedAgents`, `accountInfo` | Unsupported | No getters for initialization response or inventories; system events are only partial metadata |
 | `mcpServerStatus`, `reconnectMcpServer`, `toggleMcpServer`, `setMcpServers` | Unsupported | No MCP status/reconnect/toggle/replacement API |
@@ -122,7 +122,7 @@ CLI-inherited settings may still affect execution, outside Go's typed API.
 | Official field(s) | Go status / actual configuration | Exact difference |
 | --- | --- | --- |
 | `cwd`, `env`, `model`, `resume`, `pathToClaudeCodeExecutable` | Supported scoped mapping: `WorkDir`, `Env`, `Model`, `ResumeID`, `CLIPath` | Literal startup fields; non-nil Env replaces environment; no CLI download/version negotiation |
-| `canUseTool` | Partial: `PermissionHandler` | Deferred single-use original handle; answer return value does not respond; response subset below |
+| `canUseTool` | Partial: `IncomingRequest` from Session.Receive | Deferred single-use original handle; answer return value does not respond; response subset below |
 | `abortController` | Partial: caller contexts and `Close` | Startup context does not own session lifetime; Receive context cancels wait only |
 | `includePartialMessages`, `forwardSubagentText`, `permissionPromptToolName` | Partial: fixed startup behavior | Always partial messages, forwarding true, permission prompt tool stdio; no caller selection |
 | `stderr` | Partial: bounded `Error.Stderr` | No streaming stderr callback |
@@ -231,7 +231,7 @@ unrecognized variants are not separately live-validated.
 
 | Official callback/control surface | Go status / entrypoint | Missing response capability and verification |
 | --- | --- | --- |
-| `CanUseTool`: tool name, input, AbortSignal and prompt metadata | Partial: `PermissionHandler`, `RequestID`, `ToolUseID`, `ToolName`, `Input`, `Metadata`, `Raw`, `Context`, `Epoch` | Original IDs/input are immutable; metadata is an owned snapshot; bounded pool/default deny; offline and bounded live approval coverage |
+| `CanUseTool`: tool name, input, AbortSignal and prompt metadata | Partial: `IncomingRequest` from Session.Receive, `RequestID`, `ToolUseID`, `ToolName`, `Input`, `Metadata`, `Raw`, `Context`, `Epoch` | Original IDs/input are immutable; metadata is an owned snapshot; no default decision; one authoritative registry; offline and bounded live approval coverage |
 | `PermissionResult` allow `updatedInput` | Supported subset: `PermissionAnswer{Behavior:PermissionAllow, UpdatedInput:...}` | nil preserves input; explicit object replaces it; single reserved attempt; offline and bounded live replacement coverage |
 | `PermissionResult` deny `message` | Supported subset: `PermissionDeny`, `Message` | No additional interruption requested; offline and bounded live denial coverage |
 | `updatedPermissions`, `toolUseID`, `decisionClassification`, deny `interrupt` | Unsupported runtime answer fields | Metadata/unknown JSON retention does not apply permission rules or add decision controls |
@@ -284,8 +284,8 @@ constraints (such as question/option counts). String/array answer codecs and
 WithAnswers are data helpers; actual acceptance still depends on the CLI.
 
 T permission updates can add/replace/remove rules, set mode or add/remove
-directories. Go exposes no corresponding runtime update, destination selection,
-`toolUseID` override, classification or deny interrupt. Detached codecs preserve
+directories. Session approval options preserve native permission updates, destination,
+`toolUseID`, classification and deny interrupt. General policy management remains unsupported. Detached codecs preserve
 unknown data but do not gain those authorities. Elicitation form/URL schema,
 accept/decline/cancel content and user-dialog payload/settlement are likewise
 unsupported, distinct from can_use_tool questions.
@@ -302,7 +302,8 @@ status shown; unsupported controls have no feature verification.
 | `SDKControlInitializeRequest` | Partial: Open sends hooks null and forwardSubagentText true; no other init configuration or public response getter |
 | `SDKControlInterruptRequest` | Partial: Interrupt sends subtype only; no cancel_queued selection or interrupt receipt API |
 | `SDKControlPermissionRequest` | Partial incoming can_use_tool: original PermissionRequest answer only |
-| `SDKControlSetPermissionModeRequest`, `SDKControlSetModelRequest`, `SDKControlSetMaxThinkingTokensRequest`, `SDKControlApplyFlagSettingsRequest`, `SDKControlGetSettingsRequest`, `SDKControlUpdateSettingsRequest` | Unsupported: no public request operation |
+| `SDKControlSetModelRequest`, `SDKControlSetMaxThinkingTokensRequest` | Partial: Session.SetModel/SetThinking preserve exact requested payload and matched ack; observed remains unknown |
+| `SDKControlSetPermissionModeRequest`, `SDKControlApplyFlagSettingsRequest`, `SDKControlGetSettingsRequest`, `SDKControlUpdateSettingsRequest` | Unsupported: no public request operation |
 | `SDKControlRenameSessionRequest`, `SDKControlSetColorRequest`, `SDKControlRegisterRepoRootRequest` | Unsupported: no session appearance/root-registration control |
 | `SDKControlMcpStatusRequest`, `SDKControlMcpCallRequest`, `SDKControlMcpMessageRequest`, `SDKControlMcpSetServersRequest`, `SDKControlMcpReconnectRequest`, `SDKControlMcpToggleRequest` | Unsupported: no RPC host/call or server administration |
 | `SDKControlGetContextUsageRequest`, `SDKControlGetSessionCostRequest`, `SDKControlListModelsRequest`, `SDKControlGetUsageRequest`, `SDKControlGetBinaryVersionRequest` | Unsupported: no query operation; result usage/version metadata is read-only |
@@ -328,7 +329,7 @@ are not counted as implemented actions.
 
 | Official export(s) | Go status / difference |
 | --- | --- |
-| `query` | Partial: Open/Send/Receive lifecycle; no exact query helper signature |
+| `query` | Partial: Open/Submit/Receive lifecycle; no exact query helper signature |
 | `AbortError` | Partial: Go context errors / `ErrUnknownOutcome` / runtime error types, not the official class |
 | `tool`, `createSdkMcpServer` | Unsupported: no custom tool/MCP host |
 | `listSessions`, `getSessionInfo`, `getSessionMessages`, `getSubagentMessages`, `listSubagents`, `forkSession`, `renameSession`, `tagSession`, `deleteSession` | Unsupported: no native session/transcript administration helpers |
@@ -405,10 +406,10 @@ terminal errors. Event consumption backlog grows dynamically and does not block 
 | `EventBuffer` | Ignored | 65,536 (validation only) | Deprecated; dynamic FIFO backlog, no capacity allocation |
 | `FrameBytes` | 4 MiB | 64 MiB | Incoming excess terminal; local Send excess rejected before write |
 | `PendingControls` | 32 | 65,536 | Local excess rejected before write |
-| `ControlBuffer` | 32 each | 65,536 each | Separate automatic-response/handler queues; overflow terminal |
+| `ControlBuffer` | 32 each | 65,536 each | Bounded unsupported-control response work; Session requests use the same FIFO |
 | `StderrBytes` | 8 KiB | 16 MiB | Newest tail only; no automatic logging |
 | `PendingPermissions` | 128 | 65,536 | Unanswered incoming controls; overflow terminal |
-| `PermissionWorkers` | 4 | 1,024 | Bounded callbacks; ignoring cancellation retains worker |
+| `PermissionWorkers` | 4 | 1,024 | Legacy compatibility only; normal Session has no callback workers |
 | `PermissionHistory` | 4,096 | 1,048,576 | Distinct request/cancel IDs; no eviction; overflow terminal |
 
 Initialization defaults to 60 seconds; shutdown to 3 seconds shared across
@@ -425,7 +426,7 @@ unverified. Same-group descendants are signalled, including pipe holders;
 escaped process groups are outside the guarantee. Non-POSIX builds kill only
 the direct child. Go cannot forcibly stop arbitrary callback goroutines, and
 OS scheduling/uninterruptible kernel waits can exceed a shutdown budget.
-Additional graph/run/dedup/creation/attribution limits are in [subagent bounds](subagent-events.md).
+Session membership/parent/quarantine bounds are in [Session migration](session-migration.md).
 
 ## Reproduce the offline checks
 

@@ -23,25 +23,20 @@ func answerFromTerminal(ctx context.Context, request codex.Request) error {
 }
 
 // This example is compiled but has no Output directive, so tests do not run it.
-func ExampleClient_Requests() {
-	// Obtain client from NewStdio and start/resume work on another goroutine.
-	// No request is approved automatically, even for recognized methods.
-	consume := func(ctx context.Context, client *codex.Client) error {
+func ExampleSession_Receive() {
+	// Open a Session first. No request is approved automatically.
+	consume := func(ctx context.Context, session *codex.Session) error {
 		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case request, ok := <-client.Requests():
-				if !ok {
-					return client.Err()
-				}
-				if request.Handle().Err() != nil {
-					continue
-				}
-				if err := answerFromTerminal(ctx, request); err != nil {
+			record, err := session.Receive(ctx)
+			if err != nil {
+				return err
+			}
+			if record.Request != nil && record.Request.Context().Err() == nil {
+				if err := answerFromTerminal(ctx, record.Request.Request); err != nil {
 					return err
 				}
 			}
+			// Native events and observation evidence arrive through this same loop.
 		}
 	}
 	_ = consume

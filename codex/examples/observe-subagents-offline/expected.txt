@@ -1,16 +1,10 @@
 live:
-ObservationState incomplete best-effort-auto-attach-unverified
-SubagentCreated child parent=root provenance=live
 item/completed thread=root
-SubagentCreated grand parent=child provenance=live
-item/agentMessage/delta thread=grand
+observation member-confirmed thread=child parent=
+observation parent-confirmed thread=child parent=root
 item/completed thread=child
-ObservationState incomplete unresolved-source
-fixture/unknown thread=unrelated
+observation member-confirmed thread=grand parent=
+observation parent-confirmed thread=grand parent=child
 fixture/end thread=root
-closed: err=nil; connection usable
-history:
-ObservationState incomplete best-effort-auto-attach-unverified
-ObservationState incomplete history-recovery-gap
-SubagentAssociated child parent=root provenance=history
-SubagentAssociated grand parent=child provenance=history
+quarantine: records=2 coverage-gap=true; earlier facts are not replayed
+closed: err=nil; shared connection usable

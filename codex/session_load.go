@@ -114,7 +114,7 @@ func Load(ctx context.Context, options LoadOptions) (*Session, error) {
 	c.mu.Lock()
 	if c.cause != nil {
 		err = c.cause
-	} else if c.loads[o.ThreadID] != nil || c.threadOperations[o.ThreadID] > 0 {
+	} else if c.threadOperations[o.ThreadID] > 0 {
 		err = ErrOwnershipConflict
 	} else {
 		err = s.bindLocked(o.ThreadID)

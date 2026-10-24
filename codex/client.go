@@ -1,8 +1,10 @@
-// Package codex is a bounded, native Codex app-server client. Subscribe observes
-// an explicit root and proven descendants, delivering native notifications and
-// SDK-derived relations/state in one stream. Native types and JSON stay native;
-// Requests retains the only answer authority. See docs/compatibility.md for the
-// exact source target and evidence limits.
+// Package codex provides native long-running Sessions over Codex app-server.
+// Open or Load fixes a main identity. Session.Receive is the single FIFO for
+// native events, real IncomingRequests, observation evidence and Load boundaries.
+// Submit retains native turn semantics; results do not close the Session.
+// Client is the explicit shared I/O resource and raw extension seam. Native
+// request handles retain single-use authority. See docs/compatibility.md for the
+// pinned source target and evidence limits.
 package codex
 
 import (
@@ -70,7 +72,6 @@ type Client struct {
 	quarantineEvicted   uint64
 	quarantineExpired   uint64
 	quarantineTimer     *time.Timer
-	loads               map[string]*LoadedThread
 	threadOperations    map[string]int
 	nextID              int64
 	ready               bool
@@ -222,7 +223,7 @@ func (c *Client) ReadThread(ctx context.Context, p types.ThreadReadParams) (type
 // StartTurn returns only the native response. Events, including early or stale
 // completions, never change its result. Subscribe before starting a turn.
 func (c *Client) StartTurn(ctx context.Context, p types.TurnStartParams) (types.TurnStartResponse, error) {
-	finish, err := c.beginThreadOperation(p.ThreadID, false)
+	finish, err := c.beginThreadOperation(p.ThreadID)
 	if err != nil {
 		return types.TurnStartResponse{}, err
 	}

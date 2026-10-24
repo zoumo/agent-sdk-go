@@ -19,7 +19,7 @@ type sessionAttachment struct {
 
 func (s *Session) retainAttachmentLocked(id string) bool {
 	c := s.client
-	if c.threadOperations[id] > 0 || c.loads[id] != nil {
+	if c.threadOperations[id] > 0 {
 		return false
 	}
 	if c.attachments == nil {

@@ -6,10 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sync"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/history"
 )
 
 // HistoryOptions selects a stored thread on this connection's native data home.
@@ -25,93 +23,9 @@ type HistoryOptions struct {
 	MaxIndexBytes int
 }
 
-type History = history.Stream[types.Event]
+var ErrLoadPending = errors.New("codex: session load has not completed")
 
-var (
-	ErrLoadPending  = errors.New("codex: session load has not completed")
-	ErrLoadConflict = errors.New("codex: thread has an existing load owner")
-)
-
-// Deprecated: transitional expand-contract API scheduled for removal in T13.
-// Use package Load and Session.Receive for the normal Session model.
-// LoadedThread owns this connection's resumed-thread attachment and its replay.
-// Drain Events then check Err before StartTurn. Close releases the attachment;
-// it never closes the caller-owned Client or interrupts native work.
-type LoadedThread struct {
-	replay        *History
-	client        *Client
-	threadID      string
-	response      types.ThreadResumeResponse
-	resumed       bool
-	resumeUnknown error
-	releaseOnce   sync.Once
-	releaseErr    error
-	closeMu       sync.Mutex
-	closed        bool
-}
-
-func (h *LoadedThread) Events() <-chan types.Event { return h.replay.Records() }
-func (h *LoadedThread) Done() <-chan struct{}      { return h.replay.Done() }
-func (h *LoadedThread) Err() error                 { return h.replay.Err() }
-func (h *LoadedThread) ResumeResponse() (types.ThreadResumeResponse, error) {
-	select {
-	case <-h.Done():
-	default:
-		return types.ThreadResumeResponse{}, ErrLoadPending
-	}
-	if err := h.Err(); err != nil {
-		return types.ThreadResumeResponse{}, err
-	}
-	h.closeMu.Lock()
-	defer h.closeMu.Unlock()
-	if h.closed {
-		return types.ThreadResumeResponse{}, ErrClosed
-	}
-	// Return an independent native result, matching the mutable native value API.
-	data, err := json.Marshal(h.response)
-	if err != nil {
-		return types.ThreadResumeResponse{}, err
-	}
-	var r types.ThreadResumeResponse
-	err = json.Unmarshal(data, &r)
-	return r, err
-}
-func (h *LoadedThread) release() error {
-	h.releaseOnce.Do(func() {
-		if h.resumeUnknown != nil {
-			h.releaseErr = fmt.Errorf("codex load: resume outcome is unconfirmed; close the original Client to release ownership: %w", h.resumeUnknown)
-			return
-		}
-		if !h.resumed {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), h.client.limits.ShutdownTimeout)
-		defer cancel()
-		r, err := h.client.unsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: h.threadID})
-		if err == nil && r.Status != types.ThreadUnsubscribeStatusUnsubscribed && r.Status != types.ThreadUnsubscribeStatusNotLoaded && r.Status != types.ThreadUnsubscribeStatusNotSubscribed {
-			err = errors.New("codex load: unknown unsubscribe result")
-		}
-		h.releaseErr = err
-	})
-	return h.releaseErr
-}
-func (h *LoadedThread) Close() error {
-	h.closeMu.Lock()
-	h.closed = true
-	h.closeMu.Unlock()
-	_ = h.replay.Close()
-	err := h.release()
-	if err == nil {
-		h.client.mu.Lock()
-		if h.client.loads[h.threadID] == h {
-			delete(h.client.loads, h.threadID)
-		}
-		h.client.mu.Unlock()
-	}
-	return err
-}
-
-func (c *Client) beginThreadOperation(id string, resuming bool) (func(), error) {
+func (c *Client) beginThreadOperation(id string) (func(), error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.attachmentBusyLocked(id) {
@@ -120,25 +34,7 @@ func (c *Client) beginThreadOperation(id string, resuming bool) (func(), error) 
 	if s := c.sessions[id]; s != nil {
 		return nil, ErrOwnershipConflict
 	}
-	if h := c.loads[id]; h != nil {
-		if resuming {
-			return nil, ErrLoadConflict
-		}
-		h.closeMu.Lock()
-		closed := h.closed
-		h.closeMu.Unlock()
-		if closed {
-			return nil, ErrClosed
-		}
-		select {
-		case <-h.Done():
-			if err := h.Err(); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, ErrLoadPending
-		}
-	}
+
 	if c.threadOperations == nil {
 		c.threadOperations = make(map[string]int)
 	}
@@ -164,88 +60,6 @@ func (c *Client) ListThreadItems(ctx context.Context, p types.ThreadItemsListPar
 	return r, err
 }
 
-// Load resumes the same native thread and asynchronously replays all retained
-// full turns oldest-first. Ordinary ResumeThread does not perform this replay.
-// Deprecated: use package Load, which returns a Session. This temporary
-// compatibility path is scheduled for removal in T13.
-// ctx owns the replay lifetime, not only admission. Drain Events then check Err;
-// Close cancels blocked delivery/pagination without closing the Client. Missing
-// or unsupported sources fail through Err; no fallback creates a thread.
-// Rejects active threads and observed metadata changes. Pagination is not an
-// atomic snapshot: callers must quiesce external writers for a stable view.
-func (c *Client) Load(ctx context.Context, o HistoryOptions) (*LoadedThread, error) {
-	if ctx == nil {
-		return nil, errors.New("codex history: nil context")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := normalizeHistoryOptions(&o); err != nil {
-		return nil, err
-	}
-	if filepath.Clean(string(c.ServerInfo().CodexHome)) != filepath.Clean(o.CodexHome) {
-		return nil, errors.New("codex history: data-home identity mismatch")
-	}
-	replayCtx, cancel := context.WithCancel(ctx)
-	c.mu.Lock()
-	if c.cause != nil {
-		c.mu.Unlock()
-		cancel()
-		return nil, ErrClosed
-	}
-	if c.attachmentBusyLocked(o.ThreadID) || c.sessions[o.ThreadID] != nil || c.loads[o.ThreadID] != nil || c.threadOperations[o.ThreadID] > 0 {
-		c.mu.Unlock()
-		cancel()
-		return nil, ErrLoadConflict
-	}
-	if len(c.loads) >= c.limits.PendingCalls {
-		c.mu.Unlock()
-		cancel()
-		return nil, ErrLimit
-	}
-	if c.loads == nil {
-		c.loads = make(map[string]*LoadedThread)
-	}
-	h := &LoadedThread{client: c, threadID: o.ThreadID}
-	c.loads[o.ThreadID] = h
-	h.replay = history.Start(replayCtx, func(ctx context.Context, send func(types.Event) error) (err error) {
-		if _, err = c.historyThread(ctx, o); err != nil {
-			return err
-		}
-		h.response, err = c.resumeThread(ctx, types.ThreadResumeParams{ThreadID: o.ThreadID, ExcludeTurns: types.Some(true)})
-		if err != nil {
-			var callErr *CallError
-			if errors.As(err, &callErr) && callErr.Dispatch != NotSent {
-				h.resumeUnknown = err
-			}
-			return err
-		}
-		h.resumed = true
-		if h.response.Thread.ID != o.ThreadID || filepath.Clean(string(h.response.Thread.Cwd)) != filepath.Clean(o.CWD) || filepath.Clean(string(h.response.Cwd)) != filepath.Clean(o.CWD) {
-			return errors.New("codex load: resumed cwd mismatch")
-		}
-		return c.replayHistory(ctx, o, send)
-	}, func(err error) error {
-		if err != nil {
-			return errors.Join(err, h.release())
-		}
-		return nil
-	})
-	c.mu.Unlock()
-	go func() {
-		defer cancel()
-		select {
-		case <-c.Done():
-			cancel()
-		case <-h.Done():
-		}
-	}()
-	return h, nil
-}
-
-func (c *Client) historyThread(ctx context.Context, o HistoryOptions) (types.Thread, error) {
-	return c.historyThreadOwned(ctx, o, nil)
-}
 func (c *Client) historyThreadOwned(ctx context.Context, o HistoryOptions, owner *Session) (types.Thread, error) {
 	var r types.ThreadReadResponse
 	err := c.historyCall(ctx, "thread/read", types.ThreadReadParams{ThreadID: o.ThreadID, IncludeTurns: types.Some(false)}, &r, owner)
@@ -262,9 +76,6 @@ func (c *Client) historyThreadOwned(ctx context.Context, o HistoryOptions, owner
 	return t, nil
 }
 
-func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(types.Event) error) error {
-	return c.replayHistoryOwned(ctx, o, send, nil, nil)
-}
 func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send func(types.Event) error, owner *Session, baseline *types.Thread) error {
 	first, err := c.historyThreadOwned(ctx, o, owner)
 	if err != nil {

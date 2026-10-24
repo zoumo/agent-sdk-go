@@ -338,34 +338,45 @@ func TestSessionLoadTypedDetachCannotBypassObservers(t *testing.T) {
 	}
 }
 
-func TestSessionLoadLegacyOwnerFencesLaterObserverAdmission(t *testing.T) {
+// Reversing discovery/admission order still shares the physical attachment.
+func TestSessionLoadOwnerPrecedesAncestorObservation(t *testing.T) {
 	f := startFake(t, "history-overlap", codex.Limits{})
 	a, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.NoError(t, err)
 	defer a.Close()
-	legacy, err := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "child", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+	child, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "child", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
 	require.NoError(t, err)
-	defer legacy.Close()
-	for range legacy.Events() {
+	defer child.Close()
+	for range historyEvents(t, child) {
 	}
-	require.NoError(t, legacy.Err())
-	emitRequests(t, f.c, `{"method":"thread/started","params":{"thread":{"id":"child","parentThreadId":"native-thread-42"}}}`, `{"method":"future/legacy-child","params":{"threadId":"child"}}`)
-	require.NoError(t, legacy.Close())
+	require.Equal(t, codex.LoadSucceeded, child.LoadState().Status)
+	emitRequests(t, f.c, `{"method":"thread/started","params":{"thread":{"id":"child","parentThreadId":"native-thread-42"}}}`, `{"method":"future/both","params":{"threadId":"child"}}`)
+	require.NoError(t, child.Close())
+	emitRequests(t, f.c, `{"method":"future/after-child-close","params":{"threadId":"child"}}`)
 	require.NoError(t, a.Close())
 	ctx, stop := context.WithTimeout(context.Background(), time.Second)
 	defer stop()
-	var gap bool
+	var methods []string
 	for {
-		got, e := a.Receive(ctx)
-		if e != nil {
-			require.ErrorIs(t, e, io.EOF)
+		record, err := a.Receive(ctx)
+		if err != nil {
+			require.ErrorIs(t, err, io.EOF)
 			break
 		}
-		require.Nil(t, got.Event)
-		if got.Observation != nil {
-			require.Equal(t, "attachment-owned-or-release-unconfirmed", got.Observation.Reason)
-			gap = true
+		if record.Event != nil {
+			methods = append(methods, record.Event.Method)
 		}
 	}
-	require.True(t, gap, "temporary legacy conflict must be observable, not silently lost coverage")
+	require.Equal(t, []string{"thread/started", "future/both", "future/after-child-close"}, methods)
+	var childReleases int
+	for _, frame := range trace(t, f.trace) {
+		if frame.Method == "thread/unsubscribe" {
+			var p types.ThreadUnsubscribeParams
+			require.NoError(t, json.Unmarshal(frame.Params, &p))
+			if p.ThreadID == "child" {
+				childReleases++
+			}
+		}
+	}
+	require.Equal(t, 1, childReleases, "only the last observer releases the shared native attachment")
 }

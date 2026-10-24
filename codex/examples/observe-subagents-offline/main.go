@@ -43,76 +43,40 @@ func run(out io.Writer) error {
 		return err
 	}
 	defer client.Close()
-	// Register before asking the fake peer to emit. PendingBytes forces the large
-	// unknown-source envelope to be released explicitly, without timer ordering.
-	live, err := client.Subscribe(ctx, "root", types.SubscriptionOptions{PendingBytes: 256})
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 	if err != nil {
 		return err
 	}
-	defer live.Abort()
+	defer session.Abort()
 	if err = client.Call(ctx, "fixture/emit", nil, nil); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "live:")
 	for {
-		select {
-		case record, ok := <-live.Events():
-			if !ok {
-				return fmt.Errorf("early close: %v", live.Err())
-			}
-			printRecord(out, record)
-			if record.Method == "fixture/end" {
-				if err = live.Close(); err != nil {
-					return err
-				}
-				goto history
-			}
-		case <-ctx.Done():
-			return ctx.Err()
+		record, err := session.Receive(ctx)
+		if err != nil {
+			return err
+		}
+		if record.Event != nil {
+			fmt.Fprintf(out, "%s thread=%s\n", record.Event.Method, record.Source.ThreadID)
+		}
+		if record.Observation != nil {
+			fmt.Fprintf(out, "observation %s thread=%s parent=%s\n", record.Observation.Reason, record.Observation.ThreadID, record.Observation.ParentThreadID)
+		}
+		if record.Event != nil && record.Event.Method == "fixture/end" {
+			break
 		}
 	}
-history:
-	<-live.Done()
-	if err = live.Err(); err != nil {
+	snapshot := session.Unattributed()
+	fmt.Fprintf(out, "quarantine: records=%d coverage-gap=%t; earlier facts are not replayed\n", len(snapshot.Records), snapshot.CoverageGap)
+	if err := session.Close(); err != nil {
 		return err
 	}
-	// Local observation close leaves the connection usable, without unsubscribe.
-	if err = client.Call(ctx, "fixture/ping", nil, nil); err != nil {
+	if err := client.Call(ctx, "fixture/ping", nil, nil); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "closed: err=nil; connection usable")
-	seeded, err := client.Subscribe(ctx, "root", types.SubscriptionOptions{History: []json.RawMessage{
-		json.RawMessage(`{"id":"child","parentThreadId":"root"}`),
-		json.RawMessage(`{"id":"grand","parentThreadId":"child"}`),
-	}})
-	if err != nil {
-		return err
-	}
-	if err = seeded.Close(); err != nil {
-		return err
-	}
-	fmt.Fprintln(out, "history:")
-	for record := range seeded.Events() {
-		printRecord(out, record)
-	}
-	return seeded.Err()
-}
-
-func printRecord(out io.Writer, e types.Event) {
-	switch d := e.Data.(type) {
-	case *types.ObservationState:
-		fmt.Fprintf(out, "ObservationState %s %s\n", d.State, d.Reason)
-	case *types.SubagentCreated:
-		fmt.Fprintf(out, "SubagentCreated %s parent=%s provenance=%s\n", d.ThreadID, d.ParentThreadID, d.Evidence.Provenance)
-	case *types.SubagentAssociated:
-		fmt.Fprintf(out, "SubagentAssociated %s parent=%s provenance=%s\n", d.ThreadID, d.ParentThreadID, d.Evidence.Provenance)
-	default:
-		var source struct {
-			ThreadID string `json:"threadId"`
-		}
-		_ = json.Unmarshal(e.Params, &source)
-		fmt.Fprintf(out, "%s thread=%s\n", e.Method, source.ThreadID)
-	}
+	fmt.Fprintln(out, "closed: err=nil; shared connection usable")
+	return nil
 }
 
 // Original synthetic native envelopes. fixture/* are private fake-peer methods,
@@ -136,6 +100,10 @@ func fixture() error {
 		case "initialize":
 			reply(`{"userAgent":"synthetic/only","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}`)
 		case "initialized":
+		case "thread/start":
+			reply(`{"thread":{"id":"root","sessionId":"synthetic","cliVersion":"0.162.1","createdAt":1,"updatedAt":1,"cwd":"/synthetic","ephemeral":true,"modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}`)
+		case "thread/unsubscribe":
+			reply(`{"status":"unsubscribed"}`)
 		case "fixture/emit":
 			spawn("root", "child", "spawn-child")
 			emit("item/agentMessage/delta", `{"threadId":"grand","turnId":"turn","itemId":"text","delta":"early"}`)

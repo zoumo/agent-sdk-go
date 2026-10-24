@@ -13,10 +13,7 @@ import (
 
 func TestLoadEventsUseRealtimeConsumer(t *testing.T) {
 	f := startFake(t, "history-events", codex.Limits{})
-	sub, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-	require.NoError(t, err)
-	defer sub.Abort()
-	h, err := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+	h, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
 	require.NoError(t, err)
 	defer h.Close()
 	var methods, messages []string
@@ -26,26 +23,28 @@ func TestLoadEventsUseRealtimeConsumer(t *testing.T) {
 			messages = append(messages, n.Item.AgentMessage.Text)
 		}
 	}
-	for e := range h.Events() {
+	for e := range historyEvents(t, h) {
 		require.NotNil(t, e.History)
 		require.True(t, json.Valid(e.History.Raw))
 		require.Empty(t, e.Raw, "projected history is not a received wire envelope")
 		consume(e)
 	}
-	<-h.Done()
+	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"item/completed", "turn/completed", "item/completed", "turn/completed"}, methods)
 	require.Equal(t, []string{"done"}, messages)
-	_, err = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{}})
+	_, err = h.Submit(context.Background(), codex.Input{Input: []types.UserInput{}})
 	require.NoError(t, err)
 	for len(messages) < 2 {
-		select {
-		case e := <-sub.Events():
-			require.Nil(t, e.History)
-			consume(e)
-		case <-time.After(time.Second):
-			t.Fatal("real-time event missing")
-		}
+		receiveCtx, stop := context.WithTimeout(context.Background(), time.Second)
+		record, err := h.Receive(receiveCtx)
+		stop()
+		require.NoError(t, err)
+		require.NotNil(t, record.Event)
+		e := *record.Event
+		require.Nil(t, e.History)
+		consume(e)
+
 	}
 	require.Equal(t, []string{"done", "live answer"}, messages)
 	require.NoError(t, h.Close())
@@ -53,11 +52,11 @@ func TestLoadEventsUseRealtimeConsumer(t *testing.T) {
 
 func TestLoadEventsRetainToolsUnknownsAndInterruptedStatus(t *testing.T) {
 	f := startFake(t, "history-rich", codex.Limits{})
-	h, err := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"})
+	h, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string
-	for e := range h.Events() {
+	for e := range historyEvents(t, h) {
 		require.NotNil(t, e.History)
 		switch n := e.Data.(type) {
 		case *types.ItemCompletedNotification:
@@ -83,22 +82,22 @@ func TestLoadEventsRetainToolsUnknownsAndInterruptedStatus(t *testing.T) {
 			t.Fatalf("unexpected replay value %T", e.Data)
 		}
 	}
-	<-h.Done()
+	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"tool", "compact", "future"}, ids)
-	require.Empty(t, f.c.Requests())
+	require.Empty(t, f.c.Unattributed().Records)
 }
 
 func TestLoadEventsPreserveUnknownTurnWithoutInventingCompletion(t *testing.T) {
 	f := startFake(t, "history-future-status", codex.Limits{})
-	h, err := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"})
+	h, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
 	require.NoError(t, err)
 	defer h.Close()
 	var events []types.Event
-	for e := range h.Events() {
+	for e := range historyEvents(t, h) {
 		events = append(events, e)
 	}
-	<-h.Done()
+	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 	require.NoError(t, h.Err())
 	require.Len(t, events, 1)
 	require.Empty(t, events[0].Method)

@@ -89,8 +89,13 @@ func Run() error {
 		return err
 	}
 	turn := types.TurnStartParams{Input: input, Environments: types.Some([]types.TurnEnvironmentParams{})}
-	result, sessionErr := recording.Session(ctx, c, thread, turn, &recording.Handler{Root: cfg.Dir, Story: story})
-	closeErr := c.Close()
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
+	if err != nil {
+		_ = c.Close()
+		return err
+	}
+	result, sessionErr := recording.RunSession(ctx, session, turn, &recording.Handler{Root: cfg.Dir, Story: story})
+	closeErr := errors.Join(c.Close(), session.Close())
 	h := sha256.Sum256([]byte(prompt))
 	metadata := map[string]any{"root": cfg.Dir, "home": os.Getenv("CODEX_RECORD_HOME"), "promptSHA256": hex.EncodeToString(h[:]), "cliSHA256": os.Getenv("CODEX_RECORD_CLI_SHA256"), "sdkCommit": os.Getenv("CODEX_RECORD_SDK_SHA"), "milliseconds": time.Since(start).Milliseconds(), "completed": result.Completed, "tools": result.Tools, "questions": result.Questions, "observations": result.Observations, "sessionError": sessionErr != nil, "closeError": closeErr != nil}
 	raw, _ = json.Marshal(metadata)

@@ -30,6 +30,8 @@ func (s *MockSuite) TestRealSDKStdio() {
 				`c2s {"id":101,"method":"initialize","params":{"clientInfo":{"name":"mock-consumer","version":"1"}}}`,
 				`s2c {"id":101,"result":{"userAgent":"synthetic","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}}`,
 				`c2s {"method":"initialized"}`,
+				`c2s {"id":100,"method":"thread/start","params":{}}`,
+				`s2c {"id":100,"result":{"thread":{"id":"child","sessionId":"synthetic","cliVersion":"0.162.1","createdAt":1,"updatedAt":1,"cwd":"/synthetic","ephemeral":true,"modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}}`,
 				`c2s {"id":102,"method":"synthetic/begin"}`,
 				`s2c {"id":102,"result":{}}`,
 				`s2c {"id":"reverse","method":"`+tc.method+`","params":`+tc.params+`}`,
@@ -37,16 +39,19 @@ func (s *MockSuite) TestRealSDKStdio() {
 				`c2s {"id":103,"method":"synthetic/done"}`,
 				`s2c {"id":103,"result":{}}`)
 			c, ctx := s.startSDK(scenario(fs))
+			session, err := codex.Open(ctx, codex.SessionOptions{Client: c})
+			require.NoError(s.T(), err)
+			defer func() { _ = c.Close(); _ = session.Close() }()
 			require.NoError(s.T(), c.Call(ctx, "synthetic/begin", nil, nil))
-			select {
-			case request := <-c.Requests():
-				assert.Equal(s.T(), tc.method, request.Method())
-				var result map[string]any
-				require.NoError(s.T(), json.Unmarshal([]byte(tc.answer), &result))
-				require.NoError(s.T(), request.Handle().Answer(ctx, result))
-			case <-ctx.Done():
-				s.T().Fatal("native reverse request missing")
-			}
+			received, err := session.Receive(ctx)
+			require.NoError(s.T(), err)
+			require.NotNil(s.T(), received.Request)
+			request := received.Request
+			assert.Equal(s.T(), tc.method, request.Method())
+			var result map[string]any
+			require.NoError(s.T(), json.Unmarshal([]byte(tc.answer), &result))
+			require.NoError(s.T(), request.Handle().Answer(ctx, result))
+
 			require.NoError(s.T(), c.Call(ctx, "synthetic/done", nil, nil))
 			require.NoError(s.T(), c.Close())
 		})

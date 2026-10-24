@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"os"
 	"strings"
 	"testing"
@@ -173,15 +174,15 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 func TestHistorySessionsAndNativeItemPage(t *testing.T) {
 	f := startFake(t, "history-isolation", codex.Limits{})
 	o := codex.HistoryOptions{ThreadID: "first", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}
-	slow, e := f.c.Load(context.Background(), o)
+	slow, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: o})
 	require.NoError(t, e)
 	defer slow.Close()
 	o.ThreadID = "second"
-	fast, e := f.c.Load(context.Background(), o)
+	fast, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: o})
 	require.NoError(t, e)
 	defer fast.Close()
 	var count int
-	for r := range fast.Events() {
+	for r := range historyEvents(t, fast) {
 		if r.Method != "turn/completed" {
 			continue
 		}
@@ -191,7 +192,7 @@ func TestHistorySessionsAndNativeItemPage(t *testing.T) {
 	require.NoError(t, fast.Err())
 	require.Equal(t, 2, count)
 	require.NoError(t, slow.Close())
-	require.Error(t, slow.Err())
+	require.NoError(t, slow.Err()) // Closing one owner does not fail the other Session.
 	page, e := f.c.ListThreadItems(context.Background(), types.ThreadItemsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr("native-cursor")})})
 	require.NoError(t, e)
 	require.Len(t, page.Data, 1)
@@ -216,7 +217,7 @@ func TestHistoryFailuresStayFailures(t *testing.T) {
 			case "limit":
 				o.MaxRecords = 3
 			}
-			h, e := f.c.Load(context.Background(), o)
+			h, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: o})
 			if mode == "home" {
 				require.Error(t, e)
 				return
@@ -224,7 +225,7 @@ func TestHistoryFailuresStayFailures(t *testing.T) {
 			require.NoError(t, e)
 			defer h.Close()
 			var ids []string
-			for r := range h.Events() {
+			for r := range historyEvents(t, h) {
 				if r.Method != "turn/completed" {
 					continue
 				}
@@ -234,7 +235,7 @@ func TestHistoryFailuresStayFailures(t *testing.T) {
 					require.Contains(t, string(r.History.Raw), "futureItem")
 				}
 			}
-			<-h.Done()
+			require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 			if mode == "unknown" {
 				require.NoError(t, h.Err())
 				require.Len(t, ids, 2)
@@ -254,22 +255,19 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 			f := startFake(t, "history-blocked", codex.Limits{})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			h, e := f.c.Load(ctx, codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+			h, e := codex.Load(ctx, codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
 			require.NoError(t, e)
 			defer h.Close()
 			if mode != "slow-close" && mode != "slow-client-close" {
-				select {
-				case r := <-h.Events():
-					require.Equal(t, "t1", r.History.TurnID)
-					select {
-					case terminal := <-h.Events():
-						require.Equal(t, "turn/completed", terminal.Method)
-					case <-time.After(time.Second):
-						t.Fatal("first turn snapshot missing")
-					}
-				case <-time.After(time.Second):
-					t.Fatal("first event lost")
-				}
+				receiveCtx, stop := context.WithTimeout(context.Background(), time.Second)
+				first, err := h.Receive(receiveCtx)
+				require.NoError(t, err)
+				require.Equal(t, "t1", first.Event.History.TurnID)
+				terminal, err := h.Receive(receiveCtx)
+				require.NoError(t, err)
+				require.Equal(t, "turn/completed", terminal.Event.Method)
+				stop()
+
 				require.Eventually(t, func() bool { _, err := os.Stat(f.trace + ".history-page2"); return err == nil }, time.Second, time.Millisecond)
 			}
 			switch mode {
@@ -285,7 +283,7 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("history worker leaked")
 			}
-			require.Error(t, h.Err())
+			require.Error(t, h.LoadState().Err)
 			if mode != "client-close" && mode != "slow-client-close" {
 				var result string
 				require.NoError(t, f.c.Call(context.Background(), "echo", "usable", &result))
@@ -297,11 +295,11 @@ func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
 
 func TestHistoryPagesFullTurnsInOrder(t *testing.T) {
 	f := startFake(t, "history", codex.Limits{})
-	h, err := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+	h, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
 	require.NoError(t, err)
 	defer h.Close()
 	var ids []string
-	for r := range h.Events() {
+	for r := range historyEvents(t, h) {
 		if r.Method != "turn/completed" {
 			continue
 		}
@@ -309,7 +307,7 @@ func TestHistoryPagesFullTurnsInOrder(t *testing.T) {
 		require.True(t, json.Valid(r.History.Raw))
 		require.Equal(t, "native-thread-42", r.History.ThreadID)
 	}
-	<-h.Done()
+	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"t1", "t2"}, ids)
 	for _, r := range trace(t, f.trace) {
@@ -321,31 +319,28 @@ func TestLoadResumesReplaysAndContinuesSameThread(t *testing.T) {
 	f := startFake(t, "history", codex.Limits{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	h, e := f.c.Load(ctx, codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+	h, e := codex.Load(ctx, codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
 	require.NoError(t, e)
 	defer h.Close()
-	p := types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{}}
-	_, e = f.c.StartTurn(context.Background(), p)
+	p := codex.Input{Input: []types.UserInput{}}
+	_, e = h.Submit(context.Background(), p)
 	require.ErrorIs(t, e, codex.ErrLoadPending)
-	_, e = h.ResumeResponse()
-	require.ErrorIs(t, e, codex.ErrLoadPending)
+	require.Equal(t, codex.LoadPending, h.LoadState().Status)
 	var ids []string
-	for r := range h.Events() {
+	for r := range historyEvents(t, h) {
 		if r.Method != "turn/completed" {
 			continue
 		}
 		ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
 	}
-	<-h.Done()
+	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 	require.NoError(t, h.Err())
 	require.Equal(t, []string{"t1", "t2"}, ids)
-	resumed, e := h.ResumeResponse()
-	require.NoError(t, e)
-	require.Equal(t, "native-thread-42", resumed.Thread.ID)
+	require.Equal(t, "native-thread-42", h.LoadState().ObservedIdentity)
 	cancel() // Successful load does not bind the ongoing session to this context.
-	turn, e := f.c.StartTurn(context.Background(), p)
+	turn, e := h.Submit(context.Background(), p)
 	require.NoError(t, e)
-	require.Equal(t, "continued", turn.Turn.ID)
+	require.Equal(t, "continued", turn.Response.Turn.ID)
 	methods := []string{}
 	for _, r := range trace(t, f.trace) {
 		methods = append(methods, r.Method)
@@ -360,38 +355,38 @@ func TestLoadResumeFailureAndReleaseContracts(t *testing.T) {
 	for _, mode := range []string{"resume-error", "resume-mismatch", "resume-cwd", "resume-blocked", "release-error"} {
 		t.Run(mode, func(t *testing.T) {
 			f := startFake(t, "history-"+mode, codex.Limits{})
-			h, e := f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1})
+			h, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
 			require.NoError(t, e)
 			defer h.Close()
-			_, e = f.c.Load(context.Background(), codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"})
-			require.ErrorIs(t, e, codex.ErrLoadConflict)
+			_, e = codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
+			require.ErrorIs(t, e, codex.ErrOwnershipConflict)
 			_, e = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: "native-thread-42"})
-			require.ErrorIs(t, e, codex.ErrLoadConflict)
+			require.ErrorIs(t, e, codex.ErrOwnershipConflict)
 			if mode == "resume-blocked" {
 				require.Eventually(t, func() bool { _, e := os.Stat(f.trace + ".resume-blocked"); return e == nil }, time.Second, time.Millisecond)
 				require.ErrorContains(t, h.Close(), "unconfirmed")
 				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
-				require.ErrorIs(t, e, codex.ErrClosed)
+				require.ErrorIs(t, e, codex.ErrOwnershipConflict)
 				_, e = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: "native-thread-42"})
-				require.ErrorIs(t, e, codex.ErrLoadConflict)
+				require.ErrorIs(t, e, codex.ErrOwnershipConflict)
 				var echoed string
 				require.NoError(t, f.c.Call(context.Background(), "echo", "release late resume response", &echoed))
 				require.Equal(t, "release late resume response", echoed)
 				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
-				require.ErrorIs(t, e, codex.ErrClosed)
+				require.ErrorIs(t, e, codex.ErrOwnershipConflict)
 			}
 			var count int
-			for range h.Events() {
+			for range historyEvents(t, h) {
 				count++
 			}
-			<-h.Done()
+			require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
 			if mode == "release-error" {
 				require.NoError(t, h.Err())
 				require.Equal(t, 4, count)
 				require.ErrorContains(t, h.Close(), "unsubscribe")
 				require.ErrorContains(t, h.Close(), "unsubscribe")
 			} else {
-				require.Error(t, h.Err())
+				require.Error(t, h.LoadState().Err)
 				require.Zero(t, count)
 			}
 			if mode != "release-error" && mode != "resume-blocked" {
@@ -402,5 +397,27 @@ func TestLoadResumeFailureAndReleaseContracts(t *testing.T) {
 				require.NotEqual(t, "thread/start", entry.Method)
 			}
 		})
+	}
+}
+
+func historyEvents(t *testing.T, s *codex.Session) iter.Seq[types.Event] {
+	return func(yield func(types.Event) bool) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for {
+			received, err := s.Receive(ctx)
+			if err != nil {
+				require.NotErrorIs(t, err, context.DeadlineExceeded)
+				return
+			}
+			require.Nil(t, received.Request, "historical projection cannot create authority")
+			if received.Load != nil {
+				return
+			}
+			if received.Event != nil && !yield(*received.Event) {
+				return
+			}
+		}
 	}
 }

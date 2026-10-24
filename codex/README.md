@@ -5,7 +5,7 @@ Commands in this native documentation run from `codex/`; see [root validation](.
 A native Go client for the Codex app-server protocol.
 
 Connections and execution live in the native `codex` package. Events, native models,
-optional values and subscription options live in `github.com/zoumo/agent-sdk-go/codex/types`.
+and optional values live in `github.com/zoumo/agent-sdk-go/codex/types`.
 
 **Start with [compatibility and the complete official capability inventory](docs/compatibility.md).**
 The protocol target is official **0.162.1** at one exact commit. The
@@ -61,57 +61,75 @@ non-archived records; archived records need a separate query. Results do not
 change observation membership or prove that an Agent is running or subscribed.
 See [pagination, filters and evidence limits](docs/session-discovery.md).
 
-## Local thread example
+## Open, submit and receive
 
-Go 1.26.9 is pinned with mise. Install the toolchain using your normal mise setup;
-then build with `mise exec go@1.26.9 -- go test ./...`.
+Go 1.26.9 is pinned with mise. This example is compiled by external-consumer
+validation; default tests do not launch the selected real executable.
 
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "log"
-
-    codex "github.com/zoumo/agent-sdk-go/codex"
-    "github.com/zoumo/agent-sdk-go/codex/types"
+ "context"
+ "fmt"
+ "log"
+ codex "github.com/zoumo/agent-sdk-go/codex"
+ "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-func main() {
-    ctx := context.Background()
-    client, err := codex.NewStdio(ctx, codex.StdioOptions{
-        Executable: "/path/you/selected/codex",
-        Args:       []string{"app-server"},
-        Initialize: types.InitializeParams{
-            ClientInfo: types.ClientInfo{Name: "my-client", Version: "0.1"},
-        },
-    })
-    if err != nil { log.Fatal(err) }
-    defer client.Close()
-
-    started, err := client.StartThread(ctx, types.ThreadStartParams{
-        Ephemeral: types.Some(true),
-    })
-    if err != nil { log.Fatal(err) }
-    read, err := client.ReadThread(ctx, types.ThreadReadParams{
-        ThreadID: started.Thread.ID,
-        IncludeTurns: types.Some(true),
-    })
-    if err != nil { log.Fatal(err) }
-    fmt.Println(read.Thread.ID)
+func main(){
+ ctx:=context.Background()
+ session,err:=codex.Open(ctx,codex.SessionOptions{
+  Stdio:&codex.StdioOptions{Executable:"/explicit/path/to/codex",Args:[]string{"app-server"},Initialize:types.InitializeParams{ClientInfo:types.ClientInfo{Name:"example",Version:"1"}}},
+  Thread:types.ThreadStartParams{Ephemeral:types.Some(true)},
+ })
+ if err!=nil{log.Print(err);return}
+ defer session.Abort()
+ submission,err:=session.Submit(ctx,codex.Input{Input:[]types.UserInput{{Text:types.Ptr(types.TextUserInput{Text:"Say hello briefly."})}}})
+ if err!=nil{log.Print(err);return}
+ fmt.Println("native turn",submission.Response.Turn.ID)
+ for{
+  received,err:=session.Receive(ctx);if err!=nil{log.Print(err);return}
+  if received.Request!=nil{
+   // Hand this original request to the application UI. It must supply the
+   // native answer or approval decision; the SDK makes no default decision.
+   fmt.Println("decision required",received.Request.ID(),received.Request.Method())
+  }
+  if received.Event!=nil{fmt.Println(received.Origin,received.Event.Method,string(received.Event.Params))}
+  if received.Observation!=nil{fmt.Println(received.Observation.Reason)}
+ }
 }
 ```
 
-The SDK does not download or discover Codex, log in, look up credentials, launch a
-shell, or own ambient stdin/stdout. The explicitly selected executable can itself
-read configuration or credentials and perform side effects. `Env == nil` inherits
-the parent environment; supply an explicit environment and isolated `CODEX_HOME`
-when needed. No executable is launched by importing this package.
+`Open` initializes the connection and fixes the server's main identity before
+returning. Each Session owns one FIFO; `Receive` selects native events, real
+`IncomingRequest` values, SDK observation evidence and Load boundaries. Concurrent
+receivers compete for that same FIFO. Applications own UI/logging fan-out.
+A native result does not close the Session. `Submit` uses native turn/start,
+retains the actual native turn response, and never guesses start versus steer
+from local Busy state. A successful response is not turn completion.
 
-The constructor sends `initialize`, awaits its response, then writes `initialized`
-before returning. `ServerInfo()` returns the native handshake result. Native
-thread, session, turn, and item identifiers are never fabricated.
+Use `IncomingRequest.Approve` / `Deny` with native `ApprovalOptions`, or `Answer`
+with `types.ToolRequestUserInputResponse` keyed by original question IDs. Native
+scope, execpolicy and network amendment options survive. The original
+`Handle().Answer` supports explicit raw extensions; `Handle().Reject` is an RPC
+error, separate from a user denial. Copies retain the same single-use authority.
+Cancellation, native resolution or Session termination invalidates that authority.
+No answer timeout, default deny or automatic retry is imposed by Session.
+
+Native `types.Event` retains exact `Raw`, `Params`, unknown fields/variants and
+native thread/turn/item IDs. Malformed known payloads retain bytes with a decode
+error; malformed envelopes terminate interaction. Raw duplicates remain facts.
+Confirmed members deliver immediately even when parent knowledge is missing.
+Later parent evidence never reorders earlier facts. Unconfirmed connection
+records are bounded diagnostic material in `Unattributed`, never live authority;
+later membership does not replay them into the Session FIFO.
+
+`Receive` cancellation affects only that wait. `Interrupt` requires an explicit
+native `TurnID`; its acknowledgment does not prove execution stopped. `Close`
+invalidates owned handles and cleans up without waiting for consumers. `Done`
+reports interaction termination independently of unread events. Drain to EOF or
+the stable terminal error, or explicitly `Abort` to discard abandoned backlog.
 
 ## Connect to an existing remote app-server
 
@@ -130,11 +148,12 @@ client, err := codex.NewRemote(ctx, codex.RemoteOptions{
 if err != nil { return err }
 defer client.Close()
 
-started, err := client.StartThread(ctx, types.ThreadStartParams{
-    Ephemeral: types.Some(true),
+session, err := codex.Open(ctx, codex.SessionOptions{Client: client,
+    Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
 })
 if err != nil { return err }
-fmt.Println(started.Thread.ID)
+defer session.Close()
+fmt.Println(session.ThreadID())
 ```
 
 `NewRemote` validates its options before dialing, then completes `initialize` and
@@ -168,7 +187,7 @@ are unsupported; malformed or oversized messages terminate the connection explic
 
 There is no automatic reconnect or request replay. After a lost connection,
 inspect the operation's dispatch evidence, create a new initialized client, then
-explicitly resume the saved native thread ID if appropriate. An unknown outcome
+explicitly Load the saved native thread ID if appropriate. An unknown outcome
 must be reconciled before repeating side-effecting work. Remote `Close` releases
 only this connection; it never shuts down or kills the remote service.
 
@@ -178,239 +197,27 @@ configuration, or live account. See the [canonical evidence](docs/compatibility.
 and [transport provenance](docs/protocol/README.md). The
 [remote example](remote_example_test.go) compiles in tests and is never executed.
 
-## Explicitly resume and detach a native thread
+## Native values and raw extensions
 
-Keep the native thread ID returned by the server. After closing the old client,
-construct a new client with `NewStdio` or `NewRemote` for a fresh handshake, then
-resume and read that exact ID. The SDK has no saved-session registry or reconnect loop.
+Native `types` production code uses only the standard library. Generated
+`Optional[T]` preserves omission, explicit null, false, zero and empty collections.
+Unknown fields retain their JSON without float64 conversion. Representability
+is not permission to submit an unsupported workflow. The server still validates
+native constraints. See [generation provenance](docs/protocol/README.md).
 
-```go
-resumed, err := client.ResumeThread(ctx, types.ThreadResumeParams{
-    ThreadID: nativeThreadID,
-    // Omit ServiceTier to preserve the server's override.
-    // ServiceTier: types.Null[string](), // explicitly clear the override
-})
-if err != nil { return err }
-read, err := client.ReadThread(ctx, types.ThreadReadParams{
-    ThreadID: resumed.Thread.ID,
-    IncludeTurns: types.Some(true),
-})
-if err != nil { return err }
-fmt.Println(read.Thread.ID)
-detached, err := client.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{
-    ThreadID: resumed.Thread.ID,
-})
-if err != nil { return err }
-fmt.Println(detached.Status)
-```
+An explicit `Client` remains useful for a shared native I/O resource, handshake
+metadata and `Call` extensions. Supply it in `SessionOptions.Client` or
+`LoadOptions.Client`. Closing one Session leaves other owners on that connection
+usable. A main identity has one owner. Overlapping child/ancestor observation
+ranges share physical attachments; only the final observer releases them.
+Typed detachment/resume operations respect ownership and uncertain-release
+fences. Raw calls are outside coordinated Session guarantees and never create a
+second consumer or answer registry.
 
-The compilable [resume-thread example](examples/resume-thread/main.go) takes an
-explicit executable and an already-known native thread ID. Tests compile it but
-do not run it. A real server must still have the thread; the fake-peer tests do
-not establish cross-process server persistence or resumability of ephemeral data.
-
-`ResumeThread` sends the supplied ID unchanged and checks `response.thread.id`.
-A mismatch returns `ErrProtocol` with `CallError.Dispatch == Responded` and the
-matching RPC ID. Missing/expired threads, RPC errors, timeouts, or lost connections
-never create a replacement thread or cause automatic replay.
-
-All native resume fields are exposed, including experimental fields. The native
-server can select another identity when `history` or `path` overrides `threadId`.
-This typed wrapper deliberately requires the returned ID to equal the supplied
-ID even in those cases; prefer ID-only resume. It does not undo server-side work
-if validation fails. The raw `Call` escape hatch leaves alternative-identity
-handling to the caller and does not certify those workflows.
-
-Resume `ServiceTier` distinguishes omission (keep the override), null (clear it),
-and a string (set it). `ExcludeTurns` can be omitted, false, or true, but not null.
-Other nullable fields preserve wire omission and null without claiming those
-states always mean different things to the server. Schema defaults are not
-silently inserted by the SDK.
-
-`UnsubscribeThread` returns the native `notLoaded`, `notSubscribed`, or
-`unsubscribed` status (and preserves future string values). This is server-side
-thread detachment, separate from closing a local `Subscription`. It does not
-close local observers, delete the thread, send an interrupt, or establish that an
-active turn stopped. Server notifications already in flight may still arrive.
-Closing a local subscription never sends `thread/unsubscribe`.
-
-## Native values and extensions
-
-Models live in the public `types` package. `Optional[T]` preserves omission,
-explicit null, and present values, including false, zero, and an empty list:
-
-```go
-params := types.ThreadStartParams{
-    Model: types.Some("caller-selected-model"),
-    ServiceTier: types.Null[string](),
-    Ephemeral: types.Some(false),
-}
-```
-
-Required members are checked on decoding. Generated objects retain unrecognized
-members in `UnknownFields`; unions expose typed variants and an `Unknown` raw
-fallback. Raw JSON values never pass through float64. Unknown wire structure and
-values are preserved, although re-encoding may normalize whitespace/key order.
-These loss-preserving bindings are not strict JSON Schema validators: native
-minimum/maximum and `additionalProperties` constraints are not all enforced, and
-unknown enum, union, and extension values can remain representable. The server
-remains responsible for accepting a request. See
-[generation provenance](docs/protocol/README.md) for the exact native fields.
-
-`Call(ctx, method, params, result)` is a raw extension escape hatch with the same
-bounds, exact correlation, and no-replay behavior. `nil` params omits the member;
-`json.RawMessage("null")` sends explicit null. A nil result discards the response.
-Calling an unwrapped method does not make it an officially supported SDK workflow.
-Incoming server requests have a separate bounded pull queue. Unknown methods
-remain caller-managed raw extensions; their reachability is not workflow certification.
-
-## Observe and explicitly interrupt a turn
-
-`StartTurn(ctx, types.TurnStartParams)` and `InterruptTurn(ctx,
-types.TurnInterruptParams)` return native response types. Call `Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})`
-first: a turn can emit events, including completion, before its start response.
-The response's turn ID remains authoritative for that response. The SDK does not
-merge, accumulate, or reinterpret native thread/turn/item IDs. The explicit root
-selects proven descendants; unrelated identities may remain unresolved.
-
-The compilable [observe-turn example](examples/observe-turn/main.go) registers
-before starting work, prints native thread/turn/item IDs, and checks stream
-loss. Root completion is printed while observation continues until the caller
-context ends; applications must choose their own observation stop condition.
-It is compiled by tests, never run against a model. Running it yourself may
-use an authenticated account and consume model resources.
-
-A subscription is local observation, active when returned; it does not replay
-notifications received before registration. `Events()` supplies `types.Event` directly,
-with `Method`, raw JSON `Params`, optional typed `Data`, `DecodeError`, and the
-exact notification envelope in `Raw`. SDK convenience events use separate concrete
-`Data` types: `*types.SubagentCreated`, `*types.SubagentAssociated`, and
-`*types.ObservationState`; their Method is empty and Params/Raw are nil. Switch
-on Data's concrete type. Native structs and JSON contain no SDK origin flags.
-Absent parameters remain nil; explicit null remains raw `null`. Each subscriber
-independently owns its raw and typed data.
-Typed payloads currently cover `turn/started`, `turn/completed`, `item/started`,
-`item/completed`, `item/agentMessage/delta`, `error`, and `serverRequest/resolved`.
-Other methods remain raw.
-Malformed supported payloads remain observable with `*DecodeError`; an invalid
-JSON envelope instead terminates the connection.
-
-`Done()` closes immediately on subscription termination, independently of event
-consumption. `Close()` and subscription context cancellation stop local observation;
-accepted events remain readable in FIFO order, and `Events()` closes after they
-drain. After `Done`, inspect `Err()`:
-
-- nil: explicit subscription or normal client close
-- `context.Canceled` / `context.DeadlineExceeded`: local subscription cancellation
-- Another error: the underlying terminal connection failure or observation limit
-
-Unread delivery grows dynamically in memory and does not block connection readers,
-RPC responses, or server-request routing. `EventQueue` is deprecated and ignored;
-negative values remain invalid. This backlog has no item capacity and can exhaust
-machine memory if consumers do not keep up. It is not durable across crashes or OOM.
-The public channel is an unbuffered bridge with at most one additional in-flight
-event, so `len(Events())` does not measure backlog.
-
-`Close()` returns without waiting for consumers. Continue draining `Events()`, or
-call `Abort()` to discard unread events and release the delivery goroutine when
-abandoning observation. `Abort()` also works after `Close()` and preserves the first
-terminal cause. A receive racing `Abort()` may receive the in-flight event. Neither
-operation sends `thread/unsubscribe` or `turn/interrupt` or changes answer handles.
-
-To request execution interruption explicitly, pass the exact native identities:
-
-```go
-_, err := client.InterruptTurn(ctx, types.TurnInterruptParams{
-    ThreadID: threadID,
-    TurnID: turnID,
-})
-```
-
-The acknowledgement is only an RPC response. It neither creates a completion
-event nor proves that execution stopped. There is no high-level turn runner,
-implicit interruption, or final-text aggregation.
-
-## Answer server requests explicitly
-
-`Requests()` is a single bounded pull queue, available immediately after startup.
-Each immutable `Request` exposes `ID()`, `Method()`, `Params()`, `Data()`, and
-`Handle()`. Integer `1` and string `"1"` remain different identities. `Params()`
-and `Data()` return fresh copies, so UI mutations cannot change an answer target.
-`Data()` decodes native command/file/permissions approvals, tool user input, and
-legacy command/patch approvals. Unknown methods return `nil, nil`; malformed known
-payloads return `*DecodeError` without losing their original raw bytes.
-
-Read requests concurrently with calls that might need an answer. Obtain the
-result from your application or user; the SDK supplies no default decision:
-
-```go
-request, ok := <-client.Requests()
-if !ok { return client.Err() }
-fmt.Println(request.ID(), request.Method(), string(request.Params()))
-
-// For example, read a caller-selected native JSON result from the terminal.
-var result json.RawMessage
-if err := json.NewDecoder(os.Stdin).Decode(&result); err != nil { return err }
-if err := request.Handle().Answer(ctx, result); err != nil { return err }
-```
-
-The [compiled example](requests_example_test.go) follows this pattern and is never
-executed by tests. Native response models such as
-`types.CommandExecutionRequestApprovalResponse` and
-`types.ToolRequestUserInputResponse` can be passed to `Answer` instead of raw
-JSON. `Reject(ctx, &RPCError{...})` sends exactly the caller-selected protocol error.
-`RPCError.Raw` is inbound diagnostic data and is not sent.
-
-New code receives `ReceivedRequest` from `Session.Receive`, with an
-`IncomingRequest` carrying complete envelope `Raw()`, `Params()`, `Data()` and
-`Context()`. `Approve(ctx, ApprovalOptions)` / `Deny(ctx, ApprovalOptions)` choose
-native decisions; typed options preserve scope, execpolicy/network amendments
-and extensions. Permissions approval requires an explicit grant. `Answer` accepts
-the native `ToolRequestUserInputResponse`. `Handle().Reject` remains an explicit
-RPC error operation, separate from user denial.
-
-A request enters exactly one consumption surface. A direct main owner takes
-precedence; otherwise a unique confirmed member range routes the original handle.
-Ambiguous/unknown requests remain in the connection registry and bounded Raw-only
-diagnostics; diagnostic eviction/expiry never decides or invalidates them. Later
-membership does not replay old diagnostic material. Session Close revokes only
-its assigned requests. Closing an owner ends its answer wait without canceling
-an already started shared-connection write; actual I/O faults and write deadlines
-still fail that connection. Legacy Requests is temporary expand-contract support.
-
-Raw/Params snapshots live with the received Request/FIFO. The authority registry
-retains identity fingerprints and request status, without retaining completed
-command/diff/question payloads. Keeping an original Request keeps its snapshot
-readable after answering or Close; releasing consumed snapshots releases their
-payload independently of replay protection.
-
-A handle is opaque, bound to its original connection, and shared by copies.
-Only one answer or cancellation wins. `Done()` signals termination and `Err()`
-reports answered, locally canceled, server-resolved, or connection failure.
-A successful `Answer` means its frame was written; it is not a peer acknowledgment
-or proof of execution. Competing/duplicate answers and stale handles fail locally.
-Confirmed `NotSent` failures, including cancellation before writing, leave a still
-live native handle usable. Validation, pre-canceled context, oversized frames and
-queue-admission failures likewise leave it usable. Partial or
-ambiguous writes return `AnswerError` with `OutcomeUnknown` and cannot be replayed.
-
-`Cancel()` abandons a prompt locally. It sends no response or cancellation and
-does not stop server work. There is no SDK approval countdown; `RequestTimeout`
-is deprecated and ignored. The native
-`serverRequest/resolved` notification invalidates an unanswered matching handle
-using both its exact `requestId` and native thread identity. It can follow an answer
-or interruption and does not establish success. Native resolution invalidates the original capability immediately and prevents
-a queued, unwritten answer. Once writing starts its outcome may be unknown; no
-response is retracted or retried.
-There is no invented generic cancellation method.
-
-Slow consumers cannot block ordinary responses or notifications. Queue or active
-request exhaustion terminates the connection explicitly with
-`ErrRequestOverflow` (also `ErrLimit`), invalidating handles and pending calls;
-requests are never silently discarded or automatically denied. Buffered requests
-may already be resolved or closed when read. Check handle status before showing a
-prompt and use `Done()` to dismiss stale UI. Closing the client closes the request
-queue and invalidates every pending handle without waiting for consumer code.
+The SDK does not discover executables, log in, look up credentials, reconnect or
+retry. `Env=nil` inherits the parent environment; an explicit environment can
+select an isolated `CODEX_HOME`. Stdio owns its chosen child; remote Close owns
+only the socket. The selected native executable can read its own configuration.
 
 ## Cancellation and errors
 
@@ -440,8 +247,8 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 
 - Incoming and outgoing JSON payload: 8 MiB, excluding stdio newline or WS framing
 - Queued outbound frames: 32; pending calls: 128
-- Active local subscriptions: 32; accepted event backlog grows with memory
-- Active reverse requests: 128; queued reverse requests: 32
+- Session owners: 32; accepted event backlog grows with memory
+- Active reverse requests: 128; delivery uses the Session FIFO
 - Unanswered handle lifetime: native resolution/termination only; no SDK deadline
 - Request identity registry: 4096 distinct tagged ID/method/params identities per
   connection (RequestIdentities). Terminal entries are retained; exhaustion fails
@@ -457,14 +264,13 @@ Earlier caller deadlines win. Resource admission fails with `ErrLimit` before
 sending where possible. An oversized outgoing frame is not sent; malformed or
 oversized incoming frames terminate the connection with an explicit cause.
 Bounded diagnostic counters record unmatched responses and notifications without
-retaining diagnostic payloads. Subscription storage scales with unread events,
-frame size, and subscriber count, including independent typed payload copies; use
-smaller limits for large events or many observers. SDK decoding runs on the reader,
+retaining diagnostic payloads. Session storage scales with unread events and frame size; a slow consumer can
+exhaust available memory. This is neither durable delivery nor an OOM guarantee. SDK decoding runs on the reader,
 but caller callbacks never do. Stderr is drained independently of the reader.
 
 `Close()` is concurrent-safe and idempotent. For stdio it closes stdin, waits for
 graceful exit, then kills and reaps only the owned child. For a remote client it
-closes only its WebSocket connection. Both settle pending calls, subscriptions,
+closes only its WebSocket connection. Both settle pending calls, Sessions,
 and reverse-request handles; stdio also closes all owned pipe ends. A child exit is detected even if an inherited output pipe
 remains open. It does not kill descendants, process groups, or an existing daemon.
 `Done()` signals connection termination; `Err()` gives the terminal cause. A rare
@@ -472,192 +278,6 @@ OS failure to reap before the shutdown deadline returns `ErrShutdownTimeout`;
 the background `Wait` still owns reaping. User-defined JSON marshal/unmarshal
 implementations run in the caller and must cooperate; the SDK cannot interrupt
 arbitrary Go code.
-
-## Development and testing
-
-```sh
-mise exec go@1.26.9 -- go test -v -count=1 ./...
-mise exec go@1.26.9 -- go test -race -v -count=1 ./...
-mise exec go@1.26.9 -- go vet ./...
-python3 docs/protocol/verify_inventory.py
-```
-
-Default tests use synthetic helper processes, loopback WS peers, and local WSS
-peers with synthetic certificates and dummy tokens. The opt-in [`tests/e2e`](tests/e2e)
-harnesses use a real CLI/account/model only when explicitly enabled. Keep
-`CODEX_E2E_STDIO`, `CODEX_E2E_INTERACTIONS`, and `CODEX_E2E_WEBSOCKET`
-unset or `0` for offline checks. Each requires the value `1` plus an explicit
-`CODEX_E2E_CLI` executable to opt in. `RUN_REAL_CODEX_TESTS` is not a harness
-switch. The completed historical validation budget is 9/9; it grants no reruns.
-Real E2E tests refuse CI. The WebSocket harness uses Go networking and the
-server process handle; Unix process groups remain required for bounded cleanup.
-It does not inspect process-tree listener ownership or additional listeners.
-
-The [CI workflow](../.github/workflows/ci.yml) runs uncached normal and race suites,
-vet, module verification, inventory, changed-whitespace checks, and reproducible
-schema generation on Ubuntu 24.04 and macOS 15, using Go 1.26.9 and Python 3.13.13.
-All three E2E switches are explicitly `0`; verbose output and job summaries
-identify real scenarios as **SKIPPED**, not live passes. Pushes to `main`, PRs,
-and manual dispatch run with read-only repository permissions and no service
-secrets. See [testing and CI](docs/testing.md) for all offline commands, comparison
-bases, generation limits and action maintenance.
-[Official testing patterns](docs/protocol/testing-patterns.md) distinguishes
-app-server harnesses from the TypeScript SDK's `codex exec` transport.
-
-Licensed under [Apache-2.0](LICENSE). See [NOTICE](NOTICE) for official protocol
-attribution and [dependency provenance](docs/protocol/README.md#licensing) for the
-WebSocket transport library. This is an independent SDK, not an OpenAI-maintained
-Go SDK.
-
-### Observe a root and its live descendants
-
-Read [事件时序（当前 0.162.1）](docs/event-sequences.md) for native/model/RPC
-boundaries, interleaving, lifecycle and gap examples.
-
-See the [per-capability matrix](docs/subagent-compatibility.md) and the
-[runnable offline example](examples/observe-subagents-offline/README.md), which starts
-only its own synthetic peer. Subagent E3/E4 tests were not run; ACP subagent
-proposals remain drafts and are not a stable protocol implemented by this SDK.
-
-Register before starting root work:
-
-```go
-stream, err := client.Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})
-if err != nil {
-    return err
-}
-defer stream.Abort()
-// Now start root work through the usual StartTurn API.
-for event := range stream.Events() {
-    switch data := event.Data.(type) {
-    case *types.AgentMessageDeltaNotification:
-        fmt.Print(data.Delta)
-    case *types.SubagentCreated:
-        fmt.Println(data.ThreadID, data.ParentThreadID, data.Evidence)
-    case *types.SubagentAssociated:
-        fmt.Println(data.ThreadID, data.ParentThreadID)
-    case *types.ObservationState:
-        fmt.Println(data.State, data.Reason)
-    }
-    // Unknown methods and fields remain inspectable in event.Params and event.Raw.
-}
-return stream.Err()
-```
-
-`SubagentCreated` requires a live successful `spawnAgent` completed item with
-receiver identities, or a live decoded `item/completed` SubAgentActivity with
-`kind=started` at the pinned 0.162.1 source. V2 uses notification `threadId` as
-parent and `agentThreadId` as child, without requiring `thread/started`.
-`types.SubagentEvidence.Activity` retains the actual native item; it is not collab evidence.
-Other activity kinds and `item/started` prove no relation or creation.
-Other successful collab calls can establish
-`SubagentAssociated`; association alone does not confirm creation. A later spawn
-confirmation refers to the same native thread ID. Relations precede child notifications;
-all native notifications that establish relations are also delivered. Repeated
-relations do not duplicate creation; identical text deltas remain separate events.
-Native notifications retain their thread/turn/item IDs. Convenience events carry
-the child ID, direct parent and original supporting evidence. Unknown fields, methods, explicit null and absent
-parameters remain available. Each observer owns its buffers.
-
-Relations from completed collab items, V2 completed Started activity, native `Thread.parentThreadId`, and
-`source.subAgent.thread_spawn.parent_thread_id` recursively establish descendants.
-Ancestors are announced before descendants and their buffered native events.
-`agentPath` never proves a parent. First confirmed parent wins; conflicting or
-cyclic evidence produces an incomplete observation diagnostic with the rejected
-evidence, without rebinding. `PreviousEvidence` retains the accepted edge on a
-conflict, and `types.SubagentEvidence.ParentThreadID` identifies each proposed parent.
-A later live spawn can independently confirm Created
-for the same native thread after Associated, once per entity across turns.
-
-Events whose source is not yet related enter bounded pending storage. After a
-count, byte or age limit they follow an `unresolved-source` incomplete diagnostic,
-whose UnresolvedThreadID identifies the source. This can include unrelated roots;
-only relationship evidence establishes descendant membership. Later association does not
-replay already delivered native records. Per-source pending order and exact Raw
-are retained. The initial observation remains incomplete because native attach is
-best-effort and runtime coverage is unverified, including unknown server versions.
-
-For explicit reconstruction on a new Client, pass caller-owned native Thread
-snapshots in `types.SubscriptionOptions.History` (`[]json.RawMessage`, each a Thread object,
-not a thread/read response envelope). Only parent/source links and successful
-completed collab items and V2 Started activities in `turns[].items` establish
-relations. Seeded relations
-have `Evidence.Provenance="history"` and never emit Created, even if
-later live evidence repeats their spawn. History does not replay native events,
-seed occurrence deduplication, or establish current execution state. A new live
-child can still emit Created. Seed count is bounded by MaxNodes and total snapshot
-bytes by PendingBytes; invalid snapshot IDs fail admission. Snapshots are not
-retained. Graph/depth limits also apply during seeding.
-
-A seed emits `ObservationState(incomplete, history-recovery-gap)`: new-thread
-auto-attach does not prove attachment to old threads on a cold connection. The SDK
-never issues read/list/resume/start requests to fill this gap. Silence, lagged
-attach and missing history cannot establish completeness. Explicitly reconnecting
-requires a new Client and Subscribe, with an empty occurrence cache; identical native IDs can be delivered again. There is no replay
-cursor or cross-connection exactly-once guarantee.
-
-Native deduplication is deliberately narrow: successfully decoded known-type `item/completed`
-notifications use thread, turn, method and item identity within this connection. The bounded FIFO identity cache can forget older entries. Other native
-events, including repeated identical deltas and started/complete snapshots, are
-preserved. An item ID alone never identifies an individual delta.
-
-Notifications without an identifiable source are preserved and do not establish
-membership. Child text and usage are never combined with parent answers or usage.
-
-At pinned Codex 0.162.1, native server source automatically attempts to attach
-initialized connections to newly created threads, best-effort. The SDK uses
-notifications already on its connection and sends **zero** child resume/start/
-subscribe RPCs or additional connections. This is source evidence and offline
-fake-peer validation, not real-server subagent validation. Older/unknown runtimes
-remain unverified; the SDK does not probe them with execution RPCs. See
-[compatibility and evidence](docs/compatibility.md#managed-descendant-observation).
-
-`types.SubscriptionOptions.EventQueue` and `Limits.EventQueue` are deprecated,
-validated as nonnegative, and ignored without preallocating their configured size.
-`MaxNodes` defaults to 4096 including the root and unresolved relation nodes;
-`MaxDepth` defaults to 32 edges. `PendingEvents`, `PendingBytes`, `PendingAge` and
-`DedupEntries` default to 128, 4 MiB (stored envelope plus params), 5 seconds and
-8192. Zero selects defaults; negative values are invalid. The age limit only bounds
-association waiting. Frame, reverse-request, graph, pending-association, and dedup
-limits remain separate from dynamic delivery storage.
-
-Each live notification and its derived associations/resolved pending records enter
-the FIFO atomically as one contiguous batch, as do pending-expiry diagnostics and
-unresolved native records. A single connection reader preserves notification order;
-concurrent producers are ordered at admission, without inventing global protocol
-order. `Done`/`Err` never wait for queue space or consumer drain. Graph/depth
-exhaustion still ends observation with `ErrLimit`.
-Each subscription uses one shared admission slot. `Close` ends local observation without interrupting provider work. Parent
-completion does not close it. Parent and child statuses are independent: parent
-idle may coexist with child active; child turn/activity completed or interrupted
-does not destroy the agent or prevent later turns. The SDK forwards native states
-and identities without synthesizing child completion. While a parent waits in
-wait_agent, its turn remains active. At pinned 0.162.1, TurnComplete awaits
-note_turn_completed (publishing that thread's idle change when applicable) before
-handle_turn_complete enqueues turn/completed on the same outbound queue. Status
-is per thread, with no child aggregation. This is not a cross-thread ordering or
-success-result-first promise.
-
-Unexpected connection termination preserves queued records, then emits
-`ObservationState(disconnected, permanent-gap)`. Done closes immediately, Events
-closes after drain, and Err retains the original connection cause. This observation remains incomplete; EOF is not
-work success. Close/cancel are idempotent, do not
-wait for consumers, preserve accepted records and the first terminal cause, and
-release only this local observation. The shared server attachment is never
-unsubscribed by observation teardown. Permission and question answers still go
-through original `Client.Requests()` handles.
-`Subscribe(ctx, rootThreadID, types.SubscriptionOptions{})` is the sole subscription entry.
-It always manages relations and descendant routing; there is no observation mode switch.
-See the [pinned official SDK comparison](docs/design/native-sdk-comparison.md).
-
-
-### Recorded event replay
-
-Run `go run ./examples/replay-recorded` without Codex, credentials or network.
-The embedded real sanitized S1/S2 transcripts cover two bounded dynamic file
-tools and one native user question. Default CI validates and replays them offline.
-Native shell approvals, subagent creation and background boundaries were not
-observed. See [recorded coverage and explicit real-agent maintenance](docs/recorded-events.md).
 
 ## Load an existing session and replay history
 
@@ -699,8 +319,7 @@ stop continued interaction. Close releases only owned attachment references;
 closing an explicitly loaded child does not unsubscribe an active ancestor's
 confirmed observation. Unknown resume/release outcomes remain fenced and visible.
 Raw Call is an explicit extension outside coordinated typed ownership guarantees.
-See [Session Load and native attachment evidence](docs/session-load.md). The old
-Client.Load/LoadedThread API is transitional compatibility pending removal.
+See [Session Load and native attachment evidence](docs/session-load.md). Client.Load/LoadedThread has been removed; use the Session lifecycle above.
 
 The server must support pagination; unsupported RPC errors are not hidden by a
 legacy fallback. Active threads and observed metadata changes fail. External
@@ -723,3 +342,11 @@ Full turns lack item completion timestamps: typed `CompletedAtMs` is zero and
 unknown for replay, not a measured timestamp. Do not serialize projected Params
 as a captured, complete native notification. Session.Receive delivers history,
 live records, real requests and SDK boundaries through one entry point.
+
+## Offline examples and validation
+
+Run the root offline gate with the mise-managed compiler. The four offline
+examples use explicit synthetic peers or embedded sanitized captures, never an
+installed agent. [Migration details](../docs/session-migration.md) distinguish
+native limitations, resource options and breaking lifecycle changes. Historical
+architecture reports retain their original baseline and are not current tutorials.

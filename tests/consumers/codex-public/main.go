@@ -16,9 +16,12 @@ func main() {
 		ClientInfo: types.ClientInfo{Name: "publicconsumer", Version: "1"},
 	}}
 	params := types.ThreadStartParams{Ephemeral: types.Some(true)}
-	var _ func(*codex.Client, context.Context, types.ThreadStartParams) (types.ThreadStartResponse, error) = (*codex.Client).StartThread
-	var _ func(*codex.Client, context.Context, string, types.SubscriptionOptions) (*codex.Subscription, error) = (*codex.Client).Subscribe
-	var _ func(*codex.Subscription) <-chan types.Event = (*codex.Subscription).Events
+	var _ func(context.Context, codex.SessionOptions) (*codex.Session, error) = codex.Open
+	var _ func(context.Context, codex.LoadOptions) (*codex.Session, error) = codex.Load
+	var _ func(*codex.Session, context.Context, codex.Input) (codex.Submission, error) = (*codex.Session).Submit
+	var _ func(*codex.Session, context.Context) (codex.Received, error) = (*codex.Session).Receive
+	var _ func(codex.IncomingRequest, context.Context, types.ToolRequestUserInputResponse) error = codex.IncomingRequest.Answer
+
 	_ = types.Event{}
 	if reflect.TypeOf(params).PkgPath() != "github.com/zoumo/agent-sdk-go/codex/types" {
 		panic("unexpected native package identity")

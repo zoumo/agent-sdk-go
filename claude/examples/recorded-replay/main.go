@@ -36,7 +36,7 @@ func run(out io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	client, err := claude.NewClient(ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, transcript.PeerEnvironment + "=1", "GORACE=atexit_sleep_ms=0"}})
+	client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, transcript.PeerEnvironment + "=1", "GORACE=atexit_sleep_ms=0"}})
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func run(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err = client.Send(ctx, prompt); err != nil {
+	if _, err = client.Submit(ctx, claude.Input{Text: prompt}); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "Offline replay: real CLI 2.1.258 authentication failure; no successful model/tool coverage.")
@@ -55,8 +55,8 @@ func run(out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		native, ok := record.(claude.Event)
-		if !ok {
+		native := record.Event
+		if native == nil {
 			continue
 		}
 		if native.Result != nil {

@@ -33,13 +33,13 @@ func (s *recordedObservationSuite) TestRecordedAuthenticationFailureReplay() {
 	marker := filepath.Join(dir, "consumed")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := NewClient(ctx, Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
+	client, err := Open(ctx, SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
 	require.NoError(t, err)
 	defer client.Abort()
 	prompt, err := transcript.Prompt()
 	require.NoError(t, err)
 	{
-		err = client.Send(ctx, prompt)
+		_, err = client.Submit(ctx, Input{Text: prompt})
 		require.NoError(t, err)
 	}
 	nativeCount := 0
@@ -50,11 +50,10 @@ func (s *recordedObservationSuite) TestRecordedAuthenticationFailureReplay() {
 		record, err := client.Receive(ctx)
 		require.NoError(t, err)
 		{
-			_, ok := record.(SubagentCreated)
-			require.False(t, ok, "error fixture cannot prove creation")
+			require.True(t, record.Observation == nil || record.Observation.Reason != "created", "error fixture cannot prove creation")
 		}
-		native, ok := record.(Event)
-		if !ok {
+		native := record.Event
+		if native == nil {
 			continue
 		}
 		nativeCount++

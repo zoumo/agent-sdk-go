@@ -155,7 +155,7 @@ type sdkSuite struct {
 	suite.Suite
 	ctx    context.Context
 	cancel context.CancelFunc
-	client *claude.Client
+	client *claude.Session
 }
 
 func TestSDKPeer(t *testing.T) { suite.Run(t, new(sdkSuite)) }
@@ -169,7 +169,7 @@ func (s *sdkSuite) TearDownTest() {
 	}
 	s.cancel()
 }
-func (s *sdkSuite) open(script mock.Scenario, handler claude.PermissionHandler) {
+func (s *sdkSuite) open(script mock.Scenario) {
 	dir := s.T().TempDir()
 	path := filepath.Join(dir, "synthetic.json")
 	data, err := json.Marshal(script)
@@ -177,15 +177,15 @@ func (s *sdkSuite) open(script mock.Scenario, handler claude.PermissionHandler) 
 	s.Require().NoError(os.WriteFile(path, data, 0600))
 	exe, err := os.Executable()
 	s.Require().NoError(err)
-	s.client, err = claude.NewClient(s.ctx, claude.Options{CLIPath: exe, WorkDir: dir, Env: []string{mock.ScenarioEnvironment + "=" + path, "HOME=" + dir, "GORACE=atexit_sleep_ms=0"}, PermissionHandler: handler, ShutdownTimeout: time.Second})
+	s.client, err = claude.Open(s.ctx, claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{mock.ScenarioEnvironment + "=" + path, "HOME=" + dir, "GORACE=atexit_sleep_ms=0"}, ShutdownTimeout: time.Second})
 	s.Require().NoError(err)
 }
 func (s *sdkSuite) nextNative(typ string) claude.Event {
 	for {
 		record, err := s.client.Receive(s.ctx)
 		s.Require().NoError(err)
-		if e, ok := record.(claude.Event); ok && e.Type == typ {
-			return e
+		if e := record.Event; e != nil && e.Type == typ {
+			return *e
 		}
 	}
 }
@@ -202,21 +202,15 @@ func (s *sdkSuite) TestPermissionChildAndInterrupt() {
 		frame("server", "control", `{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`),
 		frame("server", "protocol", `{"type":"result","subtype":"success","session_id":"root","result":"synthetic complete"}`),
 	)
-	requests := make(chan *claude.PermissionRequest, 1)
-	s.open(scenario(frames...), func(p *claude.PermissionRequest) { requests <- p })
-	s.Require().NoError(s.client.Send(s.ctx, "synthetic task"))
-	var p *claude.PermissionRequest
-	select {
-	case p = <-requests:
-	case <-s.ctx.Done():
-		s.Require().FailNow("permission timeout")
-	}
+	s.open(scenario(frames...))
+	s.Require().NoError(submitText(s.client, s.ctx, "synthetic task"))
+	p := s.nextRequest().Handle()
 	s.Require().Equal("permission", p.RequestID())
 	s.Require().NoError(p.Answer(s.ctx, claude.PermissionAnswer{Behavior: claude.PermissionAllow}))
 	s.nextNative("assistant")
 	e := s.nextNative("assistant")
 	s.Contains(string(e.Raw), "synthetic child")
-	s.Require().NoError(s.client.Interrupt(s.ctx))
+	s.Require().NoError(s.client.Interrupt(s.ctx, claude.InterruptOptions{}))
 	e = s.nextNative("result")
 	s.Contains(string(e.Raw), "synthetic complete")
 	s.Require().NoError(s.client.Close())
@@ -229,14 +223,8 @@ func (s *sdkSuite) TestReverseCancellationAndDisconnect() {
 		mock.Frame{Direction: "server", Channel: "control", Data: json.RawMessage(`{"type":"control_cancel_request","request_id":"permission"}`), DelayMillis: 50},
 		mock.Frame{Direction: "disconnect", Channel: "protocol", DelayMillis: 50},
 	)
-	requests := make(chan *claude.PermissionRequest, 1)
-	s.open(scenario(frames...), func(p *claude.PermissionRequest) { requests <- p })
-	var p *claude.PermissionRequest
-	select {
-	case p = <-requests:
-	case <-s.ctx.Done():
-		s.Require().FailNow("permission timeout")
-	}
+	s.open(scenario(frames...))
+	p := s.nextRequest().Handle()
 	select {
 	case <-p.Context().Done():
 	case <-s.ctx.Done():
@@ -353,16 +341,10 @@ func (s *sdkSuite) TestNativeUserQuestion() {
 	frames = append(frames,
 		frame("server", "control", `{"type":"control_request","request_id":"question","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","tool_use_id":"question-tool","input":{"questions":[{"question":"Which?","header":"Choice","options":[{"label":"A"}]}]}}}`),
 		frame("client", "control", `{"type":"control_response","response":{"subtype":"success","request_id":"question","response":{"behavior":"allow","updatedInput":{"questions":[{"question":"Which?","header":"Choice","options":[{"label":"A"}]}],"answers":{"Which?":"A"}}}}}`),
-		frame("server", "protocol", `{"type":"result","subtype":"success","result":"synthetic answer accepted"}`),
+		frame("server", "protocol", `{"type":"result","subtype":"success","session_id":"synthetic","result":"synthetic answer accepted"}`),
 	)
-	requests := make(chan *claude.PermissionRequest, 1)
-	s.open(scenario(frames...), func(p *claude.PermissionRequest) { requests <- p })
-	var p *claude.PermissionRequest
-	select {
-	case p = <-requests:
-	case <-s.ctx.Done():
-		s.Require().FailNow("question timeout")
-	}
+	s.open(scenario(frames...))
+	p := s.nextRequest().Handle()
 	s.Equal("AskUserQuestion", p.ToolName())
 	var input claude.AskUserQuestionInput
 	s.Require().NoError(json.Unmarshal(p.Input(), &input))
@@ -374,4 +356,18 @@ func (s *sdkSuite) TestNativeUserQuestion() {
 	s.Contains(string(event.Raw), "synthetic answer accepted")
 	s.Require().NoError(s.client.Close())
 	s.client = nil
+}
+
+func submitText(session *claude.Session, ctx context.Context, text string) error {
+	_, err := session.Submit(ctx, claude.Input{Text: text})
+	return err
+}
+func (s *sdkSuite) nextRequest() *claude.IncomingRequest {
+	for {
+		r, err := s.client.Receive(s.ctx)
+		s.Require().NoError(err)
+		if r.Request != nil {
+			return r.Request
+		}
+	}
 }

@@ -33,30 +33,24 @@ func TestOfflineExample(t *testing.T) {
 		require.NoError(t, err)
 	}
 	expected := strings.Split(strings.TrimSpace(frames), "\n")
-	associated := make(map[string]bool)
-	created := make(map[string]bool)
-	nativeCount, rootResult, childAfter, nested, terminal, closed := 0, false, false, false, false, false
+	members := make(map[string]bool)
+	nativeCount, rootResult, childAfter, unconfirmedParent, terminal := 0, false, false, false, false
 	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
 		var header struct {
 			Type string `json:"type"`
-			claude.SubagentInfo
+			claude.Observation
 		}
-		{
-			err := json.Unmarshal([]byte(line), &header)
-			require.NoError(t, err)
-		}
+		require.NoError(t, json.Unmarshal([]byte(line), &header))
 		switch header.Type {
-		case "subagent_associated":
-			associated[header.Source.AssociationID] = true
-			if header.Source.TaskID == "grandchild" && header.Parent != nil && header.Parent.TaskID == "child" {
-				nested = true
+		case "":
+			if header.Reason == "member-confirmed" {
+				members[header.Source.TaskID] = true
 			}
-		case "subagent_created":
-			require.True(t, associated[header.Source.AssociationID], header)
-			require.False(t, created[header.Source.TaskID], header)
-			created[header.Source.TaskID] = true
-		case "observation_state":
-			closed = closed || header.State == "closed"
+			if header.Reason == "tool-owner-unconfirmed" {
+				unconfirmedParent = true
+				require.Nil(t, header.Parent)
+			}
+
 		default:
 			require.Falsef(t, nativeCount >= len(expected), "native changed: %s", line)
 			require.EqualValuesf(t, expected[nativeCount], line, "native changed: %s", line)
@@ -80,9 +74,9 @@ func TestOfflineExample(t *testing.T) {
 		observed bool
 	}{
 		{"root result", rootResult}, {"child after root result", childAfter},
-		{"nested association", nested}, {"terminal patch", terminal}, {"closed state", closed},
+		{"unconfirmed nested tool owner", unconfirmedParent}, {"terminal patch", terminal},
 	} {
 		t.Run(tc.name, func(t *testing.T) { require.True(t, tc.observed) })
 	}
-	require.Len(t, created, 2, "created agents")
+	require.Equal(t, map[string]bool{"child": true, "grandchild": true}, members, "native task membership")
 }

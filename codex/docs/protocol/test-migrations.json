@@ -1,0 +1,119 @@
+{
+  "historical_base": "3f1776e4da94cc53d48e5029b20bd254dd727152",
+  "audit": "../docs/reviews/ticket13-legacy-guarantees.md",
+  "scope": "Historical evidence paths only. Past outcomes do not certify replacement tests.",
+  "retirements": [
+    {
+      "retired_path": "subscription_management.go",
+      "evidence_ids": [
+        "subagent02-contract-mock",
+        "subagent02-contract-race",
+        "subagent03-contract-mock",
+        "subagent03-contract-race",
+        "subagent04-contract-mock",
+        "subagent04-contract-race",
+        "subagent04-final-fixture-race",
+        "subagent05-contract-mock",
+        "subagent05-contract-race",
+        "subagent05-current-contract-mock",
+        "subagent05-current-contract-race"
+      ],
+      "replacements": [
+        "session.go",
+        "session_observation.go",
+        "session_requests.go"
+      ]
+    },
+    {
+      "retired_path": "tree_bounds_requests_test.go",
+      "evidence_ids": [
+        "subagent04-contract-mock",
+        "subagent04-contract-race",
+        "subagent04-final-fixture-race",
+        "subagent05-contract-mock",
+        "subagent05-contract-race",
+        "subagent05-current-contract-mock",
+        "subagent05-current-contract-race"
+      ],
+      "replacements": [
+        "session_native_regression_test.go",
+        "session_requests_test.go",
+        "session_test.go"
+      ]
+    },
+    {
+      "retired_path": "tree_contract_test.go",
+      "evidence_ids": [
+        "subagent01-contract-mock",
+        "subagent01-contract-race",
+        "subagent02-contract-mock",
+        "subagent02-contract-race",
+        "subagent03-contract-mock",
+        "subagent03-contract-race",
+        "subagent05-contract-mock",
+        "subagent05-contract-race",
+        "subagent05-current-contract-mock",
+        "subagent05-current-contract-race"
+      ],
+      "replacements": [
+        "session_native_regression_test.go",
+        "session_test.go"
+      ]
+    },
+    {
+      "retired_path": "tree_current_contract_test.go",
+      "evidence_ids": [
+        "subagent05-current-contract-mock",
+        "subagent05-current-contract-race",
+        "subagent05-current-model-unit"
+      ],
+      "replacements": [
+        "session_native_regression_test.go"
+      ]
+    },
+    {
+      "retired_path": "tree_lifecycle_test.go",
+      "evidence_ids": [
+        "subagent03-contract-mock",
+        "subagent03-contract-race",
+        "subagent05-contract-mock",
+        "subagent05-contract-race",
+        "subagent05-current-contract-mock",
+        "subagent05-current-contract-race"
+      ],
+      "replacements": [
+        "session_native_regression_test.go",
+        "session_load_test.go",
+        "session_test.go"
+      ]
+    },
+    {
+      "retired_path": "tree_nested_test.go",
+      "evidence_ids": [
+        "subagent02-contract-mock",
+        "subagent02-contract-race",
+        "subagent05-contract-mock",
+        "subagent05-contract-race",
+        "subagent05-current-contract-mock",
+        "subagent05-current-contract-race"
+      ],
+      "replacements": [
+        "session_native_regression_test.go",
+        "session_test.go",
+        "turn_contract_test.go"
+      ]
+    },
+    {
+      "retired_path": "tree_v2_contract_test.go",
+      "evidence_ids": [
+        "subagent-v2-created-unit",
+        "subagent-v2-created-mock",
+        "subagent-v2-created-race"
+      ],
+      "replacements": [
+        "session_native_regression_test.go",
+        "history_events_test.go"
+      ]
+    }
+  ]
+}

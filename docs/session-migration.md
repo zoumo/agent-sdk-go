@@ -8,7 +8,7 @@ and [load/delivery contracts](../harness/contracts/index.md) govern the behavior
 | Previous consumer coordination | Session path |
 |---|---|
 | Codex start/resume + Subscribe + Requests | Open/Load fixes main ownership; Receive delivers events and actual requests |
-| Claude NewClient + Send + callback worker pool | Open + Submit + Receive; application owns decision UI |
+| Claude NewClient + Send + callback worker pool | Open + Submit + Receive; process interaction private; application owns decision UI |
 | Independent Client.Load/LoadedThread history lifecycle | Package Load returns Session; independent LoadState plus same Receive FIFO |
 | Ancestor-first held events and occurrence/UUID dedup | Native arrival order and duplicates remain; optional parent knowledge follows evidence |
 | Separate history completion and live observer ownership | One Session owns the attachment and one FIFO; successful load is not termination |
@@ -56,6 +56,12 @@ replay, extra prompt, silent Open fallback or ordinary input. Pending actual
 requests, Interrupt and Close remain available. Independent offline transcript
 projection/integrity checks do not certify successful live Load.
 
+Ordinary native resume keeps no-replay semantics. Claude Open with ResumeID uses
+a fresh process, passes the ID literally and keeps requested/observed identity
+separate. It does not inherit explicit Load's history/confirmation claim. Codex's
+raw ResumeThread remains a native no-replay extension, fenced against conflicting
+coordinated owners.
+
 Inspect LoadState independently of Done and consumption. Pending or failed Load
 rejects Submit and configuration. Startup cancellation after successful Codex
 Load does not stop ongoing Session interaction. Same-connection main identity has
@@ -83,7 +89,11 @@ Each Session owns one dynamically growing FIFO, limited by available memory.
 History producers are bounded independently; this does not cap total unread
 backlog or guarantee crash/OOM delivery. Configure frame, pending call/control,
 request identity, membership, parent knowledge, quarantine and history read/index
-bounds separately. Parent-depth limits do not suppress confirmed member facts.
+bounds separately. Removed Claude resource options are PermissionWorkers,
+MaxDedupEntries, MaxRuns, MaxCreationEntries and MaxPendingRecords; they no longer
+back hidden runtimes. Codex Limits.Subscriptions now bounds concurrent main
+Session owners; deprecated EventQueue/RequestQueue/RequestTimeout do not allocate
+second consumer queues or impose approval expiration. Parent-depth limits do not suppress confirmed member facts.
 Quarantine declares retained count/bytes/age and evicted/expired gaps; later
 membership never backfills old records. A Session returned by Load must retain
 accepted startup facts for drain; a failed Open returning no consumer aborts

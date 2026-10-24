@@ -14,14 +14,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
-// PermissionHandler receives only real can_use_tool control requests, on a
-// bounded worker pool independent of stdout. It may retain the request and
-// return, or wait for a human. Returning never answers a request. Only Answer
-// can respond. Handlers must respect Context cancellation; Close cannot stop
-// arbitrary user code and does not wait for it. A panic terminates the client.
-// The CLI may auto-approve operations before this handler; it is not a sandbox.
-type PermissionHandler func(*PermissionRequest)
-
 // PermissionBehavior is native decision data in types.
 type PermissionBehavior = types.PermissionBehavior
 
@@ -122,34 +114,20 @@ func (p *PermissionRequest) Context() context.Context {
 	return ctx
 }
 
-// Answer reserves the sole response attempt and writes a response correlated to
-// the original request ID. It rechecks cancellation after acquiring the writer.
-// A call with an already-canceled ctx consumes nothing. For a Session handle,
-// local invalid/unsupported answers and cancellation before write authorization
-// return NotSent and leave still-live authority available. The temporary legacy
-// Client path instead consumes failed reserved attempts and terminates on invalid
-// answers. An attempt that may have written bytes is never retried on either path.
-// ErrPermissionWriteFailed retains a failed attempt's cause after shutdown.
-// A terminal handle's rejection is a PermissionError with its original ID.
-// Cancellation cannot retract a write already authorized; such a race is
-// conservatively reported as ErrUnknownOutcome. Successful return establishes
-// only a complete local write, not execution or acceptance by the CLI.
+// Answer reserves the sole response attempt. Invalid/unsupported input and
+// cancellation before write authorization return NotSent and retain live native
+// authority. An authorized write with an unknown outcome is never retried.
+// Success establishes only a complete local write, not CLI acceptance.
 func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer) (result error) {
-	// The expand-contract Client retains its old failed-attempt semantics. The
-	// Session path reports a confirmed local rejection without destroying a live
-	// native wait. Both paths share the same reservation and writer authority.
-	session := p != nil && p.state != nil && p.state.owner.session != nil
-	if session {
-		defer func() {
-			if result != nil {
-				state := NotSent
-				if errors.Is(result, ErrUnknownOutcome) {
-					state = OutcomeUnknown
-				}
-				result = &DispatchError{Op: "permission answer", State: state, Err: result}
+	defer func() {
+		if result != nil {
+			state := NotSent
+			if errors.Is(result, ErrUnknownOutcome) {
+				state = OutcomeUnknown
 			}
-		}()
-	}
+			result = &DispatchError{Op: "permission answer", State: state, Err: result}
+		}
+	}()
 	if err := p.reserveAnswer(ctx); err != nil {
 		return err
 	}
@@ -158,18 +136,12 @@ func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer)
 	if err != nil {
 		c := s.owner
 		c.mu.Lock()
+		defer c.mu.Unlock()
 		if stateErr := c.permissionErrorLocked(s, permissionAnswering); stateErr != nil {
-			c.mu.Unlock()
 			return stateErr
 		}
-		if session {
-			s.status = permissionPending
-			c.mu.Unlock()
-			return err
-		}
-		failure := p.failAnswerLocked(err)
-		c.mu.Unlock()
-		return failure
+		s.status = permissionPending
+		return err
 	}
 	return p.writeResponse(ctx, map[string]any{"subtype": "success", "request_id": s.id, "response": data})
 }
@@ -244,7 +216,7 @@ func (p *PermissionRequest) writeResponse(ctx context.Context, response map[stri
 			err = &PermissionError{RequestID: s.id, Err: err}
 		case !authorized && (s.status == permissionClosed || c.closing || c.stopped):
 			err = &PermissionError{RequestID: s.id, Err: ErrClosed}
-		case !authorized && c.session != nil && s.status == permissionAnswering:
+		case !authorized && s.status == permissionAnswering:
 			// Local cancellation/encoding/size rejection before OS authorization
 			// does not consume the original native answer authority.
 			s.status = permissionPending
@@ -299,7 +271,7 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 		if !utf8.Valid(input) || !json.Valid(input) || len(input) == 0 || input[0] != '{' {
 			return nil, ErrInvalidPermissionAnswer
 		}
-		if p.state.owner.session != nil && p.ToolName() == "AskUserQuestion" {
+		if p.ToolName() == "AskUserQuestion" {
 			var question types.AskUserQuestionInput
 			if err := json.Unmarshal(input, &question); err != nil {
 				return nil, errors.Join(ErrInvalidPermissionAnswer, err)
@@ -396,7 +368,7 @@ const (
 )
 
 type permissionState struct {
-	owner                   *Client
+	owner                   *interaction
 	id, toolUseID, toolName string
 	input, raw              json.RawMessage
 	epoch                   uint64
@@ -414,7 +386,7 @@ type incomingControl struct {
 var connectionEpoch atomic.Uint64
 
 // Called only under c.mu, including the final writer authorization check.
-func (c *Client) permissionErrorLocked(s *permissionState, expected permissionStatus) error {
+func (c *interaction) permissionErrorLocked(s *permissionState, expected permissionStatus) error {
 	var err error
 	switch {
 	case s.owner != c || s.epoch != c.epoch:
@@ -436,7 +408,7 @@ func (c *Client) permissionErrorLocked(s *permissionState, expected permissionSt
 	return nil
 }
 
-func (c *Client) registerIncoming(request *ControlRequest) (*PermissionRequest, error) {
+func (c *interaction) registerIncoming(request *ControlRequest) (*PermissionRequest, error) {
 	var wire struct {
 		ToolName  string          `json:"tool_name"`
 		ToolUseID string          `json:"tool_use_id"`
@@ -471,7 +443,7 @@ func (c *Client) registerIncoming(request *ControlRequest) (*PermissionRequest, 
 	return &PermissionRequest{state: s}, nil
 }
 
-func (c *Client) cancelPermission(id string) error {
+func (c *interaction) cancelPermission(id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if s := c.permissions[id]; s != nil {
@@ -486,35 +458,4 @@ func (c *Client) cancelPermission(id string) error {
 		c.permissionIDs[id] = struct{}{}
 	}
 	return nil
-}
-
-func (c *Client) dispatchPermissions() {
-	for {
-		select {
-		case <-c.done:
-			return
-		case p := <-c.permissionJobs:
-			if p.Context().Err() == nil {
-				c.callPermissionHandler(p)
-			}
-		}
-	}
-}
-
-func (c *Client) callPermissionHandler(p *PermissionRequest) {
-	// Track normal return so even panic(nil) with legacy runtime settings
-	// cannot leave a live unanswered permission behind.
-	returned := false
-	defer func() {
-		_ = recover()
-		if !returned {
-			c.mu.Lock()
-			if !c.stopped {
-				c.failLocked(&PermissionError{RequestID: p.RequestID(), Err: ErrPermissionHandlerPanic})
-			}
-			c.mu.Unlock()
-		}
-	}()
-	c.opts.PermissionHandler(p)
-	returned = true
 }

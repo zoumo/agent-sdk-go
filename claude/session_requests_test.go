@@ -226,13 +226,8 @@ func TestSessionQuestionRejectsUnverifiedAnswersWithoutConsumingHandle(t *testin
 	require.NoError(t, p.Answer(context.Background(), QuestionAnswers{Answers: map[string]string{"Full text?": "A"}}))
 }
 
-func TestSessionRejectsLegacyHandlerAndUnprivilegedQuestions(t *testing.T) {
-	o := SessionOptions(fixtureOptions(t, "tree"))
-	o.PermissionHandler = func(*PermissionRequest) { t.Error("must not run") }
-	s, err := Open(context.Background(), o)
-	require.Nil(t, s)
-	require.ErrorIs(t, err, ErrUnsupported)
-	s = openSessionFixture(t)
+func TestSessionRejectsUnprivilegedQuestions(t *testing.T) {
+	s := openSessionFixture(t)
 	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
 	sessionNative(t, s)
 	frame := `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","name":"AskUserQuestion","id":"ordinary","input":{"questions":[]}}]}}`

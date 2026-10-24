@@ -102,7 +102,9 @@ func main(){
 ```
 
 `Open` initializes the connection and fixes the server's main identity before
-returning. Each Session owns one FIFO; `Receive` selects native events, real
+returning. `StartResponse` retains a copy of the actual native startup model,
+sandbox and unknown fields; loaded Sessions use LoadState resume evidence.
+Each Session owns one FIFO; `Receive` selects native events, real
 `IncomingRequest` values, SDK observation evidence and Load boundaries. Concurrent
 receivers compete for that same FIFO. Applications own UI/logging fan-out.
 A native result does not close the Session. `Submit` uses native turn/start,

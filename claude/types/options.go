@@ -7,8 +7,7 @@ import "time"
 // Limits bounds protocol and control resources. Zero fields select defaults. A bound exceeded
 // by incoming traffic terminates the connection explicitly; frames are not
 // silently discarded and the stdout reader never waits for an event consumer.
-// Queue/count limits must be at most 65,536, except PermissionWorkers (1,024)
-// and PermissionHistory (1,048,576). FrameBytes is at most 64 MiB and StderrBytes
+// Queue/count limits must be at most 65,536, except PermissionHistory (1,048,576). FrameBytes is at most 64 MiB and StderrBytes
 // at most 16 MiB. Invalid configuration is rejected before starting a process.
 type Limits struct {
 	// EventBuffer values outside 0..65,536 are rejected before process startup.
@@ -21,16 +20,14 @@ type Limits struct {
 	// PendingPermissions bounds unanswered incoming controls, including retained
 	// permission handles.
 	PendingPermissions int
-	// PermissionWorkers bounds concurrent handler calls, including blocked ones.
-	PermissionWorkers int
 	// PermissionHistory bounds distinct incoming control/cancellation IDs per client.
 	// IDs are never evicted, so a retired request cannot acquire a new responder.
 	PermissionHistory int
 }
 
 // Options is the callback-free configuration for a local CLI process.
-// Use claude.OptionsFromTypes to adapt it to runtime options, then optionally
-// attach a root-package PermissionHandler. Env slices retain normal Go sharing.
+// Use claude.OptionsFromTypes to adapt it to runtime options. Env slices retain
+// normal Go sharing.
 // Zero values select the client defaults; validation occurs at Open.
 type Options struct {
 	CLIPath  string

@@ -199,7 +199,7 @@ the input's original questions and unknown fields. It rejects nil maps, validate
 the resulting input, and does not mutate the receiver or send anything:
 
 ```go
-// p is the original *claude.PermissionRequest received by PermissionHandler.
+// p is the original *claude.PermissionRequest retained from IncomingRequest.Handle() on Session.Receive.
 // Handle each error before proceeding; first check p.ToolName().
 var input types.AskUserQuestionInput
 if err := json.Unmarshal(p.Input(), &input); err != nil { return err }

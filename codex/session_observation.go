@@ -131,7 +131,7 @@ func (c *Client) publishSessionsLocked(method string, params json.RawMessage, ra
 				}
 			}
 		}
-		if activity := n.Item.SubAgentActivity; activity != nil && activity.Kind == types.SubAgentActivityKindStarted && identity.TurnID != "" && identity.ItemID == activity.ID {
+		if activity := n.Item.SubAgentActivity; activity != nil && activity.Kind == types.SubAgentActivityKindStarted && identity.TurnID != "" && identity.ItemID != "" && identity.ItemID == activity.ID {
 			if s.addMemberLocked(activity.AgentThreadID, method) {
 				s.parentLocked(activity.AgentThreadID, identity.ThreadID, method)
 			}

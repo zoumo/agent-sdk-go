@@ -4,6 +4,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -16,52 +17,26 @@ func (s *controlInteractionSuite) TestReceiveConcreteEventsAndNativeJSON() {
 	c := s.openFixture(t, "tree")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	first, err := c.Receive(ctx)
+	first, err := c.session.Receive(ctx)
 	require.NoError(t, err)
-	state, ok := first.(ObservationState)
-	require.Truef(t, ok, "first=%#v", first)
-	require.EqualValuesf(t, "unverified", state.State, "first=%#v", first)
-	associated, created := false, false
+	require.Equal(t, ReceivedObservation, first.Kind)
+	require.Equal(t, "forwarding-not-confirmed", first.Observation.Reason)
 	frames := []string{creationInit, creationRequest("call", "Agent", creationInput, ""), creationTask("child", "call", "false")}
 	for _, origin := range []string{"", `,"origin":null`, `,"origin":{"kind":"future","extra":7}`} {
 		frames = append(frames, ` {"type":"result","subtype":"success","session_id":"s","future":true`+origin+`} `)
 	}
 	for _, frame := range frames {
-		treeEmit(t, c, frame)
-		for {
-			received, err := c.Receive(ctx)
-			require.NoError(t, err)
-			encoded, err := json.Marshal(received)
-			require.NoError(t, err)
-			switch event := received.(type) {
-			case Event:
-				require.EqualValuesf(t, frame, string(event.Raw), "Raw changed: %q", event.Raw)
-				var before, after any
-				require.Nilf(t, json.Unmarshal([]byte(frame), &before), "native JSON changed: %s", encoded)
-				require.Nilf(t, json.Unmarshal(encoded, &after), "native JSON changed: %s", encoded)
-				require.Equalf(t, before, after, "native JSON changed: %s", encoded)
-				require.False(t, event.Subtype == "task_started" && (!associated || !created), "child preceded relationship notifications")
-				goto nextFrame
-			case SubagentAssociated:
-				associated = true
-				require.EqualValues(t, "child", event.Source.TaskID, event)
-			case SubagentCreated:
-				require.True(t, associated, "creation preceded association")
-				created = true
-			case ObservationState:
-			default:
-				require.FailNowf(t, "unexpected test outcome", "unexpected public event %T", received)
-			}
-			var fields map[string]json.RawMessage
-			require.Nilf(t, json.Unmarshal(encoded, &fields), "derived envelope classification survived: %s", encoded)
-			require.Nilf(t, fields["origin"], "derived envelope classification survived: %s", encoded)
-			require.Nilf(t, fields["native"], "derived envelope classification survived: %s", encoded)
-			require.Nilf(t, fields["kind"], "derived envelope classification survived: %s", encoded)
-		}
-	nextFrame:
+		send(t, c, frame)
+		record := sessionNative(t, c.session)
+		require.Equal(t, frame, string(record.Raw))
+		require.NotNil(t, record.Event)
+		encoded, err := json.Marshal(*record.Event)
+		require.NoError(t, err)
+		var before, after any
+		require.NoError(t, json.Unmarshal([]byte(frame), &before))
+		require.NoError(t, json.Unmarshal(encoded, &after))
+		require.Equal(t, before, after)
 	}
-	require.True(t, associated, "missing derived convenience events")
-	require.True(t, created, "missing derived convenience events")
 }
 
 func (s *controlInteractionSuite) TestReceiveInvalidWaitDoesNotConsumeStartup() {
@@ -78,15 +53,14 @@ func (s *controlInteractionSuite) TestReceiveInvalidWaitDoesNotConsumeStartup() 
 		{"canceled", canceled, context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := c.Receive(tc.ctx)
+			_, err := c.session.Receive(tc.ctx)
 			require.ErrorIs(t, err, tc.want)
 		})
 	}
-	event, err := c.Receive(context.Background())
+	event, err := c.session.Receive(context.Background())
 	require.NoError(t, err)
-	state, ok := event.(ObservationState)
-	require.True(t, ok)
-	require.Equal(t, "unverified", state.State)
+	require.Equal(t, ReceivedObservation, event.Kind)
+	require.Equal(t, "forwarding-not-confirmed", event.Observation.Reason)
 }
 
 func (s *controlInteractionSuite) TestAbortDiscardsNativeBacklogAndRejectsReceive() {
@@ -102,7 +76,7 @@ func (s *controlInteractionSuite) TestAbortDiscardsNativeBacklogAndRejectsReceiv
 			send(t, c, "overflow")
 			// The control reply follows the entire burst without consuming any events.
 			require.NoError(t, c.Interrupt(context.Background()))
-			require.Equal(t, 4, c.events.Stats().Items)
+			require.Equal(t, 5, c.session.fifo.Stats().Items)
 			if terminal {
 				send(t, c, "malformed")
 				awaitDone(t, c)
@@ -114,18 +88,18 @@ func (s *controlInteractionSuite) TestAbortDiscardsNativeBacklogAndRejectsReceiv
 				require.NoError(t, err)
 			}
 			awaitDone(t, c)
-			require.Zero(t, c.events.Stats().Items)
-			require.Zero(t, c.events.Stats().Bytes)
-			require.True(t, c.events.Stats().Closed)
-			_, err = c.Receive(context.Background())
+			require.Zero(t, c.session.fifo.Stats().Items)
+			require.Zero(t, c.session.fifo.Stats().Bytes)
+			require.True(t, c.session.fifo.Stats().Closed)
+			_, err = c.session.Receive(context.Background())
 			if terminal {
 				require.ErrorIs(t, err, ErrProtocol)
 			} else {
-				require.ErrorIs(t, err, ErrClosed)
+				require.ErrorIs(t, err, io.EOF)
 			}
 			canceled, cancel := context.WithCancel(context.Background())
 			cancel()
-			_, err = c.Receive(canceled)
+			_, err = c.session.Receive(canceled)
 			require.ErrorIs(t, err, context.Canceled)
 			// Repeated and concurrent shutdown remains harmless.
 			if terminal {

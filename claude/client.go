@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
-	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 // Limits is the callback-free resource configuration shared with types.
@@ -41,7 +40,6 @@ type Options struct {
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
 	Limits            Limits
-	PermissionHandler PermissionHandler
 }
 
 func (o *Options) defaults() error {
@@ -72,7 +70,7 @@ func (o *Options) defaults() error {
 		{"EventBuffer", &o.Limits.EventBuffer, 128, 65536}, {"FrameBytes", &o.Limits.FrameBytes, 4 << 20, 64 << 20},
 		{"PendingControls", &o.Limits.PendingControls, 32, 65536}, {"ControlBuffer", &o.Limits.ControlBuffer, 32, 65536},
 		{"StderrBytes", &o.Limits.StderrBytes, 8192, 16 << 20}, {"PendingPermissions", &o.Limits.PendingPermissions, 128, 65536},
-		{"PermissionWorkers", &o.Limits.PermissionWorkers, 4, 1024}, {"PermissionHistory", &o.Limits.PermissionHistory, 4096, 1 << 20},
+		{"PermissionHistory", &o.Limits.PermissionHistory, 4096, 1 << 20},
 	} {
 		if *pair.v < 0 || *pair.v > pair.max {
 			return fmt.Errorf("claude: %s must be between 0 and %d", pair.name, pair.max)
@@ -94,17 +92,14 @@ type pendingControl struct {
 	reply        chan controlReply
 }
 
-// Client owns one subprocess. Its methods are concurrency-safe except Receive.
-// Receive is a single-consumer stream; callers must not call it concurrently.
-type Client struct {
-	tree                                *managedTree
+// interaction owns native subprocess, control and writer mechanics.
+// Session owns input/receive admission and observation state.
+type interaction struct {
 	session                             *Session
 	opts                                Options
 	cmd                                 *exec.Cmd
 	stdin, stdout, stderr               *os.File
-	events                              queue.Queue[Event]
 	responses                           chan incomingControl
-	permissionJobs                      chan *PermissionRequest
 	writeGate                           chan struct{}
 	done                                chan struct{}
 	stop                                chan struct{}
@@ -114,7 +109,6 @@ type Client struct {
 	mu                                  sync.Mutex
 	terminal                            error
 	closing                             bool
-	aborted                             bool
 	stopped                             bool
 	processErr                          error
 	cleanupErr                          error
@@ -128,46 +122,14 @@ type Client struct {
 	permissionIDs                       map[string]struct{}
 }
 
-// NewClient starts and initializes a local process. ctx bounds startup, not the
-// lifetime of the returned client. Initialization failures include bounded
-// cleanup before returning. No Claude CLI version probe or network call is made
-// by the SDK itself; starting a real CLI can use its configured account.
-// Deprecated: use Open for the Session FIFO. This compatibility path retains
-// the legacy tree/callback contract until its consumers are migrated.
-func NewClient(ctx context.Context, options Options) (*Client, error) {
-	return open(ctx, options, "")
-}
-
-func open(ctx context.Context, options Options, expectedResumeID string) (*Client, error) {
-	return openInteraction(ctx, options, expectedResumeID, nil)
-}
-
-func openInteraction(ctx context.Context, options Options, expectedResumeID string, session *Session) (*Client, error) {
+func openInteraction(ctx context.Context, options Options, expectedResumeID string, session *Session) (*interaction, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if err := options.defaults(); err != nil {
 		return nil, err
 	}
-	var tree *managedTree
-	var err error
-	if session == nil {
-		tree, err = newManagedTree(options)
-		if err != nil {
-			return nil, err
-		}
-		options.Subagents = tree.options
-	}
-	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
-	args = append(args, thinkingArgs(options.Thinking)...)
-	if options.Model != "" {
-		args = append(args, "--model="+options.Model)
-	}
-	if options.ResumeID != "" {
-		// The CLI takes an optional resume value. Binding it to the flag also
-		// prevents a dash-leading value from becoming a different CLI option.
-		args = append(args, "--resume="+options.ResumeID)
-	}
+	args := interactionArgs(options)
 	cmd := exec.Command(options.CLIPath, args...)
 	cmd.Dir, cmd.Env = options.WorkDir, options.Env
 	prepareProcess(cmd)
@@ -201,15 +163,12 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &Client{session: session, tree: tree, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
+	c := &interaction{session: session, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
 		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
 		epoch:       connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
-	if tree != nil {
-		tree.client = c
-	}
 	if session != nil {
 		if session.bindClient(c) {
 			// Close may precede process publication during asynchronous Load.
@@ -219,17 +178,9 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 			c.mu.Unlock()
 		}
 	}
-	if options.PermissionHandler != nil {
-		c.permissionJobs = make(chan *PermissionRequest, options.Limits.ControlBuffer)
-	}
 	go c.readStdout()
 	go c.readStderr()
 	go c.respondControls()
-	if options.PermissionHandler != nil {
-		for range options.Limits.PermissionWorkers {
-			go c.dispatchPermissions()
-		}
-	}
 	go func() { err := cmd.Wait(); c.mu.Lock(); c.processErr = err; c.mu.Unlock(); close(c.processDone) }()
 	go c.ownLifecycle()
 	initCtx, cancel := context.WithTimeout(ctx, options.InitializeTimeout)
@@ -260,32 +211,25 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	return c, nil
 }
 
-// A failed legacy constructor returns no consumer, so discard its queue. Load
-// has already returned its Session and must preserve accepted facts for drain.
-func (c *Client) cleanupFailedStartup() {
-	if c.session == nil {
-		_ = c.Abort()
-	} else {
-		_ = c.Close()
-	}
-}
+// Open aborts its unreturned FIFO; an already returned Load Session must drain.
+func (c *interaction) cleanupFailedStartup() { _ = c.Close() }
 
 // Send writes one complete user-message frame. Success proves only a completed
 // local write. A canceled or failed started write is conservatively classified
 // as unknown outcome and terminates this connection; it is never retried.
-func (c *Client) Send(ctx context.Context, text string) error {
+func (c *interaction) Send(ctx context.Context, text string) error {
 	return c.sendInput(ctx, Input{Text: text})
 }
 
 // RequestedResumeID returns the value supplied in Options.ResumeID. It is a
 // request, not evidence that the CLI found or resumed that session.
-func (c *Client) RequestedResumeID() string { return c.opts.ResumeID }
+func (c *interaction) RequestedResumeID() string { return c.opts.ResumeID }
 
 // SessionID returns the most recent nonempty native session ID observed in a
 // system or result frame. Before such a frame arrives it returns ("", false),
 // even when a resume ID was requested. The last observed ID remains available
 // after Close. Receive still exposes the original session fields and raw frame.
-func (c *Client) SessionID() (string, bool) {
+func (c *interaction) SessionID() (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.sessionID, c.sessionID != ""
@@ -295,63 +239,19 @@ func (c *Client) SessionID() (string, bool) {
 // control acknowledgment. Success is not a turn result or proof of tool rollback;
 // later results remain available through Receive. If cancellation or disconnect
 // occurs after writing, the outcome may be unknown. Nothing is resent or restored.
-func (c *Client) Interrupt(ctx context.Context) error {
+func (c *interaction) Interrupt(ctx context.Context) error {
 	_, err := c.control(ctx, "interrupt", map[string]any{"subtype": "interrupt"})
 	return err
 }
 
-// Receive returns a direct Event, SubagentAssociated, SubagentCreated or
-// ObservationState value. The first value reports unverified forwarding. A root result or idle does not
-// end observation. Canceling ctx cancels only this wait; call Close to release the process.
-// A nil context returns an error without consuming any event.
-func (c *Client) Receive(ctx context.Context) (ReceivedEvent, error) {
-	if ctx == nil {
-		return nil, queue.ErrNilContext
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	aborted := c.aborted
-	c.mu.Unlock()
-	if aborted {
-		return nil, c.operationError()
-	}
-	record, err := c.tree.receive(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return record.event(), nil
-}
-
-func (c *Client) receiveNative(ctx context.Context) (Event, error) {
-	event, err := c.events.Pop(ctx)
-	if errors.Is(err, io.EOF) {
-		return c.receiveEnd(ctx)
-	}
-	return event, err
-}
-
-func (c *Client) receiveEnd(ctx context.Context) (Event, error) {
-	select {
-	case <-c.cleaned:
-		if err := c.Err(); err != nil {
-			return Event{}, err
-		}
-		return Event{}, io.EOF
-	case <-ctx.Done():
-		return Event{}, ctx.Err()
-	}
-}
-
 // Done closes as soon as shutdown or a terminal failure is observed, independent
 // of consumer progress. Already accepted events can still be drained by Receive.
-func (c *Client) Done() <-chan struct{} { return c.done }
+func (c *interaction) Done() <-chan struct{} { return c.done }
 
 // Err returns the currently known terminal error, with a snapshot of the bounded
 // stderr tail. Cleanup can add exit diagnostics; Close waits for that cleanup.
 // Err is nil during operation and after a successful explicit Close.
-func (c *Client) Err() error {
+func (c *interaction) Err() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.terminal == nil && c.cleanupErr == nil {
@@ -369,7 +269,7 @@ func (c *Client) Err() error {
 	}
 	return e
 }
-func (c *Client) operationError() error {
+func (c *interaction) operationError() error {
 	if err := c.Err(); err != nil {
 		return err
 	}
@@ -379,7 +279,7 @@ func (c *Client) operationError() error {
 // Close is idempotent and concurrency-safe. It closes stdin, gives the child a
 // bounded chance to exit, then terminates/kills it as needed. It does not wait
 // for the event consumer. It returns terminal or cleanup failures, if any.
-func (c *Client) Close() error {
+func (c *interaction) Close() error {
 	c.mu.Lock()
 	c.closing = true
 	c.mu.Unlock()
@@ -388,26 +288,16 @@ func (c *Client) Close() error {
 	return c.Err()
 }
 
-// Abort shuts down the process like Close, then discards the unconsumed native
-// backlog. Later Receive calls return the terminal error or ErrClosed. A Receive
-// already in progress may deliver an event before Abort takes effect.
-// Bounded relationship state remains owned by Client until it is collected.
-func (c *Client) Abort() error {
-	err := c.Close()
-	c.mu.Lock()
-	c.aborted = true
-	c.mu.Unlock()
-	_ = c.events.Abort(nil)
-	return err
-}
+// Abort delegates abandoned-backlog cleanup to the sole Session owner.
+func (c *interaction) Abort() error { return c.session.Abort() }
 
-func (c *Client) fail(err error) {
+func (c *interaction) fail(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.failLocked(err)
 }
 
-func (c *Client) failLocked(err error) {
+func (c *interaction) failLocked(err error) {
 	if err != nil {
 		if c.terminal == nil || c.terminal == ErrUnexpectedEOF {
 			c.terminal = err
@@ -436,11 +326,11 @@ func (c *Client) failLocked(err error) {
 	c.stopOnce.Do(func() { close(c.done); close(c.stop) })
 }
 
-func (c *Client) writeJSON(ctx context.Context, value any) error {
+func (c *interaction) writeJSON(ctx context.Context, value any) error {
 	return c.writeJSONChecked(ctx, value, nil)
 }
 
-func (c *Client) writeJSONChecked(ctx context.Context, value any, authorize func() error) error {
+func (c *interaction) writeJSONChecked(ctx context.Context, value any, authorize func() error) error {
 	// Serialize encoding as well as writing: concurrent callers do not each
 	// retain an SDK-encoded frame while waiting for the writer.
 	select {
@@ -501,11 +391,11 @@ func (c *Client) writeJSONChecked(ctx context.Context, value any, authorize func
 
 // control registers its waiter before writing. Keep this shared path for future
 // control operations so their correlation and teardown rules stay identical.
-func (c *Client) control(ctx context.Context, subtype string, request any) (json.RawMessage, error) {
+func (c *interaction) control(ctx context.Context, subtype string, request any) (json.RawMessage, error) {
 	return c.controlRequest(ctx, subtype, request, false)
 }
 
-func (c *Client) controlRequest(ctx context.Context, subtype string, request any, fullResponse bool) (json.RawMessage, error) {
+func (c *interaction) controlRequest(ctx context.Context, subtype string, request any, fullResponse bool) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -544,7 +434,7 @@ func (c *Client) controlRequest(ctx context.Context, subtype string, request any
 	}
 }
 
-func (c *Client) route(event Event) error {
+func (c *interaction) route(event Event) error {
 	if c.strictResumeID != "" && event.SessionID != "" && (event.ParentToolUseID == nil || *event.ParentToolUseID == "") && (event.AgentID == nil || *event.AgentID == "") && (event.System != nil || event.Result != nil) && event.SessionID != c.strictResumeID {
 		if c.session != nil {
 			c.session.mu.Lock()
@@ -610,30 +500,17 @@ func (c *Client) route(event Event) error {
 			return c.session.acceptRequest(event, permission)
 		}
 		work := incomingControl{subtype: event.Control.Subtype, permission: permission}
-		if work.subtype == "can_use_tool" && c.opts.PermissionHandler != nil {
-			select {
-			case c.permissionJobs <- permission:
-			default:
-				return &ResourceLimitError{Resource: "permission handler queue", Limit: c.opts.Limits.ControlBuffer}
-			}
-		} else {
-			select {
-			case c.responses <- work:
-			default:
-				return &ResourceLimitError{Resource: "incoming control queue", Limit: c.opts.Limits.ControlBuffer}
-			}
+		select {
+		case c.responses <- work:
+		default:
+			return &ResourceLimitError{Resource: "incoming control queue", Limit: c.opts.Limits.ControlBuffer}
 		}
 	}
 	return c.acceptEvent(event)
 }
 
-func (c *Client) readStdout() {
+func (c *interaction) readStdout() {
 	defer close(c.stdoutDone)
-	defer func() {
-		if c.session == nil {
-			_ = c.events.Close(nil)
-		}
-	}()
 	reader := bufio.NewReaderSize(c.stdout, min(c.opts.Limits.FrameBytes+1, 32<<10))
 	var frame []byte
 	for {
@@ -685,7 +562,7 @@ func (c *Client) readStdout() {
 	}
 }
 
-func (c *Client) readStderr() {
+func (c *interaction) readStderr() {
 	defer close(c.stderrDone)
 	buf := make([]byte, 4096)
 	for {
@@ -704,19 +581,14 @@ func (c *Client) readStderr() {
 	}
 }
 
-// One bounded worker prevents incoming replies from blocking the stdout reader
-// or spawning an unbounded goroutine per request. Human handlers have a
-// separate bounded pool, so they cannot strand unsupported-control responses.
-func (c *Client) respondControls() {
+// One bounded protocol responder handles unsupported controls independently of
+// Session consumption. Real permission requests wait for their original handles.
+func (c *interaction) respondControls() {
 	for {
 		select {
 		case <-c.done:
 			return
 		case request := <-c.responses:
-			if request.subtype == "can_use_tool" {
-				_ = request.permission.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "No permission handler is configured"})
-				continue
-			}
 			_ = request.permission.answerUnsupported(context.Background(), request.subtype)
 		}
 	}
@@ -738,7 +610,7 @@ func awaitUntil(ch <-chan struct{}, until time.Time) bool {
 	}
 }
 
-func (c *Client) ownLifecycle() {
+func (c *interaction) ownLifecycle() {
 	defer close(c.cleaned)
 	defer func() {
 		if c.session != nil {
@@ -749,6 +621,20 @@ func (c *Client) ownLifecycle() {
 	case <-c.stop:
 	case <-c.stdoutDone:
 	case <-c.processDone:
+	}
+	start := time.Now()
+	phase := c.opts.ShutdownTimeout / 3
+	// Process exit does not prove stdout was consumed. Let the reader admit
+	// the final native frames before sealing the Session FIFO. A descendant
+	// may retain the pipe, so this uses the existing first shutdown phase.
+	select {
+	case <-c.processDone:
+		select {
+		case <-c.stop:
+		default:
+			_ = awaitUntil(c.stdoutDone, start.Add(phase))
+		}
+	default:
 	}
 	c.mu.Lock()
 	closing := c.closing
@@ -764,8 +650,6 @@ func (c *Client) ownLifecycle() {
 		c.fail(nil)
 	}
 	_ = c.stdin.Close()
-	start := time.Now()
-	phase := c.opts.ShutdownTimeout / 3
 	// A descendant can keep pipe ends open after the direct child exits; waiting
 	// for each completion under one deadline bounds that case too.
 	allDone := func(deadline time.Time) bool {
@@ -825,4 +709,18 @@ func (c *Client) ownLifecycle() {
 		c.terminal = errors.Join(c.terminal, &Error{Op: "process", Err: c.processErr})
 	}
 	c.mu.Unlock()
+}
+
+func interactionArgs(options Options) []string {
+	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
+	args = append(args, thinkingArgs(options.Thinking)...)
+	if options.Model != "" {
+		args = append(args, "--model="+options.Model)
+	}
+	if options.ResumeID != "" {
+		// The CLI takes an optional resume value. Binding it to the flag also
+		// prevents a dash-leading value from becoming a different CLI option.
+		args = append(args, "--resume="+options.ResumeID)
+	}
+	return args
 }

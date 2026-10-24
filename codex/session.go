@@ -58,6 +58,7 @@ type InterruptOptions struct{ TurnID string }
 // Session owns main identity, admission and a single FIFO. All mutable state
 // except cleanupOnce/cleanupErr is protected by the connection mutex.
 type Session struct {
+	startRaw      json.RawMessage
 	load          LoadState
 	loadDone      chan struct{}
 	resumed       bool
@@ -137,6 +138,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 			return err
 		}
 		c.attachments[r.Thread.ID].managed = true
+		s.startRaw = append(json.RawMessage(nil), raw...)
 		return nil
 	})
 	if err != nil {
@@ -157,11 +159,6 @@ func (s *Session) bindLocked(id string) error {
 	if c.threadOperations[id] > 0 || c.sessions[id] != nil {
 		return ErrOwnershipConflict
 	}
-	for sub := range c.subscriptions {
-		if sub.root == id {
-			return ErrOwnershipConflict
-		}
-	}
 	if len(c.sessions) >= c.limits.Subscriptions {
 		return ErrLimit
 	}
@@ -179,6 +176,21 @@ func (s *Session) bindLocked(id string) error {
 	c.sessions[id] = s
 	return nil
 }
+
+// StartResponse returns an independent copy of the actual native thread/start
+// response, including model, sandbox and unknown fields. The boolean is false
+// for a loaded Session, which has resume evidence in LoadState instead.
+func (s *Session) StartResponse() (types.ThreadStartResponse, bool) {
+	s.client.mu.Lock()
+	defer s.client.mu.Unlock()
+	if len(s.startRaw) == 0 {
+		return types.ThreadStartResponse{}, false
+	}
+	var response types.ThreadStartResponse
+	_ = json.Unmarshal(s.startRaw, &response) // immutable bytes validated before Open returned
+	return response, true
+}
+
 func (s *Session) ThreadID() string                              { return s.root }
 func (s *Session) Receive(ctx context.Context) (Received, error) { return s.queue.Pop(ctx) }
 func (s *Session) Done() <-chan struct{}                         { return s.done }

@@ -106,3 +106,39 @@ func TestLoadEventsPreserveUnknownTurnWithoutInventingCompletion(t *testing.T) {
 	require.Equal(t, types.TurnStatus("futureStatus"), turn.Status)
 	require.Contains(t, string(events[0].History.Raw), `"opaque":true`)
 }
+
+func TestLoadHistoricalV2ActivityKeepsFactsWithoutLiveMembership(t *testing.T) {
+	f := startFake(t, "history-v2-activity", codex.Limits{})
+	s, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
+	require.NoError(t, err)
+	defer s.Close()
+	var events []types.Event
+	for e := range historyEvents(t, s) {
+		events = append(events, e)
+	}
+	require.Equal(t, codex.LoadSucceeded, s.LoadState().Status)
+	require.Len(t, events, 2)
+	e := events[0]
+	require.Empty(t, e.Raw, "history projection is not a live envelope")
+	require.NotNil(t, e.History)
+	require.Equal(t, "historical-spawn", e.History.ItemID)
+	var params struct {
+		Item json.RawMessage `json:"item"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(v2Activity("native-thread-42", "child-1", "historical-spawn", "started")), &params))
+	require.Equal(t, string(params.Item), string(e.History.Raw))
+	n, ok := e.Data.(*types.ItemCompletedNotification)
+	require.True(t, ok)
+	require.NotNil(t, n.Item.SubAgentActivity)
+	require.Equal(t, "child-1", n.Item.SubAgentActivity.AgentThreadID)
+	require.JSONEq(t, `[null,9007199254740993]`, string(n.Item.SubAgentActivity.UnknownFields["future"]))
+	child := treeFrame("item/agentMessage/delta", `{"threadId":"child-1","turnId":"ct","itemId":"ci","delta":"history cannot authorize live delivery"}`)
+	emitRequests(t, f.c, child)
+	snap := f.c.Unattributed()
+	require.Len(t, snap.Records, 1)
+	require.Equal(t, child, string(snap.Records[0].Raw))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = s.Receive(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+}

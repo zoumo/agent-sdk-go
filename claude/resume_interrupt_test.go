@@ -63,7 +63,7 @@ func runSessionFixture(mode string, reader *bufio.Reader) {
 			continue
 		}
 		if mode == "session_resume" || mode == "session_load" {
-			fixtureEmit(map[string]any{"type": "echo", "wire": json.RawMessage(line)})
+			fixtureEmit(map[string]any{"type": "echo", "session_id": os.Getenv("CLAUDE_GO_SESSION_ID"), "wire": json.RawMessage(line)})
 			fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": os.Getenv("CLAUDE_GO_SESSION_ID"), "future": "preserved"})
 			continue
 		}
@@ -113,7 +113,7 @@ func sessionReply(id, message string) {
 	fixtureEmit(map[string]any{"type": "control_response", "response": response})
 }
 
-func interruptAsync(c *Client, ctx context.Context) <-chan error {
+func interruptAsync(c *interaction, ctx context.Context) <-chan error {
 	result := make(chan error, 1)
 	go func() { result <- c.Interrupt(ctx) }()
 	return result
@@ -130,10 +130,10 @@ func awaitInterrupt(t *testing.T, result <-chan error) error {
 	}
 }
 
-func receiveInterrupt(t *testing.T, c *Client) string {
+func receiveInterrupt(t *testing.T, c *interaction) string {
 	t.Helper()
 	event := receive(t, c)
-	require.EqualValuesf(t, "control_seen", event.Type, "expected control_seen, got %s: %s", event.Type, event.Raw)
+	require.EqualValuesf(t, "control_seen", eventKind(event), "expected control_seen, got %s: %s", eventKind(event), event.Raw)
 	var observed struct {
 		Wire map[string]json.RawMessage `json:"wire"`
 	}
@@ -158,15 +158,15 @@ func receiveInterrupt(t *testing.T, c *Client) string {
 	return id
 }
 
-func sessionCommand(t *testing.T, c *Client, command, wantType string) Event {
+func sessionCommand(t *testing.T, c *interaction, command, wantType string) Event {
 	t.Helper()
 	send(t, c, command)
 	event := receive(t, c)
-	require.EqualValuesf(t, wantType, event.Type, "%s: got %s, want %s: %s", command, event.Type, wantType, event.Raw)
+	require.EqualValuesf(t, wantType, eventKind(event), "%s: got %s, want %s: %s", command, eventKind(event), wantType, event.Raw)
 	return event
 }
 
-func assertSessionID(t *testing.T, c *Client, want string, known bool) {
+func assertSessionID(t *testing.T, c *interaction, want string, known bool) {
 	t.Helper()
 	{
 		got, ok := c.SessionID()
@@ -176,25 +176,35 @@ func assertSessionID(t *testing.T, c *Client, want string, known bool) {
 
 func (s *sessionControlSuite) TestSessionIdentityDistinguishesRequestAndObservation() {
 	t := s.T()
-	c := openFixture(t, "session_controls", func(opts *Options) { opts.ResumeID = "requested-native" })
-	require.EqualValues(t, "requested-native", c.RequestedResumeID(), "requested resume ID was changed")
-	assertSessionID(t, c, "", false)
-	sessionCommand(t, c, "unknown:untrusted-future", "future_event")
-	sessionCommand(t, c, "assistant:untrusted-assistant", "assistant")
-	assertSessionID(t, c, "", false)
+	c := openFixture(t, "session_controls")
+	require.Equal(t, "", c.session.RequestedResumeID())
+	id, known := c.session.SessionID()
+	require.Empty(t, id)
+	require.False(t, known)
+	send(t, c, "unknown:untrusted-future")
+	require.Eventually(t, func() bool { return len(c.session.Unattributed().Records) == 1 }, 3*time.Second, time.Millisecond)
+	require.Equal(t, `{"session_id":"untrusted-future","type":"future_event"}`, string(c.session.Unattributed().Records[0].Event.Raw))
+	sessionCommand(t, c, "assistant:fixed-main", "assistant")
+	id, known = c.session.SessionID()
+	require.Equal(t, "fixed-main", id)
+	require.True(t, known)
 	for _, kind := range []string{"system", "result"} {
-		event := sessionCommand(t, c, kind+":observed-"+kind, kind)
-		assertSessionID(t, c, "observed-"+kind, true)
-		require.Falsef(t, event.SessionID != "observed-"+kind || !strings.Contains(string(event.Raw), `"future":"kept"`), "native identity or raw data was lost: %s", event.Raw)
-		require.False(t, kind == "system" && event.System.SessionID != event.SessionID || kind == "result" && event.Result.SessionID != event.SessionID, "typed native session ID was lost")
-		sessionCommand(t, c, kind+":", kind)
-		assertSessionID(t, c, "observed-"+kind, true)
+		send(t, c, kind+":foreign-"+kind)
+		require.Eventually(t, func() bool {
+			return len(c.session.Unattributed().Records) >= map[string]int{"system": 2, "result": 3}[kind]
+		}, 3*time.Second, time.Millisecond)
+		id, known = c.session.SessionID()
+		require.Equal(t, "fixed-main", id)
+		require.True(t, known)
+		records := c.session.Unattributed().Records
+		record := records[len(records)-1]
+		require.Equal(t, "foreign-"+kind, record.Event.SessionID)
+		require.Contains(t, string(record.Event.Raw), `"future":"kept"`)
 	}
-	{
-		err := c.Close()
-		require.NoError(t, err)
-	}
-	assertSessionID(t, c, "observed-result", true)
+	require.NoError(t, c.session.Close())
+	id, known = c.session.SessionID()
+	require.Equal(t, "fixed-main", id)
+	require.True(t, known)
 }
 
 func (s *sessionControlSuite) TestSessionIdentityObservedBeforeReceiveAndWithoutSystemInit() {
@@ -217,13 +227,14 @@ func (s *sessionControlSuite) TestResumeUsesFreshProcessLiteralArgAndNoReplay() 
 	t := s.T()
 	firstOptions := fixtureOptions(t, "session_resume")
 	firstOptions.Env = append(firstOptions.Env, "CLAUDE_GO_SESSION_ID=native-before")
-	first, err := NewClient(context.Background(), firstOptions)
+	firstSession, err := Open(context.Background(), SessionOptions(firstOptions))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = first.Abort() })
+	first := firstSession.client
+	t.Cleanup(func() { _ = firstSession.Abort() })
 	require.EqualValues(t, "", first.RequestedResumeID(), "fresh session has requested identity")
 	assertSessionID(t, first, "", false)
 	send(t, first, "old prompt that must never replay")
-	_ = receive(t, first) // Echo of this explicit Send.
+	_ = receive(t, first) // Echo of this explicit Session input.
 	_ = receive(t, first) // Native system frame.
 	id, ok := first.SessionID()
 	require.False(t, !ok || id != "native-before", "first native ID was not captured")
@@ -241,9 +252,10 @@ func (s *sessionControlSuite) TestResumeUsesFreshProcessLiteralArgAndNoReplay() 
 			transcript := filepath.Join(opts.WorkDir, "stdin.ndjson")
 			opts.ResumeID = requested
 			opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture, "CLAUDE_GO_TRANSCRIPT="+transcript, "CLAUDE_GO_SESSION_ID=native-after")
-			resumed, err := NewClient(context.Background(), opts)
+			resumedSession, err := Open(context.Background(), SessionOptions(opts))
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = resumed.Abort() })
+			resumed := resumedSession.client
+			t.Cleanup(func() { _ = resumedSession.Abort() })
 			assertSessionID(t, resumed, "", false)
 			require.EqualValues(t, requested, resumed.RequestedResumeID(), "resume request was changed")
 			data, err := os.ReadFile(capture)
@@ -319,7 +331,7 @@ func (s *sessionControlSuite) TestInterruptAcknowledgmentIsSeparateFromTurnResul
 	c := s.client
 	pending := interruptAsync(c, context.Background())
 	id := receiveInterrupt(t, c)
-	result := sessionCommand(t, c, "result:native-turn", "result")
+	result := sessionCommand(t, c, "result:s", "result")
 	require.False(t, result.Result == nil || result.Result.Result != "turn ended" || result.Result.TerminalReason != "aborted_streaming", "turn result was not delivered")
 	// A result alone cannot complete this request. Its matching error must win.
 	sessionCommand(t, c, "error:"+id, "barrier")
@@ -336,8 +348,8 @@ func (s *sessionControlSuite) TestInterruptAcknowledgmentIsSeparateFromTurnResul
 		require.NoError(t, err)
 	}
 	// The acknowledged interrupt does not close stdin or discard later results.
-	sessionCommand(t, c, "result:later-turn", "result")
-	assertSessionID(t, c, "later-turn", true)
+	sessionCommand(t, c, "result:s", "result")
+	assertSessionID(t, c, "s", true)
 }
 
 func (s *sessionControlSuite) TestInterruptImmediateAcknowledgments() {
@@ -545,9 +557,11 @@ func TestSessionIdentityConcurrentReaders(t *testing.T) {
 			}
 		}()
 	}
-	for i := range 20 {
-		sessionCommand(t, c, fmt.Sprintf("system:id-%d", i), "system")
+	for range 20 {
+		sessionCommand(t, c, "system:id-0", "system")
 	}
 	_ = c.Close()
-	assertSessionID(t, c, "id-19", true)
+	id, known := c.session.SessionID()
+	require.Equal(t, "id-0", id)
+	require.True(t, known)
 }

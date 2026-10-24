@@ -41,6 +41,7 @@ func TestMain(m *testing.M) {
 }
 
 func fixtureEmit(value any) {
+	value = fixtureNativeFrame(value)
 	if err := json.NewEncoder(os.Stdout).Encode(value); err != nil {
 		os.Exit(4)
 	}
@@ -170,6 +171,11 @@ func runFixture(mode string) {
 		if json.Unmarshal(line, &message) != nil {
 			os.Exit(8)
 		}
+		if message["type"] == "control_request" {
+			id, _ := message["request_id"].(string)
+			sessionReply(id, "")
+			continue
+		}
 		if message["type"] == "control_response" {
 			fixtureEmit(map[string]any{"type": "reply_seen", "wire": message})
 			continue
@@ -188,11 +194,11 @@ func runFixture(mode string) {
 				fmt.Fprintln(os.Stdout, frame)
 			}
 		case "malformed":
-			fmt.Fprintln(os.Stdout, `{"type":"accepted","seq":1}`)
+			fmt.Fprintln(os.Stdout, `{"type":"assistant","session_id":"s","message":{"content":[]},"fixture_kind":"accepted","seq":1}`)
 			fmt.Fprintln(os.Stdout, `{"type":`)
 			return
 		case "truncated":
-			fmt.Fprintln(os.Stdout, `{"type":"accepted","seq":1}`)
+			fmt.Fprintln(os.Stdout, `{"type":"assistant","session_id":"s","message":{"content":[]},"fixture_kind":"accepted","seq":1}`)
 			fmt.Fprint(os.Stdout, `{"type":"future"}`)
 			return
 		case "invalid_utf8":
@@ -202,7 +208,7 @@ func runFixture(mode string) {
 			fmt.Fprintln(os.Stdout, `{"type":42}`)
 			return
 		case "oversize":
-			fmt.Fprintln(os.Stdout, `{"type":"accepted","seq":1}`)
+			fmt.Fprintln(os.Stdout, `{"type":"assistant","session_id":"s","message":{"content":[]},"fixture_kind":"accepted","seq":1}`)
 			fmt.Fprintf(os.Stdout, "{\"type\":\"large\",\"text\":%q}\n", strings.Repeat("x", 2048))
 			return
 		case "oversize_without_newline":
@@ -214,18 +220,18 @@ func runFixture(mode string) {
 				fixtureEmit(map[string]any{"type": "sequence", "seq": i})
 			}
 		case "exit_error":
-			fmt.Fprintln(os.Stdout, `{"type":"result","subtype":"success","result":"last"}`)
+			fmt.Fprintln(os.Stdout, `{"type":"result","session_id":"s","subtype":"success","result":"last"}`)
 			fmt.Fprint(os.Stderr, strings.Repeat("x", 128)+"tail-marker")
 			os.Exit(17)
 		case "eof":
-			fmt.Fprintln(os.Stdout, `{"type":"accepted"}`)
+			fmt.Fprintln(os.Stdout, `{"type":"assistant","session_id":"s","message":{"content":[]},"fixture_kind":"accepted"}`)
 			return
 		case "permissions":
 			fixtureEmit(map[string]any{"type": "control_request", "request_id": "permission-1", "request": map[string]any{"subtype": "can_use_tool", "tool_name": "Read", "input": map[string]any{"path": "test"}, "tool_use_id": "t1"}})
 			fixtureEmit(map[string]any{"type": "control_request", "request_id": "unsupported-2", "request": map[string]any{"subtype": "future_control"}})
 		case "fragmented":
 			value := "start " + strings.Repeat("雪 ", 14000) + " end\nnext"
-			data, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": value}})
+			data, _ := json.Marshal(map[string]any{"type": "user", "session_id": "s", "message": map[string]any{"role": "user", "content": value}})
 			for i := 0; i < len(data); {
 				end := min(i+137, len(data))
 				os.Stdout.Write(data[i:end])
@@ -245,18 +251,18 @@ func fixtureOptions(t *testing.T, mode string) Options {
 	dir := t.TempDir()
 	return Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_GO_FIXTURE=" + mode, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}
 }
-func openFixture(t *testing.T, mode string, configure ...func(*Options)) *Client {
+func openFixture(t *testing.T, mode string, configure ...func(*Options)) *interaction {
 	t.Helper()
 	opts := fixtureOptions(t, mode)
 	for _, fn := range configure {
 		fn(&opts)
 	}
-	c, err := NewClient(context.Background(), opts)
+	c, err := openTestInteraction(context.Background(), opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	return c
 }
-func receive(t *testing.T, c *Client) Event {
+func receive(t *testing.T, c *interaction) Event {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -264,14 +270,14 @@ func receive(t *testing.T, c *Client) Event {
 	require.NoError(t, err)
 	return event
 }
-func send(t *testing.T, c *Client, text string) {
+func send(t *testing.T, c *interaction, text string) {
 	t.Helper()
 	{
-		err := c.Send(context.Background(), text)
+		_, err := c.session.Submit(context.Background(), Input{Text: text})
 		require.NoError(t, err)
 	}
 }
-func awaitDone(t *testing.T, c *Client) {
+func awaitDone(t *testing.T, c *interaction) {
 	t.Helper()
 	select {
 	case <-c.Done():
@@ -303,7 +309,7 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 	opts.Model = "--odd model; $(not-a-shell)"
-	c, err := NewClient(context.Background(), opts)
+	c, err := openTestInteraction(context.Background(), opts)
 	require.NoError(t, err)
 	defer c.Abort()
 	data, err := os.ReadFile(capture)
@@ -330,7 +336,7 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 	require.Falsef(t, string(captured.Init["type"]) != `"control_request"` || len(captured.Init["request_id"]) < 3, "initialize envelope: %s", data)
 	var request map[string]any
 	json.Unmarshal(captured.Init["request"], &request)
-	require.Falsef(t, request["subtype"] != "initialize" || request["hooks"] != nil, "initialize = %#v", request)
+	require.Falsef(t, request["subtype"] != "initialize" || request["hooks"] != nil || request["forwardSubagentText"] != true, "initialize = %#v", request)
 	text := "a literal\nmessage with \"quotes\" and 雪"
 	send(t, c, text)
 	e := receive(t, c)
@@ -353,13 +359,13 @@ func (s *clientProtocolSuite) TestTypedViewsAndLosslessUnknowns() {
 	t := s.T()
 	c := s.client
 	send(t, c, "first")
-	events := make([]Event, 6)
+	events := make([]Event, 5)
 	for i := range events {
 		events[i] = receive(t, c)
 	}
-	want := []string{"system", "assistant", "user", "stream_event", "result", "future_event"}
+	want := []string{"system", "assistant", "user", "stream_event", "result"}
 	for i, event := range events {
-		require.EqualValuesf(t, want[i], event.Type, "event %d: %s", i, event.Type)
+		require.EqualValuesf(t, want[i], eventKind(event), "event %d: %s", i, eventKind(event))
 	}
 	require.Falsef(t, events[0].System.SessionID != "native-123" || !bytes.HasPrefix(events[0].Raw, []byte(" {")) || !bytes.Contains(events[0].Raw, []byte(`"new_field"`)), "system/raw: %s", events[0].Raw)
 	a := events[1].Assistant
@@ -371,11 +377,16 @@ func (s *clientProtocolSuite) TestTypedViewsAndLosslessUnknowns() {
 	require.Falsef(t, toolResult.ToolUseID != "t1" || string(toolResult.Content) != `[{"type":"text","text":"answer"}]`, "tool result = %#v", toolResult)
 	require.False(t, events[3].Stream.Delta.Type != "content_block_delta" || *events[3].Stream.Delta.Index != 0, "missing delta view")
 	require.False(t, events[4].Result.Result != "done" || events[4].Result.NumTurns != 1, "missing result view")
-	require.EqualValues(t, `{"type":"future_event","nested":{"x":[true,1,"raw"]}}`, string(events[5].Raw), "unknown event changed")
+	require.Eventually(t, func() bool { return len(c.session.Unattributed().Records) == 1 }, 3*time.Second, time.Millisecond)
+	unknownEvent := c.session.Unattributed().Records[0].Event
+	require.Equal(t, `{"type":"future_event","nested":{"x":[true,1,"raw"]}}`, string(unknownEvent.Raw))
+	parsed, err := ParseEvent(unknownEvent.Raw)
+	require.NoError(t, err)
+	require.Equal(t, "future_event", parsed.Type)
 	// A result and an assistant AskUserQuestion block cause no implicit close or
 	// fabricated tool reply: a second user frame is still accepted by the peer.
 	send(t, c, "second")
-	require.EqualValues(t, "system", receive(t, c).Type, "second turn missing")
+	require.EqualValues(t, "system", eventKind(receive(t, c)), "second turn missing")
 }
 
 func (s *clientProtocolSuite) TestFragmentedUnicodeAndLargeFrame() {
@@ -394,7 +405,7 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 			opts := fixtureOptions(t, mode)
 			opts.InitializeTimeout = 100 * time.Millisecond
 			start := time.Now()
-			c, err := NewClient(context.Background(), opts)
+			c, err := openTestInteraction(context.Background(), opts)
 			require.Falsef(t, c != nil || err == nil, "Open = %v, %v", c, err)
 			require.False(t, time.Since(start) > 3*time.Second, "startup cleanup was not bounded")
 			if mode == "init_hang" || mode == "init_wrong" {
@@ -415,7 +426,7 @@ func (s *clientProtocolSuite) TestMalformedFramesRetainAcceptedEvents() {
 			c := openFixture(t, mode, func(o *Options) { o.Limits.FrameBytes = 1024 })
 			send(t, c, "go")
 			e := receive(t, c)
-			require.EqualValuesf(t, "accepted", e.Type, "first = %s", e.Type)
+			require.EqualValuesf(t, "accepted", eventKind(e), "first = %s", eventKind(e))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			_, err := nextNative(c, ctx)
@@ -437,13 +448,14 @@ func (s *clientProtocolSuite) TestSlowConsumerDrainsDynamicBacklogAfterClose() {
 	t := s.T()
 	c := openFixture(t, "overflow", func(o *Options) { o.Limits.EventBuffer = 2 })
 	send(t, c, "go")
+	require.NoError(t, c.Interrupt(context.Background()))
 	// Explicit close waits for the reader, never for Receive to drain the burst.
 	require.NoError(t, c.Close())
 	awaitDone(t, c)
 	require.NoError(t, c.Err())
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := c.Receive(canceled)
+	_, err := c.session.Receive(canceled)
 	require.ErrorIs(t, err, context.Canceled)
 	for i := 0; i < 20; i++ {
 		event := receive(t, c)
@@ -464,7 +476,8 @@ func (s *clientProtocolSuite) TestExitErrorFollowsLastEventWithBoundedDiagnostic
 		require.False(t, event.Result == nil || event.Result.Result != "last", "last result lost")
 	}
 	_, err := nextNative(c, context.Background())
-	require.NotNil(t, err, "exit error lost")
+	require.Error(t, err, "exit error lost")
+	err = c.session.Close()
 	var detail *Error
 	require.Falsef(t, !errors.As(err, &detail) || detail.ExitCode == nil || *detail.ExitCode != 17 || len(detail.Stderr) > 32 || !strings.HasSuffix(detail.Stderr, "tail-marker"), "error diagnostics = %#v", detail)
 }
@@ -478,14 +491,23 @@ func (s *clientProtocolSuite) TestUnexpectedEOFAfterAcceptedEvent() {
 	require.ErrorIsf(t, err, ErrUnexpectedEOF, "EOF = %v", err)
 }
 
-func (s *clientProtocolSuite) TestMissingPermissionHandlerDeniesAndUnknownControlErrors() {
+func (s *clientProtocolSuite) TestPermissionWaitsAndUnknownControlErrors() {
 	t := s.T()
 	c := s.client
 	send(t, c, "go")
 	requests := 0
+	var permission *PermissionRequest
 	replies := map[string]map[string]any{}
 	for len(replies) < 2 {
-		e := receive(t, c)
+		var e Event
+		if permission == nil {
+			delivery := receivePermission(t, c)
+			e, permission = delivery.Event, delivery.Permission
+			require.NoError(t, permission.Context().Err())
+			require.NoError(t, permission.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny}))
+		} else {
+			e = receive(t, c)
+		}
 		if e.Control != nil {
 			requests++
 			continue
@@ -616,6 +638,7 @@ func (s *clientProtocolSuite) TestCloseRetainsBufferedEvents() {
 	t := s.T()
 	c := s.client
 	send(t, c, "retained")
+	require.NoError(t, c.Interrupt(context.Background()))
 	// The fixture's EOF handling writes any in-flight echo before exiting; Close
 	// drains stdout before it returns instead of exec.Wait dropping pipe bytes.
 	{
@@ -681,21 +704,24 @@ func (s *clientProtocolSuite) TestCloseAfterDoneRetainsFinalProtocolError() {
 	}
 	{
 		e := receive(t, c)
-		require.EqualValues(t, "accepted", e.Type, "accepted event lost")
+		require.EqualValues(t, "accepted", eventKind(e), "accepted event lost")
 	}
 	_, err := nextNative(c, context.Background())
 	require.ErrorIsf(t, err, ErrProtocol, "Receive = %v", err)
 }
 
 // nextNative is deliberately test-only: native contract tests skip SDK records.
-func nextNative(c *Client, ctx context.Context) (Event, error) {
+func nextNative(c *interaction, ctx context.Context) (Event, error) {
 	for {
-		record, err := c.Receive(ctx)
+		r, err := c.session.Receive(ctx)
 		if err != nil {
 			return Event{}, err
 		}
-		if event, ok := record.(Event); ok {
-			return event, nil
+		if r.Event != nil {
+			return *r.Event, nil
+		}
+		if r.Request != nil {
+			return ParseEvent(r.Raw)
 		}
 	}
 }
@@ -714,7 +740,7 @@ func TestStartupFailureReleasesUnconsumedNativeQueue(t *testing.T) {
 		// This peer deterministically emits an event before its correlated error.
 		// Use the usual startup budget: the assertion concerns teardown, not timing.
 		opts.InitializeTimeout = 3 * time.Second
-		c, err := NewClient(context.Background(), opts)
+		c, err := openTestInteraction(context.Background(), opts)
 		require.Nil(t, c)
 		var control *ControlError
 		require.ErrorAs(t, err, &control)
@@ -722,4 +748,46 @@ func TestStartupFailureReleasesUnconsumedNativeQueue(t *testing.T) {
 	}
 	require.Eventually(t, func() bool { return managers() <= before }, time.Second, 10*time.Millisecond,
 		"failed initialization retained an undrainable ChannX manager")
+}
+
+// fixtureNativeFrame gives synthetic transport markers a reviewed native envelope.
+// Tests inspect the actual wire Raw; fixture_kind is not SDK routing evidence.
+func fixtureNativeFrame(value any) any {
+	if os.Getenv("CLAUDE_GO_FIXTURE") == "tree" {
+		return value
+	}
+	m, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	kind, _ := m["type"].(string)
+	switch kind {
+	case "echo", "reply_seen", "snapshot", "ready", "sequence", "rejected", "barrier", "control_seen", "writer_ready", "writer_prefix", "writer_finished", "accepted-before-cancel", "uncooperative_ready", "tree_ready":
+		m["fixture_kind"] = kind
+		m["type"] = "assistant"
+		if _, ok := m["session_id"]; !ok {
+			m["session_id"] = "s"
+		}
+		m["message"] = map[string]any{"content": []any{}}
+	}
+	return m
+}
+
+func eventKind(e Event) string {
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(e.Raw, &fields)
+	if raw, ok := fields["fixture_kind"]; ok {
+		var kind string
+		_ = json.Unmarshal(raw, &kind)
+		return kind
+	}
+	return e.Type
+}
+
+func openTestInteraction(ctx context.Context, o Options) (*interaction, error) {
+	s, err := Open(ctx, SessionOptions(o))
+	if err != nil {
+		return nil, err
+	}
+	return s.client, nil
 }

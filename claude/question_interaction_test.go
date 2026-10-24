@@ -13,13 +13,13 @@ import (
 
 func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionHandle() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
 	input := json.RawMessage(`{"questions":[{"question":"Which output format should I use?","header":"Format","options":[{"label":"Summary","description":"Short","future":{"x":true}},{"label":"Detailed","description":"Long"}],"multiSelect":false,"future":[null]},{"question":"Which sections should I include?","header":"Sections","options":[{"label":"Intro"},{"label":"End"}],"multiSelect":true}],"unknown":{"nested":[false,1]}}`)
 	// An assistant tool_use can be displayed/decoded, but cannot grant authority.
-	emitPermissionFrame(t, c, map[string]any{"type": "assistant", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "tool/question", "name": "AskUserQuestion", "input": input}}}})
+	emitPermissionFrame(t, c, map[string]any{"type": "assistant", "session_id": "s", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "tool/question", "name": "AskUserQuestion", "input": input}}}})
 	assistant := receive(t, c)
 	var display types.AskUserQuestionInput
 	{
@@ -30,16 +30,11 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		got := permissionResponses(t, permissionSnapshot(t, c))
 		require.EqualValues(t, 0, len(got), "assistant event answered", got)
 	}
-	select {
-	case <-requests:
-		require.FailNow(t, "assistant event minted handle")
-	default:
-	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": "request/original", "future": true, "request": map[string]any{
 		"subtype": "can_use_tool", "tool_name": "AskUserQuestion", "tool_use_id": "tool/question", "agent_id": "agent", "title": "Choose", "permission_suggestions": nil, "input": input, "future": map[string]any{"nested": false},
 	}})
-	event := receive(t, c)
-	p := awaitPermission(t, requests)
+	delivery := receivePermission(t, c)
+	event, p := delivery.Event, delivery.Permission
 	metadata, err := p.Metadata()
 	require.NoError(t, err)
 	observed, err := event.Control.PermissionMetadata()
@@ -65,6 +60,11 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		questions.Questions[0].Question: {Text: &custom},
 		questions.Questions[1].Question: {Labels: []string{"Intro", "End"}},
 	})
+	require.NoError(t, err)
+	require.ErrorIs(t, p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated}), ErrUnsupported)
+	require.NoError(t, p.Context().Err())
+	selected := "Intro, End"
+	updated, err = questions.WithAnswers(map[string]QuestionAnswer{questions.Questions[0].Question: {Text: &custom}, questions.Questions[1].Question: {Text: &selected}})
 	require.NoError(t, err)
 	{
 		err := p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated})
@@ -118,12 +118,11 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 
 func (s *controlInteractionSuite) TestQuestionPreparedAnswerCannotBypassCancellation() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
-	emitPermission(t, c, "cancel/question", "AskUserQuestion", json.RawMessage(`{"questions":[{"question":"Proceed?","options":[]}]}`))
-	p := awaitPermission(t, requests)
+	p := emitPermission(t, c, "cancel/question", "AskUserQuestion", json.RawMessage(`{"questions":[{"question":"Proceed?","options":[]}]}`)).Permission
 	metadata, err := p.Metadata()
 	require.NoError(t, err)
 	var input types.AskUserQuestionInput
@@ -147,8 +146,7 @@ func (s *controlInteractionSuite) TestQuestionPreparedAnswerCannotBypassCancella
 		got := permissionResponses(t, permissionSnapshot(t, c))
 		require.EqualValues(t, 0, len(got), "late answer written", got)
 	}
-	emitPermission(t, c, "deny/question", "AskUserQuestion", json.RawMessage(`{"questions":[]}`))
-	deny := awaitPermission(t, requests)
+	deny := emitPermission(t, c, "deny/question", "AskUserQuestion", json.RawMessage(`{"questions":[]}`)).Permission
 	{
 		err := deny.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "User declined"})
 		require.NoError(t, err)

@@ -48,7 +48,7 @@ func (r *resumeThreadResult) UnmarshalJSON(data []byte) error {
 }
 
 // UnsubscribeThread requests server-side detachment for the specified native
-// thread once and returns the native status. It does not close local Subscription
+// thread once and returns the native status. It does not close a coordinated Session
 // values or imply interruption, deletion, or completion of a thread's work.
 func (c *Client) UnsubscribeThread(ctx context.Context, p types.ThreadUnsubscribeParams) (types.ThreadUnsubscribeResponse, error) {
 	c.mu.Lock()

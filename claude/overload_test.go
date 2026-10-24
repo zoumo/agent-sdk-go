@@ -77,8 +77,8 @@ func runOverloadFixture(mode string, reader *bufio.Reader) {
 }
 
 func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
-	fields := []string{"EventBuffer", "FrameBytes", "PendingControls", "ControlBuffer", "StderrBytes", "PendingPermissions", "PermissionWorkers", "PermissionHistory"}
-	maxima := []int{65536, 64 << 20, 65536, 65536, 16 << 20, 65536, 1024, 1 << 20}
+	fields := []string{"EventBuffer", "FrameBytes", "PendingControls", "ControlBuffer", "StderrBytes", "PendingPermissions", "PermissionHistory"}
+	maxima := []int{65536, 64 << 20, 65536, 65536, 16 << 20, 65536, 1 << 20}
 	for i, field := range fields {
 		for _, value := range []int{-1, maxima[i] + 1, int(^uint(0) >> 1)} {
 			t.Run(fmt.Sprintf("%s/%d", field, value), func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 				capture := filepath.Join(opts.WorkDir, "must-not-start.json")
 				opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
 				reflect.ValueOf(&opts.Limits).Elem().FieldByName(field).SetInt(int64(value))
-				c, err := NewClient(context.Background(), opts)
+				c, err := openTestInteraction(context.Background(), opts)
 				require.Nilf(t, c, "invalid limit: %v, %v", c, err)
 				require.Errorf(t, err, "invalid limit: %v, %v", c, err)
 				require.Containsf(t, err.Error(), field, "invalid limit: %v, %v", c, err)
@@ -119,24 +119,23 @@ func (s *controlInteractionSuite) TestEventBacklogStillDispatchesControlResponse
 		e := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(e.Raw, &v)
-		require.EqualValuesf(t, "sequence", e.Type, "order: %s", e.Raw)
+		require.EqualValuesf(t, "sequence", eventKind(e), "order: %s", e.Raw)
 		require.EqualValuesf(t, i, v.Seq, "order: %s", e.Raw)
 	}
-	require.Equal(t, "rejected", receive(t, c).Type)
+	require.Equal(t, "rejected", eventKind(receive(t, c)))
 }
 
 func (s *controlInteractionSuite) TestBacklogThenProtocolFailureWakesInterruptAndPermissionWithRetainedOrder() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	release := make(chan struct{})
 	defer close(release)
 	c := s.openFixture(t, "overload_controls", func(o *Options) {
 		o.Limits.EventBuffer = 3
-		o.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release }
+
 	})
 	send(t, c, "permission")
-	require.NotNil(t, receive(t, c).Control, "missing permission")
-	p := awaitPermission(t, requests)
+	p := receivePermission(t, c).Permission
 	pending := interruptAsync(c, context.Background())
 	receiveInterrupt(t, c)
 	send(t, c, "fill")
@@ -169,10 +168,10 @@ func (s *controlInteractionSuite) TestBacklogThenProtocolFailureWakesInterruptAn
 		e := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(e.Raw, &v)
-		require.EqualValuesf(t, "sequence", e.Type, "accepted order: %s", e.Raw)
+		require.EqualValuesf(t, "sequence", eventKind(e), "accepted order: %s", e.Raw)
 		require.EqualValuesf(t, i, v.Seq, "accepted order: %s", e.Raw)
 	}
-	require.Equal(t, "rejected", receive(t, c).Type, "extra event beyond legacy capacity survived")
+	require.Equal(t, "rejected", eventKind(receive(t, c)), "extra event beyond legacy capacity survived")
 	_, err := nextNative(c, context.Background())
 	require.ErrorIs(t, err, ErrProtocol)
 	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), "waiting", ErrClosed)
@@ -182,15 +181,14 @@ func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
 	t := s.T()
 	for _, mode := range []string{"malformed", "oversize", "truncated", "eof", "exit"} {
 		t.Run(mode, func(t *testing.T) {
-			requests := make(chan *PermissionRequest, 1)
+
 			c := s.openFixture(t, "overload_controls", func(o *Options) {
 				o.Limits.FrameBytes = 2048
 				o.Limits.StderrBytes = 32
-				o.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 			})
 			send(t, c, "permission")
-			receive(t, c)
-			p := awaitPermission(t, requests)
+			p := receivePermission(t, c).Permission
 			var pending []<-chan error
 			for range 3 {
 				pending = append(pending, interruptAsync(c, context.Background()))
@@ -229,7 +227,7 @@ func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
 				e := receive(t, c)
 				var v struct{ Seq int }
 				json.Unmarshal(e.Raw, &v)
-				require.EqualValuesf(t, "sequence", e.Type, "retained order: %s", e.Raw)
+				require.EqualValuesf(t, "sequence", eventKind(e), "retained order: %s", e.Raw)
 				require.EqualValuesf(t, i, v.Seq, "retained order: %s", e.Raw)
 			}
 			{
@@ -241,18 +239,22 @@ func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
 	}
 }
 
-func (s *controlInteractionSuite) TestShutdownDoesNotWaitForIgnoringCallback() {
+func (s *controlInteractionSuite) TestShutdownDoesNotWaitForRetainedCaller() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	release := make(chan struct{})
 	returned := make(chan struct{})
 	defer close(release)
 	c := s.openFixture(t, "overload_controls", func(o *Options) {
-		o.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release; close(returned) }
+
 	})
 	send(t, c, "permission")
-	receive(t, c)
-	p := awaitPermission(t, requests)
+	p := receivePermission(t, c).Permission
+	go func() {
+		defer close(returned)
+		<-release
+		_ = p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+	}()
 	start := time.Now()
 	{
 		err := c.Close()

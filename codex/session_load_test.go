@@ -350,6 +350,8 @@ func TestSessionLoadOwnerPrecedesAncestorObservation(t *testing.T) {
 	for range historyEvents(t, child) {
 	}
 	require.Equal(t, codex.LoadSucceeded, child.LoadState().Status)
+	_, hasStart := child.StartResponse()
+	require.False(t, hasStart, "Load retains resume evidence without manufacturing a start response")
 	emitRequests(t, f.c, `{"method":"thread/started","params":{"thread":{"id":"child","parentThreadId":"native-thread-42"}}}`, `{"method":"future/both","params":{"threadId":"child"}}`)
 	require.NoError(t, child.Close())
 	emitRequests(t, f.c, `{"method":"future/after-child-close","params":{"threadId":"child"}}`)

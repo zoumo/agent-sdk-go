@@ -34,9 +34,30 @@ for row in records:
     assert set(row['evidence']) == {'unit', 'mock', 'race', 'live'}
     for refs in row['evidence'].values():
         assert set(refs) <= known_evidence, refs
+# Historical records retain their original paths and outcomes. Explicit migrations
+# validate the current check locations without relabeling those old outcomes.
+migration = json.loads((HERE / 'test-migrations.json').read_text())
+assert re.fullmatch(r'[0-9a-f]{40}', migration['historical_base']), 'invalid migration base'
+assert (ROOT / migration['audit']).is_file(), 'missing guarantee audit'
+retirements = {row['retired_path']: row for row in migration['retirements']}
+assert len(retirements) == len(migration['retirements']), 'duplicate retired path'
+used_retirements = {}
 for row in evidence['records']:
     for test_file in row.get('test_files', []):
-        assert (ROOT / test_file).is_file(), test_file
+        if (ROOT / test_file).is_file():
+            assert test_file not in retirements, 'migration for an existing path: ' + test_file
+            continue
+        assert test_file in retirements, 'unmapped missing historical path: ' + test_file
+        retired = retirements[test_file]
+        assert row['id'] in retired['evidence_ids'], 'unmapped historical evidence: ' + row['id']
+        used_retirements.setdefault(test_file, set()).add(row['id'])
+for path, retired in retirements.items():
+    assert set(retired['evidence_ids']) == used_retirements.get(path), 'stale or incomplete migration: ' + path
+    assert len(retired['evidence_ids']) == len(set(retired['evidence_ids'])), 'duplicate migration evidence'
+    assert retired['replacements'], 'migration without current checks: ' + path
+    assert len(retired['replacements']) == len(set(retired['replacements'])), 'duplicate replacement path'
+    for replacement in retired['replacements']:
+        assert replacement != path and (ROOT / replacement).is_file(), 'missing replacement: ' + replacement
 
 if len(sys.argv) > 1:
     source_root = pathlib.Path(sys.argv[1])

@@ -27,11 +27,9 @@ request can be answered later. `OutcomeUnknown` means bytes may have reached
 the CLI; it consumes the attempt and must not be retried. Successful answers
 prove complete local writes, not CLI acceptance or tool completion.
 
-Session rejects the legacy PermissionHandler option with a migration error.
-The temporary NewClient callback/default policy remains only for existing
-consumers during expand-contract; Session does not use that callback pool or
-automatic-denial path. Runtime `PermissionAnswer` now lives in `claude`; native
-decision and update data live in `claude/types`.
+The callback option and worker pool are removed. Runtime PermissionAnswer lives
+in claude; native decision/update data stays in claude/types. Actual handles are
+received through Session, with no automatic-denial path.
 
 Identity replay protection is bounded and never evicted to regrant authority.
 Duplicate IDs or exhausted permission/history limits explicitly terminate the

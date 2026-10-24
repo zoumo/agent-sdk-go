@@ -166,11 +166,7 @@ func TestSessionParentKnowledgeCanArriveAfterChildWithoutReordering(t *testing.T
 }
 
 func TestSessionLongMainConversationHasNoUUIDLedgerLimit(t *testing.T) {
-	s := openSessionFixture(t, func(o *SessionOptions) {
-		o.Subagents.MaxDedupEntries = 1
-		o.Subagents.MaxRuns = 1
-		o.Subagents.MaxCreationEntries = 1
-	})
+	s := openSessionFixture(t)
 	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
 	sessionNative(t, s)
 	for i := 0; i < 8300; i++ {

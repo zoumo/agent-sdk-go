@@ -61,8 +61,6 @@ type Client struct {
 	pending             map[ID]*pendingCall
 	reverse             map[ID]*requestState
 	requestHistory      map[requestKey]*requestState
-	requests            chan Request
-	subscriptions       map[*Subscription]struct{}
 	attachments         map[string]*sessionAttachment
 	sessions            map[string]*Session
 	sessionReservations int
@@ -167,7 +165,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 }
 
 func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {
@@ -221,7 +219,7 @@ func (c *Client) ReadThread(ctx context.Context, p types.ThreadReadParams) (type
 }
 
 // StartTurn returns only the native response. Events, including early or stale
-// completions, never change its result. Subscribe before starting a turn.
+// completions, never change its result. Open a Session before starting a turn to retain its native facts.
 func (c *Client) StartTurn(ctx context.Context, p types.TurnStartParams) (types.TurnStartResponse, error) {
 	finish, err := c.beginThreadOperation(p.ThreadID)
 	if err != nil {
@@ -490,18 +488,6 @@ func (c *Client) fail(cause error) {
 			r.attempt.finishLocked(cause)
 		} else {
 			r.finishLocked(cause)
-		}
-	}
-	close(c.requests)
-	for t := range c.subscriptions {
-		terminal := cause
-		if cause == ErrClosed {
-			terminal = nil
-		}
-		if terminal != nil {
-			t.disconnectLocked(terminal)
-		} else {
-			t.finishLocked(nil)
 		}
 	}
 	for _, s := range c.sessions {

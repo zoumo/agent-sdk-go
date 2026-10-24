@@ -32,6 +32,8 @@ LoadState() LoadState
 
 Receive 是唯一消费入口，不另设 Events、Requests channel、审批回调或 History channel。并发调用争用同一 FIFO，不提供广播或独立游标。一次 context 取消只取消等待；与已经取出的记录竞争时可返回记录。Done 表示交互终止，Err 是稳定的首个交互终止原因；都不表示 FIFO 已排空。资源回收结果由 Close 返回，不能覆盖首个终止原因。正常关闭后 Receive 排空再返回 io.EOF，故障终止排空后返回终止错误。Close 幂等，清理不等消费。
 
+Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际收到的原生启动响应副本，保留 model、sandbox 和未知字段；Load 没有启动响应，返回 false，其恢复证据仍由 LoadState 提供。该只读查询不发送协议消息，不产生消费者或回答权限。
+
 主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。主身份的 requested 与 observed 状态分别保留；Claude Open 尚未观察原生根身份时不伪造 observed ID。
 
 ## 原生输入与配置

@@ -27,18 +27,18 @@ import (
     "github.com/zoumo/agent-sdk-go/claude/types"
 )
 
-var _ func(context.Context) (claude.ReceivedEvent, error) = (*claude.Client)(nil).Receive
+var _ func(context.Context) (claude.Received, error) = (*claude.Session)(nil).Receive
 
 // Compile-only: go test runs no CLI or model calls.
 func consumeConfig(ctx context.Context, config types.Options) error {
     opts := claude.OptionsFromTypes(config)
     opts.Subagents = claude.SubagentOptions{MaxNodes: 8}
-    c, err := claude.Open(ctx, opts)
+    c, err := claude.Open(ctx, claude.SessionOptions(opts))
     if err != nil { return err }
     defer c.Close()
     r, err := c.Receive(ctx)
     if err != nil { return err }
-    if native, ok := r.(types.Event); ok {
+    if native := r.Event; native != nil {
         var official *types.MessageOrigin = native.Origin
         var message *types.Message = native.Assistant
         _ = official

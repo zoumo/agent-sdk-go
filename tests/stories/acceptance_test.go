@@ -944,6 +944,11 @@ func claudeSessionTarget(t *testing.T, story string) {
 				break
 			}
 			if r.Event != nil && fixtureKind(r.Raw) == "fixture_burst" {
+				var payload struct {
+					Sequence int `json:"sequence"`
+				}
+				require.NoError(t, json.Unmarshal(r.Raw, &payload))
+				assert.Equal(t, drained, payload.Sequence, "accepted native facts must drain in order")
 				drained++
 			}
 		}

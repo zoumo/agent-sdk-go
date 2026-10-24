@@ -60,7 +60,7 @@ Subscription 接纳的事件进入动态 FIFO，慢消费不会因 EventQueue �
 
 ## US-010
 
-未知方法保留原始 JSON；无 ID 未知消息不按文本去重。原生关系去重范围由 tree_current_contract_test.go 等测试约束。
+未知数据在确认归属的 Session 或诊断隔离区保留原文；原生重复不按实体/UUID 抑制。Session 与原请求回归见当前验收映射。
 
 自动化：`TestCommonStories/TestNativeAdapters/US-010/codex`；源码证据为以上公开 API 和本包协议测试，离线证据为实际运行结果，真实运行均未验证。
 

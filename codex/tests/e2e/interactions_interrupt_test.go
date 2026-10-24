@@ -84,10 +84,12 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 			t.Log("scenario=user-input environment-blocked: plan mode not advertised; no turn dispatched")
 			continue
 		}
-		th, e := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Sandbox: types.Some(types.SandboxModeReadOnly), Ephemeral: types.Some(true)})
+		session, e := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: types.ThreadStartParams{Cwd: types.Some(cwd), Sandbox: types.Some(types.SandboxModeReadOnly), Ephemeral: types.Some(true)}})
 		require.True(t, e == nil,
 			"thread/start failed: %T", e)
 
+		th, ok := session.StartResponse()
+		require.True(t, ok, "native startup response missing")
 		id := th.Thread.ID
 		require.False(t, id == "" || th.Sandbox.ReadOnly == nil,
 			"identity/read-only sandbox assertion failed")
@@ -99,11 +101,8 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 			}
 		}
 		t.Logf("scenario=%s native thread created read-only; inherited approval_policy=%s", sc.name, policy)
-		s, e := c.Subscribe(ctx, id, types.SubscriptionOptions{})
-		require.True(t, e == nil,
-			"subscribe failed")
 
-		p := types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: sc.prompt})}}}
+		p := codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: sc.prompt})}}}
 		if sc.name == "user-input" {
 			p.CollaborationMode = types.Some(types.CollaborationMode{Mode: types.ModeKindPlan, Settings: types.Settings{Model: th.Model, DeveloperInstructions: types.Null[string](), ReasoningEffort: types.Null[types.ReasoningEffort]()}})
 		}
@@ -115,7 +114,27 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 		attempts++
 		// Start asynchronously so events and reverse requests are consumed while
 		// the RPC is pending, not only after its response.
-		go func() { v, e := c.StartTurn(ctx, p); starts <- result{v, e} }()
+		go func() { v, e := session.Submit(ctx, p); starts <- result{v.Response, e} }()
+		receiveCtx, stopReceive := context.WithCancel(ctx)
+		records := make(chan codex.Received)
+		receiveErrors := make(chan error, 1)
+		readerDone := make(chan struct{})
+		defer func() { stopReceive(); _ = session.Close(); <-readerDone }()
+		go func() {
+			defer close(readerDone)
+			for {
+				record, err := session.Receive(receiveCtx)
+				if err != nil {
+					receiveErrors <- err
+					return
+				}
+				select {
+				case records <- record:
+				case <-receiveCtx.Done():
+					return
+				}
+			}
+		}()
 		timer := time.NewTimer(120 * time.Second)
 		turn := ""
 		response := ""
@@ -136,78 +155,78 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 				}
 				turn = response
 				t.Logf("scenario=%s turn/start responded native ID matched", sc.name)
-			case r, ok := <-c.Requests():
-				if !ok {
-					require.FailNow(t, "requests ended")
-				}
-				if seen[r.ID()] {
-					require.FailNow(t, "duplicate request ID")
-				}
-				seen[r.ID()] = true
-				d, e := r.Data()
-				if e != nil {
-					require.FailNowf(t, "assertion failed", "typed request decode failed: %T", e)
-				}
-				matched := false
-				var answer any
-				switch v := d.(type) {
-				case *types.CommandExecutionRequestApprovalParams:
-					matched = v.ThreadID == id && v.TurnID == turn
-					// Approvals are declined: this test never expands read-only rights.
-					answer = types.CommandExecutionRequestApprovalResponse{Decision: types.CommandExecutionApprovalDecision{Value: types.Ptr(types.CommandExecutionApprovalDecisionValueDecline)}}
-					if matched && sc.name == "command" {
-						targets++
+			case record := <-records:
+				if record.Request != nil {
+					r := record.Request
+
+					if seen[r.ID()] {
+						require.FailNow(t, "duplicate request ID")
 					}
-				case *types.FileChangeRequestApprovalParams:
-					matched = v.ThreadID == id && v.TurnID == turn
-					answer = types.FileChangeRequestApprovalResponse{Decision: types.FileChangeApprovalDecisionDecline}
-					if matched && sc.name == "file" {
-						targets++
+					seen[r.ID()] = true
+					d, e := r.Data()
+					if e != nil {
+						require.FailNowf(t, "assertion failed", "typed request decode failed: %T", e)
 					}
-				case *types.PermissionsRequestApprovalParams:
-					matched = v.ThreadID == id && v.TurnID == turn
-					answer = types.PermissionsRequestApprovalResponse{Permissions: types.GrantedPermissionProfile{}, Scope: types.Some(types.PermissionGrantScopeTurn)}
-					if matched && sc.name == "permissions" {
-						targets++
-					}
-				case *types.ToolRequestUserInputParams:
-					matched = v.ThreadID == id && v.TurnID == turn && sc.name == "user-input" && len(v.Questions) == 1
-					if matched {
-						q := v.Questions[0]
-						opts, _ := q.Options.Get()
-						labels := map[string]bool{}
-						for _, o := range opts {
-							labels[o.Label] = true
-						}
-						matched = len(opts) == 2 && labels["BLUE"] && labels["RED"] && !q.IsSecret.ValueOr(false)
-						if matched {
-							answer = types.ToolRequestUserInputResponse{Answers: map[string]types.ToolRequestUserInputAnswer{q.ID: {Answers: []string{"BLUE"}}}}
+					matched := false
+					var answer any
+					switch v := d.(type) {
+					case *types.CommandExecutionRequestApprovalParams:
+						matched = v.ThreadID == id && v.TurnID == turn
+						// Approvals are declined: this test never expands read-only rights.
+						answer = types.CommandExecutionRequestApprovalResponse{Decision: types.CommandExecutionApprovalDecision{Value: types.Ptr(types.CommandExecutionApprovalDecisionValueDecline)}}
+						if matched && sc.name == "command" {
 							targets++
 						}
+					case *types.FileChangeRequestApprovalParams:
+						matched = v.ThreadID == id && v.TurnID == turn
+						answer = types.FileChangeRequestApprovalResponse{Decision: types.FileChangeApprovalDecisionDecline}
+						if matched && sc.name == "file" {
+							targets++
+						}
+					case *types.PermissionsRequestApprovalParams:
+						matched = v.ThreadID == id && v.TurnID == turn
+						answer = types.PermissionsRequestApprovalResponse{Permissions: types.GrantedPermissionProfile{}, Scope: types.Some(types.PermissionGrantScopeTurn)}
+						if matched && sc.name == "permissions" {
+							targets++
+						}
+					case *types.ToolRequestUserInputParams:
+						matched = v.ThreadID == id && v.TurnID == turn && sc.name == "user-input" && len(v.Questions) == 1
+						if matched {
+							q := v.Questions[0]
+							opts, _ := q.Options.Get()
+							labels := map[string]bool{}
+							for _, o := range opts {
+								labels[o.Label] = true
+							}
+							matched = len(opts) == 2 && labels["BLUE"] && labels["RED"] && !q.IsSecret.ValueOr(false)
+							if matched {
+								answer = types.ToolRequestUserInputResponse{Answers: map[string]types.ToolRequestUserInputAnswer{q.ID: {Answers: []string{"BLUE"}}}}
+								targets++
+							}
+						}
 					}
-				}
-				aCtx, done := context.WithTimeout(ctx, 30*time.Second)
-				if matched && answer != nil {
-					e = r.Handle().Answer(aCtx, answer)
-					answers++
-				} else {
-					e = r.Handle().Reject(aCtx, &codex.RPCError{Code: -32602, Message: "outside isolated validation scope"})
-				}
-				done()
-				if e != nil {
-					require.FailNowf(t, "assertion failed", "response failed; no replay: %T", e)
-				}
-				if !errors.Is(r.Handle().Err(), codex.ErrRequestAnswered) {
-					require.FailNow(t, "one-shot terminal state mismatch")
-				}
-				t.Logf("scenario=%s request=%s native_identity_matched=%t single_response_written=true (not server acceptance)", sc.name, r.Method(), matched)
-			case ev, ok := <-s.Events():
-				if !ok {
-					require.FailNow(t, "event stream closed")
-				}
-				if ev.Raw == nil {
+					aCtx, done := context.WithTimeout(ctx, 30*time.Second)
+					if matched && answer != nil {
+						e = r.Handle().Answer(aCtx, answer)
+						answers++
+					} else {
+						e = r.Handle().Reject(aCtx, &codex.RPCError{Code: -32602, Message: "outside isolated validation scope"})
+					}
+					done()
+					if e != nil {
+						require.FailNowf(t, "assertion failed", "response failed; no replay: %T", e)
+					}
+					if !errors.Is(r.Handle().Err(), codex.ErrRequestAnswered) {
+						require.FailNow(t, "one-shot terminal state mismatch")
+					}
+					t.Logf("scenario=%s request=%s native_identity_matched=%t single_response_written=true (not server acceptance)", sc.name, r.Method(), matched)
 					continue
 				}
+				if record.Event == nil {
+					continue
+				}
+				ev := *record.Event
+
 				native := ev
 				if native.DecodeError != nil {
 					require.FailNow(t, "event loss/decode failure")
@@ -225,7 +244,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 					if v.ThreadID == id && v.TurnID == turn && sc.name == "interrupt" && v.Item.CommandExecution != nil && v.Item.CommandExecution.Command == "sleep 20" && !interruptSent {
 						itemID = v.Item.CommandExecution.ID
 						interruptSent = true
-						_, e := c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: id, TurnID: turn})
+						e := session.Interrupt(ctx, codex.InterruptOptions{TurnID: turn})
 						require.True(t, e == nil,
 							"interrupt failed; no replay: %T", e)
 
@@ -261,11 +280,13 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 						t.Logf("scenario=%s matched turn/completed status=%s", sc.name, status)
 					}
 				}
-			case <-s.Done():
-				require.FailNowf(t, "assertion failed", "subscription ended early: %T", s.Err())
+			case err := <-receiveErrors:
+				require.FailNowf(t, "receive ended", "Session failed: %T", err)
+			case <-session.Done():
+				require.FailNowf(t, "assertion failed", "subscription ended early: %T", session.Err())
 			case <-timer.C:
 				if turn != "" && !interruptSent {
-					_, _ = c.InterruptTurn(ctx, types.TurnInterruptParams{ThreadID: id, TurnID: turn})
+					_ = session.Interrupt(ctx, codex.InterruptOptions{TurnID: turn})
 				}
 				require.FailNow(t, "turn timed out; at most one interrupt; termination unconfirmed")
 			case <-ctx.Done():
@@ -273,9 +294,11 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 			}
 		}
 		timer.Stop()
+		stopReceive()
+		<-readerDone
 		{
-			e := s.Close()
-			require.False(t, e != nil || s.Err() != nil,
+			e := session.Close()
+			require.False(t, e != nil || session.Err() != nil,
 				"subscription close/loss failure")
 		}
 

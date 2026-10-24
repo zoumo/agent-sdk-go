@@ -18,12 +18,15 @@ var fullRevision = regexp.MustCompile(`^[0-9a-f]{40}$`)
 func recordingRevision(info *debug.BuildInfo, explicit string) (revisionEvidence, error) {
 	var revision string
 	clean := false
-	if info != nil {
+	if info != nil && info.Main.Path == "github.com/zoumo/agent-sdk-go" {
 		for _, setting := range info.Settings {
 			switch setting.Key {
 			case "vcs.revision":
 				revision = setting.Value
 			case "vcs.modified":
+				if setting.Value == "true" {
+					return revisionEvidence{}, fmt.Errorf("recorder: SDK build source is modified; build from a clean commit")
+				}
 				clean = setting.Value == "false"
 			}
 		}

@@ -12,14 +12,14 @@ import (
 // Goroutines exchange outcomes with the test; no suite method runs in parallel.
 type controlInteractionSuite struct {
 	suite.Suite
-	clients []*Client
+	clients []*interaction
 }
 
 func TestControlInteractions(t *testing.T) { suite.Run(t, new(controlInteractionSuite)) }
 
 func (s *controlInteractionSuite) SetupTest() { s.clients = nil }
 
-func (s *controlInteractionSuite) openFixture(t *testing.T, mode string, configure ...func(*Options)) *Client {
+func (s *controlInteractionSuite) openFixture(t *testing.T, mode string, configure ...func(*Options)) *interaction {
 	t.Helper()
 	c := openFixture(t, mode, configure...)
 	s.clients = append(s.clients, c)

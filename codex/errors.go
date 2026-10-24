@@ -21,7 +21,7 @@ var (
 	ErrRequestExpired       = errors.New("codex: server request handle expired locally")
 	ErrRequestResolved      = errors.New("codex: server request resolved by server")
 	ErrRequestOverflow      = fmt.Errorf("codex: server request capacity exhausted: %w", ErrLimit)
-	// Deprecated: incoming requests now use Requests and never emit this error.
+	// Deprecated: incoming requests use Session.Receive and never emit this error.
 	ErrUnsupportedRequest = errors.New("codex: server request unsupported by this SDK slice")
 )
 
@@ -49,8 +49,8 @@ func (e *CallError) Error() string {
 func (e *CallError) Unwrap() error { return e.Cause }
 
 // AnswerError preserves a one-shot server-response failure and its wire evidence.
-// NotSent after queue admission still consumes the handle. OutcomeUnknown must
-// never be replayed. A successful Answer returns nil (the frame was written),
+// NotSent leaves a still-live handle available for an explicit answer attempt.
+// OutcomeUnknown consumes authority and must never be replayed. A successful Answer returns nil (the frame was written),
 // which is not evidence that the peer accepted or acted on the response.
 type AnswerError struct {
 	Method   string

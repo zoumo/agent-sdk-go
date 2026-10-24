@@ -1,5 +1,8 @@
 # 合仓实施规格与验收票据
 
+Historical migration evidence; APIs/test paths below reflect their original baseline.
+Current Session contraction and guarantee mappings are in [ticket 13 audit](reviews/ticket13-contract-consumers-progress.md).
+
 设计依据：用户附件 `agent-sdk-go-monorepo-design.md`（2026-10-18，Library 全文 351 行）。附件结尾是上一次设计阶段的范围，本次授权实施 A–D。当前环境未提供 `to-spec` / `to-ticket` 技能，以下采用规格、票据、验收证据的对应结构。
 
 ## 规格

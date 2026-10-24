@@ -25,15 +25,14 @@ func TestHistoryEventsPreserveNativeContent(t *testing.T) {
 	require.NoError(t, err)
 	defer h.Close()
 	var kinds []string
-	consume := func(received ReceivedEvent) {
-		if e, ok := received.(Event); ok {
+	consume := func(received Event) {
+		if e := received; true {
 			kinds = append(kinds, e.Type)
 		}
 	}
 	i := 0
 	for received := range h.Records() {
-		e, ok := received.(Event)
-		require.True(t, ok)
+		e := received
 		require.NotNil(t, e.History)
 		require.Less(t, i, len(sourceLines))
 		require.Equal(t, sourceLines[i], []byte(e.History.Raw))

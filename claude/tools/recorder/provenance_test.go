@@ -11,6 +11,7 @@ func TestRecordingRevisionEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		name, explicit, vcs string
 		modified            bool
+		external            bool
 		wantSource          string
 		fail                bool
 	}{
@@ -20,11 +21,18 @@ func TestRecordingRevisionEvidence(t *testing.T) {
 		{name: "clean build", vcs: revision, wantSource: "go-build-vcs"},
 		{name: "dirty build", vcs: revision, modified: true, fail: true},
 		{name: "dirty caller cannot certify", vcs: revision, explicit: revision, modified: true, fail: true},
+		{name: "external main without SDK evidence", external: true, vcs: revision, fail: true},
+		{name: "external main caller assertion", external: true, vcs: revision, explicit: revision, wantSource: "caller-supplied-unverified"},
+		{name: "dirty without revision", modified: true, explicit: revision, fail: true},
 		{name: "conflicting evidence", vcs: revision, explicit: "0000000000000000000000000000000000000000", fail: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			info := &debug.BuildInfo{}
-			if tc.vcs != "" {
+			info := &debug.BuildInfo{Main: debug.Module{Path: "github.com/zoumo/agent-sdk-go"}}
+			if tc.external {
+				info.Main.Path = "example.invalid/record-wrapper"
+				info.Deps = []*debug.Module{{Path: "github.com/zoumo/agent-sdk-go", Version: "v0.0.0-unverified"}}
+			}
+			if tc.vcs != "" || tc.modified {
 				info.Settings = []debug.BuildSetting{{Key: "vcs.revision", Value: tc.vcs}, {Key: "vcs.modified", Value: map[bool]string{true: "true", false: "false"}[tc.modified]}}
 			}
 			got, err := recordingRevision(info, tc.explicit)

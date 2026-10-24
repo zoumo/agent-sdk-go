@@ -1,13 +1,13 @@
 sequenceDiagram
     participant C as CLI
-    participant G as Go SDK
-    participant H as PermissionHandler
+    participant G as Session
     participant A as 应用
-    C->>G: control_request can_use_tool，request_id 与工具 input
-    G->>H: 原始 PermissionRequest 句柄
-    G-->>A: Native，原始请求与可证明的来源
-    Note over H,A: 回调派发与 Receive 不承诺相互先后
-    H->>G: 原句柄 Answer，allow 或 deny
-    G->>C: 对同 request_id 发送一次 control_response
-    C-->>G: 原生事件继续，或报告取消/错误
-    G-->>A: Native，保持原内容和状态
+    C->>G: control_request can_use_tool，原 request_id 与 input
+    A->>G: Receive
+    G-->>A: ReceivedRequest，原始 PermissionRequest 句柄
+    Note over G,A: 应用等待决策时，原生读取与控制响应继续
+    A->>G: 原句柄 Answer，显式 allow 或 deny
+    G->>C: 对原 request_id 发送一次 control_response
+    Note over G,A: 原生取消或 Close 撤销权限，NotSent 保留仍有效句柄
+    C-->>G: 原生事件继续，或报告取消和错误
+    G-->>A: Receive 保留原内容和状态

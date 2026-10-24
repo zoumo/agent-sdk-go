@@ -115,9 +115,6 @@ func Load(ctx context.Context, o LoadOptions) (*Session, error) {
 	if err := process.defaults(); err != nil {
 		return nil, err
 	}
-	if process.PermissionHandler != nil {
-		return nil, dispatchFailure("load", ErrUnsupported)
-	}
 	s, err := newSession(process)
 	if err != nil {
 		return nil, err
@@ -130,7 +127,7 @@ func Load(ctx context.Context, o LoadOptions) (*Session, error) {
 	go func() {
 		defer close(s.loadDone)
 		defer cancel()
-		err := replayTranscript(loadCtx, opts, path, func(ReceivedEvent) error {
+		err := replayTranscript(loadCtx, opts, path, func(Event) error {
 			// No confirmed recovery route exists on this baseline. This callback is
 			// intentionally unreachable; a future route must admit to s.fifo directly.
 			return ErrResumeUnconfirmed

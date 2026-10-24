@@ -204,7 +204,7 @@ type StreamDelta struct {
 }
 
 // ControlRequest is an observable incoming control request. Configured
-// PermissionHandlers separately receive the sole answerable permission handle;
+// Session IncomingRequest separately carries the sole answerable permission handle;
 // this raw event is not an answer authority. Unsupported requests get an error.
 type ControlRequest struct {
 	RequestID string          `json:"request_id"`

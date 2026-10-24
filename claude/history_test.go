@@ -68,8 +68,7 @@ func TestHistoryBranchAndFailureContracts(t *testing.T) {
 			defer h.Close()
 			var ids []string
 			for received := range h.Records() {
-				r, ok := received.(Event)
-				require.True(t, ok)
+				r := received
 				ids = append(ids, r.UUID)
 				if tc.name == "unknown block retained" {
 					require.Contains(t, string(r.Raw), "future-block")
@@ -149,8 +148,7 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			if mode == "cancel" || mode == "close" || mode == "mutation" {
 				select {
 				case received := <-h.Records():
-					r, ok := received.(Event)
-					require.True(t, ok)
+					r := received
 					require.Equal(t, "u", r.UUID)
 				case <-time.After(time.Second):
 					t.Fatal("first record missing")
@@ -169,8 +167,7 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			}
 			var ids []string
 			for received := range h.Records() {
-				r, ok := received.(Event)
-				require.True(t, ok)
+				r := received
 				ids = append(ids, r.UUID)
 			}
 			select {
@@ -204,8 +201,7 @@ func TestHistorySessionsAreIsolated(t *testing.T) {
 	defer fast.Close()
 	var count int
 	for received := range fast.Records() {
-		r, ok := received.(Event)
-		require.True(t, ok)
+		r := received
 		require.Equal(t, second.SessionID, r.SessionID)
 		require.Contains(t, string(r.History.Raw), "second session")
 		count++
@@ -227,8 +223,7 @@ func TestHistoryLoadsOriginalMainChain(t *testing.T) {
 	defer h.Close()
 	var ids []string
 	for received := range h.Records() {
-		r, ok := received.(Event)
-		require.True(t, ok)
+		r := received
 		ids = append(ids, r.UUID)
 		require.True(t, json.Valid(r.Raw))
 		if r.UUID == "r" {
@@ -250,7 +245,7 @@ func loadOptions(t *testing.T, h HistoryOptions) LoadOptions {
 
 // The record reader is independent of native recovery. This private harness
 // tests projection/integrity only; it cannot confirm or bypass public Load.
-func readTranscriptForTest(ctx context.Context, o HistoryOptions, before func(context.Context) error) (*History, error) {
+func readTranscriptForTest(ctx context.Context, o HistoryOptions, before func(context.Context) error) (*transcriptTestStream, error) {
 	opts, path, err := prepareHistory(ctx, o)
 	if err != nil {
 		return nil, err
@@ -258,7 +253,7 @@ func readTranscriptForTest(ctx context.Context, o HistoryOptions, before func(co
 	if before == nil {
 		before = func(context.Context) error { return nil }
 	}
-	return history.Start(ctx, func(ctx context.Context, send func(ReceivedEvent) error) error {
+	return history.Start(ctx, func(ctx context.Context, send func(Event) error) error {
 		return replayTranscript(ctx, opts, path, send, before)
 	}, nil), nil
 }
@@ -295,7 +290,7 @@ func TestHistoryResumeAppendIntegrity(t *testing.T) {
 			defer h.Close()
 			var ids []string
 			for r := range h.Records() {
-				ids = append(ids, r.(Event).UUID)
+				ids = append(ids, r.UUID)
 			}
 			<-h.Done()
 			require.Equal(t, []string{"u"}, ids)
@@ -339,3 +334,6 @@ func TestHistoryMetadataIdentityCannotBypassValidation(t *testing.T) {
 		})
 	}
 }
+
+// Only parser tests use a drainable harness; production Load admits to Session.
+type transcriptTestStream = history.Stream[Event]

@@ -12,7 +12,6 @@ import (
 	"regexp"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
-	"github.com/zoumo/agent-sdk-go/internal/history"
 )
 
 // HistoryOptions selects exactly one native local main-session transcript.
@@ -38,8 +37,6 @@ type historyRecord struct {
 	Message    json.RawMessage `json:"message"`
 	Raw        json.RawMessage `json:"-"`
 }
-
-type History = history.Stream[ReceivedEvent]
 
 // HistoryError retains the offending entry when a transcript cannot be loaded.
 // Raw can contain private transcript content; do not log it without redaction.
@@ -98,7 +95,7 @@ type transcriptLink struct {
 	team       string
 }
 
-func replayTranscript(ctx context.Context, o HistoryOptions, path string, send func(ReceivedEvent) error, before func(context.Context) error) error {
+func replayTranscript(ctx context.Context, o HistoryOptions, path string, send func(Event) error, before func(context.Context) error) error {
 	f, err := openHistoryFile(path)
 	if err != nil {
 		return err

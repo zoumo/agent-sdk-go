@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -118,17 +119,6 @@ func emitRequests(t *testing.T, c *codex.Client, frames ...string) {
 		require.NoError(t, err)
 	}
 }
-func nextRequest(t *testing.T, c *codex.Client) codex.Request {
-	t.Helper()
-	select {
-	case request, ok := <-c.Requests():
-		require.True(t, ok, "requests closed: %v", c.Err())
-		return request
-	case <-time.After(3 * time.Second):
-		require.FailNow(t, "server request not delivered")
-	}
-	return codex.Request{}
-}
 func awaitAnswer(t *testing.T, h codex.AnswerHandle, cause error) {
 	t.Helper()
 	select {
@@ -200,15 +190,26 @@ func waitResponsePrefix(t *testing.T, f fixture) {
 }
 
 func runServerRequestIDsAndNativeReplyEnvelopes(t *testing.T, f fixture) {
-	require.Equal(t, f.c.Requests(), f.c.Requests(), "Requests must return one shared pull queue")
-	// ID 2 deliberately equals the client request-frames call's ID. The string
+	f = ownRequestFixture(t, f)
+	require.Equal(t, "native-thread-42", f.session.ThreadID())
+	// ID 3 deliberately equals the client request-frames call's ID. The string
 	// and integer variants must remain different in both protocol directions.
 	emitRequests(t, f.c,
-		requestFrame(`2`, "future/approval", `{"native":9007199254740993}`),
-		requestFrame(`"2"`, "future/approval", `null`),
-		requestFrame(`9007199254740993`, "future/input", ``))
-	requests := []codex.Request{nextRequest(t, f.c), nextRequest(t, f.c), nextRequest(t, f.c)}
-	wantIDs := []codex.ID{codex.IntegerID(2), codex.StringID("2"), codex.IntegerID(9007199254740993)}
+		requestFrame(`3`, "future/approval", `{"threadId":"native-thread-42","native":9007199254740993}`),
+		requestFrame(`"3"`, "future/approval", `{"threadId":"native-thread-42","nullable":null}`),
+		requestFrame(`9007199254740993`, "future/input", `{"threadId":"native-thread-42"}`))
+	requests := []codex.Request{nextOwnedRequest(t, f), nextOwnedRequest(t, f), nextOwnedRequest(t, f)}
+	// The fake writes the reverse requests before replying to request-frames.
+	// Assert the collision against the actual pending outbound RPC, after Open.
+	calls := trace(t, f.trace)
+	var emittedID json.RawMessage
+	for _, call := range calls {
+		if call.Method == "request-frames" {
+			emittedID = call.ID
+		}
+	}
+	require.Equal(t, "3", string(emittedID), "test must collide while request-frames is pending")
+	wantIDs := []codex.ID{codex.IntegerID(3), codex.StringID("3"), codex.IntegerID(9007199254740993)}
 	for i, r := range requests {
 		require.False(t, r.ID() != wantIDs[i] || r.Handle().Err() != nil, "request %d identity or state changed: %v %v", i, r.ID(), r.Handle().Err())
 		{
@@ -250,14 +251,15 @@ func runServerRequestIDsAndNativeReplyEnvelopes(t *testing.T, f fixture) {
 }
 
 func runServerRequestRawAndTypedCopies(t *testing.T, f fixture) {
+	f = ownRequestFixture(t, f)
 	const raw = `{ "n" : 9007199254740993, "nested" : [null, true] }`
 	emitRequests(t, f.c,
 		requestFrame(`"known"`, "item/commandExecution/requestApproval", approvalParams),
-		requestFrame(`"bad"`, "item/commandExecution/requestApproval", `{"threadId":false}`),
+		requestFrame(`"bad"`, "item/commandExecution/requestApproval", `{"threadId":"native-thread-42","startedAtMs":false}`),
 		requestFrame(`"unknown"`, "future/raw", raw),
 		requestFrame(`"null"`, "future/raw", `null`),
 		requestFrame(`"absent"`, "future/raw", ``))
-	r := nextRequest(t, f.c)
+	r := nextOwnedRequest(t, f)
 	require.False(t, r.Method() != "item/commandExecution/requestApproval" || string(r.Params()) != approvalParams, "native method or payload changed")
 	data, err := r.Data()
 	p, ok := data.(*types.CommandExecutionRequestApprovalParams)
@@ -270,21 +272,21 @@ func runServerRequestRawAndTypedCopies(t *testing.T, f fixture) {
 	fresh, err := r.Data()
 	require.NoError(t, err)
 	require.False(t, fresh.(*types.CommandExecutionRequestApprovalParams).ThreadID != "native-thread-42" || string(fresh.(*types.CommandExecutionRequestApprovalParams).UnknownFields["future"]) != `{"large":9007199254740993}` || string(r.Params()) != approvalParams, "caller mutation reached immutable request")
-	bad := nextRequest(t, f.c)
+	bad := nextOwnedRequest(t, f)
 	if data, err := bad.Data(); data != nil || err == nil {
 		require.FailNowf(t, "protocol scenario failed", "malformed known payload: %#v %v", data, err)
 	} else {
 		var de *codex.DecodeError
 		require.False(t, !errors.As(err, &de) || de.Method != bad.Method() || errors.Unwrap(de) == nil, "decode error lost method or cause: %v", err)
 	}
-	for _, want := range []string{raw, "null", ""} {
-		r := nextRequest(t, f.c)
-		require.Equal(t, want, string(r.Params()), "raw payload = %s, want %s", r.Params(), want)
-		{
-			data, err := r.Data()
-			require.False(t, data != nil || err != nil, "unknown payload must remain raw: %#v %v", data, err)
-		}
+	for i, want := range []string{raw, "null", ""} {
+		diagnostic := f.c.Unattributed().Records[i]
+		var envelope map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(diagnostic.Raw, &envelope))
+		require.Equal(t, want, string(envelope["params"]))
+		require.Equal(t, requestFrame([]string{`"unknown"`, `"null"`, `"absent"`}[i], "future/raw", want), string(diagnostic.Raw))
 	}
+
 	require.False(t, f.c.Err() != nil || bad.Handle().Err() != nil, "payload decode failure terminated connection or handle")
 	{
 		err := bad.Handle().Reject(context.Background(), &codex.RPCError{Code: -32602, Message: "invalid parameters"})
@@ -293,28 +295,29 @@ func runServerRequestRawAndTypedCopies(t *testing.T, f fixture) {
 }
 
 func TestStalledServerRequestsDoNotBlockCallsOrEvents(t *testing.T) {
-	f := startFake(t, "request-normal", codex.Limits{RequestQueue: 8})
-	s := subscribe(t, f.c, context.Background())
+	f := startRequestFake(t, "request-normal", codex.Limits{RequestQueue: 8})
+	s := f.session
 	emitRequests(t, f.c,
-		requestFrame(`"pending-1"`, "future/approval", `{}`),
-		requestFrame(`"pending-2"`, "future/input", `{}`),
-		`{"method":"future/duringApproval","params":{"large":9007199254740993}}`)
+		requestFrame(`"pending-1"`, "future/approval", `{"threadId":"native-thread-42"}`),
+		requestFrame(`"pending-2"`, "future/input", `{"threadId":"native-thread-42"}`),
+		`{"method":"future/duringApproval","params":{"threadId":"native-thread-42","large":9007199254740993}}`)
 	responseBarrier(t, f)
-	e := nextEvent(t, s)
-	require.False(t, e.Method != "future/duringApproval" || string(e.Params) != `{"large":9007199254740993}`, "event stopped behind approval UI: %#v", e)
-	require.Len(t, answerFrames(t, f.trace), 0, "SDK automatically answered a server request")
+
 	for _, id := range []string{"pending-1", "pending-2"} {
 		{
-			r := nextRequest(t, f.c)
+			r := nextOwnedRequest(t, f)
 			require.Equal(t, codex.StringID(id), r.ID(), "pull queue lost request order")
 		}
 	}
+	e := *nextSessionNative(t, s).Event
+	require.False(t, e.Method != "future/duringApproval" || string(e.Params) != `{"threadId":"native-thread-42","large":9007199254740993}`, "event stopped behind approval UI: %#v", e)
+	require.Len(t, answerFrames(t, f.trace), 0, "SDK automatically answered a server request")
 }
 
 func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
-	f := startFake(t, "request-normal", codex.Limits{MaxFrameBytes: 4096})
-	emitRequests(t, f.c, requestFrame(`"preflight"`, "future/approval", `{}`))
-	r := nextRequest(t, f.c)
+	f := startRequestFake(t, "request-normal", codex.Limits{MaxFrameBytes: 4096})
+	emitRequests(t, f.c, requestFrame(`"preflight"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	r := nextOwnedRequest(t, f)
 	h := r.Handle()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -345,31 +348,32 @@ func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
 }
 
 func TestServerRequestLocalCancellation(t *testing.T) {
-	f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1, RequestQueue: 1})
-	emitRequests(t, f.c, requestFrame(`"old"`, "future/approval", `{}`))
-	r := nextRequest(t, f.c)
+	f := startRequestFake(t, "request-normal", codex.Limits{ActiveRequests: 1, RequestQueue: 1})
+	emitRequests(t, f.c, requestFrame(`"old"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	r := nextOwnedRequest(t, f)
 	require.NoError(t, r.Handle().Cancel())
 	awaitAnswer(t, r.Handle(), codex.ErrRequestCanceled)
 	answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrRequestCanceled)
 	answerError(t, r.Handle().Reject(context.Background(), &codex.RPCError{Code: -1, Message: "late"}), r, codex.NotSent, codex.ErrRequestCanceled)
 	responseBarrier(t, f)
 	require.Empty(t, answerFrames(t, f.trace), "local abandonment invented a wire decision")
-	emitRequests(t, f.c, requestFrame(`"new"`, "future/approval", `{}`))
-	fresh := nextRequest(t, f.c)
+	emitRequests(t, f.c, requestFrame(`"new"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	fresh := nextOwnedRequest(t, f)
 	require.NoError(t, fresh.Handle().Answer(context.Background(), "caller decision"))
 }
 
 func runResolvedServerRequestUsesExactIDAndKeepsEvent(t *testing.T, f fixture) {
-	s := subscribe(t, f.c, context.Background())
+	f = ownRequestFixture(t, f)
+	s := f.session
 	emitRequests(t, f.c,
 		requestFrame(`7`, "item/commandExecution/requestApproval", approvalParams),
 		requestFrame(`"7"`, "item/commandExecution/requestApproval", approvalParams))
-	numeric, text := nextRequest(t, f.c), nextRequest(t, f.c)
+	numeric, text := nextOwnedRequest(t, f), nextOwnedRequest(t, f)
 	emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":7}}`)
 	awaitAnswer(t, numeric.Handle(), codex.ErrRequestResolved)
 	require.NoError(t, text.Handle().Err(), "numeric resolution invalidated textual ID")
 	answerError(t, numeric.Handle().Answer(context.Background(), "late"), numeric, codex.NotSent, codex.ErrRequestResolved)
-	e := nextEvent(t, s)
+	e := *nextSessionNative(t, s).Event
 	require.False(t, e.Method != "serverRequest/resolved" || string(e.Params) != `{"threadId":"native-thread-42","requestId":7}` || e.DecodeError != nil, "native resolution event lost: %#v", e)
 	{
 		err := text.Handle().Answer(context.Background(), "still pending")
@@ -383,19 +387,19 @@ func runResolvedServerRequestUsesExactIDAndKeepsEvent(t *testing.T, f fixture) {
 }
 
 func TestServerRequestCapacityFailureIsExplicit(t *testing.T) {
-	for _, capacity := range []string{"queue", "active"} {
+	for _, capacity := range []string{"history", "active"} {
 		t.Run(capacity, func(t *testing.T) {
-			limits := codex.Limits{RequestQueue: 1, ActiveRequests: 8}
+			limits := codex.Limits{RequestIdentities: 1, ActiveRequests: 8}
 			if capacity == "active" {
 				limits = codex.Limits{RequestQueue: 8, ActiveRequests: 1}
 			}
-			f := startFake(t, "request-normal", limits)
-			emitRequests(t, f.c, requestFrame(`"first"`, "future/approval", `{}`))
+			f := startRequestFake(t, "request-normal", limits)
+			emitRequests(t, f.c, requestFrame(`"first"`, "future/approval", `{"threadId":"native-thread-42"}`))
 			var first codex.Request
 			if capacity == "active" {
-				first = nextRequest(t, f.c)
+				first = nextOwnedRequest(t, f)
 			}
-			err := f.c.Call(context.Background(), "request-frames", []string{requestFrame(`"overflow"`, "future/approval", `{}`)}, nil)
+			err := f.c.Call(context.Background(), "request-frames", []string{requestFrame(`"overflow"`, "future/approval", `{"threadId":"native-thread-42"}`)}, nil)
 			callError(t, err, codex.OutcomeUnknown, codex.ErrRequestOverflow)
 			require.False(t, !errors.Is(err, codex.ErrLimit) || !errors.Is(f.c.Err(), codex.ErrRequestOverflow), "overflow omitted resource-limit evidence: %v", err)
 			if capacity == "active" {
@@ -409,10 +413,11 @@ func TestServerRequestCapacityFailureIsExplicit(t *testing.T) {
 }
 
 func runServerRequestCloseInvalidatesAndUnblocks(t *testing.T, f fixture) {
-	emitRequests(t, f.c, requestFrame(`"old-connection"`, "future/approval", `{}`))
-	old := nextRequest(t, f.c)
+	f = ownRequestFixture(t, f)
+	emitRequests(t, f.c, requestFrame(`"old-connection"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	old := nextOwnedRequest(t, f)
 	consumer := make(chan bool, 1)
-	go func() { _, ok := <-f.c.Requests(); consumer <- ok }()
+	go func() { _, err := f.session.Receive(context.Background()); consumer <- err == nil }()
 	{
 		err := f.c.Close()
 		require.NoError(t, err)
@@ -424,9 +429,9 @@ func runServerRequestCloseInvalidatesAndUnblocks(t *testing.T, f fixture) {
 	case <-time.After(time.Second):
 		require.FailNow(t, "Close did not unblock request consumer")
 	}
-	fresh := startFake(t, "request-normal", codex.Limits{})
-	emitRequests(t, fresh.c, requestFrame(`"old-connection"`, "future/approval", `{}`))
-	current := nextRequest(t, fresh.c)
+	fresh := startRequestFake(t, "request-normal", codex.Limits{})
+	emitRequests(t, fresh.c, requestFrame(`"old-connection"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	current := nextOwnedRequest(t, fresh)
 	answerError(t, old.Handle().Answer(context.Background(), "stale"), old, codex.NotSent, codex.ErrClosed)
 	{
 		err := current.Handle().Answer(context.Background(), "fresh")
@@ -437,8 +442,9 @@ func runServerRequestCloseInvalidatesAndUnblocks(t *testing.T, f fixture) {
 }
 
 func runConcurrentServerRequestAnswerIsOneShot(t *testing.T, f fixture) {
+	f = ownRequestFixture(t, f)
 	emitRequests(t, f.c, requestFrame(`"race"`, "future/approval", approvalParams))
-	r := nextRequest(t, f.c)
+	r := nextOwnedRequest(t, f)
 	const callers = 32
 	start := make(chan struct{})
 	results := make(chan error, callers)
@@ -471,9 +477,10 @@ func runConcurrentServerRequestAnswerIsOneShot(t *testing.T, f fixture) {
 }
 
 func runServerRequestDuplicateActiveIDTerminates(t *testing.T, f fixture) {
-	emitRequests(t, f.c, requestFrame(`"duplicate"`, "future/approval", `{}`))
-	r := nextRequest(t, f.c)
-	err := f.c.Call(context.Background(), "request-frames", []string{requestFrame(`"duplicate"`, "future/other", `{}`)}, nil)
+	f = ownRequestFixture(t, f)
+	emitRequests(t, f.c, requestFrame(`"duplicate"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	r := nextOwnedRequest(t, f)
+	err := f.c.Call(context.Background(), "request-frames", []string{requestFrame(`"duplicate"`, "future/other", `{"threadId":"native-thread-42"}`)}, nil)
 	callError(t, err, codex.OutcomeUnknown, codex.ErrProtocol)
 	awaitAnswer(t, r.Handle(), codex.ErrProtocol)
 	_ = f.c.Close()
@@ -487,9 +494,9 @@ func TestPartialServerRequestAnswerIsUnknownAndNeverReplayed(t *testing.T) {
 			if stop == "timeout" {
 				limits.WriteTimeout = 100 * time.Millisecond
 			}
-			f := startFake(t, "request-prefix-blocked", limits)
-			emitRequests(t, f.c, requestFrame(`"partial-answer"`, "future/approval", `{}`))
-			r := nextRequest(t, f.c)
+			f := startRequestFake(t, "request-prefix-blocked", limits)
+			emitRequests(t, f.c, requestFrame(`"partial-answer"`, "future/approval", `{"threadId":"native-thread-42"}`))
+			r := nextOwnedRequest(t, f)
 			{
 				err := f.c.Call(context.Background(), "request-block", nil, nil)
 				require.NoError(t, err)
@@ -556,14 +563,14 @@ func TestEverySupportedServerRequestTypedNativeRoundTrip(t *testing.T) {
 		{"item/fileChange/requestApproval", `{"threadId":"native-thread-42","turnId":"t","itemId":"f","startedAtMs":9007199254740993,"reason":null,"grantRoot":"","future":null}`, `{"decision":"cancel","future":null}`, new(types.FileChangeRequestApprovalParams), new(types.FileChangeRequestApprovalResponse)},
 		{"item/permissions/requestApproval", `{"threadId":"native-thread-42","turnId":"t","itemId":"p","cwd":"/synthetic","startedAtMs":9007199254740993,"permissions":{},"reason":null,"environmentId":null,"future":null}`, `{"permissions":{},"scope":"turn","strictAutoReview":false,"future":null}`, new(types.PermissionsRequestApprovalParams), new(types.PermissionsRequestApprovalResponse)},
 		{"item/tool/requestUserInput", `{"threadId":"native-thread-42","turnId":"t","itemId":"i","isBlocking":false,"questions":[{"id":"q","header":"H","question":"Choose","isOther":false,"isSecret":false,"options":[]}],"autoResolutionMs":null,"future":null}`, `{"answers":{"q":{"answers":["caller choice"],"future":null}},"future":null}`, new(types.ToolRequestUserInputParams), new(types.ToolRequestUserInputResponse)},
-		{"applyPatchApproval", `{"callId":"patch","conversationId":"native-conversation","fileChanges":{"synthetic":{"type":"add","content":"caller text"}},"reason":null,"grantRoot":"","future":null}`, `{"decision":"denied","future":null}`, new(types.ApplyPatchApprovalParams), new(types.ApplyPatchApprovalResponse)},
-		{"execCommandApproval", `{"callId":"exec","conversationId":"native-conversation","command":[],"cwd":"/synthetic","parsedCmd":[],"approvalId":null,"reason":"","future":null}`, `{"decision":"abort","future":null}`, new(types.ExecCommandApprovalParams), new(types.ExecCommandApprovalResponse)},
+		{"applyPatchApproval", `{"callId":"patch","conversationId":"native-thread-42","fileChanges":{"synthetic":{"type":"add","content":"caller text"}},"reason":null,"grantRoot":"","future":null}`, `{"decision":"denied","future":null}`, new(types.ApplyPatchApprovalParams), new(types.ApplyPatchApprovalResponse)},
+		{"execCommandApproval", `{"callId":"exec","conversationId":"native-thread-42","command":[],"cwd":"/synthetic","parsedCmd":[],"approvalId":null,"reason":"","future":null}`, `{"decision":"abort","future":null}`, new(types.ExecCommandApprovalParams), new(types.ExecCommandApprovalResponse)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.method, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
+			f := startRequestFake(t, "request-normal", codex.Limits{})
 			emitRequests(t, f.c, requestFrame(`"native-request"`, tc.method, tc.params))
-			r := nextRequest(t, f.c)
+			r := nextOwnedRequest(t, f)
 			data, err := r.Data()
 			require.NoError(t, err)
 			require.False(t, reflect.TypeOf(data) != reflect.TypeOf(tc.paramsType), "typed payload = %T, want %T: %v", data, tc.paramsType, err)
@@ -598,9 +605,10 @@ func decodeExactJSON(t *testing.T, raw []byte) any {
 }
 
 func runMalformedOrUnrelatedResolutionKeepsHandle(t *testing.T, f fixture) {
-	s := subscribe(t, f.c, context.Background())
+	f = ownRequestFixture(t, f)
+	s := f.session
 	emitRequests(t, f.c, requestFrame(`"native-id"`, "item/commandExecution/requestApproval", approvalParams))
-	r := nextRequest(t, f.c)
+	r := nextOwnedRequest(t, f)
 	params := []string{
 		`{"threadId":"different-thread","requestId":"native-id"}`,
 		`{"threadId":"native-thread-42","requestId":"different-id"}`,
@@ -614,9 +622,16 @@ func runMalformedOrUnrelatedResolutionKeepsHandle(t *testing.T, f fixture) {
 	for _, p := range params {
 		emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":`+p+`}`)
 		require.NoError(t, r.Handle().Err(), "unrelated resolution invalidated handle: %s", p)
-		{
-			e := nextEvent(t, s)
-			require.False(t, e.Method != "serverRequest/resolved" || string(e.Params) != p, "malformed resolution lost raw observability: %#v", e)
+		var owner struct {
+			ThreadID string `json:"threadId"`
+		}
+		_ = json.Unmarshal([]byte(p), &owner)
+		raw := `{"method":"serverRequest/resolved","params":` + p + `}`
+		if owner.ThreadID == f.session.ThreadID() && strings.Count(p, `"requestId"`) == 1 {
+			require.Equal(t, raw, string(nextSessionNative(t, s).Raw))
+		} else {
+			records := f.c.Unattributed().Records
+			require.Equal(t, raw, string(records[len(records)-1].Raw))
 		}
 	}
 	{
@@ -626,15 +641,15 @@ func runMalformedOrUnrelatedResolutionKeepsHandle(t *testing.T, f fixture) {
 }
 
 func TestServerRequestQueueAdmissionFailureIsReusable(t *testing.T) {
-	f := startFake(t, "request-cooperative-gate", codex.Limits{OutboundQueue: 1, WriteTimeout: 5 * time.Second, ShutdownTimeout: 200 * time.Millisecond})
+	f := startRequestFake(t, "request-cooperative-gate", codex.Limits{OutboundQueue: 1, WriteTimeout: 5 * time.Second, ShutdownTimeout: 200 * time.Millisecond})
 	var frames []string
 	for i := range 4 {
-		frames = append(frames, requestFrame(fmt.Sprint(100+i), "future/approval", `{}`))
+		frames = append(frames, requestFrame(fmt.Sprint(100+i), "future/approval", `{"threadId":"native-thread-42"}`))
 	}
 	emitRequests(t, f.c, frames...)
 	var requests []codex.Request
 	for range frames {
-		requests = append(requests, nextRequest(t, f.c))
+		requests = append(requests, nextOwnedRequest(t, f))
 	}
 	{
 		err := f.c.Call(context.Background(), "request-gate", nil, nil)
@@ -707,9 +722,9 @@ func (h heldAnswerMarshaler) MarshalJSON() ([]byte, error) {
 func TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose(t *testing.T) {
 	for _, stop := range []string{"cancel", "close"} {
 		t.Run(stop, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{ShutdownTimeout: 200 * time.Millisecond})
-			emitRequests(t, f.c, requestFrame(`"held-marshal"`, "future/approval", `{}`))
-			r := nextRequest(t, f.c)
+			f := startRequestFake(t, "request-normal", codex.Limits{ShutdownTimeout: 200 * time.Millisecond})
+			emitRequests(t, f.c, requestFrame(`"held-marshal"`, "future/approval", `{"threadId":"native-thread-42"}`))
+			r := nextOwnedRequest(t, f)
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once sync.Once
 			defer once.Do(func() { close(release) })
@@ -850,9 +865,10 @@ func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) 
 }
 
 func runConcurrentAnswerAndCancelHaveOneWinner(t *testing.T, f fixture) {
+	f = ownRequestFixture(t, f)
 	for iteration := range 8 {
-		emitRequests(t, f.c, requestFrame(fmt.Sprint(iteration+1000), "future/approval", `{}`))
-		r := nextRequest(t, f.c)
+		emitRequests(t, f.c, requestFrame(fmt.Sprint(iteration+1000), "future/approval", `{"threadId":"native-thread-42"}`))
+		r := nextOwnedRequest(t, f)
 		start := make(chan struct{})
 		type result struct {
 			cancel bool
@@ -914,7 +930,7 @@ func TestMalformedServerRequestEnvelopeTerminates(t *testing.T) {
 	}
 	for i, frame := range frames {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
+			f := startRequestFake(t, "request-normal", codex.Limits{})
 			err := f.c.Call(context.Background(), "request-frames", []string{frame}, nil)
 			callError(t, err, codex.OutcomeUnknown, codex.ErrProtocol)
 			_ = f.c.Close()
@@ -924,10 +940,11 @@ func TestMalformedServerRequestEnvelopeTerminates(t *testing.T) {
 }
 
 func runConcurrentAnswerAndNativeResolutionHaveOneOutcome(t *testing.T, f fixture) {
+	f = ownRequestFixture(t, f)
 	for iteration := range 16 {
 		id := fmt.Sprint(iteration + 2000)
 		emitRequests(t, f.c, requestFrame(id, "item/commandExecution/requestApproval", approvalParams))
-		r := nextRequest(t, f.c)
+		r := nextOwnedRequest(t, f)
 		start := make(chan struct{})
 		answer, resolved := make(chan error, 1), make(chan error, 1)
 		go func() {
@@ -967,9 +984,9 @@ func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
 	// not race an unrelated short lifetime against these explicit outcomes.
 	for _, firstOutcome := range []string{"cancel", "resolved", "answered"} {
 		t.Run(firstOutcome, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1})
+			f := startRequestFake(t, "request-normal", codex.Limits{ActiveRequests: 1})
 			emitRequests(t, f.c, requestFrame(`"reused"`, "item/commandExecution/requestApproval", approvalParams))
-			old := nextRequest(t, f.c)
+			old := nextOwnedRequest(t, f)
 			cause := codex.ErrRequestCanceled
 			switch firstOutcome {
 			case "cancel":
@@ -988,11 +1005,11 @@ func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
 				}
 			}
 			awaitAnswer(t, old.Handle(), cause)
-			emitRequests(t, f.c, requestFrame(`"reused"`, "future/newRequest", `{"different":true}`))
-			fresh := nextRequest(t, f.c)
+			emitRequests(t, f.c, requestFrame(`"reused"`, "future/newRequest", `{"threadId":"native-thread-42","different":true}`))
+			fresh := nextOwnedRequest(t, f)
 			answerError(t, old.Handle().Answer(context.Background(), "stale"), old, codex.NotSent, cause)
 			require.ErrorIs(t, old.Handle().Cancel(), cause, "old handle changed after ID reuse")
-			require.False(t, fresh.Handle().Err() != nil || fresh.Method() != "future/newRequest" || string(fresh.Params()) != `{"different":true}`, "old handle affected new request with same native ID")
+			require.False(t, fresh.Handle().Err() != nil || fresh.Method() != "future/newRequest" || string(fresh.Params()) != `{"threadId":"native-thread-42","different":true}`, "old handle affected new request with same native ID")
 			{
 				err := fresh.Handle().Answer(context.Background(), "second answer")
 				require.NoError(t, err)
@@ -1009,10 +1026,10 @@ func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
 }
 
 func TestBufferedRequestsRemainInspectableAfterClose(t *testing.T) {
-	f := startFake(t, "request-normal", codex.Limits{RequestQueue: 3, RequestTimeout: 30 * time.Millisecond})
+	f := startRequestFake(t, "request-normal", codex.Limits{RequestQueue: 3, RequestTimeout: 30 * time.Millisecond})
 	emitRequests(t, f.c,
-		requestFrame(`"buffered-one"`, "future/approval", `{}`),
-		requestFrame(`"buffered-two"`, "future/approval", `{}`))
+		requestFrame(`"buffered-one"`, "future/approval", `{"threadId":"native-thread-42"}`),
+		requestFrame(`"buffered-two"`, "future/approval", `{"threadId":"native-thread-42"}`))
 	// Leave the queue unattended beyond the deprecated explicit timeout.
 	// No policy decision or discard is allowed.
 	time.Sleep(150 * time.Millisecond)
@@ -1021,10 +1038,17 @@ func TestBufferedRequestsRemainInspectableAfterClose(t *testing.T) {
 		require.NoError(t, err)
 	}
 	var count int
-	for r := range f.c.Requests() {
+	for {
+		received, err := f.session.Receive(context.Background())
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		require.NotNil(t, received.Request)
+		r := received.Request.Request
 		count++
 		awaitAnswer(t, r.Handle(), codex.ErrClosed)
-		require.False(t, string(r.Params()) != `{}` || r.Method() != "future/approval", "terminal queued request lost immutable data")
+		require.False(t, string(r.Params()) != `{"threadId":"native-thread-42"}` || r.Method() != "future/approval", "terminal queued request lost immutable data")
 		answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrClosed)
 	}
 	require.False(t, count != 2 || len(answerFrames(t, f.trace)) != 0, "Close drained %d queued requests or emitted policy answers", count)
@@ -1033,16 +1057,16 @@ func TestBufferedRequestsRemainInspectableAfterClose(t *testing.T) {
 func TestLegacyRequestResolutionUsesConversationIdentity(t *testing.T) {
 	for _, method := range []string{"applyPatchApproval", "execCommandApproval"} {
 		t.Run(method, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{})
-			params := `{"callId":"native-call","conversationId":"native-legacy","fileChanges":{}}`
+			f := startRequestFake(t, "request-normal", codex.Limits{})
+			params := `{"callId":"native-call","conversationId":"native-thread-42","fileChanges":{}}`
 			if method == "execCommandApproval" {
-				params = `{"callId":"native-call","conversationId":"native-legacy","command":[],"cwd":"/synthetic","parsedCmd":[]}`
+				params = `{"callId":"native-call","conversationId":"native-thread-42","command":[],"cwd":"/synthetic","parsedCmd":[]}`
 			}
 			emitRequests(t, f.c, requestFrame(`"legacy"`, method, params))
-			r := nextRequest(t, f.c)
+			r := nextOwnedRequest(t, f)
 			emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"wrong-conversation","requestId":"legacy"}}`)
 			require.NoError(t, r.Handle().Err(), "wrong legacy conversation resolved request")
-			emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"native-legacy","requestId":"legacy"}}`)
+			emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":"legacy"}}`)
 			awaitAnswer(t, r.Handle(), codex.ErrRequestResolved)
 			answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrRequestResolved)
 			responseBarrier(t, f)
@@ -1053,20 +1077,48 @@ func TestLegacyRequestResolutionUsesConversationIdentity(t *testing.T) {
 
 func TestServerRequestsArrivingDuringInitializeAreRetained(t *testing.T) {
 	f := startFake(t, "request-during-initialize", codex.Limits{})
-	r := nextRequest(t, f.c)
-	require.False(t, r.ID() != codex.IntegerID(1) || r.Method() != "future/earlyApproval" || string(r.Params()) != `{"beforeInitialized":true}`, "early reverse request lost identity during initialization")
-	{
-		err := r.Handle().Answer(context.Background(), "caller choice after handshake")
-		require.NoError(t, err)
-	}
+	records := f.c.Unattributed().Records
+	require.Len(t, records, 1)
+	require.JSONEq(t, `{"id":1,"method":"future/earlyApproval","params":{"beforeInitialized":true}}`, string(records[0].Raw))
+	f = ownRequestFixture(t, f)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	_, err := f.session.Receive(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	responseBarrier(t, f)
-	frames := trace(t, f.trace)
-	require.False(t, len(frames) != 4 || frames[0].Method != "initialize" || frames[1].Method != "initialized" || frames[2].Method != "" || string(frames[2].ID) != "1", "early answer escaped completed handshake: %+v", frames)
+	require.Empty(t, answerFrames(t, f.trace), "quarantine cannot grant authority or auto-answer")
 }
 
 func TestServerRequestOverflowDuringInitializeCleansUp(t *testing.T) {
-	f, err := openFake(t, "request-overflow-initialize", codex.Limits{RequestQueue: 1, ShutdownTimeout: 200 * time.Millisecond})
-	require.False(t, err == nil || f.c != nil || !errors.Is(err, codex.ErrRequestOverflow) || !errors.Is(err, codex.ErrLimit), "startup overflow exposed usable client: %v %v", f.c, err)
+	f, err := openFake(t, "request-overflow-initialize", codex.Limits{ActiveRequests: 1, ShutdownTimeout: 200 * time.Millisecond})
+	require.Nil(t, f.c)
+	require.ErrorIs(t, err, codex.ErrRequestOverflow)
+	require.ErrorIs(t, err, codex.ErrLimit)
 	assertReaped(t, f.pid)
-	require.Len(t, answerFrames(t, f.trace), 0, "startup overflow invented a policy answer")
+	require.Empty(t, answerFrames(t, f.trace))
+}
+
+func ownRequestFixture(t *testing.T, f fixture) fixture {
+	t.Helper()
+	var err error
+	f.session, err = codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.session.Close() })
+	return f
+}
+func startRequestFake(t *testing.T, mode string, limits codex.Limits) fixture {
+	t.Helper()
+	return ownRequestFixture(t, startFake(t, mode, limits))
+}
+func nextOwnedRequest(t *testing.T, f fixture) codex.Request {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for {
+		r, err := f.session.Receive(ctx)
+		require.NoError(t, err)
+		if r.Request != nil {
+			return r.Request.Request
+		}
+	}
 }

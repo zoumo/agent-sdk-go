@@ -12,13 +12,13 @@ CLI target **2.1.258**. Examples below are original usage examples, not copied u
 | Task | Go | Official TypeScript 0.3.258 | Official Python pinned commit |
 | --- | --- | --- | --- |
 | Configure | `SessionOptions{CLIPath, WorkDir, Model, Thinking, Subagents}`; explicit `LoadOptions` for recovery | `query({prompt, options:{cwd, model, resume, canUseTool}})` | `ClaudeAgentOptions(cwd=..., model=..., resume=..., can_use_tool=...)` |
-| Create | `Open(ctx, Options)` returns `*Client` | `query(...)` starts query/process | `await client.connect()` or async context manager |
-| Resume | `Open(ctx, Options{ResumeID:id})` | `options.resume` on new query | `ClaudeAgentOptions(resume=id)` on new client |
-| Send | `client.Send(ctx, text)` | string or async prompt iterable; `Query.streamInput` also declared | `await client.query(text)` |
-| Receive | `(ReceivedEvent,error)`; type switch on direct `Event` or concrete derived event | async iteration yields `SDKMessage` union | `receive_messages()` yields messages; `receive_response()` stops at result |
-| Approve/question | original `PermissionRequest`; `Input()` and `Answer(PermissionAnswer)` | `canUseTool`; updated input for questions; separate `onUserDialog` contract | `can_use_tool` and permission results; updated input for questions |
-| Children | automatic forwarding, private ledger; `SubagentAssociated` / `SubagentCreated` | `forwardSubagentText`, `agents`; native parent/tool/task evidence | `forward_subagent_text`, `agents`; parsed messages |
-| Close | `client.Close()` | `q.close()` | `await client.disconnect()` or context exit |
+| Create | `Open(ctx, SessionOptions)` returns `*Session` | `query(...)` starts query/process | `await client.connect()` or async context manager |
+| Resume | explicit `Load(ctx, LoadOptions)`; fixed baseline fails `ErrResumeUnconfirmed` | `options.resume` on new query | `ClaudeAgentOptions(resume=id)` on new client |
+| Send | `session.Submit(ctx, Input{Text:text})` | string or async prompt iterable; `Query.streamInput` also declared | `await client.query(text)` |
+| Receive | `(Received,error)`; Event, real Request, Observation or Load boundary | async iteration yields `SDKMessage` union | `receive_messages()` yields messages; `receive_response()` stops at result |
+| Approve/question | real `IncomingRequest`; Approve/Deny/Answer and original native handle | `canUseTool`; updated input for questions; separate `onUserDialog` contract | `can_use_tool` and permission results; updated input for questions |
+| Children | Session native forwarding, task/tool evidence and optional parent knowledge | `forwardSubagentText`, `agents`; native parent/tool/task evidence | `forward_subagent_text`, `agents`; parsed messages |
+| Close | `session.Close()` | `q.close()` | `await client.disconnect()` or context exit |
 
 Go does not expose the official `agents` configuration used in the examples below; child relationships are observed automatically from the owned CLI stream. Go does not implement the entire official configuration, agent-definition registration, hooks, MCP server configuration, history query helpers, or TypeScript `onUserDialog`/elicitation surface. Receiving unknown frames losslessly does not implement their response APIs. Native `Event.Origin` stays an official object; derived records carry their own provenance. Derived conveniences are implemented by Go and are not official message variants.
 

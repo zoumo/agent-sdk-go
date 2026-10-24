@@ -212,3 +212,27 @@ func TestNewRejectsInvalidLimits(t *testing.T) {
 		})
 	}
 }
+
+func (s *GraphSuite) TestUnknownParentVerticesHaveLiteralCapacity() {
+	t := s.T()
+	for _, tc := range []struct {
+		name              string
+		max, nodes, edges int
+		rejected          bool
+	}{
+		{"unknown parent exceeds capacity", 2, 1, 0, true}, {"unknown parent fits capacity", 3, 3, 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newGraph(t, Limits{MaxNodes: tc.max, MaxRelations: tc.max - 1, MaxDepth: 4})
+			require.NoError(t, g.Root("root"))
+			if tc.rejected {
+				reject(t, g, ErrNodeLimit, func() error { return g.Confirm("leaf", "unknown") })
+			} else {
+				require.NoError(t, g.Confirm("leaf", "unknown"))
+			}
+			nodes, edges := g.Counts()
+			assert.Equal(t, tc.nodes, nodes)
+			assert.Equal(t, tc.edges, edges)
+		})
+	}
+}

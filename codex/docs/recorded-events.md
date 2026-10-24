@@ -1,9 +1,10 @@
 # Recorded native events and offline replay
 
 The real sanitized fixtures were captured at SDK revision
-`d465677969cf968c6245e0adeaf7e32c42356913`. Only the public `StartThread` → `Subscribe(ctx, root, types.SubscriptionOptions{})` →
-`StartTurn` flow is used. `Requests` and the original answer handle service
-reverse requests while the managed observation drains.
+`d465677969cf968c6245e0adeaf7e32c42356913`. The original capture used the public `StartThread` → `Subscribe(ctx, root, types.SubscriptionOptions{})` →
+`StartTurn` flow. Its historical API names describe capture provenance. Current offline
+playback uses Session and replay.RunSession with the same native frames and
+original handles. Capture bytes and expected protocol order are unchanged.
 
 ## Recorded scenario scope
 

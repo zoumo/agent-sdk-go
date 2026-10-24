@@ -37,7 +37,7 @@ func dispatchFailure(op string, err error) error {
 	return &DispatchError{Op: op, State: state, Err: err}
 }
 
-func (c *Client) sendInput(ctx context.Context, input Input) error {
+func (c *interaction) sendInput(ctx context.Context, input Input) error {
 	fail := func(err error) error { return dispatchFailure("submit", err) }
 	if ctx == nil {
 		return fail(queue.ErrNilContext)

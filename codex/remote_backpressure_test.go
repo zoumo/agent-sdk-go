@@ -23,6 +23,7 @@ import (
 
 type blockedRemotePeer struct {
 	client                *codex.Client
+	session               *codex.Session
 	prefix, release, done chan struct{}
 	releaseOnce           sync.Once
 	requests              atomic.Int64
@@ -67,8 +68,15 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 		if err != nil || initialized.Method != "initialized" {
 			return
 		}
+		start, err := read()
+		if err != nil || start.Method != "thread/start" {
+			return
+		}
+		if send(start.ID, startResult) != nil {
+			return
+		}
 		for i := 0; i < 4; i++ {
-			if ws.Write(context.Background(), websocket.MessageText, []byte(requestFrame(fmt.Sprint(100+i), "future/approval", `{}`))) != nil {
+			if ws.Write(context.Background(), websocket.MessageText, []byte(requestFrame(fmt.Sprint(100+i), "future/approval", `{"threadId":"native-thread-42"}`))) != nil {
 				return
 			}
 		}
@@ -145,6 +153,8 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 			reportPeerError("peer connection did not close")
 		}
 	})
+	p.session, err = codex.Open(context.Background(), codex.SessionOptions{Client: p.client})
+	require.NoError(t, err)
 	{
 		err = p.client.Call(context.Background(), "gate", nil, nil)
 		require.NoError(t, err)
@@ -172,7 +182,7 @@ func TestRemoteBlockedWritesAndAnswers(t *testing.T) {
 								timeout = 500 * time.Millisecond
 							}
 							p := openBlockedRemote(t, codex.Limits{WriteTimeout: timeout, CallTimeout: 10 * time.Second})
-							request := nextRequest(t, p.client)
+							request := nextOwnedRequest(t, fixture{c: p.client, session: p.session})
 							ctx, cancel := context.WithCancel(context.Background())
 							defer cancel()
 							result := make(chan error, 1)
@@ -240,7 +250,7 @@ func TestRemoteQueuedAnswerAdmissionAndCancellation(t *testing.T) {
 			p := openBlockedRemote(t, codex.Limits{OutboundQueue: 1, WriteTimeout: 15 * time.Second, CallTimeout: 20 * time.Second})
 			requests := make([]codex.Request, 4)
 			for i := range requests {
-				requests[i] = nextRequest(t, p.client)
+				requests[i] = nextOwnedRequest(t, fixture{c: p.client, session: p.session})
 			}
 			writer := make(chan error, 1)
 			go func() { writer <- p.client.Call(context.Background(), "echo", strings.Repeat("x", 16<<20), nil) }()

@@ -105,7 +105,6 @@ type requestState struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	owner     *Session
-	legacy    bool
 	client    *Client
 	id        ID
 	method    string
@@ -121,15 +120,6 @@ type answerAttempt struct {
 	started, writing, finished bool
 	err                        error
 }
-
-// Requests returns the connection's bounded pull queue, active from startup.
-// Session-owned requests never enter this legacy queue.
-// A stalled consumer never blocks the reader. Exhausting RequestQueue or
-// ActiveRequests explicitly fails the connection with ErrRequestOverflow.
-// Close closes this channel without waiting for consumers; buffered requests
-// remain readable, but all their handles are invalidated. Native resolution can
-// leave terminal requests in the queue. Check Handle.Err before presenting a UI.
-func (c *Client) Requests() <-chan Request { return c.requests }
 
 func (h AnswerHandle) Done() <-chan struct{} {
 	if h.state == nil {
@@ -366,7 +356,6 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	c.reverse[id] = r
 	c.requestHistory[key] = r
 	r.owner = c.requestOwnerLocked(r.threadID)
-	r.legacy = len(c.sessions) == 0 && c.sessionReservations == 0
 	return c.deliverRequestLocked(r, params, raw)
 }
 
@@ -402,12 +391,6 @@ func (c *Client) deliverRequestLocked(r *requestState, params json.RawMessage, r
 			source.ThreadID = r.threadID
 			r.owner.acceptLocked(Received{Kind: ReceivedRequest, Request: incoming, Raw: request.Raw(), Params: request.Params(), Source: source, Origin: "live"})
 		}
-	} else if r.legacy {
-		if len(c.requests) >= cap(c.requests) {
-			r.finishLocked(ErrRequestOverflow)
-			return ErrRequestOverflow
-		}
-		c.requests <- request
 	} else {
 		c.quarantineLocked(raw)
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
 	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 // A malformed later frame must not erase a complete response or notification
@@ -60,13 +59,22 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 						reportPeerError("expected initialized: %v", err)
 						return
 					}
+					start, err := securityRead(ctx, ws)
+					if err != nil || start.Method != "thread/start" {
+						reportPeerError("expected Session start: %v", err)
+						return
+					}
+					if err = ws.Write(ctx, websocket.MessageText, securityResponse(start.ID, startResult)); err != nil {
+						reportPeerError("%v", err)
+						return
+					}
 					call, err := securityRead(ctx, ws)
 					if err != nil || call.Method != "synthetic/settle-before-invalid" {
 						reportPeerError("expected test call: %v", err)
 						return
 					}
 					response := securityResponse(call.ID, `"settled"`)
-					notification := []byte(`{"method":"synthetic/valid-prefix","params":{"value":1}}`)
+					notification := []byte(`{"method":"synthetic/valid-prefix","params":{"threadId":"native-thread-42","value":1}}`)
 					if len(response) >= 126 || len(notification) >= 126 {
 						reportPeerError("fixture requires canonical short frame payloads")
 						return
@@ -95,10 +103,8 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 					options.TLSConfig = &tls.Config{RootCAs: roots}
 				}
 				c := securityOpen(t, options)
-				sub, err := c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-				cleanupSubscription(t, sub)
+				sub, err := codex.Open(context.Background(), codex.SessionOptions{Client: c})
 				require.NoError(t, err)
-				nextTree(t, sub) // initial incomplete observation
 				var result string
 				{
 					err = c.Call(context.Background(), "synthetic/settle-before-invalid", nil, &result)
@@ -111,16 +117,16 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 					require.FailNow(t, "malformed later frame did not terminate the connection")
 				}
 				require.False(t, !errors.Is(c.Err(), codex.ErrProtocol) || !errors.Is(sub.Err(), codex.ErrProtocol), "terminal protocol cause lost: client=%v subscription=%v", c.Err(), sub.Err())
-				event, ok := <-sub.Events()
-				require.False(t, !ok || event.Method != "synthetic/valid-prefix" || !json.Valid(event.Params) || string(event.Params) != `{"value":1}`, "valid notification preceding failure was lost: %+v open=%v", event, ok)
-				{
-					gap := nextTree(t, sub)
-					require.Equal(t, "permanent-gap", gap.Reason, "missing gap: %+v", gap)
-				}
-				{
-					_, ok = <-sub.Events()
-					require.False(t, ok, "malformed frame produced an additional event")
-				}
+				received, err := sub.Receive(context.Background())
+				require.NoError(t, err)
+				event := received.Event
+				require.NotNil(t, event)
+				require.Equal(t, "synthetic/valid-prefix", event.Method)
+				require.True(t, json.Valid(event.Params))
+				require.Equal(t, `{"threadId":"native-thread-42","value":1}`, string(event.Params))
+				_, err = sub.Receive(context.Background())
+				require.ErrorIs(t, err, codex.ErrProtocol)
+
 			})
 		}
 	}

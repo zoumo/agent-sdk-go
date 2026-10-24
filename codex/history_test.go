@@ -118,6 +118,14 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 			send(m.ID, `{"data":[],"nextCursor":"wrong-request"}`)
 			return true
 		}
+		if mode == "history-v2-activity" {
+			var params struct {
+				Item json.RawMessage `json:"item"`
+			}
+			_ = json.Unmarshal([]byte(v2Activity("native-thread-42", "child-1", "historical-spawn", "started")), &params)
+			send(m.ID, `{"data":[{"id":"parent-turn","status":"completed","items":[`+string(params.Item)+`],"error":null}],"nextCursor":null}`)
+			return true
+		}
 		if mode == "history-rich" {
 			send(m.ID, `{"data":[{"id":"t1","status":"interrupted","items":[{"id":"tool","type":"commandExecution","command":"never executed","commandActions":[],"cwd":"/synthetic","status":"failed","exitCode":7,"aggregatedOutput":"retained failure","future":true},{"id":"compact","type":"contextCompaction"},{"id":"future","type":"futureItem","opaque":{"retained":true}}],"error":null,"futureTurn":true}],"nextCursor":null}`)
 			return true

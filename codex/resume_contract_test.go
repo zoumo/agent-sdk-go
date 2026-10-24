@@ -80,7 +80,7 @@ func (p *resumePeer) handle(mode string, m fakeEnvelope, send func(json.RawMessa
 		send(p.pending, resumeResponseJSON("late-native-id"))
 		send(m.ID, `"fresh"`)
 	case "resume-event":
-		fmt.Fprintln(os.Stdout, `{"method":"future/afterUnsubscribe","params":{"threadId":"another-native-thread"}}`)
+		fmt.Fprintf(os.Stdout, `{"method":"future/afterUnsubscribe","params":{"threadId":%q}}`+"\n", resumedNativeID)
 		send(m.ID, `{}`)
 	default:
 		return false
@@ -285,8 +285,8 @@ func (obs *observationSuite) TestUnsubscribeNativeStatusAndLocalIndependence() {
 	for _, status := range []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusNotLoaded, types.ThreadUnsubscribeStatusNotSubscribed, types.ThreadUnsubscribeStatusUnsubscribed, "futureStatus"} {
 		t.Run(string(status), func(t *testing.T) {
 			f := obs.fixture(t, "resume-status-"+string(status), codex.Limits{})
-			s := subscribe(t, f.c, context.Background())
-			result, err := f.c.UnsubscribeThread(context.Background(), types.ThreadUnsubscribeParams{ThreadID: resumedNativeID})
+			s := openTurnSession(t, f.c, context.Background())
+			result, err := f.c.UnsubscribeThread(context.Background(), types.ThreadUnsubscribeParams{ThreadID: "another-native-thread"})
 			require.False(t, err != nil || result.Status != status || string(result.UnknownFields["future"]) != "null", "native status lost: %+v %v", result, err)
 			select {
 			case <-s.Done():
@@ -298,13 +298,13 @@ func (obs *observationSuite) TestUnsubscribeNativeStatusAndLocalIndependence() {
 				require.NoError(t, err, err)
 			}
 			{
-				e := nextEvent(t, s)
+				e := nextTurnEvent(t, s)
 				require.Equal(t, "future/afterUnsubscribe", e.Method, "unrelated event was lost")
 			}
-			_ = s.Close()
-			awaitSubscription(t, s, nil)
 			_ = f.c.Close()
-			assertMethods(t, f, "initialize", "initialized", "thread/unsubscribe", "resume-event")
+			_ = s.Close()
+			awaitTurnSession(t, s, nil)
+			assertMethods(t, f, "initialize", "initialized", "thread/start", "thread/unsubscribe", "resume-event")
 		})
 	}
 }

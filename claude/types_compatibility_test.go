@@ -16,7 +16,7 @@ import (
 
 // Function signatures require identical types, not merely convertible structs.
 var (
-	_ func(context.Context) (ReceivedEvent, error)  = (*Client)(nil).Receive
+	_ func(context.Context) (Received, error)       = (*Session)(nil).Receive
 	_ func(context.Context, PermissionAnswer) error = (*PermissionRequest)(nil).Answer
 	_ types.Event                                   = Event{
 		System: &types.SystemEvent{},
@@ -35,9 +35,8 @@ var (
 		InitializeTimeout: time.Second, ShutdownTimeout: time.Second,
 		Limits: Limits{
 			EventBuffer: 1, FrameBytes: 1024, PendingControls: 1, ControlBuffer: 1,
-			StderrBytes: 1, PendingPermissions: 1, PermissionWorkers: 1, PermissionHistory: 1,
+			StderrBytes: 1, PendingPermissions: 1, PermissionHistory: 1,
 		},
-		PermissionHandler: func(*PermissionRequest) {},
 	}
 )
 
@@ -45,21 +44,19 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 	config := types.Options{
 		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session",
 		Env: []string{"FIXTURE=1"}, InitializeTimeout: 13 * time.Second, ShutdownTimeout: 7 * time.Second,
-		Limits: types.Limits{EventBuffer: 2, FrameBytes: 1000, PendingControls: 3, ControlBuffer: 4, StderrBytes: 5, PendingPermissions: 6, PermissionWorkers: 7, PermissionHistory: 8},
+		Limits: types.Limits{EventBuffer: 2, FrameBytes: 1000, PendingControls: 3, ControlBuffer: 4, StderrBytes: 5, PendingPermissions: 6, PermissionHistory: 8},
 	}
 	for _, tc := range []struct {
 		name     string
 		decorate bool
-	}{{"plain", false}, {"callback and observation options", true}} {
+	}{{"plain", false}, {"observation options", true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := OptionsFromTypes(config)
-			require.Nil(t, o.PermissionHandler)
 			assert.Equal(t, config, o.Types(), "configuration changed")
 			if tc.decorate {
-				o.PermissionHandler = func(*PermissionRequest) {}
 				o.Subagents = SubagentOptions{MaxNodes: 7, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}}}
 			}
-			assert.Equal(t, config, o.Types(), "callback affected pure configuration")
+			assert.Equal(t, config, o.Types(), "observation options affected pure configuration")
 		})
 	}
 	for _, tc := range []struct {
@@ -76,7 +73,7 @@ func (s *clientProtocolSuite) TestOptionsAdapterRunsExistingSubprocessProtocol()
 	t := s.T()
 	// Exercise the existing isolated initialize/send/receive protocol via the adapter.
 	o := OptionsFromTypes(fixtureOptions(t, "echo").Types())
-	c, err := NewClient(context.Background(), o)
+	c, err := openTestInteraction(context.Background(), o)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	send(t, c, "adapter")

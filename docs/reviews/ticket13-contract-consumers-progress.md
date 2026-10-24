@@ -1,68 +1,91 @@
-# Ticket 13 consumer migration progress
+# Ticket 13 consumer migration result
 
-Status: in progress. This is a reviewable implementation slice, not completion
-of the expand-contract contract phase.
-
+Status: complete. Final post-fix offline gate passed.
 Fixed base: `3f1776e4da94cc53d48e5029b20bd254dd727152`.
-Ticket: `.scratch/session-refactor/issues/13-contract-consumers.md`.
+Initial consumer slice: `994e9289a0f544450484dcc193ffbedef100fbb6`.
+The contract commit follows that slice on `codex-session-refactor`; see local Git
+history and the ticket result SHA. No push or release was performed.
 
-## Implemented slice
+## Completed contract phase
 
-- Codex and Claude recorder, recorded playback, offline examples, native Go
-  examples, local public consumer and mock consumers use the public Session
-  input/receive path. Claude initialization-only gated probe also uses Open.
-- Codex Client.Load/LoadedThread and its separate history stream/attachment owner
-  were removed. Existing history tests consume the public FIFO inline; retained
-  payload/raw/projection/paging/mutation/cancellation/release checks remain.
-  Both child-first and ancestor-first attachment admission are covered.
-- Replay preserves known native turn execution options explicitly. Unknown
-  execution extensions fail before submission. Native early failure and Submit
-  rejection cannot become successful completion or leave Receive blocked.
-- Each mock consumer keeps the 2048-fact backlog unread while Interrupt and an
-  already received actual request are answered, then verifies exact FIFO drain
-  after native disconnect. Claude questions use valid full-question-text keys.
-- Recorder source metadata comes from clean Go VCS build evidence or an explicitly
-  unverified full caller revision; missing/dirty/conflicting evidence rejects.
-  Unknown modification state is null. Cleanup errors join the original run error.
-- README tutorials, package comments and the breaking migration guide describe
-  the new public path; original native source pins, generated roots, recording
-  bytes/manifests, sanitization and historical architecture reports are unchanged.
+- Recorder, replay, mock/public consumers, examples, Go Example contracts and
+  gated e2e callers use Session/Receive/Submit and real native answer handles.
+- Codex independent Subscription/Requests runtime, held/pending/dedup delivery
+  gates and Client.Load/LoadedThread lifecycle are removed. Native Client/raw
+  extensions retain connection ownership fences and native turns. StartResponse
+  preserves the actual thread/start result, unknown data and copy isolation.
+- Claude public Client/NewClient, managed tree, callback worker pool, parallel
+  native FIFO, creation/run/UUID ledgers and independent history stream are removed.
+  Private interaction retains process/control/writer and permission registry
+  mechanics; Session owns the sole FIFO. No automatic permission deny is restored.
+- Native Raw, unknown/null/absent values, original request authority, cancellation,
+  single-use answers, NotSent reuse, OutcomeUnknown no-retry, shared ownership,
+  drain/Abort, resource limits and historical integrity have public or independent
+  mechanical replacements. The [per-function guarantee audit](ticket13-legacy-guarantees.md)
+  distinguishes each retained guarantee from superseded convenience behavior.
+- Current guides cover breaking input/receive/approval/Load/resource changes.
+  Claude ordinary Open ResumeID remains a literal fresh-process no-replay request,
+  with requested and observed identity distinct. Explicit Load still fails
+  ErrResumeUnconfirmed without extra input, replay or fabricated confirmation.
+- Historical protocol evidence, native source pins, generated roots and recording
+  assets/hashes/provenance remain unchanged. Explicit test-migrations.json keeps
+  retired paths and exact historical IDs traceable to current files without
+  transferring old race/live outcomes. The verifier rejects absent/stale targets.
 
-## Outstanding ticket requirements
+## Validation
 
-Do not mark ticket 13 done while these remain:
+All heavy checks ran serially with mise Go 1.26.9,
+`GORACE=atexit_sleep_ms=0` and `GOMAXPROCS=2`.
 
-- Codex Subscription/Requests runtime state and its old parallel observation/
-  approval consumers; Claude managedTree/native FIFO and callback worker pool.
-- Migration and guarantee-by-guarantee audit of legacy runtime tests/helpers,
-  plus Codex gated lifecycle/interaction consumers. Do not delete valid native
-  mechanical guarantees to obtain compilation.
-- Complete current capability/event/subagent documentation reconciliation and
-  source search proving no independent old runtime/normal caller remains.
-- Final two-axis review of the completed contract phase and final serial gates.
+- Root offline gate passed after contraction (Claude 10.488s, Codex 34.213s):
+  boundaries, module verification, generation, protocol inventory, sanitizer and
+  fixture hash checks, all Go packages, default live skips, local public consumer
+  and four runnable offline examples. The final post-shutdown-fix run also passed
+  (Claude 10.008s, Codex 34.402s, shared stories 2.176s), retaining all gates.
+- Full Codex package race passed (53.494s).
+- Claude Session/Load/history/native codec/client protocol/recorded observation
+  selections passed under race. Its migrated ControlInteractions suite also passed.
+- Lineage, queue, both replay/mock libraries and recorder provenance race passed.
+- A subsequent shared-story race found SDK-US-017/Claude draining 31/32 final
+  facts; a narrow 20-run race reproduced 13/32. Process exit could seal Session
+  admission before buffered stdout was parsed. The lifecycle now waits for reader
+  completion within the existing first shutdown phase, using the original overall
+  deadline. The story preserves 32 facts and additionally checks exact sequence.
+  The fixed narrow race passed 50 iterations (2.892s). Then Claude relevant race
+  (12.336s) and the complete shared-story race (4.188s) passed. Both the 20 new and
+  12 old stories remain separate. No count, payload size or deadline was reduced.
+- ProcessLifecycleSuite race passed (2.567s), including descendant/pipe cleanup.
+- Built both mock commands and ran explicit local mock-consumer race (4.034s),
+  including original 2048-fact paused consumers and control/answer barriers.
+- Both native package test binaries cross-compiled for Linux/amd64. Linux-specific
+  permission FIFO tests compile; they were not executed on this macOS host.
+- Both README first Go blocks and Claude comparison/managed-consumer fragments
+  compiled independently as local source files; no real process was launched.
+- The three current Claude Mermaid diagrams now show Session/native delivery and
+  original handles; github-light PNG renders passed visual inspection.
+- go vet ./... and git diff --check passed. Inventory mutation checks rejected
+  missing current targets, unmapped retired paths, stale IDs, duplicate mappings
+  and pinned snapshot drift, while accepting the real migration.
 
-## Evidence boundaries
+## Independent reviews
 
-No real CLI, Agent, model, new recording, upstream update, push or release was
-performed. The exact fetched pushed-revision external consumer is unverified:
-there is no push authorization. Local public/mock checks are separate evidence.
-The 20 new and 12 old stories remain distinct and pass in the offline gate.
-Claude Load still fails ErrResumeUnconfirmed without replay or extra input.
-Known full-Claude-race 100 ms write cases and 1 second writer-prefix timing
-remain ticket 14 items; this slice does not claim full-repository race success.
+Two independent review agents reviewed the fixed base through the complete
+working tree, explicitly including new native regressions, audit and migration
+manifest. Spec found missing historical V2 Load coverage; Standards found Linux
+caller-cancel expectations and audit wording. All were corrected. Linux now
+asserts caller cancellation is NotSent, leaves the original handle live, allows
+an unrelated started write to finish and verifies exactly one later answer;
+its native reply echo is consumed before snapshot readback. Historical V2 Load
+retains exact history bytes/typed unknowns without granting live membership.
 
-## Checks so far
+Both axes reviewed the later shutdown fix separately and reported no unresolved
+finding. The final committed revision is recorded in the ticket after commit.
 
-- Full root offline gate passed with mise Go 1.26.9 and Python 3.13 shim;
-  dependency/generation/inventory/sanitization/hash checks, all Go packages,
-  default live skips, local public consumer and four runnable offline examples.
-- Explicit local mock consumer test passed with built native mock commands.
-- Relevant race selection passed for history/load, replay, recorder provenance,
-  mock consumers and CommonStories (all 20 new plus 12 old targets).
-- go vet ./... and git diff --check passed. README first Go blocks and Claude
-  comparison Go block compiled independently as local consumer files.
-- The initial full offline/race runs overlapped briefly; a final serial run is
-  required before treating the complete ticket as verified.
+## Evidence limits
 
-The local ticket remains in progress. Commit and independent review results are
-recorded below when available.
+No real CLI/Agent/model, new recording, upstream update, push or release occurred.
+Exact fetched pushed-revision consumers remain unverified because no revision was
+pushed; local compile/public/mock checks are separate evidence. Known full-Claude
+race 100 ms writer and 1 second writer-prefix timing cases remain T14 concerns;
+this report does not claim full-repository race success. T14 overall validation
+is separate from completion of this T13 contract phase.

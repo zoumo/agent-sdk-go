@@ -4,8 +4,7 @@ Contract: [Session Interface](../../harness/modules/native-session/interfaces.md
 Native basis: TypeScript SDK 0.3.258 / CLI 2.1.258, as recorded in
 [fixed evidence](../../docs/research/claude-session-native-evidence.md).
 
-`Session.Submit(ctx, Input{Text: text})` and legacy `Client.Send` use the same
-native writer as `Input{User: &types.UserInput{...}}`. A successful Submission
+`Session.Submit(ctx, Input{Text: text})` uses the same native writer as `Input{User: &types.UserInput{...}}`. A successful Submission
 means a complete local frame write only. Text cannot be combined with User.
 User's Message uses `types.InputMessage{Role: "user", Content: types.Content}`.
 The input-specific value avoids output-only Message defaults such as usage and
@@ -84,6 +83,7 @@ Standards reported one independent-assertion issue plus two clarity suggestions.
 All three were fixed and the Standards reviewer verified the fixes. Targeted
 Session tests/race and vet were rerun after the review edits.
 
-Future discovery, Load and removal of the temporary Client model belong to
-other tickets. Actual CLI/model/media/configuration-effect verification remains
+The validation above records the input/configuration ticket. Current
+[discovery](session-discovery.md), [Load](session-load.md) and the completed
+[single-Session migration](../../docs/session-migration.md) have separate evidence. Actual CLI/model/media/configuration-effect verification remains
 outside this offline ticket's evidence; no push or release was performed.

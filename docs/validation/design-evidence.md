@@ -1,5 +1,8 @@
 # 共享设计的来源与实施记录
 
+Historical migration evidence; APIs/test paths below reflect their original baseline.
+Current Session contraction and guarantee mappings are in [ticket 13 audit](../reviews/ticket13-contract-consumers-progress.md).
+
 规范集中在 [harness](../../harness/index.md)。本文件保留设计文档迁移时分离的历史状态、来源与验证说明，不作为通用行为合同。
 
 ## docs/glossary.md

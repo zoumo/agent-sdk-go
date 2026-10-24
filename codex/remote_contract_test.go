@@ -174,14 +174,14 @@ func TestRemotePublicContractParity(t *testing.T) {
 		{"TestInvalidOptionsAndClosedCall", TestInvalidOptionsAndClosedCall},
 		{"TestTurnEarlyEventsKeepResponseIdentity", observationCase((*observationSuite).TestTurnEarlyEventsKeepResponseIdentity)},
 		{"TestNotificationRawAndDecodeErrors", observationCase((*observationSuite).TestNotificationRawAndDecodeErrors)},
-		{"TestSubscriptionOverflowIsolatedAndInspectable", observationCase((*observationSuite).TestSubscriptionOverflowIsolatedAndInspectable)},
-		{"TestSlowSubscriberNeverBlocksResponse", observationCase((*observationSuite).TestSlowSubscriberNeverBlocksResponse)},
-		{"TestSubscriptionOwnsPayloadAndNoReplay", observationCase((*observationSuite).TestSubscriptionOwnsPayloadAndNoReplay)},
+		{"TestSessionOverflowIsolatedAndInspectable", observationCase((*observationSuite).TestSessionOverflowIsolatedAndInspectable)},
+		{"TestSessionSlowConsumerNeverBlocksResponse", observationCase((*observationSuite).TestSessionSlowConsumerNeverBlocksResponse)},
+		{"TestSessionOwnsPayloadAndNoReplay", observationCase((*observationSuite).TestSessionOwnsPayloadAndNoReplay)},
 		{"TestCancellationDoesNotInterruptTurn", observationCase((*observationSuite).TestCancellationDoesNotInterruptTurn)},
 		{"TestTurnFailureNeverReplays", observationCase((*observationSuite).TestTurnFailureNeverReplays)},
-		{"TestSubscriptionTerminalStatus", observationCase((*observationSuite).TestSubscriptionTerminalStatus)},
-		{"TestSubscriptionConcurrentLifecycle", TestSubscriptionConcurrentLifecycle},
-		{"TestSubscriptionAdmissionValidation", observationCase((*observationSuite).TestSubscriptionAdmissionValidation)},
+		{"TestSessionTerminalStatus", observationCase((*observationSuite).TestSessionTerminalStatus)},
+		{"TestSessionConcurrentLifecycle", TestSessionConcurrentLifecycle},
+		{"TestSessionAdmissionValidation", observationCase((*observationSuite).TestSessionAdmissionValidation)},
 		{"TestResumeAcrossIndependentConnections", observationCase((*observationSuite).TestResumeAcrossIndependentConnections)},
 		{"TestResumeMismatchKeepsCorrelationAndNoFallback", observationCase((*observationSuite).TestResumeMismatchKeepsCorrelationAndNoFallback)},
 		{"TestResumeAndUnsubscribeFailureNeverReplay", observationCase((*observationSuite).TestResumeAndUnsubscribeFailureNeverReplay)},
@@ -249,20 +249,26 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 		t.Run(transport, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{EventQueue: 16})
 			ctx := context.Background()
-			started, err := f.c.StartThread(ctx, types.ThreadStartParams{})
+			session, err := codex.Open(ctx, codex.SessionOptions{Client: f.c})
 			require.NoError(t, err)
+			f.session = session
+			started, ok := session.StartResponse()
+			require.True(t, ok)
 			read, err := f.c.ReadThread(ctx, types.ThreadReadParams{ThreadID: started.Thread.ID})
 			require.NoError(t, err)
 			require.False(t, read.Thread.ID != started.Thread.ID, "read native thread: %#v %v", read, err)
-			events := subscribe(t, f.c, ctx)
+			events := session
 			type outcome struct {
 				turn types.TurnStartResponse
 				err  error
 			}
 			start := make(chan outcome, 1)
-			go func() { turn, err := f.c.StartTurn(ctx, startParams()); start <- outcome{turn, err} }()
-			for range 8 {
-				_ = nextEvent(t, events)
+			go func() {
+				turn, err := session.Submit(ctx, turnInput(startParams()))
+				start <- outcome{turn.Response, err}
+			}()
+			for range 7 {
+				_ = nextTurnEvent(t, events)
 			}
 			{
 				err := f.c.Call(ctx, "release-start", nil, nil)
@@ -275,12 +281,13 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 				require.NoError(t, err)
 			}
 			emitRequests(t, f.c, requestFrame(`"native-approval"`, "item/commandExecution/requestApproval", approvalParams))
-			request := nextRequest(t, f.c)
+			request := nextOwnedRequest(t, f)
 			{
 				err := request.Handle().Answer(ctx, json.RawMessage(`{"decision":"decline"}`))
 				require.NoError(t, err)
 			}
 			responseBarrier(t, f)
+			require.NoError(t, session.Close())
 			detached, err := f.c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: started.Thread.ID})
 			require.NoError(t, err)
 			require.False(t, detached.Status != "unsubscribed", "unsubscribe: %#v %v", detached, err)
@@ -289,7 +296,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 				require.NoError(t, err)
 			}
 			frames := trace(t, f.trace)
-			methods := []string{"initialize", "initialized", "thread/start", "thread/read", "turn/start", "release-start", "turn/interrupt", "request-frames", "", "echo", "thread/unsubscribe"}
+			methods := []string{"initialize", "initialized", "thread/start", "thread/read", "turn/start", "release-start", "turn/interrupt", "request-frames", "", "echo", "thread/unsubscribe", "thread/unsubscribe"}
 			require.Len(t, frames, len(methods), "unexpected lifecycle: %#v", frames)
 			for i, want := range methods {
 				require.Equal(t, want, frames[i].Method, "frame %d method=%s want=%s", i, frames[i].Method, want)

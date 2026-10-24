@@ -178,6 +178,7 @@ func TestFakeChild(t *testing.T) {
 }
 
 type fixture struct {
+	session    *codex.Session
 	c          *codex.Client
 	trace, pid string
 }

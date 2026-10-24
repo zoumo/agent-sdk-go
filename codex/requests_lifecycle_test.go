@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zoumo/agent-sdk-go/internal/lineage"
 )
 
 // These tests route native frames through the real request lifecycle. Unlike
@@ -20,7 +21,13 @@ func TestNativeRequestLifetimeWithControlledTime(t *testing.T) {
 				limits.RequestTimeout = time.Second
 				limits.ActiveRequests = 1
 				c := newClient(limits)
-				old := receiveLifecycleRequest(t, c)
+				g, err := lineage.New[string](lineage.Limits{MaxNodes: 4, MaxRelations: 4, MaxDepth: 4})
+				require.NoError(t, err)
+				lifetime, cancel := context.WithCancel(context.Background())
+				s := &Session{client: c, done: lifetime.Done(), cancel: cancel, parents: g, members: make(map[string]struct{}), maxMembers: 4}
+				require.NoError(t, s.bindLocked("thread"))
+				defer c.fail(ErrClosed)
+				old := receiveLifecycleRequest(t, c, s)
 				time.Sleep(6 * time.Minute)
 				synctest.Wait()
 				require.NoError(t, old.Handle().Err(), "deprecated local timeout must not expire native requests")
@@ -28,10 +35,15 @@ func TestNativeRequestLifetimeWithControlledTime(t *testing.T) {
 					require.NoError(t, old.Handle().Cancel())
 				} else {
 					require.NoError(t, c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`)))
+					resolved, err := s.Receive(context.Background())
+					require.NoError(t, err)
+					require.Equal(t, "serverRequest/resolved", resolved.Event.Method)
 				}
 				checkLifecycleTerminal(t, old, cause)
 				require.NoError(t, c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread","newRequest":true}}`)))
-				fresh := <-c.Requests()
+				received, err := s.Receive(context.Background())
+				require.NoError(t, err)
+				fresh := received.Request.Request
 				checkLifecycleTerminal(t, old, cause)
 				time.Sleep(6 * time.Minute)
 				synctest.Wait()
@@ -45,13 +57,15 @@ func TestNativeRequestLifetimeWithControlledTime(t *testing.T) {
 	}
 }
 
-func receiveLifecycleRequest(t *testing.T, c *Client) Request {
+func receiveLifecycleRequest(t *testing.T, c *Client, s *Session) Request {
 	t.Helper()
 	{
 		err := c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread"}}`))
 		require.NoError(t, err, err)
 	}
-	return <-c.Requests()
+	received, err := s.Receive(context.Background())
+	require.NoError(t, err)
+	return received.Request.Request
 }
 
 func checkLifecycleTerminal(t *testing.T, r Request, want error) {

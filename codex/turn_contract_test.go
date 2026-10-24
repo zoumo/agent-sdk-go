@@ -65,7 +65,7 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 		send(m.ID, `{}`)
 	case "turn-flood":
 		for i := 0; i < 4096; i++ {
-			emit("future/ordered", fmt.Sprintf(`{"sequence":%d}`, i))
+			emit("future/ordered", fmt.Sprintf(`{"threadId":"native-thread-42","sequence":%d}`, i))
 		}
 		send(m.ID, `"reader-still-routing"`)
 	case "turn-mixed":
@@ -91,46 +91,28 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 	return true
 }
 
-func cleanupSubscription(t *testing.T, s *codex.Subscription) {
+func openTurnSession(t *testing.T, c *codex.Client, ctx context.Context) *codex.Session {
 	t.Helper()
-	if s != nil {
-		t.Cleanup(func() { _ = s.Abort() })
-	}
-}
-
-func subscribe(t *testing.T, c *codex.Client, ctx context.Context) *codex.Subscription {
-	t.Helper()
-	s, err := c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{PendingAge: 10 * time.Millisecond})
-	cleanupSubscription(t, s)
-	require.NoError(t, err, err)
-	{
-		e := nextTree(t, s)
-		require.Equal(t, stateRecord, e.Kind, "missing initial observation state")
-	}
+	s, err := codex.Open(ctx, codex.SessionOptions{Client: c})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Abort() })
 	return s
 }
-func nextEvent(t *testing.T, s *codex.Subscription) types.Event {
+func nextTurnEvent(t *testing.T, s *codex.Session) types.Event {
 	t.Helper()
-	for {
-		select {
-		case e, ok := <-s.Events():
-			require.True(t, ok, "events closed: %v", s.Err())
-			if e.Raw != nil {
-				return e
-			}
-		case <-time.After(3 * time.Second):
-			require.FailNow(t, "test invariant", "event not delivered")
-		}
-	}
+	return *nextSessionNative(t, s).Event
 }
-func awaitSubscription(t *testing.T, s *codex.Subscription, cause error) {
+func awaitTurnSession(t *testing.T, s *codex.Session, cause error) {
 	t.Helper()
 	select {
 	case <-s.Done():
 	case <-time.After(3 * time.Second):
-		require.FailNow(t, "test invariant", "subscription did not terminate")
+		t.Fatal("Session did not terminate")
 	}
-	require.ErrorIs(t, s.Err(), cause, "terminal error %v, want %v", s.Err(), cause)
+	require.ErrorIs(t, s.Err(), cause)
+}
+func turnInput(p types.TurnStartParams) codex.Input {
+	return codex.Input{Input: p.Input, ServiceTier: p.ServiceTier, DisabledPluginIDs: p.DisabledPluginIDs, OutputSchema: p.OutputSchema, ParentTurnID: p.ParentTurnID, RootTurnID: p.RootTurnID}
 }
 func startParams() types.TurnStartParams {
 	return types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "synthetic input"})}}, ServiceTier: types.Null[string](), DisabledPluginIDs: types.Some([]string{}), OutputSchema: types.Some(json.RawMessage(`{"type":"string"}`))}
@@ -139,7 +121,7 @@ func startParams() types.TurnStartParams {
 func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
 	t := obs.T()
 	f := obs.fixture(t, "turn-early", codex.Limits{EventQueue: 16})
-	s := subscribe(t, f.c, context.Background())
+	s := openTurnSession(t, f.c, context.Background())
 	type outcome struct {
 		r   types.TurnStartResponse
 		err error
@@ -148,19 +130,20 @@ func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
 	params := startParams()
 	params.ParentTurnID = types.Some("causing-turn")
 	params.RootTurnID = types.Some("chain-root-turn")
-	go func() { r, err := f.c.StartTurn(context.Background(), params); result <- outcome{r, err} }()
+	go func() {
+		r, err := s.Submit(context.Background(), turnInput(params))
+		result <- outcome{r.Response, err}
+	}()
 	var events []types.Event
-	other := false
-	for i := 0; i < 8; i++ {
-		e := nextEvent(t, s)
+
+	for i := 0; i < 7; i++ {
+		e := nextTurnEvent(t, s)
 		require.False(t, e.DecodeError != nil || e.Data == nil, "event %d: %#v", i, e)
-		if v, ok := e.Data.(*types.TurnStartedNotification); ok && v.ThreadID == "other-thread" {
-			other = true
-			continue
-		}
+
 		events = append(events, e)
 	}
-	require.False(t, events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || !other || events[2].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn", "interleaved native identities changed")
+	require.False(t, events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || events[2].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn", "interleaved native identities changed")
+	require.Contains(t, string(f.c.Unattributed().Records[0].Raw), "other-thread-turn")
 	require.Equal(t, "native-item-7", events[4].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID, "native item identity changed")
 	require.Equal(t, unknownItem, string(events[5].Data.(*types.ItemCompletedNotification).Item.Unknown), "unknown native variant lost")
 	require.Equal(t, "native-turn-response", events[6].Data.(*types.TurnCompletedNotification).Turn.ID, "early completion lost")
@@ -190,7 +173,7 @@ func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
 func (obs *observationSuite) TestNotificationRawAndDecodeErrors() {
 	t := obs.T()
 	f := obs.fixture(t, "normal", codex.Limits{EventQueue: 16})
-	s := subscribe(t, f.c, context.Background())
+	s := openTurnSession(t, f.c, context.Background())
 	{
 		err := f.c.Call(context.Background(), "turn-mixed", nil, nil)
 		require.NoError(t, err, err)
@@ -202,38 +185,45 @@ func (obs *observationSuite) TestNotificationRawAndDecodeErrors() {
 		`{"threadId":"x","threadId":"y","turnId":"x","itemId":"x","delta":"duplicate"}`,
 	}
 	seen := make(map[string]types.Event)
-	for i := 0; i < len(expected)+2; i++ {
-		e := nextEvent(t, s)
-		if e.Method == "future/absent" {
-			seen["absent"] = e
-		} else if e.Method == "item/started" {
-			seen["item-absent"] = e
-		} else if e.Method == "turn/started" {
-			seen["turn-null"] = e
-		} else {
-			seen[string(e.Params)] = e
-		}
-	}
+	records := f.c.Unattributed().Records
+	require.Len(t, records, len(expected))
 	for i, raw := range expected {
-		key := raw
-		if i == 2 {
-			key = "absent"
+		var envelope map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(records[i].Raw, &envelope))
+		require.Equal(t, raw, string(envelope["params"]))
+	}
+	for range 2 {
+		e := nextTurnEvent(t, s)
+		seen[string(e.Params)] = e
+	}
+
+	for i, raw := range expected {
+		var envelope struct {
+			Method string `json:"method"`
 		}
-		if i == 5 {
-			key = "turn-null"
-		}
-		if i == 6 {
-			key = "item-absent"
-		}
-		e, ok := seen[key]
-		require.False(t, !ok || string(e.Params) != raw || e.Data != nil, "raw event %d: %#v", i, e)
-		var de *codex.DecodeError
+		require.NoError(t, json.Unmarshal(records[i].Raw, &envelope))
 		if i < 3 {
-			require.NoError(t, e.DecodeError, "unknown method treated as malformed")
-		} else {
-			require.False(t, !errors.As(e.DecodeError, &de) || de.Method != e.Method || errors.Unwrap(de) == nil, "missing decode cause: %#v", e)
+			continue
+		}
+		switch envelope.Method {
+		case "item/agentMessage/delta":
+			var v types.AgentMessageDeltaNotification
+			require.Error(t, json.Unmarshal([]byte(raw), &v))
+		case "turn/completed":
+			var v types.TurnCompletedNotification
+			require.Error(t, json.Unmarshal([]byte(raw), &v))
+		case "turn/started":
+			var v types.TurnStartedNotification
+			require.Error(t, json.Unmarshal([]byte(raw), &v))
+		case "item/started":
+			var v types.ItemStartedNotification
+			require.Error(t, json.Unmarshal([]byte(raw), &v))
+		case "item/completed":
+			var v types.ItemCompletedNotification
+			require.Error(t, json.Unmarshal([]byte(raw), &v))
 		}
 	}
+
 	e := seen[`{"threadId":"native-thread-42","turnId":"native-turn-response","willRetry":false,"error":{"message":"synthetic error","codexErrorInfo":{"futureError":{"n":9007199254740993}}}}`]
 	native := e.Data.(*types.ErrorNotification)
 	info, ok := native.Error.CodexErrorInfo.Get()
@@ -244,45 +234,35 @@ func (obs *observationSuite) TestNotificationRawAndDecodeErrors() {
 	require.False(t, s.Err() != nil || f.c.Err() != nil, "bad payload terminated connection or stream")
 }
 
-func (obs *observationSuite) TestSubscriptionOverflowIsolatedAndInspectable() {
+func (obs *observationSuite) TestSessionOverflowIsolatedAndInspectable() {
 	t := obs.T()
-	f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1, Subscriptions: 2})
-	slow := subscribe(t, f.c, context.Background())
-	healthy := subscribe(t, f.c, context.Background())
-	{
-		_, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-		require.ErrorIs(t, err, codex.ErrLimit, "subscriber limit: %v", err)
+	f := obs.fixture(t, "session-multiple", codex.Limits{EventQueue: 1, Subscriptions: 2})
+	slow := openTurnSession(t, f.c, context.Background())
+	healthy := openTurnSession(t, f.c, context.Background())
+	nextTurnEvent(t, slow)
+	nextTurnEvent(t, healthy)
+	_, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	require.ErrorIs(t, err, codex.ErrLimit)
+	for range 4 {
+		emitRequests(t, f.c, treeFrame("future/ordered", `{"threadId":"main-1"}`), treeFrame("future/ordered", `{"threadId":"main-2"}`))
+		require.Equal(t, "future/ordered", nextTurnEvent(t, healthy).Method)
 	}
-	for i := 0; i < 4; i++ {
-		{
-			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
-			require.NoError(t, err, err)
-		}
-		require.Equal(t, "item/agentMessage/delta", nextEvent(t, healthy).Method, "healthy stream reordered")
-	}
-	// Both readers retain every accepted event regardless of the deprecated capacity.
-	require.NoError(t, slow.Err())
 	require.NoError(t, slow.Close())
-	awaitSubscription(t, slow, nil)
-	for i := 0; i < 4; i++ {
-		require.Equal(t, "item/agentMessage/delta", nextEvent(t, slow).Method)
+	awaitTurnSession(t, slow, nil)
+	for range 4 {
+		require.Equal(t, "future/ordered", nextTurnEvent(t, slow).Method)
 	}
-	_, ok := <-slow.Events()
-	require.False(t, ok)
+	_, err = slow.Receive(context.Background())
+	require.ErrorIs(t, err, io.EOF)
 	require.NoError(t, healthy.Close())
-	require.NoError(t, healthy.Err(), healthy.Err())
-	replacement := subscribe(t, f.c, context.Background())
-	{
-		err := replacement.Close()
-		require.NoError(t, err, err)
-	}
-	awaitSubscription(t, replacement, nil)
+	replacement := openTurnSession(t, f.c, context.Background())
+	require.NoError(t, replacement.Close())
 }
 
-func (obs *observationSuite) TestSlowSubscriberNeverBlocksResponse() {
+func (obs *observationSuite) TestSessionSlowConsumerNeverBlocksResponse() {
 	t := obs.T()
 	f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
-	s := subscribe(t, f.c, context.Background())
+	s := openTurnSession(t, f.c, context.Background())
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	var answer string
@@ -292,61 +272,66 @@ func (obs *observationSuite) TestSlowSubscriberNeverBlocksResponse() {
 	}
 	require.NoError(t, s.Err())
 	require.NoError(t, s.Close())
-	awaitSubscription(t, s, nil)
+	awaitTurnSession(t, s, nil)
 	for i := 0; i < 4096; i++ {
-		e := nextEvent(t, s)
+		e := nextTurnEvent(t, s)
 		var params struct {
 			Sequence int `json:"sequence"`
 		}
 		require.NoError(t, json.Unmarshal(e.Params, &params))
 		require.Equal(t, i, params.Sequence)
 	}
-	_, ok := <-s.Events()
-	require.False(t, ok)
+	_, end := s.Receive(context.Background())
+	require.ErrorIs(t, end, io.EOF)
 	require.Equal(t, uint64(4096), f.c.Diagnostics().Notifications, "reader failed to consume complete flood")
 }
 
-func (obs *observationSuite) TestSubscriptionOwnsPayloadAndNoReplay() {
+func (obs *observationSuite) TestSessionOwnsPayloadAndNoReplay() {
 	t := obs.T()
-	f := obs.fixture(t, "normal", codex.Limits{})
-	{
-		err := f.c.Call(context.Background(), "turn-emit", nil, nil)
-		require.NoError(t, err, err)
+	f := obs.fixture(t, "history-overlap", codex.Limits{})
+	require.NoError(t, f.c.Call(context.Background(), "turn-emit", nil, nil))
+	first := openTurnSession(t, f.c, context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	_, err := first.Receive(ctx)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	emitRequests(t, f.c, treeFrame("thread/started", `{"thread":{"id":"child","parentThreadId":"native-thread-42"}}`))
+	nextTurnEvent(t, first)
+	second, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "child", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
+	require.NoError(t, err)
+	defer second.Close()
+	for {
+		r, err := second.Receive(context.Background())
+		require.NoError(t, err)
+		if r.Load != nil {
+			break
+		}
 	}
-	first := subscribe(t, f.c, context.Background())
-	second := subscribe(t, f.c, context.Background())
-	select {
-	case <-first.Events():
-		require.FailNow(t, "test invariant", "replayed old notification")
-	default:
-	}
-	{
-		err := f.c.Call(context.Background(), "turn-emit", nil, nil)
-		require.NoError(t, err, err)
-	}
-	a, b := nextEvent(t, first), nextEvent(t, second)
+	delta := strings.ReplaceAll(turnDelta, "native-thread-42", "child")
+	emitRequests(t, f.c, treeFrame("item/agentMessage/delta", delta))
+	a, b := nextTurnEvent(t, first), nextTurnEvent(t, second)
 	a.Params[0] = '!'
+	a.Raw[0] = '!'
 	a.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"][0] = '!'
 	a.Data.(*types.AgentMessageDeltaNotification).ThreadID = "mutated"
-	require.False(t, string(b.Params) != turnDelta || b.Data.(*types.AgentMessageDeltaNotification).ThreadID != "native-thread-42" || string(b.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"]) != `{"x":9007199254740993}`, "subscriber buffers alias")
-	{
-		err := f.c.Call(context.Background(), "turn-item", nil, nil)
-		require.NoError(t, err, err)
-	}
-	a, b = nextEvent(t, first), nextEvent(t, second)
+	require.Equal(t, delta, string(b.Params))
+	require.Equal(t, "child", b.Data.(*types.AgentMessageDeltaNotification).ThreadID)
+	require.Equal(t, `{"x":9007199254740993}`, string(b.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"]))
+	item := treeFrame("item/completed", `{"threadId":"child","turnId":"t","completedAtMs":8,"item":`+unknownItem+`}`)
+	emitRequests(t, f.c, item)
+	a, b = nextTurnEvent(t, first), nextTurnEvent(t, second)
 	a.Data.(*types.ItemCompletedNotification).Item.Unknown[0] = '!'
-	require.Equal(t, unknownItem, string(b.Data.(*types.ItemCompletedNotification).Item.Unknown), "unknown union aliases")
-
+	require.Equal(t, unknownItem, string(b.Data.(*types.ItemCompletedNotification).Item.Unknown))
 }
 
 func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
 	t := obs.T()
 	f := obs.fixture(t, "turn-wait", codex.Limits{})
 	subctx, subcancel := context.WithCancel(context.Background())
-	s := subscribe(t, f.c, subctx)
+	s := openTurnSession(t, f.c, subctx)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
-	go func() { _, err := f.c.StartTurn(ctx, startParams()); result <- err }()
+	go func() { _, err := s.Submit(ctx, turnInput(startParams())); result <- err }()
 	waitTrace(t, f.trace, "turn/start")
 	// Establish a completed write, rather than only peer receipt, before
 	// testing cancellation of local waiting on a still-usable connection.
@@ -354,7 +339,9 @@ func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
 	cancel()
 	subcancel()
 	callError(t, <-result, codex.OutcomeUnknown, context.Canceled)
-	awaitSubscription(t, s, context.Canceled)
+	_, waitErr := s.Receive(subctx)
+	require.ErrorIs(t, waitErr, context.Canceled)
+	require.NoError(t, s.Err())
 	// This response is late for the canceled start. A barrier establishes that
 	// all writes/notifications before the explicit interrupt have been handled.
 	{
@@ -364,14 +351,14 @@ func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
 	for _, m := range trace(t, f.trace) {
 		require.False(t, m.Method == "turn/interrupt" || strings.Contains(m.Method, "cancel"), "implicit cancellation sent: %s", m.Method)
 	}
-	live := subscribe(t, f.c, context.Background())
+	live := s
 	ack, err := f.c.InterruptTurn(context.Background(), types.TurnInterruptParams{ThreadID: "native-thread-42", TurnID: "native-turn-response"})
 	require.False(t, err != nil || string(ack.UnknownFields["futureAck"]) != "true", "interrupt ack: %+v %v", ack, err)
-	select {
-	case e := <-live.Events():
-		require.FailNowf(t, "test invariant", "ack fabricated execution event: %#v", e)
-	default:
-	}
+	waitCtx, stopWait := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	_, waitErr = live.Receive(waitCtx)
+	stopWait()
+	require.ErrorIs(t, waitErr, context.DeadlineExceeded, "ack fabricated execution event")
+
 	count := 0
 	for _, m := range trace(t, f.trace) {
 		if m.Method == "turn/interrupt" {
@@ -387,12 +374,12 @@ func (obs *observationSuite) TestTurnFailureNeverReplays() {
 	for _, mode := range []string{"turn-error", "turn-exit", "turn-invalid-response"} {
 		t.Run(mode, func(t *testing.T) {
 			f := obs.fixture(t, mode, codex.Limits{})
-			s := subscribe(t, f.c, context.Background())
-			_, err := f.c.StartTurn(context.Background(), startParams())
+			s := openTurnSession(t, f.c, context.Background())
+			_, err := s.Submit(context.Background(), turnInput(startParams()))
 			state := codex.Responded
 			if mode == "turn-exit" {
 				state = codex.OutcomeUnknown
-				awaitSubscription(t, s, io.EOF)
+				awaitTurnSession(t, s, io.EOF)
 			}
 			callError(t, err, state, nil)
 			if mode == "turn-error" {
@@ -410,113 +397,94 @@ func (obs *observationSuite) TestTurnFailureNeverReplays() {
 	}
 }
 
-func (obs *observationSuite) TestSubscriptionTerminalStatus() {
+func (obs *observationSuite) TestSessionTerminalStatus() {
 	t := obs.T()
 	for _, method := range []string{"turn-malformed-envelope", "turn-oversized-envelope"} {
 		t.Run(method, func(t *testing.T) {
 			f := obs.fixture(t, "normal", codex.Limits{MaxFrameBytes: 4096})
-			s := subscribe(t, f.c, context.Background())
+			s := openTurnSession(t, f.c, context.Background())
+			require.NoError(t, f.c.Call(context.Background(), "turn-emit", nil, nil))
 			callError(t, f.c.Call(context.Background(), method, nil, nil), codex.OutcomeUnknown, codex.ErrProtocol)
-			awaitSubscription(t, s, codex.ErrProtocol)
-			require.False(t, method == "turn-oversized-envelope" && !errors.Is(s.Err(), codex.ErrFrameTooLarge), s.Err())
-			{
-				e := nextTree(t, s)
-				require.False(t, e.Kind != stateRecord || e.Reason != "permanent-gap", "missing gap: %+v", e)
+			awaitTurnSession(t, s, codex.ErrProtocol)
+			if method == "turn-oversized-envelope" {
+				require.ErrorIs(t, s.Err(), codex.ErrFrameTooLarge)
 			}
-			{
-				_, ok := <-s.Events()
-				require.False(t, ok, "malformed envelope became event")
-			}
+			nextTurnEvent(t, s)
+			_, err := s.Receive(context.Background())
+			require.ErrorIs(t, err, codex.ErrProtocol)
 			_ = s.Close()
-			require.ErrorIs(t, s.Err(), codex.ErrProtocol, "close replaced terminal cause")
+			require.ErrorIs(t, s.Err(), codex.ErrProtocol)
 		})
 	}
 	t.Run("client-close", func(t *testing.T) {
 		f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
-		s := subscribe(t, f.c, context.Background())
-		{
-			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
-			require.NoError(t, err, err)
-		}
-		{
-			err := f.c.Close()
-			require.NoError(t, err, err)
-		}
-		awaitSubscription(t, s, nil)
-		nextEvent(t, s)
-		{
-			_, ok := <-s.Events()
-			require.False(t, ok, "events still open")
-		}
-		{
-			_, err := f.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{})
-			require.ErrorIs(t, err, codex.ErrClosed, err)
-		}
+		s := openTurnSession(t, f.c, context.Background())
+		require.NoError(t, f.c.Call(context.Background(), "turn-emit", nil, nil))
+		require.NoError(t, f.c.Close())
+		awaitTurnSession(t, s, nil)
+		nextTurnEvent(t, s)
+		_, err := s.Receive(context.Background())
+		require.ErrorIs(t, err, io.EOF)
+		_, err = codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+		require.ErrorIs(t, err, codex.ErrClosed)
 	})
-	t.Run("cancel-full", func(t *testing.T) {
-		f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		s := subscribe(t, f.c, ctx)
-		{
-			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
-			require.NoError(t, err, err)
-		}
-		cancel()
-		awaitSubscription(t, s, context.Canceled)
-		nextEvent(t, s)
-		{
-			_, ok := <-s.Events()
-			require.False(t, ok, "canceled events still open")
-		}
-	})
-	t.Run("deadline", func(t *testing.T) {
-		f := obs.fixture(t, "normal", codex.Limits{})
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
-		s := subscribe(t, f.c, ctx)
-		awaitSubscription(t, s, context.DeadlineExceeded)
-		{
-			_, ok := <-s.Events()
-			require.False(t, ok, "canceled events open")
-		}
-	})
+	for _, stop := range []string{"cancel-full", "deadline"} {
+		t.Run(stop, func(t *testing.T) {
+			f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
+			s := openTurnSession(t, f.c, context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			if stop == "cancel-full" {
+				require.NoError(t, f.c.Call(context.Background(), "turn-emit", nil, nil))
+				cancel()
+			}
+			_, err := s.Receive(ctx)
+			want := error(context.DeadlineExceeded)
+			if stop == "cancel-full" {
+				want = context.Canceled
+			}
+			require.ErrorIs(t, err, want)
+			require.NoError(t, s.Err())
+			if stop == "cancel-full" {
+				nextTurnEvent(t, s)
+			}
+			require.NoError(t, s.Close())
+			awaitTurnSession(t, s, nil)
+		})
+	}
 }
 
-func TestSubscriptionConcurrentLifecycle(t *testing.T) {
-	f := startFake(t, "normal", codex.Limits{EventQueue: 2, Subscriptions: 128})
+func TestSessionConcurrentLifecycle(t *testing.T) {
+	f := startFake(t, "session-multiple", codex.Limits{EventQueue: 2, Subscriptions: 128, PendingCalls: 128, OutboundQueue: 128})
+	sessions := make([]*codex.Session, 64)
+	for i := range sessions {
+		sessions[i] = openTurnSession(t, f.c, context.Background())
+		nextTurnEvent(t, sessions[i])
+	}
 	var wg sync.WaitGroup
-	failures := make(chan error, 64)
-	for i := 0; i < 64; i++ {
+	failures := make(chan error, 128)
+	for _, s := range sessions {
 		wg.Go(func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			s, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{})
-			cleanupSubscription(t, s)
-			if err != nil {
-				if !errors.Is(err, codex.ErrClosed) {
-					failures <- err
+			wg.Go(func() { failures <- s.Close() })
+			for {
+				_, err := s.Receive(context.Background())
+				if err != nil {
+					break
 				}
-				return
-			}
-			wg.Go(func() { cancel(); _ = s.Close() })
-			for range s.Events() {
 			}
 			<-s.Done()
 			_ = s.Err()
-			_ = s.Close()
+			failures <- s.Abort()
 		})
 	}
-	for i := 0; i < 4; i++ {
-		{
-			err := f.c.Call(context.Background(), "turn-emit", nil, nil)
-			require.NoError(t, err, err)
+	for range 4 {
+		var frames []string
+		for _, s := range sessions {
+			frames = append(frames, treeFrame("future/race", fmt.Sprintf(`{"threadId":%q}`, s.ThreadID())))
 		}
+		emitRequests(t, f.c, frames...)
 	}
-	{
-		err := f.c.Close()
-		require.NoError(t, err, err)
-	}
+	require.NoError(t, f.c.Close())
 	wg.Wait()
 	close(failures)
 	for err := range failures {
@@ -524,26 +492,24 @@ func TestSubscriptionConcurrentLifecycle(t *testing.T) {
 	}
 }
 
-func (obs *observationSuite) TestSubscriptionAdmissionValidation() {
+func (obs *observationSuite) TestSessionAdmissionValidation() {
 	t := obs.T()
 	for _, limits := range []codex.Limits{{Subscriptions: -1}, {EventQueue: -1}} {
-		{
-			_, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "not-executed", Limits: limits})
-			require.False(t, err == nil, "negative subscription limit accepted")
-		}
+		_, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "not-executed", Limits: limits})
+		require.Error(t, err)
 	}
 	f := obs.fixture(t, "normal", codex.Limits{Subscriptions: 1})
-	{
-		_, err := f.c.Subscribe(nil, "native-thread-42", types.SubscriptionOptions{})
-		require.False(t, err == nil, "nil context accepted")
-	}
+	_, err := codex.Open(nil, codex.SessionOptions{Client: f.c})
+	require.Error(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	{
-		_, err := f.c.Subscribe(ctx, "native-thread-42", types.SubscriptionOptions{})
-		require.ErrorIs(t, err, context.Canceled, err)
+	_, err = codex.Open(ctx, codex.SessionOptions{Client: f.c})
+	require.ErrorIs(t, err, context.Canceled)
+	for _, options := range []codex.SessionOptions{{Client: f.c, MaxMembers: -1}, {Client: f.c, MaxParentDepth: -1}} {
+		_, err = codex.Open(context.Background(), options)
+		require.Error(t, err)
 	}
-	s := subscribe(t, f.c, context.Background())
-	_ = s.Close()
-	subscribe(t, f.c, context.Background())
+	s := openTurnSession(t, f.c, context.Background())
+	require.NoError(t, s.Close())
+	openTurnSession(t, f.c, context.Background())
 }

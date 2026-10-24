@@ -45,11 +45,6 @@ func TestSessionRequestFIFOAndOriginalRaw(t *testing.T) {
 	after, err := s.Receive(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "future/after", after.Event.Method)
-	select {
-	case <-f.c.Requests():
-		t.Fatal("Session request also entered legacy queue")
-	default:
-	}
 	require.NoError(t, r.Handle().Answer(context.Background(), json.RawMessage(`{"future":true}`)))
 	require.ErrorIs(t, r.Context().Err(), context.Canceled)
 	responseBarrier(t, f)
@@ -172,11 +167,6 @@ func TestSessionUnknownRequestsRetainRegistryBeyondDiagnosticRetention(t *testin
 	d := f.c.Unattributed()
 	require.Empty(t, d.Records)
 	require.EqualValues(t, 1, d.Evicted)
-	select {
-	case <-f.c.Requests():
-		t.Fatal("unknown request escaped to legacy consumer")
-	default:
-	}
 	// Expiring diagnostics has not released the native requests' admission slots.
 	err = f.c.Call(context.Background(), "request-frames", []string{requestFrame(`"third"`, "future/request", `{"threadId":"native-thread-42"}`)}, nil)
 	require.ErrorIs(t, err, codex.ErrRequestOverflow)

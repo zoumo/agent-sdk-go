@@ -36,20 +36,20 @@ they cannot mint answer handles. Later membership never backfills old frames.
 
 `Close` stops admission and cleans up without waiting for consumption. Accepted
 facts drain to EOF or the stable first termination cause. `Abort` additionally
-releases the Session's FIFO; it does not depend on the legacy native FIFO.
+releases the Session's FIFO.
 The FIFO is limited by available memory, not these quarantine limits. Task,
 tool and alias indexes are bounded separately; no UUID/message ledger can end
 a main-only long conversation. A task-index limit preserves the triggering fact
 before terminating; tool/parent-knowledge limits report gaps without terminating.
 
-Temporary expansion: old consumers explicitly use `NewClient`, which retains
-the old tree/callback API until T13 removes that model. Normal `Open` does not
-construct its managed tree or enqueue its native FIFO. This is not a permanent
-compatibility promise. T05 still owns real same-stream request handles and
-removal of default deny; T07 implements [structured input/configuration](session-input-config.md); T09 implements
-record discovery; T11 implements the [strict Load failure path](session-load.md).
-Successful native recovery remains an explicit fixed-baseline capability gap.
-`SessionOptions` currently carries the existing native process `Options` fields.
+The old public Client/NewClient, callback option, tree consumer and independent
+history stream are removed. Native process interaction is private and always
+bound to its Session. Permission workers and old dedup/run/creation/fanout resource
+options are removed. Use active membership, parent-knowledge and diagnostic
+retention limits above. Ordinary Open with ResumeID retains native no-replay
+resume in a fresh process; requested identity does not become observed merely
+because initialize succeeds. Explicit Load keeps its separate strict failure
+contract. See [breaking migration](../../docs/session-migration.md).
 
 Validation is offline only. `session_test.go` uses the existing synthetic native
 process peer and public Open/Receive/Submit/Interrupt/Close/Abort methods. It

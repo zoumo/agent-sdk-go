@@ -5,7 +5,6 @@ package claude
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -13,8 +12,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
-// SessionOptions carries native owned-process options. PermissionHandler is a
-// legacy Client option: Open rejects it; use Receive to obtain real requests.
+// SessionOptions carries native owned-process options and observation bounds.
 type SessionOptions Options
 
 type ReceivedKind string
@@ -51,11 +49,11 @@ type Submission struct{ Written bool }
 type InterruptOptions struct{}
 
 // Session owns admission, native identity, observation knowledge and one FIFO.
-// Client supplies process I/O and authoritative native control correlation; it
+// interaction supplies process I/O and authoritative native control correlation; it
 // does not enqueue a second native stream when owned by a Session.
 type Session struct {
 	discovery        discoveryScope
-	client           *Client
+	client           *interaction
 	done             chan struct{}
 	clientReady      chan struct{}
 	requestedID      string
@@ -87,9 +85,6 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 		return nil, queue.ErrNilContext
 	}
 	o := Options(options)
-	if o.PermissionHandler != nil {
-		return nil, &DispatchError{Op: "open", State: NotSent, Err: fmt.Errorf("%w: PermissionHandler is a legacy Client option; consume Session.Receive requests", ErrUnsupported)}
-	}
 	if err := o.defaults(); err != nil {
 		return nil, err
 	}
@@ -123,7 +118,7 @@ func newSession(o Options) (*Session, error) {
 
 // bindClient publishes the process before initialize, so pending Load can answer
 // real requests and interrupt without waiting for startup or history consumption.
-func (s *Session) bindClient(c *Client) bool {
+func (s *Session) bindClient(c *interaction) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.client = c
@@ -217,12 +212,7 @@ func (s *Session) finish(cause error) {
 	s.seeds = nil
 	_ = s.fifo.Close(cause)
 }
-func (c *Client) acceptEvent(e Event) error {
-	if c.session != nil {
-		return c.session.accept(e)
-	}
-	return c.events.Push(e, int64(len(e.Raw)))
-}
+func (c *interaction) acceptEvent(e Event) error { return c.session.accept(e) }
 
 // accept runs in the native reader. A same-session reviewed envelope is enough
 // observation evidence; a complete parent path and an inferred task identity are

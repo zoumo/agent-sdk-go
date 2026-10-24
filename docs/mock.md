@@ -36,13 +36,12 @@ client, err := codex.NewStdio(ctx, codex.StdioOptions{
 ```
 
 ```go
-client, err := claude.Open(ctx, claude.Options{
+session, err := claude.Open(ctx, claude.SessionOptions{
     CLIPath: "/tmp/bin/mock-claude",
     Env: []string{"CLAUDE_MOCK_SCENARIO=/tmp/claude-scenario.json"},
-    PermissionHandler: func(request *claude.PermissionRequest) {
-        // Hand the original handle to your application/UI. Answer it explicitly.
-    },
 })
+// After checking err, consume session.Receive(ctx). Actual IncomingRequest
+// carries the original handle; the application chooses an explicit answer.
 ```
 
 `Env` replaces the child environment. These peers require only the scenario
@@ -212,7 +211,7 @@ authentication failure. Author successful Claude conversations as synthetic.
 complete synthetic initialization, two-way question/permission handling,
 interrupts, canceled caller contexts, disconnection and strict mismatch failures.
 Paused-consumer stress sends 2,048 ordered native events through each built mock
-CLI with the legacy event capacity set to one. Question/permission answers and
+CLI while the Session FIFO remains unread. Question/permission answers and
 control replies finish before events are read; accepted events then drain in order
 after the synthetic disconnect. These are synthetic stress cases, not recordings.
 The consumer gate fetches the precise pushed module SHA into a fresh module and
@@ -227,8 +226,9 @@ mise exec -- bash scripts/check-consumers.sh FULL_PUSHED_COMMIT_SHA
 
 These peers expose SDK behavior; they do not repair it. Current native tests and
 source audit identify these limits, which are not a permanent API promise: Codex
-late responses after local call timeout count as unmatched responses, queued
-approval handles may remain writable after resolution, and duplicate `item/completed` keys
-follow native deduplication. See native compatibility and observation docs for
+late responses after local call timeout count as unmatched responses. Native
+resolution invalidates the original approval handle, and the writer rechecks
+authority before writing. Duplicate `item/completed` keys remain separate native
+arrivals, without SDK entity/UUID suppression. See native compatibility and observation docs for
 other SDK limits. Synthetic passing tests establish the chosen offline paths;
 they do not certify unmodeled real CLI behavior.

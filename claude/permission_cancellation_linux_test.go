@@ -20,7 +20,7 @@ import (
 // Linux FIFOs provide deterministic cross-process barriers without network
 // access, timing guesses, or access to SDK internals. All assertions use the
 // public client and bytes actually consumed from its subprocess stdin.
-func permissionWireBarrier(t *testing.T) (*Client, <-chan *PermissionRequest, *os.File, string) {
+func permissionWireBarrier(t *testing.T) (*interaction, *os.File, string) {
 	t.Helper()
 	dir := t.TempDir()
 	fifoPath, transcript := filepath.Join(dir, "gate"), filepath.Join(dir, "stdin.ndjson")
@@ -33,12 +33,12 @@ func permissionWireBarrier(t *testing.T) (*Client, <-chan *PermissionRequest, *o
 	gate, err := os.OpenFile(fifoPath, os.O_RDWR, 0600)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = gate.Close() })
-	requests := make(chan *PermissionRequest, 2)
+
 	c := openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Env = append(opts.Env, "CLAUDE_GO_WRITE_BARRIER="+fifoPath, "CLAUDE_GO_TRANSCRIPT="+transcript)
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
-	return c, requests, gate, transcript
+	return c, gate, transcript
 }
 
 func releasePermissionWire(t *testing.T, gate *os.File, action byte) {
@@ -49,14 +49,14 @@ func releasePermissionWire(t *testing.T, gate *os.File, action byte) {
 	}
 }
 
-func expectPermissionWireEvent(t *testing.T, c *Client, kind string) Event {
+func expectPermissionWireEvent(t *testing.T, c *interaction, kind string) Event {
 	t.Helper()
 	event := receive(t, c)
-	require.EqualValuesf(t, kind, event.Type, "expected %s, got %s", kind, event.Raw)
+	require.EqualValuesf(t, kind, eventKind(event), "expected %s, got %s", kind, event.Raw)
 	return event
 }
 
-func startBlockedPermissionWriter(t *testing.T, c *Client, id string, p *PermissionRequest) <-chan error {
+func startBlockedPermissionWriter(t *testing.T, c *interaction, id string, p *PermissionRequest) <-chan error {
 	t.Helper()
 	send(t, c, "block_write:"+id)
 	expectPermissionWireEvent(t, c, "writer_ready")
@@ -86,9 +86,8 @@ func startBlockedPermissionWriter(t *testing.T, c *Client, id string, p *Permiss
 
 func (s *controlInteractionSuite) TestPermissionQueuedWriterCancellationPreventsAllAnswerBytes() {
 	t := s.T()
-	c, requests, gate, path := permissionWireBarrier(t)
-	emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`))
-	p := awaitPermission(t, requests)
+	c, gate, path := permissionWireBarrier(t)
+	p := emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`)).Permission
 	blockedSend := startBlockedPermissionWriter(t, c, p.RequestID(), nil)
 	ctx := &answerReservationContext{Context: context.Background(), reserved: make(chan struct{})}
 	answers := make(chan error, 1)
@@ -127,9 +126,8 @@ func (s *controlInteractionSuite) TestPermissionQueuedWriterCloseOrCallerCancel(
 	t := s.T()
 	for _, callerCancels := range []bool{false, true} {
 		t.Run(map[bool]string{false: "close", true: "caller cancellation"}[callerCancels], func(t *testing.T) {
-			c, requests, gate, path := permissionWireBarrier(t)
-			emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`))
-			p := awaitPermission(t, requests)
+			c, gate, path := permissionWireBarrier(t)
+			p := emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`)).Permission
 			blockedSend := startBlockedPermissionWriter(t, c, p.RequestID(), nil)
 			base, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -138,31 +136,41 @@ func (s *controlInteractionSuite) TestPermissionQueuedWriterCloseOrCallerCancel(
 			go func() { answers <- p.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow}) }()
 			awaitSignal(t, ctx.reserved)
 			closeResults := make(chan error, 1)
-			want := ErrClosed
 			if callerCancels {
-				want = ErrPermissionWriteFailed
 				cancel()
+				err := awaitPermissionError(t, answers)
+				require.ErrorIs(t, err, context.Canceled)
+				var dispatch *DispatchError
+				require.ErrorAs(t, err, &dispatch)
+				require.Equal(t, NotSent, dispatch.State)
+				require.NoError(t, c.Err())
+				data, err := os.ReadFile(path)
+				require.NoError(t, err)
+				require.False(t, bytes.Contains(data, []byte(`{"response":`)), "canceled queued answer emitted bytes")
+				releasePermissionWire(t, gate, 'd')
+				expectPermissionWireEvent(t, c, "writer_finished")
+				require.NoError(t, awaitPermissionError(t, blockedSend), "caller cancellation interrupted unrelated write")
+				require.Empty(t, permissionResponses(t, permissionSnapshot(t, c)))
+				require.NoError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}))
+				assertPermissionReply(t, c, p.RequestID(), map[string]any{"behavior": "allow", "updatedInput": map[string]any{}})
+				got := permissionResponses(t, permissionSnapshot(t, c))
+				require.Len(t, got, 1)
+				require.NoError(t, c.Close())
+				require.Len(t, permissionResponses(t, permissionTranscript(t, path)), 1)
 			} else {
 				go func() { closeResults <- c.Close() }()
-			}
-			err := awaitPermissionError(t, answers)
-			assertPermissionError(t, err, p.RequestID(), want)
-			require.NotErrorIsf(t, err, ErrUnknownOutcome, "queued answer inherited another write's ambiguity: %v", err)
-			awaitDone(t, c)
-			{
-				err := awaitPermissionError(t, blockedSend)
-				require.Error(t, err, "blocked user write unexpectedly completed")
-			}
-			releasePermissionWire(t, gate, 'x')
-			if callerCancels {
-				_ = c.Close()
-			} else {
+				err := awaitPermissionError(t, answers)
+				assertPermissionError(t, err, p.RequestID(), ErrClosed)
+				require.NotErrorIs(t, err, ErrUnknownOutcome)
+				awaitDone(t, c)
+				require.Error(t, awaitPermissionError(t, blockedSend))
+				releasePermissionWire(t, gate, 'x')
 				_ = awaitPermissionError(t, closeResults)
+				assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{}), p.RequestID(), ErrClosed)
+				data, err := os.ReadFile(path)
+				require.NoError(t, err)
+				require.False(t, bytes.Contains(data, []byte(`{"response":`)), "queued answer emitted any response bytes")
 			}
-			assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{}), p.RequestID(), want)
-			data, err := os.ReadFile(path)
-			require.NoError(t, err)
-			require.False(t, bytes.Contains(data, []byte(`{"response":`)), "queued answer emitted any response bytes")
 		})
 	}
 }
@@ -171,9 +179,8 @@ func (s *controlInteractionSuite) TestPermissionStartedWriteCancellationAndClose
 	t := s.T()
 	for _, cliCancels := range []bool{false, true} {
 		t.Run(map[bool]string{false: "close", true: "CLI cancellation"}[cliCancels], func(t *testing.T) {
-			c, requests, gate, path := permissionWireBarrier(t)
-			emitPermission(t, c, "started", "Read", json.RawMessage(`{}`))
-			p := awaitPermission(t, requests)
+			c, gate, path := permissionWireBarrier(t)
+			p := emitPermission(t, c, "started", "Read", json.RawMessage(`{}`)).Permission
 			answers := startBlockedPermissionWriter(t, c, p.RequestID(), p)
 			closeResults := make(chan error, 1)
 			want := ErrPermissionWriteFailed
@@ -211,9 +218,8 @@ func (s *controlInteractionSuite) TestPermissionStartedWriteCancellationAndClose
 
 func (s *controlInteractionSuite) TestPermissionStartedWriteCanFinishBeforeCancellation() {
 	t := s.T()
-	c, requests, gate, path := permissionWireBarrier(t)
-	emitPermission(t, c, "completed", "Read", json.RawMessage(`{}`))
-	p := awaitPermission(t, requests)
+	c, gate, path := permissionWireBarrier(t)
+	p := emitPermission(t, c, "completed", "Read", json.RawMessage(`{}`)).Permission
 	answers := startBlockedPermissionWriter(t, c, p.RequestID(), p)
 	releasePermissionWire(t, gate, 'd')
 	expectPermissionWireEvent(t, c, "writer_finished")
@@ -236,7 +242,7 @@ func (s *controlInteractionSuite) TestPermissionStartedWriteCanFinishBeforeCance
 
 func (s *controlInteractionSuite) TestQueuedSendAndInterruptDoNotInheritStartedWriteAmbiguity() {
 	t := s.T()
-	c, _, gate, _ := permissionWireBarrier(t)
+	c, gate, _ := permissionWireBarrier(t)
 	started := startBlockedPermissionWriter(t, c, "unused", nil)
 	sendCtx := &answerReservationContext{Context: context.Background(), reserved: make(chan struct{})}
 	queuedSend := make(chan error, 1)

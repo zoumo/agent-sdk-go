@@ -23,7 +23,6 @@ var (
 	ErrPermissionWriteFailed    = errors.New("claude: permission response attempt failed")
 	ErrPermissionCancelled      = errors.New("claude: permission request cancelled")
 	ErrPermissionStale          = errors.New("claude: permission handle belongs to another connection epoch")
-	ErrPermissionHandlerPanic   = errors.New("claude: permission handler panicked")
 )
 
 // DispatchState distinguishes a local rejection from a possibly written answer.

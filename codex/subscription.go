@@ -6,13 +6,35 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-// publishLocked shares the connection reader across independent root observations.
-// Each subscription decodes into independently owned native storage.
+// publishLocked routes native notifications to the owning Sessions.
 func (c *Client) publishLocked(method string, params json.RawMessage, raw []byte) {
 	c.publishSessionsLocked(method, params, raw)
-	for s := range c.subscriptions {
-		s.publishLocked(method, params, raw)
+}
+
+func treeIdentity(params json.RawMessage) types.EventIdentity {
+	f, err := objectFields(params)
+	if err != nil {
+		return types.EventIdentity{}
 	}
+	var id types.EventIdentity
+	_ = json.Unmarshal(f["threadId"], &id.ThreadID)
+	_ = json.Unmarshal(f["turnId"], &id.TurnID)
+	_ = json.Unmarshal(f["itemId"], &id.ItemID)
+	for key, target := range map[string]*string{"thread": &id.ThreadID, "turn": &id.TurnID, "item": &id.ItemID} {
+		nested, err := objectFields(f[key])
+		if err != nil {
+			continue
+		}
+		var nestedID string
+		_ = json.Unmarshal(nested["id"], &nestedID)
+		if *target != "" && nestedID != "" && *target != nestedID {
+			*target = "" // Conflicting identities cannot support routing or deduplication.
+		} else if *target == "" {
+			*target = nestedID
+		}
+	}
+
+	return id
 }
 
 func decodeEvent(method string, params json.RawMessage) types.Event {

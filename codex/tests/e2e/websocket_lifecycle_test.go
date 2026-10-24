@@ -181,14 +181,7 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 
 		t.Log("initialize response and initialized write succeeded; server user agent present:", c.ServerInfo().UserAgent != "")
 		t.Cleanup(func() { _ = c.Close() })
-		go func() {
-			for r := range c.Requests() {
-				unexpected.Add(1)
-				rejectCtx, stop := context.WithTimeout(ctx, 30*time.Second)
-				_ = r.Handle().Reject(rejectCtx, &codex.RPCError{Code: -32601, Message: "unexpected interaction in text-only validation"})
-				stop()
-			}
-		}()
+
 		return c
 	}
 	closeClient := func(c *codex.Client) {
@@ -236,14 +229,12 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 		}
 		t.Logf("thread/read same native thread and %d completed native turn IDs; synthetic agent marker present in each", len(turnIDs))
 	}
-	observe := func(c *codex.Client, id, prompt string) string {
-		s, err := c.Subscribe(ctx, id, types.SubscriptionOptions{})
-		require.True(t, err == nil,
-			"Subscribe failed")
+	observe := func(session *codex.Session, prompt string) string {
+		id := session.ThreadID()
+		defer session.Close()
 
-		defer s.Close()
 		attempts.Add(1)
-		started, err := c.StartTurn(ctx, types.TurnStartParams{ThreadID: id, Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}})
+		submission, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}})
 		if err != nil {
 			var ce *codex.CallError
 			if errors.As(err, &ce) {
@@ -251,88 +242,94 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 			}
 			require.FailNowf(t, "assertion failed", "turn/start failed; no replay: %T", err)
 		}
-		require.False(t, started.Turn.ID == "",
+		require.False(t, submission.Response.Turn.ID == "",
 			"empty native turn ID")
 
 		t.Logf("turn/start responded; native turn T%d recorded in memory", attempts.Load())
-		timer := time.NewTimer(120 * time.Second)
-		defer timer.Stop()
+		observeCtx, stopObserve := context.WithTimeout(ctx, 120*time.Second)
+		defer stopObserve()
+
 		var delta strings.Builder
 		agent, turnStarted := false, false
 		for {
-			select {
-			case <-timer.C:
-				interruptCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
-				_, _ = c.InterruptTurn(interruptCtx, types.TurnInterruptParams{ThreadID: id, TurnID: started.Turn.ID})
+			received, err := session.Receive(observeCtx)
+			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					interruptCtx, stop := context.WithTimeout(context.Background(), 30*time.Second)
+					_ = session.Interrupt(interruptCtx, codex.InterruptOptions{TurnID: submission.Response.Turn.ID})
+					stop()
+				}
+				require.FailNowf(t, "observation ended", "native stream/timeout failure: %T", err)
+			}
+			if received.Request != nil {
+				unexpected.Add(1)
+				rejectCtx, stop := context.WithTimeout(ctx, 30*time.Second)
+				_ = received.Request.Handle().Reject(rejectCtx, &codex.RPCError{Code: -32601, Message: "unexpected interaction in text-only validation"})
 				stop()
-				require.FailNow(t, "turn observation timeout; one explicit interrupt attempted, no replay")
-			case <-s.Done():
-				require.FailNowf(t, "assertion failed", "subscription ended early: %T", s.Err())
-			case e, ok := <-s.Events():
-				if !ok || s.Err() != nil {
-					require.FailNow(t, "event stream ended/lost")
-				}
-				if e.Raw == nil {
-					continue
-				}
-				native := e
-				if native.DecodeError != nil {
-					require.FailNowf(t, "assertion failed", "event decode failure method=%s", native.Method)
-				}
-				switch v := native.Data.(type) {
-				case *types.TurnStartedNotification:
-					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						turnStarted = true
-						t.Log("matched turn/started")
-					}
-				case *types.AgentMessageDeltaNotification:
-					if v.ThreadID == id && v.TurnID == started.Turn.ID {
-						delta.WriteString(v.Delta)
-					}
-				case *types.ItemCompletedNotification:
-					if v.ThreadID == id && v.TurnID == started.Turn.ID && v.Item.AgentMessage != nil {
-						agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_E2E_WS_OK"
-						t.Log("matched item/completed agentMessage")
-					}
-				case *types.ErrorNotification:
-					require.FailNow(t, "native error notification received; raw payload withheld")
-				case *types.TurnCompletedNotification:
-					if v.ThreadID == id && v.Turn.ID == started.Turn.ID {
-						require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_E2E_WS_OK" || unexpected.Load() != 0,
-							"completion/content/interaction assertion failed")
-						{
+				continue
+			}
+			if received.Event == nil {
+				continue
+			}
+			e := *received.Event
 
-							err := s.Close()
-							require.True(t, err == nil,
-								"subscription Close failed")
-						}
+			native := e
+			if native.DecodeError != nil {
+				require.FailNowf(t, "assertion failed", "event decode failure method=%s", native.Method)
+			}
+			switch v := native.Data.(type) {
+			case *types.TurnStartedNotification:
+				if v.ThreadID == id && v.Turn.ID == submission.Response.Turn.ID {
+					turnStarted = true
+					t.Log("matched turn/started")
+				}
+			case *types.AgentMessageDeltaNotification:
+				if v.ThreadID == id && v.TurnID == submission.Response.Turn.ID {
+					delta.WriteString(v.Delta)
+				}
+			case *types.ItemCompletedNotification:
+				if v.ThreadID == id && v.TurnID == submission.Response.Turn.ID && v.Item.AgentMessage != nil {
+					agent = strings.TrimSpace(v.Item.AgentMessage.Text) == "SDK_E2E_WS_OK"
+					t.Log("matched item/completed agentMessage")
+				}
+			case *types.ErrorNotification:
+				require.FailNow(t, "native error notification received; raw payload withheld")
+			case *types.TurnCompletedNotification:
+				if v.ThreadID == id && v.Turn.ID == submission.Response.Turn.ID {
+					require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_E2E_WS_OK" || unexpected.Load() != 0,
+						"completion/content/interaction assertion failed")
+					{
 
-						select {
-						case <-s.Done():
-						default:
-							require.FailNow(t, "subscription Done open")
-						}
-						require.Equal(t, nil, s.Err(),
-							"subscription loss/terminal error")
-
-						t.Log("matched turn/completed completed; delta and agent marker exact; subscription Close/Done/Err passed")
-						return started.Turn.ID
+						err := session.Close()
+						require.True(t, err == nil,
+							"subscription Close failed")
 					}
+
+					select {
+					case <-session.Done():
+					default:
+						require.FailNow(t, "subscription Done open")
+					}
+					require.Equal(t, nil, session.Err(),
+						"subscription loss/terminal error")
+
+					t.Log("matched turn/completed completed; delta and agent marker exact; subscription Close/Done/Err passed")
+					return submission.Response.Turn.ID
 				}
 			}
 		}
 	}
 	c := open()
-	thread, err := c.StartThread(ctx, types.ThreadStartParams{Cwd: types.Some(cwd), Ephemeral: types.Some(false), Sandbox: types.Some(types.SandboxModeReadOnly)})
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: types.ThreadStartParams{Cwd: types.Some(cwd), Ephemeral: types.Some(false), Sandbox: types.Some(types.SandboxModeReadOnly)}})
 	require.True(t, err == nil,
 		"thread/start failed; no replay: %T", err)
 
-	id := thread.Thread.ID
+	id := session.ThreadID()
 	require.False(t, id == "",
 		"empty thread ID")
 
 	t.Log("thread/start persistent native thread A created in empty temporary cwd; read-only sandbox")
-	first := observe(c, id, "Do not use tools or access files. Reply with exactly SDK_E2E_WS_OK and nothing else.")
+	first := observe(session, "Do not use tools or access files. Reply with exactly SDK_E2E_WS_OK and nothing else.")
 	history(c, id, []string{first})
 	closeClient(c)
 	select {
@@ -345,22 +342,19 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 	c = open()
 	t.Log("same owned listener accepted fresh authenticated initialize after first Close")
 	history(c, id, []string{first})
-	resumed, err := c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})
-	require.True(t, err == nil,
-		"thread/resume failed; no replacement or replay: %T", err)
-	require.Equal(t, id, resumed.Thread.ID,
-		"resume identity mismatch")
+	session = loadNativeSession(t, ctx, c, id, cwd)
+	require.Equal(t, id, session.LoadState().ObservedIdentity, "resume identity mismatch")
+	t.Log("new connection Load confirmed same native main identity")
 
-	t.Log("new connection thread/resume returned same native thread A")
-	second := observe(c, id, "Do not use tools or access files. Return exactly the marker from your previous assistant reply, with no additional text.")
+	second := observe(session, "Do not use tools or access files. Return exactly the marker from your previous assistant reply, with no additional text.")
 	history(c, id, []string{first, second})
 	detached, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
 	require.True(t, err == nil,
 		"native unsubscribe failed: %T", err)
-	require.Equal(t, types.ThreadUnsubscribeStatusUnsubscribed, detached.Status,
+	require.Contains(t, []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusNotSubscribed, types.ThreadUnsubscribeStatusNotLoaded}, detached.Status,
 		"native unsubscribe unexpected status")
 
-	t.Log("thread/unsubscribe status=unsubscribed")
+	t.Log("Session.Close released attachment; native readback confirms no subscription")
 	closeClient(c)
 	select {
 	case e := <-exited:

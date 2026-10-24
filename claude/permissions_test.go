@@ -23,7 +23,7 @@ import (
 // Python tests/test_tool_callbacks.py (allow, deny, modified input, tool-use IDs,
 // display context, callback errors) and tests/test_query.py (permission roundtrip
 // before stdin closure and control cancellation). These fixtures add the Go
-// design's retained handles, bounded workers and single-use guarantees. They do
+// design's retained handles, bounded registry and single-use guarantees. They do
 // not establish live CLI compatibility or an AskUserQuestion answer schema.
 func runPermissionFixture(mode string, reader *bufio.Reader) {
 	var transcript *os.File
@@ -93,14 +93,14 @@ func runPermissionFixture(mode string, reader *bufio.Reader) {
 	}
 }
 
-func emitPermissionFrame(t *testing.T, c *Client, frame any) {
+func emitPermissionFrame(t *testing.T, c *interaction, frame any) {
 	t.Helper()
-	data, err := json.Marshal(frame)
+	data, err := json.Marshal(fixtureNativeFrame(frame))
 	require.NoError(t, err)
 	send(t, c, "emit:"+string(data))
 }
 
-func emitPermission(t *testing.T, c *Client, id, tool string, input json.RawMessage) Event {
+func emitPermission(t *testing.T, c *interaction, id, tool string, input json.RawMessage) permissionDelivery {
 	t.Helper()
 	emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": id, "request": map[string]any{
 		"subtype": "can_use_tool", "tool_name": tool, "input": input, "tool_use_id": "tool-" + id,
@@ -108,21 +108,11 @@ func emitPermission(t *testing.T, c *Client, id, tool string, input json.RawMess
 		"blocked_path": "outside/project", "decision_reason": "host approval", "title": "Approval question",
 		"display_name": "Tool action", "description": "Review input", "future_context": map[string]any{"kept": 7},
 	}})
-	event := receive(t, c)
+	delivery := receivePermission(t, c)
+	event := delivery.Event
 	require.NotNilf(t, event.Control, "expected permission %q, got %s", id, event.Raw)
 	require.EqualValuesf(t, id, event.Control.RequestID, "expected permission %q, got %s", id, event.Raw)
-	return event
-}
-
-func awaitPermission(t *testing.T, requests <-chan *PermissionRequest) *PermissionRequest {
-	t.Helper()
-	select {
-	case request := <-requests:
-		return request
-	case <-time.After(3 * time.Second):
-		require.FailNow(t, "permission handler was not dispatched")
-		return nil
-	}
+	return delivery
 }
 
 func awaitPermissionError(t *testing.T, results <-chan error) error {
@@ -136,11 +126,11 @@ func awaitPermissionError(t *testing.T, results <-chan error) error {
 	}
 }
 
-func permissionSnapshot(t *testing.T, c *Client) []json.RawMessage {
+func permissionSnapshot(t *testing.T, c *interaction) []json.RawMessage {
 	t.Helper()
 	send(t, c, "snapshot")
 	event := receive(t, c)
-	require.EqualValuesf(t, "snapshot", event.Type, "unexpected unsolicited output before snapshot: %s", event.Raw)
+	require.EqualValuesf(t, "snapshot", eventKind(event), "unexpected unsolicited output before snapshot: %s", event.Raw)
 	var snapshot struct {
 		Frames []json.RawMessage `json:"frames"`
 	}
@@ -174,13 +164,13 @@ func permissionResponses(t *testing.T, frames []json.RawMessage) []map[string]an
 	return responses
 }
 
-func assertPermissionReply(t *testing.T, c *Client, id string, decision map[string]any) {
+func assertPermissionReply(t *testing.T, c *interaction, id string, decision map[string]any) {
 	t.Helper()
 	event := receive(t, c)
 	var echoed struct {
 		Wire map[string]any `json:"wire"`
 	}
-	require.EqualValuesf(t, "reply_seen", event.Type, "expected response echo: %s", event.Raw)
+	require.EqualValuesf(t, "reply_seen", eventKind(event), "expected response echo: %s", event.Raw)
 	require.Nilf(t, json.Unmarshal(event.Raw, &echoed), "expected response echo: %s", event.Raw)
 	want := map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": id, "response": decision}}
 	require.Equalf(t, echoed.Wire, want, "response mismatch:\ngot  %#v\nwant %#v", echoed.Wire, want)
@@ -201,29 +191,24 @@ func permissionTranscript(t *testing.T, path string) []json.RawMessage {
 
 func (s *controlInteractionSuite) TestDeferredPermissionHumanWaitKeepsTransportMoving() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 2)
+
 	answers := make(chan error, 2)
 	releaseHuman := make(chan struct{})
 	handlerReturned := make(chan struct{}, 2)
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.Limits.PermissionWorkers = 2
-		opts.PermissionHandler = func(p *PermissionRequest) {
-			defer func() { handlerReturned <- struct{}{} }()
-			requests <- p
-			if p.RequestID() == "human" {
-				select {
-				case <-releaseHuman:
-				case <-p.Context().Done():
-					return
-				}
-				answers <- p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
-			} else {
-				answers <- p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "Not approved\n理由"})
-			}
-		}
+
 	})
 	event := emitPermission(t, c, "human", "Read", json.RawMessage(`{"path":"review.txt","unknown":[1,true]}`))
-	human := awaitPermission(t, requests)
+	human := event.Permission
+	go func() {
+		defer func() { handlerReturned <- struct{}{} }()
+		select {
+		case <-releaseHuman:
+		case <-human.Context().Done():
+			return
+		}
+		answers <- human.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+	}()
 	require.EqualValues(t, "human", human.RequestID(), "permission identifiers lost")
 	require.EqualValues(t, "tool-human", human.ToolUseID(), "permission identifiers lost")
 	require.EqualValues(t, "Read", human.ToolName(), "permission identifiers lost")
@@ -245,10 +230,11 @@ func (s *controlInteractionSuite) TestDeferredPermissionHumanWaitKeepsTransportM
 		}
 	}
 	event.Control.RequestID = "tampered"
-	emitPermissionFrame(t, c, map[string]any{"type": "stream_event", "event": map[string]any{"type": "content_block_delta", "delta": map[string]any{"type": "text_delta", "text": "still moving"}}})
+	emitPermissionFrame(t, c, map[string]any{"type": "stream_event", "session_id": "s", "event": map[string]any{"type": "content_block_delta", "delta": map[string]any{"type": "text_delta", "text": "still moving"}}})
 	require.NotNil(t, receive(t, c).Stream, "human wait blocked stream event")
-	emitPermission(t, c, "independent", "Write", json.RawMessage(`{"path":"other.txt"}`))
-	second := awaitPermission(t, requests)
+	second := emitPermission(t, c, "independent", "Write", json.RawMessage(`{"path":"other.txt"}`)).Permission
+	answers <- second.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "Not approved\n理由"})
+	handlerReturned <- struct{}{}
 	require.EqualValues(t, "independent", second.RequestID(), "second permission was not independent")
 	require.EqualValues(t, human.Epoch(), second.Epoch(), "second permission was not independent")
 	{
@@ -298,14 +284,11 @@ func (s *controlInteractionSuite) TestDeferredPermissionRetainedHandleUsesExactU
 		{"question", "AskUserQuestion", json.RawMessage(`{"questions":[{"question":"Which format?","options":[]}],"answers":{"Which format?":"user-supplied"}}`), map[string]any{"questions": []any{map[string]any{"question": "Which format?", "options": []any{}}}, "answers": map[string]any{"Which format?": "user-supplied"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			requests := make(chan *PermissionRequest, 1)
-			returned := make(chan struct{})
+
 			c := s.openFixture(t, "permission_controls", func(opts *Options) {
-				opts.PermissionHandler = func(p *PermissionRequest) { requests <- p; close(returned) }
+
 			})
-			emitPermission(t, c, "original/request-ID", tc.tool, json.RawMessage(`{"original":true}`))
-			p := awaitPermission(t, requests)
-			<-returned
+			p := emitPermission(t, c, "original/request-ID", tc.tool, json.RawMessage(`{"original":true}`)).Permission
 			{
 				got := permissionResponses(t, permissionSnapshot(t, c))
 				require.EqualValuesf(t, 0, len(got), "handler return answered: %#v", got)
@@ -331,19 +314,17 @@ func (s *controlInteractionSuite) TestDeferredPermissionRetainedHandleUsesExactU
 
 func (s *controlInteractionSuite) TestAssistantQuestionIsOnlyAnEvent() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.Limits.PermissionWorkers = 1
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
-	emitPermissionFrame(t, c, map[string]any{"type": "assistant", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "question-tool", "name": "AskUserQuestion", "input": map[string]any{"questions": []any{}}}}}})
+	emitPermissionFrame(t, c, map[string]any{"type": "assistant", "session_id": "s", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "question-tool", "name": "AskUserQuestion", "input": map[string]any{"questions": []any{}}}}}})
 	event := receive(t, c)
 	require.NotNilf(t, event.Assistant, "question event lost: %s", event.Raw)
 	require.EqualValuesf(t, "AskUserQuestion", event.Assistant.Content.Blocks[0].ToolUse.Name, "question event lost: %s", event.Raw)
-	// One worker and a later real request form a dispatch-order barrier. A
-	// mistakenly enqueued assistant handle would arrive before this real one.
-	emitPermission(t, c, "real-control", "Read", json.RawMessage(`{}`))
-	p := awaitPermission(t, requests)
+	// The next same-stream request must be the actual control request; the
+	// assistant block cannot create an answer handle.
+	p := emitPermission(t, c, "real-control", "Read", json.RawMessage(`{}`)).Permission
 	require.EqualValues(t, "real-control", p.RequestID(), "assistant block created an answer authority")
 	{
 		err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny})
@@ -358,12 +339,11 @@ func (s *controlInteractionSuite) TestAssistantQuestionIsOnlyAnEvent() {
 
 func (s *controlInteractionSuite) TestPermissionCancellationImmediatelyInvalidatesHandle() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 2)
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
-	emitPermission(t, c, "abandoned", "AskUserQuestion", json.RawMessage(`{"questions":[]}`))
-	p := awaitPermission(t, requests)
+	p := emitPermission(t, c, "abandoned", "AskUserQuestion", json.RawMessage(`{"questions":[]}`)).Permission
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "abandoned", "future": "preserved"})
 	cancelEvent := receive(t, c)
 	require.EqualValuesf(t, "control_cancel_request", cancelEvent.Type, "cancel frame lost: %s", cancelEvent.Raw)
@@ -374,9 +354,8 @@ func (s *controlInteractionSuite) TestPermissionCancellationImmediatelyInvalidat
 		require.ErrorIsf(t, err, ErrPermissionCancelled, "canceled answer: %v", err)
 	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "unknown"})
-	require.EqualValues(t, "control_cancel_request", receive(t, c).Type, "unknown cancellation was hidden")
-	emitPermission(t, c, "still-live", "Read", json.RawMessage(`{}`))
-	other := awaitPermission(t, requests)
+	require.EqualValues(t, "control_cancel_request", eventKind(receive(t, c)), "unknown cancellation was hidden")
+	other := emitPermission(t, c, "still-live", "Read", json.RawMessage(`{}`)).Permission
 	{
 		err := other.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "no"})
 		require.NoError(t, err)
@@ -388,15 +367,12 @@ func (s *controlInteractionSuite) TestPermissionCancellationImmediatelyInvalidat
 	}
 }
 
-func (s *controlInteractionSuite) TestPermissionInvalidAnswerAndPanicFailClosed() {
+func (s *controlInteractionSuite) TestPermissionInvalidAnswerIsNotSentAndReusable() {
 	t := s.T()
 	cases := []struct {
 		name   string
 		answer PermissionAnswer
-		panic  bool
 	}{
-		{name: "panic", panic: true},
-		{name: "nil panic", panic: true},
 		{name: "missing behavior"},
 		{name: "unknown behavior", answer: PermissionAnswer{Behavior: "ask"}},
 		{name: "invalid JSON", answer: PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: json.RawMessage(`{`)}},
@@ -406,57 +382,34 @@ func (s *controlInteractionSuite) TestPermissionInvalidAnswerAndPanicFailClosed(
 		{name: "allow reason", answer: PermissionAnswer{Behavior: PermissionAllow, Message: "contradictory"}},
 		{name: "deny input", answer: PermissionAnswer{Behavior: PermissionDeny, UpdatedInput: json.RawMessage(`{}`)}},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.name == "nil panic" {
-				t.Setenv("GODEBUG", "panicnil=1")
-			}
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
-			results := make(chan error, 1)
-			c := s.openFixture(t, "permission_controls", func(opts *Options) {
-				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-				opts.PermissionHandler = func(p *PermissionRequest) {
-					if tc.panic {
-						if tc.name == "nil panic" {
-							panic(nil)
-						}
-						panic("fixture handler panic")
-					}
-					results <- p.Answer(context.Background(), tc.answer)
-				}
-			})
-			// A terminal handler failure may beat receiving its accepted event.
-			emitPermission(t, c, "bad-handler", "Read", json.RawMessage(`{}`))
-			want := ErrInvalidPermissionAnswer
-			if tc.panic {
-				want = ErrPermissionHandlerPanic
-			} else if err := awaitPermissionError(t, results); !errors.Is(err, want) {
-				require.FailNowf(t, "unexpected test outcome", "invalid answer error: %v", err)
-			}
-			awaitDone(t, c)
-			{
-				err := c.Close()
-				require.ErrorIsf(t, err, want, "failure was not observable: %v", err)
-			}
-			var failure *PermissionError
-			require.ErrorAsf(t, c.Err(), &failure, "missing request-specific failure: %v", c.Err())
-			require.EqualValuesf(t, "bad-handler", failure.RequestID, "missing request-specific failure: %v", c.Err())
-			{
-				got := permissionResponses(t, permissionTranscript(t, path))
-				require.EqualValuesf(t, 0, len(got), "failed handler granted/responded: %#v", got)
-			}
+			c := s.openFixture(t, "permission_controls", func(o *Options) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
+			p := emitPermission(t, c, "bad-answer", "Read", json.RawMessage(`{}`)).Permission
+			err := p.Answer(context.Background(), tc.answer)
+			var dispatch *DispatchError
+			require.ErrorAs(t, err, &dispatch)
+			require.Equal(t, NotSent, dispatch.State)
+			require.ErrorIs(t, err, ErrInvalidPermissionAnswer)
+			require.NoError(t, p.Context().Err())
+			require.Equal(t, "bad-answer", p.RequestID())
+			require.Empty(t, permissionResponses(t, permissionSnapshot(t, c)))
+			require.NoError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "later explicit answer"}))
+			assertPermissionReply(t, c, "bad-answer", map[string]any{"behavior": "deny", "message": "later explicit answer"})
+			require.NoError(t, c.Close())
+			require.Len(t, permissionResponses(t, permissionTranscript(t, path)), 1)
 		})
 	}
 }
-
 func (s *controlInteractionSuite) TestPermissionAnswerConcurrentSingleUse() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
-	emitPermission(t, c, "one-response", "Read", json.RawMessage(`{}`))
-	p := awaitPermission(t, requests)
+	p := emitPermission(t, c, "one-response", "Read", json.RawMessage(`{}`)).Permission
 	start := make(chan struct{})
 	results := make(chan error, 32)
 	var wg sync.WaitGroup
@@ -480,7 +433,7 @@ func (s *controlInteractionSuite) TestPermissionAnswerConcurrentSingleUse() {
 		}
 	}
 	require.EqualValuesf(t, 1, successes, "successful responses=%d", successes)
-	require.EqualValues(t, "reply_seen", receive(t, c).Type, "response missing")
+	require.EqualValues(t, "reply_seen", eventKind(receive(t, c)), "response missing")
 	{
 		got := permissionResponses(t, permissionSnapshot(t, c))
 		require.EqualValuesf(t, 1, len(got), "duplicate responses: %#v", got)
@@ -489,21 +442,19 @@ func (s *controlInteractionSuite) TestPermissionAnswerConcurrentSingleUse() {
 
 func (s *controlInteractionSuite) TestPermissionCloseInvalidatesAndFreshClientHasNewEpoch() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 2)
+
 	configure := func(opts *Options) {
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	}
 	first := s.openFixture(t, "permission_controls", configure)
-	emitPermission(t, first, "reused-id", "Read", json.RawMessage(`{}`))
-	old := awaitPermission(t, requests)
+	old := emitPermission(t, first, "reused-id", "Read", json.RawMessage(`{}`)).Permission
 	{
 		err := first.Close()
 		require.NoError(t, err)
 	}
 	require.ErrorIs(t, context.Cause(old.Context()), ErrClosed, "Close did not cancel pending context")
 	second := s.openFixture(t, "permission_controls", configure)
-	emitPermission(t, second, "reused-id", "Read", json.RawMessage(`{}`))
-	fresh := awaitPermission(t, requests)
+	fresh := emitPermission(t, second, "reused-id", "Read", json.RawMessage(`{}`)).Permission
 	require.NotEqualValues(t, fresh.Epoch(), old.Epoch(), "connection epoch reused")
 	{
 		err := old.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
@@ -520,39 +471,31 @@ func (s *controlInteractionSuite) TestPermissionCloseInvalidatesAndFreshClientHa
 	}
 }
 
-func (s *controlInteractionSuite) TestPermissionWorkerBoundAndCloseDoNotWaitForUserCode() {
+func (s *controlInteractionSuite) TestPermissionRetainedWaitAndRegistryBoundDoNotBlockClose() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 3)
-	release := make(chan struct{})
-	returned := make(chan struct{})
+	release, returned := make(chan struct{}), make(chan struct{})
 	defer close(release)
-	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.Limits.PermissionWorkers = 1
-		opts.Limits.ControlBuffer = 1
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p; <-release; close(returned) }
-	})
-	emitPermission(t, c, "running", "Read", json.RawMessage(`{}`))
-	running := awaitPermission(t, requests)
-	emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`))
-	require.EqualValues(t, 0, len(requests), "worker limit exceeded")
+	c := s.openFixture(t, "permission_controls", func(o *Options) { o.Limits.PendingPermissions = 2; o.Limits.ControlBuffer = 1 })
+	running := emitPermission(t, c, "running", "Read", json.RawMessage(`{}`)).Permission
+	go func() {
+		defer close(returned)
+		<-release
+		_ = running.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow})
+	}()
+	queued := emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`)).Permission
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	{
-		err := c.Interrupt(ctx)
-		require.NoError(t, err)
-	}
+	require.NoError(t, c.Interrupt(ctx))
 	emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": "overflow", "request": map[string]any{"subtype": "can_use_tool", "tool_name": "Read", "input": map[string]any{}}})
 	awaitDone(t, c)
 	closed := make(chan error, 1)
 	go func() { closed <- c.Close() }()
-	{
-		err := awaitPermissionError(t, closed)
-		require.ErrorIsf(t, err, ErrResourceLimit, "overflow: %v", err)
-	}
-	require.NotNil(t, running.Context().Err(), "overflow left running permission context live")
+	require.ErrorIs(t, awaitPermissionError(t, closed), ErrResourceLimit)
+	require.Error(t, running.Context().Err())
+	require.Error(t, queued.Context().Err())
 	select {
 	case <-returned:
-		require.FailNow(t, "test handler unexpectedly returned before release")
+		t.Fatal("caller wait unexpectedly released")
 	default:
 	}
 }
@@ -561,14 +504,13 @@ func (s *controlInteractionSuite) TestPermissionDuplicateIDCannotCreateSecondAut
 	t := s.T()
 	for _, subtype := range []string{"can_use_tool", "unsupported"} {
 		t.Run(subtype, func(t *testing.T) {
-			requests := make(chan *PermissionRequest, 2)
+
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
 			c := s.openFixture(t, "permission_controls", func(opts *Options) {
 				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-				opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 			})
-			emitPermission(t, c, "duplicate", "Read", json.RawMessage(`{}`))
-			p := awaitPermission(t, requests)
+			p := emitPermission(t, c, "duplicate", "Read", json.RawMessage(`{}`)).Permission
 			emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": "duplicate", "request": map[string]any{"subtype": subtype, "tool_name": "Read", "input": map[string]any{}}})
 			awaitDone(t, c)
 			{
@@ -591,15 +533,10 @@ func (s *controlInteractionSuite) TestPermissionLateValidControlDoesNotMakeClose
 	t := s.T()
 	c := s.openFixture(t, "permission_controls")
 	send(t, c, "late_control_on_close")
-	require.EqualValues(t, "ready", receive(t, c).Type, "fixture not ready")
+	require.EqualValues(t, "ready", eventKind(receive(t, c)), "fixture not ready")
 	{
 		err := c.Close()
 		require.NoErrorf(t, err, "valid shutdown frame became error: %v", err)
-	}
-	{
-		event := receive(t, c)
-		require.NotNilf(t, event.Control, "late control was not retained: %s", event.Raw)
-		require.EqualValuesf(t, "late", event.Control.RequestID, "late control was not retained: %s", event.Raw)
 	}
 	{
 		_, err := nextNative(c, context.Background())
@@ -609,12 +546,11 @@ func (s *controlInteractionSuite) TestPermissionLateValidControlDoesNotMakeClose
 
 func (s *controlInteractionSuite) TestPermissionCanceledCallerContextDoesNotConsumeHandle() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 1)
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 	})
-	emitPermission(t, c, "retry-before-reserve", "Read", json.RawMessage(`{}`))
-	p := awaitPermission(t, requests)
+	p := emitPermission(t, c, "retry-before-reserve", "Read", json.RawMessage(`{}`)).Permission
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	{
@@ -633,41 +569,29 @@ func (s *controlInteractionSuite) TestPermissionCanceledCallerContextDoesNotCons
 	}
 }
 
-func (s *controlInteractionSuite) TestPermissionQueuedCancellationNeverInvokesHandler() {
+func (s *controlInteractionSuite) TestPermissionQueuedCancellationPreservesOtherHandles() {
 	t := s.T()
-	requests := make(chan *PermissionRequest, 3)
-	release := make(chan struct{})
+
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.Limits.PermissionWorkers = 1
-		opts.PermissionHandler = func(p *PermissionRequest) {
-			requests <- p
-			if p.RequestID() == "first" {
-				select {
-				case <-release:
-				case <-p.Context().Done():
-				}
-			}
-		}
+
 	})
-	emitPermission(t, c, "first", "Read", json.RawMessage(`{}`))
-	first := awaitPermission(t, requests)
-	emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`))
+	first := emitPermission(t, c, "first", "Read", json.RawMessage(`{}`)).Permission
+	queued := emitPermission(t, c, "queued", "Read", json.RawMessage(`{}`)).Permission
 	emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "queued"})
-	require.EqualValues(t, "control_cancel_request", receive(t, c).Type, "cancel missing")
-	// The independent automatic responder remains available while every user
-	// worker is occupied.
+	require.EqualValues(t, "control_cancel_request", eventKind(receive(t, c)), "cancel missing")
+	// Unsupported controls retain a bounded protocol responder while native
+	// permissions await their original caller-held handles.
 	emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": "unsupported", "request": map[string]any{"subtype": "future_control"}})
 	require.NotNil(t, receive(t, c).Control, "unsupported event missing")
 	echo := receive(t, c)
 	var reply struct {
 		Wire map[string]any `json:"wire"`
 	}
-	require.EqualValuesf(t, "reply_seen", echo.Type, "independent unsupported response: %s", echo.Raw)
+	require.EqualValuesf(t, "reply_seen", eventKind(echo), "independent unsupported response: %s", echo.Raw)
 	require.Nilf(t, json.Unmarshal(echo.Raw, &reply), "independent unsupported response: %s", echo.Raw)
 	require.Equalf(t, reply.Wire, map[string]any{"type": "control_response", "response": map[string]any{"subtype": "error", "request_id": "unsupported", "error": "Unsupported control request subtype: future_control"}}, "independent unsupported response: %s", echo.Raw)
-	close(release)
-	emitPermission(t, c, "last", "Read", json.RawMessage(`{}`))
-	last := awaitPermission(t, requests)
+	require.ErrorIs(t, queued.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), ErrPermissionCancelled)
+	last := emitPermission(t, c, "last", "Read", json.RawMessage(`{}`)).Permission
 	require.EqualValuesf(t, "last", last.RequestID(), "canceled queued handler invoked: %s", last.RequestID())
 	for _, p := range []*PermissionRequest{first, last} {
 		{
@@ -679,33 +603,6 @@ func (s *controlInteractionSuite) TestPermissionQueuedCancellationNeverInvokesHa
 	{
 		got := permissionResponses(t, permissionSnapshot(t, c))
 		require.EqualValuesf(t, 3, len(got), "queued cancel answered: %#v", got)
-	}
-}
-
-func (s *controlInteractionSuite) TestPermissionPanicAfterAnswerDoesNotCreateSecondResponse() {
-	t := s.T()
-	path := filepath.Join(t.TempDir(), "transcript.ndjson")
-	results := make(chan error, 1)
-	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-		opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-		opts.PermissionHandler = func(p *PermissionRequest) {
-			results <- p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny, Message: "explicit"})
-			panic("after response")
-		}
-	})
-	emitPermission(t, c, "answered-before-panic", "Read", json.RawMessage(`{}`))
-	{
-		err := awaitPermissionError(t, results)
-		require.NoError(t, err)
-	}
-	awaitDone(t, c)
-	{
-		err := c.Close()
-		require.ErrorIs(t, err, ErrPermissionHandlerPanic, err)
-	}
-	{
-		got := permissionResponses(t, permissionTranscript(t, path))
-		require.EqualValuesf(t, 1, len(got), "panic duplicated response: %#v", got)
 	}
 }
 
@@ -729,21 +626,20 @@ func (s *controlInteractionSuite) TestIncomingControlHistoryRejectsRetiredIDReus
 	for _, previous := range []string{"unsupported", "answered", "cancelled", "unknown cancellation"} {
 		t.Run(previous, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "transcript.ndjson")
-			requests := make(chan *PermissionRequest, 2)
+
 			c := s.openFixture(t, "permission_controls", func(opts *Options) {
 				opts.Env = append(opts.Env, "CLAUDE_GO_TRANSCRIPT="+path)
-				opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 			})
 			wantResponses := 0
 			switch previous {
 			case "unsupported":
 				emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": "retired", "request": map[string]any{"subtype": "unsupported"}})
 				require.NotNil(t, receive(t, c).Control, "unsupported request did not finish")
-				require.EqualValues(t, "reply_seen", receive(t, c).Type, "unsupported request did not finish")
+				require.EqualValues(t, "reply_seen", eventKind(receive(t, c)), "unsupported request did not finish")
 				wantResponses = 1
 			case "answered", "cancelled":
-				emitPermission(t, c, "retired", "Read", json.RawMessage(`{}`))
-				p := awaitPermission(t, requests)
+				p := emitPermission(t, c, "retired", "Read", json.RawMessage(`{}`)).Permission
 				if previous == "answered" {
 					{
 						err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny})
@@ -753,11 +649,11 @@ func (s *controlInteractionSuite) TestIncomingControlHistoryRejectsRetiredIDReus
 					wantResponses = 1
 				} else {
 					emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "retired"})
-					require.EqualValues(t, "control_cancel_request", receive(t, c).Type, "cancel missing")
+					require.EqualValues(t, "control_cancel_request", eventKind(receive(t, c)), "cancel missing")
 				}
 			case "unknown cancellation":
 				emitPermissionFrame(t, c, map[string]any{"type": "control_cancel_request", "request_id": "retired"})
-				require.EqualValues(t, "control_cancel_request", receive(t, c).Type, "cancel missing")
+				require.EqualValues(t, "control_cancel_request", eventKind(receive(t, c)), "cancel missing")
 			}
 			subtype := "can_use_tool"
 			if previous == "answered" || previous == "cancelled" {
@@ -781,17 +677,16 @@ func (s *controlInteractionSuite) TestPermissionRegistryBoundsFailClosed() {
 	t := s.T()
 	for _, bound := range []string{"pending", "history"} {
 		t.Run(bound, func(t *testing.T) {
-			requests := make(chan *PermissionRequest, 2)
+
 			c := s.openFixture(t, "permission_controls", func(opts *Options) {
 				if bound == "pending" {
 					opts.Limits.PendingPermissions = 1
 				} else {
 					opts.Limits.PermissionHistory = 1
 				}
-				opts.PermissionHandler = func(p *PermissionRequest) { requests <- p }
+
 			})
-			emitPermission(t, c, "first", "Read", json.RawMessage(`{}`))
-			p := awaitPermission(t, requests)
+			p := emitPermission(t, c, "first", "Read", json.RawMessage(`{}`)).Permission
 			if bound == "history" {
 				{
 					err := p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny})
@@ -807,5 +702,27 @@ func (s *controlInteractionSuite) TestPermissionRegistryBoundsFailClosed() {
 			}
 			require.NotNil(t, p.Context().Err(), "overflow left pending context live")
 		})
+	}
+}
+
+type permissionDelivery struct {
+	Event
+	Permission *PermissionRequest
+}
+
+func receivePermission(t *testing.T, c *interaction) permissionDelivery {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for {
+		r, err := c.session.Receive(ctx)
+		require.NoError(t, err)
+		if r.Kind == ReceivedObservation {
+			continue
+		}
+		require.NotNil(t, r.Request, "expected original same-stream request")
+		event, err := ParseEvent(r.Raw)
+		require.NoError(t, err)
+		return permissionDelivery{Event: event, Permission: r.Request.Handle()}
 	}
 }

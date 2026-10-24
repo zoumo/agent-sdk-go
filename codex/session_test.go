@@ -69,8 +69,6 @@ func TestSessionMembershipOrderDuplicatesAndIsolation(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	_, err = codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.ErrorIs(t, err, codex.ErrOwnershipConflict)
-	_, err = f.c.Subscribe(context.Background(), s.ThreadID(), types.SubscriptionOptions{})
-	require.ErrorIs(t, err, codex.ErrOwnershipConflict)
 	// A completed spawn confirms membership; old quarantined facts stay excluded.
 	frames := []string{
 		`{"method":"future/early","params":{"threadId":"child"}}`,
@@ -596,4 +594,28 @@ func TestSessionSiblingCommunicationKeepsConfirmedParents(t *testing.T) {
 	}
 	require.Equal(t, []string{"a:main-1", "b:main-1"}, parents)
 	require.Equal(t, []string{"future/opened", "thread/started", "thread/started", "item/completed", "future/b"}, methods)
+}
+
+// Existing native consumers need the actual startup model/sandbox evidence,
+// without issuing a second thread/start or reconstructing it from options.
+func TestSessionStartResponseRetainsNativeEvidence(t *testing.T) {
+	f := startFake(t, "request-normal", codex.Limits{})
+	session, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	require.NoError(t, err)
+	defer session.Close()
+	response, ok := session.StartResponse()
+	require.True(t, ok)
+	require.Equal(t, session.ThreadID(), response.Thread.ID)
+	require.Equal(t, "fake", response.Model)
+	require.NotNil(t, response.Sandbox.ReadOnly)
+	require.JSONEq(t, `{"large":9007199254740993}`, string(response.Thread.UnknownFields["future"]))
+	response.Thread.UnknownFields["future"][0] = '['
+	response.Model = "changed"
+	again, ok := session.StartResponse()
+	require.True(t, ok)
+	require.Equal(t, "fake", again.Model)
+	require.JSONEq(t, `{"large":9007199254740993}`, string(again.Thread.UnknownFields["future"]))
+	for _, wire := range trace(t, f.trace) {
+		require.NotEqual(t, "thread/read", wire.Method)
+	}
 }

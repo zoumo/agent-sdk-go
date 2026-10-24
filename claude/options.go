@@ -5,7 +5,7 @@ package claude
 import "github.com/zoumo/agent-sdk-go/claude/types"
 
 // OptionsFromTypes adapts callback-free configuration to runtime options.
-// Set PermissionHandler and runtime-only Subagents on the returned value when needed.
+// Set runtime-only Subagents on the returned value when needed.
 // Env is shared, as when copying Options; this function does not validate it.
 func OptionsFromTypes(config types.Options) Options {
 	return Options{
@@ -21,8 +21,8 @@ func OptionsFromTypes(config types.Options) Options {
 	}
 }
 
-// Types returns the callback-free part of Options. The handler stays with the
-// runtime options, as does Subagents (bounds/history are not round-tripped).
+// Types returns the process configuration. Subagents bounds/history stay with
+// runtime Options and are not round-tripped.
 // Env retains the same backing slice.
 func (o Options) Types() types.Options {
 	return types.Options{

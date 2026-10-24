@@ -14,7 +14,7 @@ CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0 go run ./examples/recorded-replay
 python3 scripts/check-transcripts.py
 ```
 
-The example and integration test use `Open -> Send -> Receive(ReceivedEvent)` against a re-executed fake process with a replacement HOME/environment. The installed CLI, account, network and live fallback are never used. A poison CLI sentinel, native Raw comparison, dynamic initialize ID, complete-frame marker and deadline verify this. The example consumes the native idle **after** the error result and explicitly closes.
+The example and integration test use `Open -> Submit -> Session.Receive(Received)` against a re-executed fake process with a replacement HOME/environment. The installed CLI, account, network and live fallback are never used. A poison CLI sentinel, native Raw comparison, dynamic initialize ID, complete-frame marker and deadline verify this. The example consumes the native idle **after** the error result and explicitly closes.
 
 The peer replays captured direction/order dependencies without sleeps. It supports multiple in-flight controls and notification-before-response, binds dynamic client request IDs with string/number type preservation, validates reverse requests/replies exactly once, and fails on extra/wrong/duplicate requests, missing IDs, early EOF or pending controls. It deliberately checks recorded request order; it is not an arbitrary scheduling emulator. Test callers bound its lifetime. Tool IDs and other server-owned native IDs remain the consistent sanitized fixture IDs. Native byte order is retained except for dynamic control response ID substitution.
 
@@ -83,7 +83,7 @@ Approved version is 2.1.258. The future entry point passes existing recognized a
 
 ## Source revision for new recordings
 
-The recorder reads Go build VCS metadata before attempting a recording. A clean
+The recorder reads Go build VCS metadata only when the main module is the SDK before attempting a recording. A clean
 build records its full revision with `sdk_revision_source=go-build-vcs` and
 `sdk_modified=false`; a modified checkout is rejected. When VCS metadata is absent,
 `-sdk-revision FULL_SHA` is required and is recorded as

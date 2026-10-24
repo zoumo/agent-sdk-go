@@ -473,11 +473,11 @@
       "source_archive": "codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst",
       "archive_member": "json_schema[\"codex_app_server_protocol.schemas.json\"]",
       "extracted_aggregate_sha256": "e4e7f0c7d3fd77c48cd8619cad2bf2b315d860ab006ad5a7ebe44f6e32e666c1",
-      "selection": "Transitive definition closure of the 40 exact roots listed in types/schema.json: initialization, thread start/read/resume/unsubscribe and turns/items pagination, turn start/interrupt, six turn/item/error notifications, command/file/permissions approvals, tool user input, two legacy approvals, serverRequest/resolved, thread/settings/update parameters/response, and thread/settings/updated.",
+      "selection": "Transitive definition closure of the 42 exact roots listed in types/schema.json: initialization, thread start/read/resume/unsubscribe and turns/items pagination, turn start/interrupt, six turn/item/error notifications, command/file/permissions approvals, tool user input, two legacy approvals, serverRequest/resolved, thread/settings/update parameters/response, thread/settings/updated, and thread/list parameters/response.",
       "generator": "scripts/generate_protocol.py",
       "output": "types/types_generated.go",
       "modifications": "Definitions extracted from upstream archive into a self-contained snapshot; Go bindings are independently generated and include unknown-field/union preservation and explicit optional values.",
-      "snapshot_sha256": "569694801f24ad825003efdb89f430efb3c5cd843e50f1f8b5492baebf402abe"
+      "snapshot_sha256": "a2a4d68129dcec73c25e61aebeab3384bf8f65377e21341830e52e46f30c4df9"
     }
   ]
 }

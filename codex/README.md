@@ -51,6 +51,16 @@ followed by cancellation, timeout or Close remains `OutcomeUnknown` and is never
 retried automatically. Validation is synthetic/offline; no real configuration
 effect, active-turn switch, or child inheritance is certified.
 
+## Query existing descendants
+
+`Session.ListSubagents(ctx, SubagentQuery{})` reads bounded native pages of stored
+descendants of the fixed main identity. Initialize with experimentalApi enabled.
+Inspect returned `Pages`, `Coverage` and the error together: partial pages can
+accompany a failure. Defaults select five native subAgent source kinds and only
+non-archived records; archived records need a separate query. Results do not
+change observation membership or prove that an Agent is running or subscribed.
+See [pagination, filters and evidence limits](docs/session-discovery.md).
+
 ## Local thread example
 
 Go 1.26.9 is pinned with mise. Install the toolchain using your normal mise setup;

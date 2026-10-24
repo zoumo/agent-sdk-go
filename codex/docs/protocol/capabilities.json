@@ -1238,8 +1238,8 @@
     {
       "kind": "client_request",
       "method": "thread/list",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "partial",
+      "scope": "Session.ListSubagents performs bounded foreground native pagination with ancestorThreadId fixed to the main identity, never parent-only. Requires experimentalApi. Preserves native records/responses/cursors and actual source/archive/filter coverage; default explicitly selects five pinned subAgent kinds and non-archived only. Null sources are unrestricted under the fixed relation-filter branch; empty sources select native interactive. Storage-only, non-atomic; no resume/start/subscribe/replay, membership changes, retries or active-state claims. Generic thread listing outside this Session workflow remains raw Call only.",
       "source_variant": "ThreadList",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 772,
@@ -1247,9 +1247,15 @@
       "field_experimental_gates": true,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "session08-list-model"
+        ],
+        "mock": [
+          "session08-list-peer"
+        ],
+        "race": [
+          "session08-list-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadListParams",

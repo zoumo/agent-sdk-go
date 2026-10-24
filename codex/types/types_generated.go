@@ -3299,6 +3299,101 @@ type ThreadItemsListResponse struct {
 func (v ThreadItemsListResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ThreadItemsListResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+// ThreadListCwdFilter contains exactly one typed variant or Unknown.
+type ThreadListCwdFilter struct {
+	Value *string
+	Items *[]string
+	// Unknown preserves an unrecognized future variant as raw JSON.
+	Unknown json.RawMessage
+}
+
+func (v ThreadListCwdFilter) MarshalJSON() ([]byte, error) {
+	return marshalUnion(v.Unknown, v.Value, v.Items)
+}
+func (v *ThreadListCwdFilter) UnmarshalJSON(data []byte) error {
+	var out ThreadListCwdFilter
+	kind, tag, fields, err := inspectUnion(data)
+	if err != nil {
+		return err
+	}
+	_, _, _ = kind, tag, fields
+	if kind != "array" && kind != "string" {
+		return fmt.Errorf("protocol: invalid JSON kind for ThreadListCwdFilter")
+	}
+	if kind == "string" {
+		var value string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Value = &value
+		*v = out
+		return nil
+	}
+	if kind == "array" {
+		var value []string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		out.Items = &value
+		*v = out
+		return nil
+	}
+	out.Unknown = append(json.RawMessage(nil), data...)
+	*v = out
+	return nil
+}
+
+type ThreadListParams struct {
+	// Optional ancestor thread filter. Returns spawned descendants at any depth, excluding the ancestor itself. Mutually exclusive with `parentThreadId`.
+	AncestorThreadID Optional[string] `json:"ancestorThreadId" protocol:"nullable"`
+	// Optional archived filter; when set to true, only archived threads are returned. If false or null, only non-archived threads are returned.
+	Archived Optional[bool] `json:"archived" protocol:"nullable"`
+	// Opaque pagination cursor returned by a previous call.
+	Cursor Optional[string] `json:"cursor" protocol:"nullable"`
+	// Optional cwd filter or filters; when set, only threads whose session cwd exactly matches one of these paths are returned.
+	Cwd Optional[ThreadListCwdFilter] `json:"cwd" protocol:"nullable"`
+	// Optional page size; defaults to a reasonable server-side value.
+	Limit Optional[uint32] `json:"limit" protocol:"nullable"`
+	// Optional provider filter; when set, only sessions recorded under these providers are returned. When present but empty, includes all providers.
+	ModelProviders Optional[[]string] `json:"modelProviders" protocol:"nullable"`
+	// Optional originator allowlist, matching any supplied value exactly. Supported by hosted backends only; the local app-server rejects a nonempty list. Omitted or empty lists leave originators unrestricted.
+	Originators Optional[[]string] `json:"originators" protocol:"nullable"`
+	// Optional direct parent thread filter. Mutually exclusive with `ancestorThreadId`.
+	ParentThreadID Optional[string] `json:"parentThreadId" protocol:"nullable"`
+	// Omit to include every project, set to null for unassigned threads, or provide a project ID to return only threads in that project.
+	ProjectID Optional[string] `json:"projectId" protocol:"nullable"`
+	// Optional substring filter for the extracted thread title.
+	SearchTerm Optional[string] `json:"searchTerm" protocol:"nullable"`
+	// Omit to include every section, set to `null` for unsectioned threads, or provide a section ID to return only threads in that section.
+	SectionID Optional[string] `json:"sectionId" protocol:"nullable"`
+	// Optional sort direction; defaults to descending (newest first).
+	SortDirection Optional[SortDirection] `json:"sortDirection" protocol:"nullable"`
+	// Optional sort key; defaults to created_at.
+	SortKey Optional[ThreadSortKey] `json:"sortKey" protocol:"nullable"`
+	// Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.
+	SourceKinds Optional[[]ThreadSourceKind] `json:"sourceKinds" protocol:"nullable"`
+	// If true, return from the state DB without scanning JSONL rollouts to repair thread metadata. Omitted or false preserves scan-and-repair behavior.
+	UseStateDbOnly Optional[bool] `json:"useStateDbOnly" protocol:""`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadListParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadListParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadListResponse struct {
+	// Opaque cursor to pass as `cursor` when reversing `sortDirection`. This is only populated when the page contains at least one thread. Use it with the opposite `sortDirection`; for timestamp sorts it anchors at the start of the page timestamp so same-second updates are not skipped.
+	BackwardsCursor Optional[string] `json:"backwardsCursor" protocol:"nullable"`
+	Data            []Thread         `json:"data" protocol:"required"`
+	// Opaque cursor to pass to the next call to continue after the last item. if None, there are no more items to return.
+	NextCursor Optional[string] `json:"nextCursor" protocol:"nullable"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadListResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadListResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type ThreadReadParams struct {
 	// When true, include turns and their items from rollout history. Full-history hydration is deprecated for paginated threads; prefer a metadata-only read and page with `thread/turns/list` and `thread/items/list`.
 	IncludeTurns Optional[bool] `json:"includeTurns" protocol:""`
@@ -3530,7 +3625,31 @@ func (v *ThreadSettingsUpdatedNotification) UnmarshalJSON(data []byte) error {
 	return unmarshalObject(data, v)
 }
 
+type ThreadSortKey string
+
+const (
+	ThreadSortKeyCreatedAt       ThreadSortKey = "created_at"
+	ThreadSortKeyUpdatedAt       ThreadSortKey = "updated_at"
+	ThreadSortKeyRecencyAt       ThreadSortKey = "recency_at"
+	ThreadSortKeySectionPosition ThreadSortKey = "section_position"
+)
+
 type ThreadSource = string
+
+type ThreadSourceKind string
+
+const (
+	ThreadSourceKindCLI                 ThreadSourceKind = "cli"
+	ThreadSourceKindVscode              ThreadSourceKind = "vscode"
+	ThreadSourceKindExec                ThreadSourceKind = "exec"
+	ThreadSourceKindAppServer           ThreadSourceKind = "appServer"
+	ThreadSourceKindSubAgent            ThreadSourceKind = "subAgent"
+	ThreadSourceKindSubAgentReview      ThreadSourceKind = "subAgentReview"
+	ThreadSourceKindSubAgentCompact     ThreadSourceKind = "subAgentCompact"
+	ThreadSourceKindSubAgentThreadSpawn ThreadSourceKind = "subAgentThreadSpawn"
+	ThreadSourceKindSubAgentOther       ThreadSourceKind = "subAgentOther"
+	ThreadSourceKindUnknown             ThreadSourceKind = "unknown"
+)
 
 type ThreadStartParams struct {
 	// Allow a provider with an authoritative static model catalog to replace an unavailable requested model with its default.

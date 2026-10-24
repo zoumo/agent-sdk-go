@@ -40,7 +40,7 @@ CLI **2.1.258**；TS npm **0.3.258** 的声明/实现用于该版本研究。Pyt
 | Claude 输入 | A1/A2：SDKUserMessage 的 string 或原生 user 内容块；Go 当前 Send(string)。 | Submit 写原生 user envelope；文本、图片和文档按发送声明接入，保留未知字段与支持的关联，完整本地写入即返回。 | 输出 tool_use/thinking/tool_result decoder 的存在不证明所有块均可作为新用户输入；仅供工具答复的结构不等于普通提示输入；无额外 CLI 接受回执。 |
 | Codex 配置 | C1/C3：model/effort，后续 turns；当前只有创建/turn 参数，缺公开 setter。 | SetModel(string) / SetThinking(native effort) → settings/update，保留空 ack；settings updated 从 Receive 单独观察。 | ack 非活跃 turn 切换；门槛/原生拒绝原样保留，不用新 turn 模拟设置。 |
 | Claude 配置 | A1/A2：创建 model/thinking；动态 set_model/model 与 set_max_thinking_tokens/max_thinking_tokens、thinking_display。当前 Go 无 setter。 | 创建 enabled/adaptive/disabled thinking 与动态可空预算分开；保留原生 control_response 和请求值。 | deprecated token 名称不证明所有模型硬预算；不推断当前执行及子 Agent 生效，不将 adaptive 隐式映射成整数。 |
-| Codex 子查询 | C1/C4；当前无正式 wrapper。 | ListSubagents 查询 ancestorThreadId=主 ID，cursor/limit/sourceKinds/archived；保留 nextCursor、原生身份与可用父级。 | 默认/空 sources 只 interactive；archived=true 只归档，false/null 只非归档；全范围须分别查询。关系过滤实验门槛、存储索引、非原子分页、访问失败明确报告。列表不启动/恢复/订阅，不保证记录仍运行。 |
+| Codex 子查询 | C1/C4；当前无正式 wrapper。 | ListSubagents 查询 ancestorThreadId=主 ID，cursor/limit/sourceKinds/archived；保留 nextCursor、原生身份与可用父级。 | 声明中默认/空 sources 偏 interactive；拥有实现 C4:5504–5509 对 relation_filter 存在且 source_kinds=None（缺省/null）特殊处理为 unrestricted，显式空数组仍调用 compute_source_filters；archived=true 只归档，false/null 只非归档；全范围须分别查询。关系过滤实验门槛、存储索引、非原子分页、访问失败明确报告。列表不启动/恢复/订阅，不保证记录仍运行。 |
 | Claude 子查询 | A1/A3：主记录旁 subagents、嵌套目录与 sidecar；Go 只有观察缓存/seed。 | ListSubagents 独立扫描显式 ConfigDir/cwd/main ID，保留 agent/parent/tool 元数据和扫描范围；限数/字节/访问失败返回部分覆盖。 | 固定 T 实现也递归发现嵌套目录；这不证明 CLI 实际产生全部布局。没有原生 cursor 不伪造。sidecar 缺失保留未知父级，目录可发现不证明实时活跃/转发完整。 |
 | Claude 元数据 | A3/A4：Python reader 主链筛选；permission-mode 明确元数据；TS 白名单排除其他非链类型。 | 四种 permission-mode/ai-title/file-history-delta/cost-state 与链 user/assistant 分开调查；合法非链记录不投影为会话消息。 | 排除主链不证明追加元数据可安全接受。未知/破损/身份不符仍失败；四种完整 schema 与旧 CLI 追加语义证据不足，不能扩成“所有未知类型忽略”。 |
 
@@ -83,3 +83,7 @@ CLI **2.1.258**；TS npm **0.3.258** 的声明/实现用于该版本研究。Pyt
 - `mise exec -- go vet ./...`、文档相对链接、harness 内部引用边界、OKF 元数据及 `git diff --check` 通过。
 - 首两次脚本运行因 PATH 的系统 Python 3.9 缺少 tomllib 停止；使用 `/tmp/session-ticket01-bin/python3` 指向现有 `/opt/homebrew/bin/python3.13`，以 `PATH=/tmp/session-ticket01-bin:$PATH mise exec -- bash scripts/check-offline.sh` 完整重跑通过；没有修改依赖或项目工具链。未执行 race；文档变更未改变并发实现。
 - 按 code-review 技能，从固定 base 到本 ticket 文档提交并行独立审查：Standards **0** 项，Spec **0** 项。后续仅补充本段实际检查记录，无设计或运行时改动。
+
+## Ticket 08 来源条件补正
+
+固定 C4 `thread_processor.rs:5504–5509` 明确分支 `relation_filter.is_some() && source_kinds.is_none()` → `(Vec::new(), None)`，因此 ancestor 查询下缺省或 null 不限制来源；`Some([])` 进入 `compute_source_filters` 的 interactive 默认。这里是拥有实现的特殊分支，不由 nullable schema 推断。SDK 默认显式选择五类固定子 Agent 来源；调用者 null/空数组逐字传递并在 coverage 区分。归档语义不变。当前公开查询实现、合成证据及覆盖限制见 [Codex discovery](../../codex/docs/session-discovery.md)，不改写原架构报告的历史检查结论。

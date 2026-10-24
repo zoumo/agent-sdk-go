@@ -1285,6 +1285,39 @@
       "status": "passed",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
       "command": "mise exec -- env GORACE=atexit_sleep_ms=0 GOMAXPROCS=2 go test -race ./codex -run '^TestSessionConfiguration' -count=1"
+    },
+    {
+      "id": "session08-list-model",
+      "coverage": "Pinned native thread/list params/response closure, every generated model/union round-trip including unknown fields. Schema-derived synthetic evidence only.",
+      "test_files": [
+        "types/schema_generated_test.go"
+      ],
+      "kind": "unit",
+      "status": "passed",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- go test ./codex/types -count=1"
+    },
+    {
+      "id": "session08-list-peer",
+      "coverage": "Public Session.ListSubagents: pre-existing nested records, native filters/default/null/empty sources, separate archive scope, empty pages, cursors/cycles, partial refusal/access errors, bounded retention, cancellation/owner Close and zero observation/execution side effects. Synthetic stdio peer; no real Agent or storage completeness certification.",
+      "test_files": [
+        "session_discovery_test.go"
+      ],
+      "kind": "mock",
+      "status": "passed",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- go test ./codex -run '^TestSessionDiscovery' -count=1"
+    },
+    {
+      "id": "session08-list-race",
+      "coverage": "Public discovery and configuration/request regression under race detector. Synthetic peer only; no native live listing validation.",
+      "test_files": [
+        "session_discovery_test.go"
+      ],
+      "kind": "race",
+      "status": "passed",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- env GORACE=atexit_sleep_ms=0 GOMAXPROCS=2 go test -race ./codex ./codex/types -run 'TestSessionDiscovery|TestSessionConfiguration|TestSessionRequest|TestGenerated' -count=1"
     }
   ],
   "verification_commands": [

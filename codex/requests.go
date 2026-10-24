@@ -10,12 +10,16 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
+// Request holds an immutable received snapshot separately from registry authority.
+// Consuming/releasing the snapshot releases its Raw/Params payload; terminal
+// replay protection retains no command, diff or question payload.
 // Request is an immutable received server request. Accessors return independent
 // copies; changing a decoded payload cannot change its identity or answer target.
 // Requests are shared between pull consumers, not broadcast or replayed.
 type Request struct {
-	state *requestState
-	raw   json.RawMessage
+	state  *requestState
+	raw    json.RawMessage
+	params json.RawMessage
 }
 
 // Raw returns an independent copy of the complete native request envelope.
@@ -50,7 +54,7 @@ func (r Request) Params() json.RawMessage {
 	if r.state == nil {
 		return nil
 	}
-	return append(json.RawMessage(nil), r.state.params...)
+	return append(json.RawMessage(nil), r.params...)
 }
 func (r Request) Handle() AnswerHandle { return AnswerHandle{state: r.state} }
 
@@ -77,7 +81,7 @@ func (r Request) Data() (any, error) {
 	default:
 		return nil, nil
 	}
-	if err := json.Unmarshal(r.state.params, data); err != nil {
+	if err := json.Unmarshal(r.params, data); err != nil {
 		return nil, r.state.client.safeError(&DecodeError{Method: r.state.method, Cause: err})
 	}
 	return data, nil
@@ -105,7 +109,6 @@ type requestState struct {
 	client    *Client
 	id        ID
 	method    string
-	params    json.RawMessage
 	threadID  string
 	hasThread bool
 	done      chan struct{}
@@ -335,7 +338,7 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	}
 	key := requestKey{id: id, method: method, params: sha256.Sum256(params)}
 	if r := c.requestHistory[key]; r != nil {
-		return c.deliverRequestLocked(r, raw)
+		return c.deliverRequestLocked(r, params, raw)
 	}
 	if c.reverse[id] != nil {
 		return fmt.Errorf("%w: conflicting active server request ID", ErrProtocol)
@@ -347,7 +350,7 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	if len(c.reverse) >= c.limits.ActiveRequests {
 		return ErrRequestOverflow
 	}
-	r := &requestState{client: c, id: id, method: method, params: append(json.RawMessage(nil), params...), done: make(chan struct{})}
+	r := &requestState{client: c, id: id, method: method, done: make(chan struct{})}
 	// Correlation needs the native threadId in addition to the exact tagged ID.
 	// Malformed/absent thread identity cannot authorize resolution of a handle.
 	identityField := "threadId"
@@ -364,7 +367,7 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	c.requestHistory[key] = r
 	r.owner = c.requestOwnerLocked(r.threadID)
 	r.legacy = len(c.sessions) == 0 && c.sessionReservations == 0
-	return c.deliverRequestLocked(r, raw)
+	return c.deliverRequestLocked(r, params, raw)
 }
 
 // Direct ownership takes precedence over observation. A real reverse request
@@ -388,14 +391,14 @@ func (c *Client) requestOwnerLocked(thread string) *Session {
 	}
 	return owner
 }
-func (c *Client) deliverRequestLocked(r *requestState, raw []byte) error {
-	request := Request{state: r, raw: append(json.RawMessage(nil), raw...)}
+func (c *Client) deliverRequestLocked(r *requestState, params json.RawMessage, raw []byte) error {
+	request := Request{state: r, raw: append(json.RawMessage(nil), raw...), params: append(json.RawMessage(nil), params...)}
 	// Ownership is assigned once at first reception. Late membership never
 	// retroactively grants a quarantined request to a Session.
 	if r.owner != nil {
 		if !r.owner.closed {
 			incoming := &IncomingRequest{Request: request}
-			source := treeIdentity(r.params)
+			source := treeIdentity(params)
 			source.ThreadID = r.threadID
 			r.owner.acceptLocked(Received{Kind: ReceivedRequest, Request: incoming, Raw: request.Raw(), Params: request.Params(), Source: source, Origin: "live"})
 		}

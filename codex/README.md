@@ -342,6 +342,12 @@ its assigned requests. Closing an owner ends its answer wait without canceling
 an already started shared-connection write; actual I/O faults and write deadlines
 still fail that connection. Legacy Requests is temporary expand-contract support.
 
+Raw/Params snapshots live with the received Request/FIFO. The authority registry
+retains identity fingerprints and request status, without retaining completed
+command/diff/question payloads. Keeping an original Request keeps its snapshot
+readable after answering or Close; releasing consumed snapshots releases their
+payload independently of replay protection.
+
 A handle is opaque, bound to its original connection, and shared by copies.
 Only one answer or cancellation wins. `Done()` signals termination and `Err()`
 reports answered, locally canceled, server-resolved, or connection failure.

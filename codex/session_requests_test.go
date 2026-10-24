@@ -425,3 +425,29 @@ func TestSessionApprovalRejectsOtherNativeDecisionKindsBeforeWrite(t *testing.T)
 		})
 	}
 }
+
+func TestSessionRequestSnapshotReadableAfterAuthorityTermination(t *testing.T) {
+	f := startFake(t, "request-normal", codex.Limits{})
+	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	require.NoError(t, err)
+	params := `{"threadId":"native-thread-42","turnId":"t","itemId":"i","startedAtMs":1,"command":"` + strings.Repeat("x", 256<<10) + `","future":null}`
+	raw := requestFrame(`"snapshot"`, "item/commandExecution/requestApproval", params)
+	emitRequests(t, f.c, raw)
+	r := sessionRequest(t, s)
+	require.NoError(t, r.Deny(context.Background(), codex.ApprovalOptions{}))
+	require.NoError(t, s.Close())
+	require.Equal(t, raw, string(r.Raw()))
+	require.Equal(t, params, string(r.Params()))
+	decoded, err := r.Data()
+	require.NoError(t, err)
+	native, ok := decoded.(*types.CommandExecutionRequestApprovalParams)
+	require.True(t, ok)
+	command, present := native.Command.Get()
+	require.True(t, present)
+	require.Len(t, command, 256<<10)
+	require.JSONEq(t, `null`, string(native.UnknownFields["future"]))
+	copy := r.Params()
+	copy[0] = 'x'
+	require.Equal(t, params, string(r.Params()))
+	require.ErrorIs(t, r.Context().Err(), context.Canceled)
+}

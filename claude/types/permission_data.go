@@ -67,7 +67,7 @@ func validObject(data []byte, validate func(map[string]json.RawMessage) error) e
 	if !utf8.Valid(data) {
 		return fmt.Errorf("invalid UTF-8")
 	}
-	if err := objectOnly(data); err != nil {
+	if err := validateJSONDocument(data); err != nil {
 		return err
 	}
 	var fields map[string]json.RawMessage
@@ -187,7 +187,7 @@ func (v *PermissionMetadata) UnmarshalJSON(data []byte) error {
 	}
 	type wire PermissionMetadata
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -209,7 +209,7 @@ func (v *PermissionResult) UnmarshalJSON(data []byte) error {
 	}
 	type wire PermissionResult
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -244,7 +244,7 @@ func (v *ControlResponseData) UnmarshalJSON(data []byte) error {
 	}
 	type wire ControlResponseData
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -271,7 +271,7 @@ func (v *ControlResponse) UnmarshalJSON(data []byte) error {
 	}
 	type wire ControlResponse
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)

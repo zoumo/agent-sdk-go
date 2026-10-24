@@ -1,0 +1,15 @@
+from pathlib import Path
+import subprocess
+root=Path.cwd()
+output=Path('/tmp/session-t14-doc-snippets')
+output.mkdir(exist_ok=True)
+for native in ('codex','claude'):
+    code=(root/native/'README.md').read_text().split('```go\n',1)[1].split('```',1)[0]
+    target=output/(native+'.go');target.write_text(code)
+    subprocess.run(['go','test',str(target)],check=True)
+comparison=(root/'claude/docs/api-comparison.md').read_text()
+code=comparison.split('## Go: configuration,',1)[1].split('```go\n',1)[1].split('```',1)[0]
+target=output/'configuration.go'
+target.write_text('package configuration\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/agent-sdk-go/claude")\n'+code)
+subprocess.run(['go','test',str(target)],check=True)
+print('Local source README/configuration fragments compiled; no main/real CLI ran')

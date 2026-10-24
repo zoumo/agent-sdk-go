@@ -113,14 +113,7 @@ func TestSessionFaultCleansUpAndPreservesAcceptedFacts(t *testing.T) {
 	}
 	require.ErrorIs(t, s.Err(), codex.ErrLimit)
 	// Automatic cleanup runs without an application Close or Receive.
-	require.Eventually(t, func() bool {
-		for _, m := range trace(t, f.trace) {
-			if m.Method == "thread/unsubscribe" {
-				return true
-			}
-		}
-		return false
-	}, time.Second, time.Millisecond)
+	waitTraceWithin(t, f.trace, "thread/unsubscribe", time.Second)
 	got, err := s.Receive(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "item/completed", got.Event.Method)
@@ -618,4 +611,44 @@ func TestSessionStartResponseRetainsNativeEvidence(t *testing.T) {
 	for _, wire := range trace(t, f.trace) {
 		require.NotEqual(t, "thread/read", wire.Method)
 	}
+}
+
+func TestSessionMalformedUnicodeNeverCreatesMembership(t *testing.T) {
+	f := startFake(t, "request-normal", codex.Limits{})
+	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	require.NoError(t, err)
+	defer s.Close()
+	emitRequests(t, f.c,
+		`{"method":"thread/started","params":{"thread":{"id":"child-�","parentThreadId":"native-thread-42"}}}`,
+		`{"method":"future/malformed-source","params":{"threadId":"child-\ud800"}}`,
+		`{"method":"thread/started","params":{"thread":{"id":"intruder","parentThreadId":"child-\ud800"}}}`,
+		`{"method":"thread/started","params":{"thread":{"id":"spawn-intruder","source":{"subAgent":{"thread_spawn":{"parent_thread_id":"child-\udc00"}}}}}}`,
+		`{"method":"thread/started","params":{"thread":{"id":"bad-\ud800","parentThreadId":"native-thread-42"}}}`,
+		`{"method":"future/intruder","params":{"threadId":"intruder"}}`,
+		`{"method":"future/spawn-intruder","params":{"threadId":"spawn-intruder"}}`,
+		`{"method":"future/bad-child","params":{"threadId":"bad-�"}}`,
+		`{"method":"future/valid","params":{"threadId":"child-�","turnId":"\ud800","opaque":true}}`,
+		`{"method":"future/main","params":{"threadId":"native-thread-42"}}`)
+	require.NoError(t, s.Close())
+	var methods []string
+	for {
+		r, e := s.Receive(context.Background())
+		if e != nil {
+			require.ErrorIs(t, e, io.EOF)
+			break
+		}
+		if r.Event != nil {
+			methods = append(methods, r.Event.Method)
+			if r.Event.Method == "future/valid" {
+				require.Equal(t, "child-�", r.Source.ThreadID)
+				require.Empty(t, r.Source.TurnID)
+				require.Contains(t, string(r.Raw), `\ud800`)
+			}
+		}
+	}
+	require.Equal(t, []string{"thread/started", "future/valid", "future/main"}, methods)
+	q := f.c.Unattributed()
+	require.Len(t, q.Records, 7)
+	require.True(t, q.CoverageGap)
+	require.Contains(t, string(q.Records[0].Raw), `\ud800`)
 }

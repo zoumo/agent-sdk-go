@@ -35,6 +35,11 @@ new-thread fallback, extra prompt or tool execution is used.
 Stable persisted main history only: active/ephemeral sources, repeated IDs,
 summary items, cyclic/nonadvancing cursors, resource exhaustion and observed
 source mutation fail explicitly. Metadata is checked across resume and replay.
+An exact `nextCursor` is required on every page; only explicit null establishes
+pagination end. `HistoryError` retains the failed stage, thread, input cursor,
+accepted-event count and actual response through copy-returning `Raw()`. A page
+rejected before its request has no response bytes; its cursor identifies the
+uncovered position. LoadState and Load boundaries detach mutable native errors.
 Pagination is non-atomic and requires external writers to be quiescent. Allowing
 live interleaving is not a promise of lossless active-execution recovery, original
 cross-source timing, missing deltas, historical approval authority or child-history

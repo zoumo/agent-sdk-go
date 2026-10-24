@@ -1,5 +1,7 @@
 # Session SDK-US-001～020 公开验收
 
+本页保留 T12 的检查结果与当时的未解决问题。T14 的最终集成修复、全仓验证及剩余能力缺口见[集成验证报告](../../reviews/ticket14-integration-verification.md)；以下历史失败记录不改写为当时通过。
+
 本记录对应 [ticket 12 的共同目标](../../../harness/sdk/user-stories.md)、[公开 Session Interface](../../../harness/modules/native-session/interfaces.md)、[事件交付](../../../harness/contracts/event-delivery.md)及 [Load 合同](../../../harness/contracts/async-history.md)。实现支持与证据强度分列：**合成通过不等于真实兼容性认证**。Claude 的 SDK-US-019/020 成功部分仍未满足，两端不能据此宣称完整满足全部共同目标。
 
 ## 运行入口与断言

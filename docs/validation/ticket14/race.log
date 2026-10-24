@@ -1,0 +1,29 @@
+ok      github.com/zoumo/agent-sdk-go/claude    14.172s
+?       github.com/zoumo/agent-sdk-go/claude/cmd/mock   [no test files]
+ok      github.com/zoumo/agent-sdk-go/claude/cmd/record 0.808s
+?       github.com/zoumo/agent-sdk-go/claude/examples/recorded-replay   [no test files]
+ok      github.com/zoumo/agent-sdk-go/claude/examples/subagents-offline 0.851s
+ok      github.com/zoumo/agent-sdk-go/claude/tests/e2e  1.854s
+ok      github.com/zoumo/agent-sdk-go/claude/tools/mock 1.477s
+ok      github.com/zoumo/agent-sdk-go/claude/tools/recorder     0.863s
+ok      github.com/zoumo/agent-sdk-go/claude/tools/replay       1.512s
+ok      github.com/zoumo/agent-sdk-go/claude/types      0.939s
+ok      github.com/zoumo/agent-sdk-go/codex     55.849s
+?       github.com/zoumo/agent-sdk-go/codex/cmd/mock    [no test files]
+?       github.com/zoumo/agent-sdk-go/codex/cmd/record  [no test files]
+?       github.com/zoumo/agent-sdk-go/codex/examples/apiusage   [no test files]
+ok      github.com/zoumo/agent-sdk-go/codex/examples/observe-subagents-offline  2.112s
+?       github.com/zoumo/agent-sdk-go/codex/examples/observe-turn       [no test files]
+?       github.com/zoumo/agent-sdk-go/codex/examples/replay-recorded    [no test files]
+?       github.com/zoumo/agent-sdk-go/codex/examples/resume-thread      [no test files]
+ok      github.com/zoumo/agent-sdk-go/codex/tests/e2e   1.368s
+ok      github.com/zoumo/agent-sdk-go/codex/tools/mock  5.707s
+?       github.com/zoumo/agent-sdk-go/codex/tools/recorder      [no test files]
+ok      github.com/zoumo/agent-sdk-go/codex/tools/replay        14.241s
+ok      github.com/zoumo/agent-sdk-go/codex/types       1.224s
+?       github.com/zoumo/agent-sdk-go/internal/history  [no test files]
+ok      github.com/zoumo/agent-sdk-go/internal/lineage  0.845s
+ok      github.com/zoumo/agent-sdk-go/internal/queue    2.320s
+?       github.com/zoumo/agent-sdk-go/tests/consumers/codex-public      [no test files]
+ok      github.com/zoumo/agent-sdk-go/tests/consumers/mock      1.120s
+ok      github.com/zoumo/agent-sdk-go/tests/stories     3.801s

@@ -60,24 +60,45 @@ func (c *Client) ListThreadItems(ctx context.Context, p types.ThreadItemsListPar
 	return r, err
 }
 
-func (c *Client) historyThreadOwned(ctx context.Context, o HistoryOptions, owner *Session) (types.Thread, error) {
+func (c *Client) historyThreadOwned(ctx context.Context, o HistoryOptions, owner *Session) (types.Thread, json.RawMessage, error) {
+	var raw json.RawMessage
+	err := c.historyCall(ctx, "thread/read", types.ThreadReadParams{ThreadID: o.ThreadID, IncludeTurns: types.Some(false)}, &raw, owner)
 	var r types.ThreadReadResponse
-	err := c.historyCall(ctx, "thread/read", types.ThreadReadParams{ThreadID: o.ThreadID, IncludeTurns: types.Some(false)}, &r, owner)
+	if err == nil {
+		err = json.Unmarshal(raw, &r)
+	}
 	if err != nil {
-		return types.Thread{}, err
+		return types.Thread{}, raw, err
 	}
 	t := r.Thread
 	if t.ID != o.ThreadID || filepath.Clean(string(t.Cwd)) != filepath.Clean(o.CWD) {
-		return t, errors.New("codex history: thread/cwd identity mismatch")
+		return t, raw, errors.New("codex history: thread/cwd identity mismatch")
 	}
 	if t.Ephemeral || t.Status.Active != nil || t.Status.SystemError != nil || len(t.Status.Unknown) > 0 {
-		return t, errors.New("codex history: thread is not stable persisted history")
+		return t, raw, errors.New("codex history: thread is not stable persisted history")
 	}
-	return t, nil
+	return t, raw, nil
 }
 
-func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send func(types.Event) error, owner *Session, baseline *types.Thread) error {
-	first, err := c.historyThreadOwned(ctx, o, owner)
+func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send func(types.Event) error, owner *Session, baseline *types.Thread) (err error) {
+	var raw json.RawMessage
+	cursor := types.Optional[string]{}
+	stage := "thread/read"
+	accepted := 0
+	defer func() {
+		if err != nil {
+			err = &HistoryError{threadID: o.ThreadID, cursor: cursor, stage: stage, accepted: accepted, raw: append(json.RawMessage(nil), raw...), cause: err}
+		}
+	}()
+	emit := func(event types.Event) error {
+		if e := send(event); e != nil {
+			return e
+		}
+		accepted++
+		return nil
+	}
+	var first types.Thread
+	first, raw, err = c.historyThreadOwned(ctx, o, owner)
 	if err != nil {
 		return err
 	}
@@ -105,10 +126,14 @@ func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send 
 	}
 	p := types.ThreadTurnsListParams{ThreadID: o.ThreadID, Limit: types.Some(o.PageSize), SortDirection: types.Some(types.SortDirectionAsc), ItemsView: types.Some(types.TurnItemsViewFull)}
 	for {
+		// Freeze the next uncovered position before checking admission limits.
+		// No response exists for this page until the native call returns.
+		stage = "thread/turns/list"
+		cursor = p.Cursor
+		raw = nil
 		if err := countHistoryEntry(); err != nil {
 			return err
 		}
-		var raw json.RawMessage
 		if err := c.historyCall(ctx, "thread/turns/list", p, &raw, owner); err != nil {
 			return err
 		}
@@ -116,10 +141,11 @@ func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send 
 		if err := json.Unmarshal(raw, &page); err != nil {
 			return fmt.Errorf("codex history: page: %w", err)
 		}
-		var wire struct {
-			Data []json.RawMessage `json:"data"`
+		if !page.NextCursor.IsSet() {
+			return errors.New("codex history: missing explicit pagination end/cursor")
 		}
-		if err := json.Unmarshal(raw, &wire); err != nil {
+		wire, err := historyArray(raw, "data")
+		if err != nil {
 			return err
 		}
 		if len(page.Data) > int(o.PageSize) {
@@ -145,15 +171,19 @@ func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send 
 			if t.Status == types.TurnStatusInProgress {
 				return errors.New("codex history: turn is active")
 			}
-			var items struct {
-				Items []struct {
-					ID string `json:"id"`
-				} `json:"items"`
-			}
-			if err := json.Unmarshal(wire.Data[i], &items); err != nil {
+			items, err := historyArray(wire[i], "items")
+			if err != nil {
 				return err
 			}
-			for _, item := range items.Items {
+			for _, rawItem := range items {
+				fields, err := objectFields(rawItem)
+				if err != nil {
+					return err
+				}
+				var item struct{ ID string }
+				if err := json.Unmarshal(fields["id"], &item.ID); err != nil {
+					return err
+				}
 				if err := countHistoryEntry(); err != nil {
 					return err
 				}
@@ -165,7 +195,7 @@ func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send 
 				}
 				seenItems[item.ID] = true
 			}
-			if err := replayTurn(o.ThreadID, wire.Data[i], send); err != nil {
+			if err := replayTurn(o.ThreadID, wire[i], emit); err != nil {
 				return err
 			}
 		}
@@ -182,7 +212,10 @@ func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send 
 		cursors[next] = true
 		p.Cursor = types.Some(next)
 	}
-	last, err := c.historyThreadOwned(ctx, o, owner)
+	stage = "thread/read after replay"
+	cursor = types.Optional[string]{}
+	var last types.Thread
+	last, raw, err = c.historyThreadOwned(ctx, o, owner)
 	if err != nil {
 		return err
 	}
@@ -195,11 +228,19 @@ func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send 
 // replayTurn projects retained snapshots without claiming live lifecycle timing.
 // Each delivered event owns its typed values and original source bytes.
 func replayTurn(threadID string, raw json.RawMessage, send func(types.Event) error) error {
-	var source struct {
-		ID    string            `json:"id"`
-		Items []json.RawMessage `json:"items"`
+	fields, err := objectFields(raw)
+	if err != nil {
+		return err
 	}
-	if err := json.Unmarshal(raw, &source); err != nil {
+	var source struct {
+		ID    string
+		Items []json.RawMessage
+	}
+	if err := json.Unmarshal(fields["id"], &source.ID); err != nil {
+		return err
+	}
+	source.Items, err = historyArray(raw, "items")
+	if err != nil {
 		return err
 	}
 	for _, item := range source.Items {
@@ -210,7 +251,11 @@ func replayTurn(threadID string, raw json.RawMessage, send func(types.Event) err
 		var identity struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(item, &identity); err != nil {
+		fields, err := objectFields(item)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(fields["id"], &identity.ID); err != nil {
 			return err
 		}
 		// completedAtMs is absent: a typed zero is not a recorded timestamp.
@@ -238,3 +283,36 @@ func replayTurn(threadID string, raw json.RawMessage, send func(types.Event) err
 		return send(types.Event{Data: &n.Turn, History: &types.HistorySource{ThreadID: threadID, TurnID: source.ID, Raw: append(json.RawMessage(nil), raw...)}})
 	}
 }
+
+// historyArray splits original records using the same exact keys as native types.
+func historyArray(raw json.RawMessage, key string) ([]json.RawMessage, error) {
+	fields, err := objectFields(raw)
+	if err != nil {
+		return nil, err
+	}
+	var values []json.RawMessage
+	if err := json.Unmarshal(fields[key], &values); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+// HistoryError retains the failed native response and replay position. Raw is
+// never included in Error's text; each accessor returns detached native data.
+// Accepted counts history events admitted before this failure, not consumed ones.
+type HistoryError struct {
+	threadID string
+	stage    string
+	cursor   types.Optional[string]
+	accepted int
+	raw      json.RawMessage
+	cause    error
+}
+
+func (e *HistoryError) Error() string                  { return fmt.Sprintf("codex history (%s): %v", e.stage, e.cause) }
+func (e *HistoryError) Unwrap() error                  { return e.cause }
+func (e *HistoryError) ThreadID() string               { return e.threadID }
+func (e *HistoryError) Stage() string                  { return e.stage }
+func (e *HistoryError) Cursor() types.Optional[string] { return e.cursor }
+func (e *HistoryError) Accepted() int                  { return e.accepted }
+func (e *HistoryError) Raw() json.RawMessage           { return append(json.RawMessage(nil), e.raw...) }

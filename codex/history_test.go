@@ -118,6 +118,26 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 			send(m.ID, `{"data":[],"nextCursor":"wrong-request"}`)
 			return true
 		}
+		if strings.HasPrefix(mode, "history-exact-") {
+			turn := `{"id":"exact-turn","ID":"wrong-turn","status":"completed","items":[{"id":"exact-item","ID":"wrong-item","type":"agentMessage","text":"retained","TEXT":"wrong"}],"ITEMS":[],"error":null}`
+			page := `{"data":[` + turn + `],"DATA":[],"nextCursor":null}`
+			switch mode {
+			case "history-exact-cursor-only":
+				page = `{"data":[],"NEXTCURSOR":"more"}`
+			case "history-exact-cursor-absent":
+				page = `{"data":[]}`
+			case "history-exact-data-only":
+				page = `{"DATA":[` + turn + `],"nextCursor":null}`
+			case "history-exact-items-only":
+				page = `{"data":[{"id":"exact-turn","status":"completed","ITEMS":[],"error":null}],"nextCursor":null}`
+			case "history-exact-id-only":
+				page = `{"data":[{"ID":"wrong-turn","status":"completed","items":[],"error":null}],"nextCursor":null}`
+			case "history-exact-item-id-only":
+				page = `{"data":[{"id":"exact-turn","status":"completed","items":[{"ID":"wrong-item","type":"futureItem","opaque":true}],"error":null}],"nextCursor":null}`
+			}
+			send(m.ID, page)
+			return true
+		}
 		if mode == "history-v2-activity" {
 			var params struct {
 				Item json.RawMessage `json:"item"`

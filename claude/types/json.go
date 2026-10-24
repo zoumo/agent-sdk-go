@@ -27,6 +27,9 @@ const (
 func objectJSON(v any, raw json.RawMessage, states map[string]FieldState) ([]byte, error) {
 	out := map[string]json.RawMessage{}
 	if len(raw) > 0 {
+		if err := validateJSONDocument(raw); err != nil {
+			return nil, err
+		}
 		if err := json.Unmarshal(raw, &out); err != nil {
 			return nil, err
 		}
@@ -82,6 +85,9 @@ func objectOnly(data []byte) error {
 
 func (c *Content) UnmarshalJSON(data []byte) error {
 	*c = Content{}
+	if err := validateJSONDocument(data); err != nil {
+		return err
+	}
 	data = bytes.TrimSpace(data)
 	var next Content
 	if len(data) > 0 && data[0] == '"' {
@@ -131,7 +137,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	var head struct {
 		Type string `json:"type"`
 	}
-	if err := json.Unmarshal(data, &head); err != nil {
+	if err := unmarshalExact(data, &head); err != nil {
 		return err
 	}
 	if head.Type == "" {
@@ -221,6 +227,11 @@ func (b ContentBlock) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	var m map[string]json.RawMessage
+	if len(b.Raw) > 0 {
+		if err := validateJSONDocument(b.Raw); err != nil {
+			return nil, err
+		}
+	}
 	if err = json.Unmarshal(b.Raw, &m); len(b.Raw) > 0 && err != nil {
 		return nil, err
 	}
@@ -355,7 +366,7 @@ func (v *SystemEvent) UnmarshalJSON(data []byte) error {
 	}
 	type wire SystemEvent
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -374,7 +385,7 @@ func (v *Message) UnmarshalJSON(data []byte) error {
 	}
 	type wire Message
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -393,7 +404,7 @@ func (v *ResultEvent) UnmarshalJSON(data []byte) error {
 	}
 	type wire ResultEvent
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -412,7 +423,7 @@ func (v *TextBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire TextBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -431,7 +442,7 @@ func (v *ThinkingBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire ThinkingBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -450,7 +461,7 @@ func (v *ToolUseBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire ToolUseBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -469,7 +480,7 @@ func (v *ToolResultBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire ToolResultBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -488,7 +499,7 @@ func (v *ServerToolUseBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire ServerToolUseBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -507,7 +518,7 @@ func (v *ServerToolResultBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire ServerToolResultBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -526,7 +537,7 @@ func (v *RedactedThinkingBlock) UnmarshalJSON(data []byte) error {
 	}
 	type wire RedactedThinkingBlock
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -545,7 +556,7 @@ func (v *ModelUsage) UnmarshalJSON(data []byte) error {
 	}
 	type wire ModelUsage
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -564,7 +575,7 @@ func (v *MessageOrigin) UnmarshalJSON(data []byte) error {
 	}
 	type wire MessageOrigin
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -583,7 +594,7 @@ func (v *RateLimitEvent) UnmarshalJSON(data []byte) error {
 	}
 	type wire RateLimitEvent
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -602,7 +613,7 @@ func (v *RateLimitInfo) UnmarshalJSON(data []byte) error {
 	}
 	type wire RateLimitInfo
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -621,7 +632,7 @@ func (v *ConversationResetEvent) UnmarshalJSON(data []byte) error {
 	}
 	type wire ConversationResetEvent
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -670,12 +681,12 @@ func (v *StreamEvent) UnmarshalJSON(data []byte) error {
 	}
 	type wire StreamEvent
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	if len(next.Event) > 0 && !bytes.Equal(bytes.TrimSpace(next.Event), []byte("null")) {
 		next.Delta = new(StreamDelta)
-		if err := json.Unmarshal(next.Event, next.Delta); err != nil {
+		if err := unmarshalExact(next.Event, next.Delta); err != nil {
 			return err
 		}
 	}

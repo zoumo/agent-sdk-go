@@ -265,3 +265,25 @@ func TestEnvelopePrecedenceAndExactUnknownNumber(t *testing.T) {
 		require.False(t, ok, "explicit branch omission lost")
 	}
 }
+
+func TestExactNativeDataKeys(t *testing.T) {
+	frame := `{"type":"system","TYPE":"result","session_id":"exact","SESSION_ID":"wrong","subtype":"init","model":null,"MODEL":"wrong"}`
+	e := roundTrip(t, frame)
+	require.Equal(t, "system", e.Type)
+	require.Equal(t, "exact", e.SessionID)
+	require.Empty(t, e.System.Model)
+	raw := `{"message":{"role":"user","ROLE":"assistant","content":"exact","CONTENT":"wrong"},"shouldQuery":null,"SHOULDQUERY":true}`
+	var input types.UserInput
+	require.NoError(t, json.Unmarshal([]byte(raw), &input))
+	require.Equal(t, "user", input.Message.Role)
+	require.Equal(t, "exact", *input.Message.Content.Text)
+	require.Nil(t, input.ShouldQuery)
+	b, err := json.Marshal(input)
+	require.NoError(t, err)
+	require.JSONEq(t, raw, string(b))
+	input.Message.Role = "edited"
+	b, err = json.Marshal(input)
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"role":"edited"`)
+	require.Contains(t, string(b), `"ROLE":"assistant"`)
+}

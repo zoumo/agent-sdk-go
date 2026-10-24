@@ -52,6 +52,8 @@ func (e *DispatchError) Is(target error) bool {
 // OutcomeUnknown forbids assuming that cancellation or a write error prevented
 // the CLI from acting. The SDK never automatically resends a frame.
 type Error struct {
+	// Raw retains the offending native frame for protocol/decode diagnostics.
+	Raw            json.RawMessage
 	Op             string
 	Err            error
 	Stderr         string

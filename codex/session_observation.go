@@ -71,17 +71,15 @@ func nativeThreadParents(method string, params json.RawMessage) (child string, p
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(thread["id"], &child)
-	var direct string
-	_ = json.Unmarshal(thread["parentThreadId"], &direct)
+	child, _ = nativeIdentity(thread["id"])
+	direct, _ := nativeIdentity(thread["parentThreadId"])
 	if direct != "" {
 		parents = append(parents, direct)
 	}
 	source, _ := objectFields(thread["source"])
 	sub, _ := objectFields(source["subAgent"])
 	spawn, _ := objectFields(sub["thread_spawn"])
-	var parent string
-	_ = json.Unmarshal(spawn["parent_thread_id"], &parent)
+	parent, _ := nativeIdentity(spawn["parent_thread_id"])
 	if parent != "" && parent != direct {
 		parents = append(parents, parent)
 	}

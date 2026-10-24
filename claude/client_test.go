@@ -68,6 +68,10 @@ func runFixture(mode string) {
 		}
 	}
 	switch mode {
+	case "session_load_malformed":
+		fmt.Fprintln(os.Stdout, `{ "type":"control_response","response":{"subtype":"success","request_id":"\ud800"}} `)
+		io.Copy(io.Discard, reader)
+		return
 	case "session_load_pending":
 		runLoadPendingFixture(reader, init["request_id"])
 		return
@@ -156,6 +160,13 @@ func runFixture(mode string) {
 			os.Stdin.Close()
 		}
 		fixtureEmit(map[string]any{"type": "ready"})
+		if mode == "blocked_write" {
+			prefix := make([]byte, 64)
+			if _, err := io.ReadFull(reader, prefix); err != nil {
+				os.Exit(15)
+			}
+			fixtureEmit(map[string]any{"type": "writer_prefix", "prefix": string(prefix)})
+		}
 		time.Sleep(time.Hour)
 		return
 	}
@@ -569,7 +580,20 @@ func TestWriteFailuresAreReturnedDirectly(t *testing.T) {
 			receive(t, c)
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
-			err := c.Send(ctx, strings.Repeat("x", 1<<20))
+			result := make(chan error, 1)
+			go func() { _, err := c.session.Submit(ctx, Input{Text: strings.Repeat("x", 1<<20)}); result <- err }()
+			if mode == "blocked_write" {
+				prefixCtx, stop := context.WithTimeout(context.Background(), time.Second)
+				defer stop()
+				prefix, err := c.session.Receive(prefixCtx)
+				require.NoError(t, err)
+				require.NotNil(t, prefix.Event)
+				require.Equal(t, "writer_prefix", eventKind(*prefix.Event))
+			}
+			err := <-result
+			var dispatch *DispatchError
+			require.ErrorAs(t, err, &dispatch)
+			require.Equal(t, OutcomeUnknown, dispatch.State)
 			require.Falsef(t, err == nil || !errors.Is(err, ErrUnknownOutcome), "Send = %v", err)
 			awaitDone(t, c)
 			require.Falsef(t, mode == "blocked_write" && !errors.Is(err, context.DeadlineExceeded), "blocked Send = %v", err)

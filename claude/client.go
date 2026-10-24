@@ -331,6 +331,11 @@ func (c *interaction) writeJSON(ctx context.Context, value any) error {
 }
 
 func (c *interaction) writeJSONChecked(ctx context.Context, value any, authorize func() error) error {
+	return c.writeEncodedChecked(ctx, func() ([]byte, error) { return json.Marshal(value) }, authorize)
+}
+
+// Admission covers preparation and encoding, not just the final OS write.
+func (c *interaction) writeEncodedChecked(ctx context.Context, encode func() ([]byte, error), authorize func() error) error {
 	// Serialize encoding as well as writing: concurrent callers do not each
 	// retain an SDK-encoded frame while waiting for the writer.
 	select {
@@ -349,7 +354,7 @@ func (c *interaction) writeJSONChecked(ctx context.Context, value any, authorize
 		return ErrClosed
 	default:
 	}
-	frame, err := json.Marshal(value)
+	frame, err := encode()
 	if err != nil {
 		return &Error{Op: "encode", Err: err}
 	}
@@ -450,18 +455,7 @@ func (c *interaction) route(event Event) error {
 		c.mu.Unlock()
 	}
 	if event.Type == "control_response" {
-		var wire struct {
-			Response struct {
-				Subtype   string          `json:"subtype"`
-				RequestID string          `json:"request_id"`
-				Response  json.RawMessage `json:"response"`
-				Error     string          `json:"error"`
-			} `json:"response"`
-		}
-		if err := json.Unmarshal(event.Raw, &wire); err != nil {
-			return err
-		}
-		reply := wire.Response
+		reply := event.Response.Response
 		if reply.RequestID == "" || (reply.Subtype != "success" && reply.Subtype != "error") {
 			return fmt.Errorf("invalid control response")
 		}
@@ -545,7 +539,7 @@ func (c *interaction) readStdout() {
 		}
 		event, err := parseEvent(frame)
 		if err != nil {
-			c.fail(&Error{Op: "decode", Err: fmt.Errorf("%w: %w", ErrProtocol, err)})
+			c.fail(&Error{Op: "decode", Err: fmt.Errorf("%w: %w", ErrProtocol, err), Raw: bytes.Clone(frame)})
 			return
 		}
 		if err := c.route(event); err != nil {
@@ -555,7 +549,7 @@ func (c *interaction) readStdout() {
 			if !errors.Is(err, ErrResourceLimit) {
 				err = fmt.Errorf("%w: %w", ErrProtocol, err)
 			}
-			c.fail(err)
+			c.fail(&Error{Op: "route", Err: err, Raw: bytes.Clone(frame)})
 			return
 		}
 		frame = frame[:0]

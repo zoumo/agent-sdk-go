@@ -237,7 +237,13 @@ func trace(t *testing.T, path string) []fakeEnvelope {
 }
 func waitTrace(t *testing.T, path, method string) {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
+	waitTraceWithin(t, path, method, 2*time.Second)
+}
+
+// Poll on the owning test goroutine: trace uses require for read/parse errors.
+func waitTraceWithin(t *testing.T, path, method string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.After(timeout)
 	tick := time.NewTicker(time.Millisecond)
 	defer tick.Stop()
 	for {

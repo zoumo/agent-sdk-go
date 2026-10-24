@@ -44,8 +44,8 @@ type QuestionAnswer struct {
 
 func (v *QuestionAnswer) UnmarshalJSON(data []byte) error {
 	*v = QuestionAnswer{}
-	if !utf8.Valid(data) {
-		return fmt.Errorf("invalid UTF-8")
+	if err := validateJSONDocument(data); err != nil {
+		return err
 	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
@@ -168,7 +168,7 @@ func (v *AskUserQuestionInput) UnmarshalJSON(data []byte) error {
 	}
 	type wire AskUserQuestionInput
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -190,7 +190,7 @@ func (v *Question) UnmarshalJSON(data []byte) error {
 	}
 	type wire Question
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)
@@ -212,7 +212,7 @@ func (v *QuestionOption) UnmarshalJSON(data []byte) error {
 	}
 	type wire QuestionOption
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = bytes.Clone(data)

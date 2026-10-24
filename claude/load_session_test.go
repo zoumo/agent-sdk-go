@@ -321,3 +321,37 @@ func TestLoadBoundarySnapshotCannotMutateIdentityFailure(t *testing.T) {
 	_, err = s.Receive(ctx)
 	require.ErrorIs(t, err, ErrIdentityMismatch)
 }
+
+func TestLoadProtocolErrorSnapshotsRetainDetachedRaw(t *testing.T) {
+	o := historyTranscript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "stored"}})
+	opts := loadOptions(t, o)
+	opts.Options.Env = append(opts.Options.Env, "CLAUDE_GO_FIXTURE=session_load_malformed")
+	s, err := Load(context.Background(), opts)
+	require.NoError(t, err)
+	defer s.Close()
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("load did not fail")
+	}
+	var first *Error
+	require.ErrorAs(t, s.LoadState().Err, &first)
+	raw := append([]byte(nil), first.Raw...)
+	require.NotEmpty(t, raw)
+	first.Raw[0] = '!'
+	var next *Error
+	require.ErrorAs(t, s.LoadState().Err, &next)
+	require.Equal(t, raw, []byte(next.Raw))
+	var boundary *LoadState
+	for boundary == nil {
+		r, e := s.Receive(context.Background())
+		require.NoError(t, e)
+		boundary = r.Load
+	}
+	var failure *Error
+	require.ErrorAs(t, boundary.Err, &failure)
+	require.Equal(t, raw, []byte(failure.Raw))
+	failure.Raw[0] = '!'
+	require.ErrorAs(t, s.LoadState().Err, &next)
+	require.Equal(t, raw, []byte(next.Raw))
+}

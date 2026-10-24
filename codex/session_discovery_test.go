@@ -153,14 +153,7 @@ func TestSessionDiscoveryDispatchedCancellationHasNoRetry(t *testing.T) {
 		_, err := s.ListSubagents(ctx, codex.SubagentQuery{Cursor: types.Some("withhold")})
 		result <- err
 	}()
-	require.Eventually(t, func() bool {
-		for _, frame := range trace(t, f.trace) {
-			if frame.Method == "thread/list" {
-				return true
-			}
-		}
-		return false
-	}, time.Second, time.Millisecond)
+	waitTraceWithin(t, f.trace, "thread/list", time.Second)
 	cancel()
 	var call *codex.CallError
 	require.ErrorAs(t, <-result, &call)
@@ -254,14 +247,7 @@ func TestSessionDiscoveryKnownGateAndOwnerCancellation(t *testing.T) {
 					_, err := s.ListSubagents(context.Background(), codex.SubagentQuery{Cursor: types.Some("withhold")})
 					result <- err
 				}()
-				require.Eventually(t, func() bool {
-					for _, f := range trace(t, f.trace) {
-						if f.Method == "thread/list" {
-							return true
-						}
-					}
-					return false
-				}, time.Second, time.Millisecond)
+				waitTraceWithin(t, f.trace, "thread/list", time.Second)
 				require.NoError(t, s.Close())
 				var call *codex.CallError
 				require.ErrorAs(t, <-result, &call)

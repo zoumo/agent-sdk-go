@@ -59,6 +59,10 @@ func runInputConfigFixture(reader *bufio.Reader) {
 		if wire["type"] == "control_request" {
 			request := wire["request"].(map[string]any)
 			fixtureEmit(map[string]any{"type": "assistant", "session_id": "main", "message": map[string]any{"content": "control seen"}, "wire": wire})
+			if request["model"] == "exact-keys" {
+				fixtureEmit(map[string]any{"type": "control_response", "TYPE": "future", "response": map[string]any{"subtype": "success", "SUBTYPE": "error", "request_id": wire["request_id"], "REQUEST_ID": "wrong", "response": map[string]any{"exact": true}, "RESPONSE": map[string]any{"wrong": true}}, "RESPONSE": map[string]any{"subtype": "error", "request_id": wire["request_id"], "error": "wrong casing"}})
+				continue
+			}
 			if request["model"] == "hang" {
 				continue
 			}
@@ -318,4 +322,56 @@ func TestSessionCreationInvalidThinkingDoesNotLaunch(t *testing.T) {
 		_, err = os.Stat(capture)
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
+}
+
+func TestSessionStructuredInputExactKeys(t *testing.T) {
+	s, path := openInputConfigSession(t)
+	raw := `{"message":{"role":"user","ROLE":"assistant","content":"exact","CONTENT":"wrong"},"TYPE":"future","SESSION_ID":"other","shouldQuery":null,"SHOULDQUERY":true}`
+	var user types.UserInput
+	require.NoError(t, json.Unmarshal([]byte(raw), &user))
+	receipt, err := s.Submit(context.Background(), Input{User: &user})
+	require.NoError(t, err)
+	require.True(t, receipt.Written)
+	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+	require.NoError(t, s.Close())
+	frames := permissionTranscript(t, path)
+	require.Len(t, frames, 2)
+	require.JSONEq(t, `{"message":{"role":"user","ROLE":"assistant","content":"exact","CONTENT":"wrong"},"TYPE":"future","SESSION_ID":"other","shouldQuery":null,"SHOULDQUERY":true,"type":"user","session_id":"","parent_tool_use_id":null}`, string(frames[0]))
+}
+
+func TestSessionConfigurationExactResponseKeys(t *testing.T) {
+	s, _ := openInputConfigSession(t)
+	model := "exact-keys"
+	receipt, err := s.SetModel(context.Background(), ModelChange{Model: &model})
+	require.NoError(t, err)
+	require.True(t, receipt.Accepted)
+	require.Contains(t, string(receipt.Response), `"REQUEST_ID":"wrong"`)
+	require.Contains(t, string(receipt.Response), `"error":"wrong casing"`)
+	require.NoError(t, s.Close())
+}
+
+func TestSessionWrongCaseInputCannotSupplyRequiredFields(t *testing.T) {
+	s, path := openInputConfigSession(t)
+	for _, raw := range []string{
+		`{"message":{"ROLE":"user","content":"x"}}`,
+		`{"message":{"role":"user","CONTENT":"x"}}`,
+		`{"MESSAGE":{"role":"user","content":"x"}}`,
+	} {
+		var user types.UserInput
+		require.NoError(t, json.Unmarshal([]byte(raw), &user))
+		_, err := s.Submit(context.Background(), Input{User: &user})
+		var dispatch *DispatchError
+		require.ErrorAs(t, err, &dispatch)
+		require.Equal(t, NotSent, dispatch.State)
+		require.ErrorIs(t, err, ErrInvalidInput)
+		require.NoError(t, s.Err())
+	}
+	receipt, err := s.Submit(context.Background(), Input{Text: "still usable"})
+	require.NoError(t, err)
+	require.True(t, receipt.Written)
+	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+	require.NoError(t, s.Close())
+	frames := permissionTranscript(t, path)
+	require.Len(t, frames, 2)
+	require.Contains(t, string(frames[0]), `"content":"still usable"`)
 }

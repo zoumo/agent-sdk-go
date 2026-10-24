@@ -409,11 +409,7 @@ func (c *interaction) permissionErrorLocked(s *permissionState, expected permiss
 }
 
 func (c *interaction) registerIncoming(request *ControlRequest) (*PermissionRequest, error) {
-	var wire struct {
-		ToolName  string          `json:"tool_name"`
-		ToolUseID string          `json:"tool_use_id"`
-		Input     json.RawMessage `json:"input"`
-	}
+	var wire types.PermissionMetadata
 	if request.Subtype == "can_use_tool" {
 		if err := json.Unmarshal(request.Request, &wire); err != nil {
 			return nil, err

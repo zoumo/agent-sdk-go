@@ -193,6 +193,7 @@ func snapshotLoadError(err error) error {
 		return &copy
 	case *Error:
 		copy := *e
+		copy.Raw = append(json.RawMessage(nil), e.Raw...)
 		copy.Err = snapshotLoadError(e.Err)
 		if e.ExitCode != nil {
 			code := *e.ExitCode

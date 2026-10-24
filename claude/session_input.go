@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -48,42 +49,63 @@ func (c *interaction) sendInput(ctx context.Context, input Input) error {
 	if len(input.Text) > c.opts.Limits.FrameBytes {
 		return fail(&ResourceLimitError{Resource: "outbound frame bytes", Limit: c.opts.Limits.FrameBytes})
 	}
-	user := types.UserInput{Message: types.InputMessage{Role: "user", Content: types.Content{Text: &input.Text}}}
-	if input.User != nil {
+	return fail(c.writeEncodedChecked(ctx, func() ([]byte, error) {
+		if input.User == nil {
+			if !utf8.ValidString(input.Text) {
+				return nil, fmt.Errorf("%w: invalid UTF-8 string", ErrInvalidInput)
+			}
+			// Encode text once using ordinary native fields. No Raw/presence or
+			// structured block branch is present in this convenience form.
+			return json.Marshal(struct {
+				Type      string  `json:"type"`
+				SessionID string  `json:"session_id"`
+				Parent    *string `json:"parent_tool_use_id"`
+				Message   struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				} `json:"message"`
+			}{Type: "user", Message: struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			}{"user", input.Text}})
+		}
+		user := *input.User
 		if input.Text != "" {
-			return fail(fmt.Errorf("%w: both Text and User", ErrInvalidInput))
+			return nil, fmt.Errorf("%w: both Text and User", ErrInvalidInput)
 		}
-		user = *input.User
-	}
-	if err := validateInputEncoding(user); err != nil {
-		return fail(err)
-	}
-	data, err := json.Marshal(user)
-	if err != nil {
-		return fail(fmt.Errorf("%w: %v", ErrInvalidInput, err))
-	}
-	var envelope map[string]json.RawMessage
-	if err = json.Unmarshal(data, &envelope); err != nil {
-		return fail(err)
-	}
-	// These envelope values are stream ownership markers, not target selectors.
-	for k, want := range map[string]string{"type": `"user"`, "session_id": `""`, "parent_tool_use_id": `null`} {
-		if got, ok := envelope[k]; ok && !bytes.Equal(bytes.TrimSpace(got), []byte(want)) {
-			return fail(fmt.Errorf("%w: fixed %s", ErrInvalidInput, k))
+
+		if err := validateInputEncoding(user); err != nil {
+			return nil, err
 		}
-		envelope[k] = json.RawMessage(want)
-	}
-	var message struct {
-		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"`
-	}
-	if err = json.Unmarshal(envelope["message"], &message); err != nil || message.Role != "user" {
-		return fail(fmt.Errorf("%w: message role must be user", ErrInvalidInput))
-	}
-	if err = validateInputContent(message.Content, false); err != nil {
-		return fail(err)
-	}
-	return fail(c.writeJSON(ctx, envelope))
+		data, err := json.Marshal(user)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		}
+		var envelope map[string]json.RawMessage
+		if err = json.Unmarshal(data, &envelope); err != nil {
+			return nil, err
+		}
+		// These envelope values are stream ownership markers, not target selectors.
+		for k, want := range map[string]string{"type": `"user"`, "session_id": `""`, "parent_tool_use_id": `null`} {
+			if got, ok := envelope[k]; ok && !bytes.Equal(bytes.TrimSpace(got), []byte(want)) {
+				return nil, fmt.Errorf("%w: fixed %s", ErrInvalidInput, k)
+			}
+			envelope[k] = json.RawMessage(want)
+		}
+		var message map[string]json.RawMessage
+		if err := json.Unmarshal(envelope["message"], &message); err != nil {
+			return nil, fmt.Errorf("%w: message must be an object: %v", ErrInvalidInput, err)
+		}
+		var role string
+		if err := json.Unmarshal(message["role"], &role); err != nil || role != "user" {
+			return nil, fmt.Errorf("%w: message role must be user", ErrInvalidInput)
+		}
+		if err := validateInputContent(message["content"], false); err != nil {
+			return nil, err
+		}
+
+		return json.Marshal(envelope)
+	}, nil))
 }
 
 func validateInputContent(data json.RawMessage, nested bool) error {

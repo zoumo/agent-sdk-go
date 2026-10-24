@@ -243,3 +243,100 @@ func TestSessionRejectsUnprivilegedQuestions(t *testing.T) {
 	require.ErrorIs(t, p.Answer(context.Background(), QuestionAnswers{Answers: map[string]string{}}), ErrUnsupported)
 	require.NoError(t, p.Deny(context.Background(), DenialOptions{}))
 }
+
+func TestSessionWrongCaseSourceCannotBecomeObserved(t *testing.T) {
+	s := openSessionFixture(t)
+	frame := `{"type":"system","subtype":"init","SESSION_ID":"wrong"}`
+	submitFrame(t, s, frame)
+	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+	id, observed := s.SessionID()
+	require.Empty(t, id)
+	require.False(t, observed)
+	require.NoError(t, s.Err())
+	require.Contains(t, string(s.Unattributed().Records[0].Event.Raw), `"SESSION_ID":"wrong"`)
+}
+
+func TestSessionExactLiveControlKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wire.jsonl")
+	s := openSessionFixture(t, func(o *SessionOptions) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
+	frame := `{"type":"system","TYPE":"result","subtype":"init","session_id":"s","SESSION_ID":"other"}`
+	submitFrame(t, s, frame)
+	r := sessionNative(t, s)
+	require.Equal(t, frame, string(r.Raw))
+	require.Equal(t, "system", r.Event.Type)
+	id, observed := s.SessionID()
+	require.True(t, observed)
+	require.Equal(t, "s", id)
+	frame = `{"type":"control_request","TYPE":"control_cancel_request","request_id":"exact","REQUEST_ID":"wrong","request":{"subtype":"can_use_tool","SUBTYPE":"interrupt","tool_name":"Read","TOOL_NAME":"Bash","tool_use_id":"tool","TOOL_USE_ID":"wrong-tool","input":{},"INPUT":{"wrong":true}}}`
+	submitFrame(t, s, frame)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var p *IncomingRequest
+	for p == nil {
+		r, err := s.Receive(ctx)
+		require.NoError(t, err)
+		p = r.Request
+	}
+	require.Equal(t, "exact", p.ID())
+	require.Equal(t, "Read", p.Handle().ToolName())
+	require.Equal(t, "tool", p.Handle().ToolUseID())
+	require.JSONEq(t, `{}`, string(p.Handle().Input()))
+	require.Equal(t, frame, string(p.Raw()))
+	submitFrame(t, s, `{"type":"control_cancel_request","request_id":"unrelated","REQUEST_ID":"exact"}`)
+	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+	require.NoError(t, p.Context().Err())
+	submitFrame(t, s, `{"type":"control_cancel_request","request_id":"exact","REQUEST_ID":"unrelated"}`)
+	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+	require.ErrorIs(t, p.Approve(context.Background(), ApprovalOptions{}), ErrPermissionCancelled)
+	require.NoError(t, s.Close())
+	require.Empty(t, permissionResponses(t, permissionTranscript(t, path)))
+}
+
+func TestSessionRejectsAmbiguousNativeAuthority(t *testing.T) {
+	for name, frame := range map[string]string{
+		"type casing":            `{"TYPE":"control_request","request_id":"fake","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`,
+		"request casing":         `{"type":"control_request","REQUEST_ID":"fake","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`,
+		"subtype casing":         `{"type":"control_request","request_id":"fake","request":{"SUBTYPE":"can_use_tool","tool_name":"Read","input":{}}}`,
+		"tool casing":            `{"type":"control_request","request_id":"fake","request":{"subtype":"can_use_tool","TOOL_NAME":"Read","input":{}}}`,
+		"cancel casing":          `{"type":"control_cancel_request","REQUEST_ID":"real"}`,
+		"duplicate request":      `{"type":"control_request","request_id":"fake","request_id":"real","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`,
+		"escaped duplicate":      `{"type":"control_cancel_request","request_id":"fake","request_\u0069d":"real"}`,
+		"surrogate cancellation": `{"type":"control_cancel_request","request_id":"\ud800"}`,
+		"duplicate session":      `{"type":"system","session_id":"wrong","session_id":"s","subtype":"init"}`,
+		"surrogate request":      `{"type":"control_request","request_id":"\ud800","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`,
+		"surrogate source":       `{"type":"system","session_id":"\udc00","subtype":"init"}`,
+		"bad UTF8":               "{\"type\":\"system\",\"session_id\":\"" + string([]byte{255}) + "\"}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := openSessionFixture(t)
+			p := sessionPermission(t, s, "real", "Read", `{}`)
+			// Send raw fixture instructions; the synthetic peer emits them verbatim.
+			if name == "bad UTF8" {
+				submitFrame(t, s, "emit-invalid-utf8")
+			} else {
+				submitFrame(t, s, frame)
+			}
+			select {
+			case <-s.Done():
+			case <-time.After(time.Second):
+				t.Fatal("malformed identity did not fail")
+			}
+			require.ErrorIs(t, s.Err(), ErrProtocol)
+			var protocol *Error
+			require.ErrorAs(t, s.Err(), &protocol)
+			require.Equal(t, frame, string(protocol.Raw))
+			require.Error(t, p.Context().Err())
+			id, observed := s.SessionID()
+			require.Empty(t, id)
+			require.False(t, observed)
+			for {
+				r, e := s.Receive(context.Background())
+				if e != nil {
+					require.ErrorIs(t, e, ErrProtocol)
+					break
+				}
+				require.Nil(t, r.Request)
+			}
+		})
+	}
+}

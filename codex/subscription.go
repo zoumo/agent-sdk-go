@@ -17,20 +17,21 @@ func treeIdentity(params json.RawMessage) types.EventIdentity {
 		return types.EventIdentity{}
 	}
 	var id types.EventIdentity
-	_ = json.Unmarshal(f["threadId"], &id.ThreadID)
-	_ = json.Unmarshal(f["turnId"], &id.TurnID)
-	_ = json.Unmarshal(f["itemId"], &id.ItemID)
-	for key, target := range map[string]*string{"thread": &id.ThreadID, "turn": &id.TurnID, "item": &id.ItemID} {
-		nested, err := objectFields(f[key])
-		if err != nil {
+	for _, field := range []struct {
+		direct, nested string
+		target         *string
+	}{
+		{"threadId", "thread", &id.ThreadID}, {"turnId", "turn", &id.TurnID}, {"itemId", "item", &id.ItemID},
+	} {
+		direct, directOK := nativeIdentity(f[field.direct])
+		nested, _ := objectFields(f[field.nested])
+		nestedID, nestedOK := nativeIdentity(nested["id"])
+		if !directOK || !nestedOK || direct != "" && nestedID != "" && direct != nestedID {
 			continue
 		}
-		var nestedID string
-		_ = json.Unmarshal(nested["id"], &nestedID)
-		if *target != "" && nestedID != "" && *target != nestedID {
-			*target = "" // Conflicting identities cannot support routing or deduplication.
-		} else if *target == "" {
-			*target = nestedID
+		*field.target = direct
+		if direct == "" {
+			*field.target = nestedID
 		}
 	}
 
@@ -66,4 +67,16 @@ func decodeEvent(method string, params json.RawMessage) types.Event {
 		event.Data = data
 	}
 	return event
+}
+
+// An absent identity is unknown; a malformed one must never become U+FFFD.
+func nativeIdentity(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 {
+		return "", true
+	}
+	var value string
+	if !json.Valid(raw) || raw[0] != '"' || !validStringEscapes(raw) || json.Unmarshal(raw, &value) != nil {
+		return "", false
+	}
+	return value, true
 }

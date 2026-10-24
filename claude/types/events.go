@@ -229,7 +229,7 @@ func ParseEvent(frame []byte) (Event, error) {
 	if !utf8.Valid(frame) {
 		return event, fmt.Errorf("frame is not valid UTF-8")
 	}
-	if err := json.Unmarshal(frame, (*eventWire)(&event)); err != nil {
+	if err := unmarshalExact(frame, (*eventWire)(&event)); err != nil {
 		return event, err
 	}
 	if event.Type == "" {
@@ -246,7 +246,7 @@ func ParseEvent(frame []byte) (Event, error) {
 		var envelope struct {
 			Message json.RawMessage `json:"message"`
 		}
-		err = json.Unmarshal(frame, &envelope)
+		err = unmarshalExact(frame, &envelope)
 		if err != nil {
 			break
 		}
@@ -274,7 +274,7 @@ func ParseEvent(frame []byte) (Event, error) {
 		event.Stream.Raw = event.Raw
 		if err == nil {
 			event.Stream.Delta = new(StreamDelta)
-			err = json.Unmarshal(event.Stream.Event, event.Stream.Delta)
+			err = unmarshalExact(event.Stream.Event, event.Stream.Delta)
 		}
 	case "rate_limit_event":
 		event.RateLimit = new(RateLimitEvent)
@@ -287,19 +287,19 @@ func ParseEvent(frame []byte) (Event, error) {
 		err = json.Unmarshal(frame, event.Response)
 	case "control_cancel_request":
 		event.Cancel = new(ControlCancelRequest)
-		err = json.Unmarshal(frame, event.Cancel)
+		err = unmarshalExact(frame, event.Cancel)
 		event.Cancel.Raw = event.Raw
 		if err == nil && event.Cancel.RequestID == "" {
 			err = fmt.Errorf("control cancellation has no request_id")
 		}
 	case "control_request":
 		event.Control = new(ControlRequest)
-		err = json.Unmarshal(frame, event.Control)
+		err = unmarshalExact(frame, event.Control)
 		if err == nil {
 			var h struct {
 				Subtype string `json:"subtype"`
 			}
-			err = json.Unmarshal(event.Control.Request, &h)
+			err = unmarshalExact(event.Control.Request, &h)
 			event.Control.Subtype = h.Subtype
 		}
 		if err == nil && (event.Control.RequestID == "" || event.Control.Subtype == "") {

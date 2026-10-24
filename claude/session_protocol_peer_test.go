@@ -49,6 +49,10 @@ func runTreeFixture(reader *bufio.Reader) {
 			if w.Message.Content == "disconnect" {
 				return
 			}
+			if w.Message.Content == "emit-invalid-utf8" {
+				fmt.Fprintln(os.Stdout, "{\"type\":\"system\",\"session_id\":\""+string([]byte{255})+"\"}")
+				continue
+			}
 			if !json.Valid([]byte(w.Message.Content)) {
 				os.Exit(13)
 			}

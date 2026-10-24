@@ -52,6 +52,7 @@ func (s *Session) LoadState() LoadState {
 func (s *Session) loadSnapshotLocked() LoadState {
 	state := s.load
 	state.ResumeRaw = append(json.RawMessage(nil), state.ResumeRaw...)
+	state.Err = snapshotLoadError(state.Err)
 	return state
 }
 
@@ -171,7 +172,10 @@ func (s *Session) runLoad(o HistoryOptions) {
 	defer close(s.loadDone)
 	c := s.client
 	ctx := context.Background()
-	before, err := c.historyThreadOwned(ctx, o, s)
+	before, beforeRaw, err := c.historyThreadOwned(ctx, o, s)
+	if err != nil {
+		err = &HistoryError{threadID: o.ThreadID, stage: "thread/read before resume", raw: append(json.RawMessage(nil), beforeRaw...), cause: err}
+	}
 	if err == nil {
 		var response types.ThreadResumeResponse
 		err = c.callOwned(ctx, "thread/resume", types.ThreadResumeParams{ThreadID: o.ThreadID, ExcludeTurns: types.Some(true)}, &response, false, func(raw json.RawMessage) error {
@@ -251,3 +255,55 @@ func (s *Session) releaseLoadError() error {
 	}
 	return nil
 }
+
+// Diagnostic snapshots own mutable public errors and native byte slices.
+func snapshotLoadError(err error) error {
+	switch e := err.(type) {
+	case *CallError:
+		copy := *e
+		copy.Cause = snapshotLoadError(e.Cause)
+		return &copy
+	case *AnswerError:
+		copy := *e
+		copy.Cause = snapshotLoadError(e.Cause)
+		return &copy
+	case *RPCError:
+		copy := *e
+		copy.Data = append(json.RawMessage(nil), e.Data...)
+		copy.Raw = append(json.RawMessage(nil), e.Raw...)
+		return &copy
+	case *DecodeError:
+		copy := *e
+		copy.Cause = snapshotLoadError(e.Cause)
+		return &copy
+	case *ResumeError:
+		copy := *e
+		copy.raw = e.Raw()
+		copy.cause = snapshotLoadError(e.cause)
+		return &copy
+	case *HistoryError:
+		copy := *e
+		copy.raw = e.Raw()
+		copy.cause = snapshotLoadError(e.cause)
+		return &copy
+	case interface{ Unwrap() []error }:
+		causes := e.Unwrap()
+		copies := make([]error, len(causes))
+		for i, cause := range causes {
+			copies[i] = snapshotLoadError(cause)
+		}
+		return &loadErrorSnapshot{message: err.Error(), causes: copies}
+	case interface{ Unwrap() error }:
+		return &loadErrorSnapshot{message: err.Error(), causes: []error{snapshotLoadError(e.Unwrap())}}
+	default:
+		return err
+	}
+}
+
+type loadErrorSnapshot struct {
+	message string
+	causes  []error
+}
+
+func (e *loadErrorSnapshot) Error() string   { return e.message }
+func (e *loadErrorSnapshot) Unwrap() []error { return e.causes }

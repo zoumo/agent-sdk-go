@@ -34,7 +34,7 @@ func (v *InputMessage) UnmarshalJSON(data []byte) error {
 	}
 	type wire InputMessage
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = append(json.RawMessage(nil), data...)
@@ -51,7 +51,7 @@ func (v *UserInput) UnmarshalJSON(data []byte) error {
 	}
 	type wire UserInput
 	var next wire
-	if err := json.Unmarshal(data, &next); err != nil {
+	if err := unmarshalExact(data, &next); err != nil {
 		return err
 	}
 	next.Raw = append(json.RawMessage(nil), data...)

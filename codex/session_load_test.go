@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -381,4 +382,138 @@ func TestSessionLoadOwnerPrecedesAncestorObservation(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, childReleases, "only the last observer releases the shared native attachment")
+}
+
+func TestSessionLoadExactHistoryKeys(t *testing.T) {
+	for _, mode := range []string{"mixed", "data-only", "items-only", "id-only", "item-id-only", "cursor-only", "cursor-absent"} {
+		t.Run(mode, func(t *testing.T) {
+			f := startFake(t, "history-exact-"+mode, codex.Limits{})
+			s, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
+			require.NoError(t, err)
+			defer s.Close()
+			var events []types.Event
+			for event := range historyEvents(t, s) {
+				events = append(events, event)
+			}
+			if mode != "mixed" {
+				require.Equal(t, codex.LoadFailed, s.LoadState().Status)
+				require.Empty(t, events)
+				return
+			}
+			require.Equal(t, codex.LoadSucceeded, s.LoadState().Status)
+			require.Len(t, events, 2)
+			require.Equal(t, "exact-turn", events[0].History.TurnID)
+			require.Equal(t, "exact-item", events[0].History.ItemID)
+			require.Equal(t, "retained", events[0].Data.(*types.ItemCompletedNotification).Item.AgentMessage.Text)
+			require.Contains(t, string(events[0].History.Raw), `"ID":"wrong-item"`)
+			require.Contains(t, string(events[1].History.Raw), `"ITEMS":[]`)
+			require.Equal(t, "exact-turn", events[1].History.TurnID)
+		})
+	}
+}
+
+func TestSessionLoadHistoryFailureRetainsPageEvidence(t *testing.T) {
+	f := startFake(t, "history-malformed", codex.Limits{})
+	s, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
+	require.NoError(t, err)
+	defer s.Close()
+	var events int
+	var boundary *codex.LoadState
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for boundary == nil {
+		r, e := s.Receive(ctx)
+		require.NoError(t, e)
+		if r.Event != nil {
+			events++
+		}
+		boundary = r.Load
+	}
+	require.Equal(t, 2, events)
+	require.Equal(t, codex.LoadFailed, boundary.Status)
+	var evidence interface {
+		error
+		Raw() json.RawMessage
+		Cursor() types.Optional[string]
+		Accepted() int
+		ThreadID() string
+	}
+	require.True(t, errors.As(boundary.Err, &evidence), "history failure discarded source: %v", boundary.Err)
+	require.JSONEq(t, `{"data":[{"id":"t2","items":[]}],"nextCursor":null}`, string(evidence.Raw()))
+	require.Equal(t, "page2", evidence.Cursor().ValueOr(""))
+	require.Equal(t, 2, evidence.Accepted())
+	require.Equal(t, "native-thread-42", evidence.ThreadID())
+	raw := evidence.Raw()
+	raw[0] = '!'
+	require.True(t, errors.As(s.LoadState().Err, &evidence))
+	require.Equal(t, byte('{'), evidence.Raw()[0])
+	require.True(t, errors.As(s.Err(), &evidence))
+	require.Equal(t, byte('{'), evidence.Raw()[0])
+}
+
+func TestSessionLoadNativeFailureSnapshotsAreDetached(t *testing.T) {
+	f := startFake(t, "history-resume-error", codex.Limits{})
+	s, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
+	require.NoError(t, err)
+	defer s.Close()
+	select {
+	case <-s.Done():
+	case <-time.After(time.Second):
+		t.Fatal("load did not fail")
+	}
+	var first *codex.RPCError
+	require.ErrorAs(t, s.LoadState().Err, &first)
+	raw := append([]byte(nil), first.Raw...)
+	require.NotEmpty(t, raw)
+	first.Raw[0] = '!'
+	first.Code = 0
+	first.Message = "mutated"
+	var next *codex.RPCError
+	require.ErrorAs(t, s.LoadState().Err, &next)
+	require.EqualValues(t, -32602, next.Code)
+	require.Equal(t, "resume missing", next.Message)
+	require.Equal(t, raw, []byte(next.Raw))
+	var boundary *codex.LoadState
+	for boundary == nil {
+		r, e := s.Receive(context.Background())
+		require.NoError(t, e)
+		boundary = r.Load
+	}
+	require.ErrorAs(t, boundary.Err, &next)
+	require.Equal(t, raw, []byte(next.Raw))
+	next.Raw[0] = '!'
+	require.ErrorAs(t, s.LoadState().Err, &next)
+	require.Equal(t, raw, []byte(next.Raw))
+}
+
+func TestSessionLoadUnrequestedPageLimitHasNoFabricatedResponse(t *testing.T) {
+	f := startFake(t, "history", codex.Limits{})
+	s, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1, MaxRecords: 3}})
+	require.NoError(t, err)
+	defer s.Close()
+	var events int
+	var boundary *codex.LoadState
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for boundary == nil {
+		r, e := s.Receive(ctx)
+		require.NoError(t, e)
+		if r.Event != nil {
+			events++
+		}
+		boundary = r.Load
+	}
+	require.Equal(t, 2, events)
+	var evidence *codex.HistoryError
+	require.ErrorAs(t, boundary.Err, &evidence)
+	require.Equal(t, "page2", evidence.Cursor().ValueOr(""))
+	require.Empty(t, evidence.Raw(), "the next page was not requested")
+	require.Equal(t, 2, evidence.Accepted())
+	calls := 0
+	for _, frame := range trace(t, f.trace) {
+		if frame.Method == "thread/turns/list" {
+			calls++
+		}
+	}
+	require.Equal(t, 1, calls)
 }

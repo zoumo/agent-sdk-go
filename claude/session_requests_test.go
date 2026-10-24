@@ -218,6 +218,7 @@ func TestSessionQuestionRejectsUnverifiedAnswersWithoutConsumingHandle(t *testin
 		require.ErrorIs(t, err, ErrUnsupported)
 	}
 	err := p.Answer(context.Background(), QuestionAnswers{Answers: map[string]string{"header": "A"}})
+	require.ErrorIs(t, err, ErrInvalidPermissionAnswer)
 	var dispatch *DispatchError
 	require.ErrorAs(t, err, &dispatch)
 	require.Equal(t, NotSent, dispatch.State)

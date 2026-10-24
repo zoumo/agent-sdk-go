@@ -193,8 +193,8 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	outputW.Close()
 	errorW.Close()
 	c := &Client{session: session, tree: tree, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
-		responses:      make(chan incomingControl, options.Limits.ControlBuffer),
-		permissionJobs: make(chan *PermissionRequest, options.Limits.ControlBuffer), epoch: connectionEpoch.Add(1),
+		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
+		epoch:       connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
@@ -203,6 +203,9 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	}
 	if session != nil {
 		session.client = c
+	}
+	if options.PermissionHandler != nil {
+		c.permissionJobs = make(chan *PermissionRequest, options.Limits.ControlBuffer)
 	}
 	go c.readStdout()
 	go c.readStderr()

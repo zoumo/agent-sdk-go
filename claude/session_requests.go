@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
@@ -48,7 +49,7 @@ func (r IncomingRequest) Answer(ctx context.Context, answer QuestionAnswers) err
 	}
 	var input types.AskUserQuestionInput
 	if err := json.Unmarshal(r.permission.Input(), &input); err != nil {
-		return &DispatchError{Op: "answer question", State: NotSent, Err: err}
+		return &DispatchError{Op: "answer question", State: NotSent, Err: errors.Join(ErrInvalidPermissionAnswer, err)}
 	}
 	if answer.Answers == nil {
 		return &DispatchError{Op: "answer question", State: NotSent, Err: ErrInvalidPermissionAnswer}
@@ -59,7 +60,7 @@ func (r IncomingRequest) Answer(ctx context.Context, answer QuestionAnswers) err
 	}
 	updated, err := input.WithAnswers(answers)
 	if err != nil {
-		return &DispatchError{Op: "answer question", State: NotSent, Err: err}
+		return &DispatchError{Op: "answer question", State: NotSent, Err: errors.Join(ErrInvalidPermissionAnswer, err)}
 	}
 	return r.permission.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated})
 }

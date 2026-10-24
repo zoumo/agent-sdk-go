@@ -124,9 +124,11 @@ func (p *PermissionRequest) Context() context.Context {
 
 // Answer reserves the sole response attempt and writes a response correlated to
 // the original request ID. It rechecks cancellation after acquiring the writer.
-// A call with an already-canceled ctx consumes nothing. Once reserved, a failed
-// attempt cannot be retried, even if its write outcome is unknown. Invalid
-// answers terminate the connection visibly, without granting permission.
+// A call with an already-canceled ctx consumes nothing. For a Session handle,
+// local invalid/unsupported answers and cancellation before write authorization
+// return NotSent and leave still-live authority available. The temporary legacy
+// Client path instead consumes failed reserved attempts and terminates on invalid
+// answers. An attempt that may have written bytes is never retried on either path.
 // ErrPermissionWriteFailed retains a failed attempt's cause after shutdown.
 // A terminal handle's rejection is a PermissionError with its original ID.
 // Cancellation cannot retract a write already authorized; such a race is

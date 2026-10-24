@@ -139,6 +139,10 @@ func runFixture(mode string) {
 		runSessionFixture(mode, reader)
 		return
 	}
+	if mode == "input_config" {
+		runInputConfigFixture(reader)
+		return
+	}
 	if mode == "blocked_write" || mode == "closed_stdin" {
 		if mode == "closed_stdin" {
 			os.Stdin.Close()

@@ -28,9 +28,10 @@ type Limits = types.Limits
 // child's entire environment; nil inherits os.Environ. WorkDir, Model and
 // ResumeID are passed literally, without a shell. Existing CLI settings apply.
 type Options struct {
-	CLIPath string
-	WorkDir string
-	Model   string
+	CLIPath  string
+	WorkDir  string
+	Model    string
+	Thinking *types.ThinkingConfig
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
@@ -44,6 +45,12 @@ type Options struct {
 }
 
 func (o *Options) defaults() error {
+	if err := validateInputEncoding(o.Model); err != nil {
+		return dispatchFailure("open", err)
+	}
+	if err := validateThinkingConfig(o.Thinking); err != nil {
+		return dispatchFailure("open", err)
+	}
 	if o.CLIPath == "" {
 		o.CLIPath = "claude"
 	}
@@ -82,8 +89,9 @@ type controlReply struct {
 	err  error
 }
 type pendingControl struct {
-	subtype string
-	reply   chan controlReply
+	subtype      string
+	fullResponse bool
+	reply        chan controlReply
 }
 
 // Client owns one subprocess. Its methods are concurrency-safe except Receive.
@@ -151,6 +159,7 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 		options.Subagents = tree.options
 	}
 	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
+	args = append(args, thinkingArgs(options.Thinking)...)
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
 	}
@@ -245,15 +254,7 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 // local write. A canceled or failed started write is conservatively classified
 // as unknown outcome and terminates this connection; it is never retried.
 func (c *Client) Send(ctx context.Context, text string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	// A JSON string cannot be shorter than its original bytes. Reject obviously
-	// oversized caller input before encoding; escapes/envelope are checked below.
-	if len(text) > c.opts.Limits.FrameBytes {
-		return &ResourceLimitError{Resource: "outbound frame bytes", Limit: c.opts.Limits.FrameBytes}
-	}
-	return c.writeJSON(ctx, map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}, "parent_tool_use_id": nil, "session_id": ""})
+	return c.sendInput(ctx, Input{Text: text})
 }
 
 // RequestedResumeID returns the value supplied in Options.ResumeID. It is a
@@ -481,11 +482,15 @@ func (c *Client) writeJSONChecked(ctx context.Context, value any, authorize func
 // control registers its waiter before writing. Keep this shared path for future
 // control operations so their correlation and teardown rules stay identical.
 func (c *Client) control(ctx context.Context, subtype string, request any) (json.RawMessage, error) {
+	return c.controlRequest(ctx, subtype, request, false)
+}
+
+func (c *Client) controlRequest(ctx context.Context, subtype string, request any, fullResponse bool) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	id := "go_" + strconv.FormatUint(c.nextID.Add(1), 10)
-	waiter := pendingControl{subtype: subtype, reply: make(chan controlReply, 1)}
+	waiter := pendingControl{subtype: subtype, fullResponse: fullResponse, reply: make(chan controlReply, 1)}
 	c.mu.Lock()
 	select {
 	case <-c.done:
@@ -552,8 +557,11 @@ func (c *Client) route(event Event) error {
 		c.mu.Unlock()
 		if found {
 			result := controlReply{data: reply.Response}
+			if waiter.fullResponse {
+				result.data = append(json.RawMessage(nil), event.Raw...)
+			}
 			if reply.Subtype == "error" {
-				result.err = &ControlError{RequestID: reply.RequestID, Subtype: waiter.subtype, Message: reply.Error}
+				result.err = &ControlError{RequestID: reply.RequestID, Subtype: waiter.subtype, Message: reply.Error, Raw: append(json.RawMessage(nil), event.Raw...)}
 			}
 			waiter.reply <- result
 		}

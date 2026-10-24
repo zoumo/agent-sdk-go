@@ -17,7 +17,8 @@ status: stable
 ```go
 Receive(ctx context.Context) (Received, error)
 Submit(ctx context.Context, input Input) (Submission, error)
-SetModel(ctx context.Context, model string) (ConfigurationReceipt, error)
+SetModel(ctx context.Context, model string) (ConfigurationReceipt, error) // Codex
+SetModel(ctx context.Context, change ModelChange) (ConfigurationReceipt, error) // Claude
 SetThinking(ctx context.Context, change ThinkingChange) (ConfigurationReceipt, error)
 ListSubagents(ctx context.Context, query SubagentQuery) (SubagentPage, error)
 Interrupt(ctx context.Context, options InterruptOptions) error
@@ -37,10 +38,11 @@ Receive 是唯一消费入口，不另设 Events、Requests channel、审批回�
 
 | 值 | Codex | Claude |
 |---|---|---|
-| Input | 原生 `[]types.UserInput` 与 turn/start 可用执行选项；不含可改写的主 ThreadID。 | 原生 user message 的字符串或内容块及受支持关联/扩展；根 envelope 由 Session 固定，不从输出 decoder 推导发送许可。 |
+| Input | 原生 `[]types.UserInput` 与 turn/start 可用执行选项；不含可改写的主 ThreadID。 | `Input{Text}` 或 `Input{User: *types.UserInput}`，后者携带原生 InputMessage 与关联/扩展；支持 text、image、document、tool_result，其他块明确拒绝。image source 支持 base64/url，document source 支持 base64/url/text/content；工具结果/文档的嵌套内容同样校验支持范围。根 envelope 由 Session 固定，不从输出 decoder 推导发送许可。 |
 | Submission | 保留原生 TurnStartResponse（包括 turn 身份）；成功表示 RPC 确认，不表示 turn 完成。 | 成功仅表示完整本地写入，没有虚构 CLI 接受回执或 Turn。 |
-| ThinkingChange | 原生 ReasoningEffort 值，用 thread/settings/update 的 effort；不增加跨提供方档位。 | 动态 max_thinking_tokens 的可空整数及 thinking_display 的省略、summarized、omitted、null 清除；创建时原生 thinking enabled/adaptive/disabled 独立表达，不将创建模式隐式转换成动态预算。 |
-| ConfigurationReceipt | 原生空响应、请求值与“原生接受”证据；settings updated 是另行收到的观察事实。 | 原始 control_response、请求值与“原生接受”证据；没有当前执行切换证明时 observed 保持未知。 |
+| ModelChange | SetModel 直接接受原生模型标识字符串。 | `Model *string`：nil 省略 model，恢复原生默认；非 nil 非空标识逐字发送；不发送 model:null，不将空字符串或跨提供方别名等同默认。 |
+| ThinkingChange | 原生 ReasoningEffort 值，用 thread/settings/update 的 effort；不增加跨提供方档位。 | `MaxThinkingTokens *int` 的 nil 发送 null 清除，非 nil 保留 0/整数；`ThinkingDisplay *string` 的 nil 省略，值为 summarized/omitted，`ClearDisplay` 单独发送 null 清除；创建时原生 thinking enabled/adaptive/disabled 独立表达，不将创建模式隐式转换成动态预算。 |
+| ConfigurationReceipt | 原生空响应、请求值与“原生接受”证据；settings updated 是另行收到的观察事实。 | `Requested` 为确切原生请求 payload，`Response` 为完整 control_response，`Accepted` 仅表示 success ack；`Observed` 保持未知，实际事实由 Receive 单独交付。 |
 | InterruptOptions | 显式原生 TurnID，ThreadID 固定为主会话；不猜最后收到的 turn。 | 原生 interrupt 不要求合成执行 ID；无执行选择字段。 |
 
 Submit 使用原生 start 语义，不依据本地 Busy 推断 start/steer。若保留 Codex steer 扩展，必须显式选择并携带 expectedTurnId；不能自动切换。文本便捷调用只构造 Input 并调用同一 Submit。未知输入变体保留原文不等于确认可发送；已知未接入内容明确拒绝，不能转成提示词或丢字段。

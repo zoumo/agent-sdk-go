@@ -1,5 +1,7 @@
 > The new owned-process `Open(ctx, SessionOptions)` API and its current migration
-> limits are documented in [Session migration](docs/session-migration.md). The
+> limits are documented in [Session migration](docs/session-migration.md).
+> Structured input and native configuration are described in
+> [Session input/configuration](docs/session-input-config.md). The
 > examples below retain the temporary `NewClient` compatibility entry point.
 
 # Claude Agent SDK for Go

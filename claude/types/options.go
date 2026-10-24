@@ -33,9 +33,10 @@ type Limits struct {
 // attach a root-package PermissionHandler. Env slices retain normal Go sharing.
 // Zero values select the client defaults; validation occurs at Open.
 type Options struct {
-	CLIPath string
-	WorkDir string
-	Model   string
+	CLIPath  string
+	WorkDir  string
+	Model    string
+	Thinking *ThinkingConfig
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID          string
@@ -43,4 +44,14 @@ type Options struct {
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
 	Limits            Limits
+}
+
+// ThinkingConfig is creation-only native thinking configuration from SDK
+// 0.3.258. Enabled without BudgetTokens and adaptive both launch adaptive.
+// Disabled accepts neither budget nor display. Budget is deprecated and can
+// act as an on/off switch on some models, rather than a hard token ceiling.
+type ThinkingConfig struct {
+	Type         string
+	BudgetTokens *int
+	Display      *string
 }

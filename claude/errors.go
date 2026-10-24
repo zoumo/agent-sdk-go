@@ -3,12 +3,14 @@
 package claude
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
 
 var (
 	ErrClosed                   = errors.New("claude: client is closed")
+	ErrInvalidInput             = errors.New("claude: invalid input")
 	ErrUnsupported              = errors.New("claude: unsupported operation")
 	ErrProtocol                 = errors.New("claude: invalid protocol frame")
 	ErrResourceLimit            = errors.New("claude: resource limit exceeded")
@@ -81,7 +83,10 @@ func (e *ResourceLimitError) Error() string {
 func (e *ResourceLimitError) Unwrap() error { return ErrResourceLimit }
 
 // ControlError is an explicit error response to an outbound control request.
-type ControlError struct{ RequestID, Subtype, Message string }
+type ControlError struct {
+	RequestID, Subtype, Message string
+	Raw                         json.RawMessage
+}
 
 func (e *ControlError) Error() string {
 	return fmt.Sprintf("claude: control %s (%s): %s", e.Subtype, e.RequestID, e.Message)

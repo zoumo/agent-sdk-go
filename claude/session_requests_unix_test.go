@@ -110,3 +110,53 @@ func TestSessionPermissionStartedWriteOutcomeUnknownCannotRetry(t *testing.T) {
 	require.Equal(t, 1, bytes.Count(data, []byte(`{"response":`)))
 	require.Equal(t, raw, p.Raw())
 }
+
+func TestSessionConfigurationQueuedCancelAndStartedWrite(t *testing.T) {
+	for _, started := range []bool{false, true} {
+		t.Run(map[bool]string{false: "queued", true: "started"}[started], func(t *testing.T) {
+			s, gate, _ := sessionWriteBarrier(t)
+			submitFrame(t, s, "block_write:config")
+			sessionWireSignal(t, s, "writer_ready")
+			var blocking chan error
+			if !started {
+				blocking = make(chan error, 1)
+				go func() {
+					_, err := s.Submit(context.Background(), Input{Text: strings.Repeat("large", 500000)})
+					blocking <- err
+				}()
+				sessionWireSignal(t, s, "writer_prefix")
+			}
+			base, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ctx := &answerReservationContext{Context: base, reserved: make(chan struct{})}
+			model := "small"
+			if started {
+				model = strings.Repeat("large", 500000)
+			}
+			results := make(chan error, 1)
+			go func() { _, err := s.SetModel(ctx, ModelChange{Model: &model}); results <- err }()
+			if started {
+				sessionWireSignal(t, s, "writer_prefix")
+			} else {
+				awaitSignal(t, ctx.reserved)
+			}
+			cancel()
+			err := awaitPermissionError(t, results)
+			var d *DispatchError
+			require.ErrorAs(t, err, &d)
+			if started {
+				require.Equal(t, OutcomeUnknown, d.State)
+				sessionRelease(t, gate, 'x')
+				_ = s.Close()
+			} else {
+				require.Equal(t, NotSent, d.State)
+				require.NoError(t, s.Err())
+				sessionRelease(t, gate, 'd')
+				require.NoError(t, awaitPermissionError(t, blocking))
+				sessionWireSignal(t, s, "writer_finished")
+				_, err = s.SetModel(context.Background(), ModelChange{})
+				require.NoError(t, err)
+			}
+		})
+	}
+}

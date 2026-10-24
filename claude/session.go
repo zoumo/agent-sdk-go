@@ -44,10 +44,6 @@ type Observation struct {
 	Parent           *SubagentIdentity
 }
 
-// Input is text sent to the fixed main session. Structured native input follows
-// in the input/configuration migration; no output decoder grants send authority.
-type Input struct{ Text string }
-
 // Submission proves only a complete local write, never CLI acceptance.
 type Submission struct{ Written bool }
 type InterruptOptions struct{}
@@ -117,10 +113,7 @@ func (s *Session) RequestedResumeID() string { return s.client.RequestedResumeID
 func (s *Session) Done() <-chan struct{}     { return s.client.Done() }
 func (s *Session) Err() error                { s.mu.Lock(); defer s.mu.Unlock(); return s.cause }
 func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
-	if ctx == nil {
-		return Submission{}, queue.ErrNilContext
-	}
-	err := s.client.Send(ctx, input.Text)
+	err := s.client.sendInput(ctx, input)
 	return Submission{Written: err == nil}, err
 }
 func (s *Session) Interrupt(ctx context.Context, _ InterruptOptions) error {

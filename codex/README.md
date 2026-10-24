@@ -662,27 +662,45 @@ observed. See [recorded coverage and explicit real-agent maintenance](docs/recor
 ## Load an existing session and replay history
 
 ```go
-loaded, err := client.Load(ctx, codex.HistoryOptions{
-    ThreadID: id, CWD: absoluteCWD, CodexHome: expectedAbsoluteCodexHome,
+session, err := codex.Load(ctx, codex.LoadOptions{
+    Client: client,
+    HistoryOptions: codex.HistoryOptions{
+        ThreadID: id, CWD: absoluteCWD, CodexHome: expectedAbsoluteCodexHome,
+    },
 })
-// Check err, then defer loaded.Close(). Subscribe to live events before Load.
-for event := range loaded.Events() {
-    // Use the same func(types.Event) handler as Subscription.Events().
-    // event.History contains the original item/turn JSON and source identity.
-    handleEvent(event)
+// Check err, then defer session.Close(). Receive is the only consumption entry.
+for {
+    received, err := session.Receive(receiveCtx)
+    if err != nil {
+        break // Handle terminal error or EOF after draining a closed Session.
+    }
+    switch received.Kind {
+    case codex.ReceivedEvent:
+        handleEvent(*received.Event) // History and live use the same native type.
+    case codex.ReceivedRequest:
+        handleRequest(received.Request) // Only actual live requests have authority.
+    case codex.ReceivedLoad:
+        // Inspect received.Load.Status/Err; success permits Submit/configuration.
+    }
 }
-<-loaded.Done()
-// Check loaded.Err() before continuing; Done includes resume and complete replay.
-// client.StartTurn(newContext, ...) can now continue the same native thread.
 ```
 
-Load uses native resume plus oldest-first full-turn pagination. Ordinary
-ResumeThread does not perform this SDK replay. Input during replay is rejected;
-failed loads cannot continue. ResumeResponse returns the validated native result
-after successful completion. The load context ends with replay; canceling it
-later does not terminate the resumed session. Close unsubscribes the owned thread
-attachment and reports cleanup errors; it does not close the shared Client or
-interrupt native work. Raw Call bypasses the typed operation guards.
+Load returns a Session before asynchronous validation and replay finish. It
+requires the actual native resume response's ID and cwd to match before history
+admission, then pages full main turns oldest-first. Ordinary ResumeThread does
+not perform this SDK replay. LoadState is independent of Session.Done/Err and
+consumer drain. Submit and configuration reject pending/failed loads; actual
+request answers, explicit Interrupt and Close remain available during replay.
+
+History and live traffic can interleave in the same FIFO, preserving each source's
+order without claiming the original cross-source timeline. Successful Load does
+not terminate the Session. Canceling its startup context after success does not
+stop continued interaction. Close releases only owned attachment references;
+closing an explicitly loaded child does not unsubscribe an active ancestor's
+confirmed observation. Unknown resume/release outcomes remain fenced and visible.
+Raw Call is an explicit extension outside coordinated typed ownership guarantees.
+See [Session Load and native attachment evidence](docs/session-load.md). The old
+Client.Load/LoadedThread API is transitional compatibility pending removal.
 
 The server must support pagination; unsupported RPC errors are not hidden by a
 legacy fallback. Active threads and observed metadata changes fail. External
@@ -703,6 +721,5 @@ Projected events have no received wire envelope in `event.Raw`. Their Params
 omit fields not retained by the source, listed in `History.MissingFields`.
 Full turns lack item completion timestamps: typed `CompletedAtMs` is zero and
 unknown for replay, not a measured timestamp. Do not serialize projected Params
-as a captured, complete native notification. The history stream is separate from
-live observation, but both accept the same handler. The old `Records` snapshot
-interface has been replaced by `Events`.
+as a captured, complete native notification. Session.Receive delivers history,
+live records, real requests and SDK boundaries through one entry point.

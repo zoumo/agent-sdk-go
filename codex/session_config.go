@@ -39,6 +39,12 @@ func (s *Session) SetModel(ctx context.Context, model string) (ConfigurationRece
 
 func (s *Session) configure(ctx context.Context, requested types.ThreadSettingsUpdateParams) (ConfigurationReceipt, error) {
 	r := ConfigurationReceipt{Requested: requested}
+	s.client.mu.Lock()
+	gate := s.loadGateLocked()
+	s.client.mu.Unlock()
+	if gate != nil {
+		return r, &CallError{Method: "thread/settings/update", Dispatch: NotSent, Cause: gate}
+	}
 	var invalid error
 	if !s.client.experimentalAPI {
 		invalid = ErrUnsupportedConfiguration

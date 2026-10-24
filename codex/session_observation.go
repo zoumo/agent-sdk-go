@@ -27,13 +27,12 @@ func (s *Session) addMemberLocked(id, method string) bool {
 	if s.member(id) {
 		return true
 	}
-	// An explicitly owned other main identity is never absorbed by communication.
-	if owner := s.client.sessions[id]; owner != nil && owner != s {
-		s.observeLocked(Observation{ThreadID: id, Method: method, Reason: "other-session-owner"})
-		return false
-	}
 	if len(s.members) >= s.maxMembers {
 		s.finishLocked(ErrLimit)
+		return false
+	}
+	if !s.retainAttachmentLocked(id) {
+		s.observeLocked(Observation{ThreadID: id, Method: method, Reason: "attachment-owned-or-release-unconfirmed"})
 		return false
 	}
 	s.members[id] = struct{}{}
@@ -94,9 +93,6 @@ func (c *Client) publishSessionsLocked(method string, params json.RawMessage, ra
 	accepted := false
 	for _, s := range c.sessions {
 		if s.closed {
-			continue
-		}
-		if owner := c.sessions[identity.ThreadID]; owner != nil && owner != s {
 			continue
 		}
 		// Parent evidence may establish new membership. Never retain or replay an

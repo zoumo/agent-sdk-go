@@ -14,6 +14,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
+var historyReads int
+var delayedLoadPage json.RawMessage
 var delayedLoadResume json.RawMessage // Owned by the single-threaded subprocess peer.
 
 func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
@@ -21,7 +23,21 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 		return false
 	}
 	switch m.Method {
+	case "":
+		return true
+	case "request-frames":
+		var frames []string
+		_ = json.Unmarshal(m.Params, &frames)
+		for _, frame := range frames {
+			fmt.Fprintln(os.Stdout, frame)
+		}
+		send(m.ID, `{}`)
+		return true
 	case "echo":
+		if mode == "history-interleave" && delayedLoadPage != nil {
+			send(delayedLoadPage, `{"data":[{"id":"t2","status":"completed","items":[],"error":null}],"nextCursor":null}`)
+			delayedLoadPage = nil
+		}
 		if mode == "history-resume-blocked" && delayedLoadResume != nil {
 			send(delayedLoadResume, resumeResponseJSON("native-thread-42"))
 			delayedLoadResume = nil
@@ -38,6 +54,9 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 			return true
 		}
 		switch mode {
+		case "history-resume-malformed":
+			send(m.ID, `{}`)
+			return true
 		case "history-resume-error":
 			fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32602,\"message\":\"resume missing\"}}\n", m.ID)
 			return true
@@ -70,13 +89,17 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 		}
 		return true
 	case "thread/read":
+		historyReads++
 		thread := strings.ReplaceAll(threadJSON, `"ephemeral":true`, `"ephemeral":false`)
-		if mode == "history-isolation" {
+		if mode == "history-isolation" || mode == "history-overlap" {
 			var p struct {
 				ThreadID string `json:"threadId"`
 			}
 			_ = json.Unmarshal(m.Params, &p)
 			thread = strings.ReplaceAll(thread, `native-thread-42`, p.ThreadID)
+		}
+		if mode == "history-mutated" && historyReads >= 3 {
+			thread = strings.ReplaceAll(thread, `"updatedAt":2`, `"updatedAt":3`)
 		}
 		if mode == "history-active" {
 			thread = strings.ReplaceAll(thread, `"type":"idle"`, `"type":"active","activeFlags":[]`)
@@ -109,6 +132,11 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 				os.Exit(88)
 			}
 			switch mode {
+			case "history-interleave":
+				delayedLoadPage = append(json.RawMessage(nil), m.ID...)
+				fmt.Fprintln(os.Stdout, `{"method":"future/during-load","params":{"threadId":"native-thread-42"},"unknown":true}`)
+				fmt.Fprintln(os.Stdout, `{"id":"load-question","method":"item/tool/requestUserInput","params":{"threadId":"native-thread-42","turnId":"active","itemId":"q","questions":[{"id":"q1","header":"Choice","question":"Which?","options":null}]}}`)
+				return true
 			case "history-blocked":
 				return true
 			case "history-late":

@@ -51,6 +51,29 @@ func (r *resumeThreadResult) UnmarshalJSON(data []byte) error {
 // thread once and returns the native status. It does not close local Subscription
 // values or imply interruption, deletion, or completion of a thread's work.
 func (c *Client) UnsubscribeThread(ctx context.Context, p types.ThreadUnsubscribeParams) (types.ThreadUnsubscribeResponse, error) {
+	c.mu.Lock()
+	if c.sessions[p.ThreadID] != nil || c.attachmentBusyLocked(p.ThreadID) || c.loads[p.ThreadID] != nil {
+		c.mu.Unlock()
+		return types.ThreadUnsubscribeResponse{}, &CallError{Method: "thread/unsubscribe", Dispatch: NotSent, Cause: ErrOwnershipConflict}
+	}
+	if c.threadOperations == nil {
+		c.threadOperations = make(map[string]int)
+	}
+	c.threadOperations[p.ThreadID]++
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.threadOperations[p.ThreadID]--
+		if c.threadOperations[p.ThreadID] == 0 {
+			delete(c.threadOperations, p.ThreadID)
+		}
+		c.mu.Unlock()
+	}()
+	return c.unsubscribeThread(ctx, p)
+}
+
+// Only resource owners use this dispatch after reserving the release fence.
+func (c *Client) unsubscribeThread(ctx context.Context, p types.ThreadUnsubscribeParams) (types.ThreadUnsubscribeResponse, error) {
 	var r types.ThreadUnsubscribeResponse
 	err := c.Call(ctx, "thread/unsubscribe", p, &r)
 	return r, err

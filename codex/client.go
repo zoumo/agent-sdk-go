@@ -61,6 +61,7 @@ type Client struct {
 	requestHistory      map[requestKey]*requestState
 	requests            chan Request
 	subscriptions       map[*Subscription]struct{}
+	attachments         map[string]*sessionAttachment
 	sessions            map[string]*Session
 	sessionReservations int
 	quarantine          []UnattributedRecord
@@ -281,6 +282,12 @@ func (c *Client) callOwned(ctx context.Context, method string, params any, resul
 		err := c.cause
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, err)
+	}
+	if owner != nil && (method == "turn/start" || method == "thread/settings/update") {
+		if err := owner.loadGateLocked(); err != nil {
+			c.mu.Unlock()
+			return fail(ID{}, NotSent, err)
+		}
 	}
 	if owner != nil && owner.closed {
 		c.mu.Unlock()

@@ -32,6 +32,8 @@ var (
 	ErrLoadConflict = errors.New("codex: thread has an existing load owner")
 )
 
+// Deprecated: transitional expand-contract API scheduled for removal in T13.
+// Use package Load and Session.Receive for the normal Session model.
 // LoadedThread owns this connection's resumed-thread attachment and its replay.
 // Drain Events then check Err before StartTurn. Close releases the attachment;
 // it never closes the caller-owned Client or interrupts native work.
@@ -85,7 +87,7 @@ func (h *LoadedThread) release() error {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), h.client.limits.ShutdownTimeout)
 		defer cancel()
-		r, err := h.client.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: h.threadID})
+		r, err := h.client.unsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: h.threadID})
 		if err == nil && r.Status != types.ThreadUnsubscribeStatusUnsubscribed && r.Status != types.ThreadUnsubscribeStatusNotLoaded && r.Status != types.ThreadUnsubscribeStatusNotSubscribed {
 			err = errors.New("codex load: unknown unsubscribe result")
 		}
@@ -112,6 +114,12 @@ func (h *LoadedThread) Close() error {
 func (c *Client) beginThreadOperation(id string, resuming bool) (func(), error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.attachmentBusyLocked(id) {
+		return nil, ErrOwnershipConflict
+	}
+	if s := c.sessions[id]; s != nil {
+		return nil, ErrOwnershipConflict
+	}
 	if h := c.loads[id]; h != nil {
 		if resuming {
 			return nil, ErrLoadConflict
@@ -158,6 +166,8 @@ func (c *Client) ListThreadItems(ctx context.Context, p types.ThreadItemsListPar
 
 // Load resumes the same native thread and asynchronously replays all retained
 // full turns oldest-first. Ordinary ResumeThread does not perform this replay.
+// Deprecated: use package Load, which returns a Session. This temporary
+// compatibility path is scheduled for removal in T13.
 // ctx owns the replay lifetime, not only admission. Drain Events then check Err;
 // Close cancels blocked delivery/pagination without closing the Client. Missing
 // or unsupported sources fail through Err; no fallback creates a thread.
@@ -170,20 +180,8 @@ func (c *Client) Load(ctx context.Context, o HistoryOptions) (*LoadedThread, err
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if o.ThreadID == "" || !filepath.IsAbs(o.CWD) || !filepath.IsAbs(o.CodexHome) {
-		return nil, errors.New("codex history: thread ID and absolute cwd/data home required")
-	}
-	if o.MaxRecords < 0 || o.MaxIndexBytes < 0 || o.PageSize > 1000 {
-		return nil, errors.New("codex history: invalid limit")
-	}
-	if o.MaxRecords == 0 {
-		o.MaxRecords = 100000
-	}
-	if o.PageSize == 0 {
-		o.PageSize = 50
-	}
-	if o.MaxIndexBytes == 0 {
-		o.MaxIndexBytes = 16 << 20
+	if err := normalizeHistoryOptions(&o); err != nil {
+		return nil, err
 	}
 	if filepath.Clean(string(c.ServerInfo().CodexHome)) != filepath.Clean(o.CodexHome) {
 		return nil, errors.New("codex history: data-home identity mismatch")
@@ -195,7 +193,7 @@ func (c *Client) Load(ctx context.Context, o HistoryOptions) (*LoadedThread, err
 		cancel()
 		return nil, ErrClosed
 	}
-	if c.loads[o.ThreadID] != nil || c.threadOperations[o.ThreadID] > 0 {
+	if c.attachmentBusyLocked(o.ThreadID) || c.sessions[o.ThreadID] != nil || c.loads[o.ThreadID] != nil || c.threadOperations[o.ThreadID] > 0 {
 		c.mu.Unlock()
 		cancel()
 		return nil, ErrLoadConflict
@@ -223,7 +221,7 @@ func (c *Client) Load(ctx context.Context, o HistoryOptions) (*LoadedThread, err
 			return err
 		}
 		h.resumed = true
-		if filepath.Clean(string(h.response.Thread.Cwd)) != filepath.Clean(o.CWD) || filepath.Clean(string(h.response.Cwd)) != filepath.Clean(o.CWD) {
+		if h.response.Thread.ID != o.ThreadID || filepath.Clean(string(h.response.Thread.Cwd)) != filepath.Clean(o.CWD) || filepath.Clean(string(h.response.Cwd)) != filepath.Clean(o.CWD) {
 			return errors.New("codex load: resumed cwd mismatch")
 		}
 		return c.replayHistory(ctx, o, send)
@@ -246,7 +244,11 @@ func (c *Client) Load(ctx context.Context, o HistoryOptions) (*LoadedThread, err
 }
 
 func (c *Client) historyThread(ctx context.Context, o HistoryOptions) (types.Thread, error) {
-	r, err := c.ReadThread(ctx, types.ThreadReadParams{ThreadID: o.ThreadID, IncludeTurns: types.Some(false)})
+	return c.historyThreadOwned(ctx, o, nil)
+}
+func (c *Client) historyThreadOwned(ctx context.Context, o HistoryOptions, owner *Session) (types.Thread, error) {
+	var r types.ThreadReadResponse
+	err := c.historyCall(ctx, "thread/read", types.ThreadReadParams{ThreadID: o.ThreadID, IncludeTurns: types.Some(false)}, &r, owner)
 	if err != nil {
 		return types.Thread{}, err
 	}
@@ -261,9 +263,15 @@ func (c *Client) historyThread(ctx context.Context, o HistoryOptions) (types.Thr
 }
 
 func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(types.Event) error) error {
-	first, err := c.historyThread(ctx, o)
+	return c.replayHistoryOwned(ctx, o, send, nil, nil)
+}
+func (c *Client) replayHistoryOwned(ctx context.Context, o HistoryOptions, send func(types.Event) error, owner *Session, baseline *types.Thread) error {
+	first, err := c.historyThreadOwned(ctx, o, owner)
 	if err != nil {
 		return err
+	}
+	if baseline != nil && (first.UpdatedAt != baseline.UpdatedAt || first.CreatedAt != baseline.CreatedAt || first.SessionID != baseline.SessionID) {
+		return errors.New("codex history: thread changed during resume")
 	}
 	seenTurns := make(map[string]bool)
 	seenItems := make(map[string]bool)
@@ -290,7 +298,7 @@ func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(
 			return err
 		}
 		var raw json.RawMessage
-		if err := c.Call(ctx, "thread/turns/list", p, &raw); err != nil {
+		if err := c.historyCall(ctx, "thread/turns/list", p, &raw, owner); err != nil {
 			return err
 		}
 		var page types.ThreadTurnsListResponse
@@ -363,7 +371,7 @@ func (c *Client) replayHistory(ctx context.Context, o HistoryOptions, send func(
 		cursors[next] = true
 		p.Cursor = types.Some(next)
 	}
-	last, err := c.historyThread(ctx, o)
+	last, err := c.historyThreadOwned(ctx, o, owner)
 	if err != nil {
 		return err
 	}

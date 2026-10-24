@@ -29,6 +29,7 @@ type SessionOptions struct {
 type ReceivedKind string
 
 const (
+	ReceivedLoad        ReceivedKind = "load"
 	ReceivedEvent       ReceivedKind = "event"
 	ReceivedRequest     ReceivedKind = "request"
 	ReceivedObservation ReceivedKind = "observation"
@@ -37,9 +38,10 @@ const (
 // Observation describes SDK knowledge, never a native notification.
 type Observation struct{ ThreadID, ParentThreadID, Method, Reason string }
 
-// Received retains the native envelope and its live origin. Event and
-// Observation are mutually exclusive, as selected by Kind.
+// Received retains one native or SDK fact with an explicit origin. Kind selects
+// exactly one of Event, Request, Observation or Load.
 type Received struct {
+	Load        *LoadState
 	Observation *Observation
 	Request     *IncomingRequest
 	Kind        ReceivedKind
@@ -56,19 +58,23 @@ type InterruptOptions struct{ TurnID string }
 // Session owns main identity, admission and a single FIFO. All mutable state
 // except cleanupOnce/cleanupErr is protected by the connection mutex.
 type Session struct {
-	client      *Client
-	root        string
-	owned       bool
-	queue       queue.Queue[Received]
-	done        <-chan struct{}
-	closed      bool
-	cause       error
-	cleanupOnce sync.Once
-	cleanupErr  error
-	cancel      context.CancelFunc
-	members     map[string]struct{}
-	parents     *lineage.Graph[string]
-	maxMembers  int
+	load          LoadState
+	loadDone      chan struct{}
+	resumed       bool
+	resumeUnknown error
+	client        *Client
+	root          string
+	owned         bool
+	queue         queue.Queue[Received]
+	done          <-chan struct{}
+	closed        bool
+	cause         error
+	cleanupOnce   sync.Once
+	cleanupErr    error
+	cancel        context.CancelFunc
+	members       map[string]struct{}
+	parents       *lineage.Graph[string]
+	maxMembers    int
 }
 
 func Open(ctx context.Context, options SessionOptions) (*Session, error) {
@@ -127,7 +133,11 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 		if r.Thread.ID == "" {
 			return ErrProtocol
 		}
-		return s.bindLocked(r.Thread.ID)
+		if err := s.bindLocked(r.Thread.ID); err != nil {
+			return err
+		}
+		c.attachments[r.Thread.ID].managed = true
+		return nil
 	})
 	if err != nil {
 		cancel()
@@ -144,7 +154,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 // the identity before processing the next wire record, not after the RPC wakes.
 func (s *Session) bindLocked(id string) error {
 	c := s.client
-	if c.sessions[id] != nil {
+	if c.loads[id] != nil || c.threadOperations[id] > 0 || c.sessions[id] != nil {
 		return ErrOwnershipConflict
 	}
 	for sub := range c.subscriptions {
@@ -160,6 +170,9 @@ func (s *Session) bindLocked(id string) error {
 	}
 	if err := s.parents.Root(id); err != nil {
 		return err
+	}
+	if !s.retainAttachmentLocked(id) {
+		return ErrOwnershipConflict
 	}
 	s.members[id] = struct{}{}
 	s.root = id
@@ -193,6 +206,16 @@ func (s *Session) Interrupt(ctx context.Context, options InterruptOptions) error
 func (s *Session) finishLocked(cause error) {
 	if s.closed {
 		return
+	}
+	if s.load.Status == LoadPending {
+		reason := cause
+		if reason == nil {
+			reason = ErrClosed
+		}
+		s.load.Status = LoadFailed
+		s.load.Err = reason
+		state := s.loadSnapshotLocked()
+		_ = s.queue.Push(Received{Kind: ReceivedLoad, Load: &state, Origin: "sdk"}, 0)
 	}
 	s.closed = true
 	s.cause = cause
@@ -233,17 +256,22 @@ func (s *Session) finishLocked(cause error) {
 }
 
 // Close stops admission before cleanup, preserves accepted facts, and never
-// waits for a consumer. Shared connections detach only the main thread.
+// waits for a consumer. Shared physical attachments detach only after their
+// last Session observer releases them.
 func (s *Session) Close() error {
 	s.cleanupOnce.Do(func() {
 		c := s.client
 		c.mu.Lock()
 		s.finishLocked(nil)
 		c.mu.Unlock()
+		if s.loadDone != nil {
+			<-s.loadDone
+		}
 		if s.owned {
 			s.cleanupErr = c.Close()
-		} else if c.Err() == nil {
-			_, s.cleanupErr = c.UnsubscribeThread(context.Background(), types.ThreadUnsubscribeParams{ThreadID: s.root})
+			_ = s.releaseAttachments()
+		} else {
+			s.cleanupErr = s.releaseAttachments()
 		}
 		c.mu.Lock()
 		if c.sessions[s.root] == s && (s.cleanupErr == nil || c.cause != nil) {

@@ -114,7 +114,7 @@ only. See the [event-sequence document](event-sequences.md) for model-tool resul
 ## Shared relationship storage
 
 Each subscription now uses the bounded internal graph described in the
-[shared relationship contract](../../docs/lineage.md). `MaxNodes` includes the
+[shared relationship contract](../../harness/contracts/lineage.md). `MaxNodes` includes the
 subscribed root and all confirmed-edge endpoints, including a parent that has not
 itself been associated with the root. The independent graph relation bound is
 `MaxNodes - 1`. Conflicts, cycles and limits reject the candidate atomically.

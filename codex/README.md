@@ -622,7 +622,7 @@ The server must support pagination; unsupported RPC errors are not hidden by a
 legacy fallback. Active threads and observed metadata changes fail. External
 writers must be quiescent because native paging is not an atomic snapshot.
 ListThreadTurns and ListThreadItems also expose native pages. See the
-[history contract](../docs/specs/async-history.md) for limits and evidence.
+[history contract](../harness/contracts/async-history.md) for limits and evidence.
 
 History uses the normal `types.Event` and notification payloads: one
 `item/completed` snapshot per retained item followed by `turn/completed` for a

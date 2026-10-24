@@ -7,13 +7,18 @@ status: stable
 # Architecture standards
 
 These rules describe the agreed repository boundaries. For their context and
-navigation, see the [architecture guide](../docs/architecture.md).
+navigation, see the [architecture guide](overview.md).
+The provider-independent behavior contract and onboarding requirements live in
+[SDK integration standards](sdk/index.md); this page governs repository module
+and dependency boundaries.
 
 - Use one module, `github.com/zoumo/agent-sdk-go`, and one version. Keep a single
   root `go.mod`/`go.sum`; do not introduce nested modules or `go.work`.
 - Keep the supported native SDK imports `codex`, `codex/types`, `claude` and
   `claude/types` independent. Do not add a root generic client, old-path forwarding
-  packages, a common public question interface or a shared answer state machine.
+  packages or a shared native answer state machine. Common approval operations
+  follow the [SDK behavior contract](sdk/architecture.md), preserving original
+  native answer handles and provider-specific options.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**
@@ -22,14 +27,14 @@ navigation, see the [architecture guide](../docs/architecture.md).
 - Shared runtime code must not import either native SDK or native `types`.
   `internal/lineage` accepts confirmed relationship facts; it does not parse
   native events, infer creation, send protocol messages or grant answer authority.
-  Its precise contract and resource bounds live in [lineage](../docs/lineage.md).
+  Its precise contract and resource bounds live in [lineage](contracts/lineage.md).
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib
   packages must not enter SDK production dependency trees. Native types remain
   standard-library-only. Each Codex subscription and Claude client owns one
   ChannX; there is no process-wide queue, per-agent partition or second growing
-  derived-event FIFO. See [event delivery](../docs/event-delivery.md).
+  derived-event FIFO. See [event delivery](contracts/event-delivery.md).
 - Each observer owns its graph. Native parsing, unknown data, identity aliases,
   run state, deduplication, event caches, transport and process lifecycle stay
   with the native SDK. Preserve explicit observation gaps and native subagent

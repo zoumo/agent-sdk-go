@@ -81,7 +81,7 @@ event consumption during 2,048-event bursts with the legacy capacity set to one,
 answers questions/permissions and finishes control RPCs, then verifies complete
 ordered drain after disconnection. Shared FIFO tests cover cancellation, atomic
 batches, concurrent producers, close/abort races and reference release. See the
-[event delivery contract](event-delivery.md).
+[event delivery contract](../harness/contracts/event-delivery.md).
 
 External consumer CI runs on Linux/macOS for pushed `main` commits and manual
 workflow runs, targeting `github.sha`. PR offline checks remain separate because

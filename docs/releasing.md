@@ -20,8 +20,8 @@ exact `main` commit passes its checks.
    example. Repository/dependency retrieval needs network access; no real CLI or
    model is invoked.
 4. Review [version notes](../CHANGELOG.md), [migration](migration.md),
-   [shared stories](stories/index.md), [relationship contracts](lineage.md),
-   [shared terms](glossary.md), [licenses](../LICENSE) and
+   [shared stories](../harness/contracts/stories/index.md), [relationship contracts](../harness/contracts/lineage.md),
+   [shared terms](../harness/glossary.md), [licenses](../LICENSE) and
    [attribution](../NOTICE). Preserve native package evidence and recording
    provenance. Record actual commit SHA, CI run URLs and limitations in the
    release review rather than committing a self-referential SHA.

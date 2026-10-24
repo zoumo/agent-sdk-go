@@ -44,5 +44,5 @@ Move data rather than copying a second source of truth. Preserve real bytes,
 manifest hashes, original source/CLI identities and evidence limits. Keep raw
 captures, secrets and private configuration out of published fixtures. Synthetic
 data must never be labeled real. Update imports, embeds, scripts, examples, CI
-and documentation links whenever paths change. The [recording index](../docs/recordings.md)
-owns direct file links and current evidence limits.
+and documentation links whenever paths change. Recording inventories must retain direct asset references and evidence limits,
+and reference these layout rules from their external evidence documentation.

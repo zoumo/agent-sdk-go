@@ -7,7 +7,7 @@ Feature commit: `a22e4d9`; subsequent validation fixes preserve the same contrac
 
 The user approved both provider Load handles moving directly from Records to
 Events, public Load/Events/Done/Err/Close test seams, and the local-file tracker.
-The [specification](history-events.md) and three tickets cover Codex, Claude and
+The [specification](../../harness/contracts/history-events.md) and three tickets cover Codex, Claude and
 integration. The two provider tickets have no blockers; integration depends on
 both. Tickets are individually stored under `.scratch/history-events/issues`.
 

@@ -1,7 +1,7 @@
 # History loading validation
 
 2026-10-21, SDK branch `main`, resume-and-replay baseline `7878e36`. See the
-[API and acceptance spec](async-history.md). No push, new worktree, dependency
+[API and acceptance spec](../../harness/contracts/async-history.md). No push, new worktree, dependency
 change, personal history access or new recording was performed.
 
 Passed with mise Go 1.26.9:

@@ -6,8 +6,11 @@ status: stable
 
 # Testing standards
 
-Apply these rules to Go tests and generated Go tests. Commands and validation
-scope are maintained in the [testing guide](../docs/testing.md).
+Apply these rules to Go tests and generated Go tests. Execution commands and
+validation results are maintained separately and must reference these rules.
+The [SDK common user stories](sdk/user-stories.md) define provider-independent
+acceptance targets. Map every target to native evidence and public-path checks;
+the specification alone does not establish implementation or test coverage.
 
 - Use `github.com/stretchr/testify/assert` and `require` for assertions. Use
   `require` when later steps depend on the check; use `assert` for independent

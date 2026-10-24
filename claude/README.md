@@ -262,4 +262,4 @@ files. ConfigDir is also fixed in the child environment. RequestedResumeID stays
 separate from observed SessionID: native initialize does not itself report the
 session ID, and the SDK does not invent an observation from a request. Later
 known root system/result identity mismatches terminate the loaded Client.
-See the [history contract](../docs/specs/async-history.md).
+See the [history contract](../harness/contracts/async-history.md).

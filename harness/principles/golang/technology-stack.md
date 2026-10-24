@@ -15,13 +15,13 @@ status: stable
 
 ## CLI 与 flag
 
-选型：[Cobra](https://github.com/spf13/cobra)。
+选型：Cobra。
 
 使用 Cobra 组织命令及管理 flag。
 
 ## 配置读取
 
-选型：[Viper](https://github.com/spf13/viper)。
+选型：Viper。
 
 Viper 读取配置，默认格式为 YAML。
 绑定 Cobra flag，优先级为显式参数、配置文件、默认值。
@@ -29,13 +29,13 @@ Viper 读取配置，默认格式为 YAML。
 
 ## 测试
 
-选型：[testify](https://github.com/stretchr/testify)。
+选型：testify。
 
 尽可能使用 suite 组织测试。
 
 ## HTTP 框架
 
-选型：[Huma v2](https://huma.rocks/) + [chi](https://github.com/go-chi/chi)。
+选型：Huma v2 + chi。
 
 使用 chi 路由，配合 Huma 定义 HTTP 接口。
 统一脚手架注册路由与请求、响应类型。
@@ -44,14 +44,14 @@ Viper 读取配置，默认格式为 YAML。
 
 ## HTTP 客户端
 
-选型：[Resty](https://github.com/go-resty/resty)。
+选型：Resty。
 
 默认使用 Resty 发送 HTTP 请求。
 超时、重试、重定向与流式响应须遵守接口合同。
 
 ## 结构化日志
 
-选型：标准库 [log/slog](https://pkg.go.dev/log/slog)。
+选型：标准库 log/slog。
 
 - 使用 slog 的结构化字段表达上下文，保持字段名和级别含义一致，避免把可查询字段拼入消息文本。
 - 程序入口统一配置日志；可复用模块不自行更改全局输出目标或级别。
@@ -60,7 +60,7 @@ Viper 读取配置，默认格式为 YAML。
 
 ## 日志滚动
 
-选型：[Lumberjack](https://github.com/natefinch/lumberjack)。
+选型：Lumberjack。
 
 日志写入本地文件时，使用 Lumberjack 按文件大小滚动日志。
 将 `lumberjack.Logger` 作为 slog Handler 的输出目标。
@@ -70,7 +70,7 @@ Viper 读取配置，默认格式为 YAML。
 
 ## lint 与格式检查
 
-选型：[golangci-lint](https://golangci-lint.run/)。
+选型：golangci-lint。
 
 配置基线见 [golangci-lint 模板](templates/golangci-lint.yaml)，采用 v2 格式。
 新项目可复制为 Go 模块根目录的 `.golangci.yaml` 并按需调整。
@@ -83,7 +83,7 @@ Viper 读取配置，默认格式为 YAML。
 
 ## 可观测性
 
-选型：[OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)。
+选型：OpenTelemetry Go。
 
 - 统一采用 OpenTelemetry Go API/SDK，通过 context 传递追踪上下文；日志关联有效的 trace ID 和 span ID。
 - 程序入口负责 Provider、Exporter 的初始化、配置和关闭；可复用模块只负责埋点，不自行设置全局 Provider。

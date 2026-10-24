@@ -416,7 +416,7 @@ E2 only; no real CLI/model, authentication change or runtime support claim.
 
 Each managed observer uses the shared graph for accepted parent relationships,
 root membership, cycles, depth and identity contraction. See the
-[shared relationship contract](../../docs/lineage.md) for its independent bounds:
+[shared relationship contract](../../harness/contracts/lineage.md) for its independent bounds:
 at most `2 * MaxNodes` vertices (stable associations plus session roots) and
 `MaxNodes` relationships, in addition to the native index limit above.
 Native task/agent/tool alias recognition chooses a stable association before

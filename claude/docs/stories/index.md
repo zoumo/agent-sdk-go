@@ -1,6 +1,8 @@
 # claude 故事原生映射
 
-共同故事见[根目录故事](../../../docs/stories/index.md)。此处只描述各自原生契约；两个包不相互导入。原生说明见[原生 API 比较](../api-comparison.md)、[子代理证据与限制](../subagent-compatibility.md)、[原生事件序列](../event-sequences.md)。
+规范与实现证据分开维护：[SDK 共同目标](../../../harness/sdk/user-stories.md)、[场景合同](../../../harness/contracts/stories/index.md)、[实现验收记录](../../../docs/validation/stories/index.md)。
+
+共同故事见[根目录故事](../../../harness/contracts/stories/index.md)。此处只描述各自原生契约；两个包不相互导入。原生说明见[原生 API 比较](../api-comparison.md)、[子代理证据与限制](../subagent-compatibility.md)、[原生事件序列](../event-sequences.md)。
 
 ## US-001
 

@@ -325,29 +325,48 @@ executed by tests. Native response models such as
 JSON. `Reject(ctx, &RPCError{...})` sends exactly the caller-selected protocol error.
 `RPCError.Raw` is inbound diagnostic data and is not sent.
 
+New code receives `ReceivedRequest` from `Session.Receive`, with an
+`IncomingRequest` carrying complete envelope `Raw()`, `Params()`, `Data()` and
+`Context()`. `Approve(ctx, ApprovalOptions)` / `Deny(ctx, ApprovalOptions)` choose
+native decisions; typed options preserve scope, execpolicy/network amendments
+and extensions. Permissions approval requires an explicit grant. `Answer` accepts
+the native `ToolRequestUserInputResponse`. `Handle().Reject` remains an explicit
+RPC error operation, separate from user denial.
+
+A request enters exactly one consumption surface. A direct main owner takes
+precedence; otherwise a unique confirmed member range routes the original handle.
+Ambiguous/unknown requests remain in the connection registry and bounded Raw-only
+diagnostics; diagnostic eviction/expiry never decides or invalidates them. Later
+membership does not replay old diagnostic material. Session Close revokes only
+its assigned requests. Closing an owner ends its answer wait without canceling
+an already started shared-connection write; actual I/O faults and write deadlines
+still fail that connection. Legacy Requests is temporary expand-contract support.
+
 A handle is opaque, bound to its original connection, and shared by copies.
 Only one answer or cancellation wins. `Done()` signals termination and `Err()`
-reports answered, locally canceled/expired, server-resolved, or connection failure.
+reports answered, locally canceled, server-resolved, or connection failure.
 A successful `Answer` means its frame was written; it is not a peer acknowledgment
 or proof of execution. Competing/duplicate answers and stale handles fail locally.
-Once an answer is admitted to the outbound queue, it consumes the handle, including
-when a later timeout reports `NotSent`. Validation, pre-canceled context, oversized
-frame, and queue-admission failures leave an unanswered handle usable. Partial or
+Confirmed `NotSent` failures, including cancellation before writing, leave a still
+live native handle usable. Validation, pre-canceled context, oversized frames and
+queue-admission failures likewise leave it usable. Partial or
 ambiguous writes return `AnswerError` with `OutcomeUnknown` and cannot be replayed.
 
-`Cancel()` and the configured handle expiry abandon a prompt locally. They send
-no response or cancellation and do not stop server work. The native
+`Cancel()` abandons a prompt locally. It sends no response or cancellation and
+does not stop server work. There is no SDK approval countdown; `RequestTimeout`
+is deprecated and ignored. The native
 `serverRequest/resolved` notification invalidates an unanswered matching handle
 using both its exact `requestId` and native thread identity. It can follow an answer
-or interruption and does not establish success. The first admitted answer or
-terminal signal wins; resolution does not retract an already admitted response.
+or interruption and does not establish success. Native resolution invalidates the original capability immediately and prevents
+a queued, unwritten answer. Once writing starts its outcome may be unknown; no
+response is retracted or retried.
 There is no invented generic cancellation method.
 
 Slow consumers cannot block ordinary responses or notifications. Queue or active
 request exhaustion terminates the connection explicitly with
 `ErrRequestOverflow` (also `ErrLimit`), invalidating handles and pending calls;
 requests are never silently discarded or automatically denied. Buffered requests
-may already be expired/resolved when read. Check handle status before showing a
+may already be resolved or closed when read. Check handle status before showing a
 prompt and use `Done()` to dismiss stale UI. Closing the client closes the request
 queue and invalidates every pending handle without waiting for consumer code.
 
@@ -374,14 +393,16 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 
 ## Bounds and connection ownership
 
-`DefaultLimits()` supplies finite per-connection defaults. Each zero field in
+`DefaultLimits()` supplies per-connection resource and operation defaults. Each zero field in
 `Limits` selects its default; negative values are rejected:
 
 - Incoming and outgoing JSON payload: 8 MiB, excluding stdio newline or WS framing
 - Queued outbound frames: 32; pending calls: 128
 - Active local subscriptions: 32; accepted event backlog grows with memory
 - Active reverse requests: 128; queued reverse requests: 32
-- Unanswered handle lifetime: 5 minutes (local expiry, no protocol cancellation)
+- Unanswered handle lifetime: native resolution/termination only; no SDK deadline
+- Exact answered-request replay protection: the most recent 128 terminal IDs
+  (bounded by ActiveRequests); different method/params may reuse a terminal ID
 - Diagnostic tail: 64 KiB; all stderr content is replaced with redaction markers
 - Every call, including initialization: at most 30 seconds unless configured
 - A blocked write: 10 seconds

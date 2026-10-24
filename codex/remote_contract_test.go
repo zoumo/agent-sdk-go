@@ -199,7 +199,7 @@ func TestRemotePublicContractParity(t *testing.T) {
 		}},
 		{"TestStalledServerRequestsDoNotBlockCallsOrEvents", TestStalledServerRequestsDoNotBlockCallsOrEvents},
 		{"TestAnswerPreflightFailuresLeaveHandleUsable", TestAnswerPreflightFailuresLeaveHandleUsable},
-		{"TestServerRequestLocalCancellationAndExpiration", TestServerRequestLocalCancellationAndExpiration},
+		{"TestServerRequestLocalCancellation", TestServerRequestLocalCancellation},
 		{"TestResolvedServerRequestUsesExactIDAndKeepsEvent", func(t *testing.T) {
 			runResolvedServerRequestUsesExactIDAndKeepsEvent(t, startFake(t, "request-normal", codex.Limits{}))
 		}},
@@ -228,7 +228,7 @@ func TestRemotePublicContractParity(t *testing.T) {
 			runConcurrentAnswerAndNativeResolutionHaveOneOutcome(t, startFake(t, "request-normal", codex.Limits{}))
 		}},
 		{"TestReusedServerRequestIDDoesNotReviveOldHandle", TestReusedServerRequestIDDoesNotReviveOldHandle},
-		{"TestExpiredBufferedRequestsRemainInspectableAfterClose", TestExpiredBufferedRequestsRemainInspectableAfterClose},
+		{"TestBufferedRequestsRemainInspectableAfterClose", TestBufferedRequestsRemainInspectableAfterClose},
 		{"TestLegacyRequestResolutionUsesConversationIdentity", TestLegacyRequestResolutionUsesConversationIdentity},
 		{"TestServerRequestsArrivingDuringInitializeAreRetained", TestServerRequestsArrivingDuringInitializeAreRetained},
 		{"TestServerRequestOverflowDuringInitializeCleansUp", TestServerRequestOverflowDuringInitializeCleansUp},

@@ -114,7 +114,7 @@ func (c *Client) routeFrame(raw []byte) error {
 			if err != nil {
 				return err
 			}
-			return c.receiveRequest(id, method, f["params"])
+			return c.receiveRequest(id, method, f["params"], raw)
 		}
 		c.mu.Lock()
 		c.diag.Notifications = saturatingAdd(c.diag.Notifications, 1)

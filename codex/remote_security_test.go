@@ -310,6 +310,10 @@ func TestRemoteSecurityRejectsInvalidInputBeforeDial(t *testing.T) {
 	}
 	defaults := reflect.ValueOf(codex.DefaultLimits())
 	for i := 0; i < defaults.NumField(); i++ {
+		if defaults.Type().Field(i).Name == "RequestTimeout" {
+			assert.Zero(t, defaults.Field(i).Int())
+			continue
+		}
 		assert.False(t, defaults.Field(i).Int() <= 0, "default %s is unbounded", defaults.Type().Field(i).Name)
 	}
 }

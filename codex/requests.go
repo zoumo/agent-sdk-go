@@ -1,11 +1,11 @@
 package codex
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -13,7 +13,26 @@ import (
 // Request is an immutable received server request. Accessors return independent
 // copies; changing a decoded payload cannot change its identity or answer target.
 // Requests are shared between pull consumers, not broadcast or replayed.
-type Request struct{ state *requestState }
+type Request struct {
+	state *requestState
+	raw   json.RawMessage
+}
+
+// Raw returns an independent copy of the complete native request envelope.
+func (r Request) Raw() json.RawMessage { return append(json.RawMessage(nil), r.raw...) }
+
+// IncomingRequest carries the original connection registry capability.
+// Zero values, parsing, history and diagnostic records cannot grant authority.
+type IncomingRequest struct{ Request }
+
+func (r IncomingRequest) Context() context.Context {
+	if r.state == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return r.state.ctx
+}
 
 func (r Request) ID() ID {
 	if r.state == nil {
@@ -66,11 +85,15 @@ func (r Request) Data() (any, error) {
 
 // AnswerHandle is an opaque, connection-bound, one-shot response capability.
 // Copies share one state. It cannot be retargeted to another ID or connection.
-// Cancel/expiry/resolution only win before an answer is admitted. No operation
+// Native resolution and owner termination invalidate the same registry entry. No operation
 // here claims to stop server execution; turn interruption is a separate RPC.
 type AnswerHandle struct{ state *requestState }
 
 type requestState struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
+	owner     *Session
+	legacy    bool
 	client    *Client
 	id        ID
 	method    string
@@ -80,7 +103,6 @@ type requestState struct {
 	done      chan struct{}
 	terminal  error
 	attempt   *answerAttempt
-	timer     *time.Timer
 }
 type answerAttempt struct {
 	request                    *requestState
@@ -90,10 +112,11 @@ type answerAttempt struct {
 }
 
 // Requests returns the connection's bounded pull queue, active from startup.
+// Session-owned requests never enter this legacy queue.
 // A stalled consumer never blocks the reader. Exhausting RequestQueue or
 // ActiveRequests explicitly fails the connection with ErrRequestOverflow.
 // Close closes this channel without waiting for consumers; buffered requests
-// remain readable, but all their handles are invalidated. Handle expiry may also
+// remain readable, but all their handles are invalidated. Native resolution can
 // leave terminal requests in the queue. Check Handle.Err before presenting a UI.
 func (c *Client) Requests() <-chan Request { return c.requests }
 
@@ -107,7 +130,7 @@ func (h AnswerHandle) Done() <-chan struct{} {
 }
 
 // Err is nil while waiting (including a response in progress). After Done it
-// reports ErrRequestAnswered, local cancellation/expiry, native resolution, or
+// reports ErrRequestAnswered, local cancellation, native resolution, or
 // connection failure. A successful write is not evidence of server acceptance.
 func (h AnswerHandle) Err() error {
 	if h.state == nil {
@@ -138,8 +161,8 @@ func (h AnswerHandle) Cancel() error {
 
 // Answer sends exactly one caller-selected result, including null for nil.
 // Marshal/validation, pre-canceled-context, frame-limit and queue-admission
-// failures leave the handle usable. Once admitted, the handle is consumed even
-// if cancellation occurs before writing. Partial/ambiguous writes are never
+// failures and confirmed NotSent cancellation leave a live handle usable.
+// Native resolution/Close still invalidate it. Partial/ambiguous writes are never
 // retried. Context cancellation during a blocked write fails the connection.
 func (h AnswerHandle) Answer(ctx context.Context, result any) error {
 	return h.respond(ctx, result, nil)
@@ -218,9 +241,6 @@ func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCErro
 	select {
 	case c.queue <- outbound{frame: frame, ctx: ctx, answer: a}:
 		r.attempt = a
-		if r.timer != nil {
-			r.timer.Stop()
-		}
 	default:
 		c.mu.Unlock()
 		return h.answerError(NotSent, ErrLimit)
@@ -253,17 +273,32 @@ func (r *requestState) unavailableLocked() error {
 	}
 	return nil
 }
+func (r *requestState) invalidateLocked(cause error) {
+	r.finishLocked(cause)
+	if r.attempt != nil {
+		r.attempt.finishLocked(cause)
+	}
+}
 func (r *requestState) finishLocked(cause error) {
 	if r.terminal != nil {
 		return
 	}
 	r.terminal = cause
-	if r.timer != nil {
-		r.timer.Stop()
+	if cause == ErrRequestAnswered {
+		c := r.client
+		if len(c.answeredOrder) >= c.limits.ActiveRequests {
+			delete(c.answered, c.answeredOrder[0])
+			c.answeredOrder = append(c.answeredOrder[:0], c.answeredOrder[1:]...)
+		}
+		c.answered[r.id] = r
+		c.answeredOrder = append(c.answeredOrder, r.id)
 	}
 	// Pointer check prevents a stale handle from deleting a newer reused ID.
 	if r.client.reverse[r.id] == r {
 		delete(r.client.reverse, r.id)
+	}
+	if r.cancel != nil {
+		r.cancel()
 	}
 	close(r.done)
 }
@@ -278,23 +313,47 @@ func (a *answerAttempt) finishLocked(cause error) {
 			dispatch = OutcomeUnknown
 		}
 		a.err = a.request.client.safeError(&AnswerError{Method: a.request.method, ID: a.request.id, Dispatch: dispatch, Cause: cause})
-		a.request.finishLocked(cause)
+		r := a.request
+		if !a.started && r.terminal == nil && r.client.cause == nil {
+			// A confirmed unsent operation releases admission without destroying the
+			// original live native capability. A finished queued attempt is skipped.
+			r.attempt = nil
+		} else {
+			r.finishLocked(cause)
+		}
 	} else {
 		a.request.finishLocked(ErrRequestAnswered)
 	}
 	close(a.done)
 }
 
-func (c *Client) receiveRequest(id ID, method string, params json.RawMessage) error {
+func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, raw []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.cause != nil {
 		return c.cause
 	}
-	if _, exists := c.reverse[id]; exists {
-		return fmt.Errorf("%w: duplicate active server request ID", ErrProtocol)
+	if r := c.reverse[id]; r != nil {
+		if r.method != method || !bytes.Equal(r.params, params) {
+			return fmt.Errorf("%w: conflicting active server request ID", ErrProtocol)
+		}
+		return c.deliverRequestLocked(r, raw)
 	}
-	if len(c.reverse) >= c.limits.ActiveRequests || len(c.requests) >= cap(c.requests) {
+	if r := c.answered[id]; r != nil {
+		if r.method == method && bytes.Equal(r.params, params) {
+			return c.deliverRequestLocked(r, raw)
+		}
+		// A different native request can reuse a terminal ID; stale handles remain
+		// invalid. Remove the previous bounded replay entry before accepting it.
+		delete(c.answered, id)
+		for i, old := range c.answeredOrder {
+			if old == id {
+				c.answeredOrder = append(c.answeredOrder[:i], c.answeredOrder[i+1:]...)
+				break
+			}
+		}
+	}
+	if len(c.reverse) >= c.limits.ActiveRequests {
 		return ErrRequestOverflow
 	}
 	r := &requestState{client: c, id: id, method: method, params: append(json.RawMessage(nil), params...), done: make(chan struct{})}
@@ -309,15 +368,54 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage) er
 			r.hasThread = true
 		}
 	}
+	r.ctx, r.cancel = context.WithCancel(context.Background())
 	c.reverse[id] = r
-	c.requests <- Request{state: r} // Capacity checked under the same producer lock.
-	r.timer = time.AfterFunc(c.limits.RequestTimeout, func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		if r.terminal == nil && r.attempt == nil {
-			r.finishLocked(ErrRequestExpired)
+	r.owner = c.requestOwnerLocked(r.threadID)
+	r.legacy = len(c.sessions) == 0 && c.sessionReservations == 0
+	return c.deliverRequestLocked(r, raw)
+}
+
+// Direct ownership takes precedence over observation. A real reverse request
+// creates authority; membership only routes that original capability. Ambiguous
+// ranges never select a map iteration winner or broadcast answer authority.
+func (c *Client) requestOwnerLocked(thread string) *Session {
+	if owner := c.sessions[thread]; owner != nil {
+		if !owner.closed {
+			return owner
 		}
-	})
+		return nil
+	}
+	var owner *Session
+	for _, s := range c.sessions {
+		if !s.closed && s.member(thread) {
+			if owner != nil {
+				return nil
+			}
+			owner = s
+		}
+	}
+	return owner
+}
+func (c *Client) deliverRequestLocked(r *requestState, raw []byte) error {
+	request := Request{state: r, raw: append(json.RawMessage(nil), raw...)}
+	// Ownership is assigned once at first reception. Late membership never
+	// retroactively grants a quarantined request to a Session.
+	if r.owner != nil {
+		if !r.owner.closed {
+			incoming := &IncomingRequest{Request: request}
+			source := treeIdentity(r.params)
+			source.ThreadID = r.threadID
+			r.owner.acceptLocked(Received{Kind: ReceivedRequest, Request: incoming, Raw: request.Raw(), Params: request.Params(), Source: source, Origin: "live"})
+		}
+	} else if r.legacy {
+		if len(c.requests) >= cap(c.requests) {
+			r.finishLocked(ErrRequestOverflow)
+			return ErrRequestOverflow
+		}
+		c.requests <- request
+	} else {
+		c.quarantineLocked(raw)
+	}
 	return nil
 }
 
@@ -339,7 +437,7 @@ func (c *Client) resolveRequestLocked(params json.RawMessage) {
 		return
 	}
 	r := c.reverse[id]
-	if r != nil && r.hasThread && r.threadID == thread && r.terminal == nil && r.attempt == nil {
-		r.finishLocked(ErrRequestResolved)
+	if r != nil && r.hasThread && r.threadID == thread && r.terminal == nil {
+		r.invalidateLocked(ErrRequestResolved)
 	}
 }

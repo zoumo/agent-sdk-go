@@ -339,8 +339,8 @@ func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
 	}
 }
 
-func TestServerRequestLocalCancellationAndExpiration(t *testing.T) {
-	for _, terminal := range []string{"cancel", "expire"} {
+func TestServerRequestLocalCancellation(t *testing.T) {
+	for _, terminal := range []string{"cancel"} {
 		t.Run(terminal, func(t *testing.T) {
 			f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1, RequestQueue: 1, RequestTimeout: 100 * time.Millisecond})
 			emitRequests(t, f.c, requestFrame(`"old"`, "future/approval", `{}`))
@@ -548,7 +548,7 @@ func TestPartialServerRequestAnswerIsUnknownAndNeverReplayed(t *testing.T) {
 
 func TestServerRequestLimitDefaultsAndValidation(t *testing.T) {
 	defaults := codex.DefaultLimits()
-	require.False(t, defaults.ActiveRequests != 128 || defaults.RequestQueue != 32 || defaults.RequestTimeout != 5*time.Minute, "unexpected server request bounds: %+v", defaults)
+	require.False(t, defaults.ActiveRequests != 128 || defaults.RequestQueue != 32 || defaults.RequestTimeout != 0, "unexpected server request bounds: %+v", defaults)
 	for _, limits := range []codex.Limits{{ActiveRequests: -1}, {RequestQueue: -1}, {RequestTimeout: -time.Second}} {
 		{
 			c, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "unused", Limits: limits})
@@ -780,10 +780,13 @@ func TestZeroAnswerHandleFailsLocally(t *testing.T) {
 	require.ErrorIs(t, h.Cancel(), codex.ErrInvalidAnswerHandle, "zero handle cancellation succeeded")
 }
 
-func TestQueuedAnswerCancellationIsNotSentButConsumesHandle(t *testing.T) {
+func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) {
 	f := startFake(t, "request-cooperative-gate", codex.Limits{OutboundQueue: 1, WriteTimeout: 5 * time.Second, ShutdownTimeout: 200 * time.Millisecond})
-	emitRequests(t, f.c, requestFrame(`"queued"`, "future/approval", `{}`))
-	r := nextRequest(t, f.c)
+	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	emitRequests(t, f.c, requestFrame(`"queued"`, "future/approval", `{"threadId":"native-thread-42"}`))
+	r := sessionRequest(t, s).Request
 	{
 		err := f.c.Call(context.Background(), "request-gate", nil, nil)
 		require.NoError(t, err)
@@ -816,8 +819,7 @@ func TestQueuedAnswerCancellationIsNotSentButConsumesHandle(t *testing.T) {
 	case <-time.After(time.Second):
 		require.FailNow(t, "queued answer context did not cancel promptly")
 	}
-	awaitAnswer(t, r.Handle(), context.Canceled)
-	answerError(t, r.Handle().Answer(context.Background(), "retry"), r, codex.NotSent, context.Canceled)
+	require.NoError(t, r.Handle().Err(), "confirmed NotSent must keep native permission")
 	{
 		err := os.WriteFile(f.trace+".release", []byte("resume"), 0600)
 		require.NoError(t, err)
@@ -830,6 +832,9 @@ func TestQueuedAnswerCancellationIsNotSentButConsumesHandle(t *testing.T) {
 	}
 	responseBarrier(t, f)
 	require.Len(t, answerFrames(t, f.trace), 0, "canceled queued answer was written later")
+	require.NoError(t, r.Handle().Answer(context.Background(), "explicit retry"))
+	responseBarrier(t, f)
+	require.Len(t, answerFrames(t, f.trace), 1)
 	require.NoError(t, f.c.Err(), "cancellation before write unnecessarily terminated connection")
 }
 
@@ -992,13 +997,13 @@ func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
 	}
 }
 
-func TestExpiredBufferedRequestsRemainInspectableAfterClose(t *testing.T) {
+func TestBufferedRequestsRemainInspectableAfterClose(t *testing.T) {
 	f := startFake(t, "request-normal", codex.Limits{RequestQueue: 3, RequestTimeout: 30 * time.Millisecond})
 	emitRequests(t, f.c,
 		requestFrame(`"buffered-one"`, "future/approval", `{}`),
 		requestFrame(`"buffered-two"`, "future/approval", `{}`))
-	// Deliberately leave the pull queue unattended beyond its local lifetime.
-	// Expiration must not emit a guessed decision or discard the request bytes.
+	// Leave the queue unattended beyond the deprecated explicit timeout.
+	// No policy decision or discard is allowed.
 	time.Sleep(150 * time.Millisecond)
 	{
 		err := f.c.Close()
@@ -1007,9 +1012,9 @@ func TestExpiredBufferedRequestsRemainInspectableAfterClose(t *testing.T) {
 	var count int
 	for r := range f.c.Requests() {
 		count++
-		awaitAnswer(t, r.Handle(), codex.ErrRequestExpired)
+		awaitAnswer(t, r.Handle(), codex.ErrClosed)
 		require.False(t, string(r.Params()) != `{}` || r.Method() != "future/approval", "terminal queued request lost immutable data")
-		answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrRequestExpired)
+		answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrClosed)
 	}
 	require.False(t, count != 2 || len(answerFrames(t, f.trace)) != 0, "Close drained %d queued requests or emitted policy answers", count)
 }

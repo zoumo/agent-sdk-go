@@ -27,8 +27,8 @@ type Limits struct {
 	ActiveRequests int
 	// RequestQueue bounds queued server requests, including terminal unread ones.
 	RequestQueue int
-	// RequestTimeout locally expires unanswered handles; it sends no cancellation.
-	// Admitted answers instead use the caller context and CallTimeout.
+	// RequestTimeout is ignored. Native pending requests have no SDK deadline.
+	// Deprecated: retained temporarily for source compatibility; negatives are invalid.
 	RequestTimeout  time.Duration
 	CallTimeout     time.Duration
 	WriteTimeout    time.Duration
@@ -40,7 +40,7 @@ func DefaultLimits() Limits {
 		QuarantineRecords: 128, QuarantineBytes: 4 << 20, QuarantineRetention: 5 * time.Second,
 		MaxFrameBytes: 8 << 20, OutboundQueue: 32, PendingCalls: 128,
 		Subscriptions: 32, EventQueue: 128, DiagnosticBytes: 64 << 10,
-		ActiveRequests: 128, RequestQueue: 32, RequestTimeout: 5 * time.Minute,
+		ActiveRequests: 128, RequestQueue: 32, RequestTimeout: 0,
 		CallTimeout: 30 * time.Second, WriteTimeout: 10 * time.Second,
 		ShutdownTimeout: 2 * time.Second,
 	}

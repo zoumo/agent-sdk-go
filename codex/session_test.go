@@ -149,7 +149,10 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 		if mode == "session-owned-diagnostic" {
 			fmt.Fprintln(os.Stdout, `{"method":"future/unattributed","params":{"threadId":"unowned"},"unknown":true}`)
 		}
-		if mode == "session-block-write" && p.starts == 2 {
+		if (mode == "session-block-write" || mode == "session-block-answer") && p.starts == 2 {
+			if mode == "session-block-answer" {
+				fmt.Fprintln(os.Stdout, `{"id":"blocked-answer","method":"future/approval","params":{"threadId":"main-1"}}`)
+			}
 			// Read one byte to prove dispatch, then hold the reader while the large
 			// remainder fills the pipe. The release gate is controlled by the test.
 			var first [1]byte
@@ -185,7 +188,9 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 			if json.Unmarshal(raw, &submitted) != nil {
 				os.Exit(95)
 			}
-			send(submitted.ID, `{"turn":`+nativeTurn+`}`)
+			if submitted.Method != "" {
+				send(submitted.ID, `{"turn":`+nativeTurn+`}`)
+			}
 		}
 
 	case "request-frames":

@@ -270,7 +270,8 @@ func TestRemoteQueuedAnswerAdmissionAndCancellation(t *testing.T) {
 			select {
 			case result := <-results:
 				answerError(t, result.err, result.r, codex.NotSent, context.Canceled)
-				answerError(t, result.r.Handle().Answer(context.Background(), "retry"), result.r, codex.NotSent, context.Canceled)
+				require.NoError(t, result.r.Handle().Err())
+				rejected = append(rejected, result.r)
 			case <-time.After(time.Second):
 				require.FailNow(t, "queued answer did not cancel")
 			}
@@ -291,7 +292,7 @@ func TestRemoteQueuedAnswerAdmissionAndCancellation(t *testing.T) {
 				err := p.client.Call(context.Background(), "barrier", nil, nil)
 				require.NoError(t, err)
 			}
-			require.False(t, p.answers.Load() != 3 || p.requests.Load() != 2, "requests=%d answers=%d", p.requests.Load(), p.answers.Load())
+			require.False(t, p.answers.Load() != 4 || p.requests.Load() != 2, "requests=%d answers=%d", p.requests.Load(), p.answers.Load())
 			require.NoError(t, p.client.Err(), "prewrite cancellation terminated connection")
 		})
 	}

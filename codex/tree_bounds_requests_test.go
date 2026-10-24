@@ -210,12 +210,9 @@ func (obs *observationSuite) TestTreeRequestTerminalAndEpochIsolation() {
 	t := obs.T()
 	for _, transport := range []string{"stdio", "ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			for _, terminal := range []string{"cancel", "expired", "resolved", "close"} {
+			for _, terminal := range []string{"cancel", "resolved", "close"} {
 				t.Run(terminal, func(t *testing.T) {
 					limits := codex.Limits{}
-					if terminal == "expired" {
-						limits.RequestTimeout = 100 * time.Millisecond
-					}
 					old := obs.fixture(t, "request-normal", limits)
 					s, err := old.c.Subscribe(context.Background(), "native-thread-42", types.SubscriptionOptions{EventQueue: 1})
 					cleanupSubscription(t, s)
@@ -229,8 +226,6 @@ func (obs *observationSuite) TestTreeRequestTerminalAndEpochIsolation() {
 							err := r.Handle().Cancel()
 							require.NoError(t, err, err)
 						}
-					case "expired":
-						cause = codex.ErrRequestExpired
 					case "resolved":
 						cause = codex.ErrRequestResolved
 						emitRequests(t, old.c, treeFrame("serverRequest/resolved", `{"threadId":"child-1","requestId":"reused"}`))

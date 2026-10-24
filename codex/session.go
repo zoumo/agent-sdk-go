@@ -30,6 +30,7 @@ type ReceivedKind string
 
 const (
 	ReceivedEvent       ReceivedKind = "event"
+	ReceivedRequest     ReceivedKind = "request"
 	ReceivedObservation ReceivedKind = "observation"
 )
 
@@ -40,6 +41,7 @@ type Observation struct{ ThreadID, ParentThreadID, Method, Reason string }
 // Observation are mutually exclusive, as selected by Kind.
 type Received struct {
 	Observation *Observation
+	Request     *IncomingRequest
 	Kind        ReceivedKind
 	Event       *types.Event
 	Raw         json.RawMessage
@@ -207,6 +209,15 @@ func (s *Session) finishLocked(cause error) {
 				reason = ErrClosed
 			}
 			s.client.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: dispatch, Cause: reason})
+		}
+	}
+	for _, r := range s.client.reverse {
+		if r.owner == s {
+			reason := cause
+			if reason == nil {
+				reason = ErrClosed
+			}
+			r.invalidateLocked(reason)
 		}
 	}
 	s.cancel()

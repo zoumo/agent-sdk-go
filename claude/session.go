@@ -52,6 +52,7 @@ type InterruptOptions struct{}
 // Client supplies process I/O and authoritative native control correlation; it
 // does not enqueue a second native stream when owned by a Session.
 type Session struct {
+	discovery        discoveryScope
 	client           *Client
 	mu               sync.Mutex
 	fifo             queue.Queue[Received]
@@ -84,6 +85,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	if err := o.defaults(); err != nil {
 		return nil, err
 	}
+	scope := freezeDiscoveryScope(&o)
 	// Reuse bounds validation, not the old tree attribution or consumer.
 	limits, err := normalizedSubagentOptions(o)
 	if err != nil {
@@ -93,7 +95,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{members: make(map[string]SubagentIdentity), tools: make(map[string]string), parents: graph, limits: limits, childTools: make(map[string]string), seeds: append([]SubagentHistory(nil), o.Subagents.History...)}
+	s := &Session{discovery: scope, members: make(map[string]SubagentIdentity), tools: make(map[string]string), parents: graph, limits: limits, childTools: make(map[string]string), seeds: append([]SubagentHistory(nil), o.Subagents.History...)}
 	_ = s.fifo.Push(s.observation("forwarding-not-confirmed", "initialize-forwardSubagentText-is-a-request", SubagentIdentity{}, nil), 0)
 	_, err = openInteraction(ctx, o, "", s)
 	if err != nil {

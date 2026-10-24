@@ -12,3 +12,8 @@ import (
 func openHistoryFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
 }
+
+// openDiscoveryFile confines reads to the selected config root.
+func openDiscoveryFile(root *os.Root, path string) (*os.File, error) {
+	return root.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
+}

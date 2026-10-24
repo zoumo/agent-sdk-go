@@ -220,6 +220,12 @@ func (s *Session) finishLocked(cause error) {
 			r.invalidateLocked(reason)
 		}
 	}
+	// Terminal identity protection needs no reference to a closed owner/FIFO.
+	for _, r := range s.client.requestHistory {
+		if r.owner == s {
+			r.owner = nil
+		}
+	}
 	s.cancel()
 	_ = s.queue.Close(cause)
 	s.members = nil

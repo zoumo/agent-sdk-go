@@ -61,7 +61,12 @@ func (p *requestPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 		}
 		path := os.Getenv("CODEX_SDK_TRACE")
 		_ = os.WriteFile(path+".dispatch", []byte("response byte received"), 0600)
+		resolved := false
 		for {
+			if _, err := os.Stat(path + ".resolve"); err == nil && !resolved {
+				fmt.Fprintln(os.Stdout, `{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":"queued"}}`)
+				resolved = true
+			}
 			if _, err := os.Stat(path + ".release"); err == nil {
 				break
 			}
@@ -340,33 +345,18 @@ func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
 }
 
 func TestServerRequestLocalCancellation(t *testing.T) {
-	for _, terminal := range []string{"cancel"} {
-		t.Run(terminal, func(t *testing.T) {
-			f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1, RequestQueue: 1, RequestTimeout: 100 * time.Millisecond})
-			emitRequests(t, f.c, requestFrame(`"old"`, "future/approval", `{}`))
-			r := nextRequest(t, f.c)
-			cause := codex.ErrRequestExpired
-			if terminal == "cancel" {
-				cause = codex.ErrRequestCanceled
-				{
-					err := r.Handle().Cancel()
-					require.NoError(t, err)
-				}
-			}
-			awaitAnswer(t, r.Handle(), cause)
-			answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, cause)
-			answerError(t, r.Handle().Reject(context.Background(), &codex.RPCError{Code: -1, Message: "late"}), r, codex.NotSent, cause)
-			responseBarrier(t, f)
-			require.Len(t, answerFrames(t, f.trace), 0, "local abandonment invented a wire decision")
-			// Removing a terminal active handle must reclaim admission capacity.
-			emitRequests(t, f.c, requestFrame(`"new"`, "future/approval", `{}`))
-			fresh := nextRequest(t, f.c)
-			{
-				err := fresh.Handle().Answer(context.Background(), "caller decision")
-				require.NoError(t, err)
-			}
-		})
-	}
+	f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1, RequestQueue: 1})
+	emitRequests(t, f.c, requestFrame(`"old"`, "future/approval", `{}`))
+	r := nextRequest(t, f.c)
+	require.NoError(t, r.Handle().Cancel())
+	awaitAnswer(t, r.Handle(), codex.ErrRequestCanceled)
+	answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrRequestCanceled)
+	answerError(t, r.Handle().Reject(context.Background(), &codex.RPCError{Code: -1, Message: "late"}), r, codex.NotSent, codex.ErrRequestCanceled)
+	responseBarrier(t, f)
+	require.Empty(t, answerFrames(t, f.trace), "local abandonment invented a wire decision")
+	emitRequests(t, f.c, requestFrame(`"new"`, "future/approval", `{}`))
+	fresh := nextRequest(t, f.c)
+	require.NoError(t, fresh.Handle().Answer(context.Background(), "caller decision"))
 }
 
 func runResolvedServerRequestUsesExactIDAndKeepsEvent(t *testing.T, f fixture) {
@@ -548,8 +538,8 @@ func TestPartialServerRequestAnswerIsUnknownAndNeverReplayed(t *testing.T) {
 
 func TestServerRequestLimitDefaultsAndValidation(t *testing.T) {
 	defaults := codex.DefaultLimits()
-	require.False(t, defaults.ActiveRequests != 128 || defaults.RequestQueue != 32 || defaults.RequestTimeout != 0, "unexpected server request bounds: %+v", defaults)
-	for _, limits := range []codex.Limits{{ActiveRequests: -1}, {RequestQueue: -1}, {RequestTimeout: -time.Second}} {
+	require.False(t, defaults.RequestIdentities != 4096 || defaults.ActiveRequests != 128 || defaults.RequestQueue != 32 || defaults.RequestTimeout != 0, "unexpected server request bounds: %+v", defaults)
+	for _, limits := range []codex.Limits{{ActiveRequests: -1}, {RequestIdentities: -1}, {RequestQueue: -1}, {RequestTimeout: -time.Second}} {
 		{
 			c, err := codex.NewStdio(context.Background(), codex.StdioOptions{Executable: "unused", Limits: limits})
 			require.False(t, err == nil || c != nil, "negative request limit accepted: %+v %v", limits, err)
@@ -781,61 +771,82 @@ func TestZeroAnswerHandleFailsLocally(t *testing.T) {
 }
 
 func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) {
-	f := startFake(t, "request-cooperative-gate", codex.Limits{OutboundQueue: 1, WriteTimeout: 5 * time.Second, ShutdownTimeout: 200 * time.Millisecond})
-	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = s.Close() })
-	emitRequests(t, f.c, requestFrame(`"queued"`, "future/approval", `{"threadId":"native-thread-42"}`))
-	r := sessionRequest(t, s).Request
-	{
-		err := f.c.Call(context.Background(), "request-gate", nil, nil)
-		require.NoError(t, err)
+	for _, stop := range []string{"caller-cancel", "native-resolved"} {
+		t.Run(stop, func(t *testing.T) {
+			cause := error(context.Canceled)
+			if stop == "native-resolved" {
+				cause = codex.ErrRequestResolved
+			}
+
+			f := startFake(t, "request-cooperative-gate", codex.Limits{OutboundQueue: 1, WriteTimeout: 5 * time.Second, ShutdownTimeout: 200 * time.Millisecond})
+			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = s.Close() })
+			emitRequests(t, f.c, requestFrame(`"queued"`, "future/approval", `{"threadId":"native-thread-42"}`))
+			r := sessionRequest(t, s).Request
+			{
+				err := f.c.Call(context.Background(), "request-gate", nil, nil)
+				require.NoError(t, err)
+			}
+			writer := make(chan error, 1)
+			go func() { writer <- f.c.Call(context.Background(), "echo", strings.Repeat("x", 128<<10), nil) }()
+			waitResponsePrefix(t, f)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			answers := make(chan error, 2)
+			for range 2 {
+				go func() { answers <- r.Handle().Answer(ctx, "queued answer") }()
+			}
+			// Exactly one racer is admitted. The other returns ErrRequestAnswered,
+			// which proves admission without reaching into implementation state.
+			select {
+			case err := <-answers:
+				answerError(t, err, r, codex.NotSent, codex.ErrRequestAnswered)
+			case <-time.After(time.Second):
+				require.FailNow(t, "one-shot answer admission did not resolve losing caller")
+			}
+			{
+				err := r.Handle().Cancel()
+				require.ErrorIs(t, err, codex.ErrRequestAnswered, "Cancel stole admitted queued answer: %v", err)
+			}
+			if stop == "caller-cancel" {
+				cancel()
+			} else {
+				require.NoError(t, os.WriteFile(f.trace+".resolve", nil, 0600))
+			}
+			select {
+			case err := <-answers:
+				answerError(t, err, r, codex.NotSent, cause)
+			case <-time.After(time.Second):
+				require.FailNow(t, "queued answer context did not cancel promptly")
+			}
+			if stop == "caller-cancel" {
+				require.NoError(t, r.Handle().Err(), "confirmed NotSent must keep native permission")
+			} else {
+				require.ErrorIs(t, r.Handle().Err(), cause)
+			}
+			{
+				err := os.WriteFile(f.trace+".release", []byte("resume"), 0600)
+				require.NoError(t, err)
+			}
+			select {
+			case err := <-writer:
+				require.NoError(t, err)
+			case <-time.After(3 * time.Second):
+				require.FailNow(t, "unrelated writer failed to resume")
+			}
+			responseBarrier(t, f)
+			require.Len(t, answerFrames(t, f.trace), 0, "canceled queued answer was written later")
+			if stop == "caller-cancel" {
+				require.NoError(t, r.Handle().Answer(context.Background(), "explicit retry"))
+				responseBarrier(t, f)
+				require.Len(t, answerFrames(t, f.trace), 1)
+			} else {
+				require.ErrorIs(t, r.Handle().Answer(context.Background(), "late"), cause)
+			}
+			require.NoError(t, f.c.Err(), "cancellation before write unnecessarily terminated connection")
+		})
 	}
-	writer := make(chan error, 1)
-	go func() { writer <- f.c.Call(context.Background(), "echo", strings.Repeat("x", 128<<10), nil) }()
-	waitResponsePrefix(t, f)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	answers := make(chan error, 2)
-	for range 2 {
-		go func() { answers <- r.Handle().Answer(ctx, "queued answer") }()
-	}
-	// Exactly one racer is admitted. The other returns ErrRequestAnswered,
-	// which proves admission without reaching into implementation state.
-	select {
-	case err := <-answers:
-		answerError(t, err, r, codex.NotSent, codex.ErrRequestAnswered)
-	case <-time.After(time.Second):
-		require.FailNow(t, "one-shot answer admission did not resolve losing caller")
-	}
-	{
-		err := r.Handle().Cancel()
-		require.ErrorIs(t, err, codex.ErrRequestAnswered, "Cancel stole admitted queued answer: %v", err)
-	}
-	cancel()
-	select {
-	case err := <-answers:
-		answerError(t, err, r, codex.NotSent, context.Canceled)
-	case <-time.After(time.Second):
-		require.FailNow(t, "queued answer context did not cancel promptly")
-	}
-	require.NoError(t, r.Handle().Err(), "confirmed NotSent must keep native permission")
-	{
-		err := os.WriteFile(f.trace+".release", []byte("resume"), 0600)
-		require.NoError(t, err)
-	}
-	select {
-	case err := <-writer:
-		require.NoError(t, err)
-	case <-time.After(3 * time.Second):
-		require.FailNow(t, "unrelated writer failed to resume")
-	}
-	responseBarrier(t, f)
-	require.Len(t, answerFrames(t, f.trace), 0, "canceled queued answer was written later")
-	require.NoError(t, r.Handle().Answer(context.Background(), "explicit retry"))
-	responseBarrier(t, f)
-	require.Len(t, answerFrames(t, f.trace), 1)
-	require.NoError(t, f.c.Err(), "cancellation before write unnecessarily terminated connection")
 }
 
 func runConcurrentAnswerAndCancelHaveOneWinner(t *testing.T, f fixture) {

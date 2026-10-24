@@ -124,7 +124,7 @@ func (r IncomingRequest) approval(ctx context.Context, o ApprovalOptions, approv
 		}
 	} else {
 		fields, _ := objectFields(raw)
-		allowed, known := approvalDecision(fields["decision"])
+		allowed, known := approvalDecision(r.Method(), fields["decision"])
 		if !known || allowed != approve {
 			return invalid()
 		}
@@ -134,37 +134,50 @@ func (r IncomingRequest) approval(ctx context.Context, o ApprovalOptions, approv
 
 // approvalDecision classifies only the pinned native decision forms. Unknown
 // variants stay available through the explicit raw handle, never guessed here.
-func approvalDecision(raw json.RawMessage) (approve, known bool) {
+func approvalDecision(method string, raw json.RawMessage) (approve, known bool) {
+	legacy := method == "applyPatchApproval" || method == "execCommandApproval"
 	var value string
 	if json.Unmarshal(raw, &value) == nil {
-		switch value {
-		case "accept", "acceptForSession", "approved", "approved_for_session", "approved_mcp_policy_amendment":
-			return true, true
-		case "decline", "cancel", "abort":
-			return false, true
+		if legacy {
+			switch value {
+			case "approved", "approved_for_session", "approved_mcp_policy_amendment":
+				return true, true
+			case "abort":
+				return false, true
+			}
+		} else {
+			switch value {
+			case "accept", "acceptForSession":
+				return true, true
+			case "decline", "cancel":
+				return false, true
+			}
 		}
+		return false, false
+	}
+	if method == "item/fileChange/requestApproval" {
 		return false, false
 	}
 	fields, err := objectFields(raw)
 	if err != nil {
 		return false, false
 	}
-	for _, key := range []string{"acceptWithExecpolicyAmendment", "approved_execpolicy_amendment"} {
-		if _, ok := fields[key]; ok {
-			return true, true
+	acceptKey, networkKey := "acceptWithExecpolicyAmendment", "applyNetworkPolicyAmendment"
+	if legacy {
+		acceptKey, networkKey = "approved_execpolicy_amendment", "network_policy_amendment"
+		if _, ok := fields["denied"]; ok {
+			return false, true
 		}
 	}
-	if _, ok := fields["denied"]; ok {
-		return false, true
+	if _, ok := fields[acceptKey]; ok {
+		return true, true
 	}
-	for _, key := range []string{"applyNetworkPolicyAmendment", "network_policy_amendment"} {
-		if nested, ok := fields[key]; ok {
-			body, _ := objectFields(nested)
-			amendment, _ := objectFields(body["network_policy_amendment"])
-			var action string
-			_ = json.Unmarshal(amendment["action"], &action)
-			return action == "allow", action == "allow" || action == "deny"
-		}
+	if nested, ok := fields[networkKey]; ok {
+		body, _ := objectFields(nested)
+		amendment, _ := objectFields(body["network_policy_amendment"])
+		var action string
+		_ = json.Unmarshal(amendment["action"], &action)
+		return action == "allow", action == "allow" || action == "deny"
 	}
 	return false, false
 }

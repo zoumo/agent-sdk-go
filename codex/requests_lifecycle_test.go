@@ -30,7 +30,8 @@ func TestNativeRequestLifetimeWithControlledTime(t *testing.T) {
 					require.NoError(t, c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`)))
 				}
 				checkLifecycleTerminal(t, old, cause)
-				fresh := receiveLifecycleRequest(t, c)
+				require.NoError(t, c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread","newRequest":true}}`)))
+				fresh := <-c.Requests()
 				checkLifecycleTerminal(t, old, cause)
 				time.Sleep(6 * time.Minute)
 				synctest.Wait()

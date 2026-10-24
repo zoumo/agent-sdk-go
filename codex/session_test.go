@@ -149,8 +149,8 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 		if mode == "session-owned-diagnostic" {
 			fmt.Fprintln(os.Stdout, `{"method":"future/unattributed","params":{"threadId":"unowned"},"unknown":true}`)
 		}
-		if (mode == "session-block-write" || mode == "session-block-answer") && p.starts == 2 {
-			if mode == "session-block-answer" {
+		if (mode == "session-block-write" || mode == "session-block-answer" || mode == "session-resolve-answer") && p.starts == 2 {
+			if mode == "session-block-answer" || mode == "session-resolve-answer" {
 				fmt.Fprintln(os.Stdout, `{"id":"blocked-answer","method":"future/approval","params":{"threadId":"main-1"}}`)
 			}
 			// Read one byte to prove dispatch, then hold the reader while the large
@@ -158,6 +158,9 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 			var first [1]byte
 			if _, err := io.ReadFull(os.Stdin, first[:]); err != nil {
 				os.Exit(91)
+			}
+			if mode == "session-resolve-answer" {
+				fmt.Fprintln(os.Stdout, `{"method":"serverRequest/resolved","params":{"threadId":"main-1","requestId":"blocked-answer"}}`)
 			}
 			marker := os.Getenv("CODEX_SDK_PID")
 			if os.WriteFile(marker+".writing", []byte("started"), 0600) != nil {

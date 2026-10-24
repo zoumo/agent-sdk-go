@@ -1,8 +1,8 @@
 package codex
 
 import (
-	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,6 +88,14 @@ func (r Request) Data() (any, error) {
 // Native resolution and owner termination invalidate the same registry entry. No operation
 // here claims to stop server execution; turn interruption is a separate RPC.
 type AnswerHandle struct{ state *requestState }
+
+// requestKey distinguishes tagged IDs and byte-identical native request data.
+// Retained identities are bounded and never evicted to restore permission.
+type requestKey struct {
+	id     ID
+	method string
+	params [32]byte
+}
 
 type requestState struct {
 	ctx       context.Context
@@ -284,15 +292,7 @@ func (r *requestState) finishLocked(cause error) {
 		return
 	}
 	r.terminal = cause
-	if cause == ErrRequestAnswered {
-		c := r.client
-		if len(c.answeredOrder) >= c.limits.ActiveRequests {
-			delete(c.answered, c.answeredOrder[0])
-			c.answeredOrder = append(c.answeredOrder[:0], c.answeredOrder[1:]...)
-		}
-		c.answered[r.id] = r
-		c.answeredOrder = append(c.answeredOrder, r.id)
-	}
+
 	// Pointer check prevents a stale handle from deleting a newer reused ID.
 	if r.client.reverse[r.id] == r {
 		delete(r.client.reverse, r.id)
@@ -333,26 +333,17 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	if c.cause != nil {
 		return c.cause
 	}
-	if r := c.reverse[id]; r != nil {
-		if r.method != method || !bytes.Equal(r.params, params) {
-			return fmt.Errorf("%w: conflicting active server request ID", ErrProtocol)
-		}
+	key := requestKey{id: id, method: method, params: sha256.Sum256(params)}
+	if r := c.requestHistory[key]; r != nil {
 		return c.deliverRequestLocked(r, raw)
 	}
-	if r := c.answered[id]; r != nil {
-		if r.method == method && bytes.Equal(r.params, params) {
-			return c.deliverRequestLocked(r, raw)
-		}
-		// A different native request can reuse a terminal ID; stale handles remain
-		// invalid. Remove the previous bounded replay entry before accepting it.
-		delete(c.answered, id)
-		for i, old := range c.answeredOrder {
-			if old == id {
-				c.answeredOrder = append(c.answeredOrder[:i], c.answeredOrder[i+1:]...)
-				break
-			}
-		}
+	if c.reverse[id] != nil {
+		return fmt.Errorf("%w: conflicting active server request ID", ErrProtocol)
 	}
+	if len(c.requestHistory) >= c.limits.RequestIdentities {
+		return ErrRequestOverflow
+	}
+
 	if len(c.reverse) >= c.limits.ActiveRequests {
 		return ErrRequestOverflow
 	}
@@ -370,6 +361,7 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	}
 	r.ctx, r.cancel = context.WithCancel(context.Background())
 	c.reverse[id] = r
+	c.requestHistory[key] = r
 	r.owner = c.requestOwnerLocked(r.threadID)
 	r.legacy = len(c.sessions) == 0 && c.sessionReservations == 0
 	return c.deliverRequestLocked(r, raw)

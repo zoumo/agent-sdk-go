@@ -401,8 +401,11 @@ then fail with their own dispatch evidence. Late responses cannot satisfy new ca
 - Active local subscriptions: 32; accepted event backlog grows with memory
 - Active reverse requests: 128; queued reverse requests: 32
 - Unanswered handle lifetime: native resolution/termination only; no SDK deadline
-- Exact answered-request replay protection: the most recent 128 terminal IDs
-  (bounded by ActiveRequests); different method/params may reuse a terminal ID
+- Request identity registry: 4096 distinct tagged ID/method/params identities per
+  connection (RequestIdentities). Terminal entries are retained; exhaustion fails
+  with ErrRequestOverflow rather than restoring answer permission. Different
+  method/params may reuse a terminal ID. This is an SDK replay-safety boundary,
+  not a claim that the native server guarantees globally unique IDs.
 - Diagnostic tail: 64 KiB; all stderr content is replaced with redaction markers
 - Every call, including initialization: at most 30 seconds unless configured
 - A blocked write: 10 seconds

@@ -280,40 +280,148 @@ func TestSessionRequestPrewriteRevocationAndConcurrentAnswers(t *testing.T) {
 }
 
 func TestSessionCloseDuringAnswerWriteKeepsOtherSession(t *testing.T) {
-	f := startFake(t, "session-block-answer", codex.Limits{})
-	a, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
-	require.NoError(t, err)
-	b, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0600); _ = a.Abort(); _ = b.Abort() })
-	_, err = a.Receive(context.Background())
-	require.NoError(t, err)
-	r := sessionRequest(t, a)
-	result := make(chan error, 1)
-	go func() { result <- r.Handle().Answer(context.Background(), strings.Repeat("x", 256<<10)) }()
-	require.Eventually(t, func() bool { _, err := os.Stat(f.pid + ".writing"); return err == nil }, time.Second, time.Millisecond)
-	closed := make(chan error, 1)
-	go func() { closed <- a.Close() }()
-	select {
-	case err := <-result:
-		var ae *codex.AnswerError
-		require.ErrorAs(t, err, &ae)
-		require.Equal(t, codex.OutcomeUnknown, ae.Dispatch)
-		require.ErrorIs(t, err, codex.ErrClosed)
-	case <-time.After(time.Second):
-		t.Fatal("Session answer waiter did not wake")
+	for _, stop := range []string{"close", "resolved"} {
+		t.Run(stop, func(t *testing.T) {
+			mode := "session-block-answer"
+			cause := codex.ErrClosed
+			if stop == "resolved" {
+				mode = "session-resolve-answer"
+				cause = codex.ErrRequestResolved
+			}
+
+			f := startFake(t, mode, codex.Limits{})
+			a, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			require.NoError(t, err)
+			b, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0600); _ = a.Abort(); _ = b.Abort() })
+			_, err = a.Receive(context.Background())
+			require.NoError(t, err)
+			r := sessionRequest(t, a)
+			result := make(chan error, 1)
+			go func() { result <- r.Handle().Answer(context.Background(), strings.Repeat("x", 256<<10)) }()
+			require.Eventually(t, func() bool { _, err := os.Stat(f.pid + ".writing"); return err == nil }, time.Second, time.Millisecond)
+			closed := make(chan error, 1)
+			if stop == "close" {
+				go func() { closed <- a.Close() }()
+			} else {
+				closed <- nil
+			}
+			select {
+			case err := <-result:
+				var ae *codex.AnswerError
+				require.ErrorAs(t, err, &ae)
+				require.Equal(t, codex.OutcomeUnknown, ae.Dispatch)
+				require.ErrorIs(t, err, cause)
+			case <-time.After(time.Second):
+				t.Fatal("Session answer waiter did not wake")
+			}
+			require.ErrorIs(t, r.Context().Err(), context.Canceled)
+			require.ErrorIs(t, r.Handle().Answer(context.Background(), "retry"), cause)
+			require.NoError(t, f.c.Err())
+			select {
+			case <-b.Done():
+				t.Fatal("Close terminated unrelated Session")
+			default:
+			}
+			require.NoError(t, os.WriteFile(f.pid+".release", nil, 0600))
+			require.NoError(t, <-closed)
+			_, err = b.Submit(context.Background(), codex.Input{Input: []types.UserInput{}})
+			require.NoError(t, err)
+			require.NoError(t, f.c.Err())
+			if stop == "resolved" {
+				_, err = a.Receive(context.Background())
+				require.NoError(t, err) // native resolution notification
+				emitRequests(t, f.c, requestFrame(`"blocked-answer"`, "future/approval", `{"threadId":"main-1"}`))
+				replay := sessionRequest(t, a)
+				require.Equal(t, r.Context(), replay.Context())
+				require.ErrorIs(t, replay.Handle().Answer(context.Background(), "no replay"), cause)
+			}
+		})
 	}
-	require.ErrorIs(t, r.Context().Err(), context.Canceled)
-	require.ErrorIs(t, r.Handle().Answer(context.Background(), "retry"), codex.ErrClosed)
-	require.NoError(t, f.c.Err())
-	select {
-	case <-b.Done():
-		t.Fatal("Close terminated unrelated Session")
-	default:
+}
+
+func TestSessionTerminalRequestReplayNeverRestoresAuthority(t *testing.T) {
+	for _, terminal := range []string{"answered", "resolved", "canceled"} {
+		t.Run(terminal, func(t *testing.T) {
+			f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1})
+			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = s.Close() })
+			raw := requestFrame(`"old"`, "item/commandExecution/requestApproval", approvalParams)
+			emitRequests(t, f.c, raw)
+			old := sessionRequest(t, s)
+			cause := codex.ErrRequestAnswered
+			switch terminal {
+			case "answered":
+				require.NoError(t, old.Approve(context.Background(), codex.ApprovalOptions{}))
+			case "resolved":
+				cause = codex.ErrRequestResolved
+				emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":"old"}}`)
+				_, err = s.Receive(context.Background())
+				require.NoError(t, err)
+			case "canceled":
+				cause = codex.ErrRequestCanceled
+				require.NoError(t, old.Handle().Cancel())
+			}
+			// Completing another request must not evict protection of the first one.
+			emitRequests(t, f.c, requestFrame(`"other"`, "item/fileChange/requestApproval", `{"threadId":"native-thread-42"}`))
+			other := sessionRequest(t, s)
+			require.NoError(t, other.Deny(context.Background(), codex.ApprovalOptions{}))
+			emitRequests(t, f.c, raw)
+			late := sessionRequest(t, s)
+			require.Equal(t, old.Context(), late.Context())
+			require.ErrorIs(t, late.Approve(context.Background(), codex.ApprovalOptions{}), cause)
+		})
 	}
-	require.NoError(t, os.WriteFile(f.pid+".release", nil, 0600))
-	require.NoError(t, <-closed)
-	_, err = b.Submit(context.Background(), codex.Input{Input: []types.UserInput{}})
+}
+
+func TestSessionRequestIdentityLimitFailsWithoutRegranting(t *testing.T) {
+	f := startFake(t, "request-normal", codex.Limits{ActiveRequests: 1, RequestIdentities: 2})
+	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.NoError(t, err)
-	require.NoError(t, f.c.Err())
+	t.Cleanup(func() { _ = s.Close() })
+	for _, id := range []string{`"one"`, `"two"`} {
+		emitRequests(t, f.c, requestFrame(id, "item/fileChange/requestApproval", `{"threadId":"native-thread-42"}`))
+		r := sessionRequest(t, s)
+		require.NoError(t, r.Deny(context.Background(), codex.ApprovalOptions{}))
+	}
+	// Capacity is for distinct identities; a duplicate remains observable, invalid
+	// and harmless even when the identity registry is full.
+	emitRequests(t, f.c, requestFrame(`"one"`, "item/fileChange/requestApproval", `{"threadId":"native-thread-42"}`))
+	late := sessionRequest(t, s)
+	require.ErrorIs(t, late.Approve(context.Background(), codex.ApprovalOptions{}), codex.ErrRequestAnswered)
+	err = f.c.Call(context.Background(), "request-frames", []string{requestFrame(`"third"`, "item/fileChange/requestApproval", `{"threadId":"native-thread-42"}`)}, nil)
+	require.ErrorIs(t, err, codex.ErrRequestOverflow)
+	require.ErrorIs(t, s.Err(), codex.ErrRequestOverflow)
+	require.Len(t, answerFrames(t, f.trace), 2)
+}
+
+func TestSessionApprovalRejectsOtherNativeDecisionKindsBeforeWrite(t *testing.T) {
+	for _, method := range []string{"item/fileChange/requestApproval", "execCommandApproval"} {
+		t.Run(method, func(t *testing.T) {
+			f := startFake(t, "request-normal", codex.Limits{})
+			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = s.Close() })
+			params := `{"threadId":"native-thread-42"}`
+			if method == "execCommandApproval" {
+				params = `{"conversationId":"native-thread-42"}`
+			}
+			emitRequests(t, f.c, requestFrame(`"kind"`, method, params))
+			r := sessionRequest(t, s)
+			options := codex.ApprovalOptions{}
+			if method == "execCommandApproval" {
+				options.ExecCommand = &types.ExecCommandApprovalResponse{}
+				require.NoError(t, json.Unmarshal([]byte(`"accept"`), &options.ExecCommand.Decision))
+			} else {
+				options.FileChange = &types.FileChangeRequestApprovalResponse{Decision: types.FileChangeApprovalDecision("approved")}
+			}
+			require.ErrorIs(t, r.Approve(context.Background(), options), codex.ErrInvalidInput)
+			require.NoError(t, r.Context().Err())
+			responseBarrier(t, f)
+			require.Empty(t, answerFrames(t, f.trace))
+			require.NoError(t, r.Deny(context.Background(), codex.ApprovalOptions{}))
+		})
+	}
 }

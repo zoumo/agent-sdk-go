@@ -58,8 +58,7 @@ type Client struct {
 	queue               chan outbound
 	pending             map[ID]*pendingCall
 	reverse             map[ID]*requestState
-	answered            map[ID]*requestState
-	answeredOrder       []ID
+	requestHistory      map[requestKey]*requestState
 	requests            chan Request
 	subscriptions       map[*Subscription]struct{}
 	sessions            map[string]*Session
@@ -165,7 +164,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), answered: make(map[ID]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), requests: make(chan Request, limits.RequestQueue), subscriptions: make(map[*Subscription]struct{}), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 }
 
 func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {
@@ -501,6 +500,7 @@ func (c *Client) fail(cause error) {
 		}
 		s.finishLocked(terminal)
 	}
+	c.requestHistory = nil
 	close(c.done)
 	c.mu.Unlock()
 	if c.remote != nil {

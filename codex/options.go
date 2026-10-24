@@ -25,6 +25,9 @@ type Limits struct {
 	DiagnosticBytes int
 	// ActiveRequests bounds received server requests until a terminal state.
 	ActiveRequests int
+	// RequestIdentities bounds distinct request identities retained for this connection.
+	// Exhaustion fails explicitly; terminal/replayed requests never regain authority.
+	RequestIdentities int
 	// RequestQueue bounds queued server requests, including terminal unread ones.
 	RequestQueue int
 	// RequestTimeout is ignored. Native pending requests have no SDK deadline.
@@ -40,7 +43,7 @@ func DefaultLimits() Limits {
 		QuarantineRecords: 128, QuarantineBytes: 4 << 20, QuarantineRetention: 5 * time.Second,
 		MaxFrameBytes: 8 << 20, OutboundQueue: 32, PendingCalls: 128,
 		Subscriptions: 32, EventQueue: 128, DiagnosticBytes: 64 << 10,
-		ActiveRequests: 128, RequestQueue: 32, RequestTimeout: 0,
+		RequestIdentities: 4096, ActiveRequests: 128, RequestQueue: 32, RequestTimeout: 0,
 		CallTimeout: 30 * time.Second, WriteTimeout: 10 * time.Second,
 		ShutdownTimeout: 2 * time.Second,
 	}
@@ -50,7 +53,7 @@ func (l Limits) normalized() (Limits, error) {
 	ints := []struct {
 		v   *int
 		def int
-	}{{&l.QuarantineRecords, d.QuarantineRecords}, {&l.QuarantineBytes, d.QuarantineBytes}, {&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}, {&l.ActiveRequests, d.ActiveRequests}, {&l.RequestQueue, d.RequestQueue}}
+	}{{&l.QuarantineRecords, d.QuarantineRecords}, {&l.QuarantineBytes, d.QuarantineBytes}, {&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}, {&l.ActiveRequests, d.ActiveRequests}, {&l.RequestIdentities, d.RequestIdentities}, {&l.RequestQueue, d.RequestQueue}}
 	for _, x := range ints {
 		if *x.v < 0 {
 			return l, fmt.Errorf("codex: limits must be nonnegative")

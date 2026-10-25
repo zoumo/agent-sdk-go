@@ -25,7 +25,7 @@ func init() {
 }
 func captureProfile(t *testing.T, scene string) recorder.LaunchProfile {
 	t.Helper()
-	dir, e := filepath.EvalSymlinks(t.TempDir())
+	dir, e := privateTestDir(t)
 	require.NoError(t, e)
 	p := recorder.LaunchProfile{Scene: scene, SDKRevision: "52b329a77333e55063a97eaf1304c82b30a99a59", Ledger: filepath.Join(dir, "ledger"), Project: filepath.Join(dir, "project"), RawDir: filepath.Join(dir, "raw")}
 	require.NoError(t, os.Mkdir(p.Project, 0700))

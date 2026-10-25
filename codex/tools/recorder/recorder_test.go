@@ -15,7 +15,7 @@ import (
 )
 
 func TestProfileRequiresPinnedCleanIsolatedNonsecretInputs(t *testing.T) {
-	root, e := filepath.EvalSymlinks(t.TempDir())
+	root, e := privateTestDir(t)
 	require.NoError(t, e)
 	p := recorder.LaunchProfile{Version: 1, Scene: "r1", Model: "synthetic-model", Effort: "high", CLIVersion: "0.162.1", SDKRevision: "52b329a77333e55063a97eaf1304c82b30a99a59", IsolationReview: "synthetic review only"}
 	p.CLI = filepath.Join(root, "synthetic-cli")
@@ -75,4 +75,15 @@ func TestRecordingEntrypointRefusesCIAndProxyBeforeReadingFiles(t *testing.T) {
 	require.ErrorContains(t, recorder.Run(), "CI")
 	os.Args[1] = "--proxy"
 	require.ErrorContains(t, recorder.Run(), "disabled")
+}
+
+// Go's test temp directory follows the runner's umask. Create only our own
+// private fixture directory; never loosen the recorder's production checks.
+func privateTestDir(t *testing.T) (string, error) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "private")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(dir)
 }

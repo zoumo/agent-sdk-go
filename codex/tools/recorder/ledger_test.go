@@ -12,7 +12,7 @@ import (
 )
 
 func TestAggregateAttemptsSurviveReopenAndStartupFailure(t *testing.T) {
-	dir, err := filepath.EvalSymlinks(t.TempDir())
+	dir, err := privateTestDir(t)
 	require.NoError(t, err)
 	path := filepath.Join(dir, "attempts.jsonl")
 	header := `{"version":1,"authorization":"proposal-not-live-permission","revision":"52b329a77333e55063a97eaf1304c82b30a99a59","startedAt":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","maxRoots":3,"maxTurns":6}` + "\n"
@@ -35,7 +35,7 @@ func TestAggregateAttemptsSurviveReopenAndStartupFailure(t *testing.T) {
 }
 
 func TestLedgerRefusesCorruptionExpiryAndUnsafePaths(t *testing.T) {
-	dir, e := filepath.EvalSymlinks(t.TempDir())
+	dir, e := privateTestDir(t)
 	require.NoError(t, e)
 	valid := `{"version":1,"authorization":"synthetic","revision":"52b329a77333e55063a97eaf1304c82b30a99a59","startedAt":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","maxRoots":1,"maxTurns":2}` + "\n"
 	for _, tc := range []struct{ name, content string }{
@@ -62,7 +62,7 @@ func TestLedgerRefusesCorruptionExpiryAndUnsafePaths(t *testing.T) {
 }
 
 func TestConcurrentAggregateReservationAndDurableStop(t *testing.T) {
-	dir, e := filepath.EvalSymlinks(t.TempDir())
+	dir, e := privateTestDir(t)
 	require.NoError(t, e)
 	path := filepath.Join(dir, "ledger")
 	header := `{"version":1,"authorization":"synthetic","revision":"52b329a77333e55063a97eaf1304c82b30a99a59","startedAt":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","maxRoots":3,"maxTurns":6}` + "\n"

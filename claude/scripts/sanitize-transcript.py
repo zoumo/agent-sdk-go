@@ -6,11 +6,26 @@ KEYS=set('type subtype request_id request response hooks forwardSubagentText mes
 SECRET=re.compile(r'(?i)(sk-(?:ant-)?[a-z0-9_-]{12,}|bearer[ :]+[a-z0-9._-]{8,}|authorization|access_token|refresh_token|api[_-]?key[" ]*[:=]|/users/|/home/|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})')
 KEYS.update('apiProvider api_error_status available_output_styles background budget by_type completed concurrency_limit container context_management current_permission_mode depth_limit diagnostics displayName exit_code failed fast_mode_disabled_reason foreground hook_event hook_id hook_name ide_rc_auto_enable_gate is_api_error_message killed max_depth messaging_socket_path models outcome output output_tokens_details parent pid product_feedback_disabled queued_turn_count refused remote_control_auto_enable remote_control_auto_on_by_default remote_control_available requested resolvedModel session_state spawned spawned_by_subagents started_in_background stderr stdout stop_details subagent_stats supportsAutoMode system terminal_reason thinking_tokens tokenSource unset user analytics_disabled'.split())
 IDKEYS={'hook_id','id','uuid','session_id','request_id','tool_use_id','parent_tool_use_id','agentId','agent_id','task_id','toolUseID','toolUseId'}
-def publish(raw,root):
-    frames=[json.loads(x) for x in raw.splitlines()]
+SUPPORTED_VERSION = '2.1.258'
+# Any future CLI needs its own reviewed schema, never a minimum-version range.
+KEYS.update('max_thinking_tokens thinking_display'.split())
+VERSION_KEYS = {SUPPORTED_VERSION: frozenset(KEYS)}
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result: raise ValueError('duplicate JSON key quarantined')
+        result[key] = value
+    return result
+
+def publish(raw,root,cli_version=SUPPORTED_VERSION):
+    if cli_version not in VERSION_KEYS: raise ValueError('unreviewed CLI version quarantined')
+    allowed = VERSION_KEYS[cli_version]
+    frames=[json.loads(x, object_pairs_hook=strict_object) for x in raw.splitlines()]
     ids={}; refs=collections.defaultdict(list); namespaces={}; timebase=[]
     def collect(v,field='',ordinal=0):
         if isinstance(v,dict):
+            if 'claude_code_version' in v and v['claude_code_version'] != cli_version:
+                raise ValueError('native source version mismatch quarantined')
             for k,x in v.items():
                 if k in IDKEYS and isinstance(x,(str,int)) and x!='':
                     key=(type(x).__name__,x)
@@ -23,12 +38,13 @@ def publish(raw,root):
         elif isinstance(v,list):
             for x in v:collect(x,field,ordinal)
     for i,f in enumerate(frames,1):
+        if set(f) != {'ordinal','direction','channel','data'}: raise ValueError('unknown wrapper quarantined')
         if f['ordinal']!=i or f['direction'] not in ('client','server') or f['channel'] not in ('control','protocol'):raise ValueError('frame contract')
         collect(f['data'],ordinal=i)
     def visit(v,field='',parent=''):
         if isinstance(v,dict):
             for k in v:
-                if k not in KEYS and field not in ('modelUsage','answers'):
+                if k not in allowed and field not in ('modelUsage','answers'):
                     raise ValueError('unreviewed field quarantined')
             return {k:visit(x,k,field) for k,x in v.items()}
         if isinstance(v,list):return [visit(x,field,parent) for x in v]
@@ -83,10 +99,14 @@ def selftest():
     else:raise AssertionError('ambiguous namespaces accepted')
     print('sanitizer canaries, whitelist, path and typed ID checks passed')
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--self-test',action='store_true');p.add_argument('--private-dir');p.add_argument('--output');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--self-test',action='store_true');p.add_argument('--private-dir');p.add_argument('--output');p.add_argument('--cli-version');a=p.parse_args()
     if a.self_test:selftest()
     else:
-        private=pathlib.Path(a.private_dir);data,relations=publish((private/'raw.jsonl').read_text(),str((private/'project').resolve()))
+        if a.cli_version not in VERSION_KEYS: raise ValueError('explicit reviewed CLI version required')
+        private=pathlib.Path(a.private_dir)
+        status=json.loads((private/'status.json').read_text())
+        if status.get('cli_version') != a.cli_version: raise ValueError('private source version mismatch')
+        data,relations=publish((private/'raw.jsonl').read_text(),str((private/'project').resolve()),a.cli_version)
         dest=pathlib.Path(a.output);dest.mkdir(parents=True,exist_ok=False)
         (dest/'wire.jsonl').write_text(data);(dest/'id-relations.json').write_text(json.dumps(relations,indent=2)+'\n')
         print('published scanned frames:',len(data.splitlines()),'ID classes:',len(relations),'sha256:',hashlib.sha256(data.encode()).hexdigest())

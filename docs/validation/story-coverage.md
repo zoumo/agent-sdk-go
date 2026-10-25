@@ -96,6 +96,9 @@ Bundle names and their expected replay/gap outcomes are defined in the
 | SDK-US-018 | US-011 | I report loss; N automatic reconnect (outside contract); [remote](../../codex/remote.go) | I report loss; N automatic reconnect (outside contract); [session](../../claude/session.go) | Both M for retained application-led recovery; H not a fixture | T/018 | F disconnect/new epoch; no restored answer authority |
 | SDK-US-019 | US-014 | I list/read/turns/items, V backend method availability; [query](../../codex/history.go), [list](../../codex/client.go) | I bounded main/child local list/info/messages; V other layouts; [metadata](../../claude/session_metadata.go), [messages](../../claude/session_query.go) | Both M for published successful query/storage corpus; U unpublished only, not replay | B; [Codex](../../codex/history_query_test.go), Claude `TestClaudeQueryAlongsideSession` + `TestClaudeMessageQueryFailures` in [suite](../../tests/stories/history_query_test.go) | R4 query saved-content fixture + metadata scope/pages; never wire log or live handle |
 
+Runnable zero-model F companions, exact per-row commands, real-input driver
+limits and fresh-connection handle checks: [fault/lifecycle companions](fault-companions.md).
+
 ## Scenario index (different namespace)
 
 `TestNativeAdapters/US-001…012` are the legacy scenario paths in the

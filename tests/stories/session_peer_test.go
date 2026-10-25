@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -229,18 +230,23 @@ func sessionTargetPeer(provider, story string) error {
 				if _, err = io.ReadFull(os.Stdin, first[:]); err != nil {
 					return err
 				}
-				if err = os.WriteFile(os.Getenv("SDK_STORY_TRACE")+".prefix", first[:], 0600); err != nil {
+				conn, err := net.DialTimeout("tcp4", os.Getenv("SDK_STORY_BARRIER"), 5*time.Second)
+				if err != nil {
 					return err
 				}
-				until := time.Now().Add(5 * time.Second)
-				for {
-					if _, err = os.Stat(os.Getenv("SDK_STORY_TRACE") + ".release"); err == nil {
-						break
-					}
-					if time.Now().After(until) {
-						return fmt.Errorf("release timed out")
-					}
-					time.Sleep(time.Millisecond)
+				defer conn.Close()
+				if err = conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+					return err
+				}
+				if _, err = conn.Write(first[:]); err != nil {
+					return err
+				}
+				var release [1]byte
+				if _, err = io.ReadFull(conn, release[:]); err != nil {
+					return err
+				}
+				if release[0] != 'r' {
+					return fmt.Errorf("invalid fault release")
 				}
 				return nil
 			}

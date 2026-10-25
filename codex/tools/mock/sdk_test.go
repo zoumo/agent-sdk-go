@@ -68,8 +68,16 @@ func (s *MockSuite) TestSDKCancellationAndFault() {
 				`c2s {"id":102,"method":"synthetic/fault"}`)
 			switch fault {
 			case "late response":
-				fs = append(fs, frames(`s2c {"id":102,"result":{}}`, `c2s {"id":103,"method":"synthetic/done"}`, `s2c {"id":103,"result":{}}`)...)
-				fs[4].DelayMS = 30
+				fs = append(fs[:3], frames(
+					`c2s {"id":100,"method":"thread/start","params":{}}`,
+					`s2c {"id":100,"result":{"thread":{"id":"child","sessionId":"synthetic","cliVersion":"0.162.1","createdAt":1,"updatedAt":1,"cwd":"/synthetic","ephemeral":true,"modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}}`,
+					`c2s {"id":102,"method":"synthetic/fault"}`,
+					`s2c {"method":"synthetic/dispatched","params":{"threadId":"child"}}`,
+					`c2s {"id":103,"method":"synthetic/release"}`,
+					`s2c {"id":102,"result":{}}`,
+					`s2c {"id":103,"result":{}}`,
+					`c2s {"id":104,"method":"synthetic/done"}`,
+					`s2c {"id":104,"result":{}}`)...)
 			case "RPC failure":
 				fs = append(fs, frames(`s2c {"id":102,"error":{"code":-32000,"message":"synthetic fault"}}`, `c2s {"id":103,"method":"synthetic/done"}`, `s2c {"id":103,"result":{}}`)...)
 			case "disconnect":
@@ -81,16 +89,32 @@ func (s *MockSuite) TestSDKCancellationAndFault() {
 				fs[i].Ordinal = i + 1
 			}
 			c, ctx := s.startSDK(scenario(fs))
-			callCtx := ctx
+			var err error
 			if fault == "late response" {
-				var cancel context.CancelFunc
-				callCtx, cancel = context.WithTimeout(ctx, 5*time.Millisecond)
+				session, openErr := codex.Open(ctx, codex.SessionOptions{Client: c})
+				require.NoError(s.T(), openErr)
+				defer func() { _ = c.Close(); _ = session.Close() }()
+				callCtx, cancel := context.WithCancel(ctx)
 				defer cancel()
-			}
-			err := c.Call(callCtx, "synthetic/fault", nil, nil)
-			require.Error(s.T(), err)
-			if fault == "late response" {
-				assert.ErrorIs(s.T(), err, context.DeadlineExceeded)
+				result := make(chan error, 1)
+				go func() { result <- c.Call(callCtx, "synthetic/fault", nil, nil) }()
+				received, receiveErr := session.Receive(ctx)
+				require.NoError(s.T(), receiveErr)
+				require.NotNil(s.T(), received.Event)
+				require.Equal(s.T(), "synthetic/dispatched", received.Event.Method)
+				cancel()
+				err = <-result
+				require.ErrorIs(s.T(), err, context.Canceled)
+				var callError *codex.CallError
+				require.ErrorAs(s.T(), err, &callError)
+				assert.Equal(s.T(), codex.OutcomeUnknown, callError.Dispatch)
+				// The peer cannot release the late response until cancellation
+				// returned. A second response proves the stale ID cannot settle
+				// a new request or resurrect the canceled call.
+				require.NoError(s.T(), c.Call(ctx, "synthetic/release", nil, nil))
+			} else {
+				err = c.Call(ctx, "synthetic/fault", nil, nil)
+				require.Error(s.T(), err)
 			}
 			if fault != "disconnect" {
 				require.NoError(s.T(), c.Call(ctx, "synthetic/done", nil, nil))

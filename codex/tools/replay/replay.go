@@ -44,7 +44,14 @@ func Load(story string) ([]Frame, error) {
 	return Decode(bytes.NewReader(b))
 }
 func Decode(r io.Reader) ([]Frame, error) {
-	s := bufio.NewScanner(io.LimitReader(r, 2<<20+1))
+	b, err := io.ReadAll(io.LimitReader(r, ProtocolLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > ProtocolLimit {
+		return nil, errors.New("capture decode byte limit")
+	}
+	s := bufio.NewScanner(bytes.NewReader(b))
 	s.Buffer(make([]byte, 4096), 2<<20)
 	var frames []Frame
 	for s.Scan() {
@@ -105,12 +112,20 @@ type Handler struct {
 	Story     string
 	Calls     int
 	Questions int
+	// Exact is a finite ordered policy for native root requests, separate from S1/S2.
+	Exact        []ExactRequest
+	Answered     int
+	BeforeSubmit func() error
+	Progress     func(context.Context, *types.Event) error
 	// Set only by Replay; the live recorder and public RunPeer never use the
 	// offline peer's private synchronization protocol.
 	replayClient *codex.Client
 }
 
 func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
+	if h.Exact != nil {
+		return h.answerExact(ctx, r)
+	}
 	switch r.Method() {
 	case "item/tool/call":
 		var p struct {
@@ -180,6 +195,11 @@ type Result struct {
 // Session consumes native facts and real requests through the Session FIFO.
 func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStartParams, h *Handler) (Result, error) {
 	var result Result
+	if h.BeforeSubmit != nil {
+		if err := h.BeforeSubmit(); err != nil {
+			return result, err
+		}
+	}
 	if len(turn.UnknownFields) != 0 {
 		return result, fmt.Errorf("%w: replay turn execution extensions are unsupported", codex.ErrInvalidInput)
 	}
@@ -230,6 +250,12 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 			return result, err
 		}
 		if received.Request != nil {
+			var identity struct {
+				ThreadID string `json:"threadId"`
+			}
+			if json.Unmarshal(received.Request.Params(), &identity) != nil || identity.ThreadID != session.ThreadID() {
+				return result, errors.New("non-root request in root-only scene")
+			}
 			answerCtx, stop := context.WithTimeout(ctx, 15*time.Second)
 			err := h.Answer(answerCtx, received.Request.Request)
 			stop()
@@ -259,6 +285,9 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 			var params map[string]json.RawMessage
 			_ = json.Unmarshal(e.Params, &params)
 			_ = json.Unmarshal(params["threadId"], &o.ThreadID)
+			if o.ThreadID != "" && o.ThreadID != session.ThreadID() {
+				return result, errors.New("non-root event in root-only scene")
+			}
 			switch e.Method {
 			case "turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "serverRequest/resolved":
 				if e.Data == nil {
@@ -266,6 +295,11 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 				}
 			}
 			o.Method = e.Method
+			if h.Progress != nil {
+				if err := h.Progress(ctx, &e); err != nil {
+					return result, err
+				}
+			}
 			if o.Method == "turn/completed" {
 				result.Completed = true
 			}

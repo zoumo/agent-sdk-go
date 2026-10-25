@@ -98,13 +98,6 @@ func prepareChildQuery(ctx context.Context, parent, agent string, scope *Session
 	if c.MaxResults == 0 {
 		c.MaxResults = 10000
 	}
-	if c.Limit == 0 {
-		if c.SidecarStatus == "per-record" {
-			c.Limit = 100
-		} else {
-			c.Limit = 1000
-		}
-	}
 	if l.MaxBytes == 0 {
 		l.MaxBytes = 64 << 20
 	}
@@ -146,6 +139,9 @@ func ListSubagents(ctx context.Context, parent string, o ListSubagentsOptions) (
 	page.Records = []SubagentInfo{}
 	page.Coverage = childCoverage(parent, "", o.Scope, o.Limits, o.Limit, o.Offset, o.MaxAgents)
 	page.Coverage.SidecarStatus = "per-record"
+	if page.Coverage.Limit == 0 {
+		page.Coverage.Limit = 100
+	}
 	defer func() {
 		if err != nil {
 			page.Records = []SubagentInfo{}
@@ -159,6 +155,7 @@ func ListSubagents(ctx context.Context, parent string, o ListSubagentsOptions) (
 		return page, e
 	}
 	defer r.close()
+	r.maxAgents = page.Coverage.MaxResults
 	candidates, e := r.inventory(parent)
 	if e != nil {
 		return page, e
@@ -189,6 +186,9 @@ func ListSubagents(ctx context.Context, parent string, o ListSubagentsOptions) (
 func GetSubagentMessages(ctx context.Context, parent, agent string, o SubagentMessagesOptions) (page SubagentMessagesPage, err error) {
 	page.Messages = []SubagentMessage{}
 	page.Coverage = childCoverage(parent, agent, o.Scope, o.Limits, o.Limit, o.Offset, o.MaxMessages)
+	if page.Coverage.Limit == 0 {
+		page.Coverage.Limit = 1000
+	}
 	defer func() {
 		if err != nil {
 			page.Messages = []SubagentMessage{}
@@ -238,9 +238,6 @@ func GetSubagentMessages(ctx context.Context, parent, agent string, o SubagentMe
 	for _, message := range chain {
 		if message.Type != "user" && message.Type != "assistant" {
 			continue
-		}
-		if visible >= page.Coverage.MaxResults {
-			return page, r.fail("resource-limit", selected.path, "visible messages")
 		}
 		if visible >= page.Coverage.Offset && len(page.Messages) < page.Coverage.Limit {
 			page.Messages = append(page.Messages, SubagentMessage{SessionMessage: message, AgentID: agent, ParentAgentID: copyChildString(info.ParentAgentID), ParentToolUseID: copyChildString(info.ParentToolUseID)})

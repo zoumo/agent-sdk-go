@@ -146,7 +146,8 @@ production control or history API is implied.
 
 Phase 2 retains SDK-US-006/007 real child/forwarding/parent-first gaps,
 SDK-US-008 real stored-child evidence, ADR0004 optional child-detail filtering and
-independent child-history/attachment gaps. Existing ListSubagents works in bounded
+real independent child-history/attachment evidence gaps. Independent Claude
+child queries now have synthetic coverage (#18). Existing ListSubagents works in bounded
 native scope on both SDKs; it must not be mislabeled absent. Main query APIs do not
 fill independent child history or full event-log replay requirements.
 

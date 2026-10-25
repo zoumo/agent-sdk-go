@@ -33,6 +33,7 @@ type childReader struct {
 	files       []childFile
 	absent      []string
 	project     string
+	maxAgents   int
 }
 
 func newChildReader(ctx context.Context, scope SessionQueryScope, c *SubagentHistoryCoverage) (*childReader, error) {
@@ -44,8 +45,13 @@ func newChildReader(ctx context.Context, scope SessionQueryScope, c *SubagentHis
 	r := &childReader{ctx: ctx, root: root, c: c, project: key}
 	return r, nil
 }
-func (r *childReader) close()                      { r.root.Close() }
-func (r *childReader) absolute(path string) string { return filepath.Join(r.c.ConfigDir, path) }
+func (r *childReader) close() { r.root.Close() }
+func (r *childReader) absolute(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(r.c.ConfigDir, path)
+}
 func (r *childReader) fail(kind, path, reason string) error {
 	var cause error
 	switch kind {
@@ -266,7 +272,7 @@ func (r *childReader) inventory(parent string) ([]childCandidate, error) {
 				}
 				ids[id] = true
 				// The inventory itself is bounded even when get reads only one child.
-				if len(candidates) >= r.c.MaxEntries || (r.c.SidecarStatus == "per-record" && len(candidates) >= r.c.MaxResults) {
+				if len(candidates) >= r.c.MaxEntries || (r.maxAgents > 0 && len(candidates) >= r.maxAgents) {
 					return r.fail("resource-limit", child, "agent inventory")
 				}
 				candidates = append(candidates, childCandidate{agent: id, path: child, info: st})
@@ -275,7 +281,7 @@ func (r *childReader) inventory(parent string) ([]childCandidate, error) {
 				if !validChildAgent(id) {
 					return r.fail("unsupported", child, "invalid sidecar agent component")
 				}
-				if _, ok := directory.entries["agent-"+id+".jsonl"]; !ok {
+				if transcript, ok := directory.entries["agent-"+id+".jsonl"]; !ok || !transcript.Mode().IsRegular() {
 					return r.fail("corrupt", child, "orphan sidecar")
 				}
 			} else {

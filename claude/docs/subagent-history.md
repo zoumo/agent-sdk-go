@@ -18,7 +18,7 @@ claimed. Empty main files are allowed; the selected main source must exist and
 pass full bounded syntax/available-identity validation.
 
 Selection follows the pinned official Python SDK
-[`_build_subagent_chain`](https://github.com/anthropics/claude-agent-sdk-python/blob/0e89b298e771259378a6cd3734e00d323dff5703/src/claude_agent_sdk/_internal/sessions.py#L1466):
+[`_build_subagent_chain`](https://github.com/anthropics/claude-agent-sdk-python/blob/0e89b298e771259378a6cd3734e00d323dff5703/src/claude_agent_sdk/_internal/sessions.py#L1474):
 index chain entries, choose the last user/assistant in file order, walk
 `parentUuid` to the root, reverse, retain user/assistant, then slice. This does
 not reuse main history compaction, logical-parent, sidechain/meta/team filtering,

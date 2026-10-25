@@ -146,7 +146,6 @@ func TestChildHistoryBounds(t *testing.T) {
 		{"sidecar-bytes", func(o *claude.SubagentMessagesOptions) { o.Limits.MaxSidecarBytes = 1 }},
 		{"depth", func(o *claude.SubagentMessagesOptions) { o.Limits.MaxDepth = 1 }},
 		{"result-request", func(o *claude.SubagentMessagesOptions) { o.Limit = 2; o.MaxMessages = 1 }},
-		{"visible-count", func(o *claude.SubagentMessagesOptions) { o.Limit = 1; o.MaxMessages = 1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			scope, root := childStore(t)
@@ -305,4 +304,69 @@ func TestChildQueryInaccessibleSidecar(t *testing.T) {
 	p, e := claude.GetSubagentMessages(context.Background(), childParent, "x", claude.SubagentMessagesOptions{Scope: scope})
 	childError(t, p, e, "inaccessible")
 	require.ErrorIs(t, e, os.ErrPermission)
+}
+
+func TestChildPagingBoundIsReturnedRange(t *testing.T) {
+	scope, root := childStore(t)
+	putChild(t, root, "agent-x.jsonl", childLine("u", "", "user")+childLine("a", "u", "assistant"))
+	p, e := claude.GetSubagentMessages(context.Background(), childParent, "x", claude.SubagentMessagesOptions{Scope: scope, Offset: 1, Limit: 1, MaxMessages: 1})
+	require.NoError(t, e)
+	require.Len(t, p.Messages, 1)
+	require.Equal(t, "a", p.Messages[0].UUID)
+	_, e = claude.GetSubagentMessages(context.Background(), childParent, "missing", claude.SubagentMessagesOptions{Scope: scope})
+	var qe *claude.SessionQueryError
+	require.ErrorAs(t, e, &qe)
+	require.Equal(t, root, qe.Path)
+}
+
+func TestChildSidecarRequiresTranscriptFile(t *testing.T) {
+	scope, root := childStore(t)
+	putChild(t, root, "agent-x.meta.json", `{}`)
+	require.NoError(t, os.Mkdir(filepath.Join(root, "agent-x.jsonl"), 0700))
+	p, e := claude.ListSubagents(context.Background(), childParent, claude.ListSubagentsOptions{Scope: scope})
+	var qe *claude.SessionQueryError
+	require.ErrorAs(t, e, &qe)
+	require.Equal(t, "corrupt", qe.Kind)
+	require.Empty(t, p.Records)
+}
+
+func TestChildDoesNotRecoverParallelSiblings(t *testing.T) {
+	scope, root := childStore(t)
+	source := `{"type":"user","uuid":"u","message":{"content":"root"}}` + "\n" +
+		`{"type":"assistant","uuid":"a1","parentUuid":"u","timestamp":"2099-01-01","message":{"id":"same-response","content":[{"type":"tool_use","id":"t1"}]}}` + "\n" +
+		`{"type":"assistant","uuid":"a2","parentUuid":"a1","message":{"id":"same-response","content":[{"type":"tool_use","id":"t2"}]}}` + "\n" +
+		`{"type":"user","uuid":"stray","parentUuid":"u","sourceToolAssistantUUID":"a1","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}` + "\n" +
+		`{"type":"user","uuid":"r2","parentUuid":"a2","timestamp":"2000-01-01","message":{"content":[{"type":"tool_result","tool_use_id":"t2"}]}}` + "\n"
+	putChild(t, root, "agent-x.jsonl", source)
+	p, e := claude.GetSubagentMessages(context.Background(), childParent, "x", claude.SubagentMessagesOptions{Scope: scope})
+	require.NoError(t, e)
+	ids := []string{}
+	for _, m := range p.Messages {
+		ids = append(ids, m.UUID)
+	}
+	require.Equal(t, []string{"u", "a1", "a2", "r2"}, ids)
+}
+func TestChildDefaultSlices(t *testing.T) {
+	scope, root := childStore(t)
+	var data strings.Builder
+	parent := ""
+	for i := 0; i < 1001; i++ {
+		id := fmt.Sprint(i)
+		data.WriteString(childLine(id, parent, "user"))
+		parent = id
+	}
+	putChild(t, root, "agent-x.jsonl", data.String())
+	p, e := claude.GetSubagentMessages(context.Background(), childParent, "x", claude.SubagentMessagesOptions{Scope: scope})
+	require.NoError(t, e)
+	require.Len(t, p.Messages, 1000)
+	require.Equal(t, "999", p.Messages[999].UUID)
+	require.Equal(t, int64(64<<20), p.Coverage.Limits.MaxBytes)
+	require.Equal(t, 10000, p.Coverage.MaxResults)
+	for i := 0; i < 100; i++ {
+		putChild(t, root, fmt.Sprintf("agent-%03d.jsonl", i), "")
+	}
+	listed, e := claude.ListSubagents(context.Background(), childParent, claude.ListSubagentsOptions{Scope: scope})
+	require.NoError(t, e)
+	require.Len(t, listed.Records, 100)
+	require.Equal(t, 100, listed.Coverage.Limit)
 }

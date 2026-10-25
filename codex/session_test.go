@@ -364,6 +364,9 @@ func TestSessionCleanupErrorDoesNotReplaceTermination(t *testing.T) {
 	f := startFake(t, "session-detach-error", codex.Limits{})
 	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.NoError(t, err)
+	// Open binds at the start response; the peer emits future/opened afterwards.
+	// A reader/RPC barrier proves admission before Close, without consuming it.
+	emitRequests(t, f.c)
 	err = s.Close()
 	require.Error(t, err)
 	require.Equal(t, err, s.Close())

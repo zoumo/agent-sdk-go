@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var requiredFlags = []string{"--print", "--restricted", "--safe-mode", "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config", "--mcp-config", "--no-chrome", "--setting-sources", "--settings", "--tools", "--max-budget-usd", "--system-prompt"}
+var requiredFlags = []string{"--model", "--print", "--restricted", "--safe-mode", "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config", "--mcp-config", "--no-chrome", "--setting-sources", "--settings", "--tools", "--max-budget-usd", "--system-prompt"}
 
 // ValidateVersion checks exact chosen source/flag evidence, without invoking a
 // CLI. Help/version claims alone do not prove behavior or launch authorization.
@@ -36,50 +36,61 @@ func ValidateVersion(version, help []byte) error {
 	}
 	return nil
 }
-func inspectCLI(ctx context.Context, path, approvedDigest string) (string, error) {
+
+// ValidateCLIBinary verifies the bounded regular executable and exact approved
+// digest without executing it or inspecting credentials/configuration. Native
+// Linux 2.1.258 is 215473560 bytes; the reviewed ceiling is 256 MiB.
+func ValidateCLIBinary(path, approvedDigest string) error {
 	if err := canonicalPath(path); err != nil {
-		return "", err
+		return err
 	}
 	b, err := hex.DecodeString(approvedDigest)
 	if err != nil || len(b) != 32 || strings.ToLower(approvedDigest) != approvedDigest {
-		return "", fmt.Errorf("approved CLI SHA256 required")
+		return fmt.Errorf("approved CLI SHA256 required")
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 	info, err := f.Stat()
 	if err != nil {
 		f.Close()
-		return "", err
+		return err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 || info.Size() > 128<<20 {
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 || info.Size() > 256<<20 {
 		f.Close()
-		return "", fmt.Errorf("bounded regular executable required")
+		return fmt.Errorf("bounded regular executable required")
 	}
 	h := sha256.New()
-	_, err = io.Copy(h, io.LimitReader(f, (128<<20)+1))
+	_, err = io.Copy(h, io.LimitReader(f, (256<<20)+1))
 	closeErr := f.Close()
 	if err != nil || closeErr != nil || !bytes.Equal(h.Sum(nil), b) {
-		return "", fmt.Errorf("CLI digest mismatch or unreadable")
+		return fmt.Errorf("CLI digest mismatch or unreadable")
 	}
-	version, err := probeCLI(ctx, path, "--version")
+	return nil
+}
+func inspectCLI(ctx context.Context, path, approvedDigest string, workspace *Workspace) (string, error) {
+	if err := ValidateCLIBinary(path, approvedDigest); err != nil {
+		return "", err
+	}
+	version, err := probeCLI(ctx, path, "--version", workspace)
 	if err != nil {
 		return "", err
 	}
-	help, err := probeCLI(ctx, path, "--help")
+	help, err := probeCLI(ctx, path, "--help", workspace)
 	if err != nil {
 		return "", err
 	}
 	return approvedDigest, ValidateVersion(version, help)
 }
-func probeCLI(ctx context.Context, path, arg string) ([]byte, error) {
+func probeCLI(ctx context.Context, path, arg string, workspace *Workspace) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, arg)
 	// A replacement environment avoids implicit auth/config lookup. Even these
 	// probes are forbidden until Preflight establishes policy isolation.
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	cmd.Env = workspace.Environment()
+	cmd.Dir = workspace.Project
 	var out bytes.Buffer
 	cmd.Stdout = &observationWriter{destination: &out, remaining: 256 << 10}
 	cmd.Stderr = &observationWriter{destination: io.Discard, remaining: 256 << 10}

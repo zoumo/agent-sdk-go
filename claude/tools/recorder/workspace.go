@@ -23,16 +23,8 @@ func PrepareWorkspace(path, scene string) (_ *Workspace, err error) {
 	if err = canonicalPath(path); err != nil {
 		return nil, err
 	}
-	for p := path; ; p = filepath.Dir(p) {
-		if info, e := os.Lstat(filepath.Join(p, ".git")); e == nil {
-			_, headErr := os.Lstat(filepath.Join(p, ".git", "HEAD"))
-			if info.Mode().IsRegular() || headErr == nil {
-				return nil, fmt.Errorf("private capture must be outside Git")
-			}
-		}
-		if filepath.Dir(p) == p {
-			break
-		}
+	if err = outsideGit(path); err != nil {
+		return nil, err
 	}
 	if err = os.Mkdir(path, 0700); err != nil {
 		return nil, err
@@ -61,6 +53,9 @@ func PrepareWorkspace(path, scene string) (_ *Workspace, err error) {
 func (w *Workspace) validate() error {
 	if w == nil || w.Root != w.owned || w.Project != filepath.Join(w.owned, "project") || w.Config != filepath.Join(w.owned, "config") || w.Home != filepath.Join(w.owned, "home") || w.Temp != filepath.Join(w.owned, "tmp") {
 		return fmt.Errorf("owned synthetic workspace required")
+	}
+	if err := outsideGit(w.Root); err != nil {
+		return err
 	}
 	for _, p := range []string{w.Root, w.Project, w.Config, w.Home, w.Temp} {
 		if err := canonicalPath(p); err != nil {
@@ -130,8 +125,26 @@ func Arguments(scene string, w *Workspace) ([]string, error) {
 	}
 	settings := `{"disableAllHooks":true,"permissions":{"ask":[` + ask + `]}}`
 	args := []string{"--print", "--restricted", "--safe-mode", "--disable-slash-commands", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--no-chrome", "--setting-sources", "", "--settings", settings, "--tools", tools, "--max-budget-usd", "1", "--system-prompt", "You perform only the provided synthetic fixture task. No external context, extra tools, or extra turns. Be concise."}
+	if scene == "s1" {
+		args = append(args, "--model", "codex/gpt-6.1-sol")
+	}
 	if !p.Persist {
 		args = append(args, "--no-session-persistence")
 	}
 	return args, nil
+}
+
+func outsideGit(path string) error {
+	for p := path; ; p = filepath.Dir(p) {
+		if info, e := os.Lstat(filepath.Join(p, ".git")); e == nil {
+			_, headErr := os.Lstat(filepath.Join(p, ".git", "HEAD"))
+			if info.Mode().IsRegular() || headErr == nil {
+				return fmt.Errorf("private capture must be outside Git")
+			}
+		}
+		if filepath.Dir(p) == p {
+			break
+		}
+	}
+	return nil
 }

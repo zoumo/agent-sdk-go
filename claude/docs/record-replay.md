@@ -60,15 +60,18 @@ establishes neither story's successful path.
 
 ## Explicit recording/E2E entry point
 
-`claude/cmd/record` has no CI invocation. **Every real launch currently fails
-closed**, including direct proxy dispatch, before any version/help executable,
-configuration/auth lookup or capture directory creation. `recorder.Preflight`
-returns separate managed-policy-isolation and independent financial/token/
-generation/retry-enforcement blockers. No environment assertion or supplied
-boolean can satisfy these gates. `--safe-mode`, `disableAllHooks` and the observed
-hook guard cannot establish pre-launch isolation or disable mandatory policy.
+`claude/cmd/record` has no CI invocation. The default financial policy still
+refuses real launches. An explicitly approved `--financial-policy
+accept-uncertainty` does not claim a dollar/token hard stop and cannot bypass
+independent policy isolation. Only the [reviewed fixed Linux loopback S1
+profile](../../docs/validation/issue-12-policy.md) can establish that isolation:
+exact official 2.1.258 build digest, non-WSL Linux, absent system managed policy,
+fresh owned synthetic paths and a canonical loopback endpoint. Unknown builds,
+platforms, policy sources and endpoints still fail closed before executable
+probes. No mandatory policy is modified or hidden. The hook-event guard remains
+an additional post-start defense, not startup proof.
 
-Inspect the static plan without starting a real agent:
+Inspect the default static blockers without starting a real agent:
 
 ```sh
 go run ./claude/cmd/record --help
@@ -78,9 +81,17 @@ go run ./claude/cmd/record --mode preflight  # expected refusal, no CLI executed
 The manual launcher retains CI, explicit `record|e2e`,
 `SDK_REAL_AGENT_E2E=1`, absolute CLI, exact approved SHA256, source revision and
 new private-directory guards. It validates the exact 2.1.258 version string and
-required flag tokens only **after** independent preflight can pass; 2.1.310 is
-not accepted. This ticket has not run a native probe or established compatibility
-of another binary. No operator-supplied version claim proves native behavior.
+required flag tokens only after independent inspection; 2.1.310 is not accepted.
+Version/help execute with the same isolated replacement HOME/config/environment.
+The S1 launch specifies `codex/gpt-6.1-sol` explicitly through an independently
+approved short-lived Magpie bridge. Proxy/account availability remains a separate
+gate; missing historical paths do not establish authentication failure. This
+preparation has not executed a native probe or captured a new model result.
+
+A durable, single-use S1 `launch` claim records accepted financial uncertainty
+before the proxy starts its native process. It requires the preexisting parent
+reservation; direct proxy dispatch cannot reuse it. The other root plans remain
+available for offline tests, not executable through this narrow profile.
 
 The offline-tested root plans additionally implement:
 

@@ -93,3 +93,20 @@ func TestConcurrentReservationsChargeOnlyOneAttempt(t *testing.T) {
 	}
 	require.Equal(t, 1, succeeded)
 }
+
+func TestLiveLaunchClaimIsDurableSingleUseAndRecordsRiskPolicy(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	path := filepath.Join(base, "ledger")
+	ledger, err := recorder.OpenLedger(path)
+	require.NoError(t, err)
+	require.Error(t, ledger.ClaimLaunch("s1", recorder.AcceptFinancialUncertainty))
+	require.NoError(t, ledger.Reserve("s1"))
+	require.NoError(t, ledger.ClaimLaunch("s1", recorder.AcceptFinancialUncertainty))
+	reopened, err := recorder.OpenLedger(path)
+	require.NoError(t, err)
+	require.Error(t, reopened.ClaimLaunch("s1", recorder.AcceptFinancialUncertainty))
+	data, err := os.ReadFile(filepath.Join(path, "attempts.jsonl"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"financial_policy":"accept-uncertainty"`)
+}

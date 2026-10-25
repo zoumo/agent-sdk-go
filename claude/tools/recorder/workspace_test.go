@@ -44,3 +44,34 @@ func TestIsolatedPersistentWorkspaceAndExplicitQuery(t *testing.T) {
 	_, err = os.Stat(w.Root)
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+func TestExecutableS1SelectsExactProxyModel(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	w, err := recorder.PrepareWorkspace(filepath.Join(base, "fresh"), "s1")
+	require.NoError(t, err)
+	defer w.Cleanup()
+	args, err := recorder.Arguments("s1", w)
+	require.NoError(t, err)
+	found := false
+	for i, arg := range args {
+		if arg == "--model" {
+			require.Less(t, i+1, len(args))
+			require.Equal(t, "codex/gpt-6.1-sol", args[i+1])
+			found = true
+		}
+	}
+	require.True(t, found, "no implicit Claude alias or provider switch")
+}
+
+func TestWorkspaceRevalidationRejectsNewGitAncestry(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	w, err := recorder.PrepareWorkspace(filepath.Join(base, "fresh"), "s1")
+	require.NoError(t, err)
+	require.NoError(t, os.Mkdir(filepath.Join(base, ".git"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(base, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0600))
+	_, err = recorder.Arguments("s1", w)
+	require.ErrorContains(t, err, "outside Git")
+	require.NoError(t, w.Cleanup())
+}

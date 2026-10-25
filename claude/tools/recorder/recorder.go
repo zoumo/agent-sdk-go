@@ -31,6 +31,7 @@ func Run() (runErr error) {
 		return proxy()
 	}
 	mode := flag.String("mode", "", "preflight, record or e2e")
+	financial := flag.String("financial-policy", string(RequireFinancialCap), "require-hard-cap or explicitly approved accept-uncertainty (not launch authority)")
 	story := flag.String("story", "", "s1, s2, r1, r2 or r3 (root only)")
 	cli := flag.String("cli", "", "absolute approved CLI")
 	digest := flag.String("cli-sha256", "", "approved exact CLI SHA256")
@@ -40,7 +41,7 @@ func Run() (runErr error) {
 	sdkRevision := flag.String("sdk-revision", "", "explicit source revision when build provenance is unavailable")
 	flag.Parse()
 	if *mode == "preflight" {
-		return Preflight()
+		return Preflight(FinancialPolicy(*financial))
 	}
 	if err := transcript.LiveGuard(*mode, os.Getenv("SDK_REAL_AGENT_E2E"), os.Getenv("CI"), *cli); err != nil {
 		return err
@@ -53,20 +54,34 @@ func Run() (runErr error) {
 		return fmt.Errorf("R1 requires explicit synthetic-persistence; other scenes forbid persistence")
 	}
 	// No version/help executable or auth query can run before independent proof.
-	if err = Preflight(); err != nil {
-		return err
+	if FinancialPolicy(*financial) != AcceptFinancialUncertainty {
+		return Preflight(FinancialPolicy(*financial))
+	}
+	if *story != "s1" {
+		return errors.Join(ErrPolicyIsolation, fmt.Errorf("only reviewed single-root S1 proxy profile is executable"))
 	}
 	buildInfo, _ := debug.ReadBuildInfo()
 	provenance, err := recordingRevision(buildInfo, *sdkRevision)
 	if err != nil {
 		return err
 	}
-	ledger, err := OpenLedger(*ledgerPath)
+	workspace, err := PrepareWorkspace(*out, *story)
 	if err != nil {
 		return err
 	}
+	isolation, err := InspectIsolation(*cli, *digest, os.Getenv("ANTHROPIC_BASE_URL"), workspace)
+	if err == nil {
+		err = PreflightWithIsolation(FinancialPolicy(*financial), isolation)
+	}
+	if err != nil {
+		return errors.Join(err, workspace.Cleanup())
+	}
+	ledger, err := OpenLedger(*ledgerPath)
+	if err != nil {
+		return errors.Join(err, workspace.Cleanup())
+	}
 	if err = ledger.Reserve(*story); err != nil {
-		return err
+		return errors.Join(err, workspace.Cleanup())
 	}
 	driven := false
 	defer func() {
@@ -79,11 +94,7 @@ func Run() (runErr error) {
 	start := time.Now()
 	activity, stopActivity := activityContext(ctx)
 	defer stopActivity()
-	cliDigest, err := inspectCLI(activity, *cli, *digest)
-	if err != nil {
-		return err
-	}
-	workspace, err := PrepareWorkspace(*out, *story)
+	cliDigest, err := inspectCLI(activity, *cli, *digest, workspace)
 	if err != nil {
 		return err
 	}
@@ -91,7 +102,7 @@ func Run() (runErr error) {
 	if err != nil {
 		return err
 	}
-	env := append(workspace.Environment(), "SDK_REAL_AGENT_E2E=1", "TRANSCRIPT_MODE="+*mode, "TRANSCRIPT_RECORD_PEER=1", "TRANSCRIPT_CLI="+*cli, "TRANSCRIPT_PRIVATE="+*out, "TRANSCRIPT_STORY="+*story)
+	env := append(workspace.Environment(), "SDK_REAL_AGENT_E2E=1", "TRANSCRIPT_MODE="+*mode, "TRANSCRIPT_RECORD_PEER=1", "TRANSCRIPT_CLI="+*cli, "TRANSCRIPT_PRIVATE="+*out, "TRANSCRIPT_STORY="+*story, "TRANSCRIPT_FINANCIAL_POLICY="+*financial, "TRANSCRIPT_CLI_SHA256="+*digest, "TRANSCRIPT_LEDGER="+*ledgerPath)
 	observations, err := os.OpenFile(filepath.Join(*out, "observations.jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
@@ -103,7 +114,7 @@ func Run() (runErr error) {
 	}
 	driven = true
 	runErr = Drive(ctx, client, *story, workspace, ledger, observations)
-	summary := map[string]any{"story": *story, "seconds": time.Since(start).Seconds(), "root_attempts": 1, "reserved_turns": plan.Turns, "children": 0, "error": runErr != nil, "prompts": plan.Prompts, "cli_version": CLIVersion, "cli_sha256": cliDigest, "sdk_revision": provenance.Revision, "sdk_revision_source": provenance.Source, "sdk_modified": provenance.Modified, "synthetic_persistence": plan.Persist}
+	summary := map[string]any{"story": *story, "seconds": time.Since(start).Seconds(), "root_attempts": 1, "reserved_turns": plan.Turns, "children": 0, "error": runErr != nil, "prompts": plan.Prompts, "cli_version": CLIVersion, "cli_sha256": cliDigest, "sdk_revision": provenance.Revision, "sdk_revision_source": provenance.Source, "sdk_modified": provenance.Modified, "synthetic_persistence": plan.Persist, "model": "codex/gpt-6.1-sol", "financial_policy": *financial, "independent_monetary_token_hard_stop": false}
 	b, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
 		return errors.Join(runErr, err)
@@ -114,8 +125,15 @@ func proxy() error {
 	if err := transcript.LiveGuard(os.Getenv("TRANSCRIPT_MODE"), os.Getenv("SDK_REAL_AGENT_E2E"), os.Getenv("CI"), os.Getenv("TRANSCRIPT_CLI")); err != nil {
 		return err
 	}
-	if err := Preflight(); err != nil {
-		return err
+	financial := RequireFinancialCap
+	if value := os.Getenv("TRANSCRIPT_FINANCIAL_POLICY"); value != "" {
+		financial = FinancialPolicy(value)
+	}
+	if financial != AcceptFinancialUncertainty {
+		return Preflight(financial)
+	}
+	if os.Getenv("TRANSCRIPT_CLI_SHA256") != ReviewedLinuxCLISHA256 || os.Getenv("TRANSCRIPT_STORY") != "s1" {
+		return ErrPolicyIsolation
 	}
 	if _, err := Plan(os.Getenv("TRANSCRIPT_STORY")); err != nil {
 		return err
@@ -124,6 +142,17 @@ func proxy() error {
 	workspace := &Workspace{Root: dir, Project: filepath.Join(dir, "project"), Config: filepath.Join(dir, "config"), Home: filepath.Join(dir, "home"), Temp: filepath.Join(dir, "tmp"), owned: dir}
 	var err error
 	workspace.identity, err = os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	isolation, err := InspectIsolation(os.Getenv("TRANSCRIPT_CLI"), os.Getenv("TRANSCRIPT_CLI_SHA256"), os.Getenv("ANTHROPIC_BASE_URL"), workspace)
+	if err != nil {
+		return err
+	}
+	if err = PreflightWithIsolation(financial, isolation); err != nil {
+		return err
+	}
+	ledger, err := OpenLedger(os.Getenv("TRANSCRIPT_LEDGER"))
 	if err != nil {
 		return err
 	}
@@ -143,6 +172,7 @@ func proxy() error {
 	cmd := exec.CommandContext(ctx, os.Getenv("TRANSCRIPT_CLI"), args...)
 	// Parent SDK owns a process group; descendants remain in it for bounded Close.
 	cmd.Env = workspace.Environment()
+	cmd.Dir = workspace.Project
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
@@ -165,8 +195,10 @@ func proxy() error {
 		return err
 	}
 	defer diagnostics.Close()
+	wireGuard := NewRootWireGuard(workspace.Project, ledger)
 	var mu sync.Mutex
 	ordinal, total := 0, 0
+	var policyErr error
 	transfer := func(src io.Reader, dst io.Writer, direction string) error {
 		scanner := bufio.NewScanner(src)
 		scanner.Buffer(make([]byte, 4096), 2<<20)
@@ -178,6 +210,12 @@ func proxy() error {
 				mu.Unlock()
 				cancel()
 				return fmt.Errorf("protocol byte limit")
+			}
+			if e := wireGuard.Check(direction, b); e != nil {
+				policyErr = errors.Join(policyErr, e)
+				mu.Unlock()
+				cancel()
+				return e
 			}
 			ordinal++
 			channel := "protocol"
@@ -211,6 +249,12 @@ func proxy() error {
 		}
 		return nil
 	}
+	if err = isolation.validate(); err != nil {
+		return err
+	}
+	if err = ledger.ClaimLaunch("s1", financial); err != nil {
+		return err
+	}
 	if err = cmd.Start(); err != nil {
 		return err
 	}
@@ -232,13 +276,10 @@ func proxy() error {
 	}()
 	first, second := <-errCh, <-errCh
 	waitErr := cmd.Wait()
-	if first != nil {
-		return first
-	}
-	if second != nil {
-		return second
-	}
-	return waitErr
+	mu.Lock()
+	observedPolicyErr := policyErr
+	mu.Unlock()
+	return errors.Join(first, second, waitErr, observedPolicyErr)
 }
 
 func exactOptions(v any) bool { return exactLabels(v, "Blue", "Green") }

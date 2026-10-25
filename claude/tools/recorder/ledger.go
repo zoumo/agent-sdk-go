@@ -19,14 +19,17 @@ type Ledger struct {
 	identity os.FileInfo
 }
 type ledgerEntry struct {
-	Sequence int    `json:"sequence"`
-	Scene    string `json:"scene"`
-	Action   string `json:"action"`
-	Outcome  string `json:"outcome,omitempty"`
+	Sequence        int             `json:"sequence"`
+	FinancialPolicy FinancialPolicy `json:"financial_policy,omitempty"`
+	Scene           string          `json:"scene"`
+	Action          string          `json:"action"`
+	Outcome         string          `json:"outcome,omitempty"`
 }
 type attemptState struct {
-	turns   int
-	outcome string
+	launched   bool
+	dispatched bool
+	turns      int
+	outcome    string
 }
 
 // OpenLedger accepts only a canonical private directory. Legacy story markers
@@ -63,6 +66,15 @@ func OpenLedger(path string) (*Ledger, error) {
 // allowance before startup, including failures with no native telemetry.
 func (l *Ledger) Reserve(scene string) error { return l.append(scene, "reserve", "") }
 
+// ClaimLaunch durably claims the sole native S1 process before Start. Direct
+// proxy invocation cannot reuse a reservation or omit the accepted risk policy.
+func (l *Ledger) ClaimLaunch(scene string, policy FinancialPolicy) error {
+	return l.append(scene, "launch", "", policy)
+}
+
+// Dispatch consumes one durable parent intent at the actual live wire boundary.
+func (l *Ledger) Dispatch(scene string) error { return l.append(scene, "dispatch", "") }
+
 // Turn persists dispatch intent before Submit; unknown delivery never refunds it.
 func (l *Ledger) Turn(scene string) error { return l.append(scene, "turn", "") }
 
@@ -75,7 +87,7 @@ func (l *Ledger) Finish(scene string, success bool) error {
 	}
 	return l.append(scene, "finish", outcome)
 }
-func (l *Ledger) append(scene, action, outcome string) error {
+func (l *Ledger) append(scene, action, outcome string, financial ...FinancialPolicy) error {
 	if _, err := Plan(scene); err != nil {
 		return err
 	}
@@ -144,6 +156,9 @@ func (l *Ledger) append(scene, action, outcome string) error {
 		}
 	}
 	next := ledgerEntry{Sequence: count + 1, Scene: scene, Action: action, Outcome: outcome}
+	if len(financial) == 1 {
+		next.FinancialPolicy = financial[0]
+	}
 	if err := applyEntry(state, next); err != nil {
 		return err
 	}
@@ -168,6 +183,9 @@ func applyEntry(state map[string]attemptState, e ledgerEntry) error {
 		return err
 	}
 	s, exists := state[e.Scene]
+	if e.Action != "launch" && e.FinancialPolicy != "" {
+		return fmt.Errorf("financial policy only belongs to a launch claim")
+	}
 	switch e.Action {
 	case "reserve":
 		if exists || e.Outcome != "" {
@@ -186,6 +204,18 @@ func applyEntry(state map[string]attemptState, e ledgerEntry) error {
 			return fmt.Errorf("aggregate root/turn budget exhausted")
 		}
 		state[e.Scene] = attemptState{}
+	case "launch":
+		if e.Scene != "s1" || len(state) != 1 || !exists || s.launched || s.outcome != "" || s.turns != 0 || e.Outcome != "" || e.FinancialPolicy != AcceptFinancialUncertainty {
+			return fmt.Errorf("native launch not authorized or already claimed")
+		}
+		s.launched = true
+		state[e.Scene] = s
+	case "dispatch":
+		if e.Scene != "s1" || !exists || !s.launched || s.dispatched || s.outcome != "" || s.turns != 1 || e.Outcome != "" {
+			return fmt.Errorf("wire dispatch missing intent or already consumed")
+		}
+		s.dispatched = true
+		state[e.Scene] = s
 	case "turn":
 		if !exists || s.outcome != "" || s.turns >= plan.Turns || e.Outcome != "" {
 			return fmt.Errorf("turn not authorized")

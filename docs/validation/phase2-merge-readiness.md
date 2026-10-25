@@ -313,3 +313,29 @@ three existing repetitions each time (30 replays) in 30.967 seconds. No sleep,
 retry-until-green, discarded native error, weakened matcher, real CLI/model or
 new recording is part of the repair. Complete gates and independent review are
 repeated for the combined matrix/tool change before final publication.
+
+## Configuration-cancel write boundary
+
+The next full race run passed after the replay repair. Full offline then exposed
+Claude TestSessionConfigurationCanceledAfterWriteIsUnknownWithoutRetry/cancel at
+the strict healthy-connection assertion: peer reception of the control did not
+prove the local Write's cancellation hook had been stopped. Cancel could still
+interrupt that write and correctly terminate the connection with an unknown
+outcome. The failed run remains retained. A separate pre-fix focused cancel race
+count=100 happened to pass; that is not evidence that the observed failure was
+fixed and was not substituted for the failing full run.
+
+Ticket 04 adds a public native control acknowledgment before the deliberate
+manual cancellation. It traverses the same serialized writer, establishing that
+the earlier write and its callback cleanup have settled. The unanswered model
+configuration must still return OutcomeUnknown, the Session must remain healthy,
+and subsequent thinking configuration and Close must succeed. The 100ms timeout
+case and its deadline are untouched. Exact trace assertions now include the
+intentional interrupt barrier and require the precise subtype sequence, including
+exactly one set_model; no retry or extra operation is permitted. Native SDK code
+and write-cancellation semantics remain unchanged.
+
+Both cancel and timeout subcases then passed race count=100 in 12.647 seconds.
+No sleeps, enlarged deadline, discarded error or relaxed healthy-state assertion
+was added. This fixes the test's claimed after-write schedule, not the behavior
+of actual in-progress writes, whose strict unknown/termination tests remain.

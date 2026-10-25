@@ -24,8 +24,9 @@ standard-library-only types packages, native protocol inventory, reproducible
 Codex generation, sanitization canaries and recordings, unit/subprocess tests, and
 all runnable offline examples. Validation uses `GOMAXPROCS=2`, package scheduling
 `-p=1`, and `GORACE=atexit_sleep_ms=0` to bound concurrent test load and avoid
-per-subprocess race-detector exit sleeps. CI runs the same checks, race and vet on Linux and
-macOS. Every example compiles with `go test ./...`.
+per-subprocess race-detector exit sleeps. CI runs the same checks, race and vet on
+`ubuntu-24.04`, `macos-15` and `macos-26`. macOS 15 remains an explicit target;
+macOS 26 is additive. Every example compiles with `go test ./...`.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -83,8 +84,11 @@ ordered drain after disconnection. Shared FIFO tests cover cancellation, atomic
 batches, concurrent producers, close/abort races and reference release. See the
 [event delivery contract](../harness/contracts/event-delivery.md).
 
-External consumer CI runs on Linux/macOS for pushed `main` commits and manual
-workflow runs, targeting `github.sha`. PR offline checks remain separate because
+External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
+matrix for pushed `main` commits and manual workflow runs, targeting `github.sha`.
+These events configure six jobs (three Offline and three External consumer);
+PRs configure the three Offline jobs and exclude fetched consumers. Configured
+coverage does not prove that any runner executed. PR checks remain separate because
 synthetic merge SHAs may not be retrievable as Go module versions. See
 [release readiness](releasing.md) for the required exact-commit CI evidence.
 

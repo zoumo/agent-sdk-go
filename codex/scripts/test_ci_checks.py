@@ -1,6 +1,7 @@
 """Exercise the real gates against isolated committed Git fixtures."""
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,6 +10,21 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class WorkflowCoverage(unittest.TestCase):
+    def test_offline_and_consumers_retain_macos15_and_add_macos26(self):
+        workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
+        jobs = dict(re.findall(
+            r"(?ms)^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:\n|\Z)", workflow))
+        for job in ("test", "consumer"):
+            with self.subTest(job=job):
+                self.assertIn(job, jobs)
+                matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", jobs[job])
+                self.assertIsNotNone(matrix, "expected an explicit OS matrix: " + job)
+                labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
+                self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
+                self.assertIn("    runs-on: ${{ matrix.os }}", jobs[job])
 
 
 class CIGates(unittest.TestCase):

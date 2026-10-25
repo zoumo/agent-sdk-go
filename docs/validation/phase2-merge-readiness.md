@@ -229,3 +229,42 @@ Claude cleanup race100: `97b4571bd2792511780dd8a42a3d101efb19f15cf8680ffd0d963d6
 All logs, the separate short spec/ticket, before/after checks and publication
 receipt remain in `.scratch/phase2-merge-readiness/`. They contain synthetic
 protocol/test results, not real session material or credentials.
+
+## macOS 26 matrix follow-up
+
+Base: `e922c0b81f39b897e3c0a70e72157fdb09c88014`.
+The user explicitly requested retaining macOS 15 and adding macOS 26 to both
+Offline and External consumer coverage. Ticket/spec are recorded separately in
+`.scratch/phase2-merge-readiness/issues/02-macos26-matrix.md` and spec.md.
+
+Both existing ci.yml matrices now declare `ubuntu-24.04`, `macos-15`, `macos-26`.
+This expands main push/manual dispatch to **six jobs**: three Offline and three
+External consumer. PRs retain three Offline jobs; the consumer exclusion remains.
+Prior four-job receipts in this report describe their older exact commits and
+are not rewritten. Current testing/release instructions now require all six
+jobs on the intended SHA. Action/compiler/interpreter pins, permissions,
+concurrency, triggers, checks, opt-out gates and timeout budgets are unchanged.
+
+GitHub's [official macOS 26 runner announcement](https://github.blog/changelog/2026-02-26-macos-26-is-now-generally-available-for-github-hosted-runners/)
+confirms the explicit macos-26 standard label. It is used as an additional named
+OS target, rather than replacing macOS 15 or depending on a moving latest label.
+This source check establishes label availability, not successful execution of
+our pinned toolchain or tests on that host.
+
+TDD: a new WorkflowCoverage case in the existing native Python CI-gate tests
+reads the actual workflow's two job matrices and checks the independently stated
+three-label requirement plus matrix-based runs-on. It initially failed separately
+for both missing macos-26 entries; changing only the two OS lists made it pass.
+It also guards accidental removal of macOS 15 or a one-job-only update. No YAML
+package or new validation framework was added. The first broad Python invocation
+lacked mise's gofmt and also failed the existing generator test; rerunning the
+focused red under mise isolated only the two intended matrix failures. All seven
+Python CI-gate tests passed after the matrix change under the pinned environment.
+
+This follow-up does not alter production code, approval scheduling fixes,
+recordings or the incorporated main ADR documents. Final local checks, reviews
+and exact publication receipts follow in the ticket/handoff. The previous gh
+Forbidden is respected: no retry, alternate identity or route is used to dispatch.
+No PR, main merge or remote CI execution is claimed. A user/parent with appropriate
+access must run SDK checks on the final branch/SHA and inspect all six jobs;
+configured macOS coverage is not a macOS pass.

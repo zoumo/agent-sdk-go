@@ -11,7 +11,9 @@ import (
 )
 
 func TestDurableReservationsSurviveReopenAndFailure(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ledger")
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	path := filepath.Join(base, "ledger")
 	l, err := recorder.OpenLedger(path)
 	require.NoError(t, err)
 	require.NoError(t, l.Reserve("r1"))

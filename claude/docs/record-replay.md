@@ -60,26 +60,84 @@ establishes neither story's successful path.
 
 ## Explicit recording/E2E entry point
 
-The manual `claude/cmd/record` is separate from all tests/examples and has no CI invocation. It refuses any nonempty `CI`, requires both `--mode record|e2e` and `SDK_REAL_AGENT_E2E=1`, an absolute approved CLI path, an absolute new private directory and an absolute durable `--session-ledger`. Reuse one ledger for the authorized recording session: each supported S1/S2 story is reserved exactly once before startup, with no retry, resume or extra turn; S3 is not implemented. Guard refusal is tested offline. The initialization probe’s `CLAUDE_E2E` flag cannot enable it.
+`claude/cmd/record` has no CI invocation. **Every real launch currently fails
+closed**, including direct proxy dispatch, before any version/help executable,
+configuration/auth lookup or capture directory creation. `recorder.Preflight`
+returns separate managed-policy-isolation and independent financial/token/
+generation/retry-enforcement blockers. No environment assertion or supplied
+boolean can satisfy these gates. `--safe-mode`, `disableAllHooks` and the observed
+hook guard cannot establish pre-launch isolation or disable mandatory policy.
 
-From the repository root, inspect the flags without starting a real agent:
+Inspect the static plan without starting a real agent:
 
 ```sh
 go run ./claude/cmd/record --help
+go run ./claude/cmd/record --mode preflight  # expected refusal, no CLI executed
 ```
 
-An explicitly authorized future recording uses the same entry point:
+The manual launcher retains CI, explicit `record|e2e`,
+`SDK_REAL_AGENT_E2E=1`, absolute CLI, exact approved SHA256, source revision and
+new private-directory guards. It validates the exact 2.1.258 version string and
+required flag tokens only **after** independent preflight can pass; 2.1.310 is
+not accepted. This ticket has not run a native probe or established compatibility
+of another binary. No operator-supplied version claim proves native behavior.
 
-```sh
-SDK_REAL_AGENT_E2E=1 go run ./claude/cmd/record \
-  --mode record --story s1 --cli /absolute/path/to/pinned/native/claude \
-  --private-dir /absolute/new-private-recording \
-  --session-ledger /absolute/durable-session-ledger
-```
+The offline-tested root plans additionally implement:
 
-Each supported story has a 120-second deadline including initialization, 30-second initialization bound, 3-second SDK shutdown, 2 MiB combined wire and 256 KiB stderr cap. There are at most two supported 120-second stories per ledger (less than the authorized 480-second ceiling). A deadline/limit aborts the process and marks failure. Read/Write and AskUserQuestion have exact synthetic policies; S1 completion requires two approvals and the exact output file, S2 requires one matching original question answered Blue. Unknown/outside/symlink paths are denied. The CLI restricted tool sandbox provides the directory boundary; the callback alone cannot constrain auto-approved tools, and the ask-policy behavior was **not** exercised by this failed attempt.
+- **R1:** Ready/Done ordinary inputs in the same Session, one SetModel(default)
+  and SetThinking(clear) between them; preserve native receipts/rejections and
+  leave `Observed` unasserted. Requires `--synthetic-persistence` and a newly
+  owned HOME/ConfigDir/project/tmp. It omits `--no-session-persistence` only for
+  this explicit mode. Other modes forbid persistence. Creation model/settings
+  and actual native persistence still require the #12 approved run table.
+- **R2:** exact Read once and Write deny once, then one original
+  AskUserQuestion with `Which synthetic color?` (Blue/Green) and
+  `Enter a short label.` (sample/other), answered Blue/sample. Hold the first
+  original request while a clear-thinking control and Receive progress; a
+  missing barrier stops without retry. Denial is not write success.
+- **R3:** on a native root stream-event barrier submit the one extra input and
+  Interrupt once. No barrier means untriggered; no replacement turn. A receipt
+  does not assert an interrupted terminal outcome or steer semantics.
+- **R4:** use existing ListSessions/GetSessionInfo/GetSessionMessages with only
+  R1's explicit isolated ConfigDir/project. No launcher, resume, default-history
+  scan or independent child API is added. Saved content is not a wire-event log.
 
-Approved version is 2.1.258. The future entry point passes existing recognized authentication environment variables opaquely rather than inspecting/logging their values; the first attempt had retained only HOME/PATH/TMPDIR. No change was used for a second attempt. The explicit mode is not proof of a successful E2E run. Fixing authentication or managed-hook isolation is outside the recording workflow; do not rerun automatically. The public workflow keeps all live flags zero, uses no model secrets, and only runs offline replay/example/scans.
+`recorder.Drive` operates an already opened native Session and owns cleanup;
+its caller must reserve the ledger before Open. Offline regressions use only
+re-executed synthetic mock peers and public native Session/query APIs. Plans
+are tooling support, not successful real captures.
+
+One canonical private aggregate ledger (`attempts.jsonl`, 0600 in 0700) is shared
+across tickets. Atomic crash-preserving locks, append + file/directory fsync and
+strict bounded parsing retain every root reservation, turn dispatch intent and
+cleanup-inclusive outcome. A reservation charges the scene's entire turn
+allowance before startup; every Submit adds its durable dispatch intent. At most
+three root reservations and six reserved turns fit one ledger. Each scene is
+single-use; failed/unfinished attempts block all later scenes. Torn/unknown
+records, legacy `.attempt` files, unsafe paths and stale crash locks refuse
+rather than reset/migrate/refund. The coordinator must reconcile historical
+spent ledgers; a new path never grants new authority.
+
+Every scene retains a 120-second deadline including initialization (30 seconds)
+and cleanup (3 seconds), 2 MiB wire and observations, 256 KiB stderr; no scene
+retry/resume/child/extra turn. These bounds cannot independently enforce provider
+requests, retries, tokens or money. The [#12 handoff](../../docs/validation/issue-10.md)
+records requested cumulative ceilings and remaining gates.
+
+Recognized operator-provided `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and
+`ANTHROPIC_BASE_URL` are passed opaquely to an isolated environment only after
+launch authority exists. Values are never inspected, copied from personal or
+platform configuration, logged or repaired. Their presence is not usable-auth
+proof. The original minimal-environment auth failure says nothing about current
+account availability.
+
+Publication requires explicit 2.1.258 source identity matching private status and
+native init fields. The publisher uses a frozen per-version key allowlist and
+rejects unknown wrappers, duplicate JSON keys and unreviewed versions before
+creating output. ReplayRecording rejects other source versions and mismatched
+native init versions; replay rejects unknown wrapper fields while preserving
+unknown native fields exactly. Unknown publication data remains quarantined,
+not ignored. Originals and manifest hashes are unchanged.
 
 ## Source revision for new recordings
 

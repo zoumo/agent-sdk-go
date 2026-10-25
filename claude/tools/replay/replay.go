@@ -39,12 +39,17 @@ var ErrDisconnected = errors.New("scenario disconnected")
 type ReplayOptions struct {
 	Context   context.Context
 	MaxFrames int
+	// CLIVersion is empty for synthetic peers; recordings require the exact reviewed version.
+	CLIVersion string
 }
 
 // ReplayWithOptions uses the same matcher and ID state as recorded replay.
 // Synthetic frames may delay up to 30 seconds or use direction "disconnect"
 // with an empty data field to deliberately terminate pending work.
 func ReplayWithOptions(input io.Reader, output io.Writer, capture io.Reader, complete func() error, options ReplayOptions) error {
+	if options.CLIVersion != "" && options.CLIVersion != RecordingVersion {
+		return fmt.Errorf("unreviewed recording CLI version")
+	}
 	ctx := options.Context
 	if ctx == nil {
 		ctx = context.Background()
@@ -72,8 +77,14 @@ func ReplayWithOptions(input io.Reader, output io.Writer, capture io.Reader, com
 	ordinal := 0
 	for frames.Scan() {
 		var f Frame
-		if err := json.Unmarshal(frames.Bytes(), &f); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(frames.Bytes()))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&f); err != nil {
 			return fmt.Errorf("invalid capture frame")
+		}
+		var extra any
+		if decoder.Decode(&extra) != io.EOF {
+			return fmt.Errorf("trailing capture JSON")
 		}
 		ordinal++
 		if ordinal > maxFrames {
@@ -112,6 +123,13 @@ func ReplayWithOptions(input io.Reader, output io.Writer, capture io.Reader, com
 		var expected any
 		if err := decodeJSON(f.Data, &expected); err != nil {
 			return fmt.Errorf("invalid native JSON at %d", ordinal)
+		}
+		native, ok := expected.(map[string]any)
+		if !ok {
+			return fmt.Errorf("native frame must be an object at %d", ordinal)
+		}
+		if version, present := native["claude_code_version"]; present && options.CLIVersion != "" && version != options.CLIVersion {
+			return fmt.Errorf("native source version mismatch at %d", ordinal)
 		}
 		switch f.Direction {
 		case "client":

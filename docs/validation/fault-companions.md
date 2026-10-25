@@ -91,7 +91,11 @@ Claude's blocked-write peer reads exactly one prefix byte, signals over a bounde
 loopback channel and waits for explicit release. There is no filesystem polling,
 sleep-to-pass or partial-frame retry. Codex cancellation uses the public native
 submitted marker before canceling the local wait. Active-write ambiguity and
-settled-write/wait cancellation remain different native cases.
+settled-write/wait cancellation remain different native cases. The public Codex
+mock SDK late-response test likewise uses a native `synthetic/dispatched` marker,
+then local cancellation with OutcomeUnknown, then an explicit `synthetic/release`
+request before the late response. It has no millisecond scheduling race; existing
+controlled-time tests continue to verify actual timeout budgets.
 
 Existing finer-grained timing gates remain authoritative: Codex
 [TestDefaultCallTimeoutWithControlledTime](../../codex/client_timeout_test.go)

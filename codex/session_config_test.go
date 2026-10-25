@@ -138,14 +138,12 @@ func TestSessionConfigurationNativeRejectionPreservesRequestAndSession(t *testin
 	require.NoError(t, err) // unknown native restrictions go to the peer, not a guessed enum gate
 }
 
-func TestSessionConfigurationUnknownAfterCancelCloseAndTimeout(t *testing.T) {
-	for _, mode := range []string{"cancel", "close", "timeout"} {
+func TestSessionConfigurationUnknownAfterCancelAndClose(t *testing.T) {
+	for _, mode := range []string{"cancel", "close"} {
 		t.Run(mode, func(t *testing.T) {
-			limits := codex.Limits{}
-			if mode == "timeout" {
-				limits.CallTimeout = 50 * time.Millisecond
-			}
-			f := startFake(t, "session-config", limits)
+			// The deadline case uses controlled time in client_timeout_test.go so
+			// process initialization cannot consume its configuration budget.
+			f := startFake(t, "session-config", codex.Limits{})
 			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = s.Close() })
@@ -154,6 +152,9 @@ func TestSessionConfigurationUnknownAfterCancelCloseAndTimeout(t *testing.T) {
 			result := make(chan error, 1)
 			go func() { _, err := s.SetModel(ctx, "native-withhold"); result <- err }()
 			waitTrace(t, f.trace, "thread/settings/update")
+			// The peer can trace the request before the writer settles. A later
+			// acknowledged call proves cancellation will not interrupt that write.
+			require.NoError(t, f.c.Call(context.Background(), "echo", json.RawMessage(`{}`), nil))
 			if mode == "cancel" {
 				cancel()
 			}
@@ -165,6 +166,12 @@ func TestSessionConfigurationUnknownAfterCancelCloseAndTimeout(t *testing.T) {
 				var call *codex.CallError
 				require.ErrorAs(t, err, &call)
 				require.Equal(t, codex.OutcomeUnknown, call.Dispatch)
+				require.Equal(t, "thread/settings/update", call.Method)
+				cause := error(context.Canceled)
+				if mode == "close" {
+					cause = codex.ErrClosed
+				}
+				require.ErrorIs(t, err, cause)
 			case <-time.After(time.Second):
 				t.Fatal("configuration wait did not end")
 			}

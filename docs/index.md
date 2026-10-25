@@ -21,3 +21,4 @@
 - [Codex 独立历史查询切片验证](reviews/2026-10-25-codex-history-query.md)
 
 - [阶段二历史查询整合验收与后续真实测试入口](validation/history-query-integration.md)
+- [Phase 2 可合并收尾与审批调度验证](validation/phase2-merge-readiness.md)

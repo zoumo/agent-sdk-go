@@ -939,32 +939,48 @@ func TestMalformedServerRequestEnvelopeTerminates(t *testing.T) {
 	}
 }
 
+// Both callers are concurrent, with barriers selecting each side of the native
+// dispatch boundary. An unrestricted race can also resolve during a write and
+// legitimately return OutcomeUnknown; blocked-write tests cover that third state.
 func runConcurrentAnswerAndNativeResolutionHaveOneOutcome(t *testing.T, f fixture) {
 	f = ownRequestFixture(t, f)
 	for iteration := range 16 {
 		id := fmt.Sprint(iteration + 2000)
 		emitRequests(t, f.c, requestFrame(id, "item/commandExecution/requestApproval", approvalParams))
 		r := nextOwnedRequest(t, f)
-		start := make(chan struct{})
+		entered, release, settled := make(chan struct{}), make(chan struct{}), make(chan struct{})
+		var releaseOnce, settledOnce sync.Once
+		releaseAnswer := func() { releaseOnce.Do(func() { close(release) }) }
+		releaseResolution := func() { settledOnce.Do(func() { close(settled) }) }
+		t.Cleanup(releaseAnswer)
+		t.Cleanup(releaseResolution)
 		answer, resolved := make(chan error, 1), make(chan error, 1)
 		go func() {
-			<-start
-			answer <- r.Handle().Answer(context.Background(), "caller choice")
+			answer <- r.Handle().Answer(context.Background(), heldAnswerMarshaler{entered: entered, release: release})
 		}()
+		select {
+		case <-entered: // Native answer remains in caller serialization, before admission.
+		case <-time.After(3 * time.Second):
+			require.FailNow(t, "answer never reached caller serialization barrier")
+		}
+		resolveFirst := iteration%2 == 0
 		go func() {
-			<-start
+			if !resolveFirst {
+				<-settled
+			}
 			resolved <- f.c.Call(context.Background(), "request-frames", []string{`{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":` + id + `}}`}, nil)
 		}()
-		close(start)
-		answerErr := <-answer
-		{
-			err := <-resolved
-			require.NoError(t, err)
-		}
 		cause, want := codex.ErrRequestAnswered, 1
-		if answerErr != nil {
+		if resolveFirst {
+			require.NoError(t, <-resolved)
+			releaseAnswer()
+			answerError(t, <-answer, r, codex.NotSent, codex.ErrRequestResolved)
 			cause, want = codex.ErrRequestResolved, 0
-			answerError(t, answerErr, r, codex.NotSent, codex.ErrRequestResolved)
+		} else {
+			releaseAnswer()
+			require.NoError(t, <-answer)
+			releaseResolution()
+			require.NoError(t, <-resolved)
 		}
 		awaitAnswer(t, r.Handle(), cause)
 		responseBarrier(t, f)
@@ -972,9 +988,11 @@ func runConcurrentAnswerAndNativeResolutionHaveOneOutcome(t *testing.T, f fixtur
 		for _, frame := range answerFrames(t, f.trace) {
 			if string(frame["id"]) == id {
 				n++
+				require.JSONEq(t, `{"late":"marshaled"}`, string(frame["result"]))
 			}
 		}
-		require.Equal(t, want, n, "Answer/resolution race emitted %d responses, want %d", n, want)
+		require.Equal(t, want, n, "Answer/resolution boundary emitted %d responses, want %d", n, want)
+		answerError(t, r.Handle().Answer(context.Background(), "retry"), r, codex.NotSent, cause)
 	}
 }
 

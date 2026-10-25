@@ -1862,3 +1862,38 @@ func checkClaudeMetadataNestedSampleProvenance(s *CommonStoriesSuite) {
 		})
 	}
 }
+
+func codexIndependentHistory(t *testing.T) {
+	ctx := deadline(t)
+	exe, err := os.Executable()
+	must(t, err)
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"SDK_STORY_PEER=codex", "SDK_STORY=US-014", "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "history-story", Version: "synthetic"}}})
+	must(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+	page, err := c.ListThreads(ctx, ct.ThreadListParams{})
+	must(t, err)
+	require.Len(t, page.Data, 1)
+	id := page.Data[0].ID
+	assert.Equal(t, "saved", id)
+	read, err := c.ReadThread(ctx, ct.ThreadReadParams{ThreadID: id, IncludeTurns: ct.Some(false)})
+	must(t, err)
+	assert.Equal(t, "preview", read.Thread.Preview)
+	assert.Empty(t, read.Thread.Turns)
+	assert.JSONEq(t, `{"future":true}`, string(read.UnknownFields["readState"]))
+	turns, err := c.ListThreadTurns(ctx, ct.ThreadTurnsListParams{ThreadID: id})
+	must(t, err)
+	require.Len(t, turns.Data, 1)
+	assert.Equal(t, "turn", turns.Data[0].ID)
+	assert.Empty(t, turns.Data[0].Items, "summary is not full content")
+	tail, err := c.ListThreadTurns(ctx, ct.ThreadTurnsListParams{ThreadID: id, Cursor: turns.NextCursor})
+	must(t, err)
+	assert.Empty(t, tail.Data)
+	assert.True(t, tail.NextCursor.IsNull())
+	items, err := c.ListThreadItems(ctx, ct.ThreadItemsListParams{ThreadID: id, TurnID: ct.Some("turn")})
+	must(t, err)
+	require.Len(t, items.Data, 1)
+	assert.JSONEq(t, `{"type":"futureItem","id":"item","n":9007199254740993}`, string(items.Data[0].Item.Unknown))
+	var methods []string
+	must(t, c.Call(ctx, "fixture/query-trace", nil, &methods))
+	assert.Equal(t, []string{"initialize", "initialized", "thread/list", "thread/read", "thread/turns/list", "thread/turns/list", "thread/items/list", "fixture/query-trace"}, methods, "query must not start/resume/subscribe/submit/answer")
+}

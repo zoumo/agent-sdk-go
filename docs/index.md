@@ -18,3 +18,4 @@
 - [两套原生实现的合同裁决与改造提案](reviews/2026-10-25-session-architecture-integration.md)
 
 - [Claude 独立发现与 metadata](../claude/docs/session-metadata.md)
+- [Codex 独立历史查询切片验证](reviews/2026-10-25-codex-history-query.md)

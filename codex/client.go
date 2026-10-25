@@ -212,6 +212,17 @@ func (c *Client) StartThread(ctx context.Context, p types.ThreadStartParams) (ty
 	err := c.Call(ctx, "thread/start", p, &r)
 	return r, err
 }
+
+// ListThreads returns one native thread/list page. It does not create a Session,
+// attach threads, or fetch further pages. Defaults and filters belong to the server.
+func (c *Client) ListThreads(ctx context.Context, p types.ThreadListParams) (types.ThreadListResponse, error) {
+	var r types.ThreadListResponse
+	err := c.Call(ctx, "thread/list", p, &r)
+	return r, err
+}
+
+// ReadThread reads native metadata (prefer IncludeTurns: types.Some(false)).
+// It does not resume or subscribe, even when this connection owns a Session.
 func (c *Client) ReadThread(ctx context.Context, p types.ThreadReadParams) (types.ThreadReadResponse, error) {
 	var r types.ThreadReadResponse
 	err := c.Call(ctx, "thread/read", p, &r)

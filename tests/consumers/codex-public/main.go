@@ -21,6 +21,11 @@ func main() {
 	var _ func(*codex.Session, context.Context) (codex.Received, error) = (*codex.Session).Receive
 	var _ func(codex.IncomingRequest, context.Context, types.ToolRequestUserInputResponse) error = codex.IncomingRequest.Answer
 
+	var _ func(*codex.Client, context.Context, types.ThreadListParams) (types.ThreadListResponse, error) = (*codex.Client).ListThreads
+	var _ func(*codex.Client, context.Context, types.ThreadReadParams) (types.ThreadReadResponse, error) = (*codex.Client).ReadThread
+	var _ func(*codex.Client, context.Context, types.ThreadTurnsListParams) (types.ThreadTurnsListResponse, error) = (*codex.Client).ListThreadTurns
+	var _ func(*codex.Client, context.Context, types.ThreadItemsListParams) (types.ThreadItemsListResponse, error) = (*codex.Client).ListThreadItems
+
 	_ = types.Event{}
 	if reflect.TypeOf(params).PkgPath() != "github.com/zoumo/agent-sdk-go/codex/types" {
 		panic("unexpected native package identity")

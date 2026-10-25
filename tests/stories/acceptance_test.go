@@ -1389,14 +1389,21 @@ func checkClaudeQueryScope(s *CommonStoriesSuite) {
 	s.Run("explicit-project", func() {
 		t := s.T()
 		scope, path := claudeQueryFixture(t, valid)
-		project := t.TempDir()
+		target := t.TempDir()
+		project := filepath.Join(t.TempDir(), "project-alias")
+		require.NoError(t, os.Symlink(target, project))
 		scope.ProjectDir = project
-		key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(project, "-")
+		// ProjectDir is canonicalized by contract. Keep the alias as input,
+		// but place synthetic storage under the actual project's native key.
+		canonical, err := filepath.EvalSymlinks(project)
+		require.NoError(t, err)
+		key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(canonical, "-")
 		dest := filepath.Join(scope.ConfigDir, "projects", key)
 		require.NoError(t, os.Rename(filepath.Dir(path), dest))
 		p, e := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
 		require.NoError(t, e)
 		require.Len(t, p.Messages, 1)
+		require.Equal(t, "u", p.Messages[0].UUID)
 	})
 }
 

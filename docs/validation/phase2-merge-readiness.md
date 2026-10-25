@@ -398,3 +398,46 @@ cross-platform CI verification remains pending; this context does not claim it.
 Final full offline log SHA-256:
 `c077896bb71351fe6c3d1a37d679ae7d944fec3d142f83ed2a92bbe30d970d42`.
 Full race log SHA-256: `764c08031aa9fef97261e96dc197e0c68a695e5a5e294b091c812eb984fefff3`.
+
+## PR-triggered CI and authorized squash
+
+The user subsequently authorized creating a PR to trigger CI and squash merging
+only after all checks, review blockers and mergeability are verified. Draft
+[PR #2](https://github.com/zoumo/agent-sdk-go/pull/2) was created from
+phase2/history-query-integration into main at head
+`3841c6f3417f38d4235533a8f7235fa44eab8522`. Auto-merge was not enabled.
+This explicit authorization replaces the earlier no-PR/no-merge boundary for
+this PR; it does not authorize bypassing failed or missing checks.
+
+Initial [PR run 40179658444](https://github.com/zoumo/agent-sdk-go/actions/runs/40179658444)
+actually ran three Offline jobs: Ubuntu succeeded, macOS 15 and macOS 26 failed
+in the same explicit-project fixture, and External consumer was skipped. It was
+not a six-job pass. The workflow's old consumer condition excluded all PRs, and
+its SHA expression selected the synthetic merge commit. These are changed only
+for same-repository PRs: consumer checkout and retrieval now both use the actual
+published PR head SHA. Push/manual retain github.sha; fork PR consumer jobs stay
+excluded because their commits are not assumed retrievable from this repository.
+No token permission, trigger family or pull_request_target execution is added.
+The new real-workflow regression first failed, then all eight CI-gate tests
+passed with the same-repository condition and matching head-SHA checkout/fetch.
+Current testing/release documentation reflects six jobs for same-repository PRs.
+
+The two macOS failure logs showed the public query searching a canonical
+-private-var project key, while the fixture had encoded the lexical /var temp
+path. The contract intentionally resolves ProjectDir symlinks. An explicit
+symlink project alias reproduced this failure on Linux with the original
+fixture. Synthetic storage is now created from filepath.EvalSymlinks(project),
+while the public Scope still receives the alias. Strict success, selected-message
+count and identity are retained/strengthened; native query behavior is unchanged.
+Focused scope race count=10 passed. This removes the fixture's Linux-only path
+assumption without skips, relaxed scope semantics or access to real history.
+
+The new PR synchronize event must actually run all six jobs on the final head
+before squash. Internal Standards/Spec reviews and applicable local gates are
+recorded in the ticket/publication handoff. Immediately before merging, verify
+the final head, successful checks, no unresolved review blocker, mergeability and
+no auto-merge; request squash with expected_head_sha. Then verify the resulting
+remote main commit/tree, preserved ADR and six main-push CI jobs. Do not manually
+delete the work branch. Any CI failure must be diagnosed rather than retried into
+a lucky result. This follows the newly authorized PR event path and does not
+retry or route around the earlier Forbidden manual-workflow operation.

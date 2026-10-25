@@ -13,10 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WorkflowCoverage(unittest.TestCase):
-    def test_offline_and_consumers_retain_macos15_and_add_macos26(self):
+    def workflow_jobs(self):
         workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
-        jobs = dict(re.findall(
+        return dict(re.findall(
             r"(?ms)^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:\n|\Z)", workflow))
+
+    def test_offline_and_consumers_retain_macos15_and_add_macos26(self):
+        jobs = self.workflow_jobs()
         for job in ("test", "consumer"):
             with self.subTest(job=job):
                 self.assertIn(job, jobs)
@@ -25,6 +28,16 @@ class WorkflowCoverage(unittest.TestCase):
                 labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
                 self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
                 self.assertIn("    runs-on: ${{ matrix.os }}", jobs[job])
+
+    def test_same_repository_pr_consumers_fetch_published_head(self):
+        consumer = self.workflow_jobs()["consumer"]
+        self.assertIn("    if: github.event_name != 'pull_request' || "
+                      "github.event.pull_request.head.repo.full_name == github.repository", consumer)
+        revision = "${{ github.event.pull_request.head.sha || github.sha }}"
+        self.assertIn("      SDK_CONSUMER_SHA: " + revision, consumer)
+        self.assertIn("          ref: " + revision, consumer)
+        self.assertIn('bash scripts/check-consumers.sh "$SDK_CONSUMER_SHA"', consumer)
+        self.assertIn('bash claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"', consumer)
 
 
 class CIGates(unittest.TestCase):

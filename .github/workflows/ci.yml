@@ -88,8 +88,9 @@ jobs:
 
   consumer:
     name: External consumer (${{ matrix.os }}, pushed commit)
-    # Go module retrieval cannot reliably resolve synthetic PR merge commits.
-    if: github.event_name != 'pull_request'
+    # Same-repository PR heads are published module revisions; merge SHAs and
+    # fork-only commits are not assumed retrievable from this repository.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -103,11 +104,12 @@ jobs:
       GOTOOLCHAIN: local
       GOENV: 'off'
       GOMAXPROCS: '2'
-      SDK_CONSUMER_SHA: ${{ github.sha }}
+      SDK_CONSUMER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Check out pushed source
+      - name: Check out exact consumer source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Install the mise-managed pinned compiler
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
@@ -129,5 +131,6 @@ jobs:
           the network into temporary modules with no replace or go.work.
           Four public imports, public examples and documentation snippets compile.
           Runtime checks use only synthetic data; no real CLI or model is invoked.
-          PR merge commits are outside this remote retrieval gate.
+          Same-repository PRs fetch their published head SHA; synthetic PR merge
+          commits and fork-only heads are outside this remote retrieval gate.
           SUMMARY

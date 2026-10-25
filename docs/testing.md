@@ -85,11 +85,14 @@ batches, concurrent producers, close/abort races and reference release. See the
 [event delivery contract](../harness/contracts/event-delivery.md).
 
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
-matrix for pushed `main` commits and manual workflow runs, targeting `github.sha`.
-These events configure six jobs (three Offline and three External consumer);
-PRs configure the three Offline jobs and exclude fetched consumers. Configured
-coverage does not prove that any runner executed. PR checks remain separate because
-synthetic merge SHAs may not be retrievable as Go module versions. See
+matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
+Push/manual consumers target `github.sha`; PR consumers check out and fetch the
+published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
+These events configure six jobs (three Offline and three External consumer).
+Fork PRs retain three Offline jobs and skip consumers because fork-only SHAs are
+not assumed retrievable from this repository. Token permissions remain contents:
+read; no pull_request_target execution is added. Configured coverage does not
+prove that any runner executed. See
 [release readiness](releasing.md) for the required exact-commit CI evidence.
 
 ## Testify migration scope

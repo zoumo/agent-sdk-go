@@ -147,3 +147,116 @@ assertions remain unchanged. Other partial-line and nested-object provenance
 regressions also pass. Focused race/source-integrity checks pass. Full validation
 is repeated after this production correction; the earlier all-pass run alone is
 not counted as the final corrected-source check.
+
+## Independent review
+
+Review fixed point resolves to `bd557d91b98ab4db5e2b968b125fba6d583f791b`;
+`git diff bd557d91b98ab4db5e2b968b125fba6d583f791b...17fefd0` was nonempty.
+Commits reviewed: a98b6d0 (01), bfce634 (02), 7f654d0/f222ab3/4fd9b03 (03),
+7c3c975 (merge), 17fefd0 (04 acceptance), followed by corrective f4056d2.
+Independent Standards and Spec agents re-reviewed `17fefd0...f4056d2`.
+
+### Standards
+
+0 substantive documented-standard violations and 0 smells needing correction.
+Native package/dependency boundaries, CommonStoriesSuite placement, public
+example output, harness ownership and fixed real capture bytes are preserved.
+The correction retains bounded range reads, checks the probe budget before I/O,
+and separates raw Tail/head provenance. No remaining Standards finding.
+
+### Spec
+
+The original P2 is resolved. Independent public reproduction now returns the tail
+title and two Records with unchanged raw Tail. The probe participates in budget
+and verification without head provenance. Exact-line, budget, partial-line,
+nested-provenance and priority tests pass. No additional missing requirement,
+scope expansion or Spec deviation found. No remaining Spec finding.
+
+Review totals: Standards **0**, Spec **0** outstanding after the correction.
+
+## Retained full-check failure and baseline reproduction
+
+The first full offline and full race runs on 17fefd0 passed. After the tail fix,
+a full offline run on f4056d2 failed unchanged Codex
+`TestConcurrentAnswerAndNativeResolutionHaveOneOutcome`, both direct and ws:
+expected not-sent/zero responses, observed outcome-unknown/one response. This is
+not labeled a passing run. All other packages and the preceding generation,
+inventory, dependency, sanitization/hash/transcript gates passed in that run;
+the script stopped before its subsequent consumer/example loop.
+
+An isolated `git archive bd557d91b98ab4db5e2b968b125fba6d583f791b` extracted to
+`/tmp/ticket04-baseline` reproduced the same failure with:
+
+```sh
+cd /tmp/ticket04-baseline
+mise exec -- go test ./codex \
+  -run '^TestServerRequestLifecycleSuite$/^TestConcurrentAnswerAndNativeResolutionHaveOneOutcome$' \
+  -count=100
+```
+
+The same focused count=100 also failed on the corrected implementation. A first
+attempt accidentally ran that focused check in the integration checkout rather
+than the extracted base; only the subsequent command in the explicit baseline
+cwd is counted as independent baseline evidence. Its log is retained separately.
+No approval implementation, synchronization, deadline or expected result was
+changed. The intermittent preexisting approval race remains a known limitation.
+Full race on f4056d2 passed all packages with no DATA RACE report; vet passed.
+The complete offline script is repeated once on the same source after baseline
+diagnosis, preserving the failed run rather than hiding it.
+
+The baseline CI run [40162360860](https://github.com/zoumo/agent-sdk-go/actions/runs/40162360860)
+was verified by the parent as successful at 2026-10-25 04:39:32 UTC: Ubuntu/macOS
+Offline and External consumer **4/4**, real E2E explicitly skipped. This is a
+successful baseline CI fact, not validation of these new commits. The workflow
+listens only to main, PRs and manual dispatch; publication of this work branch
+alone does not produce a CI pass. No new CI execution or macOS test is claimed.
+
+## Final local results on corrected source
+
+Implementation revision: `f4056d20bbf4c87c34e63244588426757b01b7cb`, tree
+`e24bcc9cc1eb73f0f1787f12f4ffceb2c256df7b`. Later commits only record evidence.
+
+| Gate | Result |
+|---|---|
+| Public combined browser, exact-tail regression, metadata/parallel/compaction/coexistence | Passed, including focused race/integrity checks |
+| Full `scripts/check-offline.sh` | **Failed** twice after correction solely at the independently reproduced baseline Codex approval competition; no skip or assertion relaxation |
+| Offline gates before that test | Passed: module/dependency boundaries, protocol inventory, 417 types/783 generated cases, six CI-gate tests, seven sanitization tests, capture hashes and Claude transcript checks |
+| Full `go test -race -p=1 -v -count=1 -timeout=300s ./...` | Passed all packages on corrected source, no DATA RACE report |
+| `go vet ./...` | Passed on corrected source |
+| Checkout public consumer and all seven runnable offline examples | Passed separately after the failing full script stopped before that loop |
+| Committed whitespace/gofmt, shell syntax, harness OKF/internal links, touched report/guide links | Passed |
+| Real-sanitized capture diff against original base | Empty; capture bytes and provenance unchanged |
+| Standards / Spec review after correction | 0 / 0 outstanding |
+| Real Agent/model, macOS, current-revision CI | Not executed; explicitly not inferred from local results |
+
+The single same-source offline retry again failed only the ws form of the same
+baseline approval assertion. Both failed full runs and independent baseline
+failure are retained. The final state is **not an all-green offline gate** despite
+full race/vet and new history-query acceptance passing. Fixing that independent
+approval competition remains separate work; no failure was suppressed.
+The checkout mock-consumer package's ordinary skip asks for built mock CLIs;
+the fetched-module gate builds and runs them, and is a distinct required check.
+
+Log SHA-256 values (local ignored validation directory):
+
+- corrected full race: `5cc47766a38949ab9f9bb05c4f59e7dfe8e1e052e12c9fbbbdc46dfca741d759`
+- corrected vet (empty successful output): `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- first corrected offline failure: `cdc08ff531c4c90dcf0ffa38780f8fad0c0a8dddb03563ddb35f4154dc108d55`
+- independent exact-base focused failure: `b193fc586ac790db09d358e18c6804e9c34a91c5a14fb4bf073f91c4df634d3b`
+
+Initial direct invocation of the CI-only whitespace script lacked
+GITHUB_EVENT_PATH and failed before checking. It was rerun with a local push-event
+fixture identifying the original base, and passed the full committed range;
+this was a local check, not a GitHub Actions run.
+
+## Publication receipt location
+
+Publication is authorized only to
+[`phase2/history-query-integration`](https://github.com/zoumo/agent-sdk-go/tree/phase2/history-query-integration),
+without force, PR or main merge. The exact immutable final commit/tree and remote
+verification, followed by both precise-SHA fetched-module consumer outcomes, are
+recorded in ticket04 Comments and the final handoff after this report commit is
+created. They must be read as separate evidence, not inferred from a local
+`replace`, checkout build or missing branch CI. Consumer scripts fetch the exact
+VCS hash into fresh modules/caches without replace/go.work, build both synthetic
+mock CLIs, exercise their public APIs, and run the copied native history examples.

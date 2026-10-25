@@ -122,6 +122,7 @@ for name, relative in (
     ('codex-api', 'codex/examples/apiusage/usage.go'),
     ('codex-observe', 'codex/examples/observe-turn/main.go'),
     ('codex-resume', 'codex/examples/resume-thread/main.go'),
+    ('codex-history', 'codex/examples/history-query-offline/main.go'),
     ('claude-subagents', 'claude/examples/subagents-offline/main.go'),
 ):
     target = pathlib.Path('examples') / name

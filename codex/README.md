@@ -287,15 +287,20 @@ arbitrary Go code.
 resumes a native thread. It does not create a Session or replay history through
 Session.Receive. `Client.UnsubscribeThread` releases that native attachment.
 
-`Client.ListThreadTurns` and `Client.ListThreadItems` return native history pages
-without resuming the thread. Use `Client.Call` for `thread/read` metadata and
-`thread/list`. Preserve native cursors, sort direction and item-view selection;
-query availability depends on the server version and stored history format.
-These are stored snapshots, not the original notification/delta sequence.
+`Client.ListThreads`, `Client.ReadThread`, `Client.ListThreadTurns` and
+`Client.ListThreadItems` query native metadata and saved content without Open or
+resume. Prefer `ReadThread` with `IncludeTurns: types.Some(false)`. Each call
+returns one native result; keep opaque next/backwards cursors, sort direction,
+item-view selection and omitted/null/value fields. Query availability depends on
+the server version/backend and stored history format. Metadata and saved items
+are not original notification/delta/approval logs or atomic snapshots. Remote
+queries use server storage and paths; local list may repair metadata unless
+`UseStateDbOnly` selects the native DB-only path. See [query boundaries](docs/history-query.md)
+and the [offline example](examples/history-query-offline).
 
 ## Offline examples and validation
 
-Run the root offline gate with the mise-managed compiler. The four offline
+Run the root offline gate with the mise-managed compiler. The offline
 examples use explicit synthetic peers or embedded sanitized captures, never an
 installed agent. [Migration details](../docs/session-migration.md) distinguish
 native limitations, resource options and breaking lifecycle changes. Historical

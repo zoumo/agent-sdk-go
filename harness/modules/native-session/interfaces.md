@@ -35,6 +35,10 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 
 主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。主身份的 requested 与 observed 状态分别保留；Claude Open 尚未观察原生根身份时不伪造 observed ID。
 
+## 独立历史查询
+
+历史查询不属于 Session 生命周期，不要求 Open 或同身份空闲。Codex Client 的四个原生查询签名、结果所有权、后端与分页边界见[独立历史查询合同](../../contracts/history-query.md)。查询不注入 Receive，不建立成员关系或回答权限；原生 resume 继续独立表达。
+
 ## 原生输入与配置
 
 | 值 | Codex | Claude |

@@ -16,3 +16,5 @@
 - [原生实现架构检查之一](reviews/2026-10-25-codex-architecture-alignment.md)
 - [原生实现架构检查之二](reviews/2026-10-25-claude-architecture-alignment.md)
 - [两套原生实现的合同裁决与改造提案](reviews/2026-10-25-session-architecture-integration.md)
+
+- [Codex 独立历史查询切片验证](reviews/2026-10-25-codex-history-query.md)

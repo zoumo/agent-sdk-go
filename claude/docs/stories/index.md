@@ -89,3 +89,7 @@ TestClaudeMetadataDefaultPage, TestClaudeMetadataSampleEdges and
 TestClaudeMetadataIncompleteTail. TestClaudeQueryAlongsideSession checks zero query
 protocol writes and continued delivery/original approval authority using a synthetic
 peer. These are offline evidence, with no real model or private history access.
+
+Independent child saved content (SDK-US-008/019, US-014, CLAUDE-US-005/007) now
+has a separate [synthetic implementation and H1–H5 mapping](../subagent-history.md).
+Existing Session discovery and live/real evidence limits remain separate.

@@ -126,6 +126,7 @@ for name, relative in (
     ('claude-subagents', 'claude/examples/subagents-offline/main.go'),
     ('claude-metadata', 'claude/examples/session-metadata-offline/main.go'),
     ('claude-messages', 'claude/examples/session-messages-offline/main.go'),
+    ('claude-child-history', 'claude/examples/subagent-history-offline/main.go'),
 ):
     target = pathlib.Path('examples') / name
     target.mkdir(parents=True)
@@ -160,4 +161,5 @@ GOPROXY=off GOSUMDB=off go run ./consumers/codex-public
 GOPROXY=off GOSUMDB=off go run ./examples/codex-history
 GOPROXY=off GOSUMDB=off go run ./examples/claude-metadata
 GOPROXY=off GOSUMDB=off go run ./examples/claude-messages
+GOPROXY=off GOSUMDB=off go run ./examples/claude-child-history
 printf 'External consumer verified pushed commit %s\n' "$revision"

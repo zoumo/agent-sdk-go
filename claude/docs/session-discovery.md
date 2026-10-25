@@ -72,3 +72,7 @@ existing synthetic subprocess peer only. They establish local discovery and
 transport-side-effect behavior, not real agent interoperability, live forwarding,
 recovery or actual execution state. No personal history/credentials or new
 recordings are used.
+
+For explicit no-Session discovery and selected saved messages, use the separate
+[package-level child history APIs](subagent-history.md). This Session-bound API
+retains its existing behavior and error/partial-coverage semantics.

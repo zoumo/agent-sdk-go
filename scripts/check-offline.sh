@@ -20,6 +20,6 @@ python3 claude/scripts/check-transcripts.py
 go test -p=1 -count=1 -timeout 180s ./...
 # The pure public API/configuration consumer is a validation check, not an SDK demo.
 go run ./tests/consumers/codex-public
-for example in codex/examples/history-query-offline codex/examples/observe-subagents-offline codex/examples/replay-recorded claude/examples/subagents-offline claude/examples/recorded-replay claude/examples/session-messages-offline claude/examples/session-metadata-offline; do
+for example in codex/examples/history-query-offline codex/examples/observe-subagents-offline codex/examples/replay-recorded claude/examples/subagents-offline claude/examples/recorded-replay claude/examples/session-messages-offline claude/examples/session-metadata-offline claude/examples/subagent-history-offline; do
   go run "./$example"
 done

@@ -41,3 +41,8 @@ func (s *CommonStoriesSuite) TestClaudeNonMessageRequestMetadata() {
 func (s *CommonStoriesSuite) TestClaudeRequestMetadataGuards() {
 	checkClaudeRequestMetadataGuards(s)
 }
+
+func (s *CommonStoriesSuite) TestIndependentSubagentHistory() {
+	s.Run("H1-no-session", func() { checkClaudeIndependentChildHistory(s) })
+	s.Run("H1-live-coexistence", func() { checkClaudeChildHistoryAlongsideSession(s) })
+}

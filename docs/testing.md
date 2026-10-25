@@ -111,3 +111,14 @@ and acceptance methods live directly in `tests/stories/acceptance_test.go`;
 there is no separate testkit package. Testify v1.12.1 is a test dependency;
 both native types packages still have standard-library-only production trees,
 and SDK production imports cannot reach recording tools or fixture containers.
+
+## Independent history-query acceptance
+
+`CommonStoriesSuite.TestIndependentHistoryBrowser` runs both native adapters for
+US-014/SDK-US-019. Codex exercises list → read metadata → turns → items with a
+strict synthetic app-server trace. Claude exercises list → info → message slices
+after compaction/parallel-tool recovery in temporary storage. Existing native
+focused cases retain transport, live coexistence, cancellation, unknown, errors,
+resource and integrity coverage. The seven offline examples include both native
+history workflows; the fetched consumer compiles all three history examples and
+runs them from the downloaded revision. See [integration evidence](validation/history-query-integration.md).

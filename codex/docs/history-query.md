@@ -70,5 +70,5 @@ states remain observable without retry, resume or replay fallback.
 The [offline example](../examples/history-query-offline) executes only a synthetic
 peer. [Slice validation](../../docs/reviews/2026-10-25-codex-history-query.md)
 records exact checks. No live server, private history or model was accessed.
-Claude independent local queries remain a separate ticket; this slice does not
-certify completion of US-014 across both SDKs.
+The combined public-path acceptance and remaining limits are recorded in the
+[phase-two integration report](../../docs/validation/history-query-integration.md).

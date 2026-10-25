@@ -37,7 +37,7 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 
 ## 独立历史查询
 
-历史查询不属于 Session 生命周期，不要求 Open 或同身份空闲。Codex Client 的四个原生查询签名、结果所有权、后端与分页边界见[独立历史查询合同](../../contracts/history-query.md)。查询不注入 Receive，不建立成员关系或回答权限；原生 resume 继续独立表达。
+历史查询不属于 Session 生命周期，不要求 Open 或同身份空闲。Codex Client 的四个原生查询及 Claude package-level 本地发现、metadata、消息查询相互独立；结果所有权、后端与分页边界见[独立历史查询合同](../../contracts/history-query.md)。查询不注入 Receive，不建立成员关系或回答权限；原生 resume 继续独立表达。
 
 ## 原生输入与配置
 

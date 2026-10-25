@@ -1897,3 +1897,62 @@ func codexIndependentHistory(t *testing.T) {
 	must(t, c.Call(ctx, "fixture/query-trace", nil, &methods))
 	assert.Equal(t, []string{"initialize", "initialized", "thread/list", "thread/read", "thread/turns/list", "thread/turns/list", "thread/items/list", "fixture/query-trace"}, methods, "query must not start/resume/subscribe/submit/answer")
 }
+
+// Browse metadata first, then page the selected content after compaction and
+// parallel recovery. Expected order follows the pinned native algorithm, rather
+// than JSONL line offsets or the preview's pre-compaction prompt.
+func claudeIndependentHistory(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	source := queryLine("old", "", "user", "", `{"content":"pre-compaction preview"}`) +
+		`{"type":"system","uuid":"boundary","parentUuid":null,"sessionId":"` + querySession + `","subtype":"compact_boundary","logicalParentUuid":"old"}` + "\n" +
+		queryLine("summary", "boundary", "user", `"isCompactSummary":true,`, `{"content":"retained summary"}`) +
+		queryLine("a1", "summary", "assistant", "", `{"id":"response","content":[{"type":"tool_use","id":"t1"}]}`) +
+		queryLine("a2", "a1", "assistant", "", `{"id":"response","content":[{"type":"tool_use","id":"t2"}]}`) +
+		queryLine("r1", "a1", "user", "", `{"content":[{"type":"tool_result","tool_use_id":"t1"}]}`) +
+		queryLine("r2", "a2", "user", "", `{"content":[{"type":"tool_result","tool_use_id":"t2"}]}`) +
+		queryLine("end", "r1", "assistant", `"future":null,`, `{"content":[{"type":"future","n":9007199254740993}]}`) +
+		queryLine("side", "summary", "assistant", `"isSidechain":true,`, `{"content":"hidden"}`)
+	scope, path := claudeQueryFixture(t, source)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	ctx := deadline(t)
+	listed, err := claude.ListSessions(ctx, claude.ListSessionsOptions{Scope: scope, Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, "complete", listed.Coverage.Status)
+	require.Len(t, listed.Sessions, 1)
+	id := listed.Sessions[0].SessionID
+	info, err := claude.GetSessionInfo(ctx, id, claude.SessionInfoOptions{Scope: scope})
+	require.NoError(t, err)
+	require.NotNil(t, info.Info)
+	assert.Equal(t, "pre-compaction preview", info.Info.Summary)
+	assert.Equal(t, "unknown", info.Info.Running)
+	var ids []string
+	for offset := 0; offset <= 6; offset += 2 {
+		page, err := claude.GetSessionMessages(ctx, id, claude.SessionMessagesOptions{Scope: scope, Offset: offset, Limit: 2})
+		require.NoError(t, err)
+		require.Equal(t, "complete", page.Coverage.Status)
+		assert.False(t, page.Coverage.Atomic)
+		if offset == 6 {
+			require.Empty(t, page.Messages)
+		} else {
+			require.Len(t, page.Messages, 2)
+		}
+		for _, message := range page.Messages {
+			ids = append(ids, message.UUID)
+			assert.Equal(t, id, message.SessionID)
+			if message.UUID == "end" {
+				assert.JSONEq(t, `{"content":[{"type":"future","n":9007199254740993}]}`, string(message.Message))
+				assert.Contains(t, string(message.Raw), `"future":null`)
+			}
+		}
+	}
+	assert.Equal(t, []string{"summary", "a1", "a2", "r2", "r1", "end"}, ids)
+	exhausted, err := claude.ListSessions(ctx, claude.ListSessionsOptions{Scope: scope, Offset: 1, Limit: 1})
+	require.NoError(t, err)
+	assert.Empty(t, exhausted.Sessions)
+	_, err = claude.GetSessionInfo(ctx, "22222222-2222-4222-8222-222222222222", claude.SessionInfoOptions{Scope: scope})
+	requireMetadataKind(t, err, "missing")
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, sha256.Sum256(before), sha256.Sum256(after))
+}

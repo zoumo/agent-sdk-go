@@ -47,14 +47,24 @@ func run() error {
 			continue
 		}
 		fmt.Printf("session=%s preview=%q running=%s sampled=%v\n", saved.SessionID, info.Info.Summary, info.Info.Running, info.Info.Sampled)
+		// Offset slices visible messages after native chain reconstruction.
+		// Every call rereads the bounded source; these are not I/O pages or a
+		// shared snapshot. This example owns its immutable synthetic source.
+		for offset := 0; ; {
+			page, err := claude.GetSessionMessages(ctx, saved.SessionID, claude.SessionMessagesOptions{Scope: scope, Offset: offset, Limit: 1})
+			if err != nil {
+				return err
+			}
+			if len(page.Messages) == 0 {
+				fmt.Println("end: empty content slice")
+				break
+			}
+			for _, m := range page.Messages {
+				fmt.Printf("%s %s: %s\n", m.Type, m.UUID, m.Message)
+			}
+			fmt.Printf("coverage=%s atomic=%v\n", page.Coverage.Status, page.Coverage.Atomic)
+			offset += len(page.Messages)
+		}
 	}
-	page, err := claude.GetSessionMessages(ctx, session, claude.SessionMessagesOptions{Scope: scope, Limit: 10})
-	if err != nil {
-		return err
-	}
-	for _, m := range page.Messages {
-		fmt.Printf("%s %s: %s\n", m.Type, m.UUID, m.Message)
-	}
-	fmt.Printf("coverage=%s atomic=%v\n", page.Coverage.Status, page.Coverage.Atomic)
 	return nil
 }

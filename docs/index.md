@@ -19,3 +19,5 @@
 
 - [Claude 独立发现与 metadata](../claude/docs/session-metadata.md)
 - [Codex 独立历史查询切片验证](reviews/2026-10-25-codex-history-query.md)
+
+- [阶段二历史查询整合验收与后续真实测试入口](validation/history-query-integration.md)

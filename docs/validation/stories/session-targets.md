@@ -72,3 +72,11 @@ peer trace 只记录实际到达原生对端的输入字节和启动参数。输
 先在批准的公开 seam 增加故事再补齐原生 peer：SDK-US-001 起初缺少具体 adapter 编译失败；输入/执行期故事在 peer 不拒绝第三个 Codex start、Claude 缺原生失败结果时失败；审批故事缺真实请求时超时；配置故事缺原生控制回复时失败；Load 故事缺 read/resume/paging 对端时失败。之后分别补固定原生形状及故障脚本，公开 Session 既有实现满足检查，没有发现本票必须修改的 runtime 缺陷。迁移旧 US-011 最初因未启用 Codex experimental discovery 失败，明确初始化能力后通过。新增历史工具值断言曾因把 int32 exitCode 写成 int64 的断言类型错误失败，按原生类型修正；没有放宽语义或 deadline。
 
 首次 stories race 的 late-history peer 先发送分页失败再返回 Interrupt 回执，使 owner 合法结束后控制返回 OutcomeUnknown；改为明确先回控制 RPC，再释放故意分页失败，保证测试实际表达“控制在加载期间可用，随后 Load 失败”的因果顺序。该修正只作用于合成 peer，不修改原生错误分类、取消或清理实现。
+
+## SDK-US-019：独立历史浏览
+
+当前主会话查询验收见[阶段二整合记录](../history-query-integration.md)，共同规范见
+[US-014](../../../harness/contracts/stories/US-014.md)。CommonStoriesSuite 的
+TestIndependentHistoryBrowser 同时执行 Codex 与 Claude 的原生完整浏览 adapter；
+原生 focused tests 继续覆盖过滤/页/错误/权限与 live 并存。这里不将主会话历史
+扩展成子 Agent 历史、独立订阅、完整 wire 回放或真实模型兼容性证明。

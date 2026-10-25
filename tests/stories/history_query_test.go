@@ -1,5 +1,10 @@
 package stories_test
 
+func (s *CommonStoriesSuite) TestIndependentHistoryBrowser() {
+	s.Run("US-014/codex", func() { codexIndependentHistory(s.T()) })
+	s.Run("US-014/claude", func() { claudeIndependentHistory(s.T()) })
+}
+
 func (s *CommonStoriesSuite) TestClaudeIndependentMessages()  { checkClaudeIndependentMessages(s) }
 func (s *CommonStoriesSuite) TestClaudeMessageSelection()     { checkClaudeMessageSelection(s) }
 func (s *CommonStoriesSuite) TestClaudeMessageQueryFailures() { checkClaudeMessageQueryFailures(s) }

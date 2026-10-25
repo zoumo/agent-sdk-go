@@ -43,3 +43,7 @@ internal/queue 只共享 FIFO 机械逻辑，直接使用根模块固定的 Chan
 帧、请求、观察索引、隔离材料及历史读取各自有显式资源限制；错误不能静默截断已接受事实。父级图深度限制只约束父级知识，不是 Session 的预设观察层数。Call/Write 的单次操作超时与审批等待有效期分开，无默认 SDK 审批倒计时。
 
 内部 snapshot 的 pending 数量和调用者估算字节不是 heap 测量，且不包含已取出的 staging；ChannX 不提供的最旧记录时间保持不可用。不能以诊断估计声称总内存受限，也不因此新增公共 metrics Interface。
+
+## 可选子详细交付
+
+默认保持现状；构造选项、确认 child 规则及封闭原生矩阵见[子详细交付](child-detail-delivery.md)。过滤仅改变 SDK FIFO 入队，不改变控制处理、归属或源输出。

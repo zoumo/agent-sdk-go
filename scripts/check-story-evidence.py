@@ -53,7 +53,7 @@ def check(root):
     errors += inventory_errors((root / "harness/sdk/user-stories.md").read_text(), "SDK-US", common)
     errors += inventory_errors((root / "harness/contracts/stories/index.md").read_text(), "US", scenarios)
     native = (root / "harness/sdk/native-stories.md").read_text()
-    for prefix, size in [("CODEX-US", 4), ("CLAUDE-US", 5)]:
+    for prefix, size in [("CODEX-US", 5), ("CLAUDE-US", 7)]:
         expected = {f"{prefix}-{n:03}" for n in range(1, size + 1)}
         errors += inventory_errors(native, prefix, expected)
         errors += inventory_errors(coverage, prefix, expected)
@@ -77,4 +77,4 @@ if __name__ == "__main__":
         print(failure, file=sys.stderr)
     if failures:
         sys.exit(1)
-    print("Story evidence: 19 goals, 14 scenarios, 9 native supplements; links and public suite inventory valid (offline).")
+    print("Story evidence: 19 goals, 14 scenarios, 12 native supplements; links and public suite inventory valid (offline).")

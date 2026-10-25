@@ -17,7 +17,7 @@ import (
 	recording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
 )
 
-var ErrFinancialGate = errors.New("Codex recording blocked: no verified independent dollar/token/provider-request/retry enforcement; #11 requires separate budget and isolation approval")
+var ErrFinancialGate = errors.New("Codex recording blocked: workload lacks reviewed acceptance of unknown dollar/token/provider-request/retry exposure")
 
 // LaunchProfile contains reviewed nonsecret values only. It never discovers
 // user configuration, hooks, authentication, previous captures or conversation
@@ -34,6 +34,8 @@ type LaunchProfile struct {
 	RawDir          string                   `json:"rawDir"`
 	Ledger          string                   `json:"ledger"`
 	IsolationReview string                   `json:"isolationReview"`
+	CostPolicy      string                   `json:"costPolicy,omitempty"`
+	CostReview      string                   `json:"costReview,omitempty"`
 	Model           string                   `json:"model"`
 	Effort          string                   `json:"effort"`
 	SavedRootID     string                   `json:"savedRootId"`
@@ -42,8 +44,8 @@ type LaunchProfile struct {
 
 // Run deliberately stops before spawning even a proxy. The old S1/S2 marker
 // launcher cannot supply the aggregate or financial guarantees required by #6.
-// The scenario/peer/accounting support is usable offline; enabling a future
-// financial adapter and approving a run are separate work, never a boolean here.
+// The scenario/peer/accounting support is usable offline. Reviewed financial
+// uncertainty is separate from the still-blocking technical isolation adapter.
 func Run() error {
 	if len(os.Args) != 3 || (os.Args[1] != "--record" && os.Args[1] != "--private-proxy") {
 		return errors.New("usage: record --record reviewed-nonsecret-profile.json; direct --proxy disabled")
@@ -63,7 +65,7 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	if err = financialGate(); err != nil {
+	if err = Preflight(p); err != nil {
 		return err
 	}
 	if os.Args[1] == "--private-proxy" {
@@ -169,8 +171,6 @@ func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err e
 	}
 	return p, nil
 }
-
-func financialGate() error { return ErrFinancialGate }
 
 func validScene(scene string) bool {
 	switch scene {

@@ -53,8 +53,10 @@ Root APIs use an already opened Session/client; they do not launch processes.
 A synthetic native Input test retains text-element byte ranges and an image
 variant exactly; its deliberately invalid image bytes prove serialization only.
 This is separate from R1 structured *output* schema and grants no media capture.
-The recording command validates an opt-in profile then returns
-`ErrFinancialGate` **before any model or proxy spawn**. Direct `--proxy` is
+The recording command validates an opt-in profile then calls `Preflight`
+**before any model or proxy spawn**. Without a reviewed cost-risk policy it
+returns `ErrFinancialGate`; the narrowly accepted R1/R4 policy instead reaches
+`ErrIsolationGate`. Both paths remain fail-closed. Direct `--proxy` is
 retired. The Python entry now accepts `--runner` and `--profile` and forwards only
 an allowlisted minimal environment; the old hook/config discovery and
 per-directory authorization markers are removed. Successful preflight cannot
@@ -109,12 +111,13 @@ preserves S1/S2 handlers, dispatches R1–R4, closes/drains the owned client and
 writes private metadata including actual root/start/terminal facts and unknown
 provider accounting. Initialization failure still consumes its root; cleanup or
 metadata failure persists stop. Tests inject only strict synthetic subprocesses.
-The native opener/proxy is connected behind `financialGate`, which always fails
-closed: no live boolean or historical marker can bypass it. Proxy retains its
-2 MiB wire/control and 256 KiB stderr limits and bounded owned cleanup. The
+The native opener/proxy is connected behind `Preflight`, which always fails
+closed: accepting cost uncertainty does not bypass the independent isolation
+gate. Proxy retains its 2 MiB wire/control and 256 KiB stderr limits and bounded owned cleanup. The
 private proxy entry repeats profile/financial checks and requires the bound
-reservation. A financial/isolation enforcement adapter remains a prerequisite,
-not missing basic scene orchestration. Activity deadline and cleanup are distinct;
+reservation. An opaque-auth/policy-isolation adapter and exact approved-workload
+ledger binding remain prerequisites, not missing basic scene orchestration.
+Activity deadline and cleanup are distinct;
 owned cleanup runs after activity stops. The native opener gives its proxy a
 12-second SDK shutdown timeout (six-second grace), exceeding Proxy’s bounded
 five-second worst-case native teardown so SDK shutdown does not prematurely kill
@@ -132,8 +135,9 @@ No execution has occurred. The smallest useful initial selection is R1 plus R4:
 | Minimum total | **1 / 2 / 1**, children/depth 0/0, SDK retries 0 | **150 s**, bounded teardown separately, aggregate activity window 480 s | **4 MiB / 512 KiB** | No approval/child/media claim |
 | Optional R3 increment | +1 / +2 / 0 | +120 s | +2 MiB / 256 KiB | Execution-time input / original-turn interrupt or explicit gap |
 
-The user may choose this finite workload and explicitly decide whether to accept
-unknown dollar/token/provider-generation/internal-retry exposure. These tools
+The user accepted this finite workload and unknown dollar/token/provider-
+generation/internal-retry exposure on 2026-10-25. This is not a hard financial
+cap or approval to bypass technical gates. These tools
 cannot make a truthful strict bill cap promise. The proposed USD 1/scene below
 is a proposed decision, not automatic authority or a permanent inherited rule.
 Separately, the operator must prove policy/config/hook/integration isolation and
@@ -162,18 +166,22 @@ Requested provider ceilings remain those of the shared proposal: API generations
 including native retries at most 6/6/4 (16 total), native/provider retries 0;
 per generating scene 20,000 input and 1,500 output tokens, USD 1; Codex total
 60,000 input / 4,500 output, USD 3 including failed attempts and in-flight charges.
-These are proposed approval limits; **none of the monetary/token/generation/retry
-limits is independently enforceable by these tools**. Codex has no verified
-dollar hard stop. A wall kill, wire cap, post-run token report, effort level or
+These are historical proposed limits, superseded for the approved minimal
+R1/R4 workload by explicit risk acceptance; **none of the monetary/token/
+generation/retry limits is independently enforceable by these tools**. Codex has
+no verified dollar hard stop. A wall kill, wire cap, post-run token report, effort level or
 submitted-turn counter cannot prevent the next provider request exceeding a
-financial cap. Unknown telemetry blocks launch; do not reset a ledger or try a
-new profile to bypass it. Consequently #11 remains blocked under the current unamended launch gates even
-after code CI. Historical USD limits are not a new permanent requirement: the
-parent must obtain a new explicit decision on finite activity/attempt budgets
-and whether the user accepts cost uncertainty without a strict financial cap.
-That decision would require a reviewed gate/policy update; the current code has
-no opt-in that silently accepts the risk. Isolation/privacy proof remains an
-independent requirement, regardless of the financial decision.
+financial cap. Unknown accounting must remain unknown, not be reported as zero.
+Do not reset a ledger or obtain extra attempts through a replacement profile. The operator
+may record the approved decision with `costPolicy` =
+`accept-unknown-provider-cost-v1` and a nonsecret `costReview` reference.
+`Preflight` accepts that distinction only for R1/R4 with model `gpt-6.1-sol`
+and R1 high effort; it still always returns `ErrIsolationGate`. Neither field
+is proof of authority or authentication. Actual launch remains blocked until
+an independently reviewed opaque-auth/policy-isolation adapter is available
+and a reconciled durable ledger enforces the exact 1-root/2-input/1-reader,
+150-second activity workload. No new account, login, credential inspection,
+copying or platform-auth access is enabled by this change.
 
 Media/image acceptance is not added. Native Read approval, execution-time
 acceptance, settings observation, terminal interrupt, persisted query support and

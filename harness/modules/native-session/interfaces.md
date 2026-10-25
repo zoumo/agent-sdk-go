@@ -79,3 +79,14 @@ Claude SubagentQuery 使用本 Session 固定的 ConfigDir/cwd/main ID 与记录
 | transport / protocol / closed | SDK 交互终止与原生执行失败分开；停止新接受、失效权限、排空后暴露原因。 |
 
 关闭规则以[事件交付合同](../../contracts/event-delivery.md)为准。验收使用本页公开方法，不依赖私有父图、回调池或第二消费者。
+
+## Claude 独立消息查询（Session 外）
+
+原生包提供 `GetSessionMessages(ctx context.Context, sessionID string,
+options SessionMessagesOptions) (SessionMessagesPage, error)`。
+`SessionMessagesOptions` 包含 `Scope SessionQueryScope`、Limit/Offset、
+MaxMessages/MaxBytes/MaxLines/MaxRecords/MaxLineBytes。Scope 包含显式绝对
+ConfigDir、可选绝对 ProjectDir 和 MaxEntries。Page 包含原生独立
+`[]SessionMessage` 与 `SessionMessagesCoverage`；错误为可判别的 SessionQueryError
+或 context 取消。消息值不使用 Event、Received 或 IncomingRequest。
+具体默认值、选择算法、范围和失败语义见[Claude 消息查询合同](../../contracts/claude-session-messages.md)。

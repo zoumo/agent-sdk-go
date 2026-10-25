@@ -17,3 +17,5 @@
 | US-011 | [US-011 断线后恢复观察](US-011.md) |
 | US-012 | [US-012 中断任务或关闭观察](US-012.md) |
 | US-013 | [US-013 列出当前 Session 的子 Agent](US-013.md) |
+
+原生查询验收：[Claude 独立消息查询](claude-session-messages.md)。

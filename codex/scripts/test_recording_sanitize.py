@@ -88,10 +88,11 @@ class Publication(unittest.TestCase):
             self.assertFalse((root/'public').exists())
 
     def test_unknown_legacy_child_controller_is_quarantined(self):
-        frame = {'ordinal': 1, 'direction': 's2c', 'wire': {
-            'method': 'codex/event/future_child_controller', 'params': {'threadId': 'child'}}}
-        with self.assertRaisesRegex(ValueError, 'method not whitelisted'):
-            sanitize.transform([frame], '/synthetic', '/isolated')
+        for method in ('codex/event/future_child_controller', 'codex/event'):
+            frame = {'ordinal': 1, 'direction': 's2c', 'wire': {
+                'method': method, 'params': {'type': 'future_child_controller', 'threadId': 'child'}}}
+            with self.subTest(method=method), self.assertRaisesRegex(ValueError, 'method not whitelisted'):
+                sanitize.transform([frame], '/synthetic', '/isolated')
 
     def test_hook_payload_excluded_before_scan_or_publication(self):
         f = {'ordinal': 1, 'direction': 's2c', 'wire': {'method': 'hook/completed', 'params': {'private': 'sk-neverpublish0123456789'}}}

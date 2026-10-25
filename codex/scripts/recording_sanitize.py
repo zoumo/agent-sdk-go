@@ -12,8 +12,9 @@ import tempfile
 SCHEMA = json.loads(pathlib.Path(__file__).with_name('recording-schema.json').read_text())
 SECRET = re.compile(r'(?i)(?:sk-[a-z0-9_-]{12,}|bearer\s+[a-z0-9._-]+|[a-z0-9_.+-]+@[a-z0-9.-]+\.[a-z]{2,}|/Users/|/home/|\bjim\b)')
 SECRET_KEYS = {'authorization', 'headers', 'access_token', 'refresh_token', 'api_key', 'password', 'id_token'}
-OMIT = {'hook/started', 'hook/completed', 'configWarning', 'deprecationNotice', 'mcpServerStatus/updated', 'account/updated', 'account/rateLimits/updated', 'codex/event', 'remoteControl/status/changed', 'warning', 'turn/moderationMetadata'}
+OMIT = {'hook/started', 'hook/completed', 'configWarning', 'deprecationNotice', 'mcpServerStatus/updated', 'account/updated', 'account/rateLimits/updated', 'remoteControl/status/changed', 'warning', 'turn/moderationMetadata'}
 
+ID_NAMESPACES = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'senderThreadId': 'thread', 'agentPath': 'agent-path', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}
 
 def scan(value):
     if isinstance(value, dict):
@@ -118,7 +119,7 @@ class Sanitizer:
                 if k == 'agentsStates':
                     for thread in x:
                         self.ident('thread', thread, ordinal)
-                ns = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'senderThreadId': 'thread', 'agentPath': 'agent-path', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}.get(k)
+                ns = ID_NAMESPACES.get(k)
                 if k == 'id':
                     ns = {'thread': 'thread', 'turn': 'turn', 'item': 'item', 'questions': 'question'}.get(parent)
                 if ns and x is not None:
@@ -132,7 +133,7 @@ class Sanitizer:
         if isinstance(v, dict):
             out = {}
             for k, x in v.items():
-                ns = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'senderThreadId': 'thread', 'agentPath': 'agent-path', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}.get(k)
+                ns = ID_NAMESPACES.get(k)
                 if k == 'id':
                     ns = {'thread': 'thread', 'turn': 'turn', 'item': 'item', 'questions': 'question'}.get(parent)
                 key = self.ident('thread', k, ordinal) if parent == 'agentsStates' else self.values.get(k, k) if parent == 'answers' else k

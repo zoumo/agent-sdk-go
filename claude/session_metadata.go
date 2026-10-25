@@ -16,7 +16,8 @@ import (
 
 // SessionInfoOptions selects the same local layout as GetSessionMessages.
 // Zero defaults: SampleBytes=64 KiB per head/tail, MaxBytes=16 MiB total,
-// MaxLines=10000 sampled lines. Negative values are invalid.
+// MaxLines=10000 sampled lines. MaxBytes includes the optional 1-byte tail
+// boundary probe. Negative values are invalid.
 type SessionInfoOptions struct {
 	Scope                 SessionQueryScope
 	SampleBytes, MaxBytes int64
@@ -37,7 +38,8 @@ type ListSessionsOptions struct {
 // SessionInfo is detached local metadata, not a live Session or full transcript.
 // Head/Tail preserve exact sampled bytes (possibly partial edge lines); Records
 // preserves complete sampled JSON objects, including unknown metadata. Sampled
-// means there is an unread middle. Neither value certifies a conversation chain.
+// means the windows are separated, with only a boundary probe read in the gap.
+// Neither value certifies a conversation chain.
 type SessionInfo struct {
 	SessionID, Path                                                   string
 	LastModified                                                      time.Time
@@ -54,7 +56,7 @@ type SessionInfo struct {
 type SessionMetadataCoverage struct {
 	Status, ConfigDir, ProjectDir string // unknown, partial, complete for declared discovery/sample scope only
 	Entries, Files, Lines         int
-	Bytes                         int64 // initial sampled bytes; verification rereads the same bounded samples
+	Bytes                         int64 // initial samples and optional 1-byte tail probe; verification rereads both
 	Atomic                        bool  // always false, including across calls/pages
 	Limits                        ListSessionsOptions
 }
@@ -300,7 +302,14 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	info.FileSize = initial.Size()
 	headSize := min(initial.Size(), o.SampleBytes)
 	tailStart := max(headSize, initial.Size()-o.SampleBytes)
-	tailSize := initial.Size() - tailStart
+	// Include the byte before a separated tail window to distinguish a whole
+	// first line from a fragment. The probe counts toward the read budget and
+	// source verification, but is not part of the caller's raw Tail window.
+	tailReadStart := tailStart
+	if tailStart > headSize {
+		tailReadStart--
+	}
+	tailSize := initial.Size() - tailReadStart
 	if headSize > o.MaxBytes-c.Bytes || tailSize > o.MaxBytes-c.Bytes-headSize {
 		return info, queryError("resource-limit", path, "metadata sample bytes", nil)
 	}
@@ -308,7 +317,7 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	if e != nil {
 		return info, e
 	}
-	tail, e := readQueryRange(ctx, f, tailStart, tailSize)
+	tail, e := readQueryRange(ctx, f, tailReadStart, tailSize)
 	if e != nil {
 		return info, e
 	}
@@ -317,6 +326,9 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	info.Head = head
 	info.Tail = tail
 	info.Sampled = tailStart > headSize
+	if info.Sampled {
+		info.Tail = tail[1:]
+	}
 	var parseErr error
 	headRecords := 0
 	if !info.Sampled {
@@ -327,7 +339,7 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 		parseErr = errors.Join(parseErr, tailErr)
 	}
 	parseErr = errors.Join(parseErr, extractSessionMetadata(ctx, info, headRecords))
-	e = verifyMetadataSource(ctx, f, root, filepath.Join("projects", rel), initial, head, tail, tailStart)
+	e = verifyMetadataSource(ctx, f, root, filepath.Join("projects", rel), initial, head, tail, tailReadStart)
 	if err := errors.Join(parseErr, e); err != nil {
 		return info, err
 	}

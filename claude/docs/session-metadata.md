@@ -43,8 +43,13 @@ new discovery/sample; content slicing is not filesystem I/O pagination.
 
 Info reads only the selected source's bounded head/tail. Complete JSON objects
 inside those windows become Records; raw Head/Tail preserve exact bytes, unknown
-extensions, null/omitted distinctions and numbers. Partial edge lines remain only
-in raw samples. Sampled=true means the middle was not read. Unknown metadata and
+extensions, null/omitted distinctions and numbers. For separated windows, one preceding byte establishes whether the tail starts
+at a complete line. This probe counts toward MaxBytes/Coverage.Bytes and is
+reread during verification; it is excluded from raw Tail and establishes no head
+provenance. Thus two full SampleBytes windows require 2*SampleBytes+1 initial
+bytes, and a lower MaxBytes rejects before reading. Partial edge lines remain only
+in raw samples. Sampled=true means the head/tail windows are separated, with only the one-byte
+boundary probe read in the gap. Unknown metadata and
 valid empty sources retain filename identity/stat with an empty Summary. The
 first complete source record can exclude a sidechain/team file; otherwise a
 missing title is not grounds to drop an identity. File existence never proves

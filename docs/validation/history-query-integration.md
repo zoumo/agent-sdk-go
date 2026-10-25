@@ -128,3 +128,22 @@ main-source layout only, no worktree expansion/SessionStore/cloud/system inclusi
 metadata sampling cannot validate an unread middle; neither backend promises an
 atomic snapshot or complete original event log. Synthetic/offline success is not
 successful real model/child interoperability evidence.
+
+## Review correction: exact tail line boundary
+
+Initial independent review of `17fefd0e6ec2ad87ce80034ccc6d7dd8b8ce7e63` found
+Standards 0 and Spec 1 P2. A separated metadata tail window unconditionally dropped
+its first line, even when starting exactly at a complete JSONL record. The public
+regression reproduced Summary="hello" instead of the latest complete custom title.
+This inherited issue was fixed during integration: a preceding one-byte probe
+lets the existing fragment trimming distinguish a complete first line. The probe
+is counted before reads in MaxBytes/Bytes and is included in final range
+verification. Raw Tail remains the original window; no tail record becomes head
+provenance. The public regression verifies info/list title selection, unchanged
+raw Tail, head FirstPrompt, exact bytes and rejection at a one-byte-short budget.
+The existing bounded-middle bytes assertion changes from 512 to 513 to reflect
+that newly documented, checked probe; its corrupt-middle/unknown/coverage
+assertions remain unchanged. Other partial-line and nested-object provenance
+regressions also pass. Focused race/source-integrity checks pass. Full validation
+is repeated after this production correction; the earlier all-pass run alone is
+not counted as the final corrected-source check.

@@ -1670,7 +1670,7 @@ func checkClaudeMetadataSamples(s *CommonStoriesSuite) {
 		require.NotNil(t, result.Info)
 		require.True(t, result.Info.Sampled)
 		require.Equal(t, "tail title", result.Info.Summary)
-		require.Equal(t, int64(512), result.Coverage.Bytes)
+		require.Equal(t, int64(513), result.Coverage.Bytes) // two 256-byte windows plus the tail boundary probe
 		require.Equal(t, "complete", result.Coverage.Status)
 		require.Contains(t, string(result.Info.Tail), "9007199254740993")
 		_, e = claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
@@ -1955,4 +1955,31 @@ func claudeIndependentHistory(t *testing.T) {
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, sha256.Sum256(before), sha256.Sum256(after))
+}
+
+func checkClaudeMetadataTailLineBoundary(s *CommonStoriesSuite) {
+	t := s.T()
+	head := `{"type":"user","message":{"content":"hello"}}` + "\n"
+	tail := `{"type":"custom-title","customTitle":"tail title"}` + "\n"
+	source := head + `{"type":"summary","summary":"` + strings.Repeat("x", 1000) + `"}` + "\n" + tail
+	scope, _ := claudeQueryFixture(t, source)
+	sample := int64(len(tail))
+	info, err := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scope, SampleBytes: sample})
+	require.NoError(t, err)
+	require.NotNil(t, info.Info)
+	assert.Equal(t, "tail title", info.Info.Summary)
+	require.Len(t, info.Info.Records, 2)
+	assert.Equal(t, tail, string(info.Info.Tail))
+	assert.Equal(t, "hello", *info.Info.FirstPrompt)
+	assert.True(t, info.Info.Sampled)
+	// Both windows plus one preceding byte establish that the tail starts a line.
+	assert.Equal(t, 2*sample+1, info.Coverage.Bytes)
+	listed, err := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope, SampleBytes: sample, MaxBytes: 2*sample + 1})
+	require.NoError(t, err)
+	require.Len(t, listed.Sessions, 1)
+	assert.Equal(t, "tail title", listed.Sessions[0].Summary)
+	limited, err := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scope, SampleBytes: sample, MaxBytes: 2 * sample})
+	requireMetadataKind(t, err, "resource-limit")
+	assert.Equal(t, "partial", limited.Coverage.Status)
+	assert.Zero(t, limited.Coverage.Bytes, "reject before exceeding the byte budget")
 }

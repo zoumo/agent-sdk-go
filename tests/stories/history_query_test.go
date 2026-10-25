@@ -29,3 +29,7 @@ func (s *CommonStoriesSuite) TestClaudeMetadataIncompleteTail() { checkClaudeMet
 func (s *CommonStoriesSuite) TestClaudeMetadataNestedSampleProvenance() {
 	checkClaudeMetadataNestedSampleProvenance(s)
 }
+
+func (s *CommonStoriesSuite) TestClaudeMetadataTailLineBoundary() {
+	checkClaudeMetadataTailLineBoundary(s)
+}

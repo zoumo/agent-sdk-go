@@ -39,6 +39,7 @@ Additional public-seam companions:
 ```sh
 mise exec -- go test -count=1 -timeout 60s ./tests/stories -run '^TestCommonStories$/^TestFaultClosePendingRequest$'
 mise exec -- go test -count=1 -timeout 60s ./tests/stories -run '^TestCommonStories$/^TestRecorded(Question)?FaultCompanion$'
+mise exec -- go test -count=1 -timeout 60s ./tests/stories -run '^TestCommonStories$/^TestReplayFinalResult$'
 ```
 
 `TestFaultClosePendingRequest/{codex,claude}` closes unanswered original handles,
@@ -76,6 +77,13 @@ Close preserves accepted queue facts; a peer's successful stdout write alone is
 not proof the SDK accepted them. Recorded companions consume the native terminal
 boundary before Close, then require EOF. The synthetic slow-consumer companion
 uses its control reply as a protocol ingestion barrier before Close and drain.
+Both recorded peers report their final matcher return value over a bounded
+application result channel **after** the strict client-EOF check. Tests require
+that report after Close: a local SDK EOF or process shutdown alone is insufficient.
+`TestReplayFinalResult/{codex,claude}` feeds each original capture's client frames
+with normal EOF and with an extra frame after the completion handshake; the
+latter must report a final matching error. A mutation discarding that error must
+fail the negative test.
 
 ## Timing, matching and unsupported scope
 

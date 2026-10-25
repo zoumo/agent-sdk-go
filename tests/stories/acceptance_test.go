@@ -2138,7 +2138,7 @@ func checkRecordedFaultCompanion(t *testing.T) {
 	require.NoError(t, err)
 	// Completion means every captured frame was matched/emitted. Receive has not
 	// been called; Close must still finish the strict peer's client-EOF check.
-	acceptFaultBarrier(t, barrier, 'd')
+	completion := acceptFaultBarrier(t, barrier, 'd')
 	var got []json.RawMessage
 	var failed, idle bool
 	for {
@@ -2170,6 +2170,7 @@ func checkRecordedFaultCompanion(t *testing.T) {
 			expected = append(expected, f.Data)
 		}
 	}
+	checkReplayResult(t, completion)
 	require.Len(t, got, len(expected), "every original native frame must be consumed")
 	for i := range expected {
 		assert.Equal(t, string(expected[i]), string(got[i]), "original frame %d", i)
@@ -2183,15 +2184,17 @@ func checkRecordedFaultCompanion(t *testing.T) {
 }
 
 func checkRecordedQuestionFaultCompanion(t *testing.T) {
+	barrier := faultBarrier(t)
 	frames, err := recording.Load("s2")
 	require.NoError(t, err)
 	init, thread, turn, err := recording.Params(frames)
 	require.NoError(t, err)
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	c, err := codex.NewStdio(deadline(t), codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"HOME=" + t.TempDir(), "PATH=", "SDK_STORY_PEER=codex", "SDK_STORY=recorded-question-drain", "GORACE=atexit_sleep_ms=0"}, Initialize: init})
+	c, err := codex.NewStdio(deadline(t), codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"HOME=" + t.TempDir(), "PATH=", "SDK_STORY_PEER=codex", "SDK_STORY=recorded-question-drain", "SDK_STORY_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"}, Initialize: init})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
+	completion := acceptFaultBarrier(t, barrier, 's')
 	session, err := codex.Open(deadline(t), codex.SessionOptions{Client: c, Thread: thread})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Abort() })
@@ -2252,6 +2255,7 @@ func checkRecordedQuestionFaultCompanion(t *testing.T) {
 			expected = append(expected, f.Wire)
 		}
 	}
+	checkReplayResult(t, completion)
 	require.Len(t, got, len(expected))
 	for i := range expected {
 		assert.JSONEq(t, string(expected[i]), string(got[i]), "original ordinal sequence %d", i)
@@ -2352,5 +2356,88 @@ func checkClaudeFaultClosePendingRequest(t *testing.T) {
 		require.Error(t, pending.Deny(ctx, claude.DenialOptions{}))
 		require.Error(t, pending.Deny(ctx, claude.DenialOptions{}))
 		assert.Equal(t, epoch, countAnswers(t, path, "claude"))
+	}
+}
+
+func checkReplayResult(t *testing.T, c net.Conn) {
+	t.Helper()
+	var result struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(c).Decode(&result), "peer must report after the final strict EOF check")
+	require.Empty(t, result.Error, "strict replay must return success after consuming client EOF")
+}
+
+// Verify the result channel exposes final EOF errors that SDK-local Close may
+// mask. Run both matchers against the same unmodified embedded input captures.
+func checkReplayFinalResult(t *testing.T, provider string) {
+	t.Helper()
+	var input bytes.Buffer
+	var run func(io.Reader) error
+	if provider == "codex" {
+		frames, err := recording.Load("s2")
+		require.NoError(t, err)
+		for _, f := range frames {
+			if f.Direction != "c2s" {
+				continue
+			}
+			input.Write(f.Wire)
+			input.WriteByte('\n')
+			var wire struct {
+				Method string
+				ID     json.RawMessage
+			}
+			require.NoError(t, json.Unmarshal(f.Wire, &wire))
+			if wire.Method == "" && len(wire.ID) > 0 {
+				input.WriteString("{\"id\":1000,\"method\":\"replay/answer\"}\n")
+			}
+		}
+		input.WriteString("{\"id\":1001,\"method\":\"replay/assert\"}\n")
+		run = func(r io.Reader) error { return recording.Peer(r, io.Discard, frames) }
+	} else {
+		for _, line := range bytes.Split(bytes.TrimSpace(transcript.Wire), []byte{'\n'}) {
+			var f transcript.Frame
+			require.NoError(t, json.Unmarshal(line, &f))
+			if f.Direction == "client" {
+				input.Write(f.Data)
+				input.WriteByte('\n')
+			}
+		}
+		run = func(r io.Reader) error {
+			return transcript.Replay(r, io.Discard, bytes.NewReader(transcript.Wire), nil)
+		}
+	}
+	for _, extra := range []bool{false, true} {
+		name := "strict-eof"
+		if extra {
+			name = "extra-frame-after-completion"
+		}
+		t.Run(name, func(t *testing.T) {
+			c, peer := net.Pipe()
+			defer c.Close()
+			defer peer.Close()
+			d, ok := deadline(t).Deadline()
+			require.True(t, ok)
+			require.NoError(t, c.SetDeadline(d))
+			require.NoError(t, peer.SetDeadline(d))
+			wire := input.String()
+			if extra {
+				wire += "{}\n"
+			}
+			done := make(chan error, 1)
+			go func() { done <- reportReplayResult(peer, run(strings.NewReader(wire))) }()
+			var result struct {
+				Error string `json:"error"`
+			}
+			require.NoError(t, json.NewDecoder(c).Decode(&result))
+			err := <-done
+			if extra {
+				require.ErrorContains(t, err, "extra client frame")
+				require.Contains(t, result.Error, "extra client frame")
+			} else {
+				require.NoError(t, err)
+				require.Empty(t, result.Error)
+			}
+		})
 	}
 }

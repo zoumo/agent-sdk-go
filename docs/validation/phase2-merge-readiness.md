@@ -152,3 +152,80 @@ before any dispatch attempt. Thus this context cannot trigger the final branch's
 cross-platform manual run through those available paths. No PR or CI settings
 change is substituted. A parent/user with workflow-dispatch access can select the
 final work branch in SDK checks; a PR is not required by the workflow source.
+
+## Final local verification
+
+Reviewed implementation revision: `e124883e94364efc0d8535db0acd10cae2a251a3`,
+tree `cb51a1b1733c373332c182df7bf5af07a27e36e6`. Subsequent evidence commits do
+not change Go source. Main merge commit is
+`a1e6709557612f1fa22a57d3697bea99dff2fa8e`, parents
+`a23ad1c9f1a8e90516b82e13228bb80e3a5287e8` and
+`6b00af9494e111ebe6f5f2b8b0297376a9a74b91`. The only merge conflict was docs/index.md;
+all Phase 2 links and the independent child-delivery research link were retained.
+ADR/research/index files match main, and glossary additions are preserved.
+
+### Standards
+
+After the bounded-cleanup correction, 0 remaining standard violations and 0
+smells needing correction. Exact assertions, cleanup, native public boundaries
+and caller/peer barriers were independently reviewed; no sleep fix or runtime
+semantic change was introduced.
+
+### Spec
+
+0 remaining deviations. The repair fixes demonstrated test-oracle/schedule
+defects and retains every required dispatch category. Existing in-flight and
+one-shot coverage remains, with stricter exact counts and additional ws/wss
+resolution coverage. Cross-platform CI is not claimed from focused/local passes.
+
+| Gate on final reviewed Go source | Result |
+|---|---|
+| Codex original failing public check before correction, 100 repetitions | Failed with old NotSent/zero oracle, retained |
+| Deterministic ws in-flight schedule under the old oracle | Failed in 0.258s; diagnostic-only mutation removed |
+| Codex ordered stdio/ws/wss checks with race, 100 repetitions | Passed, 18.494s |
+| New ws/wss in-flight native resolution with race, 10 repetitions | Passed, 32.573s |
+| Claude concurrent-answer/Close race, 100 repetitions after cleanup correction | Passed, 2.091s |
+| Full offline script after main integration and final cleanup correction | **Passed**: all packages, checkout public consumer, seven examples, real E2E gates skipped |
+| Generation/inventory/module/dependency/CI-gate/sanitization/hash/transcript gates | Passed within full offline script (417 types / 783 generated cases) |
+| Full race `-race -p=1 -v -count=1 -timeout=300s ./...` | **Passed**, every package, no DATA RACE report |
+| Full vet | Passed |
+| Committed whitespace/gofmt, shell syntax, OKF/internal/touched links | Passed |
+| Real-sanitized fixture diff against 6fc6f57 | Empty |
+| Production Go, module and dependency diff against 6fc6f57 | Empty |
+| Main refresh and ancestor check | Latest known main 6b00af9 included; no main write |
+| Standards / Spec after correction | 0 / 0 remaining |
+| Final exact published-SHA external consumers | Recorded in ticket/final publication handoff after immutable evidence commit creation |
+| Final-revision macOS / GitHub Actions | Pending manual SDK checks dispatch; not a local pass |
+
+The initial complete runs on the pre-cleanup-review implementation also passed.
+They were repeated only because the review caused a real test-source correction,
+not to seek a lucky scheduler result. No failed run was hidden and no gate was
+skipped to get green. Earlier failures remain historical diagnostic evidence;
+they no longer describe the final local gate result.
+
+The connector recheck after main's ADR commit reports main
+`6b00af9494e111ebe6f5f2b8b0297376a9a74b91`, protected=false,
+required_status_checks enforcement=off with empty contexts/checks, rulesets=[].
+A PR is not a configured prerequisite, and this task creates none. The remaining
+cross-platform evidence can be obtained, with suitable workflow permission, by:
+
+```sh
+gh workflow run ci.yml --repo zoumo/agent-sdk-go --ref phase2/history-query-integration
+# Verify the resulting run.head_sha equals the final published handoff SHA.
+```
+
+This workflow's Ubuntu/macOS Offline and External consumer jobs should all be
+checked against that exact SHA. The read-only connector has no dispatch action;
+the installed gh path's workflow-list API call was Forbidden, so no dispatch was
+attempted and no CI operation has an uncertain outcome. This remains a pending
+external verification action, not a remaining diagnosed code/test defect or an
+excuse to label missing CI green.
+
+Final full offline log SHA-256:
+`5dac5be0a0a3f42a5a959b50e5ee99f2c9c22d261e97bd851c92d229544d0bb0`;
+full race: `fdef2f76e1f103b3460352679a951fc64c695ca115ff951947383aa2b3f3b8d5`;
+Codex ordered race100: `352e0cfc43f205916f1fb3e9edde3bb1219e41cc1d647e30e5a0dfe6ed4e3999`;
+Claude cleanup race100: `97b4571bd2792511780dd8a42a3d101efb19f15cf8680ffd0d963d699e75dfc2`.
+All logs, the separate short spec/ticket, before/after checks and publication
+receipt remain in `.scratch/phase2-merge-readiness/`. They contain synthetic
+protocol/test results, not real session material or credentials.

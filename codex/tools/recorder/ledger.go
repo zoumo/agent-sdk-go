@@ -68,6 +68,11 @@ func operateLedger(path, revision, scene, operation, target string, checkOnly bo
 	if !parent.IsDir() || parent.Mode().Perm() != 0700 {
 		return errors.New("private aggregate ledger directory required")
 	}
+	if operation != "stop" {
+		if err := refuseStopped(path); err != nil {
+			return err
+		}
+	}
 	f, err := os.OpenFile(path, os.O_RDWR|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return err
@@ -77,6 +82,11 @@ func operateLedger(path, revision, scene, operation, target string, checkOnly bo
 		return err
 	}
 	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	if operation != "stop" {
+		if err := refuseStopped(path); err != nil {
+			return err
+		}
+	}
 	st, err := f.Stat()
 	if err != nil {
 		return err
@@ -251,4 +261,83 @@ func ledgerDeadline(path, revision string) (time.Time, error) {
 		return time.Time{}, errors.New("aggregate ledger revision mismatch")
 	}
 	return h.StartedAt.Add(480 * time.Second), nil
+}
+
+func refuseStopped(path string) error {
+	_, err := os.Lstat(path + ".stopped")
+	if err == nil {
+		return errors.New("aggregate capture stopped")
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+func stopAggregate(path, revision, scene, target string) error {
+	marker, err := os.OpenFile(path+".stopped", os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	if err != nil && !os.IsExist(err) {
+		return err
+	}
+	if err == nil {
+		_, err = marker.WriteString("failure or uncertain cleanup; no new attempts\n")
+		err = errors.Join(err, marker.Sync(), marker.Close())
+		if err != nil {
+			return err
+		}
+		dir, e := os.Open(filepath.Dir(path))
+		if e != nil {
+			return e
+		}
+		err = errors.Join(dir.Sync(), dir.Close())
+		if err != nil {
+			return err
+		}
+	}
+	return reserveRevision(path, revision, scene, "stop", target)
+}
+func acquireCaptureLease(path string) (*os.File, error) {
+	created := true
+	f, err := os.OpenFile(path+".lease", os.O_CREATE|os.O_EXCL|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if os.IsExist(err) {
+		created = false
+		f, err = os.OpenFile(path+".lease", os.O_RDWR|syscall.O_NOFOLLOW, 0)
+	}
+	if err != nil {
+		return nil, err
+	}
+	fail := func(err error) (*os.File, error) { f.Close(); return nil, err }
+	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		return fail(errors.New("aggregate capture already active"))
+	}
+	st, err := f.Stat()
+	if err != nil {
+		return fail(err)
+	}
+	if !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
+		return fail(errors.New("invalid aggregate capture lease"))
+	}
+	if !created {
+		state, err := io.ReadAll(io.LimitReader(f, 9))
+		if err != nil {
+			return fail(err)
+		}
+		if string(state) != "closed\n" {
+			return fail(errors.New("unsettled aggregate capture; no restart or retry"))
+		}
+	}
+	if _, err = f.WriteAt([]byte("active\n"), 0); err != nil {
+		return fail(err)
+	}
+	if err = f.Sync(); err != nil {
+		return fail(err)
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fail(err)
+	}
+	err = errors.Join(dir.Sync(), dir.Close())
+	if err != nil {
+		return fail(err)
+	}
+	return f, nil
 }

@@ -259,3 +259,28 @@ func TestNativeStructuredInputRetainsTextElementsAndImageVariantOffline(t *testi
 	// This verifies native serialization only. The deliberately synthetic image
 	// bytes are never submitted to a provider or claimed as accepted media.
 }
+
+func TestNativeTaskFailureStopsBeforeConfigurationAndSecondInput(t *testing.T) {
+	fs := rootPrefix(t)
+	addRoot(&fs, "c2s", `{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"Reply with the word Ready."}],"environments":[],"outputSchema":{"type":"object","properties":{"word":{"type":"string"}},"required":["word"],"additionalProperties":false}}}`)
+	addRoot(&fs, "s2c", `{"id":103,"result":{"turn":{"id":"failed-first","items":[],"status":"inProgress"}}}`)
+	addRoot(&fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"failed-first","items":[],"status":"failed","error":null}}}`)
+	c, ctx := rootClient(t, fs)
+	s, e := codex.Open(ctx, codex.SessionOptions{Client: c})
+	require.NoError(t, e)
+	defer func() { _ = c.Close(); _ = s.Close() }()
+	attempts := 0
+	out, e := RunRoot(ctx, s, RootPlan{Scene: "r1", Model: "synthetic-model", Effort: "high", Reserve: func() error { attempts++; return nil }}, &Handler{})
+	require.ErrorContains(t, e, "failed")
+	require.Equal(t, 1, attempts)
+	require.Len(t, out.Turns, 1)
+	require.Equal(t, types.TurnStatusFailed, out.Turns[0].Terminal.Status)
+	require.False(t, out.Model.NativeAccepted)
+	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
+	require.NoError(t, c.Close())
+}
+func TestR2PolicyCannotHideMissingQuestionOutcome(t *testing.T) {
+	denial := ExactRequest{Method: "item/fileChange/requestApproval", Params: json.RawMessage(`{}`), Result: json.RawMessage(`{"decision":"decline"}`)}
+	require.Error(t, ValidateR2Policy([]ExactRequest{denial}))
+	require.Error(t, ValidateR2Policy([]ExactRequest{denial, denial}))
+}

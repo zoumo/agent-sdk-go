@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -59,10 +60,10 @@ func TestCaptureReservesBeforeFailedOpenerAndNeverRetries(t *testing.T) {
 }
 func TestOriginalCaptureOrchestrationWithSyntheticPeers(t *testing.T) {
 	for _, story := range []string{"s1", "s2"} {
-		t.Run(story, func(t *testing.T) { testOriginalCapture(t, story) })
+		t.Run(story, func(t *testing.T) { testOriginalCapture(t, story, 0) })
 	}
 }
-func testOriginalCapture(t *testing.T, story string) {
+func testOriginalCapture(t *testing.T, story string, protocolBytes int) {
 	p := captureProfile(t, story)
 	prefix, e := recording.Load(story)
 	require.NoError(t, e)
@@ -116,12 +117,22 @@ func testOriginalCapture(t *testing.T, story string) {
 	opener := func(ctx context.Context, _ recorder.LaunchProfile) (*codex.Client, func() (recording.TransportResult, error), error) {
 		c, e := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--recorder-test-peer", "--scenario", path, "app-server", "--listen=stdio://"}, Env: []string{}, Initialize: init})
 		return c, func() (recording.TransportResult, error) {
-			return recording.TransportResult{Reaped: true, CleanupComplete: true}, c.Close()
+			return recording.TransportResult{Reaped: true, CleanupComplete: true, ProtocolBytes: protocolBytes}, c.Close()
 		}, e
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	out, e := recorder.CaptureWithPeer(ctx, p, opener)
+	if protocolBytes > recording.ProtocolLimit {
+		require.ErrorContains(t, e, "byte ceiling")
+		var metadata recorder.CaptureResult
+		b, err := os.ReadFile(p.RawDir + "/metadata.private.json")
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(b, &metadata))
+		require.Contains(t, metadata.Error, "byte ceiling")
+		require.Error(t, recorder.Reserve(p.Ledger, "r2", "root"))
+		return
+	}
 	require.NoError(t, e)
 	require.True(t, out.Original.Completed)
 	if story == "s1" {
@@ -142,4 +153,29 @@ func mustJSONTest(v any) json.RawMessage {
 		panic(e)
 	}
 	return b
+}
+
+func TestFailureStopSurvivesContendedJournalLock(t *testing.T) {
+	p := captureProfile(t, "r1")
+	p.Model = "synthetic-model"
+	p.Effort = "high"
+	ledger, e := os.OpenFile(p.Ledger, os.O_RDWR, 0)
+	require.NoError(t, e)
+	defer ledger.Close()
+	opener := func(context.Context, recorder.LaunchProfile) (*codex.Client, func() (recording.TransportResult, error), error) {
+		require.NoError(t, syscall.Flock(int(ledger.Fd()), syscall.LOCK_EX|syscall.LOCK_NB))
+		return nil, func() (recording.TransportResult, error) {
+			return recording.TransportResult{Reaped: true, CleanupComplete: true}, nil
+		}, errors.New("synthetic failure while another journal writer owns lock")
+	}
+	_, e = recorder.CaptureWithPeer(context.Background(), p, opener)
+	require.Error(t, e)
+	_, e = os.Stat(p.Ledger + ".stopped")
+	require.NoError(t, e)
+	require.NoError(t, syscall.Flock(int(ledger.Fd()), syscall.LOCK_UN))
+	require.ErrorContains(t, recorder.Reserve(p.Ledger, "r2", "root"), "stopped")
+}
+
+func TestCaptureByteFailureMetadataAndStop(t *testing.T) {
+	testOriginalCapture(t, "s2", recording.ProtocolLimit+1)
 }

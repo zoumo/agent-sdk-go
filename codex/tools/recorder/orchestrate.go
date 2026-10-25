@@ -60,6 +60,17 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 	if err != nil {
 		return out, err
 	}
+	lease, err := acquireCaptureLease(p.Ledger)
+	if err != nil {
+		return out, err
+	}
+	defer func() {
+		if ret == nil {
+			_, err := lease.WriteAt([]byte("closed\n"), 0)
+			ret = errors.Join(ret, err, lease.Sync())
+		}
+		ret = errors.Join(ret, lease.Close())
+	}()
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	seconds := 120
@@ -89,7 +100,7 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 	}
 	defer func() {
 		if ret != nil {
-			ret = errors.Join(ret, reserveRevision(p.Ledger, p.SDKRevision, p.Scene, "stop", p.RawDir))
+			ret = errors.Join(ret, stopAggregate(p.Ledger, p.SDKRevision, p.Scene, p.RawDir))
 		}
 	}()
 	// Even an opener/initialize failure consumes the reservation.
@@ -102,11 +113,11 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 			if !transport.CleanupComplete || !transport.Reaped {
 				ret = errors.Join(ret, errors.New("owned capture cleanup incomplete"))
 			}
-			if ret != nil {
-				out.Error = ret.Error()
-			}
 			if transport.ProtocolBytes > recording.ProtocolLimit || transport.StderrBytes > recording.StderrLimit {
 				ret = errors.Join(ret, errors.New("capture byte ceiling exceeded"))
+			}
+			if ret != nil {
+				out.Error = ret.Error()
 			}
 			if e = writeMetadata(p.RawDir, out); e != nil {
 				ret = errors.Join(ret, e)
@@ -175,6 +186,9 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 	}
 	h.Exact = p.NativePolicy
 	out.Root, err = recording.RunRoot(ctx, s, recording.RootPlan{Scene: p.Scene, Model: p.Model, Effort: types.ReasoningEffort(p.Effort), Reserve: reserveTurn}, h)
+	if err == nil && out.Root.Untriggered {
+		err = errors.New("declared root outcome untriggered")
+	}
 	return out, err
 }
 func writeExclusive(path string, b []byte) error {
@@ -239,7 +253,7 @@ func nativeOpener(profilePath string) PeerOpener {
 		if err != nil {
 			return nil, nil, err
 		}
-		c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--private-proxy", profilePath}, Dir: p.Project, Env: []string{"SDK_REAL_AGENT_E2E=1", "PATH=/usr/bin:/bin"}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "bounded-recording", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}, Limits: codex.Limits{EventQueue: 2048, CallTimeout: 120 * time.Second, RequestTimeout: 15 * time.Second}})
+		c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--private-proxy", profilePath}, Dir: p.Project, Env: []string{"SDK_REAL_AGENT_E2E=1", "PATH=/usr/bin:/bin"}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "bounded-recording", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}, Limits: codex.Limits{EventQueue: 2048, CallTimeout: 120 * time.Second, RequestTimeout: 15 * time.Second, ShutdownTimeout: 12 * time.Second}})
 		finish := func() (recording.TransportResult, error) {
 			var out recording.TransportResult
 			var closeErr error

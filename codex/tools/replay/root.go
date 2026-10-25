@@ -31,52 +31,86 @@ func (h *Handler) answerExact(ctx context.Context, r codex.Request) error {
 	if r.Method() != p.Method || !json.Valid(p.Params) || !equal(canonical(r.Params()), canonical(p.Params)) {
 		return deny()
 	}
-	switch p.Method {
-	case "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
-		// No shell or write approval is safe in Phase 1. File approval contains no
-		// patch/path, so it cannot prove exact content even with an exact envelope.
-		if !equal(canonical(p.Result), canonical([]byte(`{"decision":"decline"}`))) {
-			return deny()
-		}
-	case "item/permissions/requestApproval":
-		if !equal(canonical(p.Result), canonical([]byte(`{"permissions":{},"scope":"turn"}`))) {
-			return deny()
-		}
-	case "item/tool/requestUserInput":
-		var params types.ToolRequestUserInputParams
-		var answer types.ToolRequestUserInputResponse
-		if json.Unmarshal(p.Params, &params) != nil || json.Unmarshal(p.Result, &answer) != nil || len(params.Questions) != 2 || len(answer.Answers) != 2 || len(params.UnknownFields) != 0 || len(answer.UnknownFields) != 0 {
-			return deny()
-		}
-		ids := map[string]bool{}
-		for i, q := range params.Questions {
-			if ids[q.ID] {
-				return deny()
-			}
-			ids[q.ID] = true
-			a, ok := answer.Answers[q.ID]
-			if !ok || q.ID == "" || q.IsSecret.ValueOr(false) || len(a.Answers) != 1 || len(a.UnknownFields) != 0 {
-				return deny()
-			}
-			if i == 0 {
-				opts, ok := q.Options.Get()
-				if !ok || len(opts) != 2 || opts[0].Label != "Blue" || opts[1].Label != "Green" || a.Answers[0] != "Blue" {
-					return deny()
-				}
-			} else if a.Answers[0] != "sample" {
-				return deny()
-			}
-		}
-	default:
-		return deny()
-	}
-	if !json.Valid(p.Result) {
+	if !allowedExact(p) {
 		return deny()
 	}
 	if err := r.Handle().Answer(ctx, p.Result); err != nil {
 		return err
 	}
 	h.Answered++
+	return nil
+}
+
+func allowedExact(p ExactRequest) bool {
+	if !json.Valid(p.Params) || !json.Valid(p.Result) {
+		return false
+	}
+	switch p.Method {
+	case "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
+		// No shell or write approval is safe in Phase 1. File approval contains no
+		// patch/path, so it cannot prove exact content even with an exact envelope.
+		if !equal(canonical(p.Result), canonical([]byte(`{"decision":"decline"}`))) {
+			return false
+		}
+	case "item/permissions/requestApproval":
+		if !equal(canonical(p.Result), canonical([]byte(`{"permissions":{},"scope":"turn"}`))) {
+			return false
+		}
+	case "item/tool/requestUserInput":
+		var params types.ToolRequestUserInputParams
+		var answer types.ToolRequestUserInputResponse
+		if json.Unmarshal(p.Params, &params) != nil || json.Unmarshal(p.Result, &answer) != nil || len(params.Questions) != 2 || len(answer.Answers) != 2 || len(params.UnknownFields) != 0 || len(answer.UnknownFields) != 0 {
+			return false
+		}
+		ids := map[string]bool{}
+		for i, q := range params.Questions {
+			if ids[q.ID] {
+				return false
+			}
+			ids[q.ID] = true
+			a, ok := answer.Answers[q.ID]
+			if !ok || q.ID == "" || q.IsSecret.ValueOr(false) || len(a.Answers) != 1 || len(a.UnknownFields) != 0 {
+				return false
+			}
+			if i == 0 {
+				opts, ok := q.Options.Get()
+				if !ok || len(opts) != 2 || opts[0].Label != "Blue" || opts[1].Label != "Green" || a.Answers[0] != "Blue" {
+					return false
+				}
+			} else if a.Answers[0] != "sample" {
+				return false
+			}
+		}
+	default:
+		return false
+	}
+	if !json.Valid(p.Result) {
+		return false
+	}
+	return true
+}
+
+// ValidateR2Policy requires both native approval and the original two-question
+// outcome. A smaller successful policy cannot hide missing declared evidence.
+func ValidateR2Policy(policy []ExactRequest) error {
+	if len(policy) < 2 || len(policy) > 3 {
+		return errors.New("r2 requires native approval and question policy")
+	}
+	question := 0
+	for i, p := range policy {
+		if !allowedExact(p) {
+			return errors.New("invalid exact native policy")
+		}
+		if p.Method == "item/tool/requestUserInput" {
+			question++
+			if i != len(policy)-1 {
+				return errors.New("r2 question must follow permission policy")
+			}
+		}
+	}
+	if question != 1 {
+		return errors.New("r2 requires exactly one original two-question request")
+	}
 	return nil
 }
 
@@ -122,8 +156,10 @@ func RunRoot(ctx context.Context, s *codex.Session, p RootPlan, h *Handler) (out
 	if p.Scene == "r1" && (p.Model == "" || p.Effort == "") {
 		return out, errors.New("explicit native model/effort required")
 	}
-	if p.Scene == "r2" && h.Exact == nil {
-		return out, errors.New("reviewed exact native request policy required")
+	if p.Scene == "r2" {
+		if err := ValidateR2Policy(h.Exact); err != nil {
+			return out, err
+		}
 	}
 	oldBefore, oldProgress := h.BeforeSubmit, h.Progress
 	oldHold, oldControl := h.HoldFirst, h.WhileHeld
@@ -185,6 +221,13 @@ func RunRoot(ctx context.Context, s *codex.Session, p RootPlan, h *Handler) (out
 		out.Turns = append(out.Turns, result)
 		if err != nil {
 			return out, err
+		}
+		status := result.Terminal.Status
+		if (p.Scene != "r3" && status != types.TurnStatusCompleted) || (p.Scene == "r3" && status != types.TurnStatusCompleted && status != types.TurnStatusInterrupted) {
+			return out, fmt.Errorf("native root task ended with %s", status)
+		}
+		if p.Scene == "r3" && status != types.TurnStatusInterrupted {
+			out.Untriggered = true
 		}
 		if p.Scene == "r1" && i == 0 {
 			out.Model, err = s.SetModel(ctx, p.Model)

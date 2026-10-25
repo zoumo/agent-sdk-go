@@ -187,8 +187,11 @@ func validateSceneConfig(p LaunchProfile) error {
 			return errors.New("r1 requires reviewed model and fixed high native effort")
 		}
 	case "r2":
-		if p.Model == "" || len(p.NativePolicy) == 0 || len(p.NativePolicy) > 3 {
+		if p.Model == "" {
 			return errors.New("r2 requires reviewed model and finite exact native policy")
+		}
+		if err := recording.ValidateR2Policy(p.NativePolicy); err != nil {
+			return err
 		}
 	case "r3":
 		if p.Model == "" {

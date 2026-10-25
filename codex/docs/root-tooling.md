@@ -93,7 +93,10 @@ local accounting mechanism's guarantees.
 The ledger records reserved root, reader and submitted-input attempts separately.
 Capture reservations bind the private output target; a proxy checks that binding
 and a once-only owned startup marker before native startup. Failures persist a
-global stop row, preventing later scenes in the aggregate session.
+global stop marker before its journal row, preventing later scenes even when
+  another writer holds the journal lock. An exclusive persisted active/closed
+  capture lease serializes capture lifetimes; a crash/uncertain failure leaves
+  the lease unsettled and refuses restart. These files cannot be deleted to retry.
 Provider API request/retry counts, usage and USD are **unknown**, never inferred
 as zero or one per turn. It does not implement a live provider-meter observer.
 `CaptureWithPeer` now verifies the ledger/build revision, reserves before the
@@ -108,9 +111,31 @@ closed: no live boolean or historical marker can bypass it. Proxy retains its
 private proxy entry repeats profile/financial checks and requires the bound
 reservation. A financial/isolation enforcement adapter remains a prerequisite,
 not missing basic scene orchestration. Activity deadline and cleanup are distinct;
-owned cleanup may take up to the existing bounded proxy teardown interval after
-activity stops. A strict 120-second *total including teardown* would need a
+owned cleanup runs after activity stops. The native opener gives its proxy a
+12-second SDK shutdown timeout (six-second grace), exceeding Proxy’s bounded
+five-second worst-case native teardown so SDK shutdown does not prematurely kill
+the proxy before native reaping. Missing transport cleanup still stops the ledger. A strict 120-second *total including teardown* would need a
 separately validated earlier activity cutoff; no stronger timing claim is made.
+
+## Smallest #11 decision table
+
+No execution has occurred. The smallest useful initial selection is R1 plus R4:
+
+| Selection | Root / inputs / reader | Activity wall | Wire / stderr | Evidence |
+|---|---|---|---|---|
+| R1 | 1 / 2 / 0 | 120 s | 2 MiB / 256 KiB | Continuation and native config receipts |
+| R4, only new R1 | 0 / 0 / 1; max 6 query RPCs | 30 s | 2 MiB / 256 KiB | Fresh saved metadata/content |
+| Minimum total | **1 / 2 / 1**, children/depth 0/0, SDK retries 0 | **150 s**, bounded teardown separately, aggregate activity window 480 s | **4 MiB / 512 KiB** | No approval/child/media claim |
+| Optional R3 increment | +1 / +2 / 0 | +120 s | +2 MiB / 256 KiB | Execution-time input / original-turn interrupt or explicit gap |
+
+The user may choose this finite workload and explicitly decide whether to accept
+unknown dollar/token/provider-generation/internal-retry exposure. These tools
+cannot make a truthful strict bill cap promise. The proposed USD 1/scene below
+is a proposed decision, not automatic authority or a permanent inherited rule.
+Separately, the operator must prove policy/config/hook/integration isolation and
+an approved existing-auth transport without reading private/platform credentials.
+Approving fee uncertainty does not prove or relax that isolation. R2 safe native
+Read approval remains technically unavailable within the current no-shell policy.
 
 ## Concrete #11 run proposal and stop conditions
 
@@ -138,7 +163,13 @@ limits is independently enforceable by these tools**. Codex has no verified
 dollar hard stop. A wall kill, wire cap, post-run token report, effort level or
 submitted-turn counter cannot prevent the next provider request exceeding a
 financial cap. Unknown telemetry blocks launch; do not reset a ledger or try a
-new profile to bypass it. Consequently #11 remains blocked even after code CI.
+new profile to bypass it. Consequently #11 remains blocked under the current unamended launch gates even
+after code CI. Historical USD limits are not a new permanent requirement: the
+parent must obtain a new explicit decision on finite activity/attempt budgets
+and whether the user accepts cost uncertainty without a strict financial cap.
+That decision would require a reviewed gate/policy update; the current code has
+no opt-in that silently accepts the risk. Isolation/privacy proof remains an
+independent requirement, regardless of the financial decision.
 
 Media/image acceptance is not added. Native Read approval, execution-time
 acceptance, settings observation, terminal interrupt, persisted query support and

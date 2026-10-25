@@ -111,3 +111,101 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 		})
 	}
 }
+
+// TestSessionConfigurationTimeoutWithControlledTime covers the timeout branch of
+// TestSessionConfigurationUnknownAfterCancelAndClose. Process initialization stays
+// in the public protocol tests; this existing pipe seam lets a standard context
+// deadline expire only after the configuration frame and write have settled.
+func TestSessionConfigurationTimeoutWithControlledTime(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := newClient(DefaultLimits())
+		c.ready = true
+		c.experimentalAPI = true
+		reader, writer, err := os.Pipe()
+		require.NoError(t, err)
+		defer reader.Close()
+		c.stdin = writer
+		writerDone := make(chan struct{})
+		go func() { defer close(writerDone); c.writeLoop() }()
+		defer func() { c.fail(ErrClosed); <-writerDone }()
+		scan := bufio.NewScanner(reader)
+		var methods []string
+		readFrame := func(wantMethod string) (ID, json.RawMessage) {
+			t.Helper()
+			require.True(t, scan.Scan(), "missing dispatched %s: %v", wantMethod, scan.Err())
+			var frame struct {
+				ID     ID              `json:"id"`
+				Method string          `json:"method"`
+				Params json.RawMessage `json:"params"`
+			}
+			require.NoError(t, json.Unmarshal(scan.Bytes(), &frame))
+			require.Equal(t, wantMethod, frame.Method)
+			methods = append(methods, frame.Method)
+			return frame.ID, frame.Params
+		}
+		respond := func(id ID, response string) {
+			t.Helper()
+			require.NoError(t, c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":%s}`, id, response))))
+		}
+		type opened struct {
+			session *Session
+			err     error
+		}
+		opening := make(chan opened, 1)
+		go func() { s, err := Open(context.Background(), SessionOptions{Client: c}); opening <- opened{s, err} }()
+		id, _ := readFrame("thread/start")
+		respond(id, `{"thread":{"id":"main-1","sessionId":"session-1","cliVersion":"0.160.1","createdAt":1,"updatedAt":1,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}`)
+		got := <-opening
+		require.NoError(t, got.err)
+		s := got.session
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		type configured struct {
+			receipt ConfigurationReceipt
+			err     error
+		}
+		result := make(chan configured, 1)
+		start := time.Now()
+		go func() { r, err := s.SetModel(ctx, "native-withhold"); result <- configured{r, err} }()
+		id, params := readFrame("thread/settings/update")
+		require.JSONEq(t, `{"threadId":"main-1","model":"native-withhold"}`, string(params))
+		synctest.Wait() // The complete frame was read and the writer is idle.
+		require.NoError(t, ctx.Err(), "deadline expired before dispatch")
+		time.Sleep(50*time.Millisecond - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case got := <-result:
+			require.FailNowf(t, "configuration completed before deadline", "%v", got.err)
+		default:
+		}
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		select {
+		case got := <-result:
+			var call *CallError
+			require.ErrorAs(t, got.err, &call)
+			assert.Equal(t, "thread/settings/update", call.Method)
+			assert.Equal(t, id, call.ID)
+			assert.Equal(t, OutcomeUnknown, call.Dispatch)
+			assert.ErrorIs(t, got.err, context.DeadlineExceeded)
+			assert.Equal(t, context.DeadlineExceeded, call.Cause)
+			assert.False(t, got.receipt.NativeAccepted)
+			assert.Equal(t, "native-withhold", got.receipt.Requested.Model.ValueOr(""))
+		default:
+			require.FailNow(t, "configuration survived its exact deadline")
+		}
+		assert.Equal(t, 50*time.Millisecond, time.Since(start))
+		// A fresh configuration must be the next frame, rather than a retry.
+		go func() { r, err := s.SetModel(context.Background(), "still-usable"); result <- configured{r, err} }()
+		freshID, params := readFrame("thread/settings/update")
+		require.NotEqual(t, id, freshID)
+		require.JSONEq(t, `{"threadId":"main-1","model":"still-usable"}`, string(params))
+		respond(freshID, `{}`)
+		fresh := <-result
+		require.NoError(t, fresh.err)
+		assert.True(t, fresh.receipt.NativeAccepted)
+		assert.NoError(t, c.Err())
+		assert.NoError(t, s.Err())
+		assert.Equal(t, []string{"thread/start", "thread/settings/update", "thread/settings/update"}, methods)
+	})
+}

@@ -268,3 +268,48 @@ Forbidden is respected: no retry, alternate identity or route is used to dispatc
 No PR, main merge or remote CI execution is claimed. A user/parent with appropriate
 access must run SDK checks on the final branch/SHA and inspect all six jobs;
 configured macOS coverage is not a macOS pass.
+
+
+## Additional blocker exposed during macOS matrix validation
+
+The first complete checks after matrix commit e60caff failed: the offline script
+reached the S2 recorded-replay example and returned OutcomeUnknown +
+ErrRequestResolved; full race failed
+TestRecordedManagedIntegration/s2/repetition-3 in codex/tools/replay. These failed
+checks are retained, not marked green. The matrix commit changed no Go code.
+Ticket `.scratch/phase2-merge-readiness/issues/03-recorded-replay-answer-boundary.md`
+records the narrowly scoped follow-up.
+
+The strict recorded peer validated the client response, then immediately emitted
+the next recorded native resolution. That signal could precede the local Answer
+call settling. The SDK's conservative OutcomeUnknown is valid, but this replay
+is meant to verify the recorded successful-answer ordering, not randomly select
+an in-flight cancellation schedule. RunSession correctly rejected the error;
+no error handling or native dispatch semantics is relaxed.
+
+The existing private offline replay protocol now has a per-answer settlement
+barrier in addition to its final assertion. After an exactly matched reverse
+answer, the verification peer waits for replay/answer. Only Replay's own driver
+sends that control after the public Answer call has returned successfully. Every
+answer error remains fatal. The peer then acknowledges the private control and
+continues the original captured frames in their original relative order.
+Neither the golden bytes/hashes nor expected observations are changed. Public
+RunPeer/mock CLI scenarios and the live recorder have no settlement controls and
+retain their original behavior; native in-flight cancellation is still tested
+with strict OutcomeUnknown and no-retry assertions elsewhere.
+
+A literal public Peer regression first failed with extra client request. It now
+checks exact acknowledgment-before-resolution order, rejects missing/wrong/
+malformed/parameterized settlement controls without releasing native frames,
+and verifies public RunPeer needs no private handshake. New control output
+counts toward the existing frame/traffic budgets. The original ID correlation
+and replay mismatch tests remain. The synthetic private-peer driver was updated
+to use the same explicit settlement mode; an initial development stress run found
+that missing pairing and was stopped after diagnosis, rather than counted as a
+pass. Focused race and all handshake/fault tests pass after the correction.
+
+The original failing recorded S2 path then passed race count=10, covering its
+three existing repetitions each time (30 replays) in 30.967 seconds. No sleep,
+retry-until-green, discarded native error, weakened matcher, real CLI/model or
+new recording is part of the repair. Complete gates and independent review are
+repeated for the combined matrix/tool change before final publication.

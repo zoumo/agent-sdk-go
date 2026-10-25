@@ -85,8 +85,8 @@ func canonical(b []byte) any {
 	return v
 }
 
-// Peer follows captured dependencies and retains the private replay/assert
-// completion handshake used by existing recording verification.
+// Peer follows captured dependencies with private replay/answer settlement and
+// replay/assert completion handshakes used only by offline verification.
 func Peer(in io.Reader, out io.Writer, frames []Frame) error {
 	return runPeer(context.Background(), in, out, frames, true)
 }
@@ -105,6 +105,9 @@ type Handler struct {
 	Story     string
 	Calls     int
 	Questions int
+	// Set only by Replay; the live recorder and public RunPeer never use the
+	// offline peer's private synchronization protocol.
+	replayClient *codex.Client
 }
 
 func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
@@ -232,6 +235,11 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 			stop()
 			if err != nil {
 				return result, err
+			}
+			if h.replayClient != nil {
+				if err := h.replayClient.Call(ctx, "replay/answer", nil, nil); err != nil {
+					return result, err
+				}
 			}
 			continue
 		}
@@ -361,7 +369,7 @@ func Replay(ctx context.Context, executable, story string, out io.Writer) error 
 		return err
 	}
 	defer func() { _ = c.Close(); _ = session.Close() }()
-	result, err := RunSession(ctx, session, turn, &Handler{Root: root, Story: story})
+	result, err := RunSession(ctx, session, turn, &Handler{Root: root, Story: story, replayClient: c})
 	if err != nil {
 		return err
 	}

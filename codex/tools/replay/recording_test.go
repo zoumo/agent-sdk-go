@@ -25,7 +25,7 @@ func frame(n int, d, w string) Frame {
 }
 func TestIDCorrelationAndEarlyNotification(t *testing.T) {
 	f := []Frame{frame(1, "c2s", `{"id":101,"method":"one"}`), frame(2, "c2s", `{"id":102,"method":"two"}`), frame(3, "s2c", `{"method":"early","params":{"itemId":"item-001"}}`), frame(4, "s2c", `{"id":102,"result":{}}`), frame(5, "s2c", `{"id":101,"result":{}}`), frame(6, "s2c", `{"id":"reverse-1","method":"item/tool/call","params":{"callId":"item-001"}}`), frame(7, "c2s", `{"id":"reverse-1","result":{"success":true}}`)}
-	in := `{"id":7,"method":"one"}` + "\n" + `{"id":"8","method":"two"}` + "\n" + `{"id":"reverse-1","result":{"success":true}}` + "\n" + `{"id":9,"method":"replay/assert"}` + "\n"
+	in := `{"id":7,"method":"one"}` + "\n" + `{"id":"8","method":"two"}` + "\n" + `{"id":"reverse-1","result":{"success":true}}` + "\n" + `{"id":10,"method":"replay/answer"}` + "\n" + `{"id":9,"method":"replay/assert"}` + "\n"
 	var out bytes.Buffer
 	{
 		err := Peer(strings.NewReader(in), &out, f)
@@ -37,6 +37,57 @@ func TestIDCorrelationAndEarlyNotification(t *testing.T) {
 		"numeric/string dynamic IDs not preserved")
 
 }
+
+// Private replay synchronization chooses the recorded successful-answer path.
+// The original frames and their relative order remain independently asserted.
+func TestReplayAnswerSettlementPrecedesNativeResolution(t *testing.T) {
+	frames := []Frame{
+		frame(1, "s2c", `{"id":"question","method":"future/question","params":{"threadId":"thread"}}`),
+		frame(2, "c2s", `{"id":"question","result":{"answer":"literal"}}`),
+		frame(3, "s2c", `{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"question"}}`),
+	}
+	input := `{"id":"question","result":{"answer":"literal"}}` + "\n" +
+		`{"id":8,"method":"replay/answer"}` + "\n" + `{"id":9,"method":"replay/assert"}` + "\n"
+	var output bytes.Buffer
+	require.NoError(t, Peer(strings.NewReader(input), &output, frames))
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	require.Len(t, lines, 4)
+	assert.JSONEq(t, string(frames[0].Wire), lines[0])
+	assert.JSONEq(t, `{"id":8,"result":{}}`, lines[1])
+	assert.JSONEq(t, string(frames[2].Wire), lines[2])
+	assert.JSONEq(t, `{"id":9,"result":{}}`, lines[3])
+	answer := `{"id":"question","result":{"answer":"literal"}}` + "\n"
+	for _, tc := range []struct{ name, control string }{
+		{"missing settlement", ""},
+		{"completion before settlement", `{"id":8,"method":"replay/assert"}`},
+		{"wrong control", `{"id":8,"method":"other"}`},
+		{"invalid control ID", `{"id":null,"method":"replay/answer"}`},
+		{"unexpected parameters", `{"id":8,"method":"replay/answer","params":{}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			input := answer
+			if tc.control != "" {
+				input += tc.control + "\n"
+			}
+			require.Error(t, Peer(strings.NewReader(input), &out, frames))
+			assert.NotContains(t, out.String(), `"serverRequest/resolved"`, "failed handshake released native frames")
+		})
+	}
+	t.Run("public RunPeer needs no private handshake", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "wire.jsonl")
+		out, err := os.Create(path)
+		require.NoError(t, err)
+		require.NoError(t, RunPeer(context.Background(), io.NopCloser(strings.NewReader(answer)), out, frames))
+		wire, err := os.ReadFile(path)
+		require.NoError(t, err)
+		lines := strings.Split(strings.TrimSpace(string(wire)), "\n")
+		require.Len(t, lines, 2)
+		assert.JSONEq(t, string(frames[0].Wire), lines[0])
+		assert.JSONEq(t, string(frames[2].Wire), lines[1])
+	})
+}
+
 func TestReplayFaults(t *testing.T) {
 	frames := []Frame{frame(1, "c2s", `{"id":101,"method":"one"}`), frame(2, "s2c", `{"id":101,"result":{}}`)}
 	for _, tc := range []struct{ name, input string }{
@@ -258,7 +309,7 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
 	require.NoError(t, err)
 	defer func() { _ = c.Close(); _ = session.Close() }()
-	result, err := RunSession(ctx, session, turn, &Handler{Root: root, Story: "s1"})
+	result, err := RunSession(ctx, session, turn, &Handler{Root: root, Story: "s1", replayClient: c})
 	require.NoError(t, err)
 	require.False(t, !result.Completed || result.Tools != 2,
 		"missing lifecycle/tools")

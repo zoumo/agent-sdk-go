@@ -53,7 +53,7 @@ def check(root):
     errors += inventory_errors((root / "harness/sdk/user-stories.md").read_text(), "SDK-US", common)
     errors += inventory_errors((root / "harness/contracts/stories/index.md").read_text(), "US", scenarios)
     native = (root / "harness/sdk/native-stories.md").read_text()
-    for prefix, size in [("CODEX-US", 4), ("CLAUDE-US", 5)]:
+    for prefix, size in [("CODEX-US", 5), ("CLAUDE-US", 7)]:
         expected = {f"{prefix}-{n:03}" for n in range(1, size + 1)}
         errors += inventory_errors(native, prefix, expected)
         errors += inventory_errors(coverage, prefix, expected)
@@ -65,7 +65,9 @@ def check(root):
     if not all(name in history for name in ["TestIndependentHistoryBrowser", '"US-014/codex"', '"US-014/claude"']):
         errors.append("IndependentHistoryBrowser must expose US-014 for both native adapters")
     for relative in ["docs/validation/story-coverage.md", "docs/capture-plan.md", "harness/sdk/native-stories.md",
-                     "docs/index.md", "docs/recordings.md", "harness/sdk/index.md"]:
+                     "docs/index.md", "docs/recordings.md", "harness/sdk/index.md",
+                     "harness/contracts/child-detail-delivery.md", "harness/contracts/claude-subagent-history.md",
+                     "harness/contracts/stories/child-capabilities.md", "docs/research/child-capability-contract-sources.md"]:
         path = root / relative
         errors += link_errors(path, path.read_text())
     return errors
@@ -77,4 +79,4 @@ if __name__ == "__main__":
         print(failure, file=sys.stderr)
     if failures:
         sys.exit(1)
-    print("Story evidence: 19 goals, 14 scenarios, 9 native supplements; links and public suite inventory valid (offline).")
+    print("Story evidence: 19 goals, 14 scenarios, 12 native supplements; links and public suite inventory valid (offline).")

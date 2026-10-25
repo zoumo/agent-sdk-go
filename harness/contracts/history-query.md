@@ -50,3 +50,5 @@ metadata 的 complete 只认证本次发现和采样，不能认证未读中段�
 本合同的主会话历史能力不承诺子 Agent 历史或独立订阅。子 Agent 发现、live
 成员归属及原始回答权限继续服从[Session 合同](../modules/native-session/interfaces.md)。
 独立父子消费流、子代理消息后端与新的 live 路由需要单独设计；查询不改变现有路由。
+
+Claude 独立 child 发现和消息目标由[子历史合同](claude-subagent-history.md)单独定义；主历史算法和 Session 绑定发现均不能替代它。

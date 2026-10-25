@@ -22,3 +22,5 @@
 原生查询验收：[Claude 独立消息查询](claude-session-messages.md)。
 
 原生发现验收：[Claude 独立 metadata](claude-session-metadata.md)。
+
+可选交付与独立 child 内容子场景：[F1–F5 / H1–H5](child-capabilities.md)（沿用 US-003/014，不新增场景编号）。

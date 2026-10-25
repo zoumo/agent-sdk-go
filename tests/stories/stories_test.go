@@ -410,3 +410,13 @@ func claudeFact(trace *storyTrace, v claude.Event) {
 func (s *CommonStoriesSuite) TestIndependentHistoryCodex() {
 	s.Run("US-014/codex", func() { codexIndependentHistory(s.T()) })
 }
+
+func (s *CommonStoriesSuite) TestOptionalChildDetail() {
+	s.Run("claude", func() {
+		s.Run("F1-default-options", func() { checkClaudeChildDetailOptions(s) })
+		s.Run("F2-pure-detail", func() { checkClaudePureDetail(s) })
+		s.Run("F3-unknown-and-mixed", func() { checkClaudeMixedDetail(s) })
+		s.Run("F4-authority", func() { checkClaudeDetailAuthority(s) })
+		s.Run("F5-lifecycle", func() { checkClaudeDetailLifecycle(s) })
+	})
+}

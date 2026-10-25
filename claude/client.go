@@ -34,6 +34,9 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// ChildDetailPolicy fixes optional Receive filtering for this Session.
+	// Empty and preserve retain all current delivery. It does not change source output.
+	ChildDetailPolicy ChildDetailPolicy
 	// Subagents bounds automatic relationship observation and verified history.
 	Subagents         SubagentOptions
 	Env               []string
@@ -43,6 +46,11 @@ type Options struct {
 }
 
 func (o *Options) defaults() error {
+	switch o.ChildDetailPolicy {
+	case "", ChildDetailPreserve, ChildDetailSuppress:
+	default:
+		return fmt.Errorf("claude: child detail policy %q: %w", o.ChildDetailPolicy, ErrInvalidInput)
+	}
 	if err := validateInputEncoding(o.Model); err != nil {
 		return dispatchFailure("open", err)
 	}

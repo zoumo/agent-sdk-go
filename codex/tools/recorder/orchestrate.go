@@ -65,11 +65,18 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 		return out, err
 	}
 	defer func() {
+		var finalErr error
 		if ret == nil {
 			_, err := lease.WriteAt([]byte("closed\n"), 0)
-			ret = errors.Join(ret, err, lease.Sync())
+			finalErr = errors.Join(err, lease.Sync())
 		}
-		ret = errors.Join(ret, lease.Close())
+		finalErr = errors.Join(finalErr, lease.Close())
+		ret = errors.Join(ret, finalErr)
+		// Finalization happens after normal cleanup/metadata defers. A visible
+		// closed state with an uncertain fsync/close must never grant another run.
+		if finalErr != nil {
+			ret = errors.Join(ret, stopAggregate(p.Ledger, p.SDKRevision, p.Scene, p.RawDir))
+		}
 	}()
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()

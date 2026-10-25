@@ -1238,8 +1238,8 @@
     {
       "kind": "client_request",
       "method": "thread/list",
-      "support": "partial",
-      "scope": "Session.ListSubagents performs bounded foreground native pagination with ancestorThreadId fixed to the main identity, never parent-only. Requires experimentalApi. Preserves native records/responses/cursors and actual source/archive/filter coverage; default explicitly selects five pinned subAgent kinds and non-archived only. Null sources are unrestricted under the fixed relation-filter branch; empty sources select native interactive. Storage-only, non-atomic; no resume/start/subscribe/replay, membership changes, retries or active-state claims. Generic thread listing outside this Session workflow remains raw Call only.",
+      "support": "supported",
+      "scope": "Client.ListThreads returns one independent native page with typed filters/optional values/unknowns and opaque cursors. Session.ListSubagents adds bounded fixed-main descendant pagination and experimental gating. Backend default/archive/source scope is preserved; no start/resume/subscribe/answer/replay or membership mutation. See docs/history-query.md and docs/session-discovery.md.",
       "source_variant": "ThreadList",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 772,
@@ -1251,7 +1251,8 @@
           "session08-list-model"
         ],
         "mock": [
-          "session08-list-peer"
+          "session08-list-peer",
+          "phase1-story-audit-history-entrypoints"
         ],
         "race": [
           "session08-list-race"
@@ -1666,8 +1667,8 @@
     {
       "kind": "client_request",
       "method": "thread/turns/list",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "Client.ListThreadTurns returns one native saved-content page; opaque cursors, summary/full distinction and native backend rejection remain visible. Not a complete wire event log, snapshot, resume or live answer authority. See docs/history-query.md.",
       "source_variant": "ThreadTurnsList",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 863,
@@ -1676,7 +1677,9 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [],
-        "mock": [],
+        "mock": [
+          "phase1-story-audit-history-entrypoints"
+        ],
         "race": [],
         "live": []
       },
@@ -1693,8 +1696,8 @@
     {
       "kind": "client_request",
       "method": "thread/items/list",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "Client.ListThreadItems returns one native saved-content page; opaque cursors, summary/full distinction and native backend rejection remain visible. Not a complete wire event log, snapshot, resume or live answer authority. See docs/history-query.md.",
       "source_variant": "ThreadItemsList",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 869,
@@ -1703,7 +1706,9 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [],
-        "mock": [],
+        "mock": [
+          "phase1-story-audit-history-entrypoints"
+        ],
         "race": [],
         "live": []
       },

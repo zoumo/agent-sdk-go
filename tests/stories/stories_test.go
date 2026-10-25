@@ -405,8 +405,8 @@ func claudeFact(trace *storyTrace, v claude.Event) {
 	}
 }
 
-// Claude independent local history is a separate ticket; this checks only the
-// Codex native adapter against US-014, without claiming common completion.
+// Retain the focused Codex US-014 entrypoint. The combined native browser and
+// Claude local-query acceptance live in history_query_test.go.
 func (s *CommonStoriesSuite) TestIndependentHistoryCodex() {
 	s.Run("US-014/codex", func() { codexIndependentHistory(s.T()) })
 }

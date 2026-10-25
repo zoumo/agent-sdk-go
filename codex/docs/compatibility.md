@@ -1,19 +1,24 @@
 # Compatibility and official API gaps
 
-This Go SDK implements **7 of 173** pinned app-server client RPC paths (6 supported,
-1 partial), **6 of 11** typed server-request decoders/reply models, and **7 of 86**
+This Go SDK implements **11 of 173** pinned app-server client RPC paths (9 supported,
+2 partial), **6 of 11** typed server-request decoders/reply models, and **8 of 86**
 typed notification decoders. All remaining client methods lack a dedicated Go API;
 all valid notifications can travel through the bounded raw receive path. Raw
 `Call`, generated fields and unknown-frame preservation do **not** establish
 feature support.
 
 The largest missing controls are dedicated **steering and all six queue APIs**,
-thread listing/search/fork/archive/delete and paginated history, runtime settings,
+thread search/fork/archive/delete, general runtime settings,
 MCP administration, hooks/plugins/skills management, background terminals/processes,
 account/login, realtime and remote-control APIs. Managed child **observation** is
 implemented; dedicated model-tool subagent controllers, reliable attachment/recovery
 and combined completion are not. Applications can use ordinary native thread/turn
 methods with a known child thread ID. Go has no TypeScript-style run accumulator or exec transport.
+
+Native list/read/turns/items queries and model/thinking thread settings have
+narrow implemented scopes; backend availability, pagination and ack/effect
+limits remain in [history queries](history-query.md) and the
+[current Story matrix](../../docs/validation/story-coverage.md).
 
 ## Version scope
 

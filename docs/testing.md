@@ -19,6 +19,11 @@ GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 mise exec -- go test -race -p=1 -count=1 -
 mise exec -- go vet ./...
 ```
 
+The offline script first validates the current 19/14 Story inventory, nine native
+supplement IDs, local evidence links and existing public suite entrypoint inventory
+with `scripts/check-story-evidence.py` plus negative regression cases. This static
+check does not replace execution of `TestCommonStories`.
+
 The offline script checks single-module and native dependency boundaries, both
 standard-library-only types packages, native protocol inventory, reproducible
 Codex generation, sanitization canaries and recordings, unit/subprocess tests, and

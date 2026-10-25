@@ -5,6 +5,10 @@ are checked into this repository under the native `tests/testdata` directories. 
 recording was made for the testify test migration. Sanitizer rules, manifests,
 file hashes, typed ID mappings, source commits and evidence limits remain intact.
 
+Current per-Story scope: [19-goal/14-scenario evidence matrix](validation/story-coverage.md).
+Future root bundles and requested budgets: [capture gate proposal](capture-plan.md).
+Neither adds model-call or publication authority.
+
 ## Real recordings
 
 | Capture | Native wire data | Provenance and file hashes | Expected observations | ID mappings / transport |

@@ -1318,6 +1318,20 @@
       "status": "passed",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
       "command": "mise exec -- env GORACE=atexit_sleep_ms=0 GOMAXPROCS=2 go test -race ./codex ./codex/types -run 'TestSessionDiscovery|TestSessionConfiguration|TestSessionRequest|TestGenerated' -count=1"
+    },
+    {
+      "id": "phase1-story-audit-history-entrypoints",
+      "kind": "mock",
+      "status": "available-not-rerun",
+      "coverage": "Current public synthetic query entrypoints audited at unified base 4c03ac701901ce3e37414946f09a56347f620fe7. Not a new execution pass; earlier exact implementation checks remain in docs/reviews/2026-10-25-codex-history-query.md and docs/validation/history-query-integration.md. No live or new capture evidence.",
+      "test_files": [
+        "history_query_test.go"
+      ],
+      "test_names": [
+        "TestIndependentHistoryQueries"
+      ],
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "command": "mise exec -- go test ./codex -run ^TestIndependentHistoryQueries$ -count=1"
     }
   ],
   "verification_commands": [

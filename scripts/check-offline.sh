@@ -6,6 +6,8 @@ export CODEX_E2E_STDIO=0 CODEX_E2E_INTERACTIONS=0 CODEX_E2E_WEBSOCKET=0
 export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
+python3 -m unittest discover -s scripts -p test_story_evidence.py -v
+python3 scripts/check-story-evidence.py
 bash scripts/check-boundaries.sh
 go mod verify
 python3 -m unittest discover -s codex/scripts -p 'test_ci_checks.py' -v

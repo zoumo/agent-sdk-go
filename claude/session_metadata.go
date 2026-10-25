@@ -304,11 +304,11 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	if headSize > o.MaxBytes-c.Bytes || tailSize > o.MaxBytes-c.Bytes-headSize {
 		return info, queryError("resource-limit", path, "metadata sample bytes", nil)
 	}
-	head, e := readMetadataRange(ctx, f, 0, headSize)
+	head, e := readQueryRange(ctx, f, 0, headSize)
 	if e != nil {
 		return info, e
 	}
-	tail, e := readMetadataRange(ctx, f, tailStart, tailSize)
+	tail, e := readQueryRange(ctx, f, tailStart, tailSize)
 	if e != nil {
 		return info, e
 	}
@@ -318,19 +318,22 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	info.Tail = tail
 	info.Sampled = tailStart > headSize
 	var parseErr error
+	headRecords := 0
 	if !info.Sampled {
-		parseErr = parseSessionMetadata(ctx, info, append(bytes.Clone(head), tail...), true, true, o, c)
+		headRecords, parseErr = parseSessionMetadata(ctx, info, append(bytes.Clone(head), tail...), true, true, len(head), o, c)
 	} else {
-		parseErr = errors.Join(parseSessionMetadata(ctx, info, head, true, false, o, c), parseSessionMetadata(ctx, info, tail, false, true, o, c))
+		headRecords, parseErr = parseSessionMetadata(ctx, info, head, true, false, len(head), o, c)
+		_, tailErr := parseSessionMetadata(ctx, info, tail, false, true, 0, o, c)
+		parseErr = errors.Join(parseErr, tailErr)
 	}
-	parseErr = errors.Join(parseErr, extractSessionMetadata(ctx, info))
+	parseErr = errors.Join(parseErr, extractSessionMetadata(ctx, info, headRecords))
 	e = verifyMetadataSource(ctx, f, root, filepath.Join("projects", rel), initial, head, tail, tailStart)
 	if err := errors.Join(parseErr, e); err != nil {
 		return info, err
 	}
 	// Only the first complete source record establishes a whole-file exclusion.
 	// Later sidechain entries can coexist with a main conversation.
-	if len(info.Records) > 0 && (!info.Sampled || bytes.Contains(info.Head, info.Records[0])) {
+	if len(info.Records) > 0 && (!info.Sampled || headRecords > 0) {
 		var first map[string]json.RawMessage
 		_ = json.Unmarshal(info.Records[0], &first)
 		team, _ := discoveryString(first, "teamName")
@@ -340,38 +343,12 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	}
 	return info, nil
 }
-func readMetadataRange(ctx context.Context, f *os.File, start, size int64) ([]byte, error) {
-	// A section read bounds tail access without reading the intervening history.
-	var b bytes.Buffer
-	r := io.NewSectionReader(f, start, size)
-	buf := make([]byte, min(int64(64<<10), size))
-	if size == 0 {
-		return []byte{}, ctx.Err()
-	}
-	for {
-		if e := ctx.Err(); e != nil {
-			return nil, e
-		}
-		n, e := r.Read(buf)
-		b.Write(buf[:n])
-		if e == io.EOF {
-			break
-		}
-		if e != nil {
-			return nil, queryAccess(f.Name(), e)
-		}
-	}
-	if int64(b.Len()) != size {
-		return nil, queryError("changed", f.Name(), "sample shortened", io.ErrUnexpectedEOF)
-	}
-	return b.Bytes(), nil
-}
 func verifyMetadataSource(ctx context.Context, f *os.File, root *os.Root, path string, initial os.FileInfo, head, tail []byte, tailStart int64) error {
-	h, e := readMetadataRange(ctx, f, 0, int64(len(head)))
+	h, e := readQueryRange(ctx, f, 0, int64(len(head)))
 	if e != nil {
 		return e
 	}
-	t, e := readMetadataRange(ctx, f, tailStart, int64(len(tail)))
+	t, e := readQueryRange(ctx, f, tailStart, int64(len(tail)))
 	if e != nil {
 		return e
 	}
@@ -389,9 +366,9 @@ func verifyMetadataSource(ctx context.Context, f *os.File, root *os.Root, path s
 	return ctx.Err()
 }
 
-func parseSessionMetadata(ctx context.Context, info *SessionInfo, data []byte, head, tail bool, o ListSessionsOptions, c *SessionMetadataCoverage) error {
+func parseSessionMetadata(ctx context.Context, info *SessionInfo, data []byte, head, tail bool, headLimit int, o ListSessionsOptions, c *SessionMetadataCoverage) (headRecords int, err error) {
 	if tail && len(data) > 0 && data[len(data)-1] != '\n' {
-		return queryError("corrupt", info.Path, "incomplete final metadata line", nil)
+		return headRecords, queryError("corrupt", info.Path, "incomplete final metadata line", nil)
 	}
 	if !head {
 		if i := bytes.IndexByte(data, '\n'); i >= 0 {
@@ -408,50 +385,47 @@ func parseSessionMetadata(ctx context.Context, info *SessionInfo, data []byte, h
 		}
 	}
 	if len(data) > 0 && data[len(data)-1] != '\n' {
-		return queryError("corrupt", info.Path, "incomplete final metadata line", nil)
+		return headRecords, queryError("corrupt", info.Path, "incomplete final metadata line", nil)
 	}
+	offset := 0
 	for len(data) > 0 {
 		line, rest, _ := bytes.Cut(data, []byte{'\n'})
 		data = rest
+		offset += len(line) + 1
 		if e := ctx.Err(); e != nil {
-			return e
+			return headRecords, e
 		}
 		if c.Lines >= o.MaxLines {
-			return queryError("resource-limit", info.Path, "sampled metadata lines", nil)
+			return headRecords, queryError("resource-limit", info.Path, "sampled metadata lines", nil)
 		}
 		c.Lines++
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
 		if e := validateDiscoveryJSON(line); e != nil {
-			return queryError("corrupt", info.Path, "invalid sampled metadata", e)
+			return headRecords, queryError("corrupt", info.Path, "invalid sampled metadata", e)
 		}
 		fields := map[string]json.RawMessage{}
 		if e := json.Unmarshal(line, &fields); e != nil || fields == nil {
-			return queryError("corrupt", info.Path, "metadata object required", e)
+			return headRecords, queryError("corrupt", info.Path, "metadata object required", e)
 		}
 		info.Records = append(info.Records, bytes.Clone(line))
+		if head && offset <= headLimit {
+			headRecords++
+		}
 	}
-	return nil
+	return headRecords, nil
 }
 
-func extractSessionMetadata(ctx context.Context, info *SessionInfo) error {
+func extractSessionMetadata(ctx context.Context, info *SessionInfo, headRecords int) error {
 	var lastPrompt, summary *string
 	command := ""
-	remainingHead := info.Head
-	for _, line := range info.Records {
+	for index, line := range info.Records {
 		if e := ctx.Err(); e != nil {
 			return e
 		}
-		// Complete head lines are a prefix of Records; tail records never supply
-		// first-prompt/created-time facts when the middle was not sampled.
-		i := bytes.Index(remainingHead, line)
-		isHead := i >= 0
-		if isHead {
-			remainingHead = remainingHead[i+len(line):]
-		} else {
-			remainingHead = nil
-		}
+		// Provenance comes from parsed source offsets, never content equality.
+		isHead := index < headRecords
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(line, &fields)
 

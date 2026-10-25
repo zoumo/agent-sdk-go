@@ -21,3 +21,6 @@ func (s *CommonStoriesSuite) TestClaudeMetadataFailures()       { checkClaudeMet
 func (s *CommonStoriesSuite) TestClaudeMetadataDefaultPage()    { checkClaudeMetadataDefaultPage(s) }
 func (s *CommonStoriesSuite) TestClaudeMetadataSampleEdges()    { checkClaudeMetadataSampleEdges(s) }
 func (s *CommonStoriesSuite) TestClaudeMetadataIncompleteTail() { checkClaudeMetadataIncompleteTail(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataNestedSampleProvenance() {
+	checkClaudeMetadataNestedSampleProvenance(s)
+}

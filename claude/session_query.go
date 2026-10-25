@@ -174,7 +174,7 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 	if initial.Size() > o.MaxBytes {
 		return page, queryError("resource-limit", page.Coverage.Path, "source bytes", nil)
 	}
-	data, e := readQueryBytes(ctx, f, initial.Size())
+	data, e := readQueryRange(ctx, f, 0, initial.Size())
 	if e != nil {
 		return page, e
 	}
@@ -208,9 +208,9 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 	return page, nil
 }
 
-func readQueryBytes(ctx context.Context, f *os.File, size int64) ([]byte, error) {
+func readQueryRange(ctx context.Context, f *os.File, start, size int64) ([]byte, error) {
 	var b bytes.Buffer
-	r := io.NewSectionReader(f, 0, size)
+	r := io.NewSectionReader(f, start, size)
 	chunk := make([]byte, 64<<10)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -319,7 +319,7 @@ func locateQuerySource(ctx context.Context, projects *os.Root, key, name string,
 // Verify using both the pinned source handle and the original root-relative
 // pathname, so replacement of an ancestor directory is also observable.
 func verifyQuerySource(ctx context.Context, f *os.File, root *os.Root, path string, initial os.FileInfo, digest [32]byte) error {
-	again, e := readQueryBytes(ctx, f, initial.Size())
+	again, e := readQueryRange(ctx, f, 0, initial.Size())
 	if e != nil {
 		return e
 	}

@@ -1845,3 +1845,20 @@ func checkClaudeMetadataIncompleteTail(s *CommonStoriesSuite) {
 	_, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q, SampleBytes: 16})
 	requireMetadataKind(t, e, "corrupt")
 }
+
+func checkClaudeMetadataNestedSampleProvenance(s *CommonStoriesSuite) {
+	for _, extra := range []string{"", `"isSidechain":true,`} {
+		s.Run("nested-"+extra, func() {
+			t := s.T()
+			tail := queryLine("tail", "", "user", extra, `{"content":"tail evidence"}`)
+			source := `{"type":"future-native","nested":` + strings.TrimSpace(tail) + `,"padding":"` + strings.Repeat("x", 2000) + `"}` + "\n" + tail
+			q, _ := claudeQueryFixture(t, source)
+			r, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q, SampleBytes: 300})
+			require.NoError(t, e)
+			require.NotNil(t, r.Info)
+			require.True(t, r.Info.Sampled)
+			require.Nil(t, r.Info.FirstPrompt)
+			require.Nil(t, r.Info.CreatedAt)
+		})
+	}
+}

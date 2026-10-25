@@ -214,7 +214,8 @@ alone does not produce a CI pass. No new CI execution or macOS test is claimed.
 ## Final local results on corrected source
 
 Implementation revision: `f4056d20bbf4c87c34e63244588426757b01b7cb`, tree
-`e24bcc9cc1eb73f0f1787f12f4ffceb2c256df7b`. Later commits only record evidence.
+`e24bcc9cc1eb73f0f1787f12f4ffceb2c256df7b`. The next commit 09ec013 only
+recorded evidence; the compatibility follow-up below changes source again.
 
 | Gate | Result |
 |---|---|
@@ -325,3 +326,55 @@ Both passed after the correction. Full-check, review and final publication recei
 for this follow-up are recorded below and in ticket04 Comments/final handoff.
 The parent will re-read its unchanged real source at the final new SHA without
 another model call. No successful corrected-SHA real query is claimed yet here.
+
+
+### Follow-up checks and review
+
+Corrected implementation: `86bd84dd482b988bf787100cd8dade8eea98a2f1`, tree
+`0f6b5c8943f34a03e52913758b9447ecaabaefef`, based on 09ec0138.
+The code-review fixed point resolves and the diff is nonempty:
+`git diff 09ec0138c2ef2a14182ee601b2d975a4577d3491...86bd84dd482b988bf787100cd8dade8eea98a2f1`.
+The sole implementation commit is 86bd84d. Both independent review axes read the
+follow-up specification and fixed official evidence.
+
+#### Standards
+
+0 documented-standard violations and 0 smells needing correction. The exact
+query-only classification preserves the shared/legacy/live boundaries. Public
+CommonStoriesSuite tests, private acceptance assertions, artificial fixtures and
+harness/external evidence locations conform to the repository standards.
+
+#### Spec
+
+0 outstanding findings. The four types are excluded only after existing strict
+JSON and optional identity validation; byte/line/line-size/index and final source
+integrity bounds remain. Unknown types are still unsupported, with no changes to
+legacy replay/frozen-tail or live child routing. Independent public regressions
+passed; neither final publication nor real-source revalidation was preclaimed.
+
+| Follow-up gate | Result |
+|---|---|
+| Public four-type regression, paging/end, metadata Raw, identity/JSON/resource/unknown guards | Passed |
+| Focused race, source-integrity, legacy history and Claude/common query acceptance | Passed |
+| Full offline script on 86bd84d | Failed solely at the known Codex concurrent approval assertion (direct/ws/wss), independently reproduced on exact original base earlier in this report |
+| Full race on 86bd84d (`-race -p=1 -v -count=1 -timeout=300s ./...`) | Passed every package; no DATA RACE report |
+| Full vet | Passed |
+| Generated types/cases, protocol inventory, module/dependency boundaries, CI-gate tests, sanitizer/hash/transcript checks | Passed before full offline test failure |
+| Checkout public consumer and seven runnable offline examples | Passed separately after the script stopped before that loop |
+| Committed whitespace/gofmt, shell syntax, OKF/internal and touched documentation links | Passed |
+| Real-sanitized data and old history.go/history_snapshot.go diff against 09ec0138 | Empty |
+| Standards / Spec | 0 / 0 remaining |
+| Corrected-SHA original real source query | Pending parent revalidation; no new model needed |
+
+The failed offline run is retained and is not all-green. No Codex approval code
+or test was changed, skipped or weakened. There was no repeat-until-green loop.
+No current-branch CI or macOS evidence is inferred. The precise final published
+follow-up SHA/tree, remote agreement and both new fetched consumers are recorded
+in ticket04 Comments/final handoff after this evidence commit is created.
+
+Follow-up log SHA-256 values: offline failure
+`6f04b45c1b1b675fda8c65f3b42c8f4c4b60488ba286e491ecc29bbd30dc1013`,
+public guards `2a02cf55ac2d533b8b793511044f70a564ee4c8cd01e67741d22609a3b776730`,
+focused race `01728fa2d427a138283f17f1ac556ed5ca9e0ec88292d3a41aba8081ab886bda`.
+Full race and fetched consumer hashes join the local ignored receipt. No real
+capture or secret-bearing artifact is part of these logs or commits.

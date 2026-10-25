@@ -270,6 +270,12 @@ func TestSessionRequestPrewriteRevocationAndConcurrentAnswers(t *testing.T) {
 }
 
 func TestSessionCloseDuringAnswerWriteKeepsOtherSession(t *testing.T) {
+	for _, policy := range []codex.ChildDetailPolicy{"", codex.ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) { testSessionCloseDuringAnswerWriteKeepsOtherSession(t, policy) })
+	}
+}
+
+func testSessionCloseDuringAnswerWriteKeepsOtherSession(t *testing.T, policy codex.ChildDetailPolicy) {
 	for _, stop := range []string{"close", "resolved"} {
 		t.Run(stop, func(t *testing.T) {
 			mode := "session-block-answer"
@@ -280,9 +286,9 @@ func TestSessionCloseDuringAnswerWriteKeepsOtherSession(t *testing.T) {
 			}
 
 			f := startFake(t, mode, codex.Limits{})
-			a, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			a, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Client: f.c})
 			require.NoError(t, err)
-			b, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+			b, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Client: f.c})
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0600); _ = a.Abort(); _ = b.Abort() })
 			_, err = a.Receive(context.Background())

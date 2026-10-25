@@ -17,6 +17,8 @@ func main() {
 	}}
 	params := types.ThreadStartParams{Ephemeral: types.Some(true)}
 	var _ func(context.Context, codex.SessionOptions) (*codex.Session, error) = codex.Open
+	_ = codex.SessionOptions{ChildDetailPolicy: codex.ChildDetailSuppress}
+	_ = codex.SessionOptions{ChildDetailPolicy: codex.ChildDetailPreserve}
 	var _ func(*codex.Session, context.Context, codex.Input) (codex.Submission, error) = (*codex.Session).Submit
 	var _ func(*codex.Session, context.Context) (codex.Received, error) = (*codex.Session).Receive
 	var _ func(codex.IncomingRequest, context.Context, types.ToolRequestUserInputResponse) error = codex.IncomingRequest.Answer

@@ -55,4 +55,4 @@ status: stable
 
 默认验证不执行真实 Agent 或模型，不收集新录制。需要真实验证时明确执行范围与授权，录制材料须脱敏并保留版本、来源、哈希和限制。对每项能力分别记录“是否实现”和“证据到哪一层”，不以整体测试通过替代兼容性说明。
 
-SDK-US-006/007 的 optional-child-detail 子场景见[US-003](../contracts/stories/US-003.md)；SDK-US-008/019 的 Claude independent-child-content 子场景见[US-014](../contracts/stories/US-014.md)。两者是明确扩展目标，主能力和真实证据缺口不能相互抵消。
+SDK-US-006/007 的 optional-child-detail 子场景见[US-003](../contracts/stories/US-003.md)；SDK-US-008/019 的 independent-child-content 原生子场景见[US-014](../contracts/stories/US-014.md)。两者是明确扩展目标，主能力和真实证据缺口不能相互抵消。

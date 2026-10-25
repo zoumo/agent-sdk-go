@@ -65,7 +65,9 @@ def check(root):
     if not all(name in history for name in ["TestIndependentHistoryBrowser", '"US-014/codex"', '"US-014/claude"']):
         errors.append("IndependentHistoryBrowser must expose US-014 for both native adapters")
     for relative in ["docs/validation/story-coverage.md", "docs/capture-plan.md", "harness/sdk/native-stories.md",
-                     "docs/index.md", "docs/recordings.md", "harness/sdk/index.md"]:
+                     "docs/index.md", "docs/recordings.md", "harness/sdk/index.md",
+                     "harness/contracts/child-detail-delivery.md", "harness/contracts/claude-subagent-history.md",
+                     "harness/contracts/stories/child-capabilities.md", "docs/research/child-capability-contract-sources.md"]:
         path = root / relative
         errors += link_errors(path, path.read_text())
     return errors

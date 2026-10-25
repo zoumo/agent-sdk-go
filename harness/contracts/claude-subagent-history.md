@@ -101,7 +101,7 @@ list 读取全部候选及 sidecar 并验证语法/身份（不重建每个 chil
 不要求消息 UUID 是 native session UUID，仅要求非空字符串且唯一。
 
 sidecar 是整个 JSON object；toolUseId、parentAgentId 允许省略/null/非空 string。
-parentAgentId 若出现须满足 agentID 校验且不得等于自身；它不要求父文件存在。
+parentAgentId 为非 null string 时须满足 agentID 校验且不得等于自身；它不要求父文件存在。
 sidecar 中 sessionId/session_id、agentId/agent_id 若出现，必须分别为匹配父 UUID/文件 agentID 的非空 string（null 为 corrupt）；其他未知字段原样保留。缺 sidecar 成功，两个 parent 值
 unknown；损坏、权限失败、字段类型错误、来源身份冲突均返回错误，不降级成缺失。
 SidecarStatus 和 Sidecar 原文区分 absent 与空 object。不会把 sidecar 历史关系

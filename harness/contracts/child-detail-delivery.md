@@ -70,7 +70,7 @@ Close 排空、Abort 放弃 backlog、取消等待、资源限制和原生处理
 
 ## Codex 逐方法分类
 
-下面是封闭白名单，要求已确认 child、成功解码、仅固定 schema 字段、无保护事实。
+下面是封闭白名单，要求已确认 child、成功通过该方法的固定 schema 形状校验（不要求已有 typed binding）、仅固定 schema 字段、无保护事实。
 未列方法一律保留，包括未来 delta。
 
 | 方法或 envelope | suppress 行为 |

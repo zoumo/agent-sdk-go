@@ -123,7 +123,7 @@ func TestRootNativeErrorsAndUntriggeredControlDoNotAddTurns(t *testing.T) {
 			select {
 			case <-s.Done():
 			case <-ctx.Done():
-				t.Fatal("owned session cleanup incomplete")
+				require.FailNow(t, "owned session cleanup incomplete")
 			}
 		})
 	}
@@ -179,4 +179,30 @@ func TestRootReadDenyAndOriginalQuestionPolicy(t *testing.T) {
 	require.NoError(t, recorder.Drive(ctx, s, "r2", w, l, &observed))
 	_, err = os.Stat(filepath.Join(w.Project, "summary.txt"))
 	require.ErrorIs(t, err, os.ErrNotExist, "denial is not write success")
+}
+
+func TestSceneReservesCleanupWithinAbsoluteDeadline(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	w, err := recorder.PrepareWorkspace(filepath.Join(base, "capture"), "r1")
+	require.NoError(t, err)
+	l, err := recorder.OpenLedger(filepath.Join(base, "ledger"))
+	require.NoError(t, err)
+	require.NoError(t, l.Reserve("r1"))
+	frames := append(initialize(), user("Reply with the word Ready."))
+	delayed := terminal(false)
+	delayed[0].DelayMillis = 10000
+	frames = append(frames, delayed...)
+	ctx, cancel := context.WithTimeout(context.Background(), 3200*time.Millisecond)
+	defer cancel()
+	s := openSynthetic(t, ctx, w, frames)
+	var observed bytes.Buffer
+	start := time.Now()
+	require.ErrorIs(t, recorder.Drive(ctx, s, "r1", w, l, &observed), context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 2*time.Second, "activity must reserve the three-second cleanup allowance")
+	select {
+	case <-s.Done():
+	default:
+		require.FailNow(t, "owned session cleanup incomplete")
+	}
 }

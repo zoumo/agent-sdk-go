@@ -77,7 +77,9 @@ func Run() (runErr error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	start := time.Now()
-	cliDigest, err := inspectCLI(ctx, *cli, *digest)
+	activity, stopActivity := activityContext(ctx)
+	defer stopActivity()
+	cliDigest, err := inspectCLI(activity, *cli, *digest)
 	if err != nil {
 		return err
 	}
@@ -95,7 +97,7 @@ func Run() (runErr error) {
 		return err
 	}
 	defer observations.Close()
-	client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: exe, WorkDir: workspace.Project, Env: env, InitializeTimeout: 30 * time.Second, ShutdownTimeout: 3 * time.Second, Limits: claude.Limits{FrameBytes: 2 << 20, StderrBytes: 256 << 10}})
+	client, err := claude.Open(activity, claude.SessionOptions{CLIPath: exe, WorkDir: workspace.Project, Env: env, InitializeTimeout: 30 * time.Second, ShutdownTimeout: 3 * time.Second, Limits: claude.Limits{FrameBytes: 2 << 20, StderrBytes: 256 << 10}})
 	if err != nil {
 		return err
 	}

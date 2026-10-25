@@ -38,6 +38,11 @@ func OpenLedger(path string) (*Ledger, error) {
 	if err := os.Mkdir(path, 0700); err != nil && !os.IsExist(err) {
 		return nil, err
 	}
+	// Persist the directory name even when an earlier creation/sync was interrupted.
+	// Syncing the ledger itself does not make its parent's entry durable.
+	if err := syncDirectory(filepath.Dir(path)); err != nil {
+		return nil, err
+	}
 	info, err := os.Lstat(path)
 	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
 		return nil, fmt.Errorf("ledger must be a private directory")

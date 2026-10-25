@@ -20,7 +20,9 @@ var ErrUntriggered = errors.New("reviewed execution/interaction barrier untrigge
 // Drive uses an already opened native Session and takes ownership of its cleanup.
 // Reserve must succeed BEFORE Open. The live entry point additionally requires
 // Preflight; offline callers use only a synthetic peer. No reconnect/resume or
-// replacement turn is performed. Observations are private, not publishable data.
+// replacement turn is performed. Open must use ShutdownTimeout <= 3 seconds;
+// that cleanup allowance is reserved inside the absolute scene deadline.
+// Observations are private, not publishable data.
 func Drive(ctx context.Context, s *claude.Session, scene string, w *Workspace, l *Ledger, observations io.Writer) (err error) {
 	if s == nil || l == nil {
 		return fmt.Errorf("owned Session and reserved ledger required")
@@ -38,7 +40,7 @@ func Drive(ctx context.Context, s *claude.Session, scene string, w *Workspace, l
 	if ctx == nil || observations == nil {
 		return fmt.Errorf("context and private observations required")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	ctx, cancel := activityContext(ctx)
 	defer cancel()
 	plan, err := Plan(scene)
 	if err != nil {
@@ -288,4 +290,13 @@ func executionProgress(raw json.RawMessage) bool {
 		return true
 	}
 	return false
+}
+
+// Reserve owned shutdown inside the scene, including an earlier caller deadline.
+func activityContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	end := time.Now().Add(120 * time.Second)
+	if deadline, ok := ctx.Deadline(); ok && deadline.Before(end) {
+		end = deadline
+	}
+	return context.WithDeadline(ctx, end.Add(-3*time.Second))
 }

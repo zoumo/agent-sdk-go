@@ -23,6 +23,7 @@ var ErrFinancialGate = errors.New("Codex recording blocked: no verified independ
 // user configuration, hooks, authentication, previous captures or conversation
 // storage. A profile assertion is not proof of isolation or financial control.
 type LaunchProfile struct {
+	Child           *ChildPolicy             `json:"child,omitempty"`
 	Version         int                      `json:"version"`
 	Scene           string                   `json:"scene"`
 	CLI             string                   `json:"cli"`
@@ -83,6 +84,9 @@ func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err e
 		return p, errors.New("profile byte limit")
 	}
 	if err = decodeLedger(b, &p); err != nil {
+		return p, err
+	}
+	if err = childPreflight(p); err != nil {
 		return p, err
 	}
 	if p.Version != 1 || p.CLIVersion != "0.162.1" || p.IsolationReview == "" {

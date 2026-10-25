@@ -50,6 +50,9 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 	if open == nil {
 		return out, errors.New("explicit peer opener required")
 	}
+	if err := childPreflight(p); err != nil {
+		return out, err
+	}
 	if !validScene(p.Scene) {
 		return out, errors.New("unsupported scene; children disabled")
 	}

@@ -14,17 +14,21 @@ import (
 )
 
 type ledgerHeader struct {
-	Version       int       `json:"version"`
-	Authorization string    `json:"authorization"`
-	Revision      string    `json:"revision"`
-	StartedAt     time.Time `json:"startedAt"`
-	MaxRoots      int       `json:"maxRoots"`
-	MaxTurns      int       `json:"maxTurns"`
+	Version          int       `json:"version"`
+	Authorization    string    `json:"authorization"`
+	Revision         string    `json:"revision"`
+	StartedAt        time.Time `json:"startedAt"`
+	MaxRoots         int       `json:"maxRoots"`
+	MaxTurns         int       `json:"maxTurns"`
+	MaxChildAttempts int       `json:"maxChildAttempts,omitempty"`
+	MaxChildDepth    int       `json:"maxChildDepth,omitempty"`
 }
 type reservation struct {
-	Scene     string `json:"scene"`
-	Operation string `json:"operation"`
-	Target    string `json:"target,omitempty"`
+	Scene         string `json:"scene"`
+	Operation     string `json:"operation"`
+	Target        string `json:"target,omitempty"`
+	Attempt       string `json:"attempt,omitempty"`
+	ParentAttempt string `json:"parentAttempt,omitempty"`
 }
 
 // Reserve durably charges an attempt before startup or submission. The caller
@@ -41,14 +45,25 @@ func reserveRevision(path, revision, scene, operation string, target ...string) 
 	}
 	return operateLedger(path, revision, scene, operation, bound, false)
 }
-func operateLedger(path, revision, scene, operation, target string, checkOnly bool) error {
+
+// ReserveChildAttempt charges a synthetic pre-creation intent, including failed or
+// uncertain creation. parentAttempt is empty for a direct child; otherwise it
+// references an earlier attempt in this scene. IDs are ledger intents, never
+// native thread IDs. This is durable accounting, not runtime interception.
+func ReserveChildAttempt(path, scene, attempt, parentAttempt string) error {
+	if attempt == "" || len(attempt) > 256 || len(parentAttempt) > 256 {
+		return errors.New("bounded child attempt identity required")
+	}
+	return operateLedger(path, "", scene, "child-attempt", "", false, reservation{Attempt: attempt, ParentAttempt: parentAttempt})
+}
+func operateLedger(path, revision, scene, operation, target string, checkOnly bool, child ...reservation) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return errors.New("absolute clean aggregate ledger path required")
 	}
 	if !validScene(scene) {
 		return errors.New("unsupported scene; children disabled")
 	}
-	if operation != "root" && operation != "reader" && operation != "turn1" && operation != "turn2" && operation != "stop" {
+	if operation != "root" && operation != "reader" && operation != "turn1" && operation != "turn2" && operation != "stop" && operation != "child-attempt" {
 		return errors.New("unsupported operation")
 	}
 	// Refuse symlink components, including parent directories.
@@ -117,9 +132,13 @@ func operateLedger(path, revision, scene, operation, target string, checkOnly bo
 	if revisionErr != nil {
 		return errors.New("invalid source revision")
 	}
-	if header.Version != 1 || header.Authorization == "" || len(header.Revision) != 40 || header.MaxRoots < 1 || header.MaxRoots > 3 || header.MaxTurns < 1 || header.MaxTurns > 6 || age < 0 || age >= 480*time.Second {
+	if (header.Version != 1 && header.Version != 2) || header.Authorization == "" || len(header.Revision) != 40 || header.MaxRoots < 1 || header.MaxRoots > 3 || header.MaxTurns < 1 || header.MaxTurns > 6 || age < 0 || age >= 480*time.Second {
 		return errors.New("invalid or expired aggregate budget")
 	}
+	if header.MaxChildAttempts < 0 || header.MaxChildDepth < 0 || (header.Version == 1 && (header.MaxChildAttempts != 0 || header.MaxChildDepth != 0)) || (header.MaxChildAttempts == 0) != (header.MaxChildDepth == 0) {
+		return errors.New("invalid child accounting budget")
+	}
+	childDepths := map[[2]string]int{}
 	seen := map[[2]string]bool{}
 	targets := map[string]string{}
 	roots, turns, readers := 0, 0, 0
@@ -129,6 +148,11 @@ func operateLedger(path, revision, scene, operation, target string, checkOnly bo
 			return errors.New("aggregate capture stopped; no further attempts permitted")
 		}
 		key := [2]string{r.Scene, r.Operation}
+		if r.Operation == "child-attempt" {
+			key[1] += ":" + r.Attempt
+		} else if r.Attempt != "" || r.ParentAttempt != "" {
+			return errors.New("child metadata on non-child operation")
+		}
 		if seen[key] {
 			return errors.New("duplicate attempt")
 		}
@@ -136,6 +160,22 @@ func operateLedger(path, revision, scene, operation, target string, checkOnly bo
 			return errors.New("invalid ledger scene")
 		}
 		switch r.Operation {
+		case "child-attempt":
+			if header.Version != 2 || header.MaxChildAttempts == 0 || !seen[[2]string{r.Scene, "root"}] || r.Attempt == "" || len(r.Attempt) > 256 || len(r.ParentAttempt) > 256 {
+				return errors.New("child attempt requires bounded v2 budget and root")
+			}
+			depth := 1
+			if r.ParentAttempt != "" {
+				parentDepth, ok := childDepths[[2]string{r.Scene, r.ParentAttempt}]
+				if !ok {
+					return errors.New("unknown parent attempt")
+				}
+				depth = parentDepth + 1
+			}
+			if depth > header.MaxChildDepth || len(childDepths) >= header.MaxChildAttempts {
+				return errors.New("cumulative child attempts or depth exhausted")
+			}
+			childDepths[[2]string{r.Scene, r.Attempt}] = depth
 		case "stop":
 			stopped = true
 		case "root":
@@ -192,6 +232,9 @@ func operateLedger(path, revision, scene, operation, target string, checkOnly bo
 		return nil
 	}
 	r := reservation{Scene: scene, Operation: operation, Target: target}
+	if len(child) == 1 {
+		r.Attempt, r.ParentAttempt = child[0].Attempt, child[0].ParentAttempt
+	}
 	if err = charge(r); err != nil {
 		return err
 	}

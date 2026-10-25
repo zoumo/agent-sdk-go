@@ -112,7 +112,13 @@ class Sanitizer:
     def discover(self, v, ordinal, parent=''):
         if isinstance(v, dict):
             for k, x in v.items():
-                ns = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}.get(k)
+                if k == 'receiverThreadIds':
+                    for thread in x:
+                        self.ident('thread', thread, ordinal)
+                if k == 'agentsStates':
+                    for thread in x:
+                        self.ident('thread', thread, ordinal)
+                ns = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'senderThreadId': 'thread', 'agentPath': 'agent-path', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}.get(k)
                 if k == 'id':
                     ns = {'thread': 'thread', 'turn': 'turn', 'item': 'item', 'questions': 'question'}.get(parent)
                 if ns and x is not None:
@@ -126,11 +132,13 @@ class Sanitizer:
         if isinstance(v, dict):
             out = {}
             for k, x in v.items():
-                ns = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}.get(k)
+                ns = {'sessionId': 'session', 'forkedFromId': 'thread', 'threadId': 'thread', 'parentThreadId': 'thread', 'agentThreadId': 'thread', 'senderThreadId': 'thread', 'agentPath': 'agent-path', 'turnId': 'turn', 'rootTurnId': 'turn', 'parentTurnId': 'turn', 'itemId': 'item', 'callId': 'item', 'requestId': 'rpc-server'}.get(k)
                 if k == 'id':
                     ns = {'thread': 'thread', 'turn': 'turn', 'item': 'item', 'questions': 'question'}.get(parent)
-                key = self.values.get(k, k) if parent == 'answers' else k
-                if ns and x is not None:
+                key = self.ident('thread', k, ordinal) if parent == 'agentsStates' else self.values.get(k, k) if parent == 'answers' else k
+                if k == 'receiverThreadIds':
+                    out[key] = [self.ident('thread', thread, ordinal) for thread in x]
+                elif ns and x is not None:
                     out[key] = self.ident(ns, x, ordinal)
                 elif k == 'userAgent':
                     out[key] = 'codex-fixture/0.162.1'
@@ -163,7 +171,7 @@ def transform(frames, root, home, sanitizer=None):
     for f in frames:
         wire = f['wire']
         method = wire.get('method')
-        if method in OMIT or (method and method.startswith('codex/event/')) or wire.get('params', {}).get('item', {}).get('type') == 'hookPrompt':
+        if method in OMIT or wire.get('params', {}).get('item', {}).get('type') == 'hookPrompt':
             omitted.append({'ordinal': f['ordinal'], 'reason': 'excluded hook/integration/legacy diagnostic payload'})
             continue
         if set(wire) - {'id', 'method', 'params', 'result', 'error', 'jsonrpc', 'emittedAtMs'}:
@@ -219,6 +227,8 @@ def publish(raw_dir, destination, story, metadata):
     frames = [json.loads(line) for line in (raw_dir / 'raw.jsonl').read_text().splitlines()]
     sanitizer = Sanitizer(metadata['root'], metadata['home'])
     clean, omitted, relations = transform(frames, metadata['root'], metadata['home'], sanitizer)
+    if sum(r['namespace'] == 'thread' for r in relations) > 1 or any(r['namespace'] == 'agent-path' for r in relations):
+        raise ValueError('child publication requires separately reviewed child manifest and authorization')
     if destination.exists():
         raise ValueError('destination already exists')
     stage = pathlib.Path(tempfile.mkdtemp(prefix='publish-', dir=destination.parent))

@@ -57,6 +57,42 @@ class Publication(unittest.TestCase):
         self.assertEqual(clean['itemId'], clean['callId'])
         self.assertNotIn('native', str(clean))
 
+    def test_child_typed_references_and_aliases(self):
+        s = sanitize.Sanitizer('/synthetic', '/isolated')
+        item = {'type': 'collabAgentToolCall', 'id': 'call',
+                'senderThreadId': 'same', 'receiverThreadIds': ['A', 'B'],
+                'agentsStates': {'A': {'status': 'completed'}, 'B': {'status': 'running'}}}
+        v = {'threadId': 'same', 'turnId': 'same', 'item': item,
+             'parentThreadId': 'A', 'agentThreadId': 'B', 'agentPath': 'root/A'}
+        s.discover(v, 1)
+        clean = s.rewrite(v, 1)
+        self.assertEqual(clean['threadId'], clean['item']['senderThreadId'])
+        self.assertNotEqual(clean['threadId'], clean['turnId'])
+        self.assertEqual(clean['item']['receiverThreadIds'], list(clean['item']['agentsStates']))
+        self.assertEqual(clean['parentThreadId'], clean['item']['receiverThreadIds'][0])
+        self.assertEqual(clean['agentThreadId'], clean['item']['receiverThreadIds'][1])
+        self.assertEqual(clean['agentPath'], 'agent-path-001')
+        self.assertEqual(clean['item']['agentsStates'][clean['parentThreadId']]['status'], 'completed')
+
+    def test_root_manifest_cannot_mislabel_child_evidence(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = pathlib.Path(folder)
+            frame = {'ordinal': 1, 'direction': 's2c', 'wire': {
+                'method': 'item/completed', 'params': {'completedAtMs': 2, 'threadId': 'root', 'turnId': 'turn',
+                'item': {'type': 'collabAgentToolCall', 'id': 'spawn', 'tool': 'spawnAgent',
+                'status': 'completed', 'senderThreadId': 'root', 'receiverThreadIds': ['child'],
+                'agentsStates': {'child': {'status': 'completed'}}}}}}
+            (root/'raw.jsonl').write_text(json.dumps(frame)+'\n')
+            with self.assertRaisesRegex(ValueError, 'child publication'):
+                sanitize.publish(root, root/'public', 's1', {'root': '/synthetic', 'home': '/isolated'})
+            self.assertFalse((root/'public').exists())
+
+    def test_unknown_legacy_child_controller_is_quarantined(self):
+        frame = {'ordinal': 1, 'direction': 's2c', 'wire': {
+            'method': 'codex/event/future_child_controller', 'params': {'threadId': 'child'}}}
+        with self.assertRaisesRegex(ValueError, 'method not whitelisted'):
+            sanitize.transform([frame], '/synthetic', '/isolated')
+
     def test_hook_payload_excluded_before_scan_or_publication(self):
         f = {'ordinal': 1, 'direction': 's2c', 'wire': {'method': 'hook/completed', 'params': {'private': 'sk-neverpublish0123456789'}}}
         out, omitted, relations = sanitize.transform([f], '/fixture', '/private')

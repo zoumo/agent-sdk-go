@@ -135,27 +135,12 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 	if o.Limit > o.MaxMessages {
 		return page, queryError("resource-limit", "", "requested return limit exceeds MaxMessages", nil)
 	}
-	root, e := os.OpenRoot(o.Scope.ConfigDir)
-	if e != nil {
-		return page, queryAccess(o.Scope.ConfigDir, e)
-	}
-	defer root.Close()
-	projects, e := queryDirectory(root, "projects")
+	root, projects, key, e := openQueryScope(o.Scope)
 	if e != nil {
 		return page, e
 	}
+	defer root.Close()
 	defer projects.Close()
-	key := ""
-	if o.Scope.ProjectDir != "" {
-		project, e := filepath.EvalSymlinks(o.Scope.ProjectDir)
-		if e != nil {
-			return page, queryAccess(o.Scope.ProjectDir, e)
-		}
-		key = projectUnsafe.ReplaceAllString(project, "-")
-		if len(key) > 200 {
-			return page, queryError("unsupported", project, "truncated project keys", ErrUnsupported)
-		}
-	}
 	projectRoot, rel, e := locateQuerySource(ctx, projects, key, sessionID+".jsonl", &page.Coverage, o.Scope.MaxEntries)
 	if e != nil {
 		return page, e
@@ -350,4 +335,39 @@ func verifyQuerySource(ctx context.Context, f *os.File, root *os.Root, path stri
 		return queryError("changed", path, "source append/rewrite/replacement observed", nil)
 	}
 	return ctx.Err()
+}
+
+// Shared scope resolution for messages, metadata and discovery. No default
+// config lookup, worktree expansion or second filename resolution policy.
+func openQueryScope(scope SessionQueryScope) (*os.Root, *os.Root, string, error) {
+	if !filepath.IsAbs(scope.ConfigDir) || (scope.ProjectDir != "" && !filepath.IsAbs(scope.ProjectDir)) || scope.MaxEntries < 0 {
+		return nil, nil, "", queryError("invalid-input", "", "absolute config/project and nonnegative entries required", ErrInvalidInput)
+	}
+	root, e := os.OpenRoot(scope.ConfigDir)
+	if e != nil {
+		return nil, nil, "", queryAccess(scope.ConfigDir, e)
+	}
+	projects, e := queryDirectory(root, "projects")
+	if e != nil {
+		root.Close()
+		return nil, nil, "", e
+	}
+	key := ""
+	if scope.ProjectDir != "" {
+		project, err := filepath.EvalSymlinks(scope.ProjectDir)
+		if err != nil {
+			e = queryAccess(scope.ProjectDir, err)
+		} else {
+			key = projectUnsafe.ReplaceAllString(project, "-")
+			if len(key) > 200 {
+				e = queryError("unsupported", project, "truncated project keys", ErrUnsupported)
+			}
+		}
+	}
+	if e != nil {
+		projects.Close()
+		root.Close()
+		return nil, nil, "", e
+	}
+	return root, projects, key, nil
 }

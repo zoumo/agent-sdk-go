@@ -123,6 +123,7 @@ for name, relative in (
     ('codex-observe', 'codex/examples/observe-turn/main.go'),
     ('codex-resume', 'codex/examples/resume-thread/main.go'),
     ('claude-subagents', 'claude/examples/subagents-offline/main.go'),
+    ('claude-metadata', 'claude/examples/session-metadata-offline/main.go'),
 ):
     target = pathlib.Path('examples') / name
     target.mkdir(parents=True)

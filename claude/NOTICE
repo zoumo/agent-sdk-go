@@ -24,7 +24,8 @@ cross-checked against those pinned SDK sources and the official
 Agent SDK user-input documentation. These are source-reviewed and mock-tested
 contracts, not a claim of live CLI interoperability.
 
-Local message-query chain/parallel reconstruction in session_query_chain.go is
+Local message-query chain/parallel reconstruction in session_query_chain.go and
+metadata title/preview selection in session_metadata.go are
 adapted from anthropics/claude-agent-sdk-python, sessions.py, commit
 0e89b298e771259378a6cd3734e00d323dff5703 (SDK 0.2.174).
 

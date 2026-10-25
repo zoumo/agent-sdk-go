@@ -97,7 +97,8 @@ Native continuation uses `Open` with `SessionOptions.ResumeID`. This requests th
 CLI's native resume behavior; initialization does not prove historical recovery.
 Independent saved messages use package-level `GetSessionMessages` with an explicit
 absolute `SessionQueryScope.ConfigDir`, without Open or a runtime executable. See
-[local message queries](docs/session-messages.md) and the
+[local message queries](docs/session-messages.md),
+[session discovery and metadata](docs/session-metadata.md), and the
 [offline example](examples/session-messages-offline/main.go). Internal legacy
 parser/projection helpers remain independently tested; queries return detached
 messages rather than Events.

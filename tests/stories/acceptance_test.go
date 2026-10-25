@@ -1468,6 +1468,12 @@ func checkClaudeQueryAlongsideSession(s *CommonStoriesSuite) {
 	p, e := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
 	require.NoError(t, e)
 	require.Len(t, p.Messages, 1)
+	listed, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope})
+	require.NoError(t, e)
+	require.Len(t, listed.Sessions, 1)
+	metadata, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scope})
+	require.NoError(t, e)
+	require.Equal(t, "stored", metadata.Info.Summary)
 	after, e := os.ReadFile(trace)
 	require.NoError(t, e)
 	require.Equal(t, before, after)
@@ -1522,4 +1528,320 @@ func checkClaudeRecoveredTimestampOrder(s *CommonStoriesSuite) {
 		ids = append(ids, m.UUID)
 	}
 	require.Equal(t, []string{"u", "c0", "c1", "c2", "r2", "r1", "r0", "end"}, ids)
+}
+
+func checkClaudeSessionMetadata(s *CommonStoriesSuite) {
+	t := s.T()
+	t.Setenv("PATH", t.TempDir())
+	source := queryLine("u", "", "user", `"future":9007199254740993,`, `{"content":"first saved prompt"}`) +
+		queryLine("a", "u", "assistant", "", `{"content":"answer"}`) +
+		`{"type":"custom-title","customTitle":"Chosen title","future":null}` + "\n"
+	scope, path := claudeQueryFixture(t, source)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	page, err := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope})
+	require.NoError(t, err)
+	require.Equal(t, "complete", page.Coverage.Status)
+	require.Len(t, page.Sessions, 1)
+	info := page.Sessions[0]
+	require.Equal(t, querySession, info.SessionID)
+	require.Equal(t, "Chosen title", info.Summary)
+	require.Equal(t, "first saved prompt", *info.FirstPrompt)
+	require.Equal(t, "unknown", info.Running)
+	require.False(t, info.Sampled)
+	require.Contains(t, string(info.Head), "9007199254740993")
+	single, err := claude.GetSessionInfo(deadline(t), info.SessionID, claude.SessionInfoOptions{Scope: scope})
+	require.NoError(t, err)
+	require.NotNil(t, single.Info)
+	require.Equal(t, info, *single.Info)
+	messages, err := claude.GetSessionMessages(deadline(t), info.SessionID, claude.SessionMessagesOptions{Scope: scope})
+	require.NoError(t, err)
+	require.Len(t, messages.Messages, 2)
+	page.Sessions[0].Head[0] = 'x'
+	again, err := claude.GetSessionInfo(deadline(t), info.SessionID, claude.SessionInfoOptions{Scope: scope})
+	require.NoError(t, err)
+	require.Equal(t, byte('{'), again.Info.Head[0])
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, sha256.Sum256(before), sha256.Sum256(after))
+	stat, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0400), stat.Mode().Perm())
+}
+
+func checkClaudeMetadataScopeAndPages(s *CommonStoriesSuite) {
+	t := s.T()
+	scope, path := claudeQueryFixture(t, queryLine("u", "", "user", "", `{"content":"one"}`))
+	const other = "22222222-2222-4222-8222-222222222222"
+	p2 := filepath.Join(filepath.Dir(path), other+".jsonl")
+	require.NoError(t, os.WriteFile(p2, []byte(strings.ReplaceAll(queryLine("u", "", "user", "", `{"content":"two"}`), querySession, other)), 0400))
+	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Hour)
+	require.NoError(t, os.Chtimes(path, older, older))
+	require.NoError(t, os.Chtimes(p2, newer, newer))
+	page, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope, Limit: 1})
+	require.NoError(t, e)
+	require.Len(t, page.Sessions, 1)
+	require.Equal(t, other, page.Sessions[0].SessionID)
+	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope, Offset: 1, Limit: 1})
+	require.NoError(t, e)
+	require.Len(t, page.Sessions, 1)
+	require.Equal(t, querySession, page.Sessions[0].SessionID)
+	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope, Offset: 99})
+	require.NoError(t, e)
+	require.Empty(t, page.Sessions)
+	require.Equal(t, "complete", page.Coverage.Status)
+	require.NoError(t, os.Chtimes(path, newer, newer))
+	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope})
+	require.NoError(t, e)
+	require.Len(t, page.Sessions, 2)
+	require.Equal(t, querySession, page.Sessions[0].SessionID)
+	// Project scope must be reused by list, info and messages.
+	project := t.TempDir()
+	canonical, e := filepath.EvalSymlinks(project)
+	require.NoError(t, e)
+	key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(canonical, "-")
+	dir := filepath.Join(scope.ConfigDir, "projects", key)
+	require.NoError(t, os.Mkdir(dir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, other+".jsonl"), []byte(""), 0400))
+	scoped := scope
+	scoped.ProjectDir = project
+	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scoped})
+	require.NoError(t, e)
+	require.Len(t, page.Sessions, 1)
+	require.Equal(t, other, page.Sessions[0].SessionID)
+	require.Empty(t, page.Sessions[0].Summary)
+	_, e = claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scoped})
+	requireMetadataKind(t, e, "missing")
+	// Discovery retains duplicate identity, never picks a newest winner.
+	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scope})
+	requireMetadataKind(t, e, "ambiguous")
+	require.Equal(t, "partial", page.Coverage.Status)
+	require.Len(t, page.Sessions, 3)
+	_, e = claude.GetSessionInfo(deadline(t), other, claude.SessionInfoOptions{Scope: scope})
+	requireMetadataKind(t, e, "ambiguous")
+	// Known nested subagent layout is outside scope. A main file marked sidechain
+	// is excluded, but metadata-only or unknown native objects remain discoverable.
+	require.NoError(t, os.Mkdir(filepath.Join(dir, other), 0700))
+	side := strings.ReplaceAll(queryLine("side", "", "user", `"isSidechain":true,`, `{"content":"hidden"}`), querySession, "33333333-3333-4333-8333-333333333333")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "33333333-3333-4333-8333-333333333333.jsonl"), []byte(side), 0400))
+	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scoped})
+	require.NoError(t, e)
+	require.Len(t, page.Sessions, 1)
+}
+
+func requireMetadataKind(t *testing.T, err error, kind string) {
+	t.Helper()
+	var q *claude.SessionQueryError
+	require.ErrorAs(t, err, &q)
+	require.Equal(t, kind, q.Kind)
+}
+
+func checkClaudeMetadataSamples(s *CommonStoriesSuite) {
+	cases := []struct{ name, source, summary, prompt string }{
+		{"native-precedence", queryLine("u", "", "user", "", `{"content":"prompt"}`) + `{"type":"custom-title","aiTitle":"AI"}` + "\n" + `{"type":"last-prompt","lastPrompt":"recent"}` + "\n" + `{"type":"summary","summary":"older"}` + "\n", "AI", "prompt"},
+		{"last-prompt-precedence", queryLine("u", "", "user", "", `{"content":"prompt"}`) + `{"type":"last-prompt","lastPrompt":"recent"}` + "\n" + `{"type":"summary","summary":"older"}` + "\n", "recent", "prompt"},
+		{"skip-hook", queryLine("hook", "", "user", "", `{"content":"<session-start-hook>generated</session-start-hook>"}`) + queryLine("u", "hook", "user", "", `{"content":[{"type":"text","text":"actual prompt"}]}`), "actual prompt", "actual prompt"},
+		{"command-fallback", queryLine("u", "", "user", "", `{"content":"<command-name>/help</command-name>"}`), "/help", "/help"},
+		{"unknown", `{"type":"future-native","extension":{"n":9007199254740993}}` + "\n", "", ""},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			scope, _ := claudeQueryFixture(t, tc.source)
+			result, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scope})
+			require.NoError(t, e)
+			require.NotNil(t, result.Info)
+			require.Equal(t, tc.summary, result.Info.Summary)
+			if tc.prompt != "" {
+				require.NotNil(t, result.Info.FirstPrompt)
+				require.Equal(t, tc.prompt, *result.Info.FirstPrompt)
+			}
+		})
+	}
+	s.Run("bounded-middle", func() {
+		t := s.T()
+		head := queryLine("u", "", "user", "", `{"content":"sampled prompt"}`)
+		// A corrupt unread middle proves metadata does not force message parsing.
+		source := head + strings.Repeat("unread not JSON", 1000) + "\n" + `{"type":"custom-title","customTitle":"tail title","future":9007199254740993}` + "\n"
+		scope, _ := claudeQueryFixture(t, source)
+		result, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scope, SampleBytes: 256})
+		require.NoError(t, e)
+		require.NotNil(t, result.Info)
+		require.True(t, result.Info.Sampled)
+		require.Equal(t, "tail title", result.Info.Summary)
+		require.Equal(t, int64(512), result.Coverage.Bytes)
+		require.Equal(t, "complete", result.Coverage.Status)
+		require.Contains(t, string(result.Info.Tail), "9007199254740993")
+		_, e = claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
+		requireMetadataKind(t, e, "corrupt")
+	})
+}
+
+func checkClaudeMetadataFailures(s *CommonStoriesSuite) {
+	cases := []struct {
+		name    string
+		options func(claude.SessionQueryScope) claude.ListSessionsOptions
+		kind    string
+	}{
+		{"negative-offset", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			return claude.ListSessionsOptions{Scope: q, Offset: -1}
+		}, "invalid-input"},
+		{"negative-limit", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			return claude.ListSessionsOptions{Scope: q, Limit: -1}
+		}, "invalid-input"},
+		{"negative-sample", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			return claude.ListSessionsOptions{Scope: q, SampleBytes: -1}
+		}, "invalid-input"},
+		{"entries", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			q.MaxEntries = 1
+			return claude.ListSessionsOptions{Scope: q}
+		}, "resource-limit"},
+		{"bytes", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			return claude.ListSessionsOptions{Scope: q, MaxBytes: 1}
+		}, "resource-limit"},
+		{"lines", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			return claude.ListSessionsOptions{Scope: q, MaxLines: 1}
+		}, "resource-limit"},
+		{"page", func(q claude.SessionQueryScope) claude.ListSessionsOptions {
+			return claude.ListSessionsOptions{Scope: q, Limit: 1001}
+		}, "resource-limit"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			q, _ := claudeQueryFixture(t, queryLine("u", "", "user", "", `{"content":"prompt"}`)+queryLine("a", "u", "assistant", "", `{"content":"answer"}`))
+			p, e := claude.ListSessions(deadline(t), tc.options(q))
+			requireMetadataKind(t, e, tc.kind)
+			require.NotEqual(t, "complete", p.Coverage.Status)
+		})
+	}
+	for _, tc := range []struct{ name, source, kind string }{
+		{"invalid-json", "{bad}\n", "corrupt"}, {"incomplete", "{\"type\":\"future\"}", "corrupt"},
+		{"duplicate-key", "{\"x\":1,\"x\":2}\n", "corrupt"}, {"identity", "{\"sessionId\":\"other\"}\n", "corrupt"},
+		{"title-type", "{\"customTitle\":5}\n", "corrupt"},
+	} {
+		s.Run(tc.name, func() {
+			t := s.T()
+			q, _ := claudeQueryFixture(t, tc.source)
+			p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+			requireMetadataKind(t, e, tc.kind)
+			require.Equal(t, "partial", p.Coverage.Status)
+			require.Len(t, p.Sessions, 1)
+			r, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q})
+			requireMetadataKind(t, e, tc.kind)
+			require.NotNil(t, r.Info)
+		})
+	}
+	s.Run("access-cancel-isolation", func() {
+		t := s.T()
+		q, path := claudeQueryFixture(t, `{"future":null}`+"\n")
+		require.NoError(t, os.Chmod(path, 0000))
+		t.Cleanup(func() { _ = os.Chmod(path, 0400) })
+		p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+		requireMetadataKind(t, e, "inaccessible")
+		require.ErrorIs(t, e, os.ErrPermission)
+		require.Equal(t, "partial", p.Coverage.Status)
+		require.Len(t, p.Sessions, 1)
+		require.NoError(t, os.Chmod(path, 0400))
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		p, e = claude.ListSessions(ctx, claude.ListSessionsOptions{Scope: q})
+		require.ErrorIs(t, e, context.Canceled)
+		require.Equal(t, "unknown", p.Coverage.Status)
+		_, e = claude.GetSessionInfo(ctx, querySession, claude.SessionInfoOptions{Scope: q})
+		require.ErrorIs(t, e, context.Canceled)
+		_, e = claude.ListSessions(nil, claude.ListSessionsOptions{Scope: q})
+		requireMetadataKind(t, e, "invalid-input")
+		_, e = claude.GetSessionInfo(deadline(t), "../escape", claude.SessionInfoOptions{Scope: q})
+		requireMetadataKind(t, e, "invalid-input")
+		require.NoError(t, os.Remove(path))
+		require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "secret"), path))
+		_, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+		requireMetadataKind(t, e, "unsupported")
+		_, e = claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q})
+		requireMetadataKind(t, e, "unsupported")
+		require.NoError(t, os.Remove(path))
+		require.NoError(t, os.Remove(filepath.Dir(path)))
+		require.NoError(t, os.Symlink(t.TempDir(), filepath.Dir(path)))
+		_, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+		requireMetadataKind(t, e, "unsupported")
+	})
+	s.Run("empty-missing-partial", func() {
+		t := s.T()
+		q, path := claudeQueryFixture(t, "")
+		r, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q})
+		require.NoError(t, e)
+		require.NotNil(t, r.Info)
+		require.Equal(t, "complete", r.Coverage.Status)
+		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), "legacy.jsonl"), []byte("private must not read"), 0000))
+		p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+		requireMetadataKind(t, e, "unsupported")
+		require.Len(t, p.Sessions, 1)
+		require.Equal(t, "partial", p.Coverage.Status)
+		require.NoError(t, os.Remove(filepath.Join(filepath.Dir(path), "legacy.jsonl")))
+		require.NoError(t, os.Remove(path))
+		p, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+		require.NoError(t, e)
+		require.Empty(t, p.Sessions)
+		require.Equal(t, "complete", p.Coverage.Status)
+		_, e = claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q})
+		requireMetadataKind(t, e, "missing")
+		_, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: claude.SessionQueryScope{ConfigDir: t.TempDir()}})
+		requireMetadataKind(t, e, "missing")
+	})
+}
+
+func checkClaudeMetadataDefaultPage(s *CommonStoriesSuite) {
+	t := s.T()
+	q, path := claudeQueryFixture(t, "")
+	for i := 2; i <= 102; i++ {
+		id := fmt.Sprintf("%08x-1111-4111-8111-111111111111", i)
+		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), id+".jsonl"), nil, 0400))
+	}
+	p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+	require.NoError(t, e)
+	require.Len(t, p.Sessions, 100)
+	require.Equal(t, "complete", p.Coverage.Status)
+	p, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q, Offset: 100})
+	require.NoError(t, e)
+	require.Len(t, p.Sessions, 2)
+	p, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q, MaxSessions: 1})
+	requireMetadataKind(t, e, "resource-limit")
+	require.Len(t, p.Sessions, 1)
+	require.Equal(t, "partial", p.Coverage.Status)
+}
+
+func checkClaudeMetadataSampleEdges(s *CommonStoriesSuite) {
+	s.Run("head-is-not-tail", func() {
+		t := s.T()
+		source := strings.Repeat("\n", 256) + strings.Repeat("middle", 1000) + "\n" + queryLine("u", "", "user", "", `{"content":"tail only"}`)
+		q, _ := claudeQueryFixture(t, source)
+		r, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q, SampleBytes: 256})
+		require.NoError(t, e)
+		require.True(t, r.Info.Sampled)
+		require.Nil(t, r.Info.FirstPrompt)
+		require.Nil(t, r.Info.CreatedAt)
+	})
+	s.Run("exact-entries", func() {
+		t := s.T()
+		q, _ := claudeQueryFixture(t, "")
+		q.MaxEntries = 2
+		p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
+		require.NoError(t, e)
+		require.Len(t, p.Sessions, 1)
+	})
+	s.Run("invalid-visibility-flag", func() {
+		t := s.T()
+		q, _ := claudeQueryFixture(t, queryLine("u", "", "user", `"isSidechain":"true",`, `{"content":"uncertain"}`))
+		_, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q})
+		requireMetadataKind(t, e, "corrupt")
+	})
+}
+
+func checkClaudeMetadataIncompleteTail(s *CommonStoriesSuite) {
+	t := s.T()
+	q, _ := claudeQueryFixture(t, strings.Repeat("x", 1000))
+	_, e := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: q, SampleBytes: 16})
+	requireMetadataKind(t, e, "corrupt")
 }

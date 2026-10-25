@@ -90,3 +90,14 @@ ConfigDir、可选绝对 ProjectDir 和 MaxEntries。Page 包含原生独立
 `[]SessionMessage` 与 `SessionMessagesCoverage`；错误为可判别的 SessionQueryError
 或 context 取消。消息值不使用 Event、Received 或 IncomingRequest。
 具体默认值、选择算法、范围和失败语义见[Claude 消息查询合同](../../contracts/claude-session-messages.md)。
+
+## Claude 独立发现与 metadata（Session 外）
+
+原生包提供 `ListSessions(ctx context.Context, options ListSessionsOptions)
+(SessionsPage, error)` 与 `GetSessionInfo(ctx context.Context, sessionID string,
+options SessionInfoOptions) (SessionInfoResult, error)`。复用 SessionQueryScope，
+metadata 与消息分离。ListSessionsOptions 包含 Scope、Limit/Offset、MaxPage/
+MaxSessions、SampleBytes/MaxBytes/MaxLines；SessionInfoOptions 只含 Scope 与
+SampleBytes/MaxBytes/MaxLines。SessionsPage 包含 []SessionInfo 与
+SessionMetadataCoverage；SessionInfoResult 包含可空 *SessionInfo 与同型 Coverage。
+错误可伴部分值，不授予回答权限。字段、默认值和覆盖见[metadata 合同](../../contracts/claude-session-metadata.md)。

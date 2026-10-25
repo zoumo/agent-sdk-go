@@ -13,3 +13,11 @@ func (s *CommonStoriesSuite) TestClaudeNullToolIdentity()      { checkClaudeNull
 func (s *CommonStoriesSuite) TestClaudeRecoveredTimestampOrder() {
 	checkClaudeRecoveredTimestampOrder(s)
 }
+
+func (s *CommonStoriesSuite) TestClaudeSessionMetadata()        { checkClaudeSessionMetadata(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataScopeAndPages()  { checkClaudeMetadataScopeAndPages(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataSamples()        { checkClaudeMetadataSamples(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataFailures()       { checkClaudeMetadataFailures(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataDefaultPage()    { checkClaudeMetadataDefaultPage(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataSampleEdges()    { checkClaudeMetadataSampleEdges(s) }
+func (s *CommonStoriesSuite) TestClaudeMetadataIncompleteTail() { checkClaudeMetadataIncompleteTail(s) }

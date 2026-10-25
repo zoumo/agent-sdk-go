@@ -30,6 +30,7 @@ okf_version: "0.2"
 - [已确认关系与资源合同](contracts/lineage.md)
 - [事件交付](contracts/event-delivery.md)
 - [Claude 独立本地消息查询](contracts/claude-session-messages.md)
+- [Claude 独立本地发现与 metadata](contracts/claude-session-metadata.md)
 - [共同验收场景](contracts/stories/index.md)
 - [Session 深模块设计](modules/native-session/design.md)
 - [Session 原生公开 Interface](modules/native-session/interfaces.md)

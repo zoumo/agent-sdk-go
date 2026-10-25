@@ -75,3 +75,15 @@ ResumeID 与 Subagents.History 不重发输入/回答；历史只关联且报告
 Interrupt 仅确认原生 control_response；之后仍可 Receive result。Close 结束客户端传输，不证明模型任务停止。
 
 自动化：`TestCommonStories/TestNativeAdapters/US-012/claude`；源码证据为以上公开 API 和本包协议测试，离线证据为实际运行结果，真实运行均未验证。
+
+## Independent saved-session queries
+
+The shared discovery → metadata → messages goal uses package-level native queries,
+not Session.ListSubagents. See [metadata scope and evidence](../session-metadata.md)
+and [message selection](../session-messages.md). CommonStoriesSuite public adapter
+acceptance lives in history_query_test.go/acceptance_test.go: TestClaudeSessionMetadata,
+TestClaudeMetadataScopeAndPages, TestClaudeMetadataSamples, TestClaudeMetadataFailures,
+TestClaudeMetadataDefaultPage, TestClaudeMetadataSampleEdges and
+TestClaudeMetadataIncompleteTail. TestClaudeQueryAlongsideSession checks zero query
+protocol writes and continued delivery/original approval authority using a synthetic
+peer. These are offline evidence, with no real model or private history access.

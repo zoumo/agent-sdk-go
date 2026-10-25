@@ -19,3 +19,5 @@
 | US-013 | [US-013 列出当前 Session 的子 Agent](US-013.md) |
 
 原生查询验收：[Claude 独立消息查询](claude-session-messages.md)。
+
+原生发现验收：[Claude 独立 metadata](claude-session-metadata.md)。

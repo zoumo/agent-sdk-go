@@ -52,6 +52,11 @@ func TestQuerySourceIntegrity(t *testing.T) {
 			var qe *SessionQueryError
 			require.ErrorAs(t, e, &qe)
 			require.Equal(t, "changed", qe.Kind)
+			// Metadata verifies only the declared sample ranges, plus identity,
+			// size and mtime; it must not silently accept these observed changes.
+			e = verifyMetadataSource(context.Background(), f, root, filepath.Join("project", "source"), initial, data[:4], data[4:], 4)
+			require.ErrorAs(t, e, &qe)
+			require.Equal(t, "changed", qe.Kind)
 		})
 	}
 }

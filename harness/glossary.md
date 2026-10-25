@@ -19,6 +19,10 @@ status: stable
 | Session reception | A record is accepted for a Session using available native membership evidence; optional parent knowledge is not an admission prerequisite. |
 | Isolated diagnostic material | Bounded retained connection records whose Session membership was unconfirmed at reception. Reading them does not replay a Session stream or create answer authority. |
 | Session observation membership | Available native evidence establishes that an agent's events belong in a session's observation stream. Membership does not require a known direct parent or a complete agent tree. |
+| Agent output settings | Native controls that determine which child content the runtime emits. They are separate from SDK delivery policy. |
+| Child detail events | Text, thinking and tool progress attributable to a child agent. Parent tool results, relationship facts, completion/failure notifications and actual approval requests retain their distinct roles. See [ADR-0004](adr/0004-subagent-event-delivery.md). |
+| Internal result return | Native orchestration that supplies a child task's result to its parent, independently of application event consumption. |
+| Approval controller / observer | The controller owns the original authority to answer a live native request; an observer can inspect evidence without acquiring that authority. History is observation only. |
 | Submission | A native request or input was sent with the native API's documented outcome. A successful write does not establish model acceptance, execution or exactly-once delivery; ambiguous outcomes remain visible. |
 | Completion | A native turn/task result was observed. Root completion does not prove that children, background work, or the owned transport have stopped. The application chooses its stopping policy. |
 | Observed association | Available native evidence confirms a relationship or observation membership. Association alone does not establish a newly created agent, and the relationship graph does not interpret native evidence. |

@@ -80,3 +80,25 @@ func TestOfflineExample(t *testing.T) {
 	}
 	require.Equal(t, map[string]bool{"child": true, "grandchild": true}, members, "native task membership")
 }
+
+func TestOfflineSuppressedExample(t *testing.T) {
+	var output bytes.Buffer
+	require.NoError(t, runWithPolicy(&output, claude.ChildDetailSuppress))
+	expected := strings.Split(strings.TrimSpace(frames), "\n")
+	// Literal fixture ordinals: pure confirmed-grandchild snapshot (5) and pure
+	// confirmed-child after root result (10). The earlier mixed tool frame stays.
+	expected = append(append(append([]string{}, expected[:4]...), expected[5:9]...), expected[10:]...)
+	var got []string
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var header struct {
+			Type string `json:"type"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &header))
+		if header.Type != "" {
+			got = append(got, line)
+		}
+	}
+	require.Equal(t, expected, got)
+	require.Contains(t, output.String(), "child thinking") // mixed envelope, not privacy removal
+	require.Contains(t, output.String(), `"status":"killed"`)
+}

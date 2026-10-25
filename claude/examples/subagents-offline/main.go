@@ -27,7 +27,12 @@ func main() {
 	if os.Getenv(peerEnvironment) == "1" {
 		err = peer()
 	} else {
+		fmt.Fprintln(os.Stdout, "policy=preserve (default)")
 		err = run(os.Stdout)
+		if err == nil {
+			fmt.Fprintln(os.Stdout, "policy=suppress (mixed/protected frames remain)")
+			err = runWithPolicy(os.Stdout, claude.ChildDetailSuppress)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -35,7 +40,9 @@ func main() {
 	}
 }
 
-func run(output io.Writer) error {
+func run(output io.Writer) error { return runWithPolicy(output, "") }
+
+func runWithPolicy(output io.Writer, policy claude.ChildDetailPolicy) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	executable, err := os.Executable()
@@ -48,8 +55,9 @@ func run(output io.Writer) error {
 	}
 	defer os.RemoveAll(dir)
 	client, err := claude.Open(ctx, claude.SessionOptions{
-		CLIPath: executable,
-		WorkDir: dir,
+		CLIPath:           executable,
+		ChildDetailPolicy: policy,
+		WorkDir:           dir,
 		// Replacement environment: no account configuration is inherited.
 		Env: []string{"HOME=" + dir, peerEnvironment + "=1", "GORACE=atexit_sleep_ms=0"},
 	})

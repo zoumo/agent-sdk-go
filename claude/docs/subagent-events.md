@@ -103,3 +103,8 @@ future fields may still carry child text/thinking/tool content. A root result
 still does not imply child/background completion. Synthetic public API F1–F5 and
 native authority/write-barrier regressions verify filtering; real child forwarding
 and parent consumption remain unverified, with no new recording or model call.
+
+Run `go run ./claude/examples/subagents-offline` from the repository root for both
+policies against the same embedded synthetic frames. The example launches only
+its own peer with a replacement environment; it has no installed-CLI/account
+fallback. Its two traces illustrate retained mixed content and task terminals.

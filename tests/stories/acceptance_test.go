@@ -2287,6 +2287,9 @@ func checkClaudeDetailAuthority(s *CommonStoriesSuite) {
 		}
 	}
 	require.Equal(t, 1, successes)
+	approved := claudeDetailRequest(s, session, "approved", "Read", `{}`)
+	require.NoError(t, approved.Approve(deadline(t), claude.ApprovalOptions{}))
+	require.ErrorIs(t, approved.Deny(deadline(t), claude.DenialOptions{}), claude.ErrPermissionUsed)
 	q := claudeDetailRequest(s, session, "question", "AskUserQuestion", `{"questions":[{"question":"Choose?","header":"Pick","options":[{"label":"A","description":"alpha"}],"multiSelect":false}],"future":null}`)
 	require.NoError(t, q.Answer(deadline(t), claude.QuestionAnswers{Answers: map[string]string{"Choose?": "A"}}))
 	require.ErrorIs(t, q.Answer(deadline(t), claude.QuestionAnswers{Answers: map[string]string{"Choose?": "A"}}), claude.ErrPermissionUsed)
@@ -2309,10 +2312,11 @@ func checkClaudeDetailAuthority(s *CommonStoriesSuite) {
 			replies = append(replies, r)
 		}
 	}
-	require.Len(t, replies, 2)
+	require.Len(t, replies, 3)
 	require.Equal(t, "original", replies[0].Response.RequestID)
-	require.Equal(t, "question", replies[1].Response.RequestID)
-	require.Contains(t, string(replies[1].Response.Response), `"answers":{"Choose?":"A"}`)
+	require.Equal(t, "approved", replies[1].Response.RequestID)
+	require.Equal(t, "question", replies[2].Response.RequestID)
+	require.Contains(t, string(replies[2].Response.Response), `"answers":{"Choose?":"A"}`)
 }
 
 func checkClaudeDetailLifecycle(s *CommonStoriesSuite) {
@@ -2328,6 +2332,7 @@ func checkClaudeDetailLifecycle(s *CommonStoriesSuite) {
 			`{"type":"system","subtype":"task_progress","session_id":"s","task_id":"b","summary":"background"}`,
 			`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"a","status":"completed"}`,
 			`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"b","status":"failed"}`,
+			`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"b","status":"killed"}`,
 			`{"type":"system","subtype":"background_tasks_changed","session_id":"s","tasks":[]}`,
 		}
 		var sent []string

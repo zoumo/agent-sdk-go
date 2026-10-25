@@ -87,6 +87,14 @@ parent UUID is absent, even when the native recovery algorithm could associate
 its tool_use_id; an existing unrelated parent is supported for stray recovery.
 These are intentional strict coverage differences, covered by synthetic fixtures.
 Known transcript metadata is ignored for content after identity validation.
+Independent queries also recognize api-request-shape, api-request-blob, api-request
+and cost-state as non-message bookkeeping. They need no uuid/parentUuid and do
+not enter the conversation graph, but still undergo strict JSON and optional
+sessionId/session_id validation and count toward source byte/line/line-size bounds.
+Unknown types remain unsupported. This query-only classification does not expand
+the older replay parser or its frozen-tail append allowlist. The exact official
+filter evidence and synthetic regression are recorded in the
+[compatibility follow-up](../../docs/validation/history-query-integration.md#compatibility-follow-up-non-message-request-records).
 
 Tests are synthetic public API acceptance in `tests/stories/history_query_test.go`
 inside CommonStoriesSuite (private adapters/assertions in acceptance_test.go),

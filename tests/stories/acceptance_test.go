@@ -1983,3 +1983,78 @@ func checkClaudeMetadataTailLineBoundary(s *CommonStoriesSuite) {
 	assert.Equal(t, "partial", limited.Coverage.Status)
 	assert.Zero(t, limited.Coverage.Bytes, "reject before exceeding the byte budget")
 }
+
+func checkClaudeNonMessageRequestMetadata(s *CommonStoriesSuite) {
+	for _, kind := range []string{"api-request-shape", "api-request-blob", "api-request", "cost-state"} {
+		s.Run(kind, func() {
+			t := s.T()
+			// Artificial non-message record: no uuid/parentUuid and no real request data.
+			metadata := fmt.Sprintf(`{"type":%q,"synthetic":{"future":9007199254740993,"nullable":null}}`, kind)
+			source := queryLine("u", "", "user", "", `{"content":"question"}`) + metadata + "\n" + queryLine("a", "u", "assistant", "", `{"content":"answer"}`)
+			scope, _ := claudeQueryFixture(t, source)
+			page, err := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope, MaxBytes: int64(len(source)), MaxLines: 3, MaxRecords: 2})
+			require.NoError(t, err)
+			require.Len(t, page.Messages, 2)
+			assert.Equal(t, "u", page.Messages[0].UUID)
+			assert.Equal(t, "a", page.Messages[1].UUID)
+			assert.Equal(t, "complete", page.Coverage.Status)
+			assert.Equal(t, 3, page.Coverage.Lines)
+			assert.Equal(t, 2, page.Coverage.Records, "non-message metadata is not a chain entry")
+			next, err := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope, Offset: 1, Limit: 1})
+			require.NoError(t, err)
+			require.Len(t, next.Messages, 1)
+			assert.Equal(t, "a", next.Messages[0].UUID)
+			end, err := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope, Offset: 2, Limit: 1})
+			require.NoError(t, err)
+			assert.Empty(t, end.Messages)
+			info, err := claude.GetSessionInfo(deadline(t), querySession, claude.SessionInfoOptions{Scope: scope})
+			require.NoError(t, err)
+			require.NotNil(t, info.Info)
+			require.Len(t, info.Info.Records, 3)
+			assert.JSONEq(t, metadata, string(info.Info.Records[1]))
+		})
+	}
+}
+
+func checkClaudeRequestMetadataGuards(s *CommonStoriesSuite) {
+	for _, kind := range []string{"api-request-shape", "api-request-blob", "api-request", "cost-state"} {
+		s.Run(kind, func() {
+			for _, tc := range []struct {
+				name, extra, want string
+				configure         func(*claude.SessionMessagesOptions)
+			}{
+				{name: "foreign-camel-identity", extra: `,"sessionId":"22222222-2222-4222-8222-222222222222"`, want: "corrupt"},
+				{name: "foreign-snake-identity", extra: `,"session_id":"22222222-2222-4222-8222-222222222222"`, want: "corrupt"},
+				{name: "typed-identity", extra: `,"sessionId":12`, want: "corrupt"},
+				{name: "duplicate-identity", extra: `,"sessionId":null,"sessionId":null`, want: "corrupt"},
+				{name: "invalid-unicode", extra: `,"synthetic":"\ud800"`, want: "corrupt"},
+				{name: "lines", want: "resource-limit", configure: func(o *claude.SessionMessagesOptions) { o.MaxLines = 2 }},
+				{name: "bytes", want: "resource-limit"},
+				{name: "index", want: "resource-limit", configure: func(o *claude.SessionMessagesOptions) { o.MaxRecords = 1 }},
+				{name: "large-metadata-line", extra: `,"synthetic":"` + strings.Repeat("x", 2048) + `"`, want: "resource-limit", configure: func(o *claude.SessionMessagesOptions) { o.MaxLineBytes = 1024 }},
+			} {
+				s.Run(tc.name, func() {
+					t := s.T()
+					metadata := fmt.Sprintf(`{"type":%q%s}`+"\n", kind, tc.extra)
+					source := queryLine("u", "", "user", "", `{"content":"question"}`) + metadata + queryLine("a", "u", "assistant", "", `{"content":"answer"}`)
+					scope, _ := claudeQueryFixture(t, source)
+					options := claude.SessionMessagesOptions{Scope: scope}
+					if tc.configure != nil {
+						tc.configure(&options)
+					}
+					if tc.name == "bytes" {
+						options.MaxBytes = int64(len(source) - 1)
+					}
+					page, err := claude.GetSessionMessages(deadline(t), querySession, options)
+					requireQueryKind(t, page, err, tc.want)
+				})
+			}
+		})
+	}
+	s.Run("unknown-remains-unsupported", func() {
+		t := s.T()
+		scope, _ := claudeQueryFixture(t, `{"type":"api-request-future"}`+"\n")
+		page, err := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
+		requireQueryKind(t, page, err, "unsupported")
+	})
+}

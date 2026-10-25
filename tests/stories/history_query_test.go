@@ -33,3 +33,11 @@ func (s *CommonStoriesSuite) TestClaudeMetadataNestedSampleProvenance() {
 func (s *CommonStoriesSuite) TestClaudeMetadataTailLineBoundary() {
 	checkClaudeMetadataTailLineBoundary(s)
 }
+
+func (s *CommonStoriesSuite) TestClaudeNonMessageRequestMetadata() {
+	checkClaudeNonMessageRequestMetadata(s)
+}
+
+func (s *CommonStoriesSuite) TestClaudeRequestMetadataGuards() {
+	checkClaudeRequestMetadataGuards(s)
+}

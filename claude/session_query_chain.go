@@ -65,6 +65,10 @@ func parseQueryTranscript(ctx context.Context, data []byte, session string, o Se
 		}
 		switch *kind {
 		case "user", "assistant", "system", "progress", "attachment":
+		case "api-request-shape", "api-request-blob", "api-request", "cost-state":
+			// Native request/cost bookkeeping is not a conversation-chain entry.
+			// Keep this query-only: replay's frozen-tail allowlist is independent.
+			continue
 		default:
 			if transcriptMetadata(*kind) {
 				continue

@@ -260,3 +260,68 @@ created. They must be read as separate evidence, not inferred from a local
 `replace`, checkout build or missing branch CI. Consumer scripts fetch the exact
 VCS hash into fresh modules/caches without replace/go.work, build both synthetic
 mock CLIs, exercise their public APIs, and run the copied native history examples.
+
+## Compatibility follow-up: non-message request records
+
+Follow-up base: `09ec0138c2ef2a14182ee601b2d975a4577d3491`, after the first
+published integration. The parent reported a separately authorized live run:
+Codex 0.164.0 completed a model task and a new Client's independent list/read/
+turn/item path, including two item pages at limit=1; a single turn does not prove
+multi-page turn traversal. Claude Code 2.1.310 completed via Magpie with exit 0;
+list/info coverage was complete, but message reading rejected api-request-shape.
+Parent diagnosis identified four non-message record types lacking uuid/parentUuid:
+api-request-shape, api-request-blob, api-request and cost-state. These live results
+are parent-reported evidence, not execution by this ticket context, and do not
+certify the corrected revision until the parent rechecks unchanged source files.
+
+No real transcript, request body, credential, cloud test file or captured bytes
+were copied into this checkout. Regression fixtures are handwritten minimal JSON
+objects carrying only type and clearly synthetic unknown data, between artificial
+user/assistant records in a temporary ConfigDir. They first reproduced the exact
+unsupported error for all four kinds through public GetSessionMessages.
+
+Fixed official evidence was inspected again:
+
+- [Python sessions.py](https://github.com/anthropics/claude-agent-sdk-python/blob/0e89b298e771259378a6cd3734e00d323dff5703/src/claude_agent_sdk/_internal/sessions.py),
+  SDK 0.2.174 (bundled CLI 2.1.310): `_parse_transcript_entries` at lines 897–928
+  accepts only the five chain-entry kinds and requires a string uuid. Other
+  records do not enter `_build_conversation_chain` or content pagination.
+- Official npm [sdk.mjs 0.3.310](https://unpkg.com/@anthropic-ai/claude-agent-sdk@0.3.310/sdk.mjs):
+  public exported getSessionMessages dispatches through EKt → sF → uxe → oF.
+  The uxe parser includes only user/assistant/progress/system/attachment records
+  with a string uuid. Its ancillary delivery bookkeeping does not promote these
+  four request/cost record kinds into messages. This is a static code finding;
+  the request-kind strings themselves are not present in the SDK file.
+- The fixed npm tarball was downloaded only for static inspection; its SHA-512
+  again matched `fo+sr+9Ks73P001f6XKRQlyzfIBAJMgXArLUkH5Tu98NikRDZeGtFQVj23d5/hj2ijpFgzffrr4fHywY9qUkoQ==`.
+  sdk.mjs SHA-256: `4ee428f7e39da03262a8a3fc547d3ec60801d3af17b2d40e553c0086ffdac1f8`;
+  Python source SHA-256 remains `5faa6011b0559bb2ccbe0e54ec9dea029418001da04013a67c6d107ebd192419`.
+
+The minimal correction classifies only those four confirmed kinds as query-only
+bookkeeping after the existing JSON and optional session identity validation.
+It does not expand transcriptMetadata or the older replay frozen-tail allowlist.
+Unknown entry kinds still return unsupported; no fallback ignores arbitrary
+unknown records. Source byte/line/line-size limits and complete-source integrity
+verification are unchanged, and chain-entry limits still count the graph.
+
+Public TDD acceptance now reads both saved messages and correct slices/end with
+all four kinds present. Metadata Raw Records still preserve their exact synthetic
+unknown/null/large-number content. Guard cases cover foreign camel/snake session
+identity, invalid typed/duplicate identity, invalid Unicode, an exact full-source
+byte budget and one-byte-short failure, line/index/oversized-metadata-line limits,
+and an unrecognized api-request-future kind. Errors return no partial messages.
+Existing source mutation and legacy replay strictness checks are retained.
+
+Focused command:
+
+```sh
+mise exec -- go test -v ./tests/stories \
+  -run 'TestCommonStories/(TestClaudeNonMessageRequestMetadata|TestClaudeRequestMetadataGuards)' -count=1
+mise exec -- go test -race ./claude ./tests/stories \
+  -run 'TestQuerySourceIntegrity|TestHistory|TestCommonStories/(TestClaude|TestIndependentHistoryBrowser)' -count=1
+```
+
+Both passed after the correction. Full-check, review and final publication receipts
+for this follow-up are recorded below and in ticket04 Comments/final handoff.
+The parent will re-read its unchanged real source at the final new SHA without
+another model call. No successful corrected-SHA real query is claimed yet here.

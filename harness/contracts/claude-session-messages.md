@@ -57,7 +57,10 @@ inaccessible、corrupt、unsupported、ambiguous、resource-limit、changed；Ca
 保留 OS 错误。取消保留 context 错误。覆盖 Status 为 unknown、partial 或 complete，
 返回实际范围、字节、行、记录、发现数量与有效 Limits。任何错误都不返回部分消息，
 不把 partial 截断为成功。duplicate key/UUID、cycle、missing-parent、无效 UTF/JSON、
-冲突身份等报 corrupt；未来未知 entry type 报 unsupported。
+冲突身份等报 corrupt；未来未知 entry type 报 unsupported。已确认的非消息记录
+api-request-shape、api-request-blob、api-request、cost-state 在独立查询中不进入
+消息链、无 UUID/parentUuid 要求；仍先验证完整 JSON 和可用 sessionId/session_id
+身份，并计入源字节、行及单行上限。此分类不扩大旧 replay 的 frozen-tail 许可。
 
 读取结束前重读并比较整个源哈希、长度、mtime 和原根相对路径文件身份；观察到
 append、rewrite、文件/目录 replacement 报 changed。Atomic 始终 false：文件系统

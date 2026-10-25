@@ -526,6 +526,10 @@ func testSessionOwnedProcessCleanupWithoutConsumption(t *testing.T, policy codex
 	options := codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: append(os.Environ(), "CODEX_SDK_HELPER=session-owned-diagnostic", "CODEX_SDK_TRACE="+tracePath, "CODEX_SDK_PID="+pidPath), Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "session-test", Version: "1"}}}
 	s, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Stdio: &options})
 	require.NoError(t, err)
+	// The synthetic turn response is a reader barrier after both opening frames.
+	// Keep the FIFO unread until the owned process has been reaped.
+	_, err = s.Submit(context.Background(), codex.Input{})
+	require.NoError(t, err)
 	require.NoError(t, s.Close())
 	// Close reaps the process before the accepted event is consumed.
 	d := s.Unattributed()

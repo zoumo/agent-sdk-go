@@ -1,6 +1,6 @@
 // Package codex provides native long-running Sessions over Codex app-server.
-// Open or Load fixes a main identity. Session.Receive is the single FIFO for
-// native events, real IncomingRequests, observation evidence and Load boundaries.
+// Open fixes a main identity. Session.Receive is the single FIFO for
+// native events, real IncomingRequests and observation evidence.
 // Submit retains native turn semantics; results do not close the Session.
 // Client is the explicit shared I/O resource and raw extension seam. Native
 // request handles retain single-use authority. See docs/compatibility.md for the
@@ -281,12 +281,6 @@ func (c *Client) callOwned(ctx context.Context, method string, params any, resul
 		err := c.cause
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, err)
-	}
-	if owner != nil && (method == "turn/start" || method == "thread/settings/update") {
-		if err := owner.loadGateLocked(); err != nil {
-			c.mu.Unlock()
-			return fail(ID{}, NotSent, err)
-		}
 	}
 	if owner != nil && owner.closed {
 		c.mu.Unlock()

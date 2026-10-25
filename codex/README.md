@@ -103,9 +103,9 @@ func main(){
 
 `Open` initializes the connection and fixes the server's main identity before
 returning. `StartResponse` retains a copy of the actual native startup model,
-sandbox and unknown fields; loaded Sessions use LoadState resume evidence.
+sandbox and unknown fields.
 Each Session owns one FIFO; `Receive` selects native events, real
-`IncomingRequest` values, SDK observation evidence and Load boundaries. Concurrent
+`IncomingRequest` values, SDK observation evidence . Concurrent
 receivers compete for that same FIFO. Applications own UI/logging fan-out.
 A native result does not close the Session. `Submit` uses native turn/start,
 retains the actual native turn response, and never guesses start versus steer
@@ -189,7 +189,7 @@ are unsupported; malformed or oversized messages terminate the connection explic
 
 There is no automatic reconnect or request replay. After a lost connection,
 inspect the operation's dispatch evidence, create a new initialized client, then
-explicitly Load the saved native thread ID if appropriate. An unknown outcome
+explicitly resume the saved native thread ID if appropriate. An unknown outcome
 must be reconciled before repeating side-effecting work. Remote `Close` releases
 only this connection; it never shuts down or kills the remote service.
 
@@ -209,7 +209,7 @@ native constraints. See [generation provenance](docs/protocol/README.md).
 
 An explicit `Client` remains useful for a shared native I/O resource, handshake
 metadata and `Call` extensions. Supply it in `SessionOptions.Client` or
-`LoadOptions.Client`. Closing one Session leaves other owners on that connection
+`SessionOptions.Client`. Closing one Session leaves other owners on that connection
 usable. A main identity has one owner. Overlapping child/ancestor observation
 ranges share physical attachments; only the final observer releases them.
 Typed detachment/resume operations respect ownership and uncertain-release
@@ -281,69 +281,17 @@ the background `Wait` still owns reaping. User-defined JSON marshal/unmarshal
 implementations run in the caller and must cooperate; the SDK cannot interrupt
 arbitrary Go code.
 
-## Load an existing session and replay history
+## Native resume and history queries
 
-```go
-session, err := codex.Load(ctx, codex.LoadOptions{
-    Client: client,
-    HistoryOptions: codex.HistoryOptions{
-        ThreadID: id, CWD: absoluteCWD, CodexHome: expectedAbsoluteCodexHome,
-    },
-})
-// Check err, then defer session.Close(). Receive is the only consumption entry.
-for {
-    received, err := session.Receive(receiveCtx)
-    if err != nil {
-        break // Handle terminal error or EOF after draining a closed Session.
-    }
-    switch received.Kind {
-    case codex.ReceivedEvent:
-        handleEvent(*received.Event) // History and live use the same native type.
-    case codex.ReceivedRequest:
-        handleRequest(received.Request) // Only actual live requests have authority.
-    case codex.ReceivedLoad:
-        // Inspect received.Load.Status/Err; success permits Submit/configuration.
-    }
-}
-```
+`Client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})` explicitly
+resumes a native thread. It does not create a Session or replay history through
+Session.Receive. `Client.UnsubscribeThread` releases that native attachment.
 
-Load returns a Session before asynchronous validation and replay finish. It
-requires the actual native resume response's ID and cwd to match before history
-admission, then pages full main turns oldest-first. Ordinary ResumeThread does
-not perform this SDK replay. LoadState is independent of Session.Done/Err and
-consumer drain. Submit and configuration reject pending/failed loads; actual
-request answers, explicit Interrupt and Close remain available during replay.
-
-History and live traffic can interleave in the same FIFO, preserving each source's
-order without claiming the original cross-source timeline. Successful Load does
-not terminate the Session. Canceling its startup context after success does not
-stop continued interaction. Close releases only owned attachment references;
-closing an explicitly loaded child does not unsubscribe an active ancestor's
-confirmed observation. Unknown resume/release outcomes remain fenced and visible.
-Raw Call is an explicit extension outside coordinated typed ownership guarantees.
-See [Session Load and native attachment evidence](docs/session-load.md). Client.Load/LoadedThread has been removed; use the Session lifecycle above.
-
-The server must support pagination; unsupported RPC errors are not hidden by a
-legacy fallback. Active threads and observed metadata changes fail. External
-writers must be quiescent because native paging is not an atomic snapshot.
-ListThreadTurns and ListThreadItems also expose native pages. See the
-[history contract](../harness/contracts/async-history.md) for limits and evidence.
-
-History uses the normal `types.Event` and notification payloads: one
-`item/completed` snapshot per retained item followed by `turn/completed` for a
-known terminal turn. Item status is preserved, including failed or interrupted
-work; this is not a replay of execution. There are no invented starts, deltas,
-answer handles or live subagent-created events. An unknown future turn status
-is retained as an event with empty Method and `*types.Turn` Data.
-
-`event.History` is non-nil only for replay. Its Raw is the exact item JSON for
-item events and the exact full-turn JSON for terminal/unknown turn events.
-Projected events have no received wire envelope in `event.Raw`. Their Params
-omit fields not retained by the source, listed in `History.MissingFields`.
-Full turns lack item completion timestamps: typed `CompletedAtMs` is zero and
-unknown for replay, not a measured timestamp. Do not serialize projected Params
-as a captured, complete native notification. Session.Receive delivers history,
-live records, real requests and SDK boundaries through one entry point.
+`Client.ListThreadTurns` and `Client.ListThreadItems` return native history pages
+without resuming the thread. Use `Client.Call` for `thread/read` metadata and
+`thread/list`. Preserve native cursors, sort direction and item-view selection;
+query availability depends on the server version and stored history format.
+These are stored snapshots, not the original notification/delta sequence.
 
 ## Offline examples and validation
 

@@ -443,7 +443,7 @@ observable. The dynamic FIFO does not block reader/RPC routing.
 | Native cancellation vs local waiting | partial | InterruptTurn; context; AnswerHandle.Cancel | Context/handle cancellation is local only. No generic cancellation RPC, userVerification/cancel helper or execution rollback | Offline dispatch/handle tests; interrupt live untriggered | [Go errors](../errors.go), [native turn parameters](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/turn.rs) |
 | Stdio and remote WS/WSS | supported | NewStdio / NewRemote | Explicit executable/endpoint/bearer; WS messages differ from stdio JSONL; binary/malformed/oversized frames fail explicitly; no proxy discovery | Offline stdio/WS/WSS; historical stdio/loopback WS live; public WSS unverified | [transport provenance](protocol/README.md#remote-transport-and-authentication), [Go options](../options.go) |
 | Rust Unix-socket/local-daemon/in-process connections | unsupported | None | Go has no Unix socket, managed-daemon or embedded-runtime constructor | Unverified | [Rust endpoints](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-client/src/remote.rs), [in-process client](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-client/src/lib.rs) |
-| Recovery/reconnect | unsupported | Explicit new Client + Load only | No auto-reconnect/replay, durable cursor, token refresh, gap filling or restored observer state | Offline explicit reconnect contracts; historical same-ID resume only | [resume implementation](../thread.go), [history/gap contract](subagent-compatibility.md) |
+| Recovery/reconnect | unsupported | Explicit new Client + ResumeThread | No auto-reconnect/replay, durable cursor, token refresh, gap filling or restored observer state | Offline explicit reconnect contracts; historical same-ID resume only | [resume implementation](../thread.go), [history/gap contract](subagent-compatibility.md) |
 | Error correlation, finite bounds and ownership | supported | CallError, AnswerError, RPCError, Limits, Done/Err/Close | No retries; outcome unknown requires reconciliation; remote bearer reflection redacted; only owned stdio child reaped, not arbitrary descendants | Offline normal/race and synthetic hostile peers; limited historical cleanup live | [errors](../errors.go), [limits](../options.go), [tests](testing.md) |
 | Loss-preserving native models | partial | types.Optional, UnknownFields, unknown union/raw fallbacks | Selected closure only, not every registry model; not strict JSON Schema validation; no version compatibility inferred | Offline 399 types / 750 round-trip cases; no full live schema pass | [schema/generator provenance](protocol/README.md#generated-material) |
 
@@ -452,7 +452,7 @@ observable. The dynamic FIFO does not block reader/RPC routing.
 The app-server dialect omits `jsonrpc`. Integer and string RPC IDs are distinct;
 native thread/turn/item IDs are never fabricated. Response correlation and
 notification arrival are independent: a turn can finish before StartTurn returns.
-Open/Load fixes ownership before Submit; Receive retains early facts. Interrupt acknowledgment, request resolution,
+Open fixes ownership before Submit; Receive retains early facts. Interrupt acknowledgment, request resolution,
 parent idle/final text, EOF and local cancellation are separate boundaries.
 No implicit interrupt, retry or combined turn runner is provided.
 

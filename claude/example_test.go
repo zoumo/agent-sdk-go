@@ -47,32 +47,6 @@ func ExampleOpen() {
 	}
 }
 
-// This example compiles without running a CLI. The fixed native baseline cannot
-// confirm recovery without execution; Load reports ErrResumeUnconfirmed.
-func ExampleLoad() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	session, err := Load(ctx, LoadOptions{Options: Options{CLIPath: "claude"}, History: HistoryOptions{SessionID: "previous-native-session-id", CWD: "/absolute/project", ConfigDir: "/absolute/config"}})
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	defer session.Close()
-	for {
-		received, err := session.Receive(ctx)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-		if received.Load != nil {
-			fmt.Println(received.Load.Status, received.Load.Err)
-			return
-		}
-	}
-}
-
-// The application obtains its decision before answering the actual request.
-// This example is compile-only and does not run a CLI or choose an approval.
 func ExampleIncomingRequest_Deny() {
 	consume := func(ctx context.Context, session *Session, userDecision func(*IncomingRequest) DenialOptions) error {
 		for {

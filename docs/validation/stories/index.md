@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # 共同故事的实现验收记录
 
 设计合同见[共同验收场景](../../../harness/contracts/stories/index.md)，通用目标见[SDK 共同用户故事](../../../harness/sdk/user-stories.md)。本页记录具体实现的能力映射与验证，不作为通用设计来源。

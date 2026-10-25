@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Ticket 14 integration verification
 
 Implementation base: `fcf122fba4eefdca624101517171fc059ad41538`.

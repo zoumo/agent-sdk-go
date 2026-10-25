@@ -48,8 +48,7 @@ bound to its Session. Permission workers and old dedup/run/creation/fanout resou
 options are removed. Use active membership, parent-knowledge and diagnostic
 retention limits above. Ordinary Open with ResumeID retains native no-replay
 resume in a fresh process; requested identity does not become observed merely
-because initialize succeeds. Explicit Load keeps its separate strict failure
-contract. See [breaking migration](../../docs/session-migration.md).
+because initialize succeeds.
 
 Validation is offline only. `session_test.go` uses the existing synthetic native
 process peer and public Open/Receive/Submit/Interrupt/Close/Abort methods. It

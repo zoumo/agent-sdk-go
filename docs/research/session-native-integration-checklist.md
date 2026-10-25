@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # 固定原生 Session 接入清单
 
 日期：2026-10-25。SDK 检查固定点 `77abc43d29eac8786f317e3e8ac6b354160a346b`；目标为 [Session Interface](../../harness/modules/native-session/interfaces.md) 和 [20 项共同故事](../../harness/sdk/user-stories.md)。本文是 ticket 01 的证据与后续接入清单，不是实现报告或兼容性通过声明。未修改原生 types、版本、生成输入、录制或来源表。

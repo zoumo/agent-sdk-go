@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # 共享设计的来源与实施记录
 
 Historical migration evidence; APIs/test paths below reflect their original baseline.
@@ -46,14 +48,14 @@ Synthetic scenarios are distinct from real recording evidence.
 
 ## docs/specs/async-history.md
 
-规范：[harness/contracts/async-history.md](../../harness/contracts/async-history.md)。
+规范：harness/contracts/async-history.md (removed Load design)。
 
 Status: implementation spec, 2026-10-21. Resume-and-replay revision baseline: `7878e36`.
-Event-consumption contract revised 2026-10-22; see [history events](../../harness/contracts/history-events.md).
+Event-consumption contract revised 2026-10-22; see history events (removed Load design).
 
 ## docs/specs/async-history.md
 
-规范：[harness/contracts/async-history.md](../../harness/contracts/async-history.md)。
+规范：harness/contracts/async-history.md (removed Load design)。
 
 Each slice starts red, then gains its implementation. New acceptance verifies native resume before first replay,
 no-prompt/no-new-session traces, input gating, same-ID continued Send/StartTurn,
@@ -79,9 +81,9 @@ changes; no MASS implementation or dependency upgrade.
 
 ## docs/specs/history-events.md
 
-规范：[harness/contracts/history-events.md](../../harness/contracts/history-events.md)。
+规范：harness/contracts/history-events.md (removed Load design)。
 
-Status: implemented and independently reviewed, 2026-10-22. Local file tickets are the configured tracker. See [validation evidence](../specs/history-events-validation.md).
+Status: implemented and independently reviewed, 2026-10-22. Local file tickets are the configured tracker. See validation evidence (removed Load design).
 Supersedes the separate public snapshot-consumption contract in async-history.
 
 ## Problem Statement
@@ -96,7 +98,7 @@ Load
 
 ## docs/specs/history-events.md
 
-规范：[harness/contracts/history-events.md](../../harness/contracts/history-events.md)。
+规范：harness/contracts/history-events.md (removed Load design)。
 
 ## Further Notes
 

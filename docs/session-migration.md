@@ -1,17 +1,15 @@
 # Migrate native consumers to Session
 
-The normal interface is `Open` or explicit `Load`, followed by `Session.Submit`
+The normal interface is `Open`, followed by `Session.Submit`
 and the single `Session.Receive` FIFO. The native SDKs and `types` imports stay
 independent. [Session interfaces](../harness/modules/native-session/interfaces.md)
-and [load/delivery contracts](../harness/contracts/index.md) govern the behavior.
+and [delivery contracts](../harness/contracts/index.md) govern the behavior.
 
 | Previous consumer coordination | Session path |
 |---|---|
-| Codex start/resume + Subscribe + Requests | Open/Load fixes main ownership; Receive delivers events and actual requests |
+| Codex start/resume + Subscribe + Requests | Open fixes main ownership; Receive delivers events and actual requests |
 | Claude NewClient + Send + callback worker pool | Open + Submit + Receive; process interaction private; application owns decision UI |
-| Independent Client.Load/LoadedThread history lifecycle | Package Load returns Session; independent LoadState plus same Receive FIFO |
 | Ancestor-first held events and occurrence/UUID dedup | Native arrival order and duplicates remain; optional parent knowledge follows evidence |
-| Separate history completion and live observer ownership | One Session owns the attachment and one FIFO; successful load is not termination |
 
 ## Input, requests and native execution
 
@@ -22,9 +20,9 @@ Claude Input carries text or supported native structured user content. Its fixed
 main envelope is not an arbitrary target selector. Written proves local complete
 write only, with no invented acceptance receipt or Turn.
 
-Receive discriminates native Event, actual IncomingRequest, SDK observation and
-Load boundary. It preserves Raw/Params, unknown native data, source identity and
-live/history origin. A pure decoder or historical projection cannot create an
+Receive discriminates native Event, actual IncomingRequest and SDK observation
+evidence. It preserves Raw/Params, unknown native data, source identity and
+live origin. A pure decoder or historical projection cannot create an
 answer handle. Concurrent receivers compete; application fan-out is explicit.
 
 Use the actual request's Approve/Deny/Answer or retained native Handle. Codex
@@ -40,35 +38,12 @@ turn execution extensions fail with ErrInvalidInput before submission; they are
 not silently dropped. Real capture bytes, manifests, IDs and evidence scopes
 remain unchanged. Synthetic example output changes to show isolation and gaps.
 
-## Load and ownership
+## Native resume and independent history
 
-Codex Load requires a native ThreadID, absolute CWD and matching CodexHome. The
-actual resume response ID and both cwd values must match before history enters
-the FIFO. Stable persisted main history is supported; active/ephemeral sources,
-source mutations, repeated IDs/cursors and partial failure cannot become success.
-History keeps original source bytes and missing timestamps, without fabricated
-starts/deltas or historical answer authority. Live and history can interleave;
-this does not reconstruct their original cross-source timeline.
-
-Claude's fixed CLI 2.1.258 / SDK 0.3.258 baseline has no confirmed no-input native
-recovery acknowledgment. Load explicitly fails ErrResumeUnconfirmed, with no
-replay, extra prompt, silent Open fallback or ordinary input. Pending actual
-requests, Interrupt and Close remain available. Independent offline transcript
-projection/integrity checks do not certify successful live Load.
-
-Ordinary native resume keeps no-replay semantics. Claude Open with ResumeID uses
-a fresh process, passes the ID literally and keeps requested/observed identity
-separate. It does not inherit explicit Load's history/confirmation claim. Codex's
-raw ResumeThread remains a native no-replay extension, fenced against conflicting
-coordinated owners.
-
-Inspect LoadState independently of Done and consumption. Pending or failed Load
-rejects Submit and configuration. Startup cancellation after successful Codex
-Load does not stop ongoing Session interaction. Same-connection main identity has
-one Session owner. Overlapping ancestor/child ranges share attachment references;
-closing one does not detach another, and the final observer releases the native
-attachment. Uncertain resume or detach stays fenced. Raw Client.Call remains an
-explicit uncoordinated extension and creates no second consumer/answer registry.
+Load, LoadOptions, LoadState and ReceivedLoad have been removed. Codex retains
+Client.ResumeThread and native thread/turn/item query RPCs. Claude retains Open's
+ResumeID and the internal bounded transcript parser. Resume does not promise
+SDK history replay. Historical data cannot create answer authority.
 
 ## Configuration, resources and close
 
@@ -95,15 +70,14 @@ back hidden runtimes. Codex Limits.Subscriptions now bounds concurrent main
 Session owners; deprecated EventQueue/RequestQueue/RequestTimeout do not allocate
 second consumer queues or impose approval expiration. Parent-depth limits do not suppress confirmed member facts.
 Quarantine declares retained count/bytes/age and evicted/expired gaps; later
-membership never backfills old records. A Session returned by Load must retain
-accepted startup facts for drain; a failed Open returning no consumer aborts
+membership never backfills old records. A failed Open returning no consumer aborts
 its unreachable queue.
 
 ## Evidence and validation limits
 
 Default validation is offline. The sanitized Codex S1/S2 captures retain their
 original root/tool/question scope. Claude's checked-in real capture is an
-authentication failure. None establishes real Session child/configuration/Load
+authentication failure. None establishes real Session child/configuration
 certification. Gated live tests remain opt-in/skipped. No upstream version,
 fixture bytes, license or provenance is upgraded by this migration. Historical
 architecture reports describe their original baseline.

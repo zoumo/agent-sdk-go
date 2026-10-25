@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Ticket 13 legacy guarantee audit
 
 Fixed historical base: `3f1776e4da94cc53d48e5029b20bd254dd727152`.
@@ -5,7 +7,7 @@ This audits removed runtime seams and test bodies against the
 [Session design](../../harness/modules/native-session/design.md),
 [interfaces](../../harness/modules/native-session/interfaces.md),
 [event delivery](../../harness/contracts/event-delivery.md), and
-[history](../../harness/contracts/async-history.md). The coordinator inventory is
+history (removed Load design). The coordinator inventory is
 `.scratch/session-refactor/legacy-regression-inventory.md`.
 
 “Public” means the retained guarantee runs through Open/Load/Submit/Receive and

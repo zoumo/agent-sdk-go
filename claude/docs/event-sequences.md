@@ -1,7 +1,7 @@
 # 按用户故事理解 Claude Session 事件
 
 固定原生基线为 CLI 2.1.258 / SDK 0.3.258。Open 返回 Session；Submit 与单一
-Receive 配合，区分原生 Event、真实请求、SDK Observation 和 Load 边界。
+Receive 配合，区分原生 Event、真实请求、SDK Observation。
 原生字段与 Raw 不加入 SDK 推断。源码、合成测试和真实录制分别记录。
 
 ## 故事 1：我输入一个普通任务，等待答案
@@ -49,8 +49,7 @@ Unattributed 诊断区；报告丢弃/过期缺口，不回填实时流，不产
 ## 故事 9：我断线后显式恢复，并保留缺口
 
 普通 Open 的 ResumeID 逐字传给新进程，不重放旧输入；requested 与 observed
-身份分开，初始化成功不证明恢复。显式 Load 的历史/恢复合同更严格；固定基线
-缺少无输入确认，必须报告 ErrResumeUnconfirmed，不补提示词或伪造成功。
+身份分开，初始化成功不证明恢复。断线期间的缺失不能声称已补齐。
 
 ## 可执行离线故事与后续真实验证
 

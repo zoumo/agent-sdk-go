@@ -11,12 +11,10 @@ knowledge and bounded diagnostic quarantine. The process interaction is private;
 there is no public Client, callback worker pool, managedTree or second queue.
 
 Open starts readers before matched initialize and requests native forwarding.
-Failed Open returns no consumer and aborts its unreachable FIFO. Load returns a
-consumable pending Session, so failure preserves accepted startup facts and the
-failed load boundary for drain. Ordinary Open with ResumeID starts a fresh process
-and passes the literal native resume ID without replay. It never claims successful
-Load. Explicit Load requires separate native confirmation and source integrity;
-the pinned baseline reports ErrResumeUnconfirmed without a prompt or fake success.
+Failed Open returns no consumer and aborts its unreachable FIFO. Ordinary Open
+with ResumeID starts a fresh process and passes the literal native resume ID
+without SDK history replay. Historical transcript parsing remains independent
+of process startup and does not establish a running Session.
 
 Submit preserves native text/structured input in the fixed main envelope.
 Written means a complete local write. SetModel/SetThinking keep requested and

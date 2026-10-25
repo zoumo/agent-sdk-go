@@ -56,11 +56,6 @@ func (s *Session) releaseAttachments() error {
 			}
 			continue
 		}
-		if id == s.root && s.resumeUnknown != nil {
-			a.uncertain = s.releaseLoadError()
-			result = errors.Join(result, a.uncertain)
-			continue
-		}
 		delete(a.observers, s)
 		if len(a.observers) != 0 {
 			continue

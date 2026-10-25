@@ -3,7 +3,7 @@
 This Go SDK implements a small local-process client. **It is not an API-compatible
 replacement for the official TypeScript SDK. No CLI version is fully live-validated.**
 
-The public lifecycle is Open/ordinary native resume or explicit Load, then
+The public lifecycle is Open/ordinary native resume, then
 Session.Submit and Session.Receive. Actual requests share that FIFO and retain
 the original native authority. Local NotSent rejections keep live authority;
 OutcomeUnknown attempts are never retried. No callback pool or default permission
@@ -12,9 +12,9 @@ policy remains. Offline evidence is separate from historical live observations.
 The largest gaps remain full configuration/control parity, hook and SDK-hosted
 MCP execution, remote transports, administration and durable recovery. Structured
 input, native model/thinking controls and read-only child record discovery have
-narrow implemented scopes below. Explicit Load cannot succeed on the fixed native
-baseline without no-input recovery confirmation; ordinary ResumeID remains a
-fresh-process native request without replay or a claim of successful Load.
+narrow implemented scopes below. Ordinary ResumeID remains a fresh-process
+native request without SDK history replay.
+
 
 ## Versions, sources and status meanings
 
@@ -55,7 +55,7 @@ below expands this matrix so omitted configuration and read-only support are vis
 | Send text / stream multi-turn input | Partial: `Session.Submit` | Complete local write only; text/image/document/tool_result input, fixed main envelope; no native acceptance receipt | [client tests](../client_test.go) | Ordinary text observed | `query`, `Query.streamInput`, `SDKUserMessage` |
 | Schedule/identify/append input | Partial: native UserInput fields | Preserves caller priority/uuid/shouldQuery; no local scheduler or execution acknowledgment | Native structured-input wire tests | Unverified | `SDKUserMessage` |
 | Consume messages and partial output | Partial: `Session.Receive`, `ParseEvent` | Concurrent receivers compete; typed subset plus Raw; no dedicated iterator-per-turn helper; matching control replies consumed internally | [receive tests](../receive_test.go), [codec tests](../types/json_test.go) | Bounded 2.1.258 frames; no full message-union validation | `Query` async generator, `SDKMessage` |
-| Resume native history | Partial: Open with ResumeID; explicit `Load`, `LoadState` | Ordinary resume has no replay; fixed-baseline explicit Load fails ErrResumeUnconfirmed, with no replay/ordinary input; no fork/truncation or resend | [resume tests](../resume_interrupt_test.go) | One retained-history continuation observed | `Options.resume` |
+| Resume native history | Partial: Open with ResumeID | Ordinary resume has no SDK replay; no fork/truncation or resend | [resume tests](../resume_interrupt_test.go) | One retained-history continuation observed | `Options.resume` |
 | Interrupt active work | Supported: `Interrupt` | Correlated acknowledgment only; discards `still_queued` receipt, cannot select `cancel_queued`; no rollback/task-terminal guarantee | [interrupt tests](../resume_interrupt_test.go) | Pending-question cancellation observed; active-tool rollback unverified | `Query.interrupt` |
 | Per-task stop and backgrounding | Unsupported | Native task/status reception does not implement `stopTask` or foreground-task backgrounding via `backgroundTasks` | Decoder/observer only | Unverified | `Query.stopTask`, `Query.backgroundTasks` |
 | Tool approval and questions | Partial: `Session.Receive` actual IncomingRequest and original native handle | Real `can_use_tool` only; no default decision; updated input/permissions and deny interrupt supported; no dialog/elicitation responder | [permission tests](../permissions_test.go), [question tests](../question_interaction_test.go) | Allow/update/deny, delayed question and late-answer rejection observed with limits below | `CanUseTool`, `PermissionResult`, `Options` callbacks |

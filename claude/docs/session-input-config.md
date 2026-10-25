@@ -84,6 +84,6 @@ All three were fixed and the Standards reviewer verified the fixes. Targeted
 Session tests/race and vet were rerun after the review edits.
 
 The validation above records the input/configuration ticket. Current
-[discovery](session-discovery.md), [Load](session-load.md) and the completed
+[discovery](session-discovery.md) and the completed
 [single-Session migration](../../docs/session-migration.md) have separate evidence. Actual CLI/model/media/configuration-effect verification remains
 outside this offline ticket's evidence; no push or release was performed.

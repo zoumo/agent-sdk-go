@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Codex / Claude 架构检查整合与改造提案
 
 日期：2026-10-25。状态：合同取舍已确认；以下是未来实施提案，未修改 SDK。依据为 [Codex 独立报告](2026-10-25-codex-architecture-alignment.md)、[Claude 独立报告](2026-10-25-claude-architecture-alignment.md)及当前 harness。两份原报告保留其检查基准与证据限制，不追改成新设计的验证结果。
@@ -20,13 +22,13 @@ Codex 当前的连接客户端、Subscription、Requests 与 LoadedThread 把正
 |---|---|---|---|
 | C1 | 新目标要求接收顺序，旧交付合同允许归因等待及重排 | 已确定：已确认成员的事实立即按接收顺序接受，父级后续补充。[事件交付](../../harness/contracts/event-delivery.md) | 替换两端 pending/held 作为原生交付门卫的设计；A 未知父级、B 根、C 关系，原生顺序仍 A→B→C。 |
 | C2 | graph root reachability 被当作全部成员资格；通信目标被记成父级 | 已确定：membership 与 parentage 分开。[关系合同](../../harness/contracts/lineage.md) | 兄弟通信不改父级；已知成员无需根路径。父图资源限制不得变成会话预设层数。 |
-| C3 | 单入口与多订阅、独立审批渠道及所有权分散冲突 | 单入口已确定；本轮确认同连接同主身份一个所有者。[ADR-0003](../../harness/adr/0003-session-ownership-and-load-delivery.md) | 重复 Open/Load 冲突；不同身份隔离；通知、真实请求及原句柄同入口；应用自行分发。 |
+| C3 | 单入口与多订阅、独立审批渠道及所有权分散冲突 | 单入口已确定；本轮确认同连接同主身份一个所有者。[ADR-0003](../../harness/adr/0003-session-ownership.md) | 重复 Open/Load 冲突；不同身份隔离；通知、真实请求及原句柄同入口；应用自行分发。 |
 | C4 | “所有已接收事件保留”与“不得混入无关事件”缺少接收范围 | 本轮确认连接接收不等于 Session 接收，未归属材料有界隔离，不补插实时流。[事件交付](../../harness/contracts/event-delivery.md) | 明确隔离数/字节/保留期及缺口；关闭前已接受的 Session 事实全部排空，不能仅保全已经进旧 ChannX 的子集。 |
 | C5 | Codex 默认本地审批超时；Claude 无 handler 自动 deny | 已确定：无人回答沿原生等待，取消或终止改变原句柄状态。[通用架构](../../harness/sdk/architecture.md) | 删除 SDK 默认决策与倒计时；Call/Write 超时仍独立。审批 admission 超限显式失败，不变相自动拒绝。 |
 | C6 | 实体/UUID 去重抑制原生事实；未知 run ID 被排序解释 | 已确定：原生事实保留，协议依据不足不解释 newest/stale。[关系合同](../../harness/contracts/lineage.md) | 去除事实流 seen/terminal suppression；保留 SDK 公告幂等与重复请求单次权限保护。 |
-| C7 | Load 独立回放流与长期单入口冲突；Done 含义混用 | 本轮确认单入口允许历史与实时交错；加载状态独立。[异步历史](../../harness/contracts/async-history.md) | 加载前普通输入拒绝，真实回答、中断和关闭可用；配置在 pending 时明确拒绝；历史生产者有界，不能另建增长 FIFO。 |
-| C8 | Claude initialize 成功但身份未知即可旧 Load 成功；Codex resume 响应 ID 未直接校验 | 本轮确认原生恢复身份确认是成功前提。[异步历史](../../harness/contracts/async-history.md) | Codex 校验实际 resume 响应身份；Claude 先查无执行确认机制，若不可得保留能力缺口，不用 prompt 或请求身份充当证据。 |
-| C9 | 旧接口兼容是否需要保留另一套运行模型 | 本轮确认允许破坏性迁移，仅允许无独立队列/权限/所有权的薄适配。[ADR-0003](../../harness/adr/0003-session-ownership-and-load-delivery.md) | 集中更新示例、消费者和迁移说明；旧回调不能成为第二消费者。 |
+| C7 | Load 独立回放流与长期单入口冲突；Done 含义混用 | 本轮确认单入口允许历史与实时交错；加载状态独立。异步历史 (removed Load design) | 加载前普通输入拒绝，真实回答、中断和关闭可用；配置在 pending 时明确拒绝；历史生产者有界，不能另建增长 FIFO。 |
+| C8 | Claude initialize 成功但身份未知即可旧 Load 成功；Codex resume 响应 ID 未直接校验 | 本轮确认原生恢复身份确认是成功前提。异步历史 (removed Load design) | Codex 校验实际 resume 响应身份；Claude 先查无执行确认机制，若不可得保留能力缺口，不用 prompt 或请求身份充当证据。 |
+| C9 | 旧接口兼容是否需要保留另一套运行模型 | 本轮确认允许破坏性迁移，仅允许无独立队列/权限/所有权的薄适配。[ADR-0003](../../harness/adr/0003-session-ownership.md) | 集中更新示例、消费者和迁移说明；旧回调不能成为第二消费者。 |
 | C10 | 动态队列“超限可见”被理解为必定能在 OOM 前报错 | 已确定：可用内存是边界，无崩溃/OOM 交付承诺。[事件交付](../../harness/contracts/event-delivery.md) | 不加静默丢弃或固定队列策略；历史工作集有界不代表总 backlog 有界。 |
 
 与真正冲突分开的事项：结构输入支持范围、配置生效时机、列表查询覆盖、合法历史元数据分类都需要固定版本能力映射。不能从它们尚未实现推导原生不支持，也不能为推进计划先把未知写成支持。Codex 活跃历史拒绝及非原子分页是既有范围限制；本轮不承诺活跃执行的无损 Load。

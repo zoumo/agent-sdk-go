@@ -11,7 +11,7 @@ import (
 )
 
 // HistoryOptions selects a stored thread on this connection's native data home.
-// Paths use the server's native absolute-path syntax. Load resumes this thread.
+// Paths use the server's native absolute-path syntax.
 type HistoryOptions struct {
 	ThreadID  string
 	CWD       string
@@ -22,8 +22,6 @@ type HistoryOptions struct {
 	// MaxIndexBytes bounds retained turn/item IDs and cursors (default 16 MiB).
 	MaxIndexBytes int
 }
-
-var ErrLoadPending = errors.New("codex: session load has not completed")
 
 func (c *Client) beginThreadOperation(id string) (func(), error) {
 	c.mu.Lock()
@@ -316,3 +314,28 @@ func (e *HistoryError) Stage() string                  { return e.stage }
 func (e *HistoryError) Cursor() types.Optional[string] { return e.cursor }
 func (e *HistoryError) Accepted() int                  { return e.accepted }
 func (e *HistoryError) Raw() json.RawMessage           { return append(json.RawMessage(nil), e.raw...) }
+
+func normalizeHistoryOptions(o *HistoryOptions) error {
+	if o.ThreadID == "" || !filepath.IsAbs(o.CWD) || !filepath.IsAbs(o.CodexHome) {
+		return errors.New("codex history: thread ID and absolute cwd/data home required")
+	}
+	if o.MaxRecords < 0 || o.MaxIndexBytes < 0 || o.PageSize > 1000 {
+		return errors.New("codex history: invalid limit")
+	}
+	if o.MaxRecords == 0 {
+		o.MaxRecords = 100000
+	}
+	if o.PageSize == 0 {
+		o.PageSize = 50
+	}
+	if o.MaxIndexBytes == 0 {
+		o.MaxIndexBytes = 16 << 20
+	}
+	return nil
+}
+
+// historyCall is shared by the retained internal history reader. Queries do not
+// resume or attach the selected thread.
+func (c *Client) historyCall(ctx context.Context, method string, params, result any, owner *Session) error {
+	return c.callOwned(ctx, method, params, result, false, nil, owner)
+}

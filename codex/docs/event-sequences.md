@@ -1,8 +1,8 @@
 # 从用户动作看 Codex Session 事件
 
 规范见 [Session 接口](../../harness/modules/native-session/interfaces.md)。
-应用通过 Open 或显式 Load 取得 Session，以 Submit 提交输入，并持续调用
-Receive。原生 Event、真实 IncomingRequest、SDK Observation 和 Load 边界共用
+应用通过 Open 取得 Session，以 Submit 提交输入，并持续调用
+Receive。原生 Event、真实 IncomingRequest、SDK Observation共用
 一个 FIFO。每个事件保留 Raw、Params、来源 thread/turn/item 和未知数据。
 
 ## 1. 用户提交普通任务，看到答案并结束本次工作
@@ -42,7 +42,6 @@ thinking 和 usage 不合并，不从快照缺项或安静推断成功。
 
 保留每次原生到达和未知字段。诊断隔离区报告容量、字节、期限、丢弃/过期数
 及覆盖缺口。断线后已接受事件排空并报告失败；SDK 不自动重连或重发。
-显式 Load 必须确认同一原生身份并完成历史完整性检查，再独立报告加载结果。
 
 ## 用户主动停止与关闭的边界
 
@@ -51,7 +50,6 @@ Receive 的 context 只取消这次等待；Close 停止准入并撤销所属请
 Session owner。实际合成协议回归见 session_native_regression_test.go、
 turn_contract_test.go、request_contract_test.go 和 remote_*_test.go；不代表真实
 子 Agent 验证。历史录制与源码 pin 仍按原范围解释。
-
 
 ## Pinned source references
 

@@ -26,34 +26,23 @@ func run() error {
 	ctx := context.Background()
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{
 		Executable: os.Args[1], Args: []string{"app-server"},
+		Env:        append(os.Environ(), "CODEX_HOME="+os.Args[4]),
 		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "resume-example", Version: "0.1"}},
 	})
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	session, err := codex.Load(ctx, codex.LoadOptions{Client: client, HistoryOptions: codex.HistoryOptions{ThreadID: os.Args[2], CWD: os.Args[3], CodexHome: os.Args[4]}})
+	response, err := client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: os.Args[2], Cwd: types.Some(os.Args[3]), ExcludeTurns: types.Some(true)})
 	if err != nil {
 		return err
 	}
-	defer session.Close()
-	for {
-		record, err := session.Receive(ctx)
-		if err != nil {
-			return err
-		}
-		if record.Event != nil {
-			fmt.Println(record.Origin, record.Event.Method)
-		}
-		if record.Request != nil {
-			return fmt.Errorf("request %s requires an application decision", record.Request.Method())
-		}
-		if record.Load != nil {
-			if record.Load.Err != nil {
-				return record.Load.Err
-			}
-			fmt.Println(record.Load.Status)
-			return session.Close()
-		}
+	fmt.Println("resumed", response.Thread.ID)
+	var stored types.ThreadReadResponse
+	if err := client.Call(ctx, "thread/read", types.ThreadReadParams{ThreadID: os.Args[2], IncludeTurns: types.Some(false)}, &stored); err != nil {
+		return err
 	}
+	fmt.Println("stored", stored.Thread.ID)
+	_, err = client.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: os.Args[2]})
+	return err
 }

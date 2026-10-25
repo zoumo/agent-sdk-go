@@ -41,7 +41,7 @@ and dependency boundaries.
   process lifecycle stay with the native SDK. Native facts are not suppressed
   by entity-key deduplication or reordered for relationship attribution.
 - One connection and native main identity have one Session owner. Requests and
-  notifications use that Session's single consumption entry point; load outcome
+  notifications use that Session's single consumption entry point; event drain
   is independent of termination. Unknown connection records are isolated with
   explicit resource and coverage limits. See the [Session module design](modules/native-session/design.md).
 - Answers require their original native request/permission handle. Relationship

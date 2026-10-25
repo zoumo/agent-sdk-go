@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Claude SDK 架构检查与从零设计
 
 日期：2026-10-25。检查基准：`de8647df17e73d824561a7c4f94b949d82ab7f42`，同时读取当前共享工作目录中尚未提交的 `harness/sdk/{architecture,user-stories,onboarding}.md`。本文独立检查 Claude，未读取另一套实现的检查报告。仅新增本报告；未修改 SDK、测试或合同，未执行真实 Claude CLI、Agent、模型或录制。

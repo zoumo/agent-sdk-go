@@ -21,7 +21,6 @@ const (
 	ReceivedNative      ReceivedKind = "event"
 	ReceivedRequest     ReceivedKind = "request"
 	ReceivedObservation ReceivedKind = "observation"
-	ReceivedLoad        ReceivedKind = "load"
 )
 
 // Received retains the original native envelope. Parent knowledge is optional;
@@ -30,7 +29,6 @@ type Received struct {
 	Kind        ReceivedKind
 	Event       *Event
 	Request     *IncomingRequest
-	Load        *LoadState
 	Observation *Observation
 	Raw         json.RawMessage
 	Params      json.RawMessage
@@ -57,9 +55,6 @@ type Session struct {
 	done             chan struct{}
 	clientReady      chan struct{}
 	requestedID      string
-	load             LoadState
-	loadCancel       context.CancelFunc
-	loadDone         chan struct{}
 	mu               sync.Mutex
 	fifo             queue.Queue[Received]
 	root             string
@@ -92,7 +87,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = openInteraction(ctx, o, "", s)
+	_, err = openInteraction(ctx, o, s)
 	if err != nil {
 		_ = s.fifo.Abort(err)
 		return nil, err
@@ -111,13 +106,12 @@ func newSession(o Options) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{done: make(chan struct{}), clientReady: make(chan struct{}), requestedID: o.ResumeID, load: LoadState{Status: LoadNotRequested}, discovery: scope, members: make(map[string]SubagentIdentity), tools: make(map[string]string), parents: graph, limits: limits, childTools: make(map[string]string), seeds: append([]SubagentHistory(nil), o.Subagents.History...)}
+	s := &Session{done: make(chan struct{}), clientReady: make(chan struct{}), requestedID: o.ResumeID, discovery: scope, members: make(map[string]SubagentIdentity), tools: make(map[string]string), parents: graph, limits: limits, childTools: make(map[string]string), seeds: append([]SubagentHistory(nil), o.Subagents.History...)}
 	_ = s.fifo.Push(s.observation("forwarding-not-confirmed", "initialize-forwardSubagentText-is-a-request", SubagentIdentity{}, nil), 0)
 	return s, nil
 }
 
-// bindClient publishes the process before initialize, so pending Load can answer
-// real requests and interrupt without waiting for startup or history consumption.
+// bindClient publishes the process before initialize completes.
 func (s *Session) bindClient(c *interaction) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -136,9 +130,6 @@ func (s *Session) RequestedResumeID() string { return s.requestedID }
 func (s *Session) Done() <-chan struct{}     { return s.done }
 func (s *Session) Err() error                { s.mu.Lock(); defer s.mu.Unlock(); return s.cause }
 func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
-	if err := s.inputAllowed(); err != nil {
-		return Submission{}, dispatchFailure("submit", err)
-	}
 	err := s.client.sendInput(ctx, input)
 	return Submission{Written: err == nil}, err
 }
@@ -163,23 +154,7 @@ func (s *Session) Interrupt(ctx context.Context, _ InterruptOptions) error {
 }
 func (s *Session) Close() error {
 	s.mu.Lock()
-	cancel, loaded := s.loadCancel, s.loadDone
 	c := s.client
-	s.mu.Unlock()
-	if cancel != nil {
-		// Close wins before cancellation wakes startup; retain the first cause.
-		if c != nil {
-			_ = c.Close()
-		} else {
-			s.finish(nil)
-		}
-		cancel()
-	}
-	if loaded != nil {
-		<-loaded
-	}
-	s.mu.Lock()
-	c = s.client
 	s.mu.Unlock()
 	if c != nil {
 		return c.Close()
@@ -195,15 +170,6 @@ func (s *Session) finish(cause error) {
 	}
 	s.closed = true
 	s.cause = cause
-	if s.load.Status == LoadPending {
-		s.load.Status = LoadFailed
-		s.load.Err = cause
-		if s.load.Err == nil {
-			s.load.Err = ErrClosed
-		}
-		state := s.loadSnapshotLocked()
-		_ = s.fifo.Push(Received{Kind: ReceivedLoad, Load: &state, Origin: "sdk"}, 0)
-	}
 	close(s.done)
 	s.members = nil
 	s.parents = nil
@@ -228,9 +194,6 @@ func (s *Session) accept(e Event) error {
 	rootFrame := knownEnvelope && (e.AgentID == nil || *e.AgentID == "") && (e.ParentToolUseID == nil || *e.ParentToolUseID == "")
 	if s.root == "" && rootFrame && e.SessionID != "" {
 		s.root = e.SessionID
-		if s.load.Status == LoadPending {
-			s.load.ObservedID = e.SessionID
-		}
 		_ = s.parents.Root("")
 		for _, seed := range s.seeds {
 			if seed.SessionID != s.root {

@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Claude Session 固定原生证据
 
 日期：2026-10-25。对应 ticket 01「固定原生证据与 Session 接入清单」。本说明是原生来源调查，不是新 Interface 已实现或真实兼容性认证。目标合同见 [Session 设计](../../harness/modules/native-session/design.md)；本说明不能替代合同。

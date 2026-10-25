@@ -297,16 +297,9 @@ func (obs *observationSuite) TestSessionOwnsPayloadAndNoReplay() {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	emitRequests(t, f.c, treeFrame("thread/started", `{"thread":{"id":"child","parentThreadId":"native-thread-42"}}`))
 	nextTurnEvent(t, first)
-	second, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "child", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
+	second, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.NoError(t, err)
 	defer second.Close()
-	for {
-		r, err := second.Receive(context.Background())
-		require.NoError(t, err)
-		if r.Load != nil {
-			break
-		}
-	}
 	delta := strings.ReplaceAll(turnDelta, "native-thread-42", "child")
 	emitRequests(t, f.c, treeFrame("item/agentMessage/delta", delta))
 	a, b := nextTurnEvent(t, first), nextTurnEvent(t, second)

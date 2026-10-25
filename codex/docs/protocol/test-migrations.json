@@ -83,7 +83,6 @@
       ],
       "replacements": [
         "session_native_regression_test.go",
-        "session_load_test.go",
         "session_test.go"
       ]
     },
@@ -111,8 +110,7 @@
         "subagent-v2-created-race"
       ],
       "replacements": [
-        "session_native_regression_test.go",
-        "history_events_test.go"
+        "session_native_regression_test.go"
       ]
     }
   ]

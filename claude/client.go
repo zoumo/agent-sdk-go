@@ -114,7 +114,6 @@ type interaction struct {
 	cleanupErr                          error
 	stderrTail                          []byte
 	sessionID                           string
-	strictResumeID                      string
 	pending                             map[string]pendingControl
 	nextID                              atomic.Uint64
 	epoch                               uint64
@@ -122,7 +121,7 @@ type interaction struct {
 	permissionIDs                       map[string]struct{}
 }
 
-func openInteraction(ctx context.Context, options Options, expectedResumeID string, session *Session) (*interaction, error) {
+func openInteraction(ctx context.Context, options Options, session *Session) (*interaction, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -163,7 +162,7 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &interaction{session: session, opts: options, strictResumeID: expectedResumeID, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
+	c := &interaction{session: session, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
 		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
 		epoch:       connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
@@ -171,7 +170,7 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
 	if session != nil {
 		if session.bindClient(c) {
-			// Close may precede process publication during asynchronous Load.
+			// A terminated owner cannot admit records from this process.
 			c.mu.Lock()
 			c.closing = true
 			c.failLocked(nil)
@@ -211,7 +210,7 @@ func openInteraction(ctx context.Context, options Options, expectedResumeID stri
 	return c, nil
 }
 
-// Open aborts its unreturned FIFO; an already returned Load Session must drain.
+// Open aborts its unreturned FIFO after failed startup cleanup.
 func (c *interaction) cleanupFailedStartup() { _ = c.Close() }
 
 // Send writes one complete user-message frame. Success proves only a completed
@@ -440,15 +439,6 @@ func (c *interaction) controlRequest(ctx context.Context, subtype string, reques
 }
 
 func (c *interaction) route(event Event) error {
-	if c.strictResumeID != "" && event.SessionID != "" && (event.ParentToolUseID == nil || *event.ParentToolUseID == "") && (event.AgentID == nil || *event.AgentID == "") && (event.System != nil || event.Result != nil) && event.SessionID != c.strictResumeID {
-		if c.session != nil {
-			c.session.mu.Lock()
-			c.session.load.ObservedID = event.SessionID
-			c.session.root = event.SessionID
-			c.session.mu.Unlock()
-		}
-		return &IdentityMismatchError{RequestedID: c.strictResumeID, ObservedID: event.SessionID, Raw: append(json.RawMessage(nil), event.Raw...)}
-	}
 	if (event.System != nil || event.Result != nil) && event.SessionID != "" {
 		c.mu.Lock()
 		c.sessionID = event.SessionID

@@ -232,3 +232,15 @@ authority before writing. Duplicate `item/completed` keys remain separate native
 arrivals, without SDK entity/UUID suppression. See native compatibility and observation docs for
 other SDK limits. Synthetic passing tests establish the chosen offline paths;
 they do not certify unmodeled real CLI behavior.
+
+## Recorded replay synchronization
+
+The offline recorded-verification `replay.Peer` uses private `replay/answer` and
+`replay/assert` controls. After matching an exact recorded reverse response, it
+waits for the verification driver to confirm its public Answer returned before
+emitting later recorded server frames. This fixes the successful-answer replay
+schedule while preserving native frame bytes/order and strict mismatch checks.
+The controls are not native Codex CLI methods or recording data. Public
+`replay.RunPeer` and both mock CLI scenario protocols require no such controls;
+the live recorder is unchanged. Native in-flight resolution can still produce
+OutcomeUnknown and is covered separately by the SDK's controlled-write tests.

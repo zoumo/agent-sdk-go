@@ -35,6 +35,10 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 
 主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。主身份的 requested 与 observed 状态分别保留；Claude Open 尚未观察原生根身份时不伪造 observed ID。
 
+## 独立历史查询
+
+历史查询不属于 Session 生命周期，不要求 Open 或同身份空闲。Codex Client 的四个原生查询及 Claude package-level 本地发现、metadata、消息查询相互独立；结果所有权、后端与分页边界见[独立历史查询合同](../../contracts/history-query.md)。查询不注入 Receive，不建立成员关系或回答权限；原生 resume 继续独立表达。
+
 ## 原生输入与配置
 
 | 值 | Codex | Claude |
@@ -79,3 +83,25 @@ Claude SubagentQuery 使用本 Session 固定的 ConfigDir/cwd/main ID 与记录
 | transport / protocol / closed | SDK 交互终止与原生执行失败分开；停止新接受、失效权限、排空后暴露原因。 |
 
 关闭规则以[事件交付合同](../../contracts/event-delivery.md)为准。验收使用本页公开方法，不依赖私有父图、回调池或第二消费者。
+
+## Claude 独立消息查询（Session 外）
+
+原生包提供 `GetSessionMessages(ctx context.Context, sessionID string,
+options SessionMessagesOptions) (SessionMessagesPage, error)`。
+`SessionMessagesOptions` 包含 `Scope SessionQueryScope`、Limit/Offset、
+MaxMessages/MaxBytes/MaxLines/MaxRecords/MaxLineBytes。Scope 包含显式绝对
+ConfigDir、可选绝对 ProjectDir 和 MaxEntries。Page 包含原生独立
+`[]SessionMessage` 与 `SessionMessagesCoverage`；错误为可判别的 SessionQueryError
+或 context 取消。消息值不使用 Event、Received 或 IncomingRequest。
+具体默认值、选择算法、范围和失败语义见[Claude 消息查询合同](../../contracts/claude-session-messages.md)。
+
+## Claude 独立发现与 metadata（Session 外）
+
+原生包提供 `ListSessions(ctx context.Context, options ListSessionsOptions)
+(SessionsPage, error)` 与 `GetSessionInfo(ctx context.Context, sessionID string,
+options SessionInfoOptions) (SessionInfoResult, error)`。复用 SessionQueryScope，
+metadata 与消息分离。ListSessionsOptions 包含 Scope、Limit/Offset、MaxPage/
+MaxSessions、SampleBytes/MaxBytes/MaxLines；SessionInfoOptions 只含 Scope 与
+SampleBytes/MaxBytes/MaxLines。SessionsPage 包含 []SessionInfo 与
+SessionMetadataCoverage；SessionInfoResult 包含可空 *SessionInfo 与同型 Coverage。
+错误可伴部分值，不授予回答权限。字段、默认值和覆盖见[metadata 合同](../../contracts/claude-session-metadata.md)。

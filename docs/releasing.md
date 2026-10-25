@@ -9,26 +9,30 @@ exact `main` commit passes its checks.
 
 1. Confirm `origin/main` equals the intended release commit and both recorded
    source commits remain ancestors; preserve the existing target history.
-2. Run the pinned Go 1.26.9 compiler through mise. Require both Linux and macOS
-   jobs for offline checks, race, vet, schema/inventory generation, independent
+2. Run the pinned Go 1.26.9 compiler through mise. Require all three Offline
+   jobs (`ubuntu-24.04`, `macos-15`, `macos-26`) for offline checks, race, vet,
+   schema/inventory generation, independent
    native types, sanitized recordings, and examples to succeed on that exact SHA.
-3. Require both external-consumer CI jobs on the same SHA. They create temporary
+3. Require all three external-consumer CI jobs on the same SHA (the same
+   Ubuntu, macOS 15 and macOS 26 matrix), for six required push/manual or
+   same-repository PR jobs. They create temporary
    modules outside the checkout, retrieve the module from the new repository
    with a fresh module cache, and verify the retrieved commit before compiling
    all four public imports, example code and documented configuration snippets.
-   They execute only synthetic configuration checks and the pure public-consumer
-   example. Repository/dependency retrieval needs network access; no real CLI or
-   model is invoked.
+   They execute synthetic configuration/public-consumer checks, SDKs against
+   built mock CLIs, and the native history examples. Repository/dependency
+   retrieval needs network access; no real agent CLI or model is invoked.
 4. Review [version notes](../CHANGELOG.md), [migration](migration.md),
    [shared stories](../harness/contracts/stories/index.md), [relationship contracts](../harness/contracts/lineage.md),
    [shared terms](../harness/glossary.md), [licenses](../LICENSE) and
    [attribution](../NOTICE). Preserve native package evidence and recording
    provenance. Record actual commit SHA, CI run URLs and limitations in the
    release review rather than committing a self-referential SHA.
-5. Resolve any failed or skipped required gate before publishing. PR checks
-   compile offline, while remote consumer retrieval runs only for pushed
-   `main` commits and manual workflow runs; a synthetic PR merge SHA may not be
-   available through Go module retrieval.
+5. Resolve any failed or skipped required gate before publishing. Same-repository
+   PR consumer checks retrieve the published head SHA and check out that same
+   source; Offline jobs test the PR merge checkout. Fork PR consumer checks remain
+   excluded. A synthetic PR merge SHA is never used for module retrieval. Require
+   the resulting exact `main` SHA's six push checks again after squash/merge.
 
 To reproduce external consumer verification after pushing the intended commit:
 

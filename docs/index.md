@@ -16,4 +16,10 @@
 - [原生实现架构检查之一](reviews/2026-10-25-codex-architecture-alignment.md)
 - [原生实现架构检查之二](reviews/2026-10-25-claude-architecture-alignment.md)
 - [两套原生实现的合同裁决与改造提案](reviews/2026-10-25-session-architecture-integration.md)
+
+- [Claude 独立发现与 metadata](../claude/docs/session-metadata.md)
+- [Codex 独立历史查询切片验证](reviews/2026-10-25-codex-history-query.md)
+
+- [阶段二历史查询整合验收与后续真实测试入口](validation/history-query-integration.md)
+- [Phase 2 可合并收尾与审批调度验证](validation/phase2-merge-readiness.md)
 - [子 Agent 输出与交付的来源及现状](research/subagent-event-delivery.md)

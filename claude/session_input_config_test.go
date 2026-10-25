@@ -262,6 +262,10 @@ func TestSessionConfigurationCanceledAfterWriteIsUnknownWithoutRetry(t *testing.
 			go func() { _, err := s.SetModel(ctx, ModelChange{Model: &model}); result <- err }()
 			assert.Equal(t, "control seen", *sessionNative(t, s).Event.Assistant.Content.Text)
 			if !timeout {
+				// Peer reception alone can precede local Write returning. This
+				// acknowledged control traverses the same serialized writer and
+				// proves its earlier cancellation hook has been stopped.
+				require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
 				cancel()
 			}
 			err := awaitPermissionError(t, result)
@@ -273,7 +277,17 @@ func TestSessionConfigurationCanceledAfterWriteIsUnknownWithoutRetry(t *testing.
 			_, err = s.SetThinking(context.Background(), ThinkingChange{})
 			require.NoError(t, err)
 			require.NoError(t, s.Close())
-			require.Len(t, permissionTranscript(t, path), 2)
+			want := []string{"set_model", "set_max_thinking_tokens"}
+			if !timeout {
+				want = []string{"set_model", "interrupt", "set_max_thinking_tokens"}
+			}
+			frames := permissionTranscript(t, path)
+			require.Len(t, frames, len(want))
+			for i, raw := range frames {
+				var wire struct{ Request struct{ Subtype string } }
+				require.NoError(t, json.Unmarshal(raw, &wire))
+				require.Equal(t, want[i], wire.Request.Subtype, "unexpected retry or extra operation")
+			}
 		})
 	}
 }

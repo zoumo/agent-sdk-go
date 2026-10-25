@@ -24,8 +24,9 @@ standard-library-only types packages, native protocol inventory, reproducible
 Codex generation, sanitization canaries and recordings, unit/subprocess tests, and
 all runnable offline examples. Validation uses `GOMAXPROCS=2`, package scheduling
 `-p=1`, and `GORACE=atexit_sleep_ms=0` to bound concurrent test load and avoid
-per-subprocess race-detector exit sleeps. CI runs the same checks, race and vet on Linux and
-macOS. Every example compiles with `go test ./...`.
+per-subprocess race-detector exit sleeps. CI runs the same checks, race and vet on
+`ubuntu-24.04`, `macos-15` and `macos-26`. macOS 15 remains an explicit target;
+macOS 26 is additive. Every example compiles with `go test ./...`.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -83,9 +84,15 @@ ordered drain after disconnection. Shared FIFO tests cover cancellation, atomic
 batches, concurrent producers, close/abort races and reference release. See the
 [event delivery contract](../harness/contracts/event-delivery.md).
 
-External consumer CI runs on Linux/macOS for pushed `main` commits and manual
-workflow runs, targeting `github.sha`. PR offline checks remain separate because
-synthetic merge SHAs may not be retrievable as Go module versions. See
+External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
+matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
+Push/manual consumers target `github.sha`; PR consumers check out and fetch the
+published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
+These events configure six jobs (three Offline and three External consumer).
+Fork PRs retain three Offline jobs and skip consumers because fork-only SHAs are
+not assumed retrievable from this repository. Token permissions remain contents:
+read; no pull_request_target execution is added. Configured coverage does not
+prove that any runner executed. See
 [release readiness](releasing.md) for the required exact-commit CI evidence.
 
 ## Testify migration scope
@@ -111,3 +118,14 @@ and acceptance methods live directly in `tests/stories/acceptance_test.go`;
 there is no separate testkit package. Testify v1.12.1 is a test dependency;
 both native types packages still have standard-library-only production trees,
 and SDK production imports cannot reach recording tools or fixture containers.
+
+## Independent history-query acceptance
+
+`CommonStoriesSuite.TestIndependentHistoryBrowser` runs both native adapters for
+US-014/SDK-US-019. Codex exercises list → read metadata → turns → items with a
+strict synthetic app-server trace. Claude exercises list → info → message slices
+after compaction/parallel-tool recovery in temporary storage. Existing native
+focused cases retain transport, live coexistence, cancellation, unknown, errors,
+resource and integrity coverage. The seven offline examples include both native
+history workflows; the fetched consumer compiles all three history examples and
+runs them from the downloaded revision. See [integration evidence](validation/history-query-integration.md).

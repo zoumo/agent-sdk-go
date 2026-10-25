@@ -10,6 +10,10 @@ status: stable
 
 | Term | Meaning and boundary |
 | --- | --- |
+| Metadata | 保存会话的身份、标题、预览、时间及可用状态；预览不是完整内容，记录存在不证明正在执行。 |
+| Saved content | 原生 messages、turns 或 items；不同于包含 delta、审批、hook 的原始事件日志，不能用于创建回答权限。 |
+| Raw event log | 原始 wire 通知、delta、审批与 hook 等日志；保存的消息或 raw transcript source 不构成完整日志回放 API。 |
+| Query coverage | 一次声明范围内的发现、采样或内容读取覆盖；complete 不证明所有原生布局、running 或跨页原子快照。 |
 | Session | A continuing native conversation context that can accept multiple inputs and expose events across multiple execution cycles. An individual execution result does not end the session; the term does not imply persistent recovery after an application restart. |
 | Connection reception | A native record has been read by the connection. This alone does not establish which Session owns it. |
 | Session reception | A record is accepted for a Session using available native membership evidence; optional parent knowledge is not an admission prerequisite. |

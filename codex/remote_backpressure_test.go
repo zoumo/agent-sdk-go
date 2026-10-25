@@ -28,12 +28,13 @@ type blockedRemotePeer struct {
 	releaseOnce           sync.Once
 	requests              atomic.Int64
 	answers               atomic.Int64
+	lastAnswerID          atomic.Value
 }
 
 // This peer pauses after an actual message payload byte. Payloads exceed socket
 // buffering; the SDK's write is released only by an explicit peer barrier, local
 // context cancellation, its write deadline, or Close. No private SDK state used.
-func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
+func openBlockedRemote(t *testing.T, limits codex.Limits, resolveID string) *blockedRemotePeer {
 	reportPeerError := collectTransportPeerErrors(t)
 
 	t.Helper()
@@ -95,6 +96,13 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 		if _, err = io.ReadFull(reader, first); err != nil {
 			return
 		}
+		if resolveID != "" {
+			frame := fmt.Sprintf(`{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":%s}}`, resolveID)
+			if err := ws.Write(context.Background(), websocket.MessageText, []byte(frame)); err != nil {
+				reportPeerError("native resolution: %v", err)
+				return
+			}
+		}
 		close(p.prefix)
 		<-p.release
 		rest, err := io.ReadAll(reader)
@@ -108,6 +116,7 @@ func openBlockedRemote(t *testing.T, limits codex.Limits) *blockedRemotePeer {
 		account := func(m fakeEnvelope) error {
 			if m.Method == "" {
 				p.answers.Add(1)
+				p.lastAnswerID.Store(string(m.ID))
 				return nil
 			}
 			p.requests.Add(1)
@@ -181,7 +190,7 @@ func TestRemoteBlockedWritesAndAnswers(t *testing.T) {
 							if stop == "timeout" {
 								timeout = 500 * time.Millisecond
 							}
-							p := openBlockedRemote(t, codex.Limits{WriteTimeout: timeout, CallTimeout: 10 * time.Second})
+							p := openBlockedRemote(t, codex.Limits{WriteTimeout: timeout, CallTimeout: 10 * time.Second}, "")
 							request := nextOwnedRequest(t, fixture{c: p.client, session: p.session})
 							ctx, cancel := context.WithCancel(context.Background())
 							defer cancel()
@@ -247,7 +256,7 @@ func TestRemoteBlockedWritesAndAnswers(t *testing.T) {
 func TestRemoteQueuedAnswerAdmissionAndCancellation(t *testing.T) {
 	for _, transport := range []string{"ws", "wss"} {
 		t.Run(transport, func(t *testing.T) {
-			p := openBlockedRemote(t, codex.Limits{OutboundQueue: 1, WriteTimeout: 15 * time.Second, CallTimeout: 20 * time.Second})
+			p := openBlockedRemote(t, codex.Limits{OutboundQueue: 1, WriteTimeout: 15 * time.Second, CallTimeout: 20 * time.Second}, "")
 			requests := make([]codex.Request, 4)
 			for i := range requests {
 				requests[i] = nextOwnedRequest(t, fixture{c: p.client, session: p.session})
@@ -366,6 +375,38 @@ func TestRemoteCloseLeavesListenerAvailable(t *testing.T) {
 				wg.Wait()
 			}
 			require.EqualValues(t, 2, connections.Load(), "unexpected connection count: %d", connections.Load())
+		})
+	}
+}
+
+// The peer has consumed a payload byte but holds the remainder beyond socket
+// capacity. Native resolution must retain ambiguity, even when the same single
+// response finishes after release. A zero-frame NotSent assertion is wrong here.
+func TestRemoteNativeResolutionDuringAnswerWrite(t *testing.T) {
+	for _, transport := range []string{"ws", "wss"} {
+		t.Run(transport, func(t *testing.T) {
+			p := openBlockedRemote(t, codex.Limits{WriteTimeout: 15 * time.Second, CallTimeout: 20 * time.Second}, "100")
+			r := sessionRequest(t, p.session).Request
+			require.Equal(t, "100", r.ID().String())
+			result := make(chan error, 1)
+			go func() { result <- r.Handle().Answer(context.Background(), strings.Repeat("x", 16<<20)) }()
+			awaitPrefix(t, p)
+			select {
+			case err := <-result:
+				answerError(t, err, r, codex.OutcomeUnknown, codex.ErrRequestResolved)
+			case <-time.After(3 * time.Second):
+				require.FailNow(t, "native resolution did not wake blocked answer")
+			}
+			awaitAnswer(t, r.Handle(), codex.ErrRequestResolved)
+			answerError(t, r.Handle().Answer(context.Background(), "retry"), r, codex.NotSent, codex.ErrRequestResolved)
+			require.NoError(t, p.client.Err())
+			p.releaseOnce.Do(func() { close(p.release) })
+			var drained string
+			require.NoError(t, p.client.Call(context.Background(), "echo", nil, &drained))
+			require.Equal(t, "drained", drained)
+			require.Equal(t, int64(1), p.answers.Load(), "one original response, no retry")
+			require.Equal(t, "100", p.lastAnswerID.Load())
+			require.ErrorIs(t, r.Handle().Err(), codex.ErrRequestResolved, "later write completion must not regrant authority")
 		})
 	}
 }

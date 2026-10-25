@@ -15,7 +15,7 @@ import (
 var ErrDisconnected = errors.New("scripted peer disconnect")
 
 // RunPeer runs the same strict matching and request-ID correlation engine as
-// Peer, without its private replay/assert handshake. Completion requires client
+// Peer, without its private replay handshakes. Completion requires client
 // EOF; any trailing request fails. Streams are owned and closed on return and on
 // cancellation. Their Close methods must unblock Read/Write (pipes, files and
 // network connections do); arbitrary non-interruptible streams are unsupported.
@@ -111,6 +111,16 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 	reverseSeen := map[string]bool{}
 	reverseThread := map[string]json.RawMessage{}
 	written := 0
+	emit := func(wire []byte) error {
+		if len(wire) > ProtocolLimit {
+			return errors.New("peer output frame byte limit")
+		}
+		written += len(wire) + 1
+		if written > trafficLimit {
+			return errors.New("peer output byte limit")
+		}
+		return writePeerLine(out, wire)
+	}
 	for _, f := range frames {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -135,6 +145,7 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 			return errors.New("invalid scenario ID")
 		}
 		if f.Direction == "c2s" {
+			reverseAnswer := false
 			if !s.Scan() {
 				if s.Err() != nil {
 					return s.Err()
@@ -170,9 +181,18 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 					return errors.New("unknown or duplicate reverse answer")
 				}
 				delete(reverse, key)
+				reverseAnswer = true
 			}
 			if !equal(canonical(mustJSON(got)), canonical(f.Wire)) {
 				return fmt.Errorf("client frame mismatch at ordinal %d", f.Ordinal)
+			}
+			if assertion && reverseAnswer {
+				// Only the offline replay driver has this handshake. Delay later
+				// native frames until its public Answer call has settled, without
+				// modifying the recorded frames or hiding a dispatch error.
+				if err := replayHandshake(s, emit, "replay/answer"); err != nil {
+					return err
+				}
 			}
 		} else {
 			if id := want["id"]; id != nil {
@@ -209,15 +229,7 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 					}
 				}
 			}
-			wire := mustJSON(want)
-			if len(wire) > ProtocolLimit {
-				return errors.New("peer output frame byte limit")
-			}
-			written += len(wire) + 1
-			if written > trafficLimit {
-				return errors.New("peer output byte limit")
-			}
-			if err = writePeerLine(out, wire); err != nil {
+			if err = emit(mustJSON(want)); err != nil {
 				return err
 			}
 		}
@@ -226,17 +238,7 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 		return errors.New("unfinished protocol requests")
 	}
 	if assertion {
-		if !s.Scan() {
-			return errors.New("missing completion assertion")
-		}
-		m, err := object(s.Bytes())
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(m["method"], []byte(`"replay/assert"`)) || !validID(m["id"]) || m["params"] != nil {
-			return errors.New("extra client request")
-		}
-		if err = writePeerLine(out, []byte(fmt.Sprintf("{\"id\":%s,\"result\":{}}", m["id"]))); err != nil {
+		if err := replayHandshake(s, emit, "replay/assert"); err != nil {
 			return err
 		}
 	}
@@ -244,6 +246,24 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 		return errors.New("extra client frame after scenario")
 	}
 	return s.Err()
+}
+
+// Handshakes are private replay controls, not native protocol/capture records.
+func replayHandshake(s *bufio.Scanner, emit func([]byte) error, method string) error {
+	if !s.Scan() {
+		if err := s.Err(); err != nil {
+			return err
+		}
+		return errors.New("missing replay handshake: " + method)
+	}
+	m, err := object(s.Bytes())
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(m["method"], mustJSON(method)) || !validID(m["id"]) || m["params"] != nil {
+		return errors.New("extra client request")
+	}
+	return emit([]byte(fmt.Sprintf("{\"id\":%s,\"result\":{}}", m["id"])))
 }
 
 func writePeerLine(out io.Writer, wire []byte) error {

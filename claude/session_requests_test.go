@@ -85,6 +85,20 @@ func TestSessionPermissionCancellationCloseAndSnapshot(t *testing.T) {
 	}
 }
 
+// Caller context preparation is outside write authorization. Holding it proves
+// Close can invalidate a reserved answer without waiting for caller code; unlike
+// an unconstrained race, this schedule cannot have an ambiguous in-flight write.
+type heldPermissionAnswerContext struct {
+	context.Context
+	entered, release chan struct{}
+	once             sync.Once
+}
+
+func (c *heldPermissionAnswerContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.entered); <-c.release })
+	return c.Context.Done()
+}
+
 func TestSessionPermissionConcurrentAnswersAndClose(t *testing.T) {
 	for _, closeFirst := range []bool{false, true} {
 		t.Run(map[bool]string{false: "answers", true: "close"}[closeFirst], func(t *testing.T) {
@@ -94,33 +108,86 @@ func TestSessionPermissionConcurrentAnswersAndClose(t *testing.T) {
 			start := make(chan struct{})
 			results := make(chan error, 16)
 			var workers sync.WaitGroup
-			for range 16 {
-				workers.Go(func() { <-start; results <- p.Deny(context.Background(), DenialOptions{Message: "declined"}) })
+			var answerCtx context.Context = context.Background()
+			var held *heldPermissionAnswerContext
+			var releaseOnce sync.Once
+			release := func() {
+				releaseOnce.Do(func() {
+					if held != nil {
+						close(held.release)
+					}
+				})
 			}
-			var closed chan error
+			t.Cleanup(release)
 			if closeFirst {
-				closed = make(chan error, 1)
-				go func() { <-start; closed <- s.Close() }()
+				held = &heldPermissionAnswerContext{Context: context.Background(), entered: make(chan struct{}), release: make(chan struct{})}
+				answerCtx = held
+			}
+			for range 16 {
+				workers.Go(func() { <-start; results <- p.Deny(answerCtx, DenialOptions{Message: "declined"}) })
 			}
 			close(start)
-			workers.Wait()
+			workersDone := make(chan struct{})
+			go func() { workers.Wait(); close(workersDone) }()
+			t.Cleanup(func() {
+				release()
+				select {
+				case <-workersDone:
+				case <-time.After(3 * time.Second):
+					t.Error("answer workers did not settle after releasing caller barrier")
+				}
+			})
+			if closeFirst {
+				awaitSignal(t, held.entered)
+				closed := make(chan error, 1)
+				go func() { closed <- s.Close() }()
+				collected := false
+				t.Cleanup(func() {
+					release()
+					if !collected {
+						select {
+						case <-closed:
+						case <-time.After(3 * time.Second):
+							t.Error("Close did not settle after releasing caller barrier")
+						}
+					}
+				})
+				select {
+				case err := <-closed:
+					collected = true
+					require.NoError(t, err)
+				case <-time.After(3 * time.Second):
+					require.FailNow(t, "Close waited for reserved caller preparation")
+				}
+				release()
+			}
+			awaitSignal(t, workersDone)
 			close(results)
 			succeeded := 0
 			for err := range results {
 				if err == nil {
 					succeeded++
 				} else {
-					require.True(t, errors.Is(err, ErrPermissionUsed) || errors.Is(err, ErrClosed) || errors.Is(err, ErrUnknownOutcome), "%v", err)
+					require.NotErrorIs(t, err, ErrUnknownOutcome, "no write can cross this explicit boundary")
+					if closeFirst {
+						require.True(t, errors.Is(err, ErrPermissionUsed) || errors.Is(err, ErrClosed), "%v", err)
+					} else {
+						require.ErrorIs(t, err, ErrPermissionUsed)
+					}
 				}
 			}
-			if closed != nil {
-				require.NoError(t, <-closed)
-			} else {
-				require.NoError(t, s.Close())
-				require.Equal(t, 1, succeeded)
+			want := 1
+			if closeFirst {
+				want = 0
 			}
-			require.LessOrEqual(t, succeeded, 1)
-			require.LessOrEqual(t, len(permissionResponses(t, permissionTranscript(t, path))), 1)
+			require.Equal(t, want, succeeded)
+			if !closeFirst {
+				// Native control acknowledgment is a peer-consumption barrier for
+				// the preceding complete response, not merely a local write result.
+				require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+			}
+			require.Equal(t, want, len(permissionResponses(t, permissionTranscript(t, path))))
+			require.NoError(t, s.Close())
 			require.Error(t, p.Context().Err())
 		})
 	}

@@ -7,8 +7,8 @@ The original Go implementation and tests are licensed under Apache-2.0.
 Protocol shapes and behavioral references were researched from the official
 anthropics/claude-agent-sdk-python project at commit
 f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab and the official Agent SDK overview.
-No official or competing SDK implementation or test source is redistributed
-or linked as a dependency. Source hashes and test provenance are recorded in
+Except for the query algorithm adaptation noted below, no official or competing
+SDK implementation or test source is redistributed or linked as a dependency. Source hashes and test provenance are recorded in
 docs/compatibility.md. Reference-source licenses do not replace or extend the
 license of the CLI or its services; those remain subject to their own terms.
 
@@ -16,10 +16,37 @@ Additional type-organization research: severity1/claude-agent-sdk-go
 (d167fbef06759f127f5623bcf685c05b422de5df, MIT) and
 Roasbeef/claude-agent-sdk-go (a886b29cee2478f48251cfaab02142683ee43d6b, MIT).
 Official TypeScript npm 0.3.302 was used for wire-schema cross-checking only;
-it is not MIT. No reference implementation source is redistributed.
+it is not MIT. No TypeScript reference implementation source is redistributed.
 Detailed source/license review: docs/type-sources.md.
 
 Detached permission/control schemas and AskUserQuestion data were also
 cross-checked against those pinned SDK sources and the official
 Agent SDK user-input documentation. These are source-reviewed and mock-tested
 contracts, not a claim of live CLI interoperability.
+
+Local message-query chain/parallel reconstruction in session_query_chain.go and
+metadata title/preview selection in session_metadata.go are
+adapted from anthropics/claude-agent-sdk-python, sessions.py, commit
+0e89b298e771259378a6cd3734e00d323dff5703 (SDK 0.2.174).
+
+MIT License
+
+Copyright (c) 2025 Anthropic, PBC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

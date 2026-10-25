@@ -122,7 +122,10 @@ for name, relative in (
     ('codex-api', 'codex/examples/apiusage/usage.go'),
     ('codex-observe', 'codex/examples/observe-turn/main.go'),
     ('codex-resume', 'codex/examples/resume-thread/main.go'),
+    ('codex-history', 'codex/examples/history-query-offline/main.go'),
     ('claude-subagents', 'claude/examples/subagents-offline/main.go'),
+    ('claude-metadata', 'claude/examples/session-metadata-offline/main.go'),
+    ('claude-messages', 'claude/examples/session-messages-offline/main.go'),
 ):
     target = pathlib.Path('examples') / name
     target.mkdir(parents=True)
@@ -154,4 +157,7 @@ export SDK_MOCK_CLAUDE_BIN="$consumer_dir/bin/mock-claude"
 # Downloads are complete: consumer/example compilation and mock checks now run offline.
 GOPROXY=off GOSUMDB=off go test -count=1 ./...
 GOPROXY=off GOSUMDB=off go run ./consumers/codex-public
+GOPROXY=off GOSUMDB=off go run ./examples/codex-history
+GOPROXY=off GOSUMDB=off go run ./examples/claude-metadata
+GOPROXY=off GOSUMDB=off go run ./examples/claude-messages
 printf 'External consumer verified pushed commit %s\n' "$revision"

@@ -4,6 +4,9 @@
 
 - [已确认关系与资源合同](lineage.md)
 - [事件交付合同](event-delivery.md)
+- [Claude 独立本地消息查询](claude-session-messages.md)
+- [Claude 独立本地发现与 metadata](claude-session-metadata.md)
+- [独立历史查询合同](history-query.md)
 - [共同验收场景](stories/index.md)
 
 运行时职责及 Interface 见[Session 深模块设计](../modules/native-session/design.md)。

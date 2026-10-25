@@ -95,8 +95,13 @@ resume them, prove they are running or change observation membership.
 
 Native continuation uses `Open` with `SessionOptions.ResumeID`. This requests the
 CLI's native resume behavior; initialization does not prove historical recovery.
-History parser/projection helpers remain internal and independently tested; they
-do not start a process or establish a running Session.
+Independent saved messages use package-level `GetSessionMessages` with an explicit
+absolute `SessionQueryScope.ConfigDir`, without Open or a runtime executable. See
+[local message queries](docs/session-messages.md),
+[session discovery and metadata](docs/session-metadata.md), and the
+[offline example](examples/session-messages-offline/main.go). Internal legacy
+parser/projection helpers remain independently tested; queries return detached
+messages rather than Events.
 
 ## Cancellation, shutdown and resources
 

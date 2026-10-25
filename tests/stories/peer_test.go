@@ -2,11 +2,17 @@ package stories_test
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	transcript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
+	recording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
 )
 
 func TestMain(m *testing.M) {
@@ -20,11 +26,44 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// This self-reexecuting peer understands only fixture traffic. It never opens a
-// network connection, loads account configuration, or starts a native agent.
+// This self-reexecuting peer understands only fixture traffic. It never opens an
+// external connection, loads account configuration, or starts a native agent.
+// Fault companions use only a loopback application synchronization channel.
 func peer(provider, story string) error {
 	if provider == "codex" && story == "child-detail" {
 		return childDetailPeer()
+	}
+	if provider == "codex" && story == "recorded-question-drain" {
+		frames, err := recording.Load("s2")
+		if err != nil {
+			return err
+		}
+		c, err := openFaultBarrier()
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		if _, err = c.Write([]byte("s")); err != nil {
+			return err
+		}
+		return reportReplayResult(c, recording.Peer(os.Stdin, os.Stdout, frames))
+	}
+	if provider == "claude" && story == "recorded-auth-drain" {
+		var c net.Conn
+		err := transcript.Replay(os.Stdin, os.Stdout, bytes.NewReader(transcript.Wire), func() error {
+			var err error
+			c, err = openFaultBarrier()
+			if err != nil {
+				return err
+			}
+			_, err = c.Write([]byte("d"))
+			return err
+		})
+		if c == nil {
+			return err
+		}
+		defer c.Close()
+		return reportReplayResult(c, err)
 	}
 	if story == "US-014" && provider == "codex" {
 		return historyQueryStoryPeer()
@@ -240,4 +279,30 @@ func nativeParentFixture(child, parent string) string {
 	t["parentThreadId"], _ = json.Marshal(parent)
 	b, _ := json.Marshal(map[string]any{"thread": t})
 	return string(b)
+}
+
+// This channel is application-driver metadata, never a native replay frame.
+func openFaultBarrier() (net.Conn, error) {
+	c, err := net.DialTimeout("tcp4", os.Getenv("SDK_STORY_BARRIER"), 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	if err = c.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+func reportReplayResult(c net.Conn, replayErr error) error {
+	result := struct {
+		Error string `json:"error"`
+	}{}
+	if replayErr != nil {
+		result.Error = replayErr.Error()
+	}
+	if err := json.NewEncoder(c).Encode(result); err != nil {
+		return err
+	}
+	return replayErr
 }

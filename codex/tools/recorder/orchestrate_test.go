@@ -140,6 +140,11 @@ func testOriginalCapture(t *testing.T, story string, protocolBytes int) {
 	} else {
 		require.Equal(t, 1, out.Original.Questions)
 	}
+	lease, err := os.ReadFile(p.Ledger + ".lease")
+	require.NoError(t, err)
+	require.Equal(t, "closed\n", string(lease))
+	_, err = os.Lstat(p.Ledger + ".finalizing")
+	require.True(t, os.IsNotExist(err))
 	require.Nil(t, out.ProviderRequests)
 	require.Nil(t, out.USD)
 	b, e = os.ReadFile(p.Ledger)
@@ -178,4 +183,20 @@ func TestFailureStopSurvivesContendedJournalLock(t *testing.T) {
 
 func TestCaptureByteFailureMetadataAndStop(t *testing.T) {
 	testOriginalCapture(t, "s2", recording.ProtocolLimit+1)
+}
+
+func TestUncertainFinalizationBlocksReservationAndPeerStartup(t *testing.T) {
+	p := captureProfile(t, "r1")
+	p.Model = "synthetic-model"
+	p.Effort = "high"
+	require.NoError(t, os.WriteFile(p.Ledger+".finalizing", []byte("uncertain synthetic finalization\n"), 0600))
+	calls := 0
+	opener := func(context.Context, recorder.LaunchProfile) (*codex.Client, func() (recording.TransportResult, error), error) {
+		calls++
+		return nil, nil, errors.New("must not open")
+	}
+	_, err := recorder.CaptureWithPeer(context.Background(), p, opener)
+	require.Error(t, err)
+	require.Zero(t, calls)
+	require.Error(t, recorder.Reserve(p.Ledger, "r1", "root"))
 }

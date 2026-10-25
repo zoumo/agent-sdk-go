@@ -96,7 +96,11 @@ and a once-only owned startup marker before native startup. Failures persist a
 global stop marker before its journal row, preventing later scenes even when
   another writer holds the journal lock. An exclusive persisted active/closed
   capture lease serializes capture lifetimes; a crash/uncertain failure leaves
-  the lease unsettled and refuses restart. These files cannot be deleted to retry.
+  the lease unsettled and refuses restart. Finalization creates a durable barrier
+  before exposing closed state, removed only after a successful close. These
+  files cannot be deleted to retry. Durability assumes OS locking/fsync and
+  stable storage; arbitrary kernel/disk failure, clock rollback or operator
+  modification cannot be made a global financial guarantee by local files.
 Provider API request/retry counts, usage and USD are **unknown**, never inferred
 as zero or one per turn. It does not implement a live provider-meter observer.
 `CaptureWithPeer` now verifies the ledger/build revision, reserves before the

@@ -264,15 +264,25 @@ func ledgerDeadline(path, revision string) (time.Time, error) {
 }
 
 func refuseStopped(path string) error {
-	_, err := os.Lstat(path + ".stopped")
-	if err == nil {
-		return errors.New("aggregate capture stopped")
-	}
-	if !os.IsNotExist(err) {
-		return err
+	for _, suffix := range []string{".stopped", ".finalizing"} {
+		_, err := os.Lstat(path + suffix)
+		if err == nil {
+			return errors.New("aggregate capture stopped or finalization uncertain")
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
 	}
 	return nil
 }
+func syncDirectory(path string) error {
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	return errors.Join(dir.Sync(), dir.Close())
+}
+
 func stopAggregate(path, revision, scene, target string) error {
 	marker, err := os.OpenFile(path+".stopped", os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0600)
 	if err != nil && !os.IsExist(err) {
@@ -296,6 +306,9 @@ func stopAggregate(path, revision, scene, target string) error {
 	return reserveRevision(path, revision, scene, "stop", target)
 }
 func acquireCaptureLease(path string) (*os.File, error) {
+	if err := refuseStopped(path); err != nil {
+		return nil, err
+	}
 	created := true
 	f, err := os.OpenFile(path+".lease", os.O_CREATE|os.O_EXCL|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
 	if os.IsExist(err) {
@@ -308,6 +321,9 @@ func acquireCaptureLease(path string) (*os.File, error) {
 	fail := func(err error) (*os.File, error) { f.Close(); return nil, err }
 	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		return fail(errors.New("aggregate capture already active"))
+	}
+	if err := refuseStopped(path); err != nil {
+		return fail(err)
 	}
 	st, err := f.Stat()
 	if err != nil {

@@ -67,17 +67,36 @@ func CaptureWithPeer(ctx context.Context, p LaunchProfile, open PeerOpener) (out
 	defer func() {
 		var finalErr error
 		if ret == nil {
-			_, err := lease.WriteAt([]byte("closed\n"), 0)
-			finalErr = errors.Join(err, lease.Sync())
+			// While locked, establish a durable barrier before exposing closed state.
+			// An uncertain close or crash leaves this marker and refuses new captures.
+			finalErr = writeExclusive(p.Ledger+".finalizing", []byte("finalizing; no new capture\n"))
+			if finalErr == nil {
+				finalErr = syncDirectory(p.Ledger)
+			}
+			if finalErr == nil {
+				_, err := lease.WriteAt([]byte("closed\n"), 0)
+				finalErr = errors.Join(err, lease.Sync())
+			}
 		}
-		finalErr = errors.Join(finalErr, lease.Close())
-		ret = errors.Join(ret, finalErr)
-		// Finalization happens after normal cleanup/metadata defers. A visible
-		// closed state with an uncertain fsync/close must never grant another run.
 		if finalErr != nil {
+			ret = errors.Join(ret, finalErr, stopAggregate(p.Ledger, p.SDKRevision, p.Scene, p.RawDir))
+		}
+		closeErr := lease.Close()
+		ret = errors.Join(ret, closeErr)
+		if closeErr != nil {
 			ret = errors.Join(ret, stopAggregate(p.Ledger, p.SDKRevision, p.Scene, p.RawDir))
 		}
+		if ret == nil {
+			finalErr = os.Remove(p.Ledger + ".finalizing")
+			if finalErr == nil {
+				finalErr = syncDirectory(p.Ledger)
+			}
+			if finalErr != nil {
+				ret = errors.Join(ret, finalErr, stopAggregate(p.Ledger, p.SDKRevision, p.Scene, p.RawDir))
+			}
+		}
 	}()
+
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	seconds := 120

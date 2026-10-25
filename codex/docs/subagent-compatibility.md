@@ -14,8 +14,8 @@ child forwarding. No subagent live pass or supported server-version range is cla
 | Duplicates / order | Every accepted native arrival survives in receive order | Repeated delta/spawn/unknown-item and 4096/8192 backlog cases | No occurrence cache, pending ancestry reorder or cross-connection exactly-once |
 | Unknown scope | Bounded diagnostic quarantine, active expiry, copies and gaps | Session quarantine tests | No retroactive insertion or answer authority |
 | Requests | Same Receive FIFO and original registry handle | request_contract_test.go; Session child/backlog/epoch/write cases | Ownerless connection controls remain diagnostic; no default policy |
-| History / ordinary resume | Explicit package Load owns confirmed same-ID replay and attachment; raw ResumeThread keeps no-replay semantics | Session Load/history tests | Active/ephemeral/mutated/partial history cannot become success |
-| Ownership / close | Unique main owner, shared physical attachment references, final observer releases | session_load_test.go; 64-way distinct-owner lifecycle | Close revokes owned requests; Receive cancellation only ends its wait |
+| History / ordinary resume | Client query pages and explicit ResumeThread have separate lifecycles | Native pagination and resume contract tests | Queries do not establish a live Session or reconstruct all original events |
+| Ownership / close | Unique main owner, shared physical attachment references, final observer releases | 64-way distinct-owner lifecycle | Close revokes owned requests; Receive cancellation only ends its wait |
 | Failure | Accepted drain then stable cause; Abort abandons backlog | Native fault, remote coalescing and backpressure tests | No reconnect/resend/gap reconstruction |
 
 E1 is immutable source/type inspection. E2 is original synthetic offline testing;

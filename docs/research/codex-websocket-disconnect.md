@@ -1,8 +1,10 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Codex app-server 连接断开与 Session 存续调研
 
 日期：2026-10-24。状态：研究证据，不是已采纳的 SDK 合同。
 
-当前 SDK 设计决定见[断线报告与显式 Load](../../harness/adr/0002-disconnect-reporting-and-explicit-load.md)。本文件记录原生行为证据；末尾研究问题不替代当前规范。
+当前 SDK 设计决定见[断线报告](../../harness/adr/0002-disconnect-reporting.md)。本文件记录原生行为证据；末尾研究问题不替代当前规范。
 
 ## 范围与方法
 

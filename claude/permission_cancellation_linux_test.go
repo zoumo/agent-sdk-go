@@ -75,7 +75,7 @@ func startBlockedPermissionWriter(t *testing.T, c *interaction, id string, p *Pe
 		require.NoError(t, err)
 	}
 	require.Falsef(t, p != nil && (!strings.HasPrefix(wire.Prefix, `{"response":`) || !strings.Contains(wire.Prefix, `"request_id":"`+id+`"`)), "expected actual answer prefix, got %q", wire.Prefix)
-	require.Falsef(t, p == nil && !strings.HasPrefix(wire.Prefix, `{"message":`), "expected actual user prefix, got %q", wire.Prefix)
+	require.Falsef(t, p == nil && !strings.HasPrefix(wire.Prefix, `{"type":"user","session_id":`), "expected actual user prefix, got %q", wire.Prefix)
 	select {
 	case err := <-results:
 		require.FailNowf(t, "unexpected test outcome", "large frame completed before read barrier: %v", err)

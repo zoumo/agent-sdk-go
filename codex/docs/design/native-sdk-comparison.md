@@ -5,7 +5,7 @@ Official source pin: [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github
 | Operation | Implemented Go | Official TypeScript exec SDK | Official Rust app-server client |
 |---|---|---|---|
 | Configuration | NewStdio(StdioOptions), NewRemote(RemoteOptions) | new Codex(CodexOptions) | RemoteAppServerClient::connect(RemoteAppServerConnectArgs), or InProcessAppServerClient::start |
-| Create / resume | Open / Load; raw native ResumeThread retains ordinary no-replay semantics | startThread / resumeThread; execution starts lazily during run | request_typed with ClientRequest::ThreadStart / ThreadResume |
+| Create / resume | Open; native ResumeThread retains ordinary no-replay semantics | startThread / resumeThread; execution starts lazily during run | request_typed with ClientRequest::ThreadStart / ThreadResume |
 | Send | Session.Submit with native Input options | thread.run / runStreamed | request_typed with ClientRequest::TurnStart |
 | Receive | Session.Receive → Received with native Event/request/observation/load | AsyncGenerator of exec ThreadEvent, not app-server notifications | next_event → AppServerEvent |
 | Approvals / user questions | Receive → actual IncomingRequest → native Handle/Approve/Deny/Answer | No public bidirectional server-request channel; approvalPolicy is configuration | ServerRequest; resolve_server_request / reject_server_request |
@@ -86,7 +86,7 @@ for {
 ```
 
 [Compile-checked native examples](../../examples/apiusage/usage.go) show creation,
-ordinary native resume, explicit Session Load, input and original responses.
+ordinary native resume, input and original responses.
 Native Codex turns remain visible in Input/Submission/Interrupt selectors.
 The TypeScript and Rust excerpts are source-checked references, not compiled by
 the Go gate. Raw connection operations remain explicit extensions outside

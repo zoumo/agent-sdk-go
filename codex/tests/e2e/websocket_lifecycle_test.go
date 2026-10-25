@@ -342,19 +342,20 @@ func (s *WebSocketLifecycleHistorySuite) TestLifecycle() {
 	c = open()
 	t.Log("same owned listener accepted fresh authenticated initialize after first Close")
 	history(c, id, []string{first})
-	session = loadNativeSession(t, ctx, c, id, cwd)
-	require.Equal(t, id, session.LoadState().ObservedIdentity, "resume identity mismatch")
-	t.Log("new connection Load confirmed same native main identity")
-
-	second := observe(session, "Do not use tools or access files. Return exactly the marker from your previous assistant reply, with no additional text.")
+	resumed, err := c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id, ExcludeTurns: types.Some(true)})
+	require.NoError(t, err)
+	require.Equal(t, id, resumed.Thread.ID, "resume identity mismatch")
+	t.Log("new connection ResumeThread confirmed same native main identity")
+	attempts.Add(1)
+	second := resumedTurn(t, ctx, c, id)
 	history(c, id, []string{first, second})
 	detached, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
 	require.True(t, err == nil,
 		"native unsubscribe failed: %T", err)
-	require.Contains(t, []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusNotSubscribed, types.ThreadUnsubscribeStatusNotLoaded}, detached.Status,
+	require.Contains(t, []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusUnsubscribed}, detached.Status,
 		"native unsubscribe unexpected status")
 
-	t.Log("Session.Close released attachment; native readback confirms no subscription")
+	t.Log("ResumeThread attachment explicitly unsubscribed")
 	closeClient(c)
 	select {
 	case e := <-exited:

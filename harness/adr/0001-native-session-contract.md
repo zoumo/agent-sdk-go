@@ -24,11 +24,11 @@ Closing a session ends SDK interaction and observation and releases SDK-owned re
 
 ## Disconnection and recovery
 
-The provisional remote recovery contract is superseded by [ADR-0002: disconnect reporting and explicit Load](0002-disconnect-reporting-and-explicit-load.md). SDKs report connection loss without initiating reconnect or guaranteeing missed-event recovery. Callers decide whether to reconnect and can explicitly use Load to resume the same native session and replay retained history. Same-object recovery, subscription restoration and approval-handle recovery are deferred. Transport loss remains distinct from evidence of native execution termination.
+SDKs report connection loss without initiating reconnect or guaranteeing missed-event recovery. Callers decide whether to open a new connection and request native resume. Resume and history reads remain separate. Same-object recovery, subscription restoration and approval-handle recovery are deferred. Transport loss is distinct from native execution termination. See [disconnect reporting](0002-disconnect-reporting.md).
 
 ## Approval delivery and local cancellation
 
-Deliver approval requests through the session's single event stream with a common answer handle. Applications can continue consuming events while deferring an answer; no separate approval callback delivery mechanism is required by this contract. Reconnection does not automatically restore an old handle's usability: restoring or replacing an answer entry point requires native request replay and validity evidence. Handle recovery design is deferred under [ADR-0002](0002-disconnect-reporting-and-explicit-load.md).
+Deliver approval requests through the session's single event stream with a common answer handle. Applications can continue consuming events while deferring an answer; no separate approval callback delivery mechanism is required by this contract. Reconnection does not automatically restore an old handle's usability: restoring or replacing an answer entry point requires native request replay and validity evidence. Handle recovery design is deferred under [ADR-0002](0002-disconnect-reporting.md).
 
 Canceling a local event wait ends only that wait, without closing the session or interrupting native execution; consumption can be attempted again. Interrupt and close are explicit operations. When an input or approval answer may already have been sent, preserve an unknown outcome rather than claiming nonexecution or automatically resending it.
 

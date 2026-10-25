@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Codex SDK 架构检查：以长期 Session 为中心重新设计
 
 日期：2026-10-25。检查基准：`de8647df17e73d824561a7c4f94b949d82ab7f42`，并读取当前共享工作目录中未提交的 `harness/sdk/{architecture,user-stories,onboarding}.md`、ADR-0001/0002 及相关规则。本文是独立设计与检查，只检查 Codex；没有读取另一实现的检查报告，也没有修改 SDK、测试或合同。

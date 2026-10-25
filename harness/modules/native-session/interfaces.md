@@ -10,7 +10,7 @@ status: stable
 
 ## Session 与交付值
 
-两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`、`Load(ctx, LoadOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams；Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking。已有连接不再是正常调用必须拼装的订阅对象。LoadOptions 固定主身份、绝对 cwd、CodexHome 或 ConfigDir，以及有界历史读取选项。所有权在原生派发之前保留，失败不静默改为 Open。
+两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams；Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking。已有连接不再是正常调用必须拼装的订阅对象。所有权在原生派发之前保留，失败明确报告。
 
 两个 `*Session` 都有以下方法；同名配套类型位于各自运行时包：
 
@@ -25,14 +25,13 @@ Interrupt(ctx context.Context, options InterruptOptions) error
 Close() error
 Done() <-chan struct{}
 Err() error
-LoadState() LoadState
 ```
 
-`Received` 是有判别字段的值，只携带一个事实类别：原生 Event、真实 IncomingRequest、SDK 关系/覆盖证据或 Load 边界。它保留原生顶层 Raw、Params、未知 envelope 字段、来源身份与 live/history 来源；历史含原始记录及可用关联字段。不能为历史重新构造“实时 Raw”。其 Event 复用原生类型；不是把两种协议收敛为一个事件模型。
+`Received` 是有判别字段的值，只携带一个事实类别：原生 Event、真实 IncomingRequest、SDK 关系/覆盖证据。它保留原生顶层 Raw、Params、未知 envelope 字段与来源身份。其 Event 复用原生类型；不是把两种协议收敛为一个事件模型。
 
 Receive 是唯一消费入口，不另设 Events、Requests channel、审批回调或 History channel。并发调用争用同一 FIFO，不提供广播或独立游标。一次 context 取消只取消等待；与已经取出的记录竞争时可返回记录。Done 表示交互终止，Err 是稳定的首个交互终止原因；都不表示 FIFO 已排空。资源回收结果由 Close 返回，不能覆盖首个终止原因。正常关闭后 Receive 排空再返回 io.EOF，故障终止排空后返回终止错误。Close 幂等，清理不等消费。
 
-Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际收到的原生启动响应副本，保留 model、sandbox 和未知字段；Load 没有启动响应，返回 false，其恢复证据仍由 LoadState 提供。该只读查询不发送协议消息，不产生消费者或回答权限。
+Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际收到的原生启动响应副本，保留 model、sandbox 和未知字段。该只读查询不发送协议消息，不产生消费者或回答权限。
 
 主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。主身份的 requested 与 observed 状态分别保留；Claude Open 尚未观察原生根身份时不伪造 observed ID。
 
@@ -59,15 +58,11 @@ Codex 的适配覆盖 command execution、file change、permissions、原生 leg
 
 Context 在原生取消、已回答或交互终止时失效；回答前由同一 registry 再检查，至多一次有效发送。派发结果未知不恢复可重试权限，不自动重答。不增加默认审批倒计时或无人回答决定。ParseEvent、历史、子记录和隔离诊断均不能构造有效 IncomingRequest。
 
-## 查询与 Load 状态
+## 子 Agent 查询
 
 Codex SubagentQuery 使用 cursor、limit、sourceKinds、archived 等原生过滤，ancestorThreadId 固定为本 Session 主身份，不同时发送 parentThreadId。SubagentPage 保留原生 Thread 记录、nextCursor 和查询覆盖条件。完整非归档与归档覆盖需要分别查询；source 默认 interactive 不等于子 Agent 全覆盖。实验能力未启用或被拒绝必须显式报告，不能回退为缓存。
 
 Claude SubagentQuery 使用本 Session 固定的 ConfigDir/cwd/main ID 与记录数/字节限制，发现主 transcript 旁的 subagents 记录及有证据的嵌套布局。SubagentPage 保留 agent ID、可用 parent/tool/sidecar 元数据、实际扫描范围和完整/部分/未知覆盖。无原生分页时不伪造原生 cursor；资源限制、访问失败和未支持布局不能作为完整空列表。两端允许部分记录与错误同时返回；调用者以 coverage 和 error 判断，不以长度判断完整。列表不触发 resume/start/subscribe、回放或成员观察范围更新。
-
-LoadState 是 pending/succeeded/failed 的可查询快照，包含 requested identity、原生确认的 observed identity（可缺）、确认来源及失败原因。Open 的状态为 not-requested。Load 的 pending 状态不允许 Submit/配置；真实请求回答、Interrupt、Close 保持可用。Load 成功须同时具备原生同身份恢复确认及主历史完整接受，通过同一 Receive 交付完成边界；独立状态不需要消费到边界才能查询。失败即终止该 Session、清理所属资源并保留已接受事件排空，不开放普通输入。
-
-当固定原生基线没有已确认的无执行恢复机制时，Load 返回明确的恢复未确认错误，或返回 Session 后将 LoadState 置 failed；不能无限等待应用输入，也不能在失败前交付历史为已恢复回放。超时不是恢复证明，initialize、指定 ID 和磁盘 ID 不是恢复确认。
 
 ## 错误语义
 
@@ -77,12 +72,10 @@ LoadState 是 pending/succeeded/failed 的可查询快照，包含 requested ide
 |---|---|
 | ownership-conflict | 同连接同主身份已有所有者或不确定的附着；本地拒绝，不另建订阅。 |
 | unsupported / invalid-input | 已知能力或参数不支持/不合法；未发送。原生未知限制保留原生拒绝，不猜测成功。 |
-| load-pending / load-failed | 成功门禁尚未满足或已经失败；普通输入及配置未发送。 |
-| resume-unconfirmed / identity-mismatch | 缺少同身份原生确认或实际响应身份不同；Load 失败，前者不冒充不存在的会话，后者不继续回放。 |
 | request-invalid / already-answered | 原句柄不存在、取消、已回答或已终止；不产生新回答权限。 |
 | not-sent / outcome-unknown | 前者确认未派发；后者可能已经写出或执行。输入、配置、回答及释放的后者不自动重试。 |
 | native-rejected | 保留原生 RPC/control 错误及关联；不是正常执行失败事件，也不强制结束其他交互。 |
 | history-integrity / resource-limit / coverage-gap | 保留 offending raw、游标/路径、已交付及未覆盖范围；不能以截断成功处理。覆盖缺口可作为证据交付，不必全部终止。 |
 | transport / protocol / closed | SDK 交互终止与原生执行失败分开；停止新接受、失效权限、排空后暴露原因。 |
 
-具体历史完整性与关闭规则以[异步历史合同](../../contracts/async-history.md)及[事件交付合同](../../contracts/event-delivery.md)为准。验收使用本页公开方法，不依赖私有父图、回调池或第二消费者。
+关闭规则以[事件交付合同](../../contracts/event-delivery.md)为准。验收使用本页公开方法，不依赖私有父图、回调池或第二消费者。

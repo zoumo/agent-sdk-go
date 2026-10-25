@@ -58,7 +58,7 @@ The main envelope is fixed; session_id and parent_tool_use_id are not arbitrary
 input targets. A native result, including is_error, does not terminate Session.
 
 `Receive` is the sole consumption entry for native Event, real IncomingRequest,
-observation evidence and Load boundary. Concurrent calls compete for the same
+observation evidence. Concurrent calls compete for the same
 FIFO. Applications own UI/logging fan-out. Native Raw/unknown values and repeated
 UUIDs remain intact. Confirmed members do not wait for a complete parent path.
 Unknown envelopes and unconfirmed identities remain bounded `Unattributed`
@@ -93,13 +93,10 @@ explicit count/byte bounds. Inspect coverage together with errors; a partial or
 unsupported scan is not a complete empty list. Querying stored records does not
 resume them, prove they are running or change observation membership.
 
-`Load` requires an explicit native SessionID, absolute CWD and ConfigDir. Its
-LoadState is independent of Done and consumer drain. The fixed CLI 2.1.258 /
-SDK 0.3.258 baseline has no confirmed no-input recovery acknowledgment:
-initialize is insufficient, so Load explicitly fails with ErrResumeUnconfirmed.
-It never replays history as a successful recovery, submits an extra prompt, or
-falls back to a new session. Pending real requests and controls remain usable;
-ordinary input/configuration stay gated. See [Load](docs/session-load.md).
+Native continuation uses `Open` with `SessionOptions.ResumeID`. This requests the
+CLI's native resume behavior; initialization does not prove historical recovery.
+History parser/projection helpers remain internal and independently tested; they
+do not start a process or establish a running Session.
 
 ## Cancellation, shutdown and resources
 

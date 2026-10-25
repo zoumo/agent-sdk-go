@@ -7,7 +7,7 @@ Use [Session usage](../README.md#session-usage) and the
 [runnable offline example](../examples/subagents-offline/main.go).
 
 `Session.Receive` distinguishes native `Event`, actual `IncomingRequest`, SDK
-`Observation` and `Load` outcome. Native Raw, unknown fields, null/absence,
+`Observation`. Native Raw, unknown fields, null/absence,
 text/thinking/tool blocks, usage and Origin survive without rewriting. Native
 facts retain arrival order and duplicates. Parent knowledge can arrive later;
 missing ancestry does not delay confirmed same-session facts. No Created label,
@@ -52,8 +52,7 @@ parent/child usage. Receive cancellation ends one wait. Close stops admission,
 invalidates owned requests and cleans up; accepted facts drain. Abort additionally
 abandons unread FIFO entries. Ordinary Open with ResumeID passes the literal ID
 to a fresh process without replay; requested and observed identities stay distinct.
-Explicit [Load](session-load.md) has stricter confirmation/integrity gates and
-fails ErrResumeUnconfirmed on the fixed baseline.
+
 
 The [capability matrix](subagent-compatibility.md) separates source, synthetic,
 recorded and real evidence. No real child/model execution was performed for this

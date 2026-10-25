@@ -1,3 +1,5 @@
+> Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
+
 # Ticket 13 consumer migration result
 
 Status: complete. Final post-fix offline gate passed.

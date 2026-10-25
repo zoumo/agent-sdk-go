@@ -4,28 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"iter"
 	"os"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-var historyReads int
-var delayedLoadPage json.RawMessage
-var delayedLoadResume json.RawMessage // Owned by the single-threaded subprocess peer.
+// Owned by the single-threaded subprocess protocol peer.
+var historyStarts int
 
 func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
-	if !strings.HasPrefix(mode, "history") {
+	if mode != "history-isolation" && mode != "history-overlap" {
 		return false
 	}
 	switch m.Method {
-	case "":
-		return true
 	case "request-frames":
 		var frames []string
 		_ = json.Unmarshal(m.Params, &frames)
@@ -34,163 +28,23 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 		}
 		send(m.ID, `{}`)
 		return true
-	case "echo":
-		if mode == "history-interleave" && delayedLoadPage != nil {
-			send(delayedLoadPage, `{"data":[{"id":"t2","status":"completed","items":[],"error":null}],"nextCursor":null}`)
-			delayedLoadPage = nil
+	case "thread/start":
+		if mode != "history-overlap" {
+			return false
 		}
-		if mode == "history-resume-blocked" && delayedLoadResume != nil {
-			send(delayedLoadResume, resumeResponseJSON("native-thread-42"))
-			delayedLoadResume = nil
-			send(m.ID, string(m.Params))
-			return true
+		historyStarts++
+		id := "native-thread-42"
+		if historyStarts > 1 {
+			id = "child"
 		}
-	case "thread/resume":
-		var p types.ThreadResumeParams
-		if json.Unmarshal(m.Params, &p) != nil {
-			os.Exit(89)
-		}
-		if !p.ExcludeTurns.ValueOr(false) {
-			send(m.ID, `{}`)
-			return true
-		}
-		switch mode {
-		case "history-resume-malformed":
-			send(m.ID, `{}`)
-			return true
-		case "history-resume-error":
-			fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32602,\"message\":\"resume missing\"}}\n", m.ID)
-			return true
-		case "history-resume-mismatch":
-			send(m.ID, resumeResponseJSON("different"))
-			return true
-		case "history-resume-cwd":
-			send(m.ID, strings.ReplaceAll(resumeResponseJSON(p.ThreadID), `/synthetic`, `/foreign`))
-			return true
-		case "history-resume-blocked":
-			delayedLoadResume = append(json.RawMessage(nil), m.ID...)
-			if os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".resume-blocked", []byte("received"), 0600) != nil {
-				os.Exit(90)
-			}
-			return true
-		}
-		send(m.ID, resumeResponseJSON(p.ThreadID))
-		return true
-	case "thread/unsubscribe":
-		if mode == "history-release-error" {
-			send(m.ID, `{"status":"unknown-future"}`)
-			return true
-		}
-		send(m.ID, `{"status":"unsubscribed"}`)
-		return true
-	case "turn/start":
-		send(m.ID, `{"turn":{"id":"continued","status":"inProgress","items":[]}}`)
-		if mode == "history-events" {
-			fmt.Fprintln(os.Stdout, `{"method":"item/completed","params":{"threadId":"native-thread-42","turnId":"continued","completedAtMs":123,"item":{"type":"agentMessage","id":"live-item","text":"live answer"}}}`)
-		}
-		return true
-	case "thread/read":
-		historyReads++
-		thread := strings.ReplaceAll(threadJSON, `"ephemeral":true`, `"ephemeral":false`)
-		if mode == "history-isolation" || mode == "history-overlap" {
-			var p struct {
-				ThreadID string `json:"threadId"`
-			}
-			_ = json.Unmarshal(m.Params, &p)
-			thread = strings.ReplaceAll(thread, `native-thread-42`, p.ThreadID)
-		}
-		if mode == "history-mutated" && historyReads >= 3 {
-			thread = strings.ReplaceAll(thread, `"updatedAt":2`, `"updatedAt":3`)
-		}
-		if mode == "history-active" {
-			thread = strings.ReplaceAll(thread, `"type":"idle"`, `"type":"active","activeFlags":[]`)
-		}
-		if mode == "history-missing" {
-			fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32602,\"message\":\"not found\"}}\n", m.ID)
-			return true
-		}
-		send(m.ID, `{"thread":`+thread+`}`)
+		send(m.ID, resumeResponseJSON(id))
 		return true
 	case "thread/turns/list":
-		var p map[string]any
-		_ = json.Unmarshal(m.Params, &p)
-		if p["sortDirection"] != "asc" || p["itemsView"] != "full" {
-			send(m.ID, `{"data":[],"nextCursor":"wrong-request"}`)
-			return true
+		var p types.ThreadTurnsListParams
+		if json.Unmarshal(m.Params, &p) != nil || p.SortDirection.ValueOr("") != types.SortDirectionAsc || p.ItemsView.ValueOr("") != types.TurnItemsViewFull {
+			os.Exit(89)
 		}
-		if strings.HasPrefix(mode, "history-exact-") {
-			turn := `{"id":"exact-turn","ID":"wrong-turn","status":"completed","items":[{"id":"exact-item","ID":"wrong-item","type":"agentMessage","text":"retained","TEXT":"wrong"}],"ITEMS":[],"error":null}`
-			page := `{"data":[` + turn + `],"DATA":[],"nextCursor":null}`
-			switch mode {
-			case "history-exact-cursor-only":
-				page = `{"data":[],"NEXTCURSOR":"more"}`
-			case "history-exact-cursor-absent":
-				page = `{"data":[]}`
-			case "history-exact-data-only":
-				page = `{"DATA":[` + turn + `],"nextCursor":null}`
-			case "history-exact-items-only":
-				page = `{"data":[{"id":"exact-turn","status":"completed","ITEMS":[],"error":null}],"nextCursor":null}`
-			case "history-exact-id-only":
-				page = `{"data":[{"ID":"wrong-turn","status":"completed","items":[],"error":null}],"nextCursor":null}`
-			case "history-exact-item-id-only":
-				page = `{"data":[{"id":"exact-turn","status":"completed","items":[{"ID":"wrong-item","type":"futureItem","opaque":true}],"error":null}],"nextCursor":null}`
-			}
-			send(m.ID, page)
-			return true
-		}
-		if mode == "history-v2-activity" {
-			var params struct {
-				Item json.RawMessage `json:"item"`
-			}
-			_ = json.Unmarshal([]byte(v2Activity("native-thread-42", "child-1", "historical-spawn", "started")), &params)
-			send(m.ID, `{"data":[{"id":"parent-turn","status":"completed","items":[`+string(params.Item)+`],"error":null}],"nextCursor":null}`)
-			return true
-		}
-		if mode == "history-rich" {
-			send(m.ID, `{"data":[{"id":"t1","status":"interrupted","items":[{"id":"tool","type":"commandExecution","command":"never executed","commandActions":[],"cwd":"/synthetic","status":"failed","exitCode":7,"aggregatedOutput":"retained failure","future":true},{"id":"compact","type":"contextCompaction"},{"id":"future","type":"futureItem","opaque":{"retained":true}}],"error":null,"futureTurn":true}],"nextCursor":null}`)
-			return true
-		}
-		if mode == "history-future-status" {
-			send(m.ID, `{"data":[{"id":"t1","status":"futureStatus","items":[],"error":null,"opaque":true}],"nextCursor":null}`)
-			return true
-		}
-		if p["cursor"] == nil {
-			send(m.ID, `{"data":[{"id":"t1","status":"completed","items":[{"id":"i1","type":"userMessage","content":[{"type":"text","text":"hello"}]}],"error":null}],"nextCursor":"page2"}`)
-		} else {
-			if err := os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".history-page2", []byte("received"), 0600); err != nil {
-				os.Exit(88)
-			}
-			switch mode {
-			case "history-interleave":
-				delayedLoadPage = append(json.RawMessage(nil), m.ID...)
-				fmt.Fprintln(os.Stdout, `{"method":"future/during-load","params":{"threadId":"native-thread-42"},"unknown":true}`)
-				fmt.Fprintln(os.Stdout, `{"id":"load-question","method":"item/tool/requestUserInput","params":{"threadId":"native-thread-42","turnId":"active","itemId":"q","questions":[{"id":"q1","header":"Choice","question":"Which?","options":null}]}}`)
-				return true
-			case "history-blocked":
-				return true
-			case "history-late":
-				fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32601,\"message\":\"unsupported\"}}\n", m.ID)
-				return true
-			case "history-cursor":
-				send(m.ID, `{"data":[],"nextCursor":"page2"}`)
-				return true
-			case "history-malformed":
-				send(m.ID, `{"data":[{"id":"t2","items":[]}],"nextCursor":null}`)
-				return true
-			}
-			data := `{"data":[{"id":"t2","status":"completed","items":[{"id":"i2","type":"agentMessage","text":"done"}],"error":null}],"nextCursor":null}`
-			switch mode {
-			case "history-duplicate":
-				data = strings.ReplaceAll(data, `"t2"`, `"t1"`)
-			case "history-item-duplicate":
-				data = strings.ReplaceAll(data, `"i2"`, `"i1"`)
-			case "history-summary":
-				data = strings.ReplaceAll(data, `"status":"completed"`, `"status":"completed","itemsView":"summary"`)
-			case "history-unknown":
-				data = strings.ReplaceAll(data, `"type":"agentMessage","text":"done"`, `"type":"futureItem","future":true`)
-			}
-			send(m.ID, data)
-		}
+		send(m.ID, `{"data":[{"id":"t1","status":"completed","items":[{"id":"i1","type":"userMessage","content":[{"type":"text","text":"hello"}]}],"error":null}],"nextCursor":"page2"}`)
 		return true
 	case "thread/items/list":
 		send(m.ID, `{"data":[{"turnId":"t","item":{"type":"agentMessage","id":"i","text":"x"},"startedAtMs":123}],"nextCursor":null}`)
@@ -199,253 +53,17 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 	return false
 }
 
-func TestHistorySessionsAndNativeItemPage(t *testing.T) {
+func TestHistoryNativePagesWithoutResume(t *testing.T) {
 	f := startFake(t, "history-isolation", codex.Limits{})
-	o := codex.HistoryOptions{ThreadID: "first", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}
-	slow, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: o})
-	require.NoError(t, e)
-	defer slow.Close()
-	o.ThreadID = "second"
-	fast, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: o})
-	require.NoError(t, e)
-	defer fast.Close()
-	var count int
-	for r := range historyEvents(t, fast) {
-		if r.Method != "turn/completed" {
-			continue
-		}
-		require.Equal(t, "second", r.History.ThreadID)
-		count++
-	}
-	require.NoError(t, fast.Err())
-	require.Equal(t, 2, count)
-	require.NoError(t, slow.Close())
-	require.NoError(t, slow.Err()) // Closing one owner does not fail the other Session.
-	page, e := f.c.ListThreadItems(context.Background(), types.ThreadItemsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr("native-cursor")})})
-	require.NoError(t, e)
+	page, err := f.c.ListThreadItems(context.Background(), types.ThreadItemsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr("native-cursor")})})
+	require.NoError(t, err)
 	require.Len(t, page.Data, 1)
 	require.Equal(t, int64(123), page.Data[0].StartedAtMs.ValueOr(0))
-	turns, e := f.c.ListThreadTurns(context.Background(), types.ThreadTurnsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), ItemsView: types.Some(types.TurnItemsViewFull)})
-	require.NoError(t, e)
-	require.Equal(t, "page2", turns.NextCursor.ValueOr(""))
-}
-
-func TestHistoryFailuresStayFailures(t *testing.T) {
-	for _, mode := range []string{"late", "cursor", "malformed", "duplicate", "item-duplicate", "summary", "missing", "active", "unknown", "cwd", "home", "identity", "limit"} {
-		t.Run(mode, func(t *testing.T) {
-			f := startFake(t, "history-"+mode, codex.Limits{})
-			o := codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}
-			switch mode {
-			case "cwd":
-				o.CWD = "/wrong"
-			case "home":
-				o.CodexHome = "/wrong"
-			case "identity":
-				o.ThreadID = "foreign"
-			case "limit":
-				o.MaxRecords = 3
-			}
-			h, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: o})
-			if mode == "home" {
-				require.Error(t, e)
-				return
-			}
-			require.NoError(t, e)
-			defer h.Close()
-			var ids []string
-			for r := range historyEvents(t, h) {
-				if r.Method != "turn/completed" {
-					continue
-				}
-				ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
-				if mode == "unknown" && r.Data.(*types.TurnCompletedNotification).Turn.ID == "t2" {
-					require.NotEmpty(t, r.Data.(*types.TurnCompletedNotification).Turn.Items[0].Unknown)
-					require.Contains(t, string(r.History.Raw), "futureItem")
-				}
-			}
-			require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
-			if mode == "unknown" {
-				require.NoError(t, h.Err())
-				require.Len(t, ids, 2)
-			} else {
-				require.Error(t, h.Err())
-				if mode == "late" {
-					require.Equal(t, []string{"t1"}, ids)
-				}
-			}
-		})
-	}
-}
-
-func TestHistoryCloseAndCancelBlockedPagination(t *testing.T) {
-	for _, mode := range []string{"slow-close", "rpc-close", "rpc-cancel", "client-close", "slow-client-close"} {
-		t.Run(mode, func(t *testing.T) {
-			f := startFake(t, "history-blocked", codex.Limits{})
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			h, e := codex.Load(ctx, codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
-			require.NoError(t, e)
-			defer h.Close()
-			if mode != "slow-close" && mode != "slow-client-close" {
-				receiveCtx, stop := context.WithTimeout(context.Background(), time.Second)
-				first, err := h.Receive(receiveCtx)
-				require.NoError(t, err)
-				require.Equal(t, "t1", first.Event.History.TurnID)
-				terminal, err := h.Receive(receiveCtx)
-				require.NoError(t, err)
-				require.Equal(t, "turn/completed", terminal.Event.Method)
-				stop()
-
-				require.Eventually(t, func() bool { _, err := os.Stat(f.trace + ".history-page2"); return err == nil }, time.Second, time.Millisecond)
-			}
-			switch mode {
-			case "rpc-cancel":
-				cancel()
-			case "client-close", "slow-client-close":
-				require.NoError(t, f.c.Close())
-			default:
-				require.NoError(t, h.Close())
-			}
-			select {
-			case <-h.Done():
-			case <-time.After(time.Second):
-				t.Fatal("history worker leaked")
-			}
-			require.Error(t, h.LoadState().Err)
-			if mode != "client-close" && mode != "slow-client-close" {
-				var result string
-				require.NoError(t, f.c.Call(context.Background(), "echo", "usable", &result))
-				require.Equal(t, "usable", result)
-			}
-		})
-	}
-}
-
-func TestHistoryPagesFullTurnsInOrder(t *testing.T) {
-	f := startFake(t, "history", codex.Limits{})
-	h, err := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
+	turns, err := f.c.ListThreadTurns(context.Background(), types.ThreadTurnsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), ItemsView: types.Some(types.TurnItemsViewFull)})
 	require.NoError(t, err)
-	defer h.Close()
-	var ids []string
-	for r := range historyEvents(t, h) {
-		if r.Method != "turn/completed" {
-			continue
-		}
-		ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
-		require.True(t, json.Valid(r.History.Raw))
-		require.Equal(t, "native-thread-42", r.History.ThreadID)
-	}
-	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
-	require.NoError(t, h.Err())
-	require.Equal(t, []string{"t1", "t2"}, ids)
-	for _, r := range trace(t, f.trace) {
-		require.NotContains(t, []string{"turn/start", "thread/start"}, r.Method)
-	}
-}
-
-func TestLoadResumesReplaysAndContinuesSameThread(t *testing.T) {
-	f := startFake(t, "history", codex.Limits{})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	h, e := codex.Load(ctx, codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
-	require.NoError(t, e)
-	defer h.Close()
-	p := codex.Input{Input: []types.UserInput{}}
-	_, e = h.Submit(context.Background(), p)
-	require.ErrorIs(t, e, codex.ErrLoadPending)
-	require.Equal(t, codex.LoadPending, h.LoadState().Status)
-	var ids []string
-	for r := range historyEvents(t, h) {
-		if r.Method != "turn/completed" {
-			continue
-		}
-		ids = append(ids, r.Data.(*types.TurnCompletedNotification).Turn.ID)
-	}
-	require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
-	require.NoError(t, h.Err())
-	require.Equal(t, []string{"t1", "t2"}, ids)
-	require.Equal(t, "native-thread-42", h.LoadState().ObservedIdentity)
-	cancel() // Successful load does not bind the ongoing session to this context.
-	turn, e := h.Submit(context.Background(), p)
-	require.NoError(t, e)
-	require.Equal(t, "continued", turn.Response.Turn.ID)
-	methods := []string{}
-	for _, r := range trace(t, f.trace) {
-		methods = append(methods, r.Method)
-	}
-	require.Equal(t, []string{"initialize", "initialized", "thread/read", "thread/resume", "thread/read", "thread/turns/list", "thread/turns/list", "thread/read", "turn/start"}, methods)
-	require.NoError(t, h.Close())
-	var echoed string
-	require.NoError(t, f.c.Call(context.Background(), "echo", "shared connection usable", &echoed))
-}
-
-func TestLoadResumeFailureAndReleaseContracts(t *testing.T) {
-	for _, mode := range []string{"resume-error", "resume-mismatch", "resume-cwd", "resume-blocked", "release-error"} {
-		t.Run(mode, func(t *testing.T) {
-			f := startFake(t, "history-"+mode, codex.Limits{})
-			h, e := codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home", PageSize: 1}})
-			require.NoError(t, e)
-			defer h.Close()
-			_, e = codex.Load(context.Background(), codex.LoadOptions{Client: f.c, HistoryOptions: codex.HistoryOptions{ThreadID: "native-thread-42", CWD: "/synthetic", CodexHome: "/synthetic-home"}})
-			require.ErrorIs(t, e, codex.ErrOwnershipConflict)
-			_, e = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: "native-thread-42"})
-			require.ErrorIs(t, e, codex.ErrOwnershipConflict)
-			if mode == "resume-blocked" {
-				require.Eventually(t, func() bool { _, e := os.Stat(f.trace + ".resume-blocked"); return e == nil }, time.Second, time.Millisecond)
-				require.ErrorContains(t, h.Close(), "unconfirmed")
-				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
-				require.ErrorIs(t, e, codex.ErrOwnershipConflict)
-				_, e = f.c.ResumeThread(context.Background(), types.ThreadResumeParams{ThreadID: "native-thread-42"})
-				require.ErrorIs(t, e, codex.ErrOwnershipConflict)
-				var echoed string
-				require.NoError(t, f.c.Call(context.Background(), "echo", "release late resume response", &echoed))
-				require.Equal(t, "release late resume response", echoed)
-				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
-				require.ErrorIs(t, e, codex.ErrOwnershipConflict)
-			}
-			var count int
-			for range historyEvents(t, h) {
-				count++
-			}
-			require.NotEqual(t, codex.LoadPending, h.LoadState().Status)
-			if mode == "release-error" {
-				require.NoError(t, h.Err())
-				require.Equal(t, 4, count)
-				require.ErrorContains(t, h.Close(), "unsubscribe")
-				require.ErrorContains(t, h.Close(), "unsubscribe")
-			} else {
-				require.Error(t, h.LoadState().Err)
-				require.Zero(t, count)
-			}
-			if mode != "release-error" && mode != "resume-blocked" {
-				_, e = f.c.StartTurn(context.Background(), types.TurnStartParams{ThreadID: "native-thread-42"})
-				require.Error(t, e)
-			}
-			for _, entry := range trace(t, f.trace) {
-				require.NotEqual(t, "thread/start", entry.Method)
-			}
-		})
-	}
-}
-
-func historyEvents(t *testing.T, s *codex.Session) iter.Seq[types.Event] {
-	return func(yield func(types.Event) bool) {
-		t.Helper()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		for {
-			received, err := s.Receive(ctx)
-			if err != nil {
-				require.NotErrorIs(t, err, context.DeadlineExceeded)
-				return
-			}
-			require.Nil(t, received.Request, "historical projection cannot create authority")
-			if received.Load != nil {
-				return
-			}
-			if received.Event != nil && !yield(*received.Event) {
-				return
-			}
-		}
+	require.Equal(t, "page2", turns.NextCursor.ValueOr(""))
+	for _, entry := range trace(t, f.trace) {
+		require.NotEqual(t, "thread/resume", entry.Method)
+		require.NotEqual(t, "thread/start", entry.Method)
 	}
 }

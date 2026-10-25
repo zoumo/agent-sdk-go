@@ -10,7 +10,7 @@ import "encoding/json"
 // and union variants remain in the native Data and in Params.
 //
 // Each receiving Session owns its event's buffers and typed data independently.
-// Load also delivers this type with History set; its projected events have no
+// Internal history projection uses this type with History set and has no
 // received Raw envelope. Thread identity stays in the notification payload.
 type Event struct {
 	// Raw preserves the received notification envelope, excluding transport delimiters.

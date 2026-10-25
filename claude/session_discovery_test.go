@@ -64,7 +64,7 @@ func TestSessionDiscoveryExistingNativeRecords(t *testing.T) {
 	assert.Equal(t, "old", *page.Records[1].ParentAgentID)
 	assert.Equal(t, "tool", page.Records[1].ToolUseID)
 	assert.Contains(t, string(page.Records[1].Sidecar), `"unknown":null`)
-	require.NoError(t, s.Err()) // No terminal transcript, resume or Load gate.
+	require.NoError(t, s.Err()) // No terminal transcript or resume operation.
 }
 
 func TestSessionDiscoveryDamagedSidecarRetainsEvidence(t *testing.T) {
@@ -117,7 +117,13 @@ func TestSessionDiscoveryLimitsAndPartialCoverage(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, base, _ := discoveryFixture(t)
-			for _, name := range []string{"agent-a.jsonl", "agent-b.jsonl", "nested/deep/agent-c.jsonl"} {
+			names := []string{"agent-a.jsonl", "agent-b.jsonl", "nested/deep/agent-c.jsonl"}
+			if tc.name == "entries" {
+				// ReadDir order is filesystem-dependent. Every entry in this
+				// case is a record; depth traversal is exercised separately.
+				names[2] = "agent-c.jsonl"
+			}
+			for _, name := range names {
 				discoveryWrite(t, filepath.Join(base, "subagents", name), "{}\n")
 			}
 			p, err := s.ListSubagents(context.Background(), tc.q)

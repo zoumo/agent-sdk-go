@@ -43,7 +43,7 @@ type Event struct {
 	RateLimit       *RateLimitEvent         `json:"-"`
 	Reset           *ConversationResetEvent `json:"-"`
 	// History is SDK-only evidence for a retained transcript entry projected by
-	// Load. It is nil for live frames and is never encoded into native JSON.
+	// transcript projection. It is nil for live frames and is never encoded into native JSON.
 	History *HistorySource `json:"-"`
 }
 

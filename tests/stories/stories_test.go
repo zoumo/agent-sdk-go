@@ -35,7 +35,7 @@ func (s *CommonStoriesSuite) SetupSuite() {
 
 func TestCommonStories(t *testing.T) { suite.Run(t, new(CommonStoriesSuite)) }
 func (s *CommonStoriesSuite) TestSessionTargets() {
-	for _, id := range []string{"SDK-US-001", "SDK-US-002", "SDK-US-003", "SDK-US-004", "SDK-US-005", "SDK-US-006", "SDK-US-007", "SDK-US-008", "SDK-US-009", "SDK-US-010", "SDK-US-011", "SDK-US-012", "SDK-US-013", "SDK-US-014", "SDK-US-015", "SDK-US-016", "SDK-US-017", "SDK-US-018", "SDK-US-019", "SDK-US-020"} {
+	for _, id := range []string{"SDK-US-001", "SDK-US-002", "SDK-US-003", "SDK-US-004", "SDK-US-005", "SDK-US-006", "SDK-US-007", "SDK-US-008", "SDK-US-009", "SDK-US-010", "SDK-US-011", "SDK-US-012", "SDK-US-013", "SDK-US-014", "SDK-US-015", "SDK-US-016", "SDK-US-017", "SDK-US-018"} {
 		s.Run(id, func() {
 			s.Run("codex", func() { codexSessionTarget(s.T(), id) })
 			s.Run("claude", func() { claudeSessionTarget(s.T(), id) })

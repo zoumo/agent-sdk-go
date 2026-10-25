@@ -29,7 +29,6 @@ type SessionOptions struct {
 type ReceivedKind string
 
 const (
-	ReceivedLoad        ReceivedKind = "load"
 	ReceivedEvent       ReceivedKind = "event"
 	ReceivedRequest     ReceivedKind = "request"
 	ReceivedObservation ReceivedKind = "observation"
@@ -39,9 +38,8 @@ const (
 type Observation struct{ ThreadID, ParentThreadID, Method, Reason string }
 
 // Received retains one native or SDK fact with an explicit origin. Kind selects
-// exactly one of Event, Request, Observation or Load.
+// exactly one of Event, Request or Observation.
 type Received struct {
-	Load        *LoadState
 	Observation *Observation
 	Request     *IncomingRequest
 	Kind        ReceivedKind
@@ -58,24 +56,20 @@ type InterruptOptions struct{ TurnID string }
 // Session owns main identity, admission and a single FIFO. All mutable state
 // except cleanupOnce/cleanupErr is protected by the connection mutex.
 type Session struct {
-	startRaw      json.RawMessage
-	load          LoadState
-	loadDone      chan struct{}
-	resumed       bool
-	resumeUnknown error
-	client        *Client
-	root          string
-	owned         bool
-	queue         queue.Queue[Received]
-	done          <-chan struct{}
-	closed        bool
-	cause         error
-	cleanupOnce   sync.Once
-	cleanupErr    error
-	cancel        context.CancelFunc
-	members       map[string]struct{}
-	parents       *lineage.Graph[string]
-	maxMembers    int
+	startRaw    json.RawMessage
+	client      *Client
+	root        string
+	owned       bool
+	queue       queue.Queue[Received]
+	done        <-chan struct{}
+	closed      bool
+	cause       error
+	cleanupOnce sync.Once
+	cleanupErr  error
+	cancel      context.CancelFunc
+	members     map[string]struct{}
+	parents     *lineage.Graph[string]
+	maxMembers  int
 }
 
 func Open(ctx context.Context, options SessionOptions) (*Session, error) {
@@ -152,8 +146,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	return s, nil
 }
 
-// bindLocked is also the registration seam for explicit Load. The reader binds
-// the identity before processing the next wire record, not after the RPC wakes.
+// bindLocked registers identity before the reader processes the next wire record.
 func (s *Session) bindLocked(id string) error {
 	c := s.client
 	if c.threadOperations[id] > 0 || c.sessions[id] != nil {
@@ -178,8 +171,7 @@ func (s *Session) bindLocked(id string) error {
 }
 
 // StartResponse returns an independent copy of the actual native thread/start
-// response, including model, sandbox and unknown fields. The boolean is false
-// for a loaded Session, which has resume evidence in LoadState instead.
+// response, including model, sandbox and unknown fields.
 func (s *Session) StartResponse() (types.ThreadStartResponse, bool) {
 	s.client.mu.Lock()
 	defer s.client.mu.Unlock()
@@ -218,16 +210,6 @@ func (s *Session) Interrupt(ctx context.Context, options InterruptOptions) error
 func (s *Session) finishLocked(cause error) {
 	if s.closed {
 		return
-	}
-	if s.load.Status == LoadPending {
-		reason := cause
-		if reason == nil {
-			reason = ErrClosed
-		}
-		s.load.Status = LoadFailed
-		s.load.Err = reason
-		state := s.loadSnapshotLocked()
-		_ = s.queue.Push(Received{Kind: ReceivedLoad, Load: &state, Origin: "sdk"}, 0)
 	}
 	s.closed = true
 	s.cause = cause
@@ -276,9 +258,6 @@ func (s *Session) Close() error {
 		c.mu.Lock()
 		s.finishLocked(nil)
 		c.mu.Unlock()
-		if s.loadDone != nil {
-			<-s.loadDone
-		}
 		if s.owned {
 			s.cleanupErr = c.Close()
 			_ = s.releaseAttachments()

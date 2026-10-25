@@ -34,11 +34,10 @@ licenses are retained in [type sources](type-sources.md) and [NOTICE](../NOTICE)
 | Original permission / questions | Same-stream actual IncomingRequest and one native handle | permissions_test.go, permission_cancellation_test.go, question_interaction_test.go, Session request tests | No default policy; unsupported controls use bounded protocol errors |
 | Close / failure | Stop admission, bounded cleanup, accepted drain, explicit Abort | lifecycle tests; Session fault/concurrent-close cases | No recursive completion, automatic reconnect or retry |
 | Ordinary resume | Open with literal ResumeID, fresh process, no replay | Actual captured argv/stdin in resume_interrupt_test.go | Requested identity is not recovery confirmation |
-| Explicit Load | Pending controls plus explicit failed Load boundary | load_session_test.go and history parser integrity cases | Fixed baseline lacks no-input confirmation; no successful replay claimed |
 | Record discovery | Read-only native local-file enumeration and coverage | session_discovery_test.go | Independent of current observation; not proof of live activity |
 
 Tests and examples use synthetic isolated peers. The checked-in real Claude
-capture is an authentication failure, not successful child or Load evidence.
+capture is an authentication failure, not successful child evidence.
 The [offline example](../examples/subagents-offline/main.go) prints native facts
 and SDK observations separately, then explicitly closes and drains. Example
 policy does not make idle or a result mean all children are finished.

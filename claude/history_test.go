@@ -236,15 +236,8 @@ func TestHistoryLoadsOriginalMainChain(t *testing.T) {
 	require.Equal(t, []string{"u", "a", "r"}, ids)
 }
 
-func loadOptions(t *testing.T, h HistoryOptions) LoadOptions {
-	t.Helper()
-	exe, err := os.Executable()
-	require.NoError(t, err)
-	return LoadOptions{History: h, Options: Options{CLIPath: exe, Env: []string{"HOME=" + h.ConfigDir, "CLAUDE_GO_FIXTURE=session_load", "CLAUDE_GO_SESSION_ID=" + h.SessionID, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}}
-}
-
 // The record reader is independent of native recovery. This private harness
-// tests projection/integrity only; it cannot confirm or bypass public Load.
+// tests projection/integrity only; it never starts a native process.
 func readTranscriptForTest(ctx context.Context, o HistoryOptions, before func(context.Context) error) (*transcriptTestStream, error) {
 	opts, path, err := prepareHistory(ctx, o)
 	if err != nil {
@@ -335,5 +328,5 @@ func TestHistoryMetadataIdentityCannotBypassValidation(t *testing.T) {
 	}
 }
 
-// Only parser tests use a drainable harness; production Load admits to Session.
+// Parser tests use a drainable harness independently of Session.
 type transcriptTestStream = history.Stream[Event]

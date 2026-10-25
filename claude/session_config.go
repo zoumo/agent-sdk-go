@@ -72,9 +72,6 @@ func (s *Session) SetThinking(ctx context.Context, change ThinkingChange) (Confi
 }
 
 func (s *Session) configure(ctx context.Context, subtype string, request any) (ConfigurationReceipt, error) {
-	if err := s.inputAllowed(); err != nil {
-		return ConfigurationReceipt{}, dispatchFailure(subtype, err)
-	}
 	if ctx == nil {
 		return ConfigurationReceipt{}, dispatchFailure(subtype, queue.ErrNilContext)
 	}

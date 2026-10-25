@@ -85,10 +85,6 @@ func sessionTargetPeer(provider, story string) error {
 		}
 	}
 	starts, inputs, interrupts := 0, 0, 0
-	var initializeID string
-	var delayedPage json.RawMessage
-	historyReads := 0
-	fault := os.Getenv("SDK_STORY_FAULT")
 	for scanner.Scan() {
 		line := append([]byte(nil), scanner.Bytes()...)
 		if _, err = trace.Write(append(line, '\n')); err != nil {
@@ -124,20 +120,8 @@ func sessionTargetPeer(provider, story string) error {
 			}
 			reply(fmt.Sprintf(`{"thread":{"id":%q,"cwd":"/synthetic","sessionId":"native-session","projectId":null,"cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"ephemeral":false,"modelProvider":"synthetic","preview":"","source":"appServer","status":{"type":"idle"},"turns":[]},"model":"creation-model","modelProvider":"synthetic","cwd":"/synthetic","approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"readOnly"}}`, id))
 		case f.Type == "control_request" && f.Request.Subtype == "initialize":
-			if story == "SDK-US-019" || story == "SDK-US-020" {
-				initializeID = f.RequestID
-				observed := root
-				if fault == "mismatch" {
-					observed = "wrong"
-				}
-				emit(map[string]any{"type": "system", "subtype": "init", "session_id": observed, "claude_code_version": "2.1.258"})
-				marker("pending", nil)
-				request("load-answer", false)
-				request("load-pending", false)
-			} else {
-				reply(`{}`)
-				emit(map[string]any{"type": "system", "subtype": "init", "session_id": root, "claude_code_version": "2.1.258", "model": "creation-model"})
-			}
+			reply(`{}`)
+			emit(map[string]any{"type": "system", "subtype": "init", "session_id": root, "claude_code_version": "2.1.258", "model": "creation-model"})
 		case f.Method == "thread/unsubscribe":
 			reply(`{"status":"unsubscribed"}`)
 		case f.Method == "turn/interrupt" || f.Type == "control_request" && f.Request.Subtype == "interrupt":
@@ -165,19 +149,6 @@ func sessionTargetPeer(provider, story string) error {
 			}
 			marker("interrupt", nil)
 			reply(`{}`)
-			if delayedPage != nil {
-				if fault == "late" {
-					raw(fmt.Sprintf(`{"id":%s,"error":{"code":-32602,"message":"late retained source failure"}}`, delayedPage))
-				} else {
-					raw(fmt.Sprintf(`{"id":%s,"result":{"data":[{"id":"t2","status":"futureStatus","items":[],"error":null,"future":true}],"nextCursor":null}}`, delayedPage))
-				}
-				delayedPage = nil
-			}
-
-			if initializeID != "" {
-				raw(fmt.Sprintf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{}}}`, initializeID))
-				initializeID = ""
-			}
 
 		case f.Method == "thread/settings/update" || f.Type == "control_request" && (f.Request.Subtype == "set_model" || f.Request.Subtype == "set_max_thinking_tokens"):
 			var q struct{ Model string }
@@ -200,44 +171,6 @@ func sessionTargetPeer(provider, story string) error {
 				reply(`{}`)
 			}
 
-		case f.Method == "thread/read":
-			historyReads++
-			var q struct{ ThreadID string }
-			if err = json.Unmarshal(f.Params, &q); err != nil {
-				return err
-			}
-			thread := nativeStoryThread(q.ThreadID)
-			if fault == "source" && historyReads >= 3 {
-				thread = json.RawMessage(strings.ReplaceAll(string(thread), `"updatedAt":2`, `"updatedAt":3`))
-			}
-			if fault == "active" {
-				thread = json.RawMessage(strings.ReplaceAll(string(thread), `"type":"idle"`, `"type":"active","activeFlags":[]`))
-			}
-			reply(`{"thread":` + string(thread) + `}`)
-		case f.Method == "thread/resume":
-			var q struct{ ThreadID string }
-			if err = json.Unmarshal(f.Params, &q); err != nil {
-				return err
-			}
-			root = q.ThreadID
-			id := root
-			if fault == "mismatch" {
-				id = "wrong"
-			}
-			reply(`{"thread":` + string(nativeStoryThread(id)) + `,"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}`)
-		case f.Method == "thread/turns/list":
-			var p struct{ Cursor string }
-			if err = json.Unmarshal(f.Params, &p); err != nil {
-				return err
-			}
-			if p.Cursor == "" {
-				reply(`{"data":[{"id":"t1","status":"completed","items":[{"id":"u","type":"userMessage","content":[{"type":"text","text":"retained"}]},{"id":"future","type":"futureItem","opaque":{"n":9007199254740993,"nullable":null}},{"id":"retained-tool","type":"commandExecution","command":"retained only; never run","cwd":"/synthetic","processId":null,"status":"failed","commandActions":[],"aggregatedOutput":"retained failure","exitCode":7,"durationMs":1}],"error":null}],"nextCursor":"page2"}`)
-			} else {
-				delayedPage = append(json.RawMessage(nil), f.ID...)
-				marker("pending", nil)
-				request("load-answer", false)
-				request("load-pending", false)
-			}
 		case f.Method == "thread/list":
 			var q struct {
 				Cursor   string

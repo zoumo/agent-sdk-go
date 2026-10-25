@@ -6,7 +6,7 @@
 // Fixed source targets and evidence limits are documented in docs/compatibility.md.
 //
 // Open creates a Session with one FIFO. Receive delivers native events, real
-// IncomingRequests, observation evidence and Load boundaries. Submit success
+// IncomingRequests and observation evidence. Submit success
 // proves only a complete local write; it does not invent a native acknowledgment
 // or a Claude Turn. Results do not end the Session. Native Raw, unknown fields
 // and duplicate facts remain intact; optional parent knowledge never sorts facts.
@@ -16,9 +16,8 @@
 // Session imposes no default answer or local approval deadline. Parsing, history
 // and diagnostic material cannot create answer authority.
 //
-// LoadState is separate from Done and FIFO drain. The fixed native baseline
-// cannot confirm recovery without input, so Load fails with ErrResumeUnconfirmed
-// rather than replaying history as recovered or sending an additional prompt.
+// ResumeID requests native continuation through Open; history reads do not
+// establish a running Session or restore permission authority.
 //
 // Receive cancellation cancels only the wait. Interrupt's native acknowledgment
 // does not prove rollback. Close cleans owned resources without waiting for the

@@ -51,6 +51,7 @@ type InterruptOptions struct{}
 // does not enqueue a second native stream when owned by a Session.
 type Session struct {
 	discovery        discoveryScope
+	detailPolicy     ChildDetailPolicy
 	client           *interaction
 	done             chan struct{}
 	clientReady      chan struct{}
@@ -106,7 +107,7 @@ func newSession(o Options) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{done: make(chan struct{}), clientReady: make(chan struct{}), requestedID: o.ResumeID, discovery: scope, members: make(map[string]SubagentIdentity), tools: make(map[string]string), parents: graph, limits: limits, childTools: make(map[string]string), seeds: append([]SubagentHistory(nil), o.Subagents.History...)}
+	s := &Session{done: make(chan struct{}), clientReady: make(chan struct{}), requestedID: o.ResumeID, detailPolicy: o.ChildDetailPolicy, discovery: scope, members: make(map[string]SubagentIdentity), tools: make(map[string]string), parents: graph, limits: limits, childTools: make(map[string]string), seeds: append([]SubagentHistory(nil), o.Subagents.History...)}
 	_ = s.fifo.Push(s.observation("forwarding-not-confirmed", "initialize-forwardSubagentText-is-a-request", SubagentIdentity{}, nil), 0)
 	return s, nil
 }
@@ -325,7 +326,10 @@ func (s *Session) accept(e Event) error {
 		}
 	}
 	// Native first; the following bounded per-frame knowledge is not a second FIFO.
-	items := []queue.Item[Received]{{Value: Received{Kind: ReceivedNative, Event: &e, Raw: e.Raw, Source: source, Parent: s.parent(key), Origin: "live"}, Bytes: int64(len(e.Raw))}}
+	var items []queue.Item[Received]
+	if s.detailPolicy != ChildDetailSuppress || key == "" || s.nativeVersion != "2.1.258" || !pureChildDetail(e) {
+		items = append(items, queue.Item[Received]{Value: Received{Kind: ReceivedNative, Event: &e, Raw: e.Raw, Source: source, Parent: s.parent(key), Origin: "live"}, Bytes: int64(len(e.Raw))})
+	}
 	for _, r := range observations {
 		items = append(items, queue.Item[Received]{Value: r})
 	}

@@ -64,3 +64,47 @@ migration. Existing license/source pins and recording bytes remain unchanged.
 - [official Hooks reference](https://code.claude.com/docs/en/hooks#subagentstart)
 - [f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab, initialize forwarding](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/src/claude_agent_sdk/_internal/query.py)
 - [official Python SystemMessage reference](https://code.claude.com/docs/en/agent-sdk/python#systemmessage)
+
+## Optional child detail delivery
+
+`SessionOptions.ChildDetailPolicy` (also on runtime `Options`) is fixed at `Open`,
+including an explicit `ResumeID`. Empty and `ChildDetailPreserve` (`"preserve"`)
+keep existing delivery. `ChildDetailSuppress` (`"suppress"`) filters only confirmed
+child pure detail before admission to the same FIFO. Other values wrap
+`ErrInvalidInput` before starting a process. `OptionsFromTypes` leaves the policy
+empty and `Options.Types()` excludes this runtime setting.
+
+```go
+s, err := claude.Open(ctx, claude.SessionOptions{
+    ChildDetailPolicy: claude.ChildDetailSuppress,
+})
+```
+
+Membership and aliases still use CLI 2.1.258 `local_agent` task/tool evidence;
+`agent_id` or arbitrary `parent_tool_use_id` alone cannot identify a child.
+Complete parent knowledge is unnecessary. The native initialize still sends
+`forwardSubagentText:true`; filtering neither disables source output nor changes
+internal results-to-parent, history queries, token costs or the model configuration.
+
+The [delivery contract](../../harness/contracts/child-detail-delivery.md) defines
+this closed allowlist: assistant arrays containing only text/thinking/redacted
+thinking, and indexed `content_block_delta` with text/thinking/signature/input JSON
+deltas. Known message metadata and the four native token counters are accepted;
+unreviewed usage extensions, content string forms and empty block arrays are
+conservatively retained. Boundary events (including message stop), tool blocks,
+parent tool results, original approval/question handles, task/relationship/status
+facts, completion/failure and unknown/mixed fields stay intact, with original Raw
+bytes and order. No frames are split and no filtered placeholder is generated.
+Unknown versions/sources retain the existing delivery/quarantine behavior.
+
+This reduces reviewed pure detail delivery, and is **not a privacy or complete
+content removal guarantee**. Mixed assistant snapshots, system notifications and
+future fields may still carry child text/thinking/tool content. A root result
+still does not imply child/background completion. Synthetic public API F1–F5 and
+native authority/write-barrier regressions verify filtering; real child forwarding
+and parent consumption remain unverified, with no new recording or model call.
+
+Run `go run ./claude/examples/subagents-offline` from the repository root for both
+policies against the same embedded synthetic frames. The example launches only
+its own peer with a replacement environment; it has no installed-CLI/account
+fallback. Its two traces illustrate retained mixed content and task terminals.

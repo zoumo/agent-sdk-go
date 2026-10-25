@@ -100,95 +100,103 @@ func (c *heldPermissionAnswerContext) Done() <-chan struct{} {
 }
 
 func TestSessionPermissionConcurrentAnswersAndClose(t *testing.T) {
-	for _, closeFirst := range []bool{false, true} {
-		t.Run(map[bool]string{false: "answers", true: "close"}[closeFirst], func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "wire.jsonl")
-			s := openSessionFixture(t, func(o *SessionOptions) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
-			p := sessionPermission(t, s, "race", "Read", `{}`)
-			start := make(chan struct{})
-			results := make(chan error, 16)
-			var workers sync.WaitGroup
-			var answerCtx context.Context = context.Background()
-			var held *heldPermissionAnswerContext
-			var releaseOnce sync.Once
-			release := func() {
-				releaseOnce.Do(func() {
-					if held != nil {
-						close(held.release)
+	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) {
+			for _, closeFirst := range []bool{false, true} {
+				t.Run(map[bool]string{false: "answers", true: "close"}[closeFirst], func(t *testing.T) {
+					path := filepath.Join(t.TempDir(), "wire.jsonl")
+					s := openSessionFixture(t, func(o *SessionOptions) {
+						o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path)
+						o.ChildDetailPolicy = policy
+					})
+					p := sessionPermission(t, s, "race", "Read", `{}`)
+					start := make(chan struct{})
+					results := make(chan error, 16)
+					var workers sync.WaitGroup
+					var answerCtx context.Context = context.Background()
+					var held *heldPermissionAnswerContext
+					var releaseOnce sync.Once
+					release := func() {
+						releaseOnce.Do(func() {
+							if held != nil {
+								close(held.release)
+							}
+						})
 					}
-				})
-			}
-			t.Cleanup(release)
-			if closeFirst {
-				held = &heldPermissionAnswerContext{Context: context.Background(), entered: make(chan struct{}), release: make(chan struct{})}
-				answerCtx = held
-			}
-			for range 16 {
-				workers.Go(func() { <-start; results <- p.Deny(answerCtx, DenialOptions{Message: "declined"}) })
-			}
-			close(start)
-			workersDone := make(chan struct{})
-			go func() { workers.Wait(); close(workersDone) }()
-			t.Cleanup(func() {
-				release()
-				select {
-				case <-workersDone:
-				case <-time.After(3 * time.Second):
-					t.Error("answer workers did not settle after releasing caller barrier")
-				}
-			})
-			if closeFirst {
-				awaitSignal(t, held.entered)
-				closed := make(chan error, 1)
-				go func() { closed <- s.Close() }()
-				collected := false
-				t.Cleanup(func() {
-					release()
-					if !collected {
+					t.Cleanup(release)
+					if closeFirst {
+						held = &heldPermissionAnswerContext{Context: context.Background(), entered: make(chan struct{}), release: make(chan struct{})}
+						answerCtx = held
+					}
+					for range 16 {
+						workers.Go(func() { <-start; results <- p.Deny(answerCtx, DenialOptions{Message: "declined"}) })
+					}
+					close(start)
+					workersDone := make(chan struct{})
+					go func() { workers.Wait(); close(workersDone) }()
+					t.Cleanup(func() {
+						release()
 						select {
-						case <-closed:
+						case <-workersDone:
 						case <-time.After(3 * time.Second):
-							t.Error("Close did not settle after releasing caller barrier")
+							t.Error("answer workers did not settle after releasing caller barrier")
+						}
+					})
+					if closeFirst {
+						awaitSignal(t, held.entered)
+						closed := make(chan error, 1)
+						go func() { closed <- s.Close() }()
+						collected := false
+						t.Cleanup(func() {
+							release()
+							if !collected {
+								select {
+								case <-closed:
+								case <-time.After(3 * time.Second):
+									t.Error("Close did not settle after releasing caller barrier")
+								}
+							}
+						})
+						select {
+						case err := <-closed:
+							collected = true
+							require.NoError(t, err)
+						case <-time.After(3 * time.Second):
+							require.FailNow(t, "Close waited for reserved caller preparation")
+						}
+						release()
+					}
+					awaitSignal(t, workersDone)
+					close(results)
+					succeeded := 0
+					for err := range results {
+						if err == nil {
+							succeeded++
+						} else {
+							require.NotErrorIs(t, err, ErrUnknownOutcome, "no write can cross this explicit boundary")
+							if closeFirst {
+								require.True(t, errors.Is(err, ErrPermissionUsed) || errors.Is(err, ErrClosed), "%v", err)
+							} else {
+								require.ErrorIs(t, err, ErrPermissionUsed)
+							}
 						}
 					}
-				})
-				select {
-				case err := <-closed:
-					collected = true
-					require.NoError(t, err)
-				case <-time.After(3 * time.Second):
-					require.FailNow(t, "Close waited for reserved caller preparation")
-				}
-				release()
-			}
-			awaitSignal(t, workersDone)
-			close(results)
-			succeeded := 0
-			for err := range results {
-				if err == nil {
-					succeeded++
-				} else {
-					require.NotErrorIs(t, err, ErrUnknownOutcome, "no write can cross this explicit boundary")
+					want := 1
 					if closeFirst {
-						require.True(t, errors.Is(err, ErrPermissionUsed) || errors.Is(err, ErrClosed), "%v", err)
-					} else {
-						require.ErrorIs(t, err, ErrPermissionUsed)
+						want = 0
 					}
-				}
+					require.Equal(t, want, succeeded)
+					if !closeFirst {
+						// Native control acknowledgment is a peer-consumption barrier for
+						// the preceding complete response, not merely a local write result.
+						require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
+					}
+					require.Equal(t, want, len(permissionResponses(t, permissionTranscript(t, path))))
+					require.NoError(t, s.Close())
+					require.Error(t, p.Context().Err())
+				})
 			}
-			want := 1
-			if closeFirst {
-				want = 0
-			}
-			require.Equal(t, want, succeeded)
-			if !closeFirst {
-				// Native control acknowledgment is a peer-consumption barrier for
-				// the preceding complete response, not merely a local write result.
-				require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
-			}
-			require.Equal(t, want, len(permissionResponses(t, permissionTranscript(t, path))))
-			require.NoError(t, s.Close())
-			require.Error(t, p.Context().Err())
+
 		})
 	}
 }
@@ -253,22 +261,27 @@ func TestSessionPermissionWaitsWhileReaderContinues(t *testing.T) {
 }
 
 func TestSessionPermissionNotSentKeepsOriginalHandle(t *testing.T) {
-	s := openSessionFixture(t)
-	p := sessionPermission(t, s, "local-rejection", "Read", `{}`)
-	err := p.Approve(context.Background(), ApprovalOptions{ToolUseID: "override"})
-	var dispatch *DispatchError
-	require.ErrorAs(t, err, &dispatch)
-	require.Equal(t, NotSent, dispatch.State)
-	require.ErrorIs(t, err, ErrUnsupported)
-	require.NoError(t, p.Context().Err())
-	require.Error(t, p.Approve(nil, ApprovalOptions{}))
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
-	require.Equal(t, "init", sessionNative(t, s).Event.Subtype)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err = p.Approve(ctx, ApprovalOptions{})
-	require.ErrorIs(t, err, context.Canceled)
-	require.NoError(t, p.Deny(context.Background(), DenialOptions{Message: "later"}))
+	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) {
+			s := openSessionFixture(t, func(o *SessionOptions) { o.ChildDetailPolicy = policy })
+			p := sessionPermission(t, s, "local-rejection", "Read", `{}`)
+			err := p.Approve(context.Background(), ApprovalOptions{ToolUseID: "override"})
+			var dispatch *DispatchError
+			require.ErrorAs(t, err, &dispatch)
+			require.Equal(t, NotSent, dispatch.State)
+			require.ErrorIs(t, err, ErrUnsupported)
+			require.NoError(t, p.Context().Err())
+			require.Error(t, p.Approve(nil, ApprovalOptions{}))
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			require.Equal(t, "init", sessionNative(t, s).Event.Subtype)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			err = p.Approve(ctx, ApprovalOptions{})
+			require.ErrorIs(t, err, context.Canceled)
+			require.NoError(t, p.Deny(context.Background(), DenialOptions{Message: "later"}))
+
+		})
+	}
 }
 
 func TestSessionQuestionRejectsUnverifiedAnswersWithoutConsumingHandle(t *testing.T) {

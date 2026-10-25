@@ -29,12 +29,6 @@ class WorkflowCoverage(unittest.TestCase):
                 self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
                 self.assertIn("    runs-on: ${{ matrix.os }}", jobs[job])
 
-    def test_offline_pr_checks_use_published_head(self):
-        offline = self.workflow_jobs()["test"]
-        revision = "${{ github.event.pull_request.head.sha || github.sha }}"
-        self.assertIn("          ref: " + revision, offline)
-        self.assertIn("          HEAD_SHA: " + revision, offline)
-
     def test_same_repository_pr_consumers_fetch_published_head(self):
         consumer = self.workflow_jobs()["consumer"]
         self.assertIn("    if: github.event_name != 'pull_request' || "

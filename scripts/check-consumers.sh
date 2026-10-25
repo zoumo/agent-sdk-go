@@ -155,4 +155,5 @@ export SDK_MOCK_CLAUDE_BIN="$consumer_dir/bin/mock-claude"
 # Downloads are complete: consumer/example compilation and mock checks now run offline.
 GOPROXY=off GOSUMDB=off go test -count=1 ./...
 GOPROXY=off GOSUMDB=off go run ./consumers/codex-public
+GOPROXY=off GOSUMDB=off go run ./examples/claude-metadata
 printf 'External consumer verified pushed commit %s\n' "$revision"

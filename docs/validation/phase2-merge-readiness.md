@@ -124,3 +124,31 @@ This branch refreshes and preserves those documents, without implementing the
 new child-flow design or changing live child routes.
 
 Final validation, independent reviews and publication results follow below.
+
+## Independent review correction
+
+Initial review of `6fc6f57...a1e6709`: Spec found 0 deviations and independently
+confirmed that the faulty component was the test oracle, not the production
+state machines. Exact counts, concurrent one-shot coverage and in-flight
+uncertainty remain covered. Standards found one failure-cleanup issue: a held
+caller test synchronously called Close, so a Close regression waiting for that
+caller could trap the test before cleanup. Close now runs in a goroutine with a
+bounded assertion, and failure cleanup releases the caller barrier and attempts
+bounded collection of both Close and all answer workers. Strict zero/one counts,
+no-unknown prewrite checks and all original causes are unchanged. The updated
+Claude race check again passed 100 repetitions.
+
+The parent supplied current main CI evidence: run
+[40175585836](https://github.com/zoumo/agent-sdk-go/actions/runs/40175585836),
+commit 6b00af9, passed Linux offline and both fetched-consumer jobs, but its
+[macOS offline job](https://github.com/zoumo/agent-sdk-go/actions/runs/40175585836/job/121115416409)
+failed exactly the Claude concurrent Close clean-result assertion diagnosed
+above. This is a real current-main CI failure and remains distinct from the
+previous original-baseline 4/4 successful run. The fix covers both providers.
+
+The GitHub connector exposes workflow reads but no callable dispatch action.
+The installed gh CLI's harmless workflow-list request was blocked with Forbidden
+before any dispatch attempt. Thus this context cannot trigger the final branch's
+cross-platform manual run through those available paths. No PR or CI settings
+change is substituted. A parent/user with workflow-dispatch access can select the
+final work branch in SDK checks; a PR is not required by the workflow source.

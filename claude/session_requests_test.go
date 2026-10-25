@@ -127,12 +127,41 @@ func TestSessionPermissionConcurrentAnswersAndClose(t *testing.T) {
 				workers.Go(func() { <-start; results <- p.Deny(answerCtx, DenialOptions{Message: "declined"}) })
 			}
 			close(start)
+			workersDone := make(chan struct{})
+			go func() { workers.Wait(); close(workersDone) }()
+			t.Cleanup(func() {
+				release()
+				select {
+				case <-workersDone:
+				case <-time.After(3 * time.Second):
+					t.Error("answer workers did not settle after releasing caller barrier")
+				}
+			})
 			if closeFirst {
 				awaitSignal(t, held.entered)
-				require.NoError(t, s.Close()) // Must not wait for reserved caller preparation.
+				closed := make(chan error, 1)
+				go func() { closed <- s.Close() }()
+				collected := false
+				t.Cleanup(func() {
+					release()
+					if !collected {
+						select {
+						case <-closed:
+						case <-time.After(3 * time.Second):
+							t.Error("Close did not settle after releasing caller barrier")
+						}
+					}
+				})
+				select {
+				case err := <-closed:
+					collected = true
+					require.NoError(t, err)
+				case <-time.After(3 * time.Second):
+					require.FailNow(t, "Close waited for reserved caller preparation")
+				}
 				release()
 			}
-			workers.Wait()
+			awaitSignal(t, workersDone)
 			close(results)
 			succeeded := 0
 			for err := range results {

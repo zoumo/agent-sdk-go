@@ -124,7 +124,7 @@ func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err e
 	}
 	for _, path := range []string{p.RawDir, p.Project, p.IsolatedHome, p.Ledger} {
 		for part := filepath.Dir(path); part != "/"; part = filepath.Dir(part) {
-			if _, e := os.Lstat(filepath.Join(part, ".git")); e == nil {
+			if marker, e := os.Lstat(filepath.Join(part, ".git")); e == nil && (!marker.IsDir() || hasGitHead(filepath.Join(part, ".git", "HEAD"))) {
 				return p, errors.New("capture/profile paths must be outside Git worktrees")
 			}
 		}
@@ -201,3 +201,5 @@ func validateSceneConfig(p LaunchProfile) error {
 	}
 	return nil
 }
+
+func hasGitHead(path string) bool { _, err := os.Lstat(path); return err == nil }

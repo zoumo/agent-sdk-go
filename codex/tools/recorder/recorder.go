@@ -1,119 +1,208 @@
-// record is an opt-in maintenance tool. Default tests never invoke Codex.
+// Package recorder contains opt-in recording preflight and durable accounting.
+// Offline scenario drivers live in codex/tools/replay. No live authority is
+// inferred from an opt-in, historical marker or successful synthetic test.
 package recorder
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
+	"io"
 	"os"
-	"time"
+	"path/filepath"
+	"runtime/debug"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
-	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-const s1 = "Synthetic fixture task. Use fixture_read exactly once on numbers.txt. Add the two integers. Use fixture_write exactly once on summary.txt with text exactly sum=42 followed by a newline. Then report the sum briefly. Do not use other tools or spawn agents."
-const s2 = "Synthetic interaction fixture. Use request_user_input exactly once to ask which color to use: Amber or Indigo. Give exactly those two choices. After receiving the answer, report the chosen color briefly and finish. Do not use other tools or spawn agents."
+var ErrFinancialGate = errors.New("Codex recording blocked: no verified independent dollar/token/provider-request/retry enforcement; #11 requires separate budget and isolation approval")
 
-// Run executes the explicitly guarded recorder using the process arguments and environment.
+// LaunchProfile contains reviewed nonsecret values only. It never discovers
+// user configuration, hooks, authentication, previous captures or conversation
+// storage. A profile assertion is not proof of isolation or financial control.
+type LaunchProfile struct {
+	Version         int                      `json:"version"`
+	Scene           string                   `json:"scene"`
+	CLI             string                   `json:"cli"`
+	CLIVersion      string                   `json:"cliVersion"`
+	CLISHA256       string                   `json:"cliSHA256"`
+	SDKRevision     string                   `json:"sdkRevision"`
+	IsolatedHome    string                   `json:"isolatedHome"`
+	Project         string                   `json:"project"`
+	RawDir          string                   `json:"rawDir"`
+	Ledger          string                   `json:"ledger"`
+	IsolationReview string                   `json:"isolationReview"`
+	Model           string                   `json:"model"`
+	Effort          string                   `json:"effort"`
+	SavedRootID     string                   `json:"savedRootId"`
+	NativePolicy    []recording.ExactRequest `json:"nativePolicy"`
+}
+
+// Run deliberately stops before spawning even a proxy. The old S1/S2 marker
+// launcher cannot supply the aggregate or financial guarantees required by #6.
+// The scenario/peer/accounting support is usable offline; enabling a future
+// financial adapter and approving a run are separate work, never a boolean here.
 func Run() error {
-	if len(os.Args) != 3 {
-		return errors.New("usage: record --record|--proxy private-config.json")
+	if len(os.Args) != 3 || (os.Args[1] != "--record" && os.Args[1] != "--private-proxy") {
+		return errors.New("usage: record --record reviewed-nonsecret-profile.json; direct --proxy disabled")
 	}
-	mode := ""
-	if os.Args[1] == "--record" || os.Args[1] == "--proxy" {
-		mode = "record"
-	}
-	if err := recording.Guard(mode); err != nil {
+	if err := recording.Guard("record"); err != nil {
 		return err
 	}
 	b, err := os.ReadFile(os.Args[2])
 	if err != nil {
 		return err
 	}
-	var cfg recording.ProxyConfig
-	if err = json.Unmarshal(b, &cfg); err != nil {
-		return err
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return errors.New("unproven recorder build")
 	}
-	if cfg.Seconds != 120 || cfg.Executable == "" || cfg.Dir == "" || cfg.RawDir == "" {
-		return errors.New("missing bounded configuration")
-	}
-	cfg.Env = runtimeEnvironment()
-	if os.Args[1] == "--proxy" {
-		_, err = recording.Proxy(cfg, os.Stdin, os.Stdout)
-		return err
-	}
-	// An exclusive per-story marker counts even startup failure. No resume/retry.
-	marker, err := os.OpenFile(cfg.RawDir+"/attempted", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return errors.New("story already attempted")
-	}
-	marker.Close()
-	story := os.Getenv("CODEX_RECORD_STORY")
-	prompt := s1
-	if story == "s2" {
-		prompt = s2
-	} else if story != "s1" {
-		return errors.New("only s1/s2 supported; subagent scenario blocked")
-	}
-	if err = os.WriteFile(cfg.Dir+"/numbers.txt", []byte("17\n25\n"), 0600); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-	executable, err := os.Executable()
+	p, err := ValidateProfile(bytes.NewReader(b), info)
 	if err != nil {
 		return err
 	}
-	init := types.InitializeParams{ClientInfo: types.ClientInfo{Name: "bounded-recording", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}
-	start := time.Now()
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"--proxy", os.Args[2]}, Dir: cfg.Dir, Env: append(runtimeEnvironment(), "SDK_REAL_AGENT_E2E=1"), Initialize: init, Limits: codex.Limits{EventQueue: 2048, CallTimeout: 120 * time.Second, RequestTimeout: 15 * time.Second}})
-	if err != nil {
+	if err = financialGate(); err != nil {
 		return err
 	}
-	sandbox := types.SandboxModeReadOnly
-	thread := types.ThreadStartParams{Cwd: types.Some(cfg.Dir), Ephemeral: types.Some(true), Environments: types.Some([]types.TurnEnvironmentParams{}), Sandbox: types.Some(sandbox), RuntimeWorkspaceRoots: types.Some([]types.AbsolutePathBuf{types.AbsolutePathBuf(cfg.Dir)})}
-	if story == "s1" {
-		var tools []types.DynamicToolSpec
-		if err = json.Unmarshal([]byte(`[{"type":"function","name":"fixture_read","description":"Read the synthetic numbers.txt file only. One call allowed.","inputSchema":{"type":"object","properties":{"path":{"type":"string","enum":["numbers.txt"]}},"required":["path"],"additionalProperties":false}},{"type":"function","name":"fixture_write","description":"Write synthetic summary.txt once, only sum=42 followed by a newline.","inputSchema":{"type":"object","properties":{"path":{"type":"string","enum":["summary.txt"]},"text":{"type":"string","enum":["sum=42\n"]}},"required":["path","text"],"additionalProperties":false}}]`), &tools); err != nil {
-			return err
-		}
-		thread.DynamicTools = types.Some(tools)
+	if os.Args[1] == "--private-proxy" {
+		return proxyProfile(p)
 	}
-	var input []types.UserInput
-	raw, _ := json.Marshal([]map[string]any{{"type": "text", "text": prompt, "text_elements": []any{}}})
-	if err = json.Unmarshal(raw, &input); err != nil {
-		return err
-	}
-	turn := types.TurnStartParams{Input: input, Environments: types.Some([]types.TurnEnvironmentParams{})}
-	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
-	if err != nil {
-		_ = c.Close()
-		return err
-	}
-	result, sessionErr := recording.RunSession(ctx, session, turn, &recording.Handler{Root: cfg.Dir, Story: story})
-	closeErr := errors.Join(c.Close(), session.Close())
-	h := sha256.Sum256([]byte(prompt))
-	metadata := map[string]any{"root": cfg.Dir, "home": os.Getenv("CODEX_RECORD_HOME"), "promptSHA256": hex.EncodeToString(h[:]), "cliSHA256": os.Getenv("CODEX_RECORD_CLI_SHA256"), "sdkCommit": os.Getenv("CODEX_RECORD_SDK_SHA"), "milliseconds": time.Since(start).Milliseconds(), "completed": result.Completed, "tools": result.Tools, "questions": result.Questions, "observations": result.Observations, "sessionError": sessionErr != nil, "closeError": closeErr != nil}
-	raw, _ = json.Marshal(metadata)
-	if err = os.WriteFile(cfg.RawDir+"/metadata.private.json", raw, 0600); err != nil {
-		return err
-	}
-	if sessionErr != nil {
-		return errors.New("recorded session failed; inspect private metadata without publishing raw diagnostics")
-	}
-	return closeErr
+	_, err = CaptureWithPeer(context.Background(), p, nativeOpener(os.Args[2]))
+	return err
 }
 
-func runtimeEnvironment() []string {
-	env := []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-	for _, key := range []string{"HOME", "CODEX_HOME", "TMPDIR", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR"} {
-		if v, ok := os.LookupEnv(key); ok {
-			env = append(env, key+"="+v)
+// ValidateProfile performs only offline validation; it grants no spawn authority.
+func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err error) {
+	b, err := io.ReadAll(io.LimitReader(r, 16385))
+	if err != nil {
+		return p, err
+	}
+	if len(b) > 16384 {
+		return p, errors.New("profile byte limit")
+	}
+	if err = decodeLedger(b, &p); err != nil {
+		return p, err
+	}
+	if p.Version != 1 || p.CLIVersion != "0.162.1" || p.IsolationReview == "" {
+		return p, errors.New("unreviewed profile or unsupported pinned CLI version")
+	}
+	if !validScene(p.Scene) {
+		return p, errors.New("unsupported scene; children disabled")
+	}
+	if err = validateSceneConfig(p); err != nil {
+		return p, err
+	}
+	revision, clean := "", false
+	if info != nil {
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" {
+				revision = s.Value
+			}
+			if s.Key == "vcs.modified" {
+				clean = s.Value == "false"
+			}
 		}
 	}
-	return env
+	if len(revision) != 40 || p.SDKRevision != revision || !clean {
+		return p, errors.New("dirty or unproven recorder revision")
+	}
+	for _, path := range []string{p.CLI, p.IsolatedHome, p.Project, p.RawDir, p.Ledger} {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+			return p, errors.New("absolute isolated paths required")
+		}
+		for part := path; part != "/"; part = filepath.Dir(part) {
+			st, e := os.Lstat(part)
+			if e != nil {
+				return p, e
+			}
+			if st.Mode()&os.ModeSymlink != 0 {
+				return p, errors.New("profile symlink refused")
+			}
+		}
+	}
+	for _, path := range []string{p.RawDir, p.Project, p.IsolatedHome, p.Ledger} {
+		for part := filepath.Dir(path); part != "/"; part = filepath.Dir(part) {
+			if marker, e := os.Lstat(filepath.Join(part, ".git")); e == nil && (!marker.IsDir() || hasGitHead(filepath.Join(part, ".git", "HEAD"))) {
+				return p, errors.New("capture/profile paths must be outside Git worktrees")
+			}
+		}
+	}
+	for _, dir := range []string{p.IsolatedHome, p.Project, p.RawDir} {
+		st, e := os.Stat(dir)
+		if e != nil {
+			return p, e
+		}
+		if !st.IsDir() || st.Mode().Perm() != 0700 {
+			return p, errors.New("private isolated directories required")
+		}
+	}
+	paths := []string{p.IsolatedHome, p.Project, p.RawDir, p.Ledger}
+	for i, a := range paths {
+		for _, b := range paths[i+1:] {
+			rel, _ := filepath.Rel(a, b)
+			back, _ := filepath.Rel(b, a)
+			if rel == "." || (rel != ".." && !bytes.HasPrefix([]byte(rel), []byte("../"))) || (back != ".." && !bytes.HasPrefix([]byte(back), []byte("../"))) {
+				return p, errors.New("profile paths overlap")
+			}
+		}
+	}
+	cli, e := os.Stat(p.CLI)
+	if e != nil {
+		return p, e
+	}
+	if !cli.Mode().IsRegular() || cli.Mode().Perm()&0111 == 0 {
+		return p, errors.New("CLI must be regular executable")
+	}
+	f, e := os.Open(p.CLI)
+	if e != nil {
+		return p, e
+	}
+	defer f.Close()
+	hash := sha256.New()
+	if _, e = io.Copy(hash, f); e != nil {
+		return p, e
+	}
+	if hex.EncodeToString(hash.Sum(nil)) != p.CLISHA256 {
+		return p, errors.New("CLI digest mismatch")
+	}
+	return p, nil
 }
+
+func financialGate() error { return ErrFinancialGate }
+
+func validScene(scene string) bool {
+	switch scene {
+	case "s1", "s2", "r1", "r2", "r3", "r4":
+		return true
+	}
+	return false
+}
+
+func validateSceneConfig(p LaunchProfile) error {
+	switch p.Scene {
+	case "r1":
+		if p.Model == "" || p.Effort != "high" {
+			return errors.New("r1 requires reviewed model and fixed high native effort")
+		}
+	case "r2":
+		if p.Model == "" {
+			return errors.New("r2 requires reviewed model and finite exact native policy")
+		}
+		if err := recording.ValidateR2Policy(p.NativePolicy); err != nil {
+			return err
+		}
+	case "r3":
+		if p.Model == "" {
+			return errors.New("r3 requires reviewed model")
+		}
+	case "r4":
+		if p.SavedRootID == "" {
+			return errors.New("r4 requires fresh synthetic saved root identity")
+		}
+	}
+	return nil
+}
+
+func hasGitHead(path string) bool { _, err := os.Lstat(path); return err == nil }

@@ -13,6 +13,9 @@ func (s *Session) acceptLocked(value Received) {
 	if s.closed {
 		return
 	}
+	if s.suppressChildDetailLocked(value) {
+		return
+	}
 	if err := s.queue.Push(value, int64(len(value.Raw))); err != nil {
 		s.finishLocked(err)
 	}

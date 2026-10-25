@@ -51,6 +51,25 @@ followed by cancellation, timeout or Close remains `OutcomeUnknown` and is never
 retried automatically. Validation is synthetic/offline; no real configuration
 effect, active-turn switch, or child inheritance is certified.
 
+## Optional child detail delivery
+
+To omit reviewed pure child text, reasoning and tool progress from `Receive`, set
+`SessionOptions.ChildDetailPolicy: codex.ChildDetailSuppress` when calling `Open`.
+The zero value and `codex.ChildDetailPreserve` retain default delivery. Other
+values wrap `ErrInvalidInput` before process startup or RPC. The policy is fixed
+per Session, including subsequent submissions and confirmed child members;
+shared Client sessions select independently.
+
+Filtering leaves native source output, parent tool results, relationships,
+approvals and lifecycle facts intact. Complete items and mixed/unknown frames
+remain visible, with their original bytes. It is not content redaction or a
+token-cost control. Low-level `Client.ResumeThread` is unchanged; no Session
+resume constructor is added. See the exact
+[method and shape contract](../harness/contracts/child-detail-delivery.md).
+`CommonStoriesSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
+public API delivery and original peer bytes; real child interoperability remains
+unverified.
+
 ## Query existing descendants
 
 `Session.ListSubagents(ctx, SubagentQuery{})` reads bounded native pages of stored

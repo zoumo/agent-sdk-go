@@ -22,7 +22,7 @@ class Publication(unittest.TestCase):
         self.assertEqual(clean[4]['wire']['result']['thread']['id'], clean[5]['wire']['params']['threadId'])
         self.assertTrue(ids)
 
-    def test_live_guard_and_user_hook_identity(self):
+    def test_live_guard_without_private_hook_discovery(self):
         spec = importlib.util.spec_from_file_location('record_real', pathlib.Path(__file__).with_name('record_real.py'))
         runner = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(runner)
@@ -30,8 +30,10 @@ class Publication(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runner.guard(mode, env)
         runner.guard(True, {'SDK_REAL_AGENT_E2E': '1'})
-        states = runner.hook_states(pathlib.Path('/synthetic'), {'hooks': {'PreToolUse': [{'hooks': [{'type': 'command'}]}]}})
-        self.assertEqual(states, {'/synthetic/config.toml:pre_tool_use:0:0': {'enabled': False}})
+        self.assertFalse(hasattr(runner, 'hook_states'))
+        source = pathlib.Path(runner.__file__).read_text()
+        self.assertNotIn('config.toml', source)
+        self.assertNotIn('pathlib.Path.home()', source)
 
     def test_secret_canaries(self):
         for value in [{'authorization': 'x'}, {'headers': {}}, {'text': 'sk-canary012345678901234'}, {'text': '/Users/canary/private'}, {'text': 'user@example.invalid'}, {'text': 'Bearer canaryABC'}]:

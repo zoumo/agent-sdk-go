@@ -19,14 +19,19 @@ type Ledger struct {
 	identity os.FileInfo
 }
 type ledgerEntry struct {
-	Sequence int    `json:"sequence"`
-	Scene    string `json:"scene"`
-	Action   string `json:"action"`
-	Outcome  string `json:"outcome,omitempty"`
+	Sequence int          `json:"sequence"`
+	Scene    string       `json:"scene"`
+	Action   string       `json:"action"`
+	Outcome  string       `json:"outcome,omitempty"`
+	Children *ChildLimits `json:"children,omitempty"`
+	Child    string       `json:"child,omitempty"`
+	Parent   string       `json:"parent,omitempty"`
 }
 type attemptState struct {
-	turns   int
-	outcome string
+	turns    int
+	outcome  string
+	limits   *ChildLimits
+	children map[string]childState
 }
 
 // OpenLedger accepts only a canonical private directory. Legacy story markers
@@ -76,6 +81,10 @@ func (l *Ledger) Finish(scene string, success bool) error {
 	return l.append(scene, "finish", outcome)
 }
 func (l *Ledger) append(scene, action, outcome string) error {
+	return l.appendEntry(ledgerEntry{Scene: scene, Action: action, Outcome: outcome})
+}
+func (l *Ledger) appendEntry(next ledgerEntry) error {
+	scene := next.Scene
 	if _, err := Plan(scene); err != nil {
 		return err
 	}
@@ -143,7 +152,7 @@ func (l *Ledger) append(scene, action, outcome string) error {
 			return fmt.Errorf("torn ledger write")
 		}
 	}
-	next := ledgerEntry{Sequence: count + 1, Scene: scene, Action: action, Outcome: outcome}
+	next.Sequence = count + 1
 	if err := applyEntry(state, next); err != nil {
 		return err
 	}
@@ -168,6 +177,29 @@ func applyEntry(state map[string]attemptState, e ledgerEntry) error {
 		return err
 	}
 	s, exists := state[e.Scene]
+	if e.Action == "child-policy" || e.Action == "child-attempt" || e.Action == "child-finish" {
+		if !exists || s.outcome != "" {
+			return fmt.Errorf("child operation requires active reserved root")
+		}
+		attempts := 0
+		for _, previous := range state {
+			attempts += len(previous.children)
+			if e.Children != nil && previous.limits != nil && e.Children.TotalAttempts != previous.limits.TotalAttempts {
+				return fmt.Errorf("aggregate child policy cannot change between roots")
+			}
+		}
+		if e.Action == "child-attempt" && s.limits != nil && attempts >= s.limits.TotalAttempts {
+			return fmt.Errorf("aggregate child attempt budget exhausted")
+		}
+		if err := applyChildEntry(&s, e); err != nil {
+			return err
+		}
+		state[e.Scene] = s
+		return nil
+	}
+	if e.Children != nil || e.Child != "" || e.Parent != "" {
+		return fmt.Errorf("child data on root record")
+	}
 	switch e.Action {
 	case "reserve":
 		if exists || e.Outcome != "" {
@@ -195,6 +227,13 @@ func applyEntry(state map[string]attemptState, e ledgerEntry) error {
 	case "finish":
 		if !exists || s.outcome != "" || (e.Outcome != "failed" && e.Outcome != "succeeded") || (e.Outcome == "succeeded" && s.turns != plan.Turns) {
 			return fmt.Errorf("invalid attempt outcome")
+		}
+		if e.Outcome == "succeeded" {
+			for _, child := range s.children {
+				if child.outcome != "succeeded" {
+					return fmt.Errorf("child failed or background observation incomplete")
+				}
+			}
 		}
 		s.outcome = e.Outcome
 		state[e.Scene] = s

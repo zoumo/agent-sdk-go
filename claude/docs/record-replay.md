@@ -141,6 +141,11 @@ not ignored. Originals and manifest hashes are unchanged.
 
 ## Source revision for new recordings
 
+The [#20 child-tooling handoff](../../docs/validation/issue-20.md) adds offline
+durable cumulative child accounting, private saved-file snapshot preparation and
+explicit child publication quarantine. Native recursive enforcement is still
+unproven; S3 and #22/P2.8 live capture remain blocked. No child budget is approved.
+
 The recorder reads Go build VCS metadata only when the main module is the SDK before attempting a recording. A clean
 build records its full revision with `sdk_revision_source=go-build-vcs` and
 `sdk_modified=false`; a modified checkout is rejected. When VCS metadata is absent,

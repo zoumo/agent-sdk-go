@@ -104,8 +104,14 @@ func Drive(ctx context.Context, s *claude.Session, scene string, w *Workspace, l
 				}
 			}
 		}
-		if native.Subtype == "hook_started" || native.Subtype == "hook_response" || native.Subtype == "task_started" || native.Subtype == "task_progress" || (native.ParentToolUseID != nil && *native.ParentToolUseID != "") {
-			return fmt.Errorf("startup hook/child event violates root isolation")
+		if native.AgentID != nil && *native.AgentID != "" || native.ParentToolUseID != nil && *native.ParentToolUseID != "" {
+			return ErrChildEnforcement
+		}
+		switch native.Subtype {
+		case "task_started", "task_progress", "task_updated", "task_notification", "background_tasks_changed":
+			return ErrChildEnforcement
+		case "hook_started", "hook_response":
+			return ErrPolicyIsolation
 		}
 		if native.System != nil && native.Subtype == "init" && native.System.ClaudeCodeVersion != CLIVersion {
 			return fmt.Errorf("unreviewed native CLI version")
@@ -218,7 +224,14 @@ func (p *scenePolicy) answer(handle *claude.PermissionRequest) error {
 	answer := claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: "outside exact synthetic story policy"}
 	matched := false
 	var input map[string]any
-	if json.Unmarshal(handle.Input(), &input) == nil {
+	var metadata map[string]json.RawMessage
+	rootOnly := json.Unmarshal(handle.Raw(), &metadata) == nil
+	for _, key := range []string{"agent_id", "agentId", "parent_tool_use_id", "task_id", "parent_task_id"} {
+		if _, present := metadata[key]; present {
+			rootOnly = false // Unknown attribution cannot widen the root allowlist.
+		}
+	}
+	if rootOnly && json.Unmarshal(handle.Input(), &input) == nil {
 		path, _ := input["file_path"].(string)
 		if (p.scene == "s1" || (p.scene == "r2" && p.turn == 0)) && handle.ToolName() == "Read" && !p.read && len(input) == 1 && transcript.SafeFile(p.project, path, "numbers.txt") {
 			p.read, matched = true, true

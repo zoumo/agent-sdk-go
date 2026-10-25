@@ -14,6 +14,7 @@ type Workspace struct {
 	Root, Project, Config, Home, Temp string
 	owned                             string
 	identity                          os.FileInfo
+	configIdentity                    os.FileInfo
 }
 
 func PrepareWorkspace(path, scene string) (_ *Workspace, err error) {
@@ -51,6 +52,10 @@ func PrepareWorkspace(path, scene string) (_ *Workspace, err error) {
 		if err = os.Mkdir(dir, 0700); err != nil {
 			return nil, err
 		}
+	}
+	w.configIdentity, err = os.Lstat(w.Config)
+	if err != nil {
+		return nil, err
 	}
 	err = os.WriteFile(filepath.Join(w.Project, "numbers.txt"), []byte("7\n11\n"), 0600)
 	if err != nil {

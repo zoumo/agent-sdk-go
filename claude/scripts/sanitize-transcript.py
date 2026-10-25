@@ -26,6 +26,13 @@ def publish(raw,root,cli_version=SUPPORTED_VERSION):
         if isinstance(v,dict):
             if 'claude_code_version' in v and v['claude_code_version'] != cli_version:
                 raise ValueError('native source version mismatch quarantined')
+            # The root allowlist is not a reviewed child/storage schema. Keep
+            # raw task/alias/permission material private until the child profile
+            # has independent per-version publication and equality review.
+            if v.get('subtype') in ('task_started', 'task_progress', 'task_updated', 'task_notification', 'background_tasks_changed') or any(
+                v.get(key) not in (None, '') for key in ('agent_id', 'agentId', 'parent_tool_use_id', 'parent_task_id', 'parentAgentId')
+            ):
+                raise ValueError('unreviewed child publication profile quarantined')
             for k,x in v.items():
                 if k in IDKEYS and isinstance(x,(str,int)) and x!='':
                     key=(type(x).__name__,x)

@@ -4,7 +4,10 @@ Follow-up base: `6fc6f57d18fd8c3872506bdc90f772b530652b55` on
 `phase2/history-query-integration`. Scope: remove actual merge blockers under the
 existing [Session interfaces](../../harness/modules/native-session/interfaces.md)
 and [testing rules](../../harness/testing.md), without new runtime features.
-The local short spec and ticket are in `.scratch/phase2-merge-readiness/`.
+The short spec and ticket were local scratch artifacts. The project root scratch
+directory has since been removed after a verified repository-external backup;
+the cleanup handoff records its location and checksum. This report retains the
+published specification and evidence; the backup is not a repository asset.
 The [history integration report](history-query-integration.md) retains all earlier
 failures and exact input/publication evidence. They are not rewritten as passes.
 
@@ -227,15 +230,17 @@ full race: `fdef2f76e1f103b3460352679a951fc64c695ca115ff951947383aa2b3f3b8d5`;
 Codex ordered race100: `352e0cfc43f205916f1fb3e9edde3bb1219e41cc1d647e30e5a0dfe6ed4e3999`;
 Claude cleanup race100: `97b4571bd2792511780dd8a42a3d101efb19f15cf8680ffd0d963d699e75dfc2`.
 All logs, the separate short spec/ticket, before/after checks and publication
-receipt remain in `.scratch/phase2-merge-readiness/`. They contain synthetic
-protocol/test results, not real session material or credentials.
+receipt were retained locally under the historical `phase2-merge-readiness`
+scratch feature and are now covered by the verified cleanup backup. They contain
+synthetic protocol/test results, not real session material or credentials.
 
 ## macOS 26 matrix follow-up
 
 Base: `e922c0b81f39b897e3c0a70e72157fdb09c88014`.
 The user explicitly requested retaining macOS 15 and adding macOS 26 to both
-Offline and External consumer coverage. Ticket/spec are recorded separately in
-`.scratch/phase2-merge-readiness/issues/02-macos26-matrix.md` and spec.md.
+Offline and External consumer coverage. The separate local ticket was named
+`02-macos26-matrix.md`; it and its spec are in the cleanup backup, rather than
+the current tree.
 
 Both existing ci.yml matrices now declare `ubuntu-24.04`, `macos-15`, `macos-26`.
 This expands main push/manual dispatch to **six jobs**: three Offline and three
@@ -277,8 +282,8 @@ reached the S2 recorded-replay example and returned OutcomeUnknown +
 ErrRequestResolved; full race failed
 TestRecordedManagedIntegration/s2/repetition-3 in codex/tools/replay. These failed
 checks are retained, not marked green. The matrix commit changed no Go code.
-Ticket `.scratch/phase2-merge-readiness/issues/03-recorded-replay-answer-boundary.md`
-records the narrowly scoped follow-up.
+The historical local ticket `03-recorded-replay-answer-boundary.md` recorded
+the narrowly scoped follow-up and is retained in the cleanup backup.
 
 The strict recorded peer validated the client response, then immediately emitted
 the next recorded native resolution. That signal could precede the local Answer

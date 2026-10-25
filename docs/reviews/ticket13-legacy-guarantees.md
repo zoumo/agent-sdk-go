@@ -7,8 +7,9 @@ This audits removed runtime seams and test bodies against the
 [Session design](../../harness/modules/native-session/design.md),
 [interfaces](../../harness/modules/native-session/interfaces.md),
 [event delivery](../../harness/contracts/event-delivery.md), and
-history (removed Load design). The coordinator inventory is
-`.scratch/session-refactor/legacy-regression-inventory.md`.
+history (removed Load design). The coordinator inventory was a local scratch
+artifact, historically named `session-refactor/legacy-regression-inventory.md`.
+It is not shipped in the current tree; this report retains the published audit.
 
 “Public” means the retained guarantee runs through Open/Load/Submit/Receive and
 original native answer handles. “Mechanical” means an independent codec or queue/

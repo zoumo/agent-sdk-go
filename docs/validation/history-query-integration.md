@@ -92,8 +92,10 @@ mise exec -- bash claude/scripts/check-managed-consumer.sh FULL_PUSHED_SHA
 ```
 
 Final full-check, independent-review and publication outcomes are recorded below
-once those operations complete. Local logs are retained under the ignored
-`.scratch/history-query-phase2/validation/` directory.
+once those operations complete. Local logs were retained under the historical
+`history-query-phase2` scratch feature. The root scratch directory has since been
+removed after a verified repository-external backup; the cleanup handoff records
+its location and checksum. These local logs are not shipped in the current tree.
 
 ## Subsequent real-agent test entry points
 

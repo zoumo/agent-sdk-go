@@ -1,4 +1,4 @@
-.scratch/
+/.scratch/
 *.test
 coverage.out
 __pycache__/

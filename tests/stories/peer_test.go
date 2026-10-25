@@ -23,6 +23,9 @@ func TestMain(m *testing.M) {
 // This self-reexecuting peer understands only fixture traffic. It never opens a
 // network connection, loads account configuration, or starts a native agent.
 func peer(provider, story string) error {
+	if provider == "codex" && story == "child-detail" {
+		return childDetailPeer()
+	}
 	if story == "US-014" && provider == "codex" {
 		return historyQueryStoryPeer()
 	}

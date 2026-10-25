@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -20,6 +21,8 @@ type SessionOptions struct {
 	Client *Client
 	Stdio  *StdioOptions
 	Thread types.ThreadStartParams
+	// ChildDetailPolicy fixes optional confirmed-child progress delivery for this Session.
+	ChildDetailPolicy ChildDetailPolicy
 	// MaxMembers bounds observation identities independently of parent knowledge.
 	MaxMembers int
 	// MaxParentDepth bounds parent knowledge, never membership eligibility.
@@ -56,23 +59,27 @@ type InterruptOptions struct{ TurnID string }
 // Session owns main identity, admission and a single FIFO. All mutable state
 // except cleanupOnce/cleanupErr is protected by the connection mutex.
 type Session struct {
-	startRaw    json.RawMessage
-	client      *Client
-	root        string
-	owned       bool
-	queue       queue.Queue[Received]
-	done        <-chan struct{}
-	closed      bool
-	cause       error
-	cleanupOnce sync.Once
-	cleanupErr  error
-	cancel      context.CancelFunc
-	members     map[string]struct{}
-	parents     *lineage.Graph[string]
-	maxMembers  int
+	startRaw          json.RawMessage
+	client            *Client
+	root              string
+	owned             bool
+	queue             queue.Queue[Received]
+	done              <-chan struct{}
+	closed            bool
+	cause             error
+	cleanupOnce       sync.Once
+	cleanupErr        error
+	cancel            context.CancelFunc
+	members           map[string]struct{}
+	parents           *lineage.Graph[string]
+	maxMembers        int
+	childDetailPolicy ChildDetailPolicy
 }
 
 func Open(ctx context.Context, options SessionOptions) (*Session, error) {
+	if options.ChildDetailPolicy != "" && options.ChildDetailPolicy != ChildDetailPreserve && options.ChildDetailPolicy != ChildDetailSuppress {
+		return nil, fmt.Errorf("%w: unknown child detail policy", ErrInvalidInput)
+	}
 	if ctx == nil {
 		return nil, errors.New("codex: nil context")
 	}
@@ -118,7 +125,7 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	}
 	defer func() { c.mu.Lock(); c.sessionReservations--; c.mu.Unlock() }()
 	lifetime, cancel := context.WithCancel(context.Background())
-	s := &Session{client: c, owned: owned, done: lifetime.Done(), cancel: cancel, parents: graph, members: make(map[string]struct{}), maxMembers: options.MaxMembers}
+	s := &Session{client: c, owned: owned, done: lifetime.Done(), cancel: cancel, parents: graph, members: make(map[string]struct{}), maxMembers: options.MaxMembers, childDetailPolicy: options.ChildDetailPolicy}
 	var response types.ThreadStartResponse
 	err = c.callAccept(ctx, "thread/start", options.Thread, &response, false, func(raw json.RawMessage) error {
 		var r types.ThreadStartResponse

@@ -16,6 +16,12 @@ import (
 // The private adapter controls only native I/O/time; all assertions use public
 // Open, Receive, IncomingRequest and Client operations.
 func TestSessionDelayedRequestWithControlledTime(t *testing.T) {
+	for _, policy := range []ChildDetailPolicy{"", ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) { testSessionDelayedRequestWithControlledTime(t, policy) })
+	}
+}
+
+func testSessionDelayedRequestWithControlledTime(t *testing.T, policy ChildDetailPolicy) {
 	synctest.Test(t, func(t *testing.T) {
 		c := newClient(DefaultLimits())
 		c.ready = true
@@ -28,7 +34,11 @@ func TestSessionDelayedRequestWithControlledTime(t *testing.T) {
 		defer func() { c.fail(ErrClosed); <-writerDone }()
 		opened := make(chan *Session, 1)
 		errors := make(chan error, 1)
-		go func() { s, err := Open(context.Background(), SessionOptions{Client: c}); opened <- s; errors <- err }()
+		go func() {
+			s, err := Open(context.Background(), SessionOptions{ChildDetailPolicy: policy, Client: c})
+			opened <- s
+			errors <- err
+		}()
 		scan := bufio.NewScanner(reader)
 		require.True(t, scan.Scan())
 		var request struct {

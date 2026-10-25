@@ -446,8 +446,14 @@ func TestSessionCommunicationDoesNotGrantMembershipOrParent(t *testing.T) {
 }
 
 func TestSessionParentDepthBoundsKnowledgeNotMembership(t *testing.T) {
+	for _, policy := range []codex.ChildDetailPolicy{"", codex.ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) { testSessionParentDepthBoundsKnowledgeNotMembership(t, policy) })
+	}
+}
+
+func testSessionParentDepthBoundsKnowledgeNotMembership(t *testing.T, policy codex.ChildDetailPolicy) {
 	f := startFake(t, "session-normal", codex.Limits{})
-	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c, MaxParentDepth: 1})
+	s, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Client: f.c, MaxParentDepth: 1})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	_, err = s.Receive(context.Background())
@@ -456,6 +462,7 @@ func TestSessionParentDepthBoundsKnowledgeNotMembership(t *testing.T) {
 		`{"method":"thread/started","params":{"thread":{"id":"a","parentThreadId":"main-1"}}}`,
 		`{"method":"thread/started","params":{"thread":{"id":"b","parentThreadId":"a"}}}`,
 		`{"method":"thread/started","params":{"thread":{"id":"c","parentThreadId":"b"}}}`,
+		`{"method":"item/agentMessage/delta","params":{"threadId":"c","turnId":"t","itemId":"i","delta":"confirmed member, unknown parent"}}`,
 		`{"method":"future/deep","params":{"threadId":"c"}}`)
 	require.NoError(t, s.Close())
 	var methods []string
@@ -473,13 +480,24 @@ func TestSessionParentDepthBoundsKnowledgeNotMembership(t *testing.T) {
 			gap = true
 		}
 	}
-	require.Equal(t, []string{"thread/started", "thread/started", "thread/started", "future/deep"}, methods)
+	want := []string{"thread/started", "thread/started", "thread/started"}
+	if policy != codex.ChildDetailSuppress {
+		want = append(want, "item/agentMessage/delta")
+	}
+	want = append(want, "future/deep")
+	require.Equal(t, want, methods)
 	require.True(t, gap)
 }
 
 func TestSessionAbortDiscardsAbandonedBacklog(t *testing.T) {
+	for _, policy := range []codex.ChildDetailPolicy{"", codex.ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) { testSessionAbortDiscardsAbandonedBacklog(t, policy) })
+	}
+}
+
+func testSessionAbortDiscardsAbandonedBacklog(t *testing.T, policy codex.ChildDetailPolicy) {
 	f := startFake(t, "session-normal", codex.Limits{})
-	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
+	s, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Client: f.c})
 	require.NoError(t, err)
 	emitRequests(t, f.c, `{"method":"future/unread","params":{"threadId":"main-1"}}`)
 	require.NoError(t, s.Close())
@@ -491,13 +509,19 @@ func TestSessionAbortDiscardsAbandonedBacklog(t *testing.T) {
 }
 
 func TestSessionOwnedProcessCleanupWithoutConsumption(t *testing.T) {
+	for _, policy := range []codex.ChildDetailPolicy{"", codex.ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) { testSessionOwnedProcessCleanupWithoutConsumption(t, policy) })
+	}
+}
+
+func testSessionOwnedProcessCleanupWithoutConsumption(t *testing.T, policy codex.ChildDetailPolicy) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	dir := t.TempDir()
 	tracePath := filepath.Join(dir, "trace.jsonl")
 	pidPath := filepath.Join(dir, "pid")
 	options := codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: append(os.Environ(), "CODEX_SDK_HELPER=session-owned-diagnostic", "CODEX_SDK_TRACE="+tracePath, "CODEX_SDK_PID="+pidPath), Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "session-test", Version: "1"}}}
-	s, err := codex.Open(context.Background(), codex.SessionOptions{Stdio: &options})
+	s, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Stdio: &options})
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 	// Close reaps the process before the accepted event is consumed.

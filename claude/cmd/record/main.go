@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -13,7 +14,11 @@ func run() error { return recorder.Run() }
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "recording stopped; inspect private status (no raw diagnostics printed)")
+		if errors.Is(err, recorder.ErrPolicyIsolation) {
+			fmt.Fprintln(os.Stderr, err)
+		} else {
+			fmt.Fprintln(os.Stderr, "recording stopped; raw diagnostics withheld")
+		}
 		os.Exit(1)
 	}
 }

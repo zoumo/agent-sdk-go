@@ -32,6 +32,8 @@ okf_version: "0.2"
 - [Claude 独立本地消息查询](contracts/claude-session-messages.md)
 - [Claude 独立本地发现与 metadata](contracts/claude-session-metadata.md)
 - [独立历史查询](contracts/history-query.md)
+- [可选子详细事件交付](contracts/child-detail-delivery.md)
+- [Claude 独立本地子历史](contracts/claude-subagent-history.md)
 - [共同验收场景](contracts/stories/index.md)
 - [Session 深模块设计](modules/native-session/design.md)
 - [Session 原生公开 Interface](modules/native-session/interfaces.md)

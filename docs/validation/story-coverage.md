@@ -138,6 +138,9 @@ production control or history API is implied.
 | CLAUDE-US-003 | A: I is_error/idle/unknown observation | T/004/005/007/017; [TestRecordedAuthenticationFailureReplay](../../claude/recorded_replay_test.go) | A1 9–11 failure R-part; successful and background M → R1/Phase 2 |
 | CLAUDE-US-004 | A: I creation/dynamic subset; N effort policy | T/012/013; [TestSessionCreationThinkingIsSeparateFromDynamicControl](../../claude/session_input_config_test.go) | M → R1; budget not hard tokens |
 | CLAUDE-US-005 | Q (+ A child discovery): I explicit local main query/child discovery; N independent child messages | B; `TestClaudeMessageSelection`, `TestClaudeMetadataSamples`, `TestClaudeQueryAlongsideSession` in [suite](../../tests/stories/history_query_test.go); [discovery tests](../../claude/session_discovery_test.go) | M/U only → R4; synthetic compaction/parallel chain stays companion unless genuinely observed |
+| CODEX-US-005 | C: N optional filtering; [contract](../../harness/contracts/child-detail-delivery.md) | Planned F1–F5, not current executable tests | Real child M; #16 implementation, #19 gates, #21 capture |
+| CLAUDE-US-006 | A: N optional filtering; explicit forwarding true preserved | Planned F1–F5, not current executable tests | Real child M; #17 implementation, #20 gates, #22 capture |
+| CLAUDE-US-007 | Q: N independent child content; existing Session discovery I | Planned H1–H5 in [acceptance](../../harness/contracts/stories/child-capabilities.md) | Real child files M; #18 implementation; main browser does not fill gap |
 
 ## Carry-forward and delivery gates
 

@@ -1,11 +1,13 @@
 package stories_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,8 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zoumo/agent-sdk-go/claude"
+	transcript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
 	clt "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/codex"
+	recording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
 	ct "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -392,6 +396,12 @@ func codexSessionTarget(t *testing.T, story string) {
 		assert.Equal(t, n, countAnswers(t, path, "codex"))
 		require.Equal(t, 1, countFrames(t, path, "turn/start"))
 		checkAnswerWires(t, path, story, "codex")
+		want := []string{"initialize", "initialized", "thread/start", "turn/start", "turn/interrupt"}
+		if story != "SDK-US-010" {
+			want = append(want, "answer:first")
+		}
+		want = append(want, "answer:second", "turn/interrupt")
+		checkFaultControlOrder(t, path, "codex", want)
 
 	case "SDK-US-012", "SDK-US-013":
 		_, e = s.Submit(ctx, codex.Input{})
@@ -553,6 +563,9 @@ func codexSessionTarget(t *testing.T, story string) {
 				break
 			}
 			if r.Event != nil && r.Event.Method == "fixture/burst" {
+				var p struct{ Sequence int }
+				require.NoError(t, json.Unmarshal(r.Params, &p))
+				assert.Equal(t, drained, p.Sequence, "accepted facts drain in order")
 				drained++
 			}
 		}
@@ -579,6 +592,11 @@ func codexSessionTarget(t *testing.T, story string) {
 }
 func claudeSessionTarget(t *testing.T, story string) {
 	o, path := claudeTargetOptions(t, story)
+	var barrier *net.TCPListener
+	if story == "SDK-US-015" {
+		barrier = faultBarrier(t)
+		o.Env = append(o.Env, "SDK_STORY_BARRIER="+barrier.Addr().String())
+	}
 	if story == "SDK-US-012" || story == "SDK-US-013" {
 		budget := 1024
 		display := "summarized"
@@ -786,6 +804,12 @@ func claudeSessionTarget(t *testing.T, story string) {
 		assert.Equal(t, n, countAnswers(t, path, "claude"))
 		require.Equal(t, 1, countFrames(t, path, "user"))
 		checkAnswerWires(t, path, story, "claude")
+		want := []string{"initialize", "user", "interrupt"}
+		if story != "SDK-US-010" {
+			want = append(want, "answer:first")
+		}
+		want = append(want, "answer:second", "interrupt")
+		checkFaultControlOrder(t, path, "claude", want)
 
 	case "SDK-US-012", "SDK-US-013":
 		_, e = s.Submit(ctx, claude.Input{Text: "executing"})
@@ -890,14 +914,15 @@ func claudeSessionTarget(t *testing.T, story string) {
 		defer stop()
 		result := make(chan error, 1)
 		go func() { _, e := s.Submit(waiting, claude.Input{Text: strings.Repeat("x", 2<<20)}); result <- e }()
-		require.Eventually(t, func() bool { _, err := os.Stat(path + ".prefix"); return err == nil }, time.Second, time.Millisecond)
+		blocked := acceptFaultBarrier(t, barrier, '{')
 		stop()
 		e = <-result
 		var unknown *claude.DispatchError
 		require.ErrorAs(t, e, &unknown)
 		assert.Equal(t, claude.OutcomeUnknown, unknown.State)
 		require.ErrorIs(t, e, claude.ErrUnknownOutcome)
-		require.NoError(t, os.WriteFile(path+".release", nil, 0600))
+		_, e = blocked.Write([]byte("r"))
+		require.NoError(t, e)
 		require.ErrorIs(t, s.Close(), claude.ErrUnknownOutcome)
 		assert.Equal(t, 1, countFrames(t, path, "user"))
 		// Local Receive cancellation was checked before dispatch, while Session is live.
@@ -2064,4 +2089,355 @@ func checkClaudeRequestMetadataGuards(s *CommonStoriesSuite) {
 		page, err := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
 		requireQueryKind(t, page, err, "unsupported")
 	})
+}
+
+// faultBarrier is a bounded application/peer handshake, separate from native
+// traffic. It proves a write prefix was read before cancellation, without polls.
+func faultBarrier(t *testing.T) *net.TCPListener {
+	t.Helper()
+	l, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = l.Close() })
+	d, ok := deadline(t).Deadline()
+	require.True(t, ok)
+	require.NoError(t, l.SetDeadline(d))
+	return l
+}
+
+func acceptFaultBarrier(t *testing.T, l *net.TCPListener, want byte) net.Conn {
+	t.Helper()
+	c, err := l.Accept()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+	d, ok := deadline(t).Deadline()
+	require.True(t, ok)
+	require.NoError(t, c.SetDeadline(d))
+	var got [1]byte
+	_, err = io.ReadFull(c, got[:])
+	require.NoError(t, err)
+	require.Equal(t, want, got[0])
+	return c
+}
+
+// The wire is the single embedded, unmodified CLI 2.1.258 auth-failure capture.
+// The withheld consumer and barrier are synthetic application timing evidence.
+func checkRecordedFaultCompanion(t *testing.T) {
+	barrier := faultBarrier(t)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	dir := t.TempDir()
+	session, err := claude.Open(deadline(t), claude.SessionOptions{
+		CLIPath: exe, WorkDir: dir,
+		Env: []string{"HOME=" + dir, "PATH=", "SDK_STORY_PEER=claude", "SDK_STORY=recorded-auth-drain", "SDK_STORY_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Abort() })
+	prompt, err := transcript.Prompt()
+	require.NoError(t, err)
+	_, err = session.Submit(deadline(t), claude.Input{Text: prompt})
+	require.NoError(t, err)
+	// Completion means every captured frame was matched/emitted. Receive has not
+	// been called; Close must still finish the strict peer's client-EOF check.
+	completion := acceptFaultBarrier(t, barrier, 'd')
+	var got []json.RawMessage
+	var failed, idle bool
+	for {
+		r, err := session.Receive(deadline(t))
+		if err != nil {
+			require.ErrorIs(t, err, io.EOF)
+			break
+		}
+		require.Nil(t, r.Request, "auth failure cannot mint answer authority")
+		if r.Event == nil {
+			continue
+		}
+		got = append(got, r.Raw)
+		if r.Event.Result != nil {
+			require.Equal(t, "success", r.Event.Subtype)
+			failed = r.Event.Result.IsError
+		}
+		if r.Event.System != nil && r.Event.System.State != nil && *r.Event.System.State == "idle" {
+			idle = failed
+			require.NoError(t, session.Close())
+			wait(t, deadline(t), session.Done())
+		}
+	}
+	var expected []json.RawMessage
+	for _, line := range bytes.Split(bytes.TrimSpace(transcript.Wire), []byte{'\n'}) {
+		var f transcript.Frame
+		require.NoError(t, json.Unmarshal(line, &f))
+		if f.Direction == "server" && f.Channel == "protocol" {
+			expected = append(expected, f.Data)
+		}
+	}
+	checkReplayResult(t, completion)
+	require.Len(t, got, len(expected), "every original native frame must be consumed")
+	for i := range expected {
+		assert.Equal(t, string(expected[i]), string(got[i]), "original frame %d", i)
+	}
+	assert.True(t, failed)
+	assert.True(t, idle)
+	assert.NoError(t, session.Err(), "task failure is distinct from transport failure")
+	require.NoError(t, session.Close())
+	_, err = session.Submit(context.Background(), claude.Input{Text: "no retry"})
+	require.Error(t, err)
+}
+
+func checkRecordedQuestionFaultCompanion(t *testing.T) {
+	barrier := faultBarrier(t)
+	frames, err := recording.Load("s2")
+	require.NoError(t, err)
+	init, thread, turn, err := recording.Params(frames)
+	require.NoError(t, err)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	c, err := codex.NewStdio(deadline(t), codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"HOME=" + t.TempDir(), "PATH=", "SDK_STORY_PEER=codex", "SDK_STORY=recorded-question-drain", "SDK_STORY_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"}, Initialize: init})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+	completion := acceptFaultBarrier(t, barrier, 's')
+	session, err := codex.Open(deadline(t), codex.SessionOptions{Client: c, Thread: thread})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Abort() })
+	_, err = session.Submit(deadline(t), codex.Input{Input: turn.Input, Environments: turn.Environments})
+	require.NoError(t, err)
+	var got []json.RawMessage
+	var request *codex.IncomingRequest
+	for request == nil {
+		r, err := session.Receive(deadline(t))
+		require.NoError(t, err)
+		if r.Event != nil {
+			got = append(got, r.Raw)
+		}
+		request = r.Request
+	}
+	require.Equal(t, "item/tool/requestUserInput", request.Method())
+	var q ct.ToolRequestUserInputParams
+	require.NoError(t, json.Unmarshal(request.Params(), &q))
+	require.Len(t, q.Questions, 1)
+	answer := ct.ToolRequestUserInputResponse{Answers: map[string]ct.ToolRequestUserInputAnswer{q.Questions[0].ID: {Answers: []string{"Amber"}}}}
+	require.NoError(t, request.Answer(deadline(t), answer))
+	require.Error(t, request.Answer(deadline(t), answer), "original handle is single-use")
+	require.NoError(t, c.Call(deadline(t), "replay/answer", nil, nil))
+	// No further Receive until every native frame has been emitted and the
+	// strict matcher has checked the original single correlated answer.
+	require.NoError(t, c.Call(deadline(t), "replay/assert", nil, nil))
+	for {
+		r, err := session.Receive(deadline(t))
+		require.NoError(t, err)
+		if r.Event != nil {
+			got = append(got, r.Raw)
+			if r.Event.Method == "turn/completed" {
+				break
+			}
+		}
+	}
+	require.NoError(t, c.Close()) // closes peer input; strict EOF rejects any extra frame
+	wait(t, deadline(t), session.Done())
+	for {
+		r, err := session.Receive(deadline(t))
+		if err != nil {
+			require.ErrorIs(t, err, io.EOF)
+			assert.NoError(t, session.Err())
+			break
+		}
+		if r.Event != nil {
+			got = append(got, r.Raw)
+		}
+	}
+	var expected []json.RawMessage
+	for _, f := range frames {
+		var wire struct {
+			Method string
+			ID     json.RawMessage
+		}
+		require.NoError(t, json.Unmarshal(f.Wire, &wire))
+		if f.Direction == "s2c" && wire.Method != "" && len(wire.ID) == 0 {
+			expected = append(expected, f.Wire)
+		}
+	}
+	checkReplayResult(t, completion)
+	require.Len(t, got, len(expected))
+	for i := range expected {
+		assert.JSONEq(t, string(expected[i]), string(got[i]), "original ordinal sequence %d", i)
+	}
+	require.Error(t, request.Answer(deadline(t), answer), "Close cannot restore old authority")
+}
+
+// Compare complete native input/answer order from peer-observed bytes. Detached
+// trace facts cannot create an answer handle or hide an extra control/retry.
+func checkFaultControlOrder(t *testing.T, path, provider string, want []string) {
+	t.Helper()
+	var got []string
+	for _, b := range peerFrames(t, path) {
+		var f struct {
+			Method, Type string
+			ID           json.RawMessage
+			Request      struct{ Subtype string }
+			Response     struct {
+				RequestID string `json:"request_id"`
+			}
+		}
+		require.NoError(t, json.Unmarshal(b, &f))
+		if provider == "codex" {
+			if f.Method != "" {
+				got = append(got, f.Method)
+			} else if len(f.ID) > 0 {
+				var id string
+				require.NoError(t, json.Unmarshal(f.ID, &id))
+				got = append(got, "answer:"+id)
+			}
+		} else {
+			switch f.Type {
+			case "control_request":
+				got = append(got, f.Request.Subtype)
+			case "user":
+				got = append(got, "user")
+			case "control_response":
+				got = append(got, "answer:"+f.Response.RequestID)
+			}
+		}
+	}
+	assert.Equal(t, want, got, "exact control order; no automatic answers, retries or extra input")
+}
+
+func checkCodexFaultClosePendingRequest(t *testing.T) {
+	ctx := deadline(t)
+	var old *codex.IncomingRequest
+	for epoch := range 2 {
+		o, path := codexTargetOptions(t, "SDK-US-010")
+		c, err := codex.NewStdio(ctx, o)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = c.Close() })
+		session, err := codex.Open(ctx, codex.SessionOptions{Client: c})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = session.Close() })
+		_, err = session.Submit(ctx, codex.Input{})
+		require.NoError(t, err)
+		pending := codexRequests(t, session, 2)[0]
+		if epoch == 0 {
+			old = pending
+		} else {
+			require.Equal(t, old.ID(), pending.ID(), "synthetic peer deliberately reuses the native ID in a fresh connection")
+			require.Error(t, old.Approve(ctx, codex.ApprovalOptions{}), "fresh connection cannot restore old answer authority")
+			require.NoError(t, pending.Deny(ctx, codex.ApprovalOptions{}))
+		}
+		require.NoError(t, session.Close())
+		wait(t, ctx, pending.Context().Done())
+		require.Error(t, pending.Deny(ctx, codex.ApprovalOptions{}))
+		require.Error(t, pending.Deny(ctx, codex.ApprovalOptions{}))
+		require.NoError(t, c.Close())
+		assert.Equal(t, epoch, countAnswers(t, path, "codex"))
+	}
+}
+
+func checkClaudeFaultClosePendingRequest(t *testing.T) {
+	ctx := deadline(t)
+	var old *claude.IncomingRequest
+	for epoch := range 2 {
+		o, path := claudeTargetOptions(t, "SDK-US-010")
+		session, err := claude.Open(ctx, o)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = session.Abort() })
+		_, err = session.Submit(ctx, claude.Input{Text: "pending"})
+		require.NoError(t, err)
+		pending := claudeRequests(t, session, 2)[0]
+		if epoch == 0 {
+			old = pending
+		} else {
+			require.Equal(t, old.Handle().RequestID(), pending.Handle().RequestID(), "synthetic peer deliberately reuses the native ID in a fresh connection")
+			require.Error(t, old.Approve(ctx, claude.ApprovalOptions{}), "fresh connection cannot restore old answer authority")
+			require.NoError(t, pending.Deny(ctx, claude.DenialOptions{}))
+			// The interrupt reply is a peer input/answer settlement barrier before Close.
+			require.NoError(t, session.Interrupt(ctx, claude.InterruptOptions{}))
+			claudeUntil(t, session, "fixture_interrupt")
+		}
+		require.NoError(t, session.Close())
+		wait(t, ctx, pending.Context().Done())
+		require.Error(t, pending.Deny(ctx, claude.DenialOptions{}))
+		require.Error(t, pending.Deny(ctx, claude.DenialOptions{}))
+		assert.Equal(t, epoch, countAnswers(t, path, "claude"))
+	}
+}
+
+func checkReplayResult(t *testing.T, c net.Conn) {
+	t.Helper()
+	var result struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(c).Decode(&result), "peer must report after the final strict EOF check")
+	require.Empty(t, result.Error, "strict replay must return success after consuming client EOF")
+}
+
+// Verify the result channel exposes final EOF errors that SDK-local Close may
+// mask. Run both matchers against the same unmodified embedded input captures.
+func checkReplayFinalResult(t *testing.T, provider string) {
+	t.Helper()
+	var input bytes.Buffer
+	var run func(io.Reader) error
+	if provider == "codex" {
+		frames, err := recording.Load("s2")
+		require.NoError(t, err)
+		for _, f := range frames {
+			if f.Direction != "c2s" {
+				continue
+			}
+			input.Write(f.Wire)
+			input.WriteByte('\n')
+			var wire struct {
+				Method string
+				ID     json.RawMessage
+			}
+			require.NoError(t, json.Unmarshal(f.Wire, &wire))
+			if wire.Method == "" && len(wire.ID) > 0 {
+				input.WriteString("{\"id\":1000,\"method\":\"replay/answer\"}\n")
+			}
+		}
+		input.WriteString("{\"id\":1001,\"method\":\"replay/assert\"}\n")
+		run = func(r io.Reader) error { return recording.Peer(r, io.Discard, frames) }
+	} else {
+		for _, line := range bytes.Split(bytes.TrimSpace(transcript.Wire), []byte{'\n'}) {
+			var f transcript.Frame
+			require.NoError(t, json.Unmarshal(line, &f))
+			if f.Direction == "client" {
+				input.Write(f.Data)
+				input.WriteByte('\n')
+			}
+		}
+		run = func(r io.Reader) error {
+			return transcript.Replay(r, io.Discard, bytes.NewReader(transcript.Wire), nil)
+		}
+	}
+	for _, extra := range []bool{false, true} {
+		name := "strict-eof"
+		if extra {
+			name = "extra-frame-after-completion"
+		}
+		t.Run(name, func(t *testing.T) {
+			c, peer := net.Pipe()
+			defer c.Close()
+			defer peer.Close()
+			d, ok := deadline(t).Deadline()
+			require.True(t, ok)
+			require.NoError(t, c.SetDeadline(d))
+			require.NoError(t, peer.SetDeadline(d))
+			wire := input.String()
+			if extra {
+				wire += "{}\n"
+			}
+			done := make(chan error, 1)
+			go func() { done <- reportReplayResult(peer, run(strings.NewReader(wire))) }()
+			var result struct {
+				Error string `json:"error"`
+			}
+			require.NoError(t, json.NewDecoder(c).Decode(&result))
+			err := <-done
+			if extra {
+				require.ErrorContains(t, err, "extra client frame")
+				require.Contains(t, result.Error, "extra client frame")
+			} else {
+				require.NoError(t, err)
+				require.Empty(t, result.Error)
+			}
+		})
+	}
 }

@@ -44,7 +44,14 @@ func Load(story string) ([]Frame, error) {
 	return Decode(bytes.NewReader(b))
 }
 func Decode(r io.Reader) ([]Frame, error) {
-	s := bufio.NewScanner(io.LimitReader(r, 2<<20+1))
+	b, err := io.ReadAll(io.LimitReader(r, ProtocolLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > ProtocolLimit {
+		return nil, errors.New("capture decode byte limit")
+	}
+	s := bufio.NewScanner(bytes.NewReader(b))
 	s.Buffer(make([]byte, 4096), 2<<20)
 	var frames []Frame
 	for s.Scan() {
@@ -105,12 +112,23 @@ type Handler struct {
 	Story     string
 	Calls     int
 	Questions int
+	// Exact is a finite ordered policy for native root requests, separate from S1/S2.
+	Exact        []ExactRequest
+	Answered     int
+	BeforeSubmit func() error
+	HoldFirst    bool
+	WhileHeld    func(context.Context) error
+	heldOnce     bool
+	Progress     func(context.Context, *types.Event) error
 	// Set only by Replay; the live recorder and public RunPeer never use the
 	// offline peer's private synchronization protocol.
 	replayClient *codex.Client
 }
 
 func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
+	if h.Exact != nil {
+		return h.answerExact(ctx, r)
+	}
 	switch r.Method() {
 	case "item/tool/call":
 		var p struct {
@@ -123,8 +141,28 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 		if err := json.Unmarshal(r.Params(), &p); err != nil {
 			return err
 		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(r.Params(), &fields); err != nil {
+			return err
+		}
+		for key := range fields {
+			switch key {
+			case "threadId", "turnId", "callId", "namespace", "tool", "arguments":
+			default:
+				return errors.Join(errors.New("unknown dynamic tool request field"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
+			}
+		}
+		var arguments map[string]json.RawMessage
+		if err := json.Unmarshal(fields["arguments"], &arguments); err != nil {
+			return err
+		}
+		allowedArguments := (p.Tool == "fixture_read" && len(arguments) == 1 && arguments["path"] != nil) || (p.Tool == "fixture_write" && len(arguments) == 2 && arguments["path"] != nil && arguments["text"] != nil)
+		namespace := fields["namespace"]
+		if !allowedArguments || (namespace != nil && string(namespace) != "null") {
+			return errors.Join(errors.New("out-of-policy dynamic tool arguments/namespace"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
+		}
 		if h.Story != "s1" || h.Calls >= 2 {
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
 		}
 		var text string
 		var err error
@@ -137,7 +175,7 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 			err = writeSynthetic(h.Root, p.Arguments.Text)
 			text = "written summary.txt"
 		default:
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
 		}
 		if err != nil {
 			return err
@@ -150,17 +188,17 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 			return err
 		}
 		if h.Story != "s2" || h.Questions != 0 || len(p.Questions) != 1 {
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"}))
 		}
 		q := p.Questions[0]
 		options, ok := q.Options.Get()
 		if !ok || len(options) != 2 || options[0].Label != "Amber" || options[1].Label != "Indigo" || q.IsSecret.ValueOr(false) {
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"}))
 		}
 		h.Questions++
 		return r.Handle().Answer(ctx, types.ToolRequestUserInputResponse{Answers: map[string]types.ToolRequestUserInputAnswer{q.ID: {Answers: []string{"Amber"}}}})
 	default:
-		return r.Handle().Reject(ctx, &codex.RPCError{Code: -32601, Message: "request denied"})
+		return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32601, Message: "request denied"}))
 	}
 }
 
@@ -175,11 +213,17 @@ type Result struct {
 	Tools        int           `json:"tools"`
 	Questions    int           `json:"questions"`
 	Completed    bool          `json:"completed"`
+	Terminal     types.Turn    `json:"terminal"`
 }
 
 // Session consumes native facts and real requests through the Session FIFO.
 func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStartParams, h *Handler) (Result, error) {
 	var result Result
+	if h.BeforeSubmit != nil {
+		if err := h.BeforeSubmit(); err != nil {
+			return result, err
+		}
+	}
 	if len(turn.UnknownFields) != 0 {
 		return result, fmt.Errorf("%w: replay turn execution extensions are unsupported", codex.ErrInvalidInput)
 	}
@@ -213,14 +257,49 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 	}
 	receiveCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	submitted := make(chan error, 1)
+	type submission struct {
+		value codex.Submission
+		err   error
+	}
+	submitted := make(chan submission, 1)
+	var submittedTurnID string
 	go func() {
-		_, err := session.Submit(ctx, input)
-		submitted <- err
+		value, err := session.Submit(receiveCtx, input)
+		submitted <- submission{value: value, err: err}
 		if err != nil {
 			cancel(err)
 		}
 	}()
+	submissionIdentity := func() error {
+		if submittedTurnID != "" {
+			return nil
+		}
+		select {
+		case sub := <-submitted:
+			if sub.err != nil {
+				return sub.err
+			}
+			submittedTurnID = sub.value.Response.Turn.ID
+			if submittedTurnID == "" {
+				return errors.New("submission missing native turn identity")
+			}
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	var held *codex.Request
+	answer := func(request codex.Request) error {
+		answerCtx, stop := context.WithTimeout(ctx, 15*time.Second)
+		defer stop()
+		if err := h.Answer(answerCtx, request); err != nil {
+			return err
+		}
+		if h.replayClient != nil {
+			return h.replayClient.Call(ctx, "replay/answer", nil, nil)
+		}
+		return nil
+	}
 	for !result.Completed {
 		received, err := session.Receive(receiveCtx)
 		if err != nil {
@@ -230,16 +309,27 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 			return result, err
 		}
 		if received.Request != nil {
-			answerCtx, stop := context.WithTimeout(ctx, 15*time.Second)
-			err := h.Answer(answerCtx, received.Request.Request)
-			stop()
-			if err != nil {
-				return result, err
+			var identity struct {
+				ThreadID string `json:"threadId"`
 			}
-			if h.replayClient != nil {
-				if err := h.replayClient.Call(ctx, "replay/answer", nil, nil); err != nil {
+			if json.Unmarshal(received.Request.Params(), &identity) != nil || identity.ThreadID != session.ThreadID() {
+				return result, errors.New("non-root request in root-only scene")
+			}
+			if held != nil {
+				return result, errors.Join(errors.New("additional request while exact request held"), received.Request.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "request denied"}))
+			}
+			if h.HoldFirst && !h.heldOnce {
+				request := received.Request.Request
+				held = &request
+				h.heldOnce = true
+				if h.WhileHeld == nil {
+					return result, errors.New("deferred request requires bounded non-generating control")
+				}
+				if err := h.WhileHeld(ctx); err != nil {
 					return result, err
 				}
+			} else if err := answer(received.Request.Request); err != nil {
+				return result, err
 			}
 			continue
 		}
@@ -259,15 +349,55 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 			var params map[string]json.RawMessage
 			_ = json.Unmarshal(e.Params, &params)
 			_ = json.Unmarshal(params["threadId"], &o.ThreadID)
+			if o.ThreadID != "" && o.ThreadID != session.ThreadID() {
+				return result, errors.New("non-root event in root-only scene")
+			}
 			switch e.Method {
 			case "turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "serverRequest/resolved":
 				if e.Data == nil {
 					return result, errors.New("missing typed native data")
 				}
 			}
+			if held != nil {
+				if e.Method == "turn/completed" {
+					return result, errors.New("deferred request progress untriggered before terminal")
+				}
+				if o.ThreadID == session.ThreadID() {
+					if err := answer(*held); err != nil {
+						return result, err
+					}
+					held = nil
+				}
+			}
 			o.Method = e.Method
+			progressMatches := true
+			if h.Progress != nil && e.Method == "turn/started" {
+				if err := submissionIdentity(); err != nil {
+					return result, err
+				}
+				var started types.TurnStartedNotification
+				if err := json.Unmarshal(e.Params, &started); err != nil {
+					return result, err
+				}
+				progressMatches = started.Turn.ID == submittedTurnID
+			}
+			if h.Progress != nil && progressMatches {
+				if err := h.Progress(ctx, &e); err != nil {
+					return result, err
+				}
+			}
 			if o.Method == "turn/completed" {
-				result.Completed = true
+				if err := submissionIdentity(); err != nil {
+					return result, err
+				}
+				var terminal types.TurnCompletedNotification
+				if err := json.Unmarshal(e.Params, &terminal); err != nil {
+					return result, err
+				}
+				if terminal.Turn.ID == submittedTurnID {
+					result.Completed = true
+					result.Terminal = terminal.Turn
+				}
 			}
 		} else {
 			if received.Observation == nil {
@@ -277,9 +407,7 @@ func RunSession(ctx context.Context, session *codex.Session, turn types.TurnStar
 		}
 		result.Observations = append(result.Observations, o)
 	}
-	if err := <-submitted; err != nil {
-		return result, err
-	}
+
 	result.Tools = h.Calls
 	result.Questions = h.Questions
 	return result, nil

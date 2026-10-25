@@ -21,25 +21,35 @@ func TestChildGateIsIndependentAndCannotBeAssertedAway(t *testing.T) {
 }
 
 func TestChildPermissionCannotUseRootReadAllowance(t *testing.T) {
-	base, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	w, err := recorder.PrepareWorkspace(filepath.Join(base, "capture"), "s1")
-	require.NoError(t, err)
-	l, err := recorder.OpenLedger(filepath.Join(base, "ledger"))
-	require.NoError(t, err)
-	require.NoError(t, l.Reserve("s1"))
-	plan, err := recorder.Plan("s1")
-	require.NoError(t, err)
-	frames := append(initialize(), user(plan.Prompts[0]))
-	frames = append(frames,
-		native("server", "control", `{"type":"control_request","request_id":"child-read","request":{"subtype":"can_use_tool","tool_name":"Read","tool_use_id":"read","agent_id":"unverified","input":{"file_path":"numbers.txt"}}}`),
-		native("client", "control", `{"type":"control_response","response":{"subtype":"success","request_id":"child-read","response":{"behavior":"deny","message":"outside exact synthetic story policy"}}}`),
-		mock.Frame{Direction: "disconnect", Channel: "protocol"})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	s := openSynthetic(t, ctx, w, frames)
-	var observations bytes.Buffer
-	require.ErrorContains(t, recorder.Drive(ctx, s, "s1", w, l, &observations), "out-of-policy permission")
+	for _, scene := range []string{"s1", "r2"} {
+		for name, raw := range map[string]string{
+			"nested":   `{"type":"control_request","request_id":"child-read","request":{"subtype":"can_use_tool","tool_name":"Read","tool_use_id":"read","agent_id":"unverified","input":{"file_path":"numbers.txt"}}}`,
+			"envelope": `{"type":"control_request","request_id":"child-read","agent_id":"unverified","parent_tool_use_id":"spawn","request":{"subtype":"can_use_tool","tool_name":"Read","tool_use_id":"read","input":{"file_path":"numbers.txt"}}}`,
+		} {
+			t.Run(scene+"/"+name, func(t *testing.T) {
+
+				base, err := filepath.EvalSymlinks(t.TempDir())
+				require.NoError(t, err)
+				w, err := recorder.PrepareWorkspace(filepath.Join(base, "capture"), scene)
+				require.NoError(t, err)
+				l, err := recorder.OpenLedger(filepath.Join(base, "ledger"))
+				require.NoError(t, err)
+				require.NoError(t, l.Reserve(scene))
+				plan, err := recorder.Plan(scene)
+				require.NoError(t, err)
+				frames := append(initialize(), user(plan.Prompts[0]))
+				frames = append(frames,
+					native("server", "control", raw),
+					native("client", "control", `{"type":"control_response","response":{"subtype":"success","request_id":"child-read","response":{"behavior":"deny","message":"outside exact synthetic story policy"}}}`),
+					mock.Frame{Direction: "disconnect", Channel: "protocol"})
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				s := openSynthetic(t, ctx, w, frames)
+				var observations bytes.Buffer
+				require.ErrorContains(t, recorder.Drive(ctx, s, scene, w, l, &observations), "out-of-policy permission")
+			})
+		}
+	}
 }
 
 func TestRootDriverRejectsChildFactsBeforeClaimingSuccess(t *testing.T) {

@@ -64,6 +64,7 @@ func Drive(ctx context.Context, s *claude.Session, scene string, w *Workspace, l
 	turn, result, modelError, interrupted := 0, false, false, false
 	heldOnce := false
 	var held *claude.PermissionRequest
+	var heldRaw json.RawMessage
 	for {
 		record, e := s.Receive(ctx)
 		if e != nil {
@@ -73,22 +74,26 @@ func Drive(ctx context.Context, s *claude.Session, scene string, w *Workspace, l
 			return e
 		}
 		if held != nil {
-			if e = policy.answer(held); e != nil {
+			if e = policy.answer(held, heldRaw); e != nil {
 				return e
 			}
 			held = nil
 		}
 		if record.Request != nil {
 			p := record.Request.Handle()
+			if !rootPermission(record.Raw) || !rootPermission(p.Raw()) {
+				return policy.answer(p, record.Raw) // Deny before any held-request control.
+			}
 			if scene == "r2" && !heldOnce {
 				// Preserve the original handle while a non-generating control and Receive
 				// progress. If no further event arrives, the scene times out/untriggers.
 				held, heldOnce = p, true
+				heldRaw = record.Raw
 				receipt, controlErr := s.SetThinking(ctx, claude.ThinkingChange{})
 				if e = recordControl(encoder, receipt, controlErr); e != nil {
 					return e
 				}
-			} else if e = policy.answer(p); e != nil {
+			} else if e = policy.answer(p, record.Raw); e != nil {
 				return e
 			}
 			continue
@@ -220,17 +225,24 @@ type scenePolicy struct {
 	read, write, question bool
 }
 
-func (p *scenePolicy) answer(handle *claude.PermissionRequest) error {
+func rootPermission(raw json.RawMessage) bool {
+	var metadata map[string]json.RawMessage
+	if json.Unmarshal(raw, &metadata) != nil || metadata == nil {
+		return false
+	}
+	for _, key := range []string{"agent_id", "agentId", "parent_tool_use_id", "task_id", "parent_task_id"} {
+		if _, present := metadata[key]; present {
+			return false // Unknown attribution cannot widen the root allowlist.
+		}
+	}
+	return true
+}
+
+func (p *scenePolicy) answer(handle *claude.PermissionRequest, envelope json.RawMessage) error {
 	answer := claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: "outside exact synthetic story policy"}
 	matched := false
 	var input map[string]any
-	var metadata map[string]json.RawMessage
-	rootOnly := json.Unmarshal(handle.Raw(), &metadata) == nil
-	for _, key := range []string{"agent_id", "agentId", "parent_tool_use_id", "task_id", "parent_task_id"} {
-		if _, present := metadata[key]; present {
-			rootOnly = false // Unknown attribution cannot widen the root allowlist.
-		}
-	}
+	rootOnly := rootPermission(envelope) && rootPermission(handle.Raw())
 	if rootOnly && json.Unmarshal(handle.Input(), &input) == nil {
 		path, _ := input["file_path"].(string)
 		if (p.scene == "s1" || (p.scene == "r2" && p.turn == 0)) && handle.ToolName() == "Read" && !p.read && len(input) == 1 && transcript.SafeFile(p.project, path, "numbers.txt") {

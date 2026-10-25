@@ -55,3 +55,18 @@ func TestBackgroundCompletionAndAggregateChildrenAreSeparateFromRoot(t *testing.
 	require.NoError(t, l.Turn("r2"))
 	require.Error(t, l.ChildAttempt("r2", "new-root-child", ""), "new root never resets aggregate attempts")
 }
+
+func TestChildDepthAndLateIntentRefuseWithOtherBudgetsAvailable(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	l, err := recorder.OpenLedger(filepath.Join(base, "ledger"))
+	require.NoError(t, err)
+	require.NoError(t, l.Reserve("r1"))
+	require.NoError(t, l.ConfigureChildren("r1", recorder.ChildLimits{TotalAttempts: 5, Attempts: 5, Depth: 2, Concurrent: 5}))
+	require.NoError(t, l.Turn("r1"))
+	require.NoError(t, l.ChildAttempt("r1", "a", ""))
+	require.NoError(t, l.ChildAttempt("r1", "c", "a"))
+	require.ErrorContains(t, l.ChildAttempt("r1", "too-deep", "c"), "depth", "concurrent and cumulative capacity remain available")
+	require.NoError(t, l.Finish("r1", false))
+	require.ErrorContains(t, l.ChildAttempt("r1", "late", ""), "active reserved root", "remaining budget cannot authorize late intent")
+}

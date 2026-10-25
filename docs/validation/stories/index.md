@@ -4,7 +4,7 @@
 
 设计合同见[共同验收场景](../../../harness/contracts/stories/index.md)，通用目标见[SDK 共同用户故事](../../../harness/sdk/user-stories.md)。本页记录具体实现的能力映射与验证，不作为通用设计来源。
 
-**当前 Session 验收见 [SDK-US-001～020 支持与证据矩阵](session-targets.md)**：全部新目标在 `CommonStoriesSuite.TestSessionTargets` 直接运行。下表是旧 US 编号，不是新目标的重命名；Claude Load 成功仍有明确原生能力缺口，不能宣称全部共同能力已满足。
+**当前验收见 [19/14 Story 交叉矩阵](../story-coverage.md)**：SDK-US-001～018 在 TestSessionTargets，SDK-US-019/US-014 在独立 TestIndependentHistoryBrowser。下面及 [旧 Session 报告](session-targets.md)保留原始基线的 Load/020 记录，不代表当前 API 或当前未实现状态。
 
 运行 `mise exec -- go test ./tests/stories -count=1`，或使用仓库 `scripts/check-offline.sh`。测试适配通过各自公开 API 连接到自执行的合成子进程；子进程替换完整环境，不启动真实 agent。共同验收直接位于 [`CommonStoriesSuite.checkStory`](../../../tests/stories/acceptance_test.go)，只检查脱离原始句柄的私有测试事实；原生适配和生命周期保留在 [`stories_test.go`](../../../tests/stories/stories_test.go)。没有独立 testkit 包、通用客户端、问答接口或回答状态机。
 

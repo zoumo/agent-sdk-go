@@ -1,5 +1,7 @@
 > Historical evidence for the pre-removal baseline. Load and its contracts have been removed; this report is not a current API guide.
 
+当前 19 项目标与原生补充见[当前矩阵](../story-coverage.md)。本页的旧 019 Load/020 编号和历史失败不适用于当前独立查询目标。
+
 # Session SDK-US-001～020 公开验收
 
 本页保留 T12 的检查结果与当时的未解决问题。T14 的最终集成修复、全仓验证及剩余能力缺口见[集成验证报告](../../reviews/ticket14-integration-verification.md)；以下历史失败记录不改写为当时通过。

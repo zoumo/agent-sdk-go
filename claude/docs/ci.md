@@ -1,7 +1,10 @@
 # CI checks and live gate
 
 The [shared workflow](../../.github/workflows/ci.yml) validates the single module
-on Linux (`ubuntu-24.04`) and macOS (`macos-15`) with mise-managed Go 1.26.9.
+on `ubuntu-24.04`, `macos-15` and `macos-26` with mise-managed Go 1.26.9.
+Push/manual and same-repository PR events configure three Offline plus three
+External consumer jobs at the exact published revision; fork-only consumers skip.
+Configured jobs do not prove execution. All live switches remain zero.
 See [root validation](../../docs/testing.md) for current commands and gates.
 Native scripts and examples remain relative to `claude/`.
 

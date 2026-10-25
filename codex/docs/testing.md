@@ -52,8 +52,11 @@ reading upstream tests is not evidence that those tests ran here.
 ## Hosted gates
 
 The [workflow](../../.github/workflows/ci.yml) runs on pushes to `main`, pull requests
-and manual dispatch, on Ubuntu 24.04 and macOS 15 with matrix fail-fast disabled.
-Each job checks dependencies/module cleanliness, committed whitespace, CI negative
+and manual dispatch, on Ubuntu 24.04, macOS 15 and macOS 26 with matrix fail-fast disabled.
+Three Offline and three External consumer jobs are configured for push/manual
+and same-repository PR events; consumers fetch the exact published head, while
+fork-only consumers skip. Configured coverage is not execution evidence.
+Each Offline job checks dependencies/module cleanliness, committed whitespace, CI negative
 fixtures, inventory, reproducible generation, recording validation, uncached normal
 and race suites, offline examples and vet. Live switches are explicitly zero;
 real scenarios visibly report SKIP. A package-level success is not a live pass.

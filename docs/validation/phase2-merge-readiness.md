@@ -339,3 +339,62 @@ Both cancel and timeout subcases then passed race count=100 in 12.647 seconds.
 No sleeps, enlarged deadline, discarded error or relaxed healthy-state assertion
 was added. This fixes the test's claimed after-write schedule, not the behavior
 of actual in-progress writes, whose strict unknown/termination tests remain.
+
+## Final combined matrix and test-repair verification
+
+Reviewed implementation: `4ac78f522210fb86e95dbd91f447188474ecb22c`, tree
+`09d16c21366fa2becf1a696b74cbed73c21b1953`. Review range:
+`git diff e922c0b81f39b897e3c0a70e72157fdb09c88014...4ac78f522210fb86e95dbd91f447188474ecb22c`.
+Commits e60caff, 62b4cc0 and 4ac78f5 cover the matrix, recorded replay boundary
+and configuration cancellation boundary respectively. Later evidence-only
+commits do not alter the tested Go/Python/workflow sources.
+
+### Standards
+
+0 confirmed standard violations and 0 smells requiring correction after reviewing
+all three changes. Existing native interfaces, strict assertions, tool/runtime
+boundaries and capture provenance are retained. The recorded-verification Peer
+uses an explicitly private protocol; public RunPeer/mock scenarios do not gain
+that protocol. The exported Handler's private replay configuration is used only
+by the package's verification driver; it is not a native SDK API or recorder mode.
+
+### Spec
+
+0 outstanding deviations. Both matrices retain macOS 15 and add macOS 26;
+recorded replay still fails on every answer/matching error and preserves native
+source frames; configuration cancellation now proves its claimed after-write
+schedule with a public acknowledgment. No unknown outcome is swallowed, and no
+sleep, enlarged deadline, implicit retry or CI permission bypass is introduced.
+
+| Final combined local gate | Result |
+|---|---|
+| Existing Python CI-gate tests plus both-job runner regression | Passed, seven tests |
+| Recorded S2 original failing path, race count=10 with three repetitions each | Passed, 30 replays / 30.967s |
+| Configuration cancel + unchanged timeout cases, race count=100 | Passed, 12.647s |
+| Full offline script after both observed blockers were repaired | **Passed**, all packages and seven examples |
+| Generation, inventory, module/dependency boundaries, CI gates, sanitization/hash and transcript checks | Passed within full offline script |
+| Full race (`-race -p=1 -v -count=1 -timeout=300s ./...`) | **Passed**, no DATA RACE report |
+| Full vet, committed whitespace/gofmt, shell syntax and touched links | Passed |
+| Original native approval fixes and main ADR documents | Retained unchanged |
+| Real-sanitized capture/manifest/expected-observation diff | Empty |
+| New exact-SHA fetched consumers and remote SHA/tree | Recorded in the final immutable publication receipt / ticket handoff |
+| macOS 15 / macOS 26 / final GitHub Actions jobs | **Not run by this task**; configured coverage is not a pass |
+
+The failed full checks before the two actual repairs remain in local evidence.
+The successful full run followed source corrections; there was no repeat-until-
+green substitution. No actual user's history, account material, real model or new
+recording was accessed. The installed gh request previously returned Forbidden;
+that denial was not retried, replaced by another identity, or bypassed through
+another dispatch route. Git publication and fetched-module verification use the
+same already authorized repository paths.
+
+The authorized user/parent should use GitHub Actions → SDK checks → Run workflow,
+select `phase2/history-query-integration`, and verify the run's head SHA matches
+the final publication receipt. Inspect **six** results: Offline and External
+consumer on each of Ubuntu 24.04, macOS 15 and macOS 26. No PR is required by the
+workflow source, and none is created. Until that operation actually runs, the
+cross-platform CI verification remains pending; this context does not claim it.
+
+Final full offline log SHA-256:
+`c077896bb71351fe6c3d1a37d679ae7d944fec3d142f83ed2a92bbe30d970d42`.
+Full race log SHA-256: `764c08031aa9fef97261e96dc197e0c68a695e5a5e294b091c812eb984fefff3`.

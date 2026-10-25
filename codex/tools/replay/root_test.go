@@ -284,3 +284,23 @@ func TestR2PolicyCannotHideMissingQuestionOutcome(t *testing.T) {
 	require.Error(t, ValidateR2Policy([]ExactRequest{denial}))
 	require.Error(t, ValidateR2Policy([]ExactRequest{denial, denial}))
 }
+
+func TestOriginalDynamicPolicyRejectsAndStopsOnExtraArguments(t *testing.T) {
+	params := `{"threadId":"thread-001","turnId":"turn-1","callId":"item-1","namespace":null,"tool":"fixture_read","arguments":{"path":"numbers.txt","extra":"not allowed"}}`
+	fs := rootPrefix(t)
+	addRoot(&fs, "s2c", `{"id":"invalid-tool","method":"item/tool/call","params":`+params+`}`)
+	addRoot(&fs, "c2s", `{"id":"invalid-tool","error":{"code":-32602,"message":"operation denied"}}`)
+	c, ctx := rootClient(t, fs)
+	s, e := codex.Open(ctx, codex.SessionOptions{Client: c})
+	require.NoError(t, e)
+	defer func() { _ = c.Close(); _ = s.Close() }()
+	got, e := s.Receive(ctx)
+	require.NoError(t, e)
+	require.NotNil(t, got.Request)
+	h := Handler{Story: "s1", Root: t.TempDir()}
+	require.ErrorContains(t, h.Answer(ctx, got.Request.Request), "out-of-policy")
+	require.Zero(t, h.Calls)
+	require.NoError(t, c.Call(ctx, "replay/answer", nil, nil))
+	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
+	require.NoError(t, c.Close())
+}

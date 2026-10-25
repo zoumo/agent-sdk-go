@@ -141,8 +141,28 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 		if err := json.Unmarshal(r.Params(), &p); err != nil {
 			return err
 		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(r.Params(), &fields); err != nil {
+			return err
+		}
+		for key := range fields {
+			switch key {
+			case "threadId", "turnId", "callId", "namespace", "tool", "arguments":
+			default:
+				return errors.Join(errors.New("unknown dynamic tool request field"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
+			}
+		}
+		var arguments map[string]json.RawMessage
+		if err := json.Unmarshal(fields["arguments"], &arguments); err != nil {
+			return err
+		}
+		allowedArguments := (p.Tool == "fixture_read" && len(arguments) == 1 && arguments["path"] != nil) || (p.Tool == "fixture_write" && len(arguments) == 2 && arguments["path"] != nil && arguments["text"] != nil)
+		namespace := fields["namespace"]
+		if !allowedArguments || (namespace != nil && string(namespace) != "null") {
+			return errors.Join(errors.New("out-of-policy dynamic tool arguments/namespace"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
+		}
 		if h.Story != "s1" || h.Calls >= 2 {
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
 		}
 		var text string
 		var err error
@@ -155,7 +175,7 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 			err = writeSynthetic(h.Root, p.Arguments.Text)
 			text = "written summary.txt"
 		default:
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "operation denied"}))
 		}
 		if err != nil {
 			return err
@@ -168,17 +188,17 @@ func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 			return err
 		}
 		if h.Story != "s2" || h.Questions != 0 || len(p.Questions) != 1 {
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"}))
 		}
 		q := p.Questions[0]
 		options, ok := q.Options.Get()
 		if !ok || len(options) != 2 || options[0].Label != "Amber" || options[1].Label != "Indigo" || q.IsSecret.ValueOr(false) {
-			return r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"})
+			return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32602, Message: "question denied"}))
 		}
 		h.Questions++
 		return r.Handle().Answer(ctx, types.ToolRequestUserInputResponse{Answers: map[string]types.ToolRequestUserInputAnswer{q.ID: {Answers: []string{"Amber"}}}})
 	default:
-		return r.Handle().Reject(ctx, &codex.RPCError{Code: -32601, Message: "request denied"})
+		return errors.Join(errors.New("recording policy violation; stop scene"), r.Handle().Reject(ctx, &codex.RPCError{Code: -32601, Message: "request denied"}))
 	}
 }
 

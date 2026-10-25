@@ -2441,3 +2441,606 @@ func checkReplayFinalResult(t *testing.T, provider string) {
 		})
 	}
 }
+
+func (s *CommonStoriesSuite) checkCodexPureChildDetail() {
+	for _, policy := range []codex.ChildDetailPolicy{"", codex.ChildDetailPreserve, codex.ChildDetailSuppress} {
+		s.Run(string(policy), func() {
+			t := s.T()
+			session, client, path := openChildDetail(t, policy, false)
+			frames := []string{detailRelation("child", "root-1")}
+			frames = append(frames, pureDetails("child")...)
+			frames = append(frames, pureDetails("root-1")...)
+			frames = append(frames, pureDetails("root-1")[0]) // identical native facts are not deduplicated
+			emitChildDetail(t, client, frames)
+			got := drainChildDetail(t, session)
+			var raws []string
+			for _, r := range got {
+				if r.Event != nil {
+					raws = append(raws, string(r.Raw))
+					assert.Equal(t, r.Raw, r.Event.Raw)
+					assert.Equal(t, r.Params, r.Event.Params)
+					assert.Equal(t, "live", r.Origin)
+					var source struct {
+						ThreadID string `json:"threadId"`
+					}
+					require.NoError(t, json.Unmarshal(r.Params, &source))
+					if source.ThreadID != "" {
+						assert.Equal(t, source.ThreadID, r.Source.ThreadID)
+					}
+				}
+			}
+			want := frames
+			if policy == codex.ChildDetailSuppress {
+				want = append([]string{frames[0]}, frames[8:]...)
+			}
+			assert.Equal(t, want, raws)
+			wire, err := os.ReadFile(path)
+			require.NoError(t, err)
+			for _, raw := range frames {
+				assert.Contains(t, string(wire), "source:"+raw+"\n")
+			}
+			assert.NotContains(t, string(wire), "childDetailPolicy")
+		})
+	}
+}
+
+func (s *CommonStoriesSuite) checkCodexChildDetailOptions() {
+	for _, owned := range []bool{false, true} {
+		for _, policy := range []codex.ChildDetailPolicy{"", codex.ChildDetailPreserve, codex.ChildDetailSuppress} {
+			s.Run(fmt.Sprintf("owned=%v/%s", owned, policy), func() {
+				t := s.T()
+				session, _, path := openChildDetail(t, policy, owned)
+				for range 2 {
+					_, err := session.Submit(deadline(t), codex.Input{})
+					require.NoError(t, err)
+				}
+				got := drainChildDetail(t, session)
+				details, barriers := 0, 0
+				for _, r := range got {
+					if r.Event != nil {
+						if r.Event.Method == "fixture/turn-barrier" {
+							barriers++
+						}
+						if strings.HasPrefix(r.Event.Method, "item/") {
+							details++
+						}
+					}
+				}
+				assert.Equal(t, 2, barriers)
+				want := 14
+				if policy == codex.ChildDetailSuppress {
+					want = 0
+				}
+				assert.Equal(t, want, details)
+				wire, err := os.ReadFile(path)
+				require.NoError(t, err)
+				assert.NotContains(t, string(wire), "childDetailPolicy")
+			})
+		}
+	}
+	t := s.T()
+	first, client, _ := openChildDetail(t, codex.ChildDetailSuppress, false)
+	opts := codex.SessionOptions{Client: client, ChildDetailPolicy: codex.ChildDetailPreserve}
+	second, err := codex.Open(deadline(t), opts)
+	require.NoError(t, err)
+	defer second.Abort()
+	opts.ChildDetailPolicy = codex.ChildDetailSuppress
+	frames := []string{detailRelation("shared-child", first.ThreadID()), detailRelation("shared-child", second.ThreadID()), pureDetails("shared-child")[0]}
+	emitChildDetail(t, client, frames)
+	a, b := drainChildDetail(t, first), drainChildDetail(t, second)
+	count := func(values []codex.Received) int {
+		n := 0
+		for _, r := range values {
+			if r.Event != nil && r.Event.Method == "item/agentMessage/delta" {
+				n++
+			}
+		}
+		return n
+	}
+	assert.Zero(t, count(a))
+	assert.Equal(t, 1, count(b), "one Session's fixed policy must not affect a shared observer")
+}
+
+func (s *CommonStoriesSuite) checkCodexMixedChildDetail() {
+	t := s.T()
+	session, client, _ := openChildDetail(t, codex.ChildDetailSuppress, false)
+	// Early and foreign records stay diagnostic, including after late confirmation.
+	early := pureDetails("child")[0]
+	foreign := pureDetails("foreign")[0]
+	frames := []string{early, foreign, detailRelation("child", "root-1"), detailRelation("nested", "child"), detailRelation("sibling", "root-1")}
+	want := append([]string(nil), frames[2:]...)
+	for _, id := range []string{"child", "nested", "sibling"} {
+		frames = append(frames, pureDetails(id)...)
+	}
+	for _, pure := range pureDetails("child") {
+		// Unknown or essential semantics added at either envelope or params level.
+		for _, suffix := range []string{`,"future":null`, `,"parentThreadId":"root-1"`, `,"status":"failed"`, `,"error":{"code":1}`} {
+			mixed := strings.TrimSuffix(pure, "}}") + suffix + "}}"
+			frames = append(frames, mixed)
+			want = append(want, mixed)
+		}
+		extra := strings.TrimSuffix(pure, "}") + `,"futureEnvelope":null}`
+		frames = append(frames, extra)
+		want = append(want, extra)
+		// A fixed schema requires non-null strings, required fields and exact int64 indices.
+		for _, bad := range []string{
+			strings.Replace(pure, `"itemId":"item",`, "", 1),
+			strings.Replace(pure, `"itemId":"item"`, `"future":null`, 1),
+			strings.Replace(pure, `"itemId":"item"`, `"itemId":null`, 1),
+			strings.Replace(pure, `"itemId":"item"`, `"itemId":[]`, 1),
+		} {
+			frames = append(frames, bad)
+			want = append(want, bad)
+		}
+	}
+	extra := []string{
+		`{ "method" : "item/agentMessage/delta", "params" : {"threadId":"child","turnId":"turn","itemId":"item","delta":"text","future":[null,9007199254740993]} }`,
+		detailFrame("item/reasoning/textDelta", `{"threadId":"child","turnId":"turn","itemId":"item","delta":"thought","contentIndex":null}`),
+		detailFrame("item/reasoning/summaryTextDelta", `{"threadId":"child","turnId":"turn","itemId":"item","delta":"summary","summaryIndex":9223372036854775808}`),
+		detailFrame("item/reasoning/summaryPartAdded", `{"threadId":"child","turnId":"turn","itemId":"item","summaryIndex":0.5}`),
+		detailFrame("item/agentMessage/delta", `{"threadId":"child","turnId":"turn","itemId":"item","delta":null}`),
+		detailFrame("item/future/delta", `{"threadId":"child","delta":"future"}`),
+		detailFrame("item/completed", `{"threadId":"child","turnId":"turn","completedAtMs":1,"item":{"type":"futureItem","id":"item","text":"mixed","future":null}}`),
+		detailFrame("item/started", `{"threadId":"child","turnId":"turn","startedAtMs":1,"item":{"type":"agentMessage","id":"item","text":"visible full item"}}`),
+	}
+	frames = append(frames, extra...)
+	want = append(want, extra...)
+	duplicate := strings.Replace(pureDetails("child")[0], `"itemId":"item"`, `"itemId":"item","itemId":"duplicate"`, 1)
+	frames = append(frames, duplicate)
+	emitChildDetail(t, client, frames)
+	got := drainChildDetail(t, session)
+	var raws []string
+	for _, r := range got {
+		if r.Event != nil {
+			raws = append(raws, string(r.Raw))
+			assert.Equal(t, r.Raw, r.Event.Raw)
+		}
+	}
+	assert.Equal(t, want, raws)
+	q := session.Unattributed()
+	require.Len(t, q.Records, 3)
+	assert.Equal(t, duplicate, string(q.Records[2].Raw))
+	assert.Equal(t, early, string(q.Records[0].Raw))
+	assert.Equal(t, foreign, string(q.Records[1].Raw))
+	assert.True(t, q.CoverageGap)
+}
+
+func (s *CommonStoriesSuite) checkCodexChildDetailAuthority() {
+	for _, action := range []string{"approve", "deny", "answer", "resolved", "close"} {
+		s.Run(action, func() {
+			t := s.T()
+			session, client, path := openChildDetail(t, codex.ChildDetailSuppress, false)
+			method := "item/commandExecution/requestApproval"
+			params := `{ "threadId":"child","turnId":"turn","itemId":"item","command":"synthetic only","cwd":"/synthetic","future":null }`
+			if action == "answer" {
+				method = "item/tool/requestUserInput"
+				params = `{"threadId":"child","turnId":"turn","itemId":"item","isBlocking":false,"questions":[{"id":"q","header":"H","question":"Choose","isOther":false,"isSecret":false,"options":[]}]}`
+			}
+			request := fmt.Sprintf(`{"id":"original","method":%q,"params":%s,"futureEnvelope":null}`, method, params)
+			// Backlogged detail does not block the control path or change the original request.
+			frames := []string{detailRelation("child", "root-1")}
+			for range 256 {
+				frames = append(frames, pureDetails("child")...)
+			}
+			frames = append(frames, request)
+			emitChildDetail(t, client, frames)
+			var incoming *codex.IncomingRequest
+			for incoming == nil {
+				r, err := session.Receive(deadline(t))
+				require.NoError(t, err)
+				if r.Request != nil {
+					incoming = r.Request
+					assert.Equal(t, request, string(r.Raw))
+					assert.Equal(t, params, string(r.Params))
+					assert.Equal(t, "child", r.Source.ThreadID)
+				}
+			}
+			originalCtx := incoming.Context()
+			require.NoError(t, originalCtx.Err())
+			canceled, cancel := context.WithCancel(context.Background())
+			cancel()
+			require.ErrorIs(t, incoming.Handle().Answer(canceled, json.RawMessage(`{}`)), context.Canceled)
+			require.NoError(t, originalCtx.Err(), "a canceled answer attempt must not revoke the request")
+			switch action {
+			case "approve":
+				require.NoError(t, incoming.Approve(deadline(t), codex.ApprovalOptions{}))
+			case "deny":
+				require.NoError(t, incoming.Deny(deadline(t), codex.ApprovalOptions{}))
+			case "answer":
+				require.NoError(t, incoming.Answer(deadline(t), ct.ToolRequestUserInputResponse{Answers: map[string]ct.ToolRequestUserInputAnswer{"q": {Answers: []string{"A"}}}}))
+			case "resolved":
+				emitChildDetail(t, client, []string{detailFrame("serverRequest/resolved", `{"threadId":"child","requestId":"original"}`)})
+			case "close":
+				require.NoError(t, session.Close())
+			}
+			require.ErrorIs(t, originalCtx.Err(), context.Canceled)
+			require.Error(t, incoming.Handle().Answer(deadline(t), json.RawMessage(`{}`)), "original capability is single use")
+			// A client barrier makes the peer's recorded answer count deterministic.
+			emitChildDetail(t, client, nil)
+			wire, err := os.ReadFile(path)
+			require.NoError(t, err)
+			answers := 0
+			for _, line := range strings.Split(string(wire), "\n") {
+				if strings.HasPrefix(line, "source:") {
+					continue
+				}
+				var f map[string]json.RawMessage
+				if json.Unmarshal([]byte(line), &f) == nil && string(f["id"]) == `"original"` {
+					if _, ok := f["result"]; ok {
+						answers++
+					}
+				}
+			}
+			want := 1
+			if action == "resolved" || action == "close" {
+				want = 0
+			}
+			assert.Equal(t, want, answers)
+		})
+	}
+}
+
+func (s *CommonStoriesSuite) checkCodexChildDetailLifecycle() {
+	for _, stop := range []string{"close", "abort"} {
+		s.Run(stop, func() {
+			t := s.T()
+			session, client, _ := openChildDetail(t, codex.ChildDetailSuppress, false)
+			canceled, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err := session.Receive(canceled)
+			require.ErrorIs(t, err, context.Canceled)
+			parentResult := detailFrame("item/completed", `{"threadId":"root-1","turnId":"turn","completedAtMs":1,"item":{"type":"collabAgentToolCall","id":"spawn","tool":"spawnAgent","status":"completed","senderThreadId":"root-1","receiverThreadIds":["child"],"agentsStates":{}}}`)
+			frames := []string{parentResult}
+			want := []string{parentResult}
+			for range 2048 {
+				frames = append(frames, pureDetails("child")[0])
+				retained := detailFrame("fixture/ordered", fmt.Sprintf(`{"threadId":"child","ordinal":%d}`, len(want)))
+				frames = append(frames, retained)
+				want = append(want, retained)
+			}
+			terminal := []string{
+				detailFrame("item/completed", `{"threadId":"root-1","turnId":"turn","completedAtMs":2,"item":{"type":"collabAgentToolCall","id":"wait","tool":"wait","status":"completed","senderThreadId":"root-1","receiverThreadIds":["child"],"agentsStates":{"child":{"status":"completed","message":"parent tool result"}}}}`),
+				detailFrame("turn/completed", `{"threadId":"root-1","turn":{"id":"turn","items":[],"status":"completed","error":null}}`),
+				detailFrame("item/completed", `{"threadId":"child","turnId":"turn","completedAtMs":3,"item":{"type":"agentMessage","id":"item","text":"full child item remains"}}`),
+				detailFrame("error", `{"threadId":"child","turnId":"turn","willRetry":false,"error":{"message":"synthetic failure","codexErrorInfo":{}}}`),
+				detailFrame("turn/completed", `{"threadId":"child","turn":{"id":"turn","items":[],"status":"failed","error":{"message":"synthetic failure","codexErrorInfo":{}}}}`),
+				detailFrame("turn/completed", `{"threadId":"child","turn":{"id":"next","items":[],"status":"interrupted","error":null}}`),
+			}
+			frames = append(frames, terminal...)
+			frames = append(frames, pureDetails("child")...)
+			want = append(want, terminal...)
+			emitChildDetail(t, client, frames) // reply arrives with no Receive consumer
+			select {
+			case <-session.Done():
+				require.FailNow(t, "root terminal ended child observation")
+			default:
+			}
+			require.NoError(t, session.Interrupt(deadline(t), codex.InterruptOptions{TurnID: "turn"}))
+			if stop == "abort" {
+				require.NoError(t, session.Abort())
+				_, err := session.Receive(deadline(t))
+				require.ErrorIs(t, err, io.EOF)
+				return
+			}
+			got := drainChildDetail(t, session)
+			var raws []string
+			members, parents := 0, 0
+			for _, r := range got {
+				if r.Event != nil {
+					raws = append(raws, string(r.Raw))
+				}
+				if r.Observation != nil {
+					if r.Observation.Reason == "member-confirmed" {
+						members++
+					}
+					if r.Observation.Reason == "parent-confirmed" {
+						parents++
+					}
+				}
+			}
+			assert.Equal(t, want, raws)
+			assert.Equal(t, 1, members)
+			assert.Equal(t, 1, parents)
+		})
+	}
+}
+
+const claudeDetailInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`
+const claudeDetailTask = `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`
+const claudeDetailText = ` {"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"}]}} `
+
+func openClaudeDetail(s *CommonStoriesSuite, policy claude.ChildDetailPolicy, resume string) (*claude.Session, string) {
+	t := s.T()
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	dir := t.TempDir()
+	trace := filepath.Join(dir, "trace.jsonl")
+	o := claude.SessionOptions{CLIPath: exe, WorkDir: dir, ResumeID: resume, ChildDetailPolicy: policy, Env: []string{"HOME=" + dir, "SDK_STORY_PEER=claude", "SDK_STORY=child-detail", "SDK_STORY_TRACE=" + trace, "GORACE=atexit_sleep_ms=0"}}
+	session, err := claude.Open(deadline(t), o)
+	require.NoError(t, err)
+	o.ChildDetailPolicy = claude.ChildDetailSuppress // construction fixes a value copy
+	t.Cleanup(func() { _ = session.Abort() })
+	return session, trace
+}
+func sendClaudeDetail(s *CommonStoriesSuite, session *claude.Session, frames ...string) {
+	t := s.T()
+	t.Helper()
+	for _, frame := range frames {
+		receipt, err := session.Submit(deadline(t), claude.Input{Text: frame})
+		require.NoError(t, err)
+		require.True(t, receipt.Written)
+	}
+	require.NoError(t, session.Interrupt(deadline(t), claude.InterruptOptions{}))
+}
+func drainClaudeDetail(s *CommonStoriesSuite, session *claude.Session) []claude.Received {
+	t := s.T()
+	t.Helper()
+	require.NoError(t, session.Close())
+	var result []claude.Received
+	for {
+		r, err := session.Receive(deadline(t))
+		if err != nil {
+			require.ErrorIs(t, err, io.EOF)
+			break
+		}
+		if r.Event != nil {
+			require.Equal(t, r.Raw, r.Event.Raw)
+			result = append(result, r)
+		}
+	}
+	return result
+}
+func checkClaudeChildDetailOptions(s *CommonStoriesSuite) {
+	t := s.T()
+	for _, policy := range []claude.ChildDetailPolicy{"", "preserve", "suppress"} {
+		for _, resume := range []string{"", "explicit-resume"} {
+			session, trace := openClaudeDetail(s, policy, resume)
+			sendClaudeDetail(s, session, claudeDetailInit, claudeDetailTask, claudeDetailText)
+			got := drainClaudeDetail(s, session)
+			expected := 3
+			if policy == claude.ChildDetailSuppress {
+				expected = 2
+			}
+			require.Equal(t, expected, len(got))
+			if expected == 3 {
+				require.Equal(t, claudeDetailText, string(got[2].Raw))
+			}
+			raw, err := os.ReadFile(trace)
+			require.NoError(t, err)
+			lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			var args []string
+			require.NoError(t, json.Unmarshal([]byte(lines[0]), &args))
+			if resume != "" {
+				require.Contains(t, args, "--resume="+resume)
+				require.Equal(t, resume, session.RequestedResumeID())
+			}
+			var init struct{ Request map[string]any }
+			require.NoError(t, json.Unmarshal([]byte(lines[1]), &init))
+			require.Equal(t, true, init.Request["forwardSubagentText"])
+			require.NotContains(t, init.Request, "child_detail_policy")
+		}
+	}
+	for _, policy := range []claude.ChildDetailPolicy{"SUPPRESS", "unknown", " preserve"} {
+		session, err := claude.Open(context.Background(), claude.SessionOptions{CLIPath: "/nonexistent-must-not-start", ChildDetailPolicy: policy})
+		require.Nil(t, session)
+		require.ErrorIs(t, err, claude.ErrInvalidInput)
+	}
+}
+
+func checkClaudePureDetail(s *CommonStoriesSuite) {
+	t := s.T()
+	details := []string{claudeDetailText,
+		`{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"thinking","thinking":"reason","signature":"sig"},{"type":"redacted_thinking","data":"opaque"}],"usage":{"input_tokens":2,"output_tokens":7},"stop_reason":"end_turn"}}`,
+	}
+	for _, delta := range []string{`{"type":"text_delta","text":"next"}`, `{"type":"thinking_delta","thinking":"reason"}`, `{"type":"signature_delta","signature":"sig"}`, `{"type":"input_json_delta","partial_json":"{\"x\":"}`} {
+		details = append(details, `{"type":"stream_event","session_id":"s","parent_tool_use_id":"spawn","event":{"type":"content_block_delta","index":0,"delta":`+delta+`}}`)
+	}
+	for _, policy := range []claude.ChildDetailPolicy{"", claude.ChildDetailPreserve, claude.ChildDetailSuppress} {
+		session, _ := openClaudeDetail(s, policy, "")
+		frames := []string{claudeDetailInit, claudeDetailTask}
+		want := append([]string(nil), frames...)
+		for _, detail := range details {
+			frames = append(frames, detail, detail) // repeated snapshots/deltas are never deduplicated
+			if policy != claude.ChildDetailSuppress {
+				want = append(want, detail, detail)
+			}
+			root := strings.Replace(detail, `"parent_tool_use_id":"spawn"`, `"parent_tool_use_id":null`, 1)
+			frames = append(frames, root)
+			want = append(want, root)
+		}
+		sendClaudeDetail(s, session, frames...)
+		got := drainClaudeDetail(s, session)
+		require.Len(t, got, len(want))
+		for i, frame := range want {
+			require.Equal(t, frame, string(got[i].Raw))
+			if got[i].Source.AssociationID != "" {
+				require.Equal(t, "task:a", got[i].Source.AssociationID)
+				require.Nil(t, got[i].Parent)
+			}
+		}
+	}
+}
+
+func checkClaudeMixedDetail(s *CommonStoriesSuite) {
+	t := s.T()
+	session, _ := openClaudeDetail(s, claude.ChildDetailSuppress, "")
+	early := strings.Replace(claudeDetailText, "child", "early", 1)
+	foreign := strings.Replace(claudeDetailText, `"session_id":"s"`, `"session_id":"foreign"`, 1)
+	unknown := `{"type":"future","session_id":"s","parent_tool_use_id":"spawn","value":42}`
+	sendClaudeDetail(s, session, early, claudeDetailInit, foreign, unknown)
+	// Same-session unknown tool/agent identity is insufficient to filter.
+	frames := []string{
+		strings.Replace(claudeDetailText, "spawn", "missing", 1),
+		`{"type":"assistant","session_id":"s","agent_id":"a","message":{"content":[{"type":"text","text":"not proof"}]}}`,
+		claudeDetailTask,
+	}
+	for _, extra := range []string{`"future":null`, `"error":null`, `"tool_use_result":null`, `"agent_id":"a"`, `"parent_task_id":"p"`, `"isReplay":true`} {
+		frames = append(frames, strings.Replace(claudeDetailText, `"type":"assistant"`, `"type":"assistant",`+extra, 1))
+	}
+	for _, content := range []string{
+		`[{"type":"text","text":"detail"},{"type":"tool_use","id":"nested","name":"Agent","input":{}}]`,
+		`[{"type":"text","text":"detail"},{"type":"server_tool_use","id":"server","name":"search","input":{}}]`,
+		`[{"type":"text","text":"detail"},{"type":"tool_result","tool_use_id":"nested","content":"result"}]`,
+		`[{"type":"future","value":null}]`, `[{"type":"text","text":"x","future":null}]`, `"text shape"`, `[]`,
+	} {
+		frames = append(frames, `{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":`+content+`}}`)
+	}
+	for _, metadata := range []string{`"future":null`, `"usage":{"output_tokens":1,"future":null}`, `"usage":{"output_tokens":null}`, `"role":"user"`} {
+		frames = append(frames, `{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"x"}],`+metadata+`}}`)
+	}
+	for _, event := range []string{
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x","future":null}}`,
+		`{"type":"content_block_delta","index":-1,"delta":{"type":"text_delta","text":"x"}}`,
+		`{"type":"content_block_delta","delta":{"type":"text_delta"}}`,
+		`{"type":"content_block_delta","delta":{"type":"text_delta","text":"missing index"}}`,
+		`{"type":"content_block_delta","delta":{"type":"future","text":"x"}}`,
+		`{"type":"content_block_delta","delta":{"type":"text_delta","text":"x"},"task_id":"protected"}`,
+		`{"type":"message_start","message":{"content":[]}}`, `{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+		`{"type":"message_stop"}`, `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`{"type":"content_block_stop","index":0}`, `{"type":"ping"}`, `{"type":"future"}`,
+	} {
+		frames = append(frames, `{"type":"stream_event","session_id":"s","parent_tool_use_id":"spawn","event":`+event+`}`)
+	}
+	sendClaudeDetail(s, session, frames...)
+	// A reviewed child alias can suppress detail with no known parent. A late
+	// root tool owner still creates its protected relationship observation.
+	sendClaudeDetail(s, session, claudeDetailText, `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`)
+	got := drainClaudeDetail(s, session)
+	require.Equal(t, len(frames)+2, len(got))
+	require.Equal(t, claudeDetailInit, string(got[0].Raw))
+	for i, frame := range frames {
+		require.Equal(t, frame, string(got[i+1].Raw))
+	}
+	snap := session.Unattributed()
+	require.Len(t, snap.Records, 3)
+	for i, want := range []string{early, foreign, unknown} {
+		require.Equal(t, want, string(snap.Records[i].Event.Raw))
+	}
+	// A future version cannot reuse reviewed shapes as a suppression license.
+	future, _ := openClaudeDetail(s, claude.ChildDetailSuppress, "")
+	futureFrames := []string{strings.Replace(claudeDetailInit, "2.1.258", "future", 1), claudeDetailTask, claudeDetailText}
+	sendClaudeDetail(s, future, futureFrames...)
+	futureGot := drainClaudeDetail(s, future)
+	require.Equal(t, len(futureFrames), len(futureGot))
+	require.Empty(t, futureGot[2].Source.AssociationID)
+}
+
+func claudeDetailRequest(s *CommonStoriesSuite, session *claude.Session, id, tool, input string) *claude.IncomingRequest {
+	t := s.T()
+	t.Helper()
+	raw := ` {"type":"control_request","request_id":"` + id + `","request":{"subtype":"can_use_tool","tool_name":"` + tool + `","tool_use_id":"spawn","agent_id":"unverified","input":` + input + `}} `
+	sendClaudeDetail(s, session, claudeDetailText, raw)
+	for {
+		r, err := session.Receive(deadline(t))
+		require.NoError(t, err)
+		if r.Request != nil {
+			require.Equal(t, raw, string(r.Raw))
+			require.Equal(t, raw, string(r.Request.Raw()))
+			require.Equal(t, r.Params, r.Request.Params())
+			require.Equal(t, id, r.Request.ID())
+			return r.Request
+		}
+	}
+}
+func checkClaudeDetailAuthority(s *CommonStoriesSuite) {
+	t := s.T()
+	session, trace := openClaudeDetail(s, claude.ChildDetailSuppress, "")
+	sendClaudeDetail(s, session, claudeDetailInit, claudeDetailTask)
+	p := claudeDetailRequest(s, session, "original", "Read", `{"file_path":"synthetic","future":null}`)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, p.Approve(canceled, claude.ApprovalOptions{}), context.Canceled)
+	require.NoError(t, p.Context().Err())
+	outcomes := make(chan error, 12)
+	for range 12 {
+		go func() { outcomes <- p.Deny(context.Background(), claude.DenialOptions{Message: "declined"}) }()
+	}
+	successes := 0
+	for range 12 {
+		err := <-outcomes
+		if err == nil {
+			successes++
+		} else {
+			require.ErrorIs(t, err, claude.ErrPermissionUsed)
+		}
+	}
+	require.Equal(t, 1, successes)
+	approved := claudeDetailRequest(s, session, "approved", "Read", `{}`)
+	require.NoError(t, approved.Approve(deadline(t), claude.ApprovalOptions{}))
+	require.ErrorIs(t, approved.Deny(deadline(t), claude.DenialOptions{}), claude.ErrPermissionUsed)
+	q := claudeDetailRequest(s, session, "question", "AskUserQuestion", `{"questions":[{"question":"Choose?","header":"Pick","options":[{"label":"A","description":"alpha"}],"multiSelect":false}],"future":null}`)
+	require.NoError(t, q.Answer(deadline(t), claude.QuestionAnswers{Answers: map[string]string{"Choose?": "A"}}))
+	require.ErrorIs(t, q.Answer(deadline(t), claude.QuestionAnswers{Answers: map[string]string{"Choose?": "A"}}), claude.ErrPermissionUsed)
+	revoked := claudeDetailRequest(s, session, "revoked", "Read", `{}`)
+	sendClaudeDetail(s, session, `{"type":"control_cancel_request","request_id":"revoked"}`)
+	require.ErrorIs(t, revoked.Context().Err(), context.Canceled)
+	require.ErrorIs(t, revoked.Approve(deadline(t), claude.ApprovalOptions{}), claude.ErrPermissionCancelled)
+	pending := claudeDetailRequest(s, session, "pending", "Read", `{}`)
+	drainClaudeDetail(s, session)
+	require.ErrorIs(t, pending.Deny(deadline(t), claude.DenialOptions{}), claude.ErrClosed)
+	raw, err := os.ReadFile(trace)
+	require.NoError(t, err)
+	var replies []clt.ControlResponse
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n")[1:] {
+		var f struct{ Type string }
+		require.NoError(t, json.Unmarshal([]byte(line), &f))
+		if f.Type == "control_response" {
+			var r clt.ControlResponse
+			require.NoError(t, json.Unmarshal([]byte(line), &r))
+			replies = append(replies, r)
+		}
+	}
+	require.Len(t, replies, 3)
+	require.Equal(t, "original", replies[0].Response.RequestID)
+	require.Equal(t, "approved", replies[1].Response.RequestID)
+	require.Equal(t, "question", replies[2].Response.RequestID)
+	require.Contains(t, string(replies[2].Response.Response), `"answers":{"Choose?":"A"}`)
+}
+
+func checkClaudeDetailLifecycle(s *CommonStoriesSuite) {
+	t := s.T()
+	for _, abort := range []bool{false, true} {
+		session, _ := openClaudeDetail(s, claude.ChildDetailSuppress, "")
+		frames := []string{claudeDetailInit,
+			`{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`,
+			claudeDetailTask,
+			`{"type":"system","subtype":"task_started","session_id":"s","task_id":"b","task_type":"local_agent","tool_use_id":"sibling","is_backgrounded":true}`,
+			`{"type":"user","session_id":"s","message":{"content":[{"type":"tool_result","tool_use_id":"spawn","content":"child result","is_error":true}]},"tool_use_result":{"status":"failed"}}`,
+			`{"type":"result","session_id":"s","result":"root done"}`,
+			`{"type":"system","subtype":"task_progress","session_id":"s","task_id":"b","summary":"background"}`,
+			`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"a","status":"completed"}`,
+			`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"b","status":"failed"}`,
+			`{"type":"system","subtype":"task_notification","session_id":"s","task_id":"b","status":"killed"}`,
+			`{"type":"system","subtype":"background_tasks_changed","session_id":"s","tasks":[]}`,
+		}
+		var sent []string
+		for i, frame := range frames {
+			sent = append(sent, frame)
+			if i < 3 {
+				continue
+			}
+			for range 40 {
+				sent = append(sent, claudeDetailText, strings.Replace(claudeDetailText, "spawn", "sibling", 1))
+			}
+		}
+		// A control response after a burst is a reader barrier with Receive unread.
+		sendClaudeDetail(s, session, sent...)
+		if abort {
+			require.NoError(t, session.Abort())
+		}
+		got := drainClaudeDetail(s, session)
+		if abort {
+			require.Empty(t, got)
+			continue
+		}
+		require.Equal(t, len(frames), len(got))
+		for i, frame := range frames {
+			require.Equal(t, frame, string(got[i].Raw))
+		}
+		require.Equal(t, "task:a", got[7].Source.AssociationID)
+		require.NotNil(t, got[7].Parent)
+		require.Equal(t, "task:b", got[8].Source.AssociationID)
+		require.Nil(t, got[8].Parent)
+	}
+}

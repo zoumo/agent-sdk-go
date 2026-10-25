@@ -201,19 +201,27 @@ func TestSessionDepthRejectionDoesNotRejectMemberOrSortRuns(t *testing.T) {
 }
 
 func TestSessionWaitCancellationAndQuarantineExpiry(t *testing.T) {
-	s := openSessionFixture(t, func(o *SessionOptions) { o.Subagents.MaxUnresolvedWait = time.Millisecond })
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := s.Receive(ctx)
-	require.ErrorIs(t, err, context.Canceled)
-	submitFrame(t, s, `{"type":"future","session_id":"foreign"}`)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
-	sessionNative(t, s)
-	// Snapshot reads do not expire material; only the active retention timer can
-	// advance Expired while the native peer is idle.
-	require.Eventually(t, func() bool { return s.Unattributed().Expired == 1 }, time.Second, time.Millisecond)
-	require.Empty(t, s.Unattributed().Records)
-	require.True(t, s.Unattributed().CoverageGap)
+	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) {
+			s := openSessionFixture(t, func(o *SessionOptions) {
+				o.Subagents.MaxUnresolvedWait = time.Millisecond
+				o.ChildDetailPolicy = policy
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err := s.Receive(ctx)
+			require.ErrorIs(t, err, context.Canceled)
+			submitFrame(t, s, `{"type":"future","session_id":"foreign"}`)
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			sessionNative(t, s)
+			// Snapshot reads do not expire material; only the active retention timer can
+			// advance Expired while the native peer is idle.
+			require.Eventually(t, func() bool { return s.Unattributed().Expired == 1 }, time.Second, time.Millisecond)
+			require.Empty(t, s.Unattributed().Records)
+			require.True(t, s.Unattributed().CoverageGap)
+
+		})
+	}
 }
 
 func TestSessionForeignHistoryCannotSupplyLocalParentAlias(t *testing.T) {
@@ -227,26 +235,31 @@ func TestSessionForeignHistoryCannotSupplyLocalParentAlias(t *testing.T) {
 }
 
 func TestSessionFaultDrainsAcceptedFactsAndKeepsFirstCause(t *testing.T) {
-	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
-	sessionNative(t, s)
-	submitFrame(t, s, `{"type":"result","session_id":"s","result":"accepted"}`)
-	// Valid JSON with an invalid native message shape faults the SDK decoder.
-	submitFrame(t, s, `{"type":"assistant","session_id":"s"}`)
-	select {
-	case <-s.Done():
-	case <-time.After(3 * time.Second):
-		t.Fatal("fault waited for Receive")
+	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) {
+			s := openSessionFixture(t, func(o *SessionOptions) { o.ChildDetailPolicy = policy })
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			sessionNative(t, s)
+			submitFrame(t, s, `{"type":"result","session_id":"s","result":"accepted"}`)
+			// Valid JSON with an invalid native message shape faults the SDK decoder.
+			submitFrame(t, s, `{"type":"assistant","session_id":"s"}`)
+			select {
+			case <-s.Done():
+			case <-time.After(3 * time.Second):
+				t.Fatal("fault waited for Receive")
+			}
+			cause := s.Err()
+			require.ErrorIs(t, cause, ErrProtocol)
+			require.Equal(t, "accepted", sessionNative(t, s).Event.Result.Result)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_, err := s.Receive(ctx)
+			require.Equal(t, cause, err)
+			_ = s.Close()
+			require.Equal(t, cause, s.Err())
+
+		})
 	}
-	cause := s.Err()
-	require.ErrorIs(t, cause, ErrProtocol)
-	require.Equal(t, "accepted", sessionNative(t, s).Event.Result.Result)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	_, err := s.Receive(ctx)
-	require.Equal(t, cause, err)
-	_ = s.Close()
-	require.Equal(t, cause, s.Err())
 }
 
 func TestSessionRejectsCyclesConflictsAndToolAliasesWithoutLosingFacts(t *testing.T) {

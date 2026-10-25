@@ -24,6 +24,7 @@ type ledgerHeader struct {
 type reservation struct {
 	Scene     string `json:"scene"`
 	Operation string `json:"operation"`
+	Target    string `json:"target,omitempty"`
 }
 
 // Reserve durably charges an attempt before startup or submission. The caller
@@ -31,14 +32,23 @@ type reservation struct {
 // Failed/uncertain starts are never refunded. This is accounting, not authority
 // to launch, and does not measure provider requests, retries, tokens or dollars.
 // The externally reviewed header starts a single 480-second activity window.
-func Reserve(path, scene, operation string) error {
+func Reserve(path, scene, operation string) error { return reserveRevision(path, "", scene, operation) }
+
+func reserveRevision(path, revision, scene, operation string, target ...string) error {
+	bound := ""
+	if len(target) > 0 {
+		bound = target[0]
+	}
+	return operateLedger(path, revision, scene, operation, bound, false)
+}
+func operateLedger(path, revision, scene, operation, target string, checkOnly bool) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return errors.New("absolute clean aggregate ledger path required")
 	}
-	if scene != "s1" && scene != "s2" && scene != "r1" && scene != "r2" && scene != "r3" && scene != "r4" {
+	if !validScene(scene) {
 		return errors.New("unsupported scene; children disabled")
 	}
-	if operation != "root" && operation != "reader" && operation != "turn1" && operation != "turn2" {
+	if operation != "root" && operation != "reader" && operation != "turn1" && operation != "turn2" && operation != "stop" {
 		return errors.New("unsupported operation")
 	}
 	// Refuse symlink components, including parent directories.
@@ -50,6 +60,13 @@ func Reserve(path, scene, operation string) error {
 		if st.Mode()&os.ModeSymlink != 0 {
 			return errors.New("ledger symlink refused")
 		}
+	}
+	parent, parentErr := os.Stat(filepath.Dir(path))
+	if parentErr != nil {
+		return parentErr
+	}
+	if !parent.IsDir() || parent.Mode().Perm() != 0700 {
+		return errors.New("private aggregate ledger directory required")
 	}
 	f, err := os.OpenFile(path, os.O_RDWR|syscall.O_NOFOLLOW, 0)
 	if err != nil {
@@ -82,6 +99,9 @@ func Reserve(path, scene, operation string) error {
 	if err = decodeLedger(scan.Bytes(), &header); err != nil {
 		return err
 	}
+	if revision != "" && header.Revision != revision {
+		return errors.New("aggregate ledger revision mismatch")
+	}
 	age := time.Since(header.StartedAt)
 	_, revisionErr := hex.DecodeString(header.Revision)
 	if revisionErr != nil {
@@ -90,32 +110,45 @@ func Reserve(path, scene, operation string) error {
 	if header.Version != 1 || header.Authorization == "" || len(header.Revision) != 40 || header.MaxRoots < 1 || header.MaxRoots > 3 || header.MaxTurns < 1 || header.MaxTurns > 6 || age < 0 || age >= 480*time.Second {
 		return errors.New("invalid or expired aggregate budget")
 	}
-	seen := map[reservation]bool{}
+	seen := map[[2]string]bool{}
+	targets := map[string]string{}
 	roots, turns, readers := 0, 0, 0
+	stopped := false
 	charge := func(r reservation) error {
-		if seen[r] {
+		if stopped {
+			return errors.New("aggregate capture stopped; no further attempts permitted")
+		}
+		key := [2]string{r.Scene, r.Operation}
+		if seen[key] {
 			return errors.New("duplicate attempt")
 		}
-		if r.Scene != "s1" && r.Scene != "s2" && r.Scene != "r1" && r.Scene != "r2" && r.Scene != "r3" && r.Scene != "r4" {
+		if !validScene(r.Scene) {
 			return errors.New("invalid ledger scene")
 		}
 		switch r.Operation {
+		case "stop":
+			stopped = true
 		case "root":
 			if r.Scene == "r4" {
 				return errors.New("query cannot create root")
 			}
+			targets[r.Scene] = r.Target
 			roots++
 		case "reader":
 			if r.Scene != "r4" {
 				return errors.New("reader only r4")
 			}
+			targets[r.Scene] = r.Target
 			readers++
 		case "turn1", "turn2":
-			if !seen[reservation{r.Scene, "root"}] || r.Scene == "r4" {
+			if !seen[[2]string{r.Scene, "root"}] || r.Scene == "r4" {
 				return errors.New("turn without root")
 			}
-			if r.Operation == "turn2" && (!seen[reservation{r.Scene, "turn1"}] || r.Scene == "s1" || r.Scene == "s2") {
+			if r.Operation == "turn2" && (!seen[[2]string{r.Scene, "turn1"}] || r.Scene == "s1" || r.Scene == "s2") {
 				return errors.New("extra or unordered turn")
+			}
+			if r.Target != targets[r.Scene] {
+				return errors.New("turn target differs from root reservation")
 			}
 			turns++
 		default:
@@ -124,7 +157,7 @@ func Reserve(path, scene, operation string) error {
 		if roots > header.MaxRoots || turns > header.MaxTurns || readers > 1 {
 			return errors.New("aggregate attempts exhausted")
 		}
-		seen[r] = true
+		seen[key] = true
 		return nil
 	}
 	for scan.Scan() {
@@ -139,7 +172,16 @@ func Reserve(path, scene, operation string) error {
 	if err = scan.Err(); err != nil {
 		return err
 	}
-	r := reservation{scene, operation}
+	if checkOnly {
+		if stopped {
+			return errors.New("aggregate capture stopped")
+		}
+		if !seen[[2]string{scene, operation}] || target == "" || targets[scene] != target {
+			return errors.New("missing bound launch reservation")
+		}
+		return nil
+	}
+	r := reservation{Scene: scene, Operation: operation, Target: target}
 	if err = charge(r); err != nil {
 		return err
 	}
@@ -188,4 +230,25 @@ func decodeLedger(b []byte, v any) error {
 		return errors.New("trailing ledger JSON")
 	}
 	return nil
+}
+
+// ledgerDeadline is checked again by reserveRevision under the journal lock.
+func ledgerDeadline(path, revision string) (time.Time, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(io.LimitReader(f, 64<<10))
+	if !scan.Scan() {
+		return time.Time{}, errors.New("missing aggregate budget")
+	}
+	var h ledgerHeader
+	if err = decodeLedger(scan.Bytes(), &h); err != nil {
+		return time.Time{}, err
+	}
+	if h.Revision != revision {
+		return time.Time{}, errors.New("aggregate ledger revision mismatch")
+	}
+	return h.StartedAt.Add(480 * time.Second), nil
 }

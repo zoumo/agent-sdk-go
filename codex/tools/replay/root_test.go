@@ -84,6 +84,7 @@ func TestRootContinuationStructuredInputAndNativeReceipts(t *testing.T) {
 	addRoot(&fs, "c2s", `{"id":105,"method":"thread/settings/update","params":{"threadId":"thread-001","effort":"high"}}`)
 	addRoot(&fs, "s2c", `{"id":105,"result":{}}`)
 	addRoot(&fs, "c2s", `{"id":106,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"Reply with the word Done."}],"environments":[]}}`)
+	addRoot(&fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}`)
 	completeRoot(&fs, "106", "turn-2")
 	c, ctx := rootClient(t, fs)
 	session, e := codex.Open(ctx, codex.SessionOptions{Client: c})
@@ -94,6 +95,7 @@ func TestRootContinuationStructuredInputAndNativeReceipts(t *testing.T) {
 	require.NoError(t, e)
 	require.Equal(t, 2, count)
 	require.Len(t, out.Turns, 2)
+	require.Equal(t, "turn-2", out.Turns[1].Terminal.ID)
 	require.True(t, out.Model.NativeAccepted)
 	require.Contains(t, out.Model.Response.UnknownFields, "futureReceipt")
 	require.True(t, out.Thinking.NativeAccepted)
@@ -136,6 +138,7 @@ func TestExecutionTimeInputAndExplicitInterrupt(t *testing.T) {
 	addRoot(&fs, "s2c", `{"id":104,"result":{"turn":{"id":"turn-2","items":[],"status":"inProgress"}}}`)
 	addRoot(&fs, "c2s", `{"id":105,"method":"turn/interrupt","params":{"threadId":"thread-001","turnId":"turn-1"}}`)
 	addRoot(&fs, "s2c", `{"id":105,"result":{}}`)
+	addRoot(&fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"turn-2","items":[],"status":"completed","error":null}}}`)
 	addRoot(&fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"turn-1","items":[],"status":"interrupted","error":null}}}`)
 	c, ctx := rootClient(t, fs)
 	s, e := codex.Open(ctx, codex.SessionOptions{Client: c})
@@ -145,6 +148,8 @@ func TestExecutionTimeInputAndExplicitInterrupt(t *testing.T) {
 	out, e := RunRoot(ctx, s, RootPlan{Scene: "r3", Reserve: func() error { attempts++; return nil }}, &Handler{})
 	require.NoError(t, e)
 	require.Equal(t, 2, attempts)
+	require.Equal(t, types.TurnStatusInterrupted, out.Turns[0].Terminal.Status)
+	require.Equal(t, "turn-1", out.Turns[0].Terminal.ID)
 	require.True(t, out.InterruptAccepted)
 	require.False(t, out.Untriggered)
 	require.Equal(t, "turn-2", out.Interleaved.Response.Turn.ID)
@@ -209,4 +214,48 @@ func TestDecodeRejectsTrailingTrafficBeyondCaptureLimit(t *testing.T) {
 	input.WriteString(`{"unexpected":"trailing"}`)
 	_, err := Decode(strings.NewReader(input.String()))
 	require.Error(t, err)
+}
+
+func TestHeldNativeRequestContinuesReceiveAfterNonGeneratingControl(t *testing.T) {
+	params := `{"threadId":"thread-001","turnId":"turn-1","itemId":"item-1","startedAtMs":1,"grantRoot":null}`
+	fs := rootPrefix(t)
+	addRoot(&fs, "c2s", `{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"synthetic deferred request"}]}}`)
+	addRoot(&fs, "s2c", `{"id":103,"result":{"turn":{"id":"turn-1","items":[],"status":"inProgress"}}}`)
+	addRoot(&fs, "s2c", `{"id":"held","method":"item/fileChange/requestApproval","params":`+params+`}`)
+	addRoot(&fs, "c2s", `{"id":104,"method":"thread/settings/update","params":{"threadId":"thread-001"}}`)
+	addRoot(&fs, "s2c", `{"id":104,"result":{}}`)
+	addRoot(&fs, "s2c", `{"method":"future/progress","params":{"threadId":"thread-001","future":true}}`)
+	addRoot(&fs, "c2s", `{"id":"held","result":{"decision":"decline"}}`)
+	addRoot(&fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}`)
+	c, ctx := rootClient(t, fs)
+	s, e := codex.Open(ctx, codex.SessionOptions{Client: c})
+	require.NoError(t, e)
+	defer func() { _ = c.Close(); _ = s.Close() }()
+	h := Handler{HoldFirst: true, replayClient: c, WhileHeld: func(ctx context.Context) error { _, err := s.SetThinking(ctx, codex.ThinkingChange{}); return err }, Exact: []ExactRequest{{Method: "item/fileChange/requestApproval", Params: json.RawMessage(params), Result: json.RawMessage(`{"decision":"decline"}`)}}}
+	out, e := RunSession(ctx, s, types.TurnStartParams{Input: []types.UserInput{{Text: &types.TextUserInput{Type: "text", Text: "synthetic deferred request"}}}}, &h)
+	require.NoError(t, e)
+	require.True(t, out.Completed)
+	require.True(t, h.heldOnce)
+	require.Equal(t, 1, h.Answered)
+	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
+	require.NoError(t, c.Close())
+}
+func TestNativeStructuredInputRetainsTextElementsAndImageVariantOffline(t *testing.T) {
+	fs := rootPrefix(t)
+	input := `[{"type":"text","text":"Synthetic [image] input.","text_elements":[{"byteRange":{"start":10,"end":17},"placeholder":"[image]"}]},{"type":"image","url":"data:image/png;base64,synthetic-only"}]`
+	addRoot(&fs, "c2s", `{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":`+input+`}}`)
+	completeRoot(&fs, "103", "turn-structured")
+	c, ctx := rootClient(t, fs)
+	s, e := codex.Open(ctx, codex.SessionOptions{Client: c})
+	require.NoError(t, e)
+	defer func() { _ = c.Close(); _ = s.Close() }()
+	var native []types.UserInput
+	require.NoError(t, json.Unmarshal([]byte(input), &native))
+	out, e := RunSession(ctx, s, types.TurnStartParams{Input: native}, &Handler{})
+	require.NoError(t, e)
+	require.Equal(t, "turn-structured", out.Terminal.ID)
+	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
+	require.NoError(t, c.Close())
+	// This verifies native serialization only. The deliberately synthetic image
+	// bytes are never submitted to a provider or claimed as accepted media.
 }

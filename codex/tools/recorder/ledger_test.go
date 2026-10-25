@@ -60,3 +60,24 @@ func TestLedgerRefusesCorruptionExpiryAndUnsafePaths(t *testing.T) {
 	require.NoError(t, os.Chmod(path, 0644))
 	require.Error(t, recorder.Reserve(path, "r1", "root"))
 }
+
+func TestConcurrentAggregateReservationAndDurableStop(t *testing.T) {
+	dir, e := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, e)
+	path := filepath.Join(dir, "ledger")
+	header := `{"version":1,"authorization":"synthetic","revision":"52b329a77333e55063a97eaf1304c82b30a99a59","startedAt":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","maxRoots":3,"maxTurns":6}` + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(header), 0600))
+	results := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		go func() { results <- recorder.Reserve(path, "r1", "root") }()
+	}
+	success := 0
+	for i := 0; i < 8; i++ {
+		if <-results == nil {
+			success++
+		}
+	}
+	require.Equal(t, 1, success)
+	require.NoError(t, recorder.Reserve(path, "r1", "stop"))
+	require.Error(t, recorder.Reserve(path, "r2", "root"))
+}

@@ -126,11 +126,25 @@ func RunRoot(ctx context.Context, s *codex.Session, p RootPlan, h *Handler) (out
 		return out, errors.New("reviewed exact native request policy required")
 	}
 	oldBefore, oldProgress := h.BeforeSubmit, h.Progress
-	defer func() { h.BeforeSubmit = oldBefore; h.Progress = oldProgress }()
+	oldHold, oldControl := h.HoldFirst, h.WhileHeld
+	defer func() {
+		h.BeforeSubmit = oldBefore
+		h.Progress = oldProgress
+		h.HoldFirst = oldHold
+		h.WhileHeld = oldControl
+	}()
 	h.BeforeSubmit = p.Reserve
 	prompts := []string{readyPrompt, donePrompt}
 	if p.Scene == "r2" {
 		prompts = []string{"Read numbers.txt, then write summary.txt with total=18.", "Ask two questions once: choose Blue or Green; enter a short label."}
+	}
+	if p.Scene == "r2" {
+		h.HoldFirst = true
+		h.WhileHeld = func(ctx context.Context) error {
+			var err error
+			out.Thinking, err = s.SetThinking(ctx, codex.ThinkingChange{})
+			return err
+		}
 	}
 	if p.Scene == "r3" {
 		prompts = []string{"Produce a short numbered list from one to ten."}
@@ -162,7 +176,7 @@ func RunRoot(ctx context.Context, s *codex.Session, p RootPlan, h *Handler) (out
 	}
 	for i, prompt := range prompts {
 		turn := neutralTurn(prompt)
-		// Output schema is structured input supported by the pinned turn protocol;
+		// Output schema is structured output configuration in the pinned protocol;
 		// media remains separately gated. Do not map effort to a token budget.
 		if p.Scene == "r1" && i == 0 {
 			turn.OutputSchema = types.Some(json.RawMessage(`{"type":"object","properties":{"word":{"type":"string"}},"required":["word"],"additionalProperties":false}`))

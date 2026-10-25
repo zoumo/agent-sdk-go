@@ -5,6 +5,7 @@ package recorder
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -22,17 +23,21 @@ var ErrFinancialGate = errors.New("Codex recording blocked: no verified independ
 // user configuration, hooks, authentication, previous captures or conversation
 // storage. A profile assertion is not proof of isolation or financial control.
 type LaunchProfile struct {
-	Version         int    `json:"version"`
-	Scene           string `json:"scene"`
-	CLI             string `json:"cli"`
-	CLIVersion      string `json:"cliVersion"`
-	CLISHA256       string `json:"cliSHA256"`
-	SDKRevision     string `json:"sdkRevision"`
-	IsolatedHome    string `json:"isolatedHome"`
-	Project         string `json:"project"`
-	RawDir          string `json:"rawDir"`
-	Ledger          string `json:"ledger"`
-	IsolationReview string `json:"isolationReview"`
+	Version         int                      `json:"version"`
+	Scene           string                   `json:"scene"`
+	CLI             string                   `json:"cli"`
+	CLIVersion      string                   `json:"cliVersion"`
+	CLISHA256       string                   `json:"cliSHA256"`
+	SDKRevision     string                   `json:"sdkRevision"`
+	IsolatedHome    string                   `json:"isolatedHome"`
+	Project         string                   `json:"project"`
+	RawDir          string                   `json:"rawDir"`
+	Ledger          string                   `json:"ledger"`
+	IsolationReview string                   `json:"isolationReview"`
+	Model           string                   `json:"model"`
+	Effort          string                   `json:"effort"`
+	SavedRootID     string                   `json:"savedRootId"`
+	NativePolicy    []recording.ExactRequest `json:"nativePolicy"`
 }
 
 // Run deliberately stops before spawning even a proxy. The old S1/S2 marker
@@ -40,7 +45,7 @@ type LaunchProfile struct {
 // The scenario/peer/accounting support is usable offline; enabling a future
 // financial adapter and approving a run are separate work, never a boolean here.
 func Run() error {
-	if len(os.Args) != 3 || os.Args[1] != "--record" {
+	if len(os.Args) != 3 || (os.Args[1] != "--record" && os.Args[1] != "--private-proxy") {
 		return errors.New("usage: record --record reviewed-nonsecret-profile.json; direct --proxy disabled")
 	}
 	if err := recording.Guard("record"); err != nil {
@@ -54,10 +59,18 @@ func Run() error {
 	if !ok {
 		return errors.New("unproven recorder build")
 	}
-	if _, err = ValidateProfile(bytes.NewReader(b), info); err != nil {
+	p, err := ValidateProfile(bytes.NewReader(b), info)
+	if err != nil {
 		return err
 	}
-	return ErrFinancialGate
+	if err = financialGate(); err != nil {
+		return err
+	}
+	if os.Args[1] == "--private-proxy" {
+		return proxyProfile(p)
+	}
+	_, err = CaptureWithPeer(context.Background(), p, nativeOpener(os.Args[2]))
+	return err
 }
 
 // ValidateProfile performs only offline validation; it grants no spawn authority.
@@ -75,8 +88,11 @@ func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err e
 	if p.Version != 1 || p.CLIVersion != "0.162.1" || p.IsolationReview == "" {
 		return p, errors.New("unreviewed profile or unsupported pinned CLI version")
 	}
-	if p.Scene != "s1" && p.Scene != "s2" && p.Scene != "r1" && p.Scene != "r2" && p.Scene != "r3" && p.Scene != "r4" {
+	if !validScene(p.Scene) {
 		return p, errors.New("unsupported scene; children disabled")
+	}
+	if err = validateSceneConfig(p); err != nil {
+		return p, err
 	}
 	revision, clean := "", false
 	if info != nil {
@@ -103,6 +119,13 @@ func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err e
 			}
 			if st.Mode()&os.ModeSymlink != 0 {
 				return p, errors.New("profile symlink refused")
+			}
+		}
+	}
+	for _, path := range []string{p.RawDir, p.Project, p.IsolatedHome, p.Ledger} {
+		for part := filepath.Dir(path); part != "/"; part = filepath.Dir(part) {
+			if _, e := os.Lstat(filepath.Join(part, ".git")); e == nil {
+				return p, errors.New("capture/profile paths must be outside Git worktrees")
 			}
 		}
 	}
@@ -145,4 +168,36 @@ func ValidateProfile(r io.Reader, info *debug.BuildInfo) (p LaunchProfile, err e
 		return p, errors.New("CLI digest mismatch")
 	}
 	return p, nil
+}
+
+func financialGate() error { return ErrFinancialGate }
+
+func validScene(scene string) bool {
+	switch scene {
+	case "s1", "s2", "r1", "r2", "r3", "r4":
+		return true
+	}
+	return false
+}
+
+func validateSceneConfig(p LaunchProfile) error {
+	switch p.Scene {
+	case "r1":
+		if p.Model == "" || p.Effort != "high" {
+			return errors.New("r1 requires reviewed model and fixed high native effort")
+		}
+	case "r2":
+		if p.Model == "" || len(p.NativePolicy) == 0 || len(p.NativePolicy) > 3 {
+			return errors.New("r2 requires reviewed model and finite exact native policy")
+		}
+	case "r3":
+		if p.Model == "" {
+			return errors.New("r3 requires reviewed model")
+		}
+	case "r4":
+		if p.SavedRootID == "" {
+			return errors.New("r4 requires fresh synthetic saved root identity")
+		}
+	}
+	return nil
 }

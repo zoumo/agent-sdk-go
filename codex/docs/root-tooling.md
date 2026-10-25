@@ -26,6 +26,7 @@ Original S1/S2 bytes, manifests, hashes and public replay remain unchanged.
   that policy isolation exists. No opaque authentication transport is implemented.
 - `replay.RunRoot`: existing public Session, finite neutral R1/R2/R3 inputs,
   reservation callback before every Submit, separate model/thinking receipts,
+  original submitted-turn terminal correlation (including status/error),
   structured output schema on R1's first input, execution-start barrier before
   R3's additional input and explicit turn-ID Interrupt. Receipt acceptance does
   not prove observed settings; Submit during execution remains turn/start,
@@ -33,7 +34,9 @@ Original S1/S2 bytes, manifests, hashes and public replay remain unchanged.
   terminal. Callers own Close/drain and must capture the native terminal facts.
 - `replay.Handler.Exact`: finite ordered complete native Params/Result policy,
   original request handles, exact question IDs/text/options and Blue/sample
-  responses. Command/file permission support is **deny only**; permission grant
+  responses. R2 holds the first request, issues one no-op native settings control,
+  continues Receive and releases only after a same-root nonterminal native fact;
+  absent progress stays untriggered. Command/file permission support is **deny only**; permission grant
   response is empty/turn scoped. Dynamic tools never count as native approval.
   Any unknown/out-of-policy request is rejected and stops the scene. Request
   identities must be supplied by a reviewed fixture policy; this is immediately
@@ -47,6 +50,9 @@ Original S1/S2 bytes, manifests, hashes and public replay remain unchanged.
   history scan, root creation, resume or subscription occurs.
 
 Root APIs use an already opened Session/client; they do not launch processes.
+A synthetic native Input test retains text-element byte ranges and an image
+variant exactly; its deliberately invalid image bytes prove serialization only.
+This is separate from R1 structured *output* schema and grants no media capture.
 The recording command validates an opt-in profile then returns
 `ErrFinancialGate` **before any model or proxy spawn**. Direct `--proxy` is
 retired. The Python entry now accepts `--runner` and `--profile` and forwards only
@@ -85,14 +91,26 @@ not be recreated to obtain a replacement budget. Clock tampering is outside this
 local accounting mechanism's guarantees.
 
 The ledger records reserved root, reader and submitted-input attempts separately.
+Capture reservations bind the private output target; a proxy checks that binding
+and a once-only owned startup marker before native startup. Failures persist a
+global stop row, preventing later scenes in the aggregate session.
 Provider API request/retry counts, usage and USD are **unknown**, never inferred
 as zero or one per turn. It does not implement a live provider-meter observer.
-The future launcher must verify the header revision equals its clean build,
-reserve before spawn/Submit, feed the remaining aggregate deadline into the
-120-second scene deadline and retain Proxy's 2 MiB wire/control and 256 KiB stderr
-ceilings. The current command cannot reach a spawn, so it cannot accidentally
-bypass these requirements; wiring a financial/isolation adapter and live launch
-is still a separately reviewed prerequisite, not a hidden opt-in.
+`CaptureWithPeer` now verifies the ledger/build revision, reserves before the
+supplied opener and each Submit, applies the lesser aggregate/scene deadline,
+preserves S1/S2 handlers, dispatches R1–R4, closes/drains the owned client and
+writes private metadata including actual root/start/terminal facts and unknown
+provider accounting. Initialization failure still consumes its root; cleanup or
+metadata failure persists stop. Tests inject only strict synthetic subprocesses.
+The native opener/proxy is connected behind `financialGate`, which always fails
+closed: no live boolean or historical marker can bypass it. Proxy retains its
+2 MiB wire/control and 256 KiB stderr limits and bounded owned cleanup. The
+private proxy entry repeats profile/financial checks and requires the bound
+reservation. A financial/isolation enforcement adapter remains a prerequisite,
+not missing basic scene orchestration. Activity deadline and cleanup are distinct;
+owned cleanup may take up to the existing bounded proxy teardown interval after
+activity stops. A strict 120-second *total including teardown* would need a
+separately validated earlier activity cutoff; no stronger timing claim is made.
 
 ## Concrete #11 run proposal and stop conditions
 
@@ -105,7 +123,7 @@ Historical macOS CLI digests do not approve another binary.
 
 | Scene | Root / submitted-input attempts | Scene wall | Wire / stderr | Task and stop |
 |---|---|---|---|---|
-| R1 | 1 / 2 | 120 s including startup/cleanup | 2 MiB / 256 KiB | Exact Ready/Done prompts in RunRoot; first has the committed JSON word schema. One SetModel and SetThinking high between turns. Persist only this new synthetic root for R4. Rejection stops; no replacement input. |
+| R1 | 1 / 2 | 120 s activity including startup; bounded owned teardown | 2 MiB / 256 KiB | Exact Ready/Done prompts in RunRoot; first has the committed JSON word schema. One SetModel and SetThinking high between turns. Persist only this new synthetic root for R4. Rejection stops; no replacement input. |
 | R2 | 1 / 2, currently policy gap | 120 s | 2 MiB / 256 KiB | Exact read/write task then two questions. No native read approval can currently be safely allowed without shell; file approval lacks patch/path. Denial-only replay support is not successful read/write evidence. Do not launch until a separately reviewed safe native policy exists. Never substitute dynamic tools. |
 | R3 | 1 / 2 | 120 s | 2 MiB / 256 KiB | List 1–10; first root turn/started triggers exact additional sample input, then one original-turn Interrupt. Early completion means untriggered, no retry. |
 | R4 | 0 / 0, one reader process | 30 s | 2 MiB query / 256 KiB | Only persisted R1 root, at most six query RPCs, no resume/Subscribe. Unsupported persistence/query remains missing. |

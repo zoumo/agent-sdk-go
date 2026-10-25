@@ -17,7 +17,7 @@ import (
 func TestProfileRequiresPinnedCleanIsolatedNonsecretInputs(t *testing.T) {
 	root, e := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, e)
-	p := recorder.LaunchProfile{Version: 1, Scene: "r1", CLIVersion: "0.162.1", SDKRevision: "52b329a77333e55063a97eaf1304c82b30a99a59", IsolationReview: "synthetic review only"}
+	p := recorder.LaunchProfile{Version: 1, Scene: "r1", Model: "synthetic-model", Effort: "high", CLIVersion: "0.162.1", SDKRevision: "52b329a77333e55063a97eaf1304c82b30a99a59", IsolationReview: "synthetic review only"}
 	p.CLI = filepath.Join(root, "synthetic-cli")
 	require.NoError(t, os.WriteFile(p.CLI, []byte("not a model"), 0700))
 	hash := sha256.Sum256([]byte("not a model"))

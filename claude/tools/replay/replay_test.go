@@ -153,3 +153,19 @@ func TestReplayOutputBudgets(t *testing.T) {
 		require.Empty(t, output.Bytes(), "oversize expanded frame must not be emitted")
 	})
 }
+
+func TestUnknownEnvelopeIsQuarantined(t *testing.T) {
+	capture := `{"ordinal":1,"direction":"server","channel":"protocol","private_wrapper":"unreviewed","data":{"type":"future","native_extension":1}}` + "\n"
+	var output bytes.Buffer
+	require.Error(t, Replay(strings.NewReader(""), &output, strings.NewReader(capture), nil))
+	require.Empty(t, output.String())
+}
+
+func TestRecordingVersionIsExactAndNativeUnknownIsPreserved(t *testing.T) {
+	capture := `{"ordinal":1,"direction":"server","channel":"protocol","data":{"type":"future","native_extension":{"unknown":null}}}` + "\n"
+	var output bytes.Buffer
+	require.Error(t, ReplayRecording("2.1.310", strings.NewReader(""), &output, strings.NewReader(capture), nil))
+	require.Empty(t, output.String())
+	require.NoError(t, ReplayRecording("2.1.258", strings.NewReader(""), &output, strings.NewReader(capture), nil))
+	require.JSONEq(t, `{"type":"future","native_extension":{"unknown":null}}`, output.String())
+}

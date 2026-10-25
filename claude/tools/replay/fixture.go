@@ -45,8 +45,27 @@ func Prompt() (string, error) {
 	}
 	return "", fmt.Errorf("fixture has no input")
 }
+
+// RecordingVersion is the only reviewed publication/replay CLI schema.
+const RecordingVersion = "2.1.258"
+
+// ReplayRecording rejects unreviewed source versions before emitting any data.
+// Unknown native fields still take part in exact comparison/Raw preservation;
+// publication performs the separate per-version allowlist/quarantine step.
+func ReplayRecording(version string, input io.Reader, output io.Writer, capture io.Reader, complete func() error) error {
+	if version != RecordingVersion {
+		return fmt.Errorf("unreviewed recording CLI version")
+	}
+	return ReplayWithOptions(input, output, capture, complete, ReplayOptions{CLIVersion: version})
+}
 func Peer(input io.Reader, output io.Writer) error {
-	return Replay(input, output, bytes.NewReader(Wire), func() error {
+	var identity struct {
+		Version string `json:"cli_version"`
+	}
+	if err := json.Unmarshal(Manifest, &identity); err != nil {
+		return err
+	}
+	return ReplayRecording(identity.Version, input, output, bytes.NewReader(Wire), func() error {
 		if path := os.Getenv("CLAUDE_GO_REPLAY_COMPLETE"); path != "" {
 			return os.WriteFile(path, []byte("complete\n"), 0600)
 		}

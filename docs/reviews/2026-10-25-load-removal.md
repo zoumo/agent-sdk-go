@@ -2,7 +2,9 @@
 
 Baseline: `zoumo/agent-sdk-go` main `fc395595d9b5eb95038fdbe1188aeb9578997052`.
 Worktree: `/workspace/agent-sdk-go`, local branch `phase1/remove-load`.
-Changes remain uncommitted and unpushed for review. The original
+The stage-one change is isolated in a local checkpoint; publication and merge
+status are tracked by its independent PR. The validation below records the local
+pre-publication snapshot. The original
 `/workspace/codex-sdk-go` checkout remains unchanged.
 
 ## Delivered scope
@@ -55,7 +57,7 @@ compiler. It is a local convenience wrapper, not part of the SDK.
 | Public Codex consumer and all four documented offline examples | Passed separately after the full offline script stopped at failed tests |
 | git diff --check | Passed |
 | Real agent/model E2E | Disabled/skipped; no live compatibility claim |
-| External exact-pushed-SHA consumer | Not run: no push authorized or performed; local consumer is not a substitute |
+| External exact-pushed-SHA consumer | Not run during local validation; local consumer is not a substitute |
 
 Focused history race command:
 
@@ -119,6 +121,6 @@ Local supporting logs:
 - `/tmp/agent-sdk-go-answer-baseline.log`
 - `/tmp/agent-sdk-go-replay-baseline.log`
 
-No private sessions, host Codex session directory, paid model calls, new real
-recordings, push, PR, merge or release were accessed/performed. There was no
+The local validation accessed no private sessions or host Codex session directory,
+and performed no paid model calls, new real recordings or release. There was no
 automatic approval denial; the remaining blocker is the failed baseline tests.

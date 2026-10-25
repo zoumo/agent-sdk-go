@@ -30,6 +30,9 @@ func TestMain(m *testing.M) {
 // external connection, loads account configuration, or starts a native agent.
 // Fault companions use only a loopback application synchronization channel.
 func peer(provider, story string) error {
+	if provider == "codex" && story == "child-detail" {
+		return childDetailPeer()
+	}
 	if provider == "codex" && story == "recorded-question-drain" {
 		frames, err := recording.Load("s2")
 		if err != nil {

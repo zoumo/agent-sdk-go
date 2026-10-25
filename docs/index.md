@@ -3,6 +3,7 @@
 架构、术语、设计决定、共同验收和接入规范统一维护在 [harness](../harness/index.md)。本目录记录实现、原生研究、执行证据及操作流程，引用规范而不替代规范。
 
 - [当前 19/14 Story 交叉索引、原生补充与证据矩阵](validation/story-coverage.md)
+- [逐 Story 零模型故障和生命周期 companions](validation/fault-companions.md)
 - [根场景组合与捕获预算门禁提案](capture-plan.md)
 - [共同场景的历史实现验收记录](validation/stories/index.md)
 - [历史 Session 目标支持与证据](validation/stories/session-targets.md)
@@ -25,3 +26,5 @@
 - [阶段二历史查询整合验收与后续真实测试入口](validation/history-query-integration.md)
 - [Phase 2 可合并收尾与审批调度验证](validation/phase2-merge-readiness.md)
 - [子 Agent 输出与交付的来源及现状](research/subagent-event-delivery.md)
+
+- [子能力合同来源、差异及 #16–#20 交接](research/child-capability-contract-sources.md)

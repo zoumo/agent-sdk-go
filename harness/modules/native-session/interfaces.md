@@ -105,3 +105,7 @@ MaxSessions、SampleBytes/MaxBytes/MaxLines；SessionInfoOptions 只含 Scope �
 SampleBytes/MaxBytes/MaxLines。SessionsPage 包含 []SessionInfo 与
 SessionMetadataCoverage；SessionInfoResult 包含可空 *SessionInfo 与同型 Coverage。
 错误可伴部分值，不授予回答权限。字段、默认值和覆盖见[metadata 合同](../../contracts/claude-session-metadata.md)。
+
+## 可选 child 扩展目标
+
+两包构造字段 `ChildDetailPolicy`、默认/显式 resume 作用域及原生分类见[子详细交付](../../contracts/child-detail-delivery.md)。Claude 新增 package-level `ListSubagents` 与 `GetSubagentMessages`，完整签名/值及边界见[子历史](../../contracts/claude-subagent-history.md)，不替代 Session.ListSubagents。

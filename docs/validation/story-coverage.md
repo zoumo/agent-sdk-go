@@ -96,6 +96,9 @@ Bundle names and their expected replay/gap outcomes are defined in the
 | SDK-US-018 | US-011 | I report loss; N automatic reconnect (outside contract); [remote](../../codex/remote.go) | I report loss; N automatic reconnect (outside contract); [session](../../claude/session.go) | Both M for retained application-led recovery; H not a fixture | T/018 | F disconnect/new epoch; no restored answer authority |
 | SDK-US-019 | US-014 | I list/read/turns/items, V backend method availability; [query](../../codex/history.go), [list](../../codex/client.go) | I bounded main local list/info/messages; N independent child messages, V other layouts; [metadata](../../claude/session_metadata.go), [messages](../../claude/session_query.go) | Both M for published successful query/storage corpus; U unpublished only, not replay | B; [Codex](../../codex/history_query_test.go), Claude `TestClaudeQueryAlongsideSession` + `TestClaudeMessageQueryFailures` in [suite](../../tests/stories/history_query_test.go) | R4 query saved-content fixture + metadata scope/pages; never wire log or live handle |
 
+Runnable zero-model F companions, exact per-row commands, real-input driver
+limits and fresh-connection handle checks: [fault/lifecycle companions](fault-companions.md).
+
 ## Scenario index (different namespace)
 
 `TestNativeAdapters/US-001…012` are the legacy scenario paths in the
@@ -138,6 +141,9 @@ production control or history API is implied.
 | CLAUDE-US-003 | A: I is_error/idle/unknown observation | T/004/005/007/017; [TestRecordedAuthenticationFailureReplay](../../claude/recorded_replay_test.go) | A1 9–11 failure R-part; successful and background M → R1/Phase 2 |
 | CLAUDE-US-004 | A: I creation/dynamic subset; N effort policy | T/012/013; [TestSessionCreationThinkingIsSeparateFromDynamicControl](../../claude/session_input_config_test.go) | M → R1; budget not hard tokens |
 | CLAUDE-US-005 | Q (+ A child discovery): I explicit local main query/child discovery; N independent child messages | B; `TestClaudeMessageSelection`, `TestClaudeMetadataSamples`, `TestClaudeQueryAlongsideSession` in [suite](../../tests/stories/history_query_test.go); [discovery tests](../../claude/session_discovery_test.go) | M/U only → R4; synthetic compaction/parallel chain stays companion unless genuinely observed |
+| CODEX-US-005 | C: N optional filtering; [contract](../../harness/contracts/child-detail-delivery.md) | Planned F1–F5, not current executable tests | Real child M; #16 implementation, #19 gates, #21 capture |
+| CLAUDE-US-006 | A: N optional filtering; explicit forwarding true preserved | Planned F1–F5, not current executable tests | Real child M; #17 implementation, #20 gates, #22 capture |
+| CLAUDE-US-007 | Q: N independent child content; existing Session discovery I | Planned H1–H5 in [acceptance](../../harness/contracts/stories/child-capabilities.md) | Real child files M; #18 implementation; main browser does not fill gap |
 
 ## Carry-forward and delivery gates
 

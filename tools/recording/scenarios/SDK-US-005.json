@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "id": "SDK-US-005",
+  "goals": [
+    "SDK-US-005"
+  ],
+  "name": "protocol-faults",
+  "execution": {
+    "mode": "offline-only",
+    "reason": "requires controlled protocol/storage evidence; ordinary model text cannot establish this branch"
+  },
+  "setup": {
+    "files": {
+      "numbers.txt": "7\n11\n"
+    }
+  },
+  "inputs": {},
+  "steps": [],
+  "expect": {
+    "requests": [],
+    "missingEvidence": "untriggered",
+    "scope": "离线检查原生 unknown 字段和重复消息的交付。",
+    "caseId": "SDK-US-005/protocol-faults",
+    "outOfScope": [
+      "真实模型生成未知协议",
+      "其他故障分支"
+    ]
+  },
+  "limits": {
+    "inputs": 0,
+    "activitySeconds": 110,
+    "transportSeconds": 120,
+    "protocolBytes": 2097152,
+    "stderrBytes": 262144
+  }
+}

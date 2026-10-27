@@ -427,3 +427,35 @@ func (s *ManagedRecordingSuite) SetupTest() {
 	require.NoError(s.T(), err)
 	s.executable = executable
 }
+
+func TestStoryPeerRequiresAnswerSettlementAndOrdinaryEOF(t *testing.T) {
+	frames := []Frame{
+		frame(1, "c2s", `{"id":1,"method":"echo","params":{}}`),
+		frame(2, "s2c", `{"id":1,"result":{}}`),
+		frame(3, "s2c", `{"id":"native-1","method":"future/request","params":{}}`),
+		frame(4, "c2s", `{"id":"native-1","result":{}}`),
+		frame(5, "s2c", `{"method":"serverRequest/resolved","params":{"requestId":"native-1"}}`),
+	}
+	prefix := "{\"id\":11,\"method\":\"echo\",\"params\":{}}\n{\"id\":\"native-1\",\"result\":{}}\n"
+	for _, tc := range []struct {
+		name, tail string
+		bad        bool
+	}{
+		{"settled EOF", "{\"id\":12,\"method\":\"replay/answer\"}\n", false},
+		{"missing settlement", "", true},
+		{"wrong settlement", "{\"id\":12,\"method\":\"different\"}\n", true},
+		{"extra request", "{\"id\":12,\"method\":\"replay/answer\"}\n{}\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := RunStoryPeer(context.Background(), strings.NewReader(prefix+tc.tail), &out, frames)
+			if tc.bad {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Contains(t, out.String(), `"id":11`)
+				assert.Less(t, strings.Index(out.String(), `"id":12`), strings.Index(out.String(), `"method":"serverRequest/resolved"`))
+			}
+		})
+	}
+}

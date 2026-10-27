@@ -16,6 +16,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if provider := os.Getenv("SDK_OFFICIAL_PEER"); provider != "" {
+		os.Exit(officialRecordingPeer(provider))
+	}
 	if provider := os.Getenv("SDK_STORY_PEER"); provider != "" {
 		if err := peer(provider, os.Getenv("SDK_STORY")); err != nil {
 			fmt.Fprintln(os.Stderr, err)

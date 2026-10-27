@@ -27,6 +27,9 @@ const s2 = "Use AskUserQuestion exactly once with the question 'Which synthetic 
 
 // Run executes the explicitly guarded recorder using the process arguments and environment.
 func Run() (runErr error) {
+	if handled, err := runStoryEntry(); handled {
+		return err
+	}
 	if os.Getenv("TRANSCRIPT_RECORD_PEER") == "1" {
 		return proxy()
 	}

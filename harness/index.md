@@ -20,6 +20,7 @@ okf_version: "0.2"
 - [SDK 接入规范入口](sdk/index.md)
 - [通用架构](sdk/architecture.md)
 - [共同用户故事](sdk/user-stories.md)
+- [确定性录制与回放场景](sdk/recording-scenarios.md)
 - [新 Agent 接入流程](sdk/onboarding.md)
 - [共享术语](glossary.md)
 - [设计决定](adr/index.md)

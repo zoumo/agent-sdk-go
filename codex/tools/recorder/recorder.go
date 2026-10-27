@@ -45,6 +45,9 @@ type LaunchProfile struct {
 // The scenario/peer/accounting support is usable offline; enabling a future
 // financial adapter and approving a run are separate work, never a boolean here.
 func Run() error {
+	if handled, err := runStoryEntry(); handled {
+		return err
+	}
 	if len(os.Args) != 3 || (os.Args[1] != "--record" && os.Args[1] != "--private-proxy") {
 		return errors.New("usage: record --record reviewed-nonsecret-profile.json; direct --proxy disabled")
 	}

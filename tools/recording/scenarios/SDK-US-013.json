@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "id": "SDK-US-013",
+  "goals": [
+    "SDK-US-013"
+  ],
+  "name": "configuration-timing",
+  "execution": {
+    "mode": "live-selected-path",
+    "reason": ""
+  },
+  "setup": {
+    "files": {
+      "numbers.txt": "7\n11\n"
+    }
+  },
+  "inputs": {
+    "input-1": "Reply with the word Ready.",
+    "input-2": "Reply with the word Done."
+  },
+  "steps": [
+    {
+      "op": "session.open"
+    },
+    {
+      "op": "configuration.apply"
+    },
+    {
+      "op": "input.submit",
+      "input": "input-1"
+    },
+    {
+      "op": "event.wait",
+      "event": "execution.result",
+      "onMissing": "untriggered"
+    },
+    {
+      "op": "input.submit",
+      "input": "input-2"
+    },
+    {
+      "op": "event.wait",
+      "event": "execution.result",
+      "onMissing": "untriggered"
+    },
+    {
+      "op": "session.close"
+    }
+  ],
+  "expect": {
+    "requests": [],
+    "missingEvidence": "untriggered",
+    "scope": "记录首次输入前配置请求的原生结果及后续输入的顺序。",
+    "caseId": "SDK-US-013/configuration-timing",
+    "outOfScope": [
+      "配置实际生效值",
+      "动态思考能力推断",
+      "子任务配置继承"
+    ]
+  },
+  "limits": {
+    "inputs": 2,
+    "activitySeconds": 110,
+    "transportSeconds": 120,
+    "protocolBytes": 2097152,
+    "stderrBytes": 262144
+  }
+}

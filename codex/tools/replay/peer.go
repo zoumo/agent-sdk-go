@@ -81,7 +81,15 @@ func validID(id json.RawMessage) bool {
 	}
 }
 
+// RunStoryPeer uses the private post-Answer barrier while retaining ordinary EOF.
+// It never starts a native CLI. Public RunPeer keeps its handshake-free contract.
+func RunStoryPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame) error {
+	return runPeerMode(ctx, in, out, frames, true, false)
+}
 func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, assertion bool) error {
+	return runPeerMode(ctx, in, out, frames, assertion, assertion)
+}
+func runPeerMode(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, settlement, assertion bool) error {
 	if len(frames) == 0 || len(frames) > 10000 {
 		return errors.New("peer frame count limit")
 	}
@@ -186,7 +194,7 @@ func runPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, a
 			if !equal(canonical(mustJSON(got)), canonical(f.Wire)) {
 				return fmt.Errorf("client frame mismatch at ordinal %d", f.Ordinal)
 			}
-			if assertion && reverseAnswer {
+			if settlement && reverseAnswer {
 				// Only the offline replay driver has this handshake. Delay later
 				// native frames until its public Answer call has settled, without
 				// modifying the recorded frames or hiding a dispatch error.

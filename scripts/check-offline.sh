@@ -7,6 +7,8 @@ export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
 python3 -m unittest discover -s scripts -p test_story_evidence.py -v
+python3 -m unittest discover -s scripts -p test_record_stories.py -v
+PYTHONPATH=tools/recording python3 -m unittest discover -s tools/recording -p 'test_*.py' -v
 python3 scripts/check-story-evidence.py
 bash scripts/check-boundaries.sh
 go mod verify

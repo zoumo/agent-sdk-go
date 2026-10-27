@@ -9,6 +9,12 @@ Current per-Story scope: [19-goal/14-scenario evidence matrix](validation/story-
 Future root bundles and requested budgets: [capture gate proposal](capture-plan.md).
 Neither adds model-call or publication authority.
 
+The [official Python SDK recording module](../tools/recording/README.md) now owns live story capture; Go commands retain historical offline replay. The
+[per-story recording workflow](record-stories.md) creates separate private
+SDK-US datasets with independent HOME and explicit configuration inheritance.
+Its [historical Go-driver report](validation/story-recording-2026-10-27.md) records
+historical private evidence and gaps. [Official Python SDK verification](validation/official-python-recording-2026-10-27.md) is separate; neither set of private files is a published fixture.
+
 ## Real recordings
 
 | Capture | Native wire data | Provenance and file hashes | Expected observations | ID mappings / transport |
@@ -62,9 +68,9 @@ reclassify synthetic fixtures to fill the missing real-subagent evidence.
 ## Directory responsibilities
 
 See the [layout standards](../harness/code-layout.md) for the authoritative
-cmd/tools/testdata responsibilities. The current entry points are
-`codex/cmd/record` and `claude/cmd/record`; they delegate to
-their native `tools/recorder`, which uses native `tools/replay` helpers. The data
+cmd/tools/testdata responsibilities. Live story capture uses `tools/recording`. The legacy Go entry points
+`codex/cmd/record` and `claude/cmd/record` retain gated historical interfaces and
+offline story replay through their native `tools/recorder`/`tools/replay` helpers. The data
 links above point to the single published fixture copies.
 
 The example-local [Claude subagent events](../claude/examples/subagents-offline/testdata/events.ndjson) remain explicitly synthetic. The library package names `recording` and `transcript` remain protocol-specific even though their directory layouts align.

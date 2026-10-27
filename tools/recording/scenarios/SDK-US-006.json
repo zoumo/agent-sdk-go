@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "id": "SDK-US-006",
+  "goals": [
+    "SDK-US-006"
+  ],
+  "name": "children",
+  "execution": {
+    "mode": "blocked",
+    "reason": "recursive child resource and tool enforcement unproven"
+  },
+  "setup": {
+    "files": {
+      "numbers.txt": "7\n11\n"
+    }
+  },
+  "inputs": {},
+  "steps": [],
+  "expect": {
+    "requests": [],
+    "missingEvidence": "untriggered",
+    "scope": "观察一个直接子任务读取固定文件并返回结果。",
+    "caseId": "SDK-US-006/children",
+    "outOfScope": [
+      "嵌套子任务",
+      "并行子任务",
+      "递归资源限制证明"
+    ]
+  },
+  "limits": {
+    "inputs": 0,
+    "activitySeconds": 110,
+    "transportSeconds": 120,
+    "protocolBytes": 2097152,
+    "stderrBytes": 262144
+  }
+}

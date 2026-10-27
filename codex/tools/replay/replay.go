@@ -120,10 +120,14 @@ type Handler struct {
 	WhileHeld    func(context.Context) error
 	heldOnce     bool
 	Progress     func(context.Context, *types.Event) error
-	// Set only by Replay; the live recorder and public RunPeer never use the
+	// Set only by explicit offline replay; the live recorder and public RunPeer never use the
 	// offline peer's private synchronization protocol.
 	replayClient *codex.Client
 }
+
+// UsePrivateReplayPeer enables the post-Answer scheduling barrier supported by
+// RunStoryPeer. Use only with an explicitly selected offline peer, never live.
+func (h *Handler) UsePrivateReplayPeer(client *codex.Client) { h.replayClient = client }
 
 func (h *Handler) Answer(ctx context.Context, r codex.Request) error {
 	if h.Exact != nil {

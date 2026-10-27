@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "id": "SDK-US-007",
+  "goals": [
+    "SDK-US-007"
+  ],
+  "name": "background-children",
+  "execution": {
+    "mode": "blocked",
+    "reason": "recursive child resource and tool enforcement unproven"
+  },
+  "setup": {
+    "files": {
+      "numbers.txt": "7\n11\n"
+    }
+  },
+  "inputs": {},
+  "steps": [],
+  "expect": {
+    "requests": [],
+    "missingEvidence": "untriggered",
+    "scope": "观察根任务结束后一个后台子任务的原生完成记录。",
+    "caseId": "SDK-US-007/background-children",
+    "outOfScope": [
+      "嵌套或并行子任务",
+      "全部后台任务停止",
+      "递归资源限制证明"
+    ]
+  },
+  "limits": {
+    "inputs": 0,
+    "activitySeconds": 110,
+    "transportSeconds": 120,
+    "protocolBytes": 2097152,
+    "stderrBytes": 262144
+  }
+}

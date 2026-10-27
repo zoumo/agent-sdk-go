@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "id": "SDK-US-012",
+  "goals": [
+    "SDK-US-012"
+  ],
+  "name": "configuration",
+  "execution": {
+    "mode": "live-selected-path",
+    "reason": ""
+  },
+  "setup": {
+    "files": {
+      "numbers.txt": "7\n11\n"
+    }
+  },
+  "inputs": {
+    "input-1": "Reply with the word Ready."
+  },
+  "steps": [
+    {
+      "op": "session.open"
+    },
+    {
+      "op": "configuration.apply"
+    },
+    {
+      "op": "input.submit",
+      "input": "input-1"
+    },
+    {
+      "op": "event.wait",
+      "event": "execution.result",
+      "onMissing": "untriggered"
+    },
+    {
+      "op": "session.close"
+    }
+  ],
+  "expect": {
+    "requests": [],
+    "missingEvidence": "untriggered",
+    "scope": "在首次输入前请求设置模型，记录原生确认或明确拒绝并观察输入结果。",
+    "caseId": "SDK-US-012/configuration",
+    "outOfScope": [
+      "全部修改时机",
+      "模型实际生效值",
+      "子任务继承"
+    ]
+  },
+  "limits": {
+    "inputs": 1,
+    "activitySeconds": 110,
+    "transportSeconds": 120,
+    "protocolBytes": 2097152,
+    "stderrBytes": 262144
+  }
+}

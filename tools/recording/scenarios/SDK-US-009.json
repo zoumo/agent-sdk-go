@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "id": "SDK-US-009",
+  "goals": [
+    "SDK-US-009"
+  ],
+  "name": "approval",
+  "execution": {
+    "mode": "live-selected-path",
+    "reason": ""
+  },
+  "setup": {
+    "files": {
+      "numbers.txt": "7\n11\n"
+    }
+  },
+  "inputs": {
+    "input-1": "Use Write exactly once to create denied.txt containing exactly denied followed by a newline. If denied, finish without retrying."
+  },
+  "steps": [
+    {
+      "op": "session.open"
+    },
+    {
+      "op": "input.submit",
+      "input": "input-1"
+    },
+    {
+      "op": "event.wait",
+      "event": "execution.result",
+      "onMissing": "untriggered"
+    },
+    {
+      "op": "session.close"
+    }
+  ],
+  "expect": {
+    "requests": [
+      "approval.deny"
+    ],
+    "missingEvidence": "untriggered",
+    "scope": "拒绝一次对固定 denied.txt 内容的原生写入审批。",
+    "caseId": "SDK-US-009/approval",
+    "outOfScope": [
+      "批准分支",
+      "其他文件或 patch",
+      "重复和撤销的审批句柄"
+    ]
+  },
+  "limits": {
+    "inputs": 1,
+    "activitySeconds": 110,
+    "transportSeconds": 120,
+    "protocolBytes": 2097152,
+    "stderrBytes": 262144
+  }
+}

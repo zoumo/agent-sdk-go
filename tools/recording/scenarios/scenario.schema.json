@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "id": {
+      "type": "string"
+    },
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "live-selected-path",
+            "offline-only",
+            "blocked"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "setup": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "enum": [
+              "session.open",
+              "configuration.apply",
+              "input.submit",
+              "event.wait",
+              "execution.interrupt",
+              "session.close"
+            ]
+          },
+          "input": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "execution.progress",
+              "execution.result"
+            ]
+          },
+          "onMissing": {
+            "const": "untriggered"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "expect": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missingEvidence": {
+          "const": "untriggered"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "answers": {
+          "type": "object"
+        },
+        "caseId": {
+          "type": "string"
+        },
+        "outOfScope": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "requests",
+        "missingEvidence",
+        "scope",
+        "caseId",
+        "outOfScope"
+      ],
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "activitySeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 110
+        },
+        "transportSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "protocolBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2097152
+        },
+        "stderrBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        }
+      },
+      "required": [
+        "inputs",
+        "activitySeconds",
+        "transportSeconds",
+        "protocolBytes",
+        "stderrBytes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "goals",
+    "name",
+    "execution",
+    "setup",
+    "inputs",
+    "steps",
+    "expect",
+    "limits"
+  ],
+  "additionalProperties": false
+}

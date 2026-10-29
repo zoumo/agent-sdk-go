@@ -1,0 +1,395 @@
+{
+  "version": 3,
+  "provider": "codex",
+  "cases": {
+    "SDK-CASE-001": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-002": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-003": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null,
+      "execution": {
+        "mode": "unsupported",
+        "reason": "Codex native UserInput has no document variant; rejection is not successful document input"
+      }
+    },
+    "SDK-CASE-004": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-005": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": "item/started with a non-user item type"
+    },
+    "SDK-CASE-006": {
+      "inputs": [
+        "Use fixture_read exactly once on numbers.txt, add the two integers, then use fixture_write exactly once on summary.txt with text exactly sum=42 followed by a newline. Use no other tools."
+      ],
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "fixture.read": "fixture_read",
+        "fixture.write": "fixture_write"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-007": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "fixture.read": "fixture_read"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-008": {
+      "inputs": [
+        "Use the native file change tool to write denied.txt with content denied followed by a newline in the working directory. The permission request will be denied; report the denial without retrying."
+      ],
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "approval.deny": "approval_answer"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-009": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "approval.answer": "approval_answer"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-010": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "approval.answer": "approval_answer"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-011": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "approval.answer": "approval_answer"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-012": {
+      "execution": {
+        "mode": "planned",
+        "reason": "当前官方 SDK 同步审批回调不能完成持有审批期间的事件交付流程。"
+      },
+      "inputs": [],
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "permission.read": "Read",
+        "permission.held-control": "held-control",
+        "permission.held-event": "held-event"
+      },
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-013": {
+      "inputs": [
+        "Synthetic interaction fixture. Use request_user_input exactly once to ask which color to use: Amber or Indigo. Give exactly those two choices. After receiving the answer, report the chosen color briefly and finish. Do not use other tools or spawn agents."
+      ],
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "question.answer": "question"
+      },
+      "answers": {
+        "choice": "Amber",
+        "options": [
+          "Amber",
+          "Indigo"
+        ]
+      },
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-014": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "question.answer": "question"
+      },
+      "answers": {
+        "choice": "SYNTHETIC_FREE_TEXT",
+        "options": []
+      },
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-015": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {
+        "question.answer": "question"
+      },
+      "answers": {
+        "choice": "Amber",
+        "options": [
+          "Amber",
+          "Indigo"
+        ]
+      },
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-016": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null,
+      "inputs": [
+        "Use spawn_agent exactly once with agent_type fixture_reader and message exactly \"Use fixture_read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly SYNTHETIC_CHILD_TOKEN. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\". Wait for this one child with wait, then report its result. The root must not read files, use shell/network/other tools, or create another child."
+      ]
+    },
+    "SDK-CASE-017": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-018": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-019": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null,
+      "inputs": [
+        "Use spawn_agent exactly once with agent_type fixture_reader and message exactly \"Use fixture_read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly SYNTHETIC_CHILD_TOKEN. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\". Return ROOT_RETURNED immediately after launch, without waiting or closing the child. The root must not read files, use shell/network/other tools, or create another child."
+      ]
+    },
+    "SDK-CASE-020": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-021": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-022": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {
+        "timing": "before-first-input",
+        "modelSource": "session",
+        "thinking": {
+          "effort": "low"
+        },
+        "effectiveValue": "unknown-unless-observed"
+      },
+      "progressBarrier": null
+    },
+    "SDK-CASE-023": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-024": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-025": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-026": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null,
+      "execution": {
+        "mode": "unsupported",
+        "reason": "Codex exposes reasoning effort, not a dynamic token budget"
+      }
+    },
+    "SDK-CASE-027": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-028": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-029": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-030": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": "item/started with a non-user item type"
+    },
+    "SDK-CASE-031": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-032": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-033": {
+      "files": {
+        "numbers.txt": "17\n25\n"
+      },
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null,
+      "execution": {
+        "mode": "planned",
+        "reason": "独立发现、元数据与内容查询的完整录制驱动尚未实现。"
+      }
+    },
+    "SDK-CASE-034": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null,
+      "execution": {
+        "mode": "planned",
+        "reason": "当前官方 SDK 录制驱动尚未实现此独立查询流程。"
+      }
+    },
+    "SDK-CASE-035": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    },
+    "SDK-CASE-036": {
+      "files": {},
+      "requests": {},
+      "answers": {},
+      "configuration": {},
+      "progressBarrier": null
+    }
+  }
+}

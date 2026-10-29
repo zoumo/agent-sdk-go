@@ -66,8 +66,8 @@ func (s *sessionControlSuite) SetupTest() {
 	}
 }
 
-type recordedObservationSuite struct {
+type syntheticObservationSuite struct {
 	suite.Suite
 }
 
-func TestRecordedObservationSuite(t *testing.T) { suite.Run(t, new(recordedObservationSuite)) }
+func TestSyntheticObservationSuite(t *testing.T) { suite.Run(t, new(syntheticObservationSuite)) }

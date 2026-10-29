@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/zoumo/agent-sdk-go/internal/history"
 )
 
 const historySession = "00000000-0000-4000-8000-000000000001"
@@ -246,9 +245,9 @@ func readTranscriptForTest(ctx context.Context, o HistoryOptions, before func(co
 	if before == nil {
 		before = func(context.Context) error { return nil }
 	}
-	return history.Start(ctx, func(ctx context.Context, send func(Event) error) error {
+	return startTranscriptTestStream(ctx, func(ctx context.Context, send func(Event) error) error {
 		return replayTranscript(ctx, opts, path, send, before)
-	}, nil), nil
+	}), nil
 }
 
 func TestHistoryResumeAppendIntegrity(t *testing.T) {
@@ -327,6 +326,3 @@ func TestHistoryMetadataIdentityCannotBypassValidation(t *testing.T) {
 		})
 	}
 }
-
-// Parser tests use a drainable harness independently of Session.
-type transcriptTestStream = history.Stream[Event]

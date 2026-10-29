@@ -3,7 +3,7 @@
 
 // Package claude provides an independent native Session over an explicitly
 // selected local Claude Code process. It does not bundle a CLI or manage accounts.
-// Fixed source targets and evidence limits are documented in docs/compatibility.md.
+// Fixed source targets and evidence limits are documented in README.md.
 //
 // Open creates a Session with one FIFO. Receive delivers native events, real
 // IncomingRequests and observation evidence. Submit success

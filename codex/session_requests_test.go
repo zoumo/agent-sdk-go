@@ -56,6 +56,8 @@ func TestSessionNativeApprovalAndQuestionAnswers(t *testing.T) {
 		name, method, params, result string
 		deny                         bool
 	}{
+		{"file-allow", "item/fileChange/requestApproval", approvalParams, `{"decision":"accept","future":null}`, false},
+		{"command-deny", "item/commandExecution/requestApproval", approvalParams, `{"decision":"decline","future":null}`, true},
 		{"command-scope", "item/commandExecution/requestApproval", approvalParams, `{"decision":"acceptForSession","future":null}`, false},
 		{"command-policy", "item/commandExecution/requestApproval", approvalParams, `{"decision":{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["git","status"]}},"future":true}`, false},
 		{"network-deny", "item/commandExecution/requestApproval", approvalParams, `{"decision":{"applyNetworkPolicyAmendment":{"network_policy_amendment":{"host":"example.test","action":"deny"}}}}`, true},

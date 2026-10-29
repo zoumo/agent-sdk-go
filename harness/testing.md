@@ -8,9 +8,46 @@ status: stable
 
 Apply these rules to Go tests and generated Go tests. Execution commands and
 validation results are maintained separately and must reference these rules.
-The [SDK common user stories](sdk/user-stories.md) define provider-independent
+The [SDK simulation user stories](sdk/validation-cases.md#stories-sdk-用户故事) define provider-independent
 acceptance targets. Map every target to native evidence and public-path checks;
 the specification alone does not establish implementation or test coverage.
+
+## 测试层级与自动化边界
+
+术语定义见[共享术语](../GLOSSARY.md)。本仓库采用三个测试层级，
+集成层分为仿真与专项集成两类执行方式：
+
+| 层级 | 验证范围 | 依赖与数据 | 自动化与 CI 要求 |
+|---|---|---|---|
+| 单元测试 | 函数或独立模块的行为合同 | 局部输入、受控替身 | 必需 |
+| 集成测试：专项集成 | SDK、协议、进程及工具之间的协作与异常处理 | 受控进程、临时存储、人工构造的协议与故障 | 必需 |
+| 集成测试：仿真 | 真实用户流程在当前 SDK 中的回归行为 | 来自真实 Agent 的录制、Agent mock | 必需 |
+| 真实 E2E | 被测 SDK 对接真实 Agent 后达成用户目标 | 真实 CLI、模型、认证和执行环境 | 按需显式执行，不是必需门禁 |
+
+常规自动化与 CI 的必需覆盖止于集成层，包含专项集成和仿真。
+真实 E2E 不作为 PR 合并、常规发布或离线验收的必需条件；
+测试脚本可以支持真实 E2E，但须由操作者显式启用，CI 不执行。
+CI 可下载工具链和依赖；测试执行不依赖真实 Agent、模型服务或其认证。
+静态检查、生成一致性、race、vet 和独立消费者检查是补充工程门禁，
+不构成第四层，也不因真实 E2E 可选而取消。
+
+用户故事及其验证 case 只表达真实可执行、可录制的使用流程。
+仿真与真实 E2E 使用同一用户目标、前置条件和验收语义；
+人工故障、极限边界和竞态由代码自己的单元或专项集成测试覆盖，
+不新增专项检查目录体系，也不把合成回执登记为真实 case 的录制证据。
+
+仿真须经被测 SDK 的公共接口执行流程，同时检查业务预期、协议匹配、
+录制完整消费和进程清理。单独将录制中的客户端帧送入 mock，只证明协议自回放，
+不能替代 SDK 仿真验收。录制缺失或目标行为未触发须报告未验证；
+必需仿真覆盖缺失时不能用跳过或自动连接真实 Agent 使门禁通过。
+
+真实 E2E 须区分流程断言、采集完整性和清理结果。
+录制成功不等于目标达成，回放复现失败也不等于用户流程通过。
+官方 SDK 生成的录制可作为仿真输入，但不能单独证明本仓库 Go SDK 的真实 E2E。
+真实 E2E 未执行不影响离线门禁通过，结果须明确标注未执行，
+不能由仿真结果推断当前真实 Agent 兼容性。
+
+## 测试编写规则
 
 - Use `github.com/stretchr/testify/assert` and `require` for assertions. Use
   `require` when later steps depend on the check; use `assert` for independent
@@ -42,14 +79,28 @@ the specification alone does not establish implementation or test coverage.
   evidence separate. A skipped live check is not a live pass. Default tests and
   CI do not run real agents or collect recordings.
 
-Shared user stories run directly in `CommonStoriesSuite`; private observations
-and acceptance checks live in `tests/stories/acceptance_test.go`. Protocol peers
-remain in test files, and reusable recording/replay helpers follow the
-[tools layout](code-layout.md). There is no separate `internal/testkit` framework.
+Shared code integration scenarios run directly in `NativeIntegrationSuite`; private observations
+and assertions live in `tests/integration/acceptance_test.go`. Checks using
+synthetic peers are targeted integration tests, not simulation evidence for user
+stories. Protocol peers remain in test files, and reusable recording/replay helpers follow the
+[tools layout](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
 
 Use mise's pinned compiler and retain offline, race, vet, generation, inventory,
-fixture sanitization/hash, dependency-boundary and independent-consumer gates on
+simulation source/hash validation, dependency-boundary and independent-consumer gates on
 Linux/macOS. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.
 
-通用验收、资源隔离和结果声明遵循[测试与验收原则](principles/testing.md)。
+
+
+agent-mock 的专项测试通过与调用方相同的进程接口验证录制与回放，
+并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-mock/design.md#测试与依赖)。
+录制与 mock 的正确性不得仅由 Go SDK 测试间接证明。
+官方 SDK 回放是可选校验，不是 Go SDK 离线验收的前置条件；
+流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-mock/design.md#story-官方-sdk-仿真测试)。
+
+## 环境与结果
+
+测试使用自有临时资源，保留个人及其他任务的数据；失败时也释放己方资源并核对结果。
+认证来自外部配置，日志和证据移除秘密。前置条件缺失或场景为空时报告未执行。
+结果绑定实际源码、产物、环境和执行范围，保留失败证据；执行期间源码变化须说明。
+通过、失败、未验证分别报告，筛选或局部通过不能代表全部通过，命令启动不代表完成。

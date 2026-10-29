@@ -19,16 +19,18 @@ type ConfigurationReceipt struct {
 	NativeAccepted bool
 }
 
-// ThinkingChange preserves native effort values. Omitted and null effort both
+// ThinkingChange preserves native effort and reasoning-summary fields. Omitted and null effort both
 // leave the native override unchanged at the pinned protocol version; null is
 // not a request to clear an effort setting.
 type ThinkingChange struct {
 	Effort types.Optional[types.ReasoningEffort]
+	// Summary is the native reasoning-summary display setting, independent of effort.
+	Summary types.Optional[types.ReasoningSummary]
 }
 
 // SetThinking requests native reasoning effort for subsequent main-thread turns.
 func (s *Session) SetThinking(ctx context.Context, change ThinkingChange) (ConfigurationReceipt, error) {
-	return s.configure(ctx, types.ThreadSettingsUpdateParams{ThreadID: s.root, Effort: change.Effort})
+	return s.configure(ctx, types.ThreadSettingsUpdateParams{ThreadID: s.root, Effort: change.Effort, Summary: change.Summary})
 }
 
 // SetModel requests a native model identifier for subsequent turns of the main
@@ -43,6 +45,8 @@ func (s *Session) configure(ctx context.Context, requested types.ThreadSettingsU
 	if !s.client.experimentalAPI {
 		invalid = ErrUnsupportedConfiguration
 	} else if model, ok := requested.Model.Get(); ok && model == "" {
+		invalid = ErrInvalidInput
+	} else if summary, ok := requested.Summary.Get(); ok && summary == "" {
 		invalid = ErrInvalidInput
 	} else if effort, ok := requested.Effort.Get(); ok && effort == "" {
 		invalid = ErrInvalidInput

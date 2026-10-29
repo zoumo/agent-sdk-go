@@ -1,16 +1,13 @@
 # Agent guide
 
-Read the standards relevant to the task before changing code:
+Read the standards relevant to the task:
 
-- SDK, protocol, module or dependency changes: [architecture](harness/architecture.md).
-- Tests, test helpers or generators: [testing](harness/testing.md).
-- Commands, tools, examples or fixture paths: [code layout](harness/code-layout.md); for recording evidence also read the [fixture index](docs/recordings.md).
+- SDK, protocol, module, dependency or path changes: [development standards](harness/architecture.md).
+- Tests, helpers or generators: [testing standards](harness/testing.md).
+- Recording evidence: [recording and fixture provenance](tools/record-user-story/README.md#fixtures-仿真录制与测试输入).
 
 Use the mise-managed compiler pinned in `mise.toml`. Preserve native protocol
 contracts and recording provenance. Default validation is offline; this guide
 does not authorize real agent execution or new recordings.
 
-## Agent Harness
-
-开始工作前，读取并遵循 [harness 工作规则](harness/AGENTS.md)。
-项目设计从 [harness 入口](harness/index.md)读取。
+开始工作前读取 [harness 工作规则](harness/AGENTS.md)，设计从 [harness 入口](harness/index.md)读取。

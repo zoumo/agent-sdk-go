@@ -9,7 +9,7 @@ anthropics/claude-agent-sdk-python project at commit
 f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab and the official Agent SDK overview.
 Except for the query algorithm adaptation noted below, no official or competing
 SDK implementation or test source is redistributed or linked as a dependency. Source hashes and test provenance are recorded in
-docs/compatibility.md. Reference-source licenses do not replace or extend the
+docs/type-sources.md. Reference-source licenses do not replace or extend the
 license of the CLI or its services; those remain subject to their own terms.
 
 Additional type-organization research: severity1/claude-agent-sdk-go

@@ -30,10 +30,14 @@ type Limits struct {
 // normal Go sharing.
 // Zero values select the client defaults; validation occurs at Open.
 type Options struct {
-	CLIPath  string
-	WorkDir  string
-	Model    string
-	Thinking *ThinkingConfig
+	CLIPath string
+	WorkDir string
+	Model   string
+	// Effort passes the native creation-only --effort value literally. Empty omits it.
+	Effort string
+	// SDKMCPServers names application-hosted native SDK MCP servers.
+	SDKMCPServers []string
+	Thinking      *ThinkingConfig
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID          string

@@ -128,6 +128,9 @@ func (p *PermissionRequest) Answer(ctx context.Context, answer PermissionAnswer)
 			result = &DispatchError{Op: "permission answer", State: state, Err: result}
 		}
 	}()
+	if p != nil && p.state != nil && p.state.subtype != "can_use_tool" {
+		return ErrUnsupported
+	}
 	if err := p.reserveAnswer(ctx); err != nil {
 		return err
 	}
@@ -368,6 +371,7 @@ const (
 )
 
 type permissionState struct {
+	subtype                 string
 	owner                   *interaction
 	id, toolUseID, toolName string
 	input, raw              json.RawMessage
@@ -433,7 +437,7 @@ func (c *interaction) registerIncoming(request *ControlRequest) (*PermissionRequ
 		return nil, &ResourceLimitError{Resource: "permission request history", Limit: c.opts.Limits.PermissionHistory}
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
-	s := &permissionState{owner: c, id: request.RequestID, toolUseID: wire.ToolUseID, toolName: wire.ToolName,
+	s := &permissionState{subtype: request.Subtype, owner: c, id: request.RequestID, toolUseID: wire.ToolUseID, toolName: wire.ToolName,
 		input: bytes.Clone(wire.Input), raw: bytes.Clone(request.Request), epoch: c.epoch, ctx: ctx, cancel: cancel}
 	c.permissions[s.id], c.permissionIDs[s.id] = s, struct{}{}
 	return &PermissionRequest{state: s}, nil

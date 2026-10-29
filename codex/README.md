@@ -1,29 +1,27 @@
 # codex-sdk-go
 
-Commands in this native documentation run from `codex/`; see [root validation](../docs/testing.md).
+Shell commands below run from the repository root; see [root validation](../docs/testing.md).
 
 A native Go client for the Codex app-server protocol.
 
 Connections and execution live in the native `codex` package. Events, native models,
 and optional values live in `github.com/zoumo/agent-sdk-go/codex/types`.
 
-**Start with [compatibility and the complete official capability inventory](docs/compatibility.md).**
-The protocol target is official **0.162.1** at one exact commit. The
-[live coverage summary](docs/compatibility.md#live-validation) records limited real CLI
-**0.162.1** stdio/loopback WS and user-input passes. Approvals and interrupt were
-untriggered; public WSS/JWT remain uncovered. No supported-version range is claimed.
-Those historical runs do not validate the refreshed bindings or managed subagents.
-Current-version adaptation uses source inspection and offline tests only.
+## Compatibility
 
-## Documentation
+The source/schema target is Codex **0.162.1** at
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`; no supported-version range is claimed.
+Current bindings and descendants have source/offline evidence only. Historical
+CLI 0.162.1 stdio/loopback WS and user-input checks used older SDK/schema bases;
+approvals and interrupt were untriggered, public WSS/JWT and current descendants
+remain unverified. Exact scopes stay in [evidence.json](docs/protocol/evidence.json).
 
-- [Compatibility, protocol target and live coverage](docs/compatibility.md)
-- [Managed subagent API and limitations](docs/subagent-compatibility.md)
-- [Event sequences and user stories](docs/event-sequences.md)
-- [Testing, offline examples and CI](docs/testing.md)
-- [Recorded native events and replay](docs/recorded-events.md)
-- [Architecture and official SDK comparison](docs/design/native-sdk-comparison.md)
-- [Protocol generation, sources and licensing](docs/protocol/README.md)
+Use [capabilities.json](docs/protocol/capabilities.json) for the method inventory
+and [protocol provenance](docs/protocol/README.md) for source hashes and licensing.
+Raw Call/types support is not workflow support. Dedicated steering/work queues,
+thread administration, hooks/plugins, MCP administration, realtime, credential
+management and durable recovery are not provided. Child observation does not
+provide a spawn controller, complete forwarding or combined completion.
 
 ## Session model and reasoning settings
 
@@ -65,8 +63,8 @@ approvals and lifecycle facts intact. Complete items and mixed/unknown frames
 remain visible, with their original bytes. It is not content redaction or a
 token-cost control. Low-level `Client.ResumeThread` is unchanged; no Session
 resume constructor is added. See the exact
-[method and shape contract](../harness/contracts/child-detail-delivery.md).
-`CommonStoriesSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
+[method and shape contract](../harness/modules/native-session/design.md#child-detail-可选子详细事件交付).
+`NativeIntegrationSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
 public API delivery and original peer bytes; real child interoperability remains
 unverified.
 
@@ -78,7 +76,12 @@ Inspect returned `Pages`, `Coverage` and the error together: partial pages can
 accompany a failure. Defaults select five native subAgent source kinds and only
 non-archived records; archived records need a separate query. Results do not
 change observation membership or prove that an Agent is running or subscribed.
-See [pagination, filters and evidence limits](docs/session-discovery.md).
+
+Discovery walks pages with defaults of 128 pages, 10000 records and 16 MiB;
+MaxPages/MaxRecords/MaxBytes override these bounds. Failed calls retain accepted
+whole pages plus error/Coverage. EndReached requires explicit terminal null;
+EnumerationComplete also requires starting without a cursor. Missing/repeated/empty continuation cursors fail
+explicitly. No automatic retry or cache fallback runs.
 
 ## Open, submit and receive
 
@@ -124,7 +127,7 @@ func main(){
 returning. `StartResponse` retains a copy of the actual native startup model,
 sandbox and unknown fields.
 Each Session owns one FIFO; `Receive` selects native events, real
-`IncomingRequest` values, SDK observation evidence . Concurrent
+`IncomingRequest` values and SDK observation evidence. Concurrent
 receivers compete for that same FIFO. Applications own UI/logging fan-out.
 A native result does not close the Session. `Submit` uses native turn/start,
 retains the actual native turn response, and never guesses start versus steer
@@ -200,9 +203,7 @@ are unsupported; malformed or oversized messages terminate the connection explic
   and protocol traffic to the network. Prefer WSS or a secured loopback tunnel.
 - `ErrRemoteTransport` reports sanitized stage/status information, without URL,
   token, response body, or peer-supplied close reason. Only safe underlying causes
-  such as context cancellation and EOF are retained. Remote error messages and
-  `RPCError.Message`, `Data`, and `Raw` also redact the explicitly supplied bearer
-  if reflected by the peer, including supported JSON/URL-encoded echoes.
+  such as context cancellation and EOF are retained. Reflected bearer redaction follows the [error rules](#cancellation-and-errors).
   Successful results, events, and request payloads remain caller-sensitive data;
   the SDK is not a general logging redactor and cannot control server logs.
 
@@ -214,7 +215,7 @@ only this connection; it never shuts down or kills the remote service.
 
 The WSS example describes a caller-provided TLS endpoint; source inspection and
 synthetic TLS tests do not certify a production TLS proxy, bearer issuer, server
-configuration, or live account. See the [canonical evidence](docs/compatibility.md)
+configuration, or live account. See the [canonical evidence](#compatibility)
 and [transport provenance](docs/protocol/README.md). The
 [remote example](remote_example_test.go) compiles in tests and is never executed.
 
@@ -227,9 +228,8 @@ is not permission to submit an unsupported workflow. The server still validates
 native constraints. See [generation provenance](docs/protocol/README.md).
 
 An explicit `Client` remains useful for a shared native I/O resource, handshake
-metadata and `Call` extensions. Supply it in `SessionOptions.Client` or
-`SessionOptions.Client`. Closing one Session leaves other owners on that connection
-usable. A main identity has one owner. Overlapping child/ancestor observation
+metadata and `Call` extensions. Supply it in `SessionOptions.Client`. Closing one
+Session leaves other owners on that connection usable. A main identity has one owner. Overlapping child/ancestor observation
 ranges share physical attachments; only the final observer releases them.
 Typed detachment/resume operations respect ownership and uncertain-release
 fences. Raw calls are outside coordinated Session guarantees and never create a
@@ -314,13 +314,19 @@ item-view selection and omitted/null/value fields. Query availability depends on
 the server version/backend and stored history format. Metadata and saved items
 are not original notification/delta/approval logs or atomic snapshots. Remote
 queries use server storage and paths; local list may repair metadata unless
-`UseStateDbOnly` selects the native DB-only path. See [query boundaries](docs/history-query.md)
+`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../harness/contracts/history-query.md#codex-原生接口)
 and the [offline example](examples/history-query-offline).
 
 ## Offline examples and validation
 
 Run the root offline gate with the mise-managed compiler. The offline
-examples use explicit synthetic peers or embedded sanitized captures, never an
-installed agent. [Migration details](../docs/session-migration.md) distinguish
-native limitations, resource options and breaking lifecycle changes. Historical
-architecture reports retain their original baseline and are not current tutorials.
+examples use explicit synthetic peers and code-owned protocol inputs, never an
+installed agent. [Migration details](../docs/migration.md#session) distinguish
+native limitations, resource options and breaking lifecycle changes.
+
+Run from the repository root:
+
+```sh
+mise exec -- go run ./codex/examples/history-query-offline
+mise exec -- go run ./codex/examples/observe-subagents-offline
+```

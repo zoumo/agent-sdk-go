@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 test "$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')" = 1
 test -z "$(find . \( -name go.work -o -name go.work.sum \) -not -path './.git/*' -print)"
 test -z "$(find . -maxdepth 1 -name '*.go' -print)"
-for shared in lineage queue; do
+for shared in lineage queue mocktest; do
   imports=$(go list -deps -f '{{.ImportPath}}' "./internal/$shared")
   if [[ "$imports" == *github.com/zoumo/agent-sdk-go/codex* || "$imports" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
     echo "internal/$shared must not import native SDK packages" >&2
@@ -49,8 +49,12 @@ while IFS= read -r dependency; do
       } ;;
   esac
 done <<< "$sdk_dependencies"
+if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
+  echo "SDK production packages must not depend on agent-mock or its test bridge" >&2
+  exit 1
+fi
 for native in codex claude; do
-  if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tools* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tests/testdata* ]]; then
+  if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tools* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tests/* ]]; then
     echo "SDK production packages must not import recording tools or fixtures" >&2
     exit 1
   fi
@@ -69,3 +73,10 @@ while rows.strip():
         assert not dep.startswith('github.com/zoumo/agent-sdk-go/' + other), (path, dep)
         assert not dep.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dep)
 PY
+
+# Tool implementation and tests must remain independent of production SDKs.
+mock_dependencies=$(go list -deps -test -f '{{.ImportPath}}' ./tools/agent-mock/...)
+if [[ "$mock_dependencies" == *github.com/zoumo/agent-sdk-go/codex* || "$mock_dependencies" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
+  echo "agent-mock must not import production SDKs" >&2
+  exit 1
+fi

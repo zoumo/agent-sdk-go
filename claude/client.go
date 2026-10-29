@@ -27,10 +27,14 @@ type Limits = types.Limits
 // child's entire environment; nil inherits os.Environ. WorkDir, Model and
 // ResumeID are passed literally, without a shell. Existing CLI settings apply.
 type Options struct {
-	CLIPath  string
-	WorkDir  string
-	Model    string
-	Thinking *types.ThinkingConfig
+	CLIPath string
+	WorkDir string
+	Model   string
+	// Effort passes the native creation-only --effort value literally. Empty omits it.
+	Effort string
+	// SDKMCPServers names application-hosted native SDK MCP servers.
+	SDKMCPServers []string
+	Thinking      *types.ThinkingConfig
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
@@ -51,12 +55,16 @@ func (o *Options) defaults() error {
 	default:
 		return fmt.Errorf("claude: child detail policy %q: %w", o.ChildDetailPolicy, ErrInvalidInput)
 	}
-	if err := validateInputEncoding(o.Model); err != nil {
+	if err := validateInputEncoding(struct{ Model, Effort string }{o.Model, o.Effort}); err != nil {
 		return dispatchFailure("open", err)
 	}
 	if err := validateThinkingConfig(o.Thinking); err != nil {
 		return dispatchFailure("open", err)
 	}
+	if err := validateSDKMCPServers(o.SDKMCPServers); err != nil {
+		return dispatchFailure("open", err)
+	}
+	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
 	if o.CLIPath == "" {
 		o.CLIPath = "claude"
 	}
@@ -488,7 +496,7 @@ func (c *interaction) route(event Event) error {
 		if err != nil {
 			return err
 		}
-		if c.session != nil && event.Control.Subtype == "can_use_tool" {
+		if c.session != nil && (event.Control.Subtype == "can_use_tool" || c.ownsSDKMCPRequest(event.Control)) {
 			return c.session.acceptRequest(event, permission)
 		}
 		work := incomingControl{subtype: event.Control.Subtype, permission: permission}
@@ -708,6 +716,17 @@ func interactionArgs(options Options) []string {
 	args = append(args, thinkingArgs(options.Thinking)...)
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
+	}
+	if len(options.SDKMCPServers) > 0 {
+		servers := map[string]any{}
+		for _, name := range options.SDKMCPServers {
+			servers[name] = map[string]string{"type": "sdk", "name": name}
+		}
+		config, _ := json.Marshal(map[string]any{"mcpServers": servers})
+		args = append(args, "--mcp-config="+string(config))
+	}
+	if options.Effort != "" {
+		args = append(args, "--effort="+options.Effort)
 	}
 	if options.ResumeID != "" {
 		// The CLI takes an optional resume value. Binding it to the flag also

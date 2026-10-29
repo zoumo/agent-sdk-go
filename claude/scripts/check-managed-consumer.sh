@@ -48,7 +48,7 @@ func consumeConfig(ctx context.Context, config types.Options) error {
     return nil
 }
 GO
-python3 - "$sdk_root/docs/api-comparison.md" "$consumer_dir/comparison.go" <<'PYDOC'
+python3 - "$sdk_root/README.md" "$consumer_dir/comparison.go" <<'PYDOC'
 import pathlib, sys
 text = pathlib.Path(sys.argv[1]).read_text()
 section = text.split("## Go: configuration,", 1)[1]

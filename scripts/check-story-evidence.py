@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Check current Story inventories, local evidence links and public suite names offline."""
+"""Check simulation catalog identities, availability and documentation offline."""
 from collections import Counter
 from pathlib import Path
+import json
 import re
 import sys
 
@@ -9,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def inventory_errors(text, prefix, expected):
-    counts = Counter(re.findall(r"^\| (" + re.escape(prefix) + r"-\d{3}) \|", text, re.M))
+    counts = Counter(re.findall(r"^\| (" + re.escape(prefix) + r"-\d{3}(?:\.\d{2})?) \|", text, re.M))
     actual = set(counts)
     errors = [f"{prefix}: missing {item}" for item in sorted(expected - actual)]
     errors += [f"{prefix}: unexpected {item}" for item in sorted(actual - expected)]
@@ -17,9 +18,47 @@ def inventory_errors(text, prefix, expected):
     return errors
 
 
+def stable_stories(root):
+    return re.findall(r'^\| (SDK-US-\d{3}) \|', (root / 'harness/sdk/validation-cases.md').read_text(), re.M)
+
+
+def case_mapping_errors(stories, cases):
+    errors, seen = [], set()
+    for case in cases:
+        if case.get('storyId') not in set(stories):
+            errors.append(case['id'] + ': unknown story owner')
+        if not re.fullmatch(r'SDK-CASE-\d{3}', case['id']):
+            errors.append(case['id'] + ': invalid independent case ID')
+        if case['id'] in seen:
+            errors.append(case['id'] + ': duplicate case ID')
+        seen.add(case['id'])
+    return errors
+
+
+def recording_mapping(root):
+    directory = root / 'tests/recording/scenarios'
+    index = json.loads((directory / 'index.json').read_text())
+    stories = [json.loads((directory / (name + '.json')).read_text()) for name in index['stories']]
+    providers = {p: json.loads((directory / 'bindings' / (p + '.json')).read_text()) for p in ('codex', 'claude')}
+    cases, rows = [], []
+    for story in stories:
+        for case in story['cases']:
+            cases.append(case)
+            routes = []
+            for provider, bindings in providers.items():
+                if case['implementation'] != 'implemented':
+                    routes.append(case['implementation'])
+                    continue
+                binding = bindings['cases'][case['id']]
+                routes.append(dict(case['execution'], **binding.get('execution', {}))['mode'])
+            target = f"[配置](../../tests/recording/scenarios/{story['id']}.json)"
+            rows.append('| ' + ' | '.join([case['id'], story['id'], case['goal'], *routes, target]) + ' |')
+    return cases, rows
+
+
 def heading_ids(text):
     counts = Counter()
-    anchors = set()
+    anchors = set(re.findall(r'<a\s+id="([^"]+)"\s*>', text))
     for title in re.findall(r"^#{1,6} (.+)$", text, re.M):
         title = re.sub(r"\[([^\]]*)\]\([^)]+\)", r"\1", title)
         slug = re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")
@@ -31,6 +70,8 @@ def heading_ids(text):
 
 def link_errors(path, text):
     errors = []
+    text = re.sub(r"(?ms)^```.*?^```[^\n]*", "", text)
+    text = re.sub(r"`[^`]*`", "", text)
     for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
         if re.match(r"[a-z]+://", target):
             continue
@@ -45,30 +86,46 @@ def link_errors(path, text):
 
 
 def check(root):
-    coverage = (root / "docs/validation/story-coverage.md").read_text()
-    common = {f"SDK-US-{n:03}" for n in range(1, 20)}
-    scenarios = {f"US-{n:03}" for n in range(1, 15)}
-    errors = inventory_errors(coverage, "SDK-US", common)
-    errors += inventory_errors(coverage, "US", scenarios)
-    errors += inventory_errors((root / "harness/sdk/user-stories.md").read_text(), "SDK-US", common)
-    errors += inventory_errors((root / "harness/contracts/stories/index.md").read_text(), "US", scenarios)
-    native = (root / "harness/sdk/native-stories.md").read_text()
-    for prefix, size in [("CODEX-US", 5), ("CLAUDE-US", 7)]:
-        expected = {f"{prefix}-{n:03}" for n in range(1, size + 1)}
-        errors += inventory_errors(native, prefix, expected)
-        errors += inventory_errors(coverage, prefix, expected)
-    suite = (root / "tests/stories/stories_test.go").read_text()
-    targets = suite.split("func (s *CommonStoriesSuite) TestSessionTargets()", 1)[1].split("func ", 1)[0]
-    if set(re.findall(r'"(SDK-US-\d{3})"', targets)) != common - {"SDK-US-019"}:
-        errors.append("SessionTargets must expose exactly SDK-US-001–018")
-    history = (root / "tests/stories/history_query_test.go").read_text()
-    if not all(name in history for name in ["TestIndependentHistoryBrowser", '"US-014/codex"', '"US-014/claude"']):
-        errors.append("IndependentHistoryBrowser must expose US-014 for both native adapters")
-    for relative in ["docs/validation/story-coverage.md", "docs/capture-plan.md", "harness/sdk/native-stories.md",
-                     "docs/index.md", "docs/recordings.md", "harness/sdk/index.md",
-                     "harness/contracts/child-detail-delivery.md", "harness/contracts/claude-subagent-history.md",
-                     "harness/contracts/stories/child-capabilities.md", "docs/research/child-capability-contract-sources.md"]:
-        path = root / relative
+    common = {f"SDK-US-{n:03}" for n in range(1, 9)}
+    stories = stable_stories(root)
+    errors = inventory_errors((root / 'harness/sdk/validation-cases.md').read_text(), 'SDK-US', common)
+    cases, rows = recording_mapping(root)
+    errors += case_mapping_errors(stories, cases)
+    case_ids = {case['id'] for case in cases}
+    normative = (root / 'harness/sdk/validation-cases.md').read_text()
+    errors += inventory_errors(normative, 'SDK-CASE', case_ids)
+    owners = dict(re.findall(r'^\| (SDK-CASE-\d{3}) \| (SDK-US-\d{3}) \|', normative, re.M))
+    for case in cases:
+        if owners.get(case['id']) != case['storyId']:
+            errors.append(case['id'] + ': normative and configured ownership differ')
+        if case.get('implementation') not in ('implemented', 'planned'):
+            errors.append(case['id'] + ': simulation case must be implemented or planned')
+    directory = root / 'tests/recording/scenarios'
+    index = json.loads((directory / 'index.json').read_text())
+    if set(index['stories']) != common or len(index['stories']) != len(common):
+        errors.append('Simulation catalog must contain exactly the eight user stories')
+    for provider in ('codex', 'claude'):
+        bindings = json.loads((directory / 'bindings' / (provider + '.json')).read_text())['cases']
+        if set(bindings) != case_ids:
+            errors.append(provider + ': bindings must cover exactly the current cases')
+        for case in cases:
+            binding = bindings.get(case['id'], {})
+            route = dict(case.get('execution', {}), **binding.get('execution', {}))
+            mode = route.get('mode')
+            if mode not in ('live-selected-path', 'planned', 'unsupported'):
+                errors.append(provider + '/' + case['id'] + ': invalid simulation route')
+            if mode in ('planned', 'unsupported') and not route.get('reason', '').strip():
+                errors.append(provider + '/' + case['id'] + ': unavailable route needs a reason')
+            if 'offlineTest' in case or 'offlineTest' in binding:
+                errors.append(provider + '/' + case['id'] + ': code integration checks are not simulation routes')
+    mapping = (root / 'tools/record-user-story/README.md').read_text()
+    errors += inventory_errors(mapping, 'SDK-CASE', case_ids)
+    if [line for line in mapping.splitlines() if line.startswith('| SDK-CASE-')] != rows:
+        errors.append('Story/case mapping must match exact identities and provider routes')
+    documents = [root / name for name in ('AGENTS.md', 'README.md', 'CHANGELOG.md', 'GLOSSARY.md', 'tools/record-user-story/README.md')]
+    for directory in ('harness', 'docs', 'codex', 'claude'):
+        documents += sorted((root / directory).rglob('*.md'))
+    for path in documents:
         errors += link_errors(path, path.read_text())
     return errors
 
@@ -79,4 +136,4 @@ if __name__ == "__main__":
         print(failure, file=sys.stderr)
     if failures:
         sys.exit(1)
-    print("Story evidence: 19 goals, 14 scenarios, 12 native supplements; links and public suite inventory valid (offline).")
+    print(f"Simulation evidence: {len(stable_stories(ROOT))} stories, {len(recording_mapping(ROOT)[0])} cases; identities, availability and documentation valid (offline, no recording claim).")

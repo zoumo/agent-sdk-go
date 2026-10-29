@@ -7,7 +7,7 @@
     "manager": "mise",
     "GOTOOLCHAIN": "local"
   },
-  "live_validation": "Historical partial CLI 0.162.1 coverage at original SDK/schema bases; current bindings and managed subagents have no E3/E4 pass. See ../compatibility.md#live-validation and ../recorded-events.md.",
+  "live_validation": "Historical partial CLI 0.162.1 coverage at original SDK/schema bases; current bindings and managed subagents have no E3/E4 pass. See ../../README.md#compatibility and ../../../tools/record-user-story/README.md#fixtures-仿真录制与测试输入.",
   "records": [
     {
       "id": "ticket01-model-unit",
@@ -1323,7 +1323,7 @@
       "id": "phase1-story-audit-history-entrypoints",
       "kind": "mock",
       "status": "available-not-rerun",
-      "coverage": "Current public synthetic query entrypoints audited at unified base 4c03ac701901ce3e37414946f09a56347f620fe7. Not a new execution pass; earlier exact implementation checks remain in docs/reviews/2026-10-25-codex-history-query.md and docs/validation/history-query-integration.md. No live or new capture evidence.",
+      "coverage": "Current public synthetic query entrypoints audited at unified base 4c03ac701901ce3e37414946f09a56347f620fe7. Earlier per-slice reports describe historical working-tree checks; current validation commands are in ../../../docs/testing.md. This is not a new execution pass. No live or new capture evidence.",
       "test_files": [
         "history_query_test.go"
       ],
@@ -1456,7 +1456,7 @@
     "current_source_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
     "tested_sdk_base": "c0d7201f80e6c766835ec2e9d8c6d5721acaf046",
     "revision_note": "Current follow-up working tree hashes in subagent05-current-*; delivery SHA/hosted CI reported in handoff. Prior schema records remain historical.",
-    "report": "../subagent-compatibility.md",
+    "report": "README.md#descendant-evidence",
     "live": "Current subagent E3/E4 not run. Read-only --version is binary identity, not workflow validation.",
     "tested_sdk_source_commit": "1f11440e157cf7b31ab89cdde85d540542950ada"
   },

@@ -6,7 +6,7 @@ if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
   echo 'expected a full 40-character pushed commit SHA' >&2
   exit 2
 fi
-consumer_dir=$(mktemp -d /tmp/agent-sdk-consumer.XXXXXXXX)
+consumer_dir=$(python3 -c 'import pathlib, tempfile; print(pathlib.Path(tempfile.mkdtemp(prefix="agent-sdk-consumer-")).resolve())')
 cleanup() {
   chmod -R u+w "$consumer_dir"
   rm -rf "$consumer_dir"
@@ -53,8 +53,8 @@ import (
     codextypes "github.com/zoumo/agent-sdk-go/codex/types"
     claude "github.com/zoumo/agent-sdk-go/claude"
     claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
-    codexrecording "github.com/zoumo/agent-sdk-go/codex/tools/replay"
-    claudetranscript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
+    codexrecording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
+    claudetranscript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 )
 
 var _ func(context.Context, codex.SessionOptions) (*codex.Session, error) = codex.Open
@@ -93,29 +93,20 @@ func TestNativeConfiguration(t *testing.T) {
 
 // Tooling smoke check: the downloaded module must embed its relocated fixtures.
 // This is independent of the consumer's cwd and never opens a CLI or client.
-func TestEmbeddedRecordingFixtures(t *testing.T) {
-    for _, story := range []string{"s1", "s2"} {
-        frames, err := codexrecording.Load(story)
+func TestEmbeddedIntegrationFixtures(t *testing.T) {
+    for _, load := range []func() ([]codexrecording.Frame, error){codexrecording.QuestionFrames} {
+        frames, err := load()
         require.NoError(t, err)
         require.NotEmpty(t, frames)
     }
-    prompt, err := claudetranscript.Prompt()
-    require.NoError(t, err)
-    require.NotEmpty(t, prompt)
-    require.NotEmpty(t, claudetranscript.Wire)
+    require.NotEmpty(t, claudetranscript.TaskFailurePrompt)
+    require.NotEmpty(t, claudetranscript.TaskFailureWire)
 }
 
 GO
 python3 - "$module_dir" <<'PY'
 import pathlib, shutil, sys
 source = pathlib.Path(sys.argv[1])
-# Copy the fetched module's pure API/configuration consumer separately from SDK demos.
-target = pathlib.Path('consumers/codex-public')
-target.mkdir(parents=True)
-shutil.copyfile(source / 'tests/consumers/codex-public/main.go', target / 'main.go')
-target = pathlib.Path('consumers/mock')
-target.mkdir(parents=True)
-shutil.copyfile(source / 'tests/consumers/mock/mock_test.go', target / 'mock_test.go')
 # Compile consumer copies of the fetched module's public examples, excluding
 # example tests and all examples that import implementation-only packages.
 for name, relative in (
@@ -138,7 +129,7 @@ for native in ('codex', 'claude'):
     target = pathlib.Path('docs') / native
     target.mkdir(parents=True)
     (target / 'main.go').write_text(code)
-comparison = (source / 'claude/docs/api-comparison.md').read_text()
+comparison = (source / 'claude/README.md').read_text()
 section = comparison.split('## Go: configuration,', 1)[1]
 code = section.split('```go\n', 1)[1].split('```', 1)[0]
 target = pathlib.Path('docs/claude-configuration')
@@ -149,14 +140,8 @@ go mod tidy
 go mod verify
 go mod edit -json | python3 -c 'import json, sys; assert not json.load(sys.stdin).get("Replace"), "consumer unexpectedly contains a replace directive"'
 test ! -e go.work
-mkdir -p "$consumer_dir/bin"
-GOPROXY=off GOSUMDB=off go build -o "$consumer_dir/bin/mock-codex" github.com/zoumo/agent-sdk-go/codex/cmd/mock
-GOPROXY=off GOSUMDB=off go build -o "$consumer_dir/bin/mock-claude" github.com/zoumo/agent-sdk-go/claude/cmd/mock
-export SDK_MOCK_CODEX_BIN="$consumer_dir/bin/mock-codex"
-export SDK_MOCK_CLAUDE_BIN="$consumer_dir/bin/mock-claude"
-# Downloads are complete: consumer/example compilation and mock checks now run offline.
+# Downloads are complete: packaging smoke tests and public examples now run offline.
 GOPROXY=off GOSUMDB=off go test -count=1 ./...
-GOPROXY=off GOSUMDB=off go run ./consumers/codex-public
 GOPROXY=off GOSUMDB=off go run ./examples/codex-history
 GOPROXY=off GOSUMDB=off go run ./examples/claude-metadata
 GOPROXY=off GOSUMDB=off go run ./examples/claude-messages

@@ -15,19 +15,13 @@ Choose the native package for your agent. There is no root client or shared publ
 protocol. Both `types` packages depend only on the Go standard library. The old
 module import paths have no compatibility forwarding packages.
 
-- [Codex API, examples, protocol inventory and coverage](codex/README.md)
-- [Claude API, examples, native types and coverage](claude/README.md)
-- [Architecture](harness/overview.md)
-- [SDK common design and onboarding](harness/sdk/index.md)
-- [Engineering standards](harness/architecture.md) — [testing](harness/testing.md), [code layout](harness/code-layout.md)
-- [Migration and source history](docs/migration.md)
-- [Offline validation](docs/testing.md) and [pure public API consumer](tests/consumers/codex-public/main.go)
-- [Offline mock CLIs and programmable protocol peers](docs/mock.md)
-- [Recorded test data: Codex tools/questions, Claude authentication failure, and synthetic fixtures](docs/recordings.md)
-- [Common SDK user stories](harness/sdk/user-stories.md) and [native acceptance evidence](docs/validation/stories/index.md)
-- [Shared terms](harness/glossary.md)
-- [Release preparation and consumer checks](docs/releasing.md)
-- [Licenses and native attribution](NOTICE)
+| Start here | Documentation |
+|---|---|
+| Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
+| Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
+| Test, record or inspect evidence | [Offline validation](docs/testing.md), [recording](tools/record-user-story/README.md#repository-recording) |
+| Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
+| Check licensing | [Licenses and native attribution](NOTICE) |
 
 Go **1.26.9** is pinned in the root `mise.toml`:
 
@@ -41,5 +35,5 @@ Native contract validation runs offline; real agent/model tests remain disabled.
 External consumer CI retrieves the exact
 pushed module and dependencies over the network, then compiles public imports,
 examples and documentation snippets without invoking a real CLI or model.
-Historical recordings and source inspections have separate provenance; they do
-not establish current live agent compatibility.
+Simulation catalog availability and source inspection do not establish successful
+real recordings. Code integration tests use explicitly synthetic input.

@@ -1,6 +1,6 @@
 # Pinned protocol provenance
 
-The [canonical compatibility record](../compatibility.md) distinguishes
+The [canonical compatibility record](../../README.md#compatibility) distinguishes
 implementation from test evidence. Its complete machine-readable matrix is
 [capabilities.json](capabilities.json). All source records in
 [sources.json](sources.json) point to the same immutable official Codex revision,
@@ -22,7 +22,7 @@ implementation from test evidence. Its complete machine-readable matrix is
    line framing, EOF, WebSocket controls, and the separate managed-daemon shutdown
    handshake. No generic client cancel method was invented.
 6. Official Rust, TypeScript, and Python test sources, for independently applied
-   test-design patterns only. See [testing-patterns.md](testing-patterns.md).
+   test-design patterns only. See [inspected test sources](#inspected-test-sources).
 
 The inventory is the source-registry union, not just the smaller stable schema.
 `in_stable_schema` and `in_experimental_schema` expose each entry's presence.
@@ -33,36 +33,18 @@ membership flag is not an SDK support or server-runtime availability guarantee.
 
 ## Generated material
 
-`types/schema.json` is the unmodified definition closure of
-`InitializeParams`, `InitializeResponse`, `v2/ThreadStartParams`,
-`v2/ThreadStartResponse`, `v2/ThreadReadParams`, `v2/ThreadReadResponse`, the
-`v2/ThreadResume` and `v2/ThreadUnsubscribe` parameter/response pairs, the
-`v2/TurnStart` and `v2/TurnInterrupt` parameter/response pairs, and six notification
-roots: `v2/TurnStartedNotification`, `v2/TurnCompletedNotification`,
-`v2/ItemStartedNotification`, `v2/ItemCompletedNotification`,
-`v2/AgentMessageDeltaNotification`, and `v2/ErrorNotification`. The closure also includes
-the parameter/response roots for `CommandExecutionRequestApproval`,
-`FileChangeRequestApproval`, `PermissionsRequestApproval`,
-`ToolRequestUserInput`, `ApplyPatchApproval`, and `ExecCommandApproval`
-(all top-level schema definitions), plus
-`v2/ServerRequestResolvedNotification`. The history addition includes `v2/ThreadTurnsList` and `v2/ThreadItemsList` parameter/response pairs. The settings addition includes `v2/ThreadSettingsUpdate` parameters/response and
-`v2/ThreadSettingsUpdatedNotification`. These 40 roots are extracted
-from the official experimental archive's
-`json_schema["codex_app_server_protocol.schemas.json"]` member.
-`types/types_generated.go` is independently generated from that snapshot by
-`scripts/generate_protocol.py`. The script verifies the upstream archive's exact
-Git blob before refreshing the snapshot. The snapshot and Go code are adaptations;
-they are not an upstream OpenAI Go SDK. The Go representation adds explicit
-optional values and raw unknown-field/variant preservation. It is not a strict
-JSON Schema validator: native minimum/maximum and `additionalProperties`
-constraints are not all enforced, and unknown enum/union/extensions are preserved
-where representable. Loss preservation is distinct from server acceptance. Annotation-only schema
-nodes, such as `outputSchema`, remain arbitrary JSON instead of an invented
-JSON-Schema model. The current closure has 154 definitions, generating 399 Go
-types and 750 synthetic model round-trip cases. Mixed string/object approval
-decisions retain their native wire representations; permission-path variants
-retain their native `kind` discriminator. `RequestID` uses distinct string and
-signed 64-bit integer variants without passing numbers through floating point.
+[types/schema.json](../../types/schema.json) contains the definition closure selected by
+[generate_protocol.py](../../scripts/generate_protocol.py), including thread list/read,
+turn/item history, settings, approvals and Session lifecycle roots. The generator
+verifies the official experimental archive's Git blob and extracts its
+`json_schema["codex_app_server_protocol.schemas.json"]` member before generating
+Go bindings and synthetic round-trip cases. The generator owns the exact root set.
+
+These adaptations preserve optional values, raw unknown fields/variants and number
+literals; they are not a strict JSON Schema validator or an official OpenAI Go SDK.
+Native minimum/maximum and additionalProperties constraints are not all enforced.
+Annotation-only nodes such as outputSchema remain arbitrary JSON; CodexErrorInfo
+retains the official string/object fallback. Representability is not server acceptance.
 
 The archive, extracted-aggregate checksum, paths, revision, Git blob IDs, and
 SHA-256 digests are in [sources.json](sources.json). SHA-256 values describe exact
@@ -135,12 +117,12 @@ connection repeats initialization; no disconnect path reconnects or replays RPCs
 
 Original SDK code is licensed under Apache-2.0. Derived official protocol names,
 schema material, generated bindings, and the method inventory come from OpenAI
-Codex under Apache-2.0. The root [LICENSE](../../LICENSE) contains that license,
-and root [NOTICE](../../NOTICE) preserves the upstream notice. No competing Go
+Codex under Apache-2.0. The native [LICENSE](../../LICENSE) contains that license,
+and [NOTICE](../../NOTICE) preserves the upstream notice. No competing Go
 SDK implementation or test source is incorporated. Official tests were read;
 the Go tests are independently authored.
 
-The only non-standard-library runtime dependency is
+The WebSocket transport dependency is
 [`github.com/coder/websocket` v1.8.15](https://github.com/coder/websocket/releases/tag/v1.8.15),
 source commit `9c8faadccd1b679e811a79ce506f8a10237251ad`, under ISC. The unmodified
 [license notice](third-party/coder-websocket-LICENSE.txt) is included. Exact Go
@@ -171,21 +153,66 @@ inventory check, not a live protocol test. Public evidence records must name a
 committed SDK revision when available; a pre-commit working-tree result must say
 so instead of claiming the base commit contains the tested changes.
 
-## Automatic descendant observation
+## Session source evidence
 
-The [managed subagent contract](../subagent-compatibility.md) uses existing native
-Thread/item types and raw-only thread/started, thread/status/changed, reasoning
-delta and token-usage notifications. No typed notification root was added for
-these methods. SDK-derived records stay outside protocol. The native schema
-closure, generator roots and provenance hashes remain unchanged; method-level
-raw evidence and the internal descendant-management control are recorded separately in the inventory.
+The following source bytes were inspected on 2026-10-25 at the same
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d` pin. These are source findings,
+not new runtime tests; source inspection does not establish configuration effects,
+complete child forwarding, recovery or live query coverage.
 
-## Current schema target
+| 编号 | 官方拥有源（同一 commit） | SHA256 与结论 |
+|---|---|---|
+| C1 | [v2/thread.rs](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/thread.rs) | `553d99d01eed0c7a9073f481938f7dd68ef633879be0e1ffd8373778c937b158`；236–332 settings/model/effort/notification，1394–1465 ancestor/source/archive/page，1551 response cursor。 |
+| C2 | [v2/turn.rs](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/turn.rs) | `eb1a99cc72a65af84f933073881bfc0440288fb629de7ec92b7c1b50d3530779`；turn/start 与带 expectedTurnId 的 steer 是不同请求。 |
+| C3 | [turn_processor.rs](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/turn_processor.rs#L931) | `50bc2dd50ba86c569a81abbe527000735ae90280dcaf8502e9e8c1641864f7b7`；settings 提交 Op::ThreadSettings 后空响应；不能证明当前执行已切换。 |
+| C4 | [thread_processor.rs](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_processor.rs#L2524) | `2c40a6db590c9823a6775b28c2e125544583246318ce038166d28fb57a10ab29`；DirectChildrenOf/DescendantsOf、互斥过滤和存储错误；3607 起 best-effort auto-attach 不是完整观察证明。 |
+| C5 | [thread_lifecycle.rs](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_lifecycle.rs) | `967cbda6493c971232d5434af690e0c86a318589492d3c14344ee249a7267457`；resume 返回 thread，warm resume 可重发 pending requests，不能作为无副作用自动订阅。 |
 
-The active schema is official 0.162.1, identified by the source revision above.
-Previous 0.160.1 records are historical. The current closure
-adds typed activity model/reasoningEffort, turn-chain IDs, partial_answer and the
-open native error union. The generator preserves the official string/object raw
-fallback in CodexErrorInfo rather than inventing protocol variants. See the
-[current field contract](../subagent-compatibility.md#current-01621-fields);
-these bindings have source and offline evidence, without a live workflow pass.
+For remote connection loss, the fixed
+[unload state machine](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L20-L104)
+requires both no listeners and an inactive thread; disconnect alone does not
+stop an active turn. Stdio uses the separate
+[single-client shutdown path](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1163-L1187).
+[Warm resume](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L714-L836)
+reattaches and can resend pending native requests; it is not a notification-log
+replay and does not restore an old Go answer handle's authority. The SDK reports
+connection loss without automatic reconnect or resend.
+
+## Test migration audit
+
+[test-migrations.json](test-migrations.json) retains the historical base, each
+retired test path, exact historical evidence IDs and current replacement files.
+The inventory verifier rejects unknown missing paths, unmapped/duplicate evidence
+IDs and missing replacement targets. These mappings preserve traceability; they
+do not transfer historical passes to new code. Current Session checks preserve
+native arrival order, original request authority and drain semantics. Former tree
+consumers, ancestry-first ordering, UUID suppression and inferred run/creation
+state are superseded by the [Session contract](../../../harness/modules/native-session/design.md).
+Historical per-test narrative audits remain in Git history.
+
+## Inspected test sources
+
+Official Rust app-server, TypeScript exec and Python SDK tests informed the choice
+of public protocol seams and isolated peers. Exact sources/hashes remain in
+[sources.json](sources.json); Go tests are independently authored. Those distinct
+SDK surfaces and inspected tests are not additional Go runtime coverage.
+
+## Descendant evidence
+
+Current descendant observation has source/synthetic evidence only; no E3 actual
+provider/mock-backend or E4 real-model pass is claimed. Auto-attach is best-effort.
+Thread/item identity is native; SDK membership/coverage uses a separate Received
+kind. thread/started, thread/status/changed, reasoning deltas and token usage stay
+raw-only notifications; native Thread/item values use generated types. Raw support
+does not establish typed control APIs. No ACP wire is implemented.
+
+- **A**: [new-thread attach / lag without resync](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/lib.rs#L1291-L1319)
+  and [best-effort per-connection listener](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_processor.rs#L3607-L3639).
+- **C/I**: [collab tool and native item definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/item.rs).
+- **V**: [V2 successful spawn / Started](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L185-L239),
+  [canonical activity pair](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/tools/handlers/multi_agents_v2.rs#L45-L54),
+  and [official completed Started child-ID test, no collab](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/tests/suite/v2/turn_start.rs#L4493-L4593).
+- **T**: [native Thread definitions](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs#L204-L271).
+- **N/R**: [notification / reverse-request registry](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs).
+- **L**: [TurnComplete handling](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/bespoke_event_handling.rs#L186-L203)
+  and [per-thread idle publication](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/thread_status.rs#L148-L158).

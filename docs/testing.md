@@ -1,13 +1,10 @@
 # Offline validation
 
-The [testing standards](../harness/testing.md) define test organization and safety;
-this guide contains the commands and validation scope. Directory responsibilities
-are defined in the [layout standards](../harness/code-layout.md).
-
-See the [recorded test data index](recordings.md) for direct links to native wire
-files, manifests, expected observations and ID maps. Real Codex tool/question
-captures and the Claude authentication-failure capture remain distinct from
-synthetic fixtures; real subagent recordings are still missing.
+The [testing standards](../harness/testing.md) define test levels and required
+coverage.
+This guide describes current commands and configured gates. Simulation catalog
+availability and synthetic checks do not prove real recordings; see
+[data provenance](../tools/record-user-story/README.md#fixtures-仿真录制与测试输入).
 
 Run from the repository root with the pinned compiler:
 
@@ -15,23 +12,27 @@ Run from the repository root with the pinned compiler:
 mise install
 mise exec -- go mod download
 mise exec -- bash scripts/check-offline.sh
-GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 mise exec -- go test -race -p=1 -count=1 -timeout 300s ./...
+GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-mock.sh mise exec -- go test -race -p=1 -count=1 -timeout 300s ./...
 mise exec -- go vet ./...
 ```
 
-The offline script first validates the current 19/14 Story inventory, nine native
-supplement IDs, local evidence links and existing public suite entrypoint inventory
-with `scripts/check-story-evidence.py` plus negative regression cases. This static
-check does not replace execution of `TestCommonStories`.
+The offline script builds `tools/agent-mock` from this checkout unless an absolute
+`AGENT_MOCK_BIN` is supplied. Direct SDK tests need the same binary; use
+`scripts/with-agent-mock.sh` to build it temporarily. Select Python 3.11 or newer
+as `python3` on PATH before running the script.
 
-The offline script checks single-module and native dependency boundaries, both
-standard-library-only types packages, native protocol inventory, reproducible
-Codex generation, sanitization canaries and recordings, unit/subprocess tests, and
-all runnable offline examples. Validation uses `GOMAXPROCS=2`, package scheduling
-`-p=1`, and `GORACE=atexit_sleep_ms=0` to bound concurrent test load and avoid
-per-subprocess race-detector exit sleeps. CI runs the same checks, race and vet on
-`ubuntu-24.04`, `macos-15` and `macos-26`. macOS 15 remains an explicit target;
-macOS 26 is additive. Every example compiles with `go test ./...`.
+The offline script validates the current simulation catalog, case ownership,
+provider availability and local documentation links with `scripts/check-story-evidence.py`.
+It runs recording-tool tests and code integration tests independently. Synthetic
+protocol faults, resource boundaries, cancellation and races have no story registry.
+
+The remaining gates check module and native dependency boundaries, standard-library-only
+types packages, native inventory, reproducible Codex generation, unit/subprocess tests
+and offline examples. `GOMAXPROCS=2`, package scheduling `-p=1` and
+`GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
+`ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
+The installed-wheel smoke check runs outside the checkout and verifies catalog assets,
+Go peer identity, preserved numeric bytes, strict consumption and no native fallback.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -41,11 +42,9 @@ It checks authentication, reconnection and client/server lifecycle through the
 SDK, Go networking and the server process handle. It does not inspect process-tree
 listener ownership or assert the absence of additional listeners. Claude currently has
 only an initialization/shutdown transport integration probe: it sends no model
-turn and does not establish complete agent E2E coverage. Moving this probe does
-not add missing real model, tool, question, resume/interrupt or subagent coverage.
+turn and does not establish complete agent E2E coverage.
 
-Each SDK has independent E2E switches; the directory name does not enable
-execution. The former Mac-specific variable names are no longer supported.
+Each SDK has independent, opt-in E2E switches.
 Real CLI/agent tests are disabled through `CODEX_E2E_STDIO=0`,
 `CODEX_E2E_INTERACTIONS=0`, `CODEX_E2E_WEBSOCKET=0`, `CLAUDE_E2E=0`,
 and `SDK_REAL_AGENT_E2E=0`. Codex requires `CODEX_E2E_CLI` and Claude requires
@@ -53,11 +52,9 @@ and `SDK_REAL_AGENT_E2E=0`. Codex requires `CODEX_E2E_CLI` and Claude requires
 to equal `1` and refuses a nonempty `CI`. Offline validation and recorded replay invoke no real agent/model. Native successful subagent interoperability remains unverified;
 see each package's compatibility and recording documentation for precise evidence.
 
-Fixture evidence and its small embedding packages live in each native
-`tests/testdata`, alongside `tests/e2e`. Native replay tools embed those files,
-so replay tests and examples do not depend on the caller's working directory.
-External consumer checks also load both native recordings from the downloaded
-module to verify fixture packaging after path changes.
+Small fixture embedding packages under each native `tests/testdata`
+contain code-owned synthetic inputs from `integration/`. Replay adapters share those bytes without
+depending on the caller's working directory. External consumers verify their packaging.
 
 ## External consumers
 
@@ -69,26 +66,21 @@ mise exec -- bash scripts/check-consumers.sh "$(git rev-parse HEAD)"
 mise exec -- bash claude/scripts/check-managed-consumer.sh "$(git rev-parse HEAD)"
 ```
 
-Both scripts create their modules and module caches under `/tmp`, disable
+Both scripts create their modules and module caches in private temporary directories, disable
 `go.work` and inherited Go overlays/modfiles, and fetch from the new repository
 without `replace`. The root script resolves the exact SHA directly from GitHub,
 checks its full VCS origin hash, compiles all four public imports, copied public
 examples and documented configuration/approval snippets, and runs synthetic
-value/configuration checks and the [pure Codex public consumer](../tests/consumers/codex-public/main.go).
-This consumer checks import identity, API signatures and configuration only; SDK
-usage demonstrations stay under each native package's `examples/` directory. The retained
-Claude script separately compiles its native consumer and configuration snippet.
-Dependency download requires network access; compilation/runtime checks then use
-`GOPROXY=off` and `GOSUMDB=off`. The root script also builds both [mock CLIs](mock.md) from the fetched module
-and opens real SDK clients against them to test bidirectional question/permission
-answers, interrupts, local cancellation, disconnection and strict mismatches.
-Neither script invokes a real agent CLI or model. The mock consumer also pauses
-event consumption during 2,048-event bursts with the legacy capacity set to one,
-answers questions/permissions and finishes control RPCs, then verifies complete
-ordered drain after disconnection. Shared FIFO tests cover cancellation, atomic
-batches, concurrent producers, close/abort races and reference release. See the
-[event delivery contract](../harness/contracts/event-delivery.md).
+value/configuration and embedded fixture packaging smoke checks. It does not copy
+or rerun the SDK interaction suites. The retained Claude script separately compiles
+its native consumer and configuration snippet. Dependency download requires network
+access; compilation/runtime checks then use `GOPROXY=off` and `GOSUMDB=off`.
+Neither script invokes a real agent CLI or model. These checks validate a published
+revision, not uncommitted changes in the working checkout.
 
+## Hosted gates
+
+The [workflow](../.github/workflows/ci.yml) runs offline, race, vet and installed-wheel checks.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
@@ -98,39 +90,71 @@ Fork PRs retain three Offline jobs and skip consumers because fork-only SHAs are
 not assumed retrievable from this repository. Token permissions remain contents:
 read; no pull_request_target execution is added. Configured coverage does not
 prove that any runner executed. See
-[release readiness](releasing.md) for the required exact-commit CI evidence.
+[release readiness](#release-preparation) for the required exact-commit CI evidence.
 
-## Testify migration scope
+## Code integration tests
 
-The inventory covered all 61 original `*_test.go` files: 310 Test functions,
-four TestMain dispatch hooks, six Go Examples and 750 generated schema cases.
-All original test names remain represented. Fifty-five original test files were
-updated (including moved replay tests); six assertion-free files retain native
-Example, platform helper, view adapter or protocol-peer roles. Five new test
-files bring the total to 66.
+[Codex public API tests](../codex/public_api_test.go) check API signatures, import
+identity and configuration during ordinary package tests. Go mock CLI integration
+lives in [Codex](../codex/mock_cli_test.go) and [Claude](../claude/mock_cli_test.go)
+package tests: each SDK starts its Go mock executable as the CLI process and checks
+question/permission answers, interrupts, cancellation, disconnects and mismatches.
+Both tests also pause consumption during 2,048-event bursts, complete control and
+answer operations, then verify ordered drain after disconnection. The Go tool and Python-to-Go integration tests check
+mock command exit status and handshake completion. Shared FIFO tests cover
+cancellation, atomic batches, concurrent producers, close/abort races and reference
+release. See the [event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
 
-There are 15 sequential suites with 187 scenario methods across native client,
-permission, session, observation, replay, live opt-in, shared graph and story
-tests. Single-function cases use named tables. Native synctest, tight-deadline,
-concurrent stress and subprocess dispatch keep their testing structure; no
-existing deadline or expected result was relaxed. Workers return outcomes to
-the owning test goroutine. Go Examples and four TestMain hooks retain their Go
-toolchain contracts.
+`TestNativeIntegration` in `tests/integration` exercises both native SDK public
+interfaces through synthetic protocol peers. It retains original-handle authority,
+unknown fields, cancellation, ordering, drain, backpressure and error classification.
+Testify suites run sequentially; worker outcomes return to the owning test goroutine.
 
-The schema generator preserves the original 750 case names, types and JSON.
-The story suite preserves 28 native adapter leaf scenarios. Its private facts
-and acceptance methods live directly in `tests/stories/acceptance_test.go`;
-there is no separate testkit package. Testify v1.12.1 is a test dependency;
-both native types packages still have standard-library-only production trees,
-and SDK production imports cannot reach recording tools or fixture containers.
+`NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
+app-server trace and Claude temporary saved storage. Native focused tests retain
+transport, live coexistence, cancellation, unknown, resource and integrity checks.
+The offline examples show both native history workflows. None of these checks
+establishes real recording or model execution.
 
-## Independent history-query acceptance
+## Simulation coverage
 
-`CommonStoriesSuite.TestIndependentHistoryBrowser` runs both native adapters for
-US-014/SDK-US-019. Codex exercises list → read metadata → turns → items with a
-strict synthetic app-server trace. Claude exercises list → info → message slices
-after compaction/parallel-tool recovery in temporary storage. Existing native
-focused cases retain transport, live coexistence, cancellation, unknown, errors,
-resource and integrity coverage. The seven offline examples include both native
-history workflows; the fetched consumer compiles all three history examples and
-runs them from the downloaded revision. See [integration evidence](validation/history-query-integration.md).
+The catalog defines eight stories and 36 flows. No recorded simulation dataset
+is bundled. Required Go SDK simulation still needs reviewed real recordings,
+public-interface assertions, full consumption and cleanup checks; tooling or
+synthetic checks cannot fill that gap. Missing required coverage must be reported.
+Recording and optional official-SDK replay use the [recording guide](../tools/record-user-story/README.md#repository-recording).
+
+## Focused checks
+
+Run these from the repository root; default live gates remain disabled:
+
+```sh
+python3 scripts/check-story-evidence.py
+python3 codex/docs/protocol/verify_inventory.py
+mise exec -- bash -c 'cd codex && bash scripts/check_generated.sh'
+bash scripts/with-agent-mock.sh mise exec -- go test -count=1 ./tests/integration ./codex ./claude
+```
+
+Codex generation uses the checked-in schema without downloading upstream sources;
+consistency does not prove live compatibility. CI whitespace checks compare Git
+objects: push before→HEAD, PR merge-base→head, manual first-parent→HEAD, with an
+empty-tree baseline for an initial/root commit. Missing commits fail closed.
+[check_whitespace.py](../codex/scripts/check_whitespace.py) uses
+`GITHUB_EVENT_NAME` and `GITHUB_EVENT_PATH`; negative fixtures verify actual failures.
+CI uses pinned action commits, read-only permissions and no persisted credentials
+or service secrets. Concurrency cancellation stays within workflow/event/ref lanes.
+No Windows runtime support is claimed.
+
+## Release preparation
+
+One version covers all four native imports. Before an authorized publication:
+
+1. Confirm the intended main SHA and both imported source histories.
+2. Require the exact SHA's three Offline and three External consumer CI jobs;
+   rerun on the resulting main commit after merge. Fork PR skips do not satisfy this gate.
+3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
+   coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
+4. Record the exact commit, CI URLs and remaining limits in the release review.
+   Resolve failed/skipped required gates before creating a tag/release.
+
+Real agent checks remain opt-in. These commands do not publish anything.

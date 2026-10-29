@@ -1,9 +1,9 @@
 # Type sources and license review
 
-Reviewed 2026-10-18 UTC. These are schema/organization references, not runtime
-validation. The Go codecs and synthetic fixtures are original implementation;
-no third-party implementation, test fixture or lifecycle code is copied, adapted,
-vended or added as a dependency. Repository code remains Apache-2.0.
+The 2026-10-18 review covered schema and type organization; these references are
+source evidence, not runtime validation. Go codecs and synthetic fixtures are
+original. Later local-history algorithms adapt the pinned MIT Python source noted
+[below](#local-history-adaptation), with its attribution retained in [NOTICE](../NOTICE).
 
 | Reference | Pinned version | License / use |
 | --- | --- | --- |
@@ -12,11 +12,8 @@ vended or added as a dependency. Repository code remains Apache-2.0.
 | [severity1 Go SDK](https://github.com/severity1/claude-agent-sdk-go/tree/d167fbef06759f127f5623bcf685c05b422de5df) | `d167fbef06759f127f5623bcf685c05b422de5df` | MIT, copyright 2025 John Reilly Pospos. Root aliases and `internal/shared/message.go` inspected for type organization only. |
 | [Roasbeef Go SDK](https://github.com/Roasbeef/claude-agent-sdk-go/tree/a886b29cee2478f48251cfaab02142683ee43d6b) | `a886b29cee2478f48251cfaab02142683ee43d6b` | MIT, copyright 2026 Olaoluwa Osuntokun. `messages.go` inspected for nested wire/type organization only. |
 
-No MIT code or substantial source text is included, so no copied-source license header is required. If source is copied/adapted, retain the actual
-copyright and full permission notice alongside that material. Do not label the
-TypeScript package MIT or apply this repository's license to the CLI/service.
-`NOTICE` records research provenance; the original official Python source-file
-hashes are listed below.
+Do not label the TypeScript package MIT or apply this repository's license to the
+CLI/service. Source adaptations must retain their copyright and permission notice.
 
 Reproducible SHA256 of downloaded reference bytes:
 
@@ -53,7 +50,7 @@ The [official SDK 0.3.258 archive](https://registry.npmjs.org/@anthropic-ai/clau
 manifest names CLI 2.1.258, commit `b3cd543a1f6fcdf4d8fabc0f5e5538d2ee7f38e1`,
 build date 2026-09-01. The installed binary hash differs from the manifest's
 darwin-arm64 checksum; they are not asserted to be identical builds. A version
-probe and static inspection do not establish live subagent behavior. Creation
+probe and static inspection do not establish live subagent behavior. Task/tool association
 is gated to the exact native init version 2.1.258, not a minimum version range.
 
 | Fixed file | SHA256 |
@@ -78,8 +75,8 @@ in real time, and the SDK does not read output files to fill gaps.
 Static inspection of the hashed local binary corroborated task registration,
 background agent identity, new/resumed registration, foreground registration
 and async launch paths. No embedded code was executed for that inspection.
-Both TypeScript versions have the same non-MIT licensing boundary. No declaration
-bundle, binary, upstream implementation or third-party fixture is redistributed.
+Both TypeScript versions have the same non-MIT licensing boundary. No TypeScript declaration
+bundle, binary or implementation is redistributed.
 
 ## Python protocol source hashes
 
@@ -98,11 +95,10 @@ Source file hashes below refer to exact file bytes from that commit. Paths are r
 | [_internal/message_parser.py](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/src/claude_agent_sdk/_internal/message_parser.py) | `febb1aee19e47e03433d89cd4b1f8c5636950e206df77e4f4ca2738b0c900393` |
 | [_internal/transport/subprocess_cli.py](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) | `23c0b35acfcff5426255f1f17433e66fc7f8f6d5b8f339e93e085233c569e11c` |
 
-
 ## Python behavioral research references
 
 These source hashes identify research references, not tests executed against Go.
-The Go tests are original; no upstream source or fixtures are redistributed.
+The Go tests are original; no upstream test source or fixtures are redistributed.
 
 | Pinned official test source | Behavior used | SHA256 |
 | --- | --- | --- |
@@ -114,3 +110,46 @@ The Go tests are original; no upstream source or fixtures are redistributed.
 | [test_streaming_client.py](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/tests/test_streaming_client.py) | stream lifecycle and interrupt | `68627a1d9f279dbf35b93050fba0c410065d63fdc7e059e9c424774ba7d08383` |
 | [test_transport.py](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/tests/test_transport.py) | literal launch arguments and subprocess errors | `f5f795d75a3b8cecb6b0ec417cd727f1015c80765dbaead6b02f6a4c92772338` |
 | [test_tool_callbacks.py](https://github.com/anthropics/claude-agent-sdk-python/blob/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab/tests/test_tool_callbacks.py) | original-ID allow/deny and updated input | `13fbe491655501a4026723be3f74c90d7007dcf6143fa2d9c7bce7ee5a47db74` |
+
+## Session source evidence
+
+Static inspection on 2026-10-25 used TypeScript SDK 0.3.258 / CLI 2.1.258 and
+Python commit `f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab` (CLI source target 2.1.302).
+The newer Python source does not establish behavior of the older CLI. These
+records preserve source evidence, not a new execution or interoperability pass.
+The TypeScript package remains non-MIT; no TypeScript implementation is bundled.
+
+| Additional inspected bytes | SHA256 |
+|---|---|
+| T `package/sdk.mjs` | `4d9286bd9ca8f802e27c9be2cfa2e0769502dfabb693a6e3d16b62e4fbe3e69a` |
+| T `package/package.json` | `a8fb007bc424b11eca6a4f046f5e6bdf078c9f032a4c6f133f9bc5297e686a14` |
+| P `_internal/sessions.py` | `d5323963daf711c8bcc684057fd48d0cb786ee04d8329be6dec82444ec505662` |
+
+In the fixed `sdk.mjs`, UTF-8 decoded character offsets locate local launch
+(910611), control correlation (942303), `set_model` (938940),
+`set_max_thinking_tokens` (939022), recursive child discovery (1108436), and
+sidecar parsing (1110695). Verify the file hash before using these offsets.
+Initialize acknowledgment and a requested ResumeID do not establish observed
+local recovery identity; source inspection found no confirmed no-input identity
+handshake. Structured input, configuration acknowledgment and stored discovery
+retain their separate evidence limits in the corresponding API guides.
+
+Independent child-history selection was checked against Python SDK 0.2.174,
+commit [`0e89b298e771259378a6cd3734e00d323dff5703`](https://github.com/anthropics/claude-agent-sdk-python/tree/0e89b298e771259378a6cd3734e00d323dff5703).
+Its [sessions.py](https://github.com/anthropics/claude-agent-sdk-python/blob/0e89b298e771259378a6cd3734e00d323dff5703/src/claude_agent_sdk/_internal/sessions.py#L1367)
+contains recursive layout resolution (1367–1476), the independent last-leaf child
+chain (1474–1511), list/get (1514–1640), and sidecar/message projection (1643–1740).
+The main-chain compaction and parallel-tool recovery at 933–1261 do not apply to
+child chains. Go adds explicit scope, resource and integrity checks described in
+the [child-history contract](../../harness/contracts/history-query.md#children-claude-独立本地子历史);
+this query-source pin does not upgrade the live CLI baseline or prove real child files.
+
+## Local history adaptation
+
+Main-message compaction/parallel-tool recovery and metadata preview selection also
+use Python SDK 0.2.174, commit 0e89b298e771259378a6cd3734e00d323dff5703.
+The adapted algorithms retain MIT attribution in [NOTICE](../NOTICE).
+Official npm 0.3.310 declarations/runtime were inspected separately; the archive
+SHA-512 was fo+sr+9Ks73P001f6XKRQlyzfIBAJMgXArLUkH5Tu98NikRDZeGtFQVj23d5/hj2ijpFgzffrr4fHywY9qUkoQ==.
+Go's explicit scope, bounded reads, strict corruption errors and change detection
+are deliberate differences; no official SDK executes inside the query backend.

@@ -6,10 +6,10 @@ status: stable
 
 # Architecture standards
 
-These rules describe the agreed repository boundaries. For their context and
-navigation, see the [architecture guide](overview.md).
+These rules describe the agreed repository boundaries. For document ownership and
+navigation, see the [harness index](index.md).
 The provider-independent behavior contract and onboarding requirements live in
-[SDK integration standards](sdk/index.md); this page governs repository module
+[SDK behavior contract](sdk/architecture.md); this page governs repository module
 and dependency boundaries.
 
 - Use one module, `github.com/zoumo/agent-sdk-go`, and one version. Keep a single
@@ -27,40 +27,85 @@ and dependency boundaries.
 - Shared runtime code must not import either native SDK or native `types`.
   `internal/lineage` accepts confirmed relationship facts; it does not parse
   native events, infer creation, send protocol messages or grant answer authority.
-  Its precise contract and resource bounds live in [lineage](contracts/lineage.md).
+  Its precise contract and resource bounds live in [lineage](modules/native-session/design.md#lineage-shared-relationship-rules).
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib
   packages must not enter SDK production dependency trees. Native types remain
-  standard-library-only. Each native Session owns one
-  ChannX; there is no process-wide queue, per-agent partition or second growing
-  derived/history-event FIFO. See [event delivery](contracts/event-delivery.md).
-- Each Session owns its membership evidence and optional parent graph. Graph
-  reachability is not the only membership proof and never a delivery prerequisite.
-  Native parsing, unknown data, aliases, execution identities, transport and
-  process lifecycle stay with the native SDK. Native facts are not suppressed
-  by entity-key deduplication or reordered for relationship attribution.
-- One connection and native main identity have one Session owner. Requests and
-  notifications use that Session's single consumption entry point; event drain
-  is independent of termination. Unknown connection records are isolated with
-  explicit resource and coverage limits. See the [Session module design](modules/native-session/design.md).
+  standard-library-only.
+  FIFO ownership and resource semantics live in [event delivery](modules/native-session/design.md#delivery-event-delivery).
+- Native parsing, unknown data, aliases, execution identities, transport and
+  process lifecycle stay with each native SDK. Session state ownership and
+  internal coordination live in the [Session module design](modules/native-session/design.md).
 - Answers require their original native request/permission handle. Relationship
   records carry context only. Do not restore `TreeRecord`/`TreeEvent` APIs.
 
-The [testing standards](testing.md) govern shared story acceptance. The
-[layout standards](code-layout.md) distinguish SDK code from reusable tools,
-command entry points and test data. Python validation scripts keep their native
-generation, inventory, provenance and sanitization responsibilities.
+Testing and source placement follow the [testing standards](testing.md) and
+[code layout](#layout-code-layout-standards).
 
-## 项目技术选型边界
+<a id="layout-code-layout-standards"></a>
 
-原生协议、工具来源及依赖约束须保留；Session 组织与交付遵循本页及具体合同的目标设计。
-通用选型不要求迁移已有实现。
-新增能力须遵守本页、[代码布局](code-layout.md)和[测试规则](testing.md)。
-原生 types 包的生产依赖仍限于标准库。
-原生 SDK 不依赖工具或录制代码。
+## Code layout standards
 
-命令入口仍位于各原生 SDK 的 `cmd/` 下。
-通用目录模板不要求将入口迁移到模块根目录。
-传输、超时、重试和流式行为遵循原生合同。
-通用技术选型见 [Go 技术栈](principles/golang/technology-stack.md)。
+Both native SDKs use the same separation of responsibilities:
+
+| Location | Responsibility |
+|---|---|
+| `codex/`, `claude/` | Independent native SDK runtime and native types |
+| `tools/agent-mock/` | Generic Go stdio recording proxy, protocol mock, command and tool-owned tests; uses the root Go module |
+| `tools/record-user-story/` | Official-SDK story drivers in the required languages; capture orchestration and case evidence |
+| `tests/recording/` | Real-flow simulation catalogs and tests of recording/replay orchestration |
+| `codex/tests/replay`, `claude/tests/replay` | Fixture decoding and Go SDK assertion/process adapters; delegate protocol replay to the agent-mock tool |
+| `internal/mocktest` | Shared standard-library test process bridge, without native matching or SDK imports |
+| `codex/tests/testdata/integration`, `claude/tests/testdata/integration` | Explicitly synthetic protocol inputs owned by code integration tests |
+| `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
+| Each native `examples` | Genuine SDK usage and offline usage demonstrations |
+| Each native `*_test.go` | Public API checks and SDK integration against mock CLI processes |
+| `tests/integration` | Shared code integration suite, native test adapters and synthetic protocol peers |
+
+SDK mock integration tests launch agent-mock through the native public process
+options. Mock commands are tested through their public process interface. External fetched-module checks
+retain public import/configuration and fixture packaging smoke tests, plus public
+example and documentation compilation; they do not duplicate SDK interaction suites.
+
+`tools/agent-mock/` is the executable main package. Its `capture`, `command`,
+`rawjson`, `recording` and `replay` packages sit directly below it, without extra
+`cmd`, `pkg` or `internal` layers. Module responsibilities and dependency gates
+follow the module boundaries above.
+
+Each native `tests/testdata/embed.go` is a small standard-library-only fixture
+container because `go:embed` cannot read a parent directory. Embedded paths
+resolve within the container, independently of the caller’s working directory.
+SDK tests and offline examples reuse fixture access; example-local synthetic data
+may remain with its example. The mock tool owns protocol matching; fixture adapters
+only decode data, bridge processes and assert SDK results.
+
+Move data rather than copying it. Update imports, embeds, scripts, examples, CI
+and documentation links whenever paths change. Recording inventories retain
+direct asset references and evidence limits, and link back to these layout rules.
+
+<a id="layout-simulation-data-and-integration-fixtures"></a>
+
+### Simulation data and integration fixtures
+
+Simulation attempts are private datasets outside Git, grouped by `<story-id>/<case-id>/`.
+Identity, frozen versions and drivers, raw hashes, sanitization and publication
+review follow the [recording data contract](modules/agent-mock/design.md#story-数据格式与存储).
+Preserve original bytes and provenance when moving data; synthetic data must never
+be labeled real.
+
+Each native `tests/testdata/integration` contains synthetic protocol inputs for
+code integration tests, with semantic names rather than simulation case identities.
+Test-only peers and fault controls stay in test code, without a separate
+technical-check registry. Story/case scope follows the [case catalog](sdk/validation-cases.md).
+
+agent-mock reads explicitly supplied recordings or synthetic scenarios. Its tool
+tests do not become a published SDK simulation corpus.
+
+## 编码约定
+
+使用清楚的名称和语言惯用写法；注释解释原因，避免重复代码。按实际职责划分包，
+沿用现有 SDK 平铺布局，不新增无需求的 cmd/pkg、框架或转发层。
+复用须解决实际重复，性能优化须有实际需求。第三方依赖应有明确用途、版本与来源。
+遵守已有项目配置，限制 lint 例外并说明原因；lint 不替代编译、测试和 race。
+日志与协议 stdout 分离，不记录认证秘密；可复用模块不修改全局日志或遥测配置。

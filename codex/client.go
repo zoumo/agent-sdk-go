@@ -3,7 +3,7 @@
 // native events, real IncomingRequests and observation evidence.
 // Submit retains native turn semantics; results do not close the Session.
 // Client is the explicit shared I/O resource and raw extension seam. Native
-// request handles retain single-use authority. See docs/compatibility.md for the
+// request handles retain single-use authority. See README.md for the
 // pinned source target and evidence limits.
 package codex
 

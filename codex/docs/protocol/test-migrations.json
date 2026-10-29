@@ -1,6 +1,6 @@
 {
   "historical_base": "3f1776e4da94cc53d48e5029b20bd254dd727152",
-  "audit": "../docs/reviews/ticket13-legacy-guarantees.md",
+  "audit": "docs/protocol/README.md",
   "scope": "Historical evidence paths only. Past outcomes do not certify replacement tests.",
   "retirements": [
     {

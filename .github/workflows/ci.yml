@@ -42,7 +42,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Install the mise-managed pinned compiler
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
       - name: Install the pinned generator interpreter
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -121,7 +121,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Install the mise-managed pinned compiler
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
       - name: Install the pinned generator interpreter
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	transcript "github.com/zoumo/agent-sdk-go/claude/tools/replay"
+	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 )
 
 // All fixtures are local re-executions of this test binary under a replacement

@@ -1,7 +1,12 @@
-"""Offline regression checks for the published evidence inventory gate."""
+"""Offline checks of the simulation catalog and documentation gate."""
 import importlib.util
 from pathlib import Path
 import unittest
+import subprocess
+import sys
+import json
+import shutil
+import tempfile
 
 SPEC = importlib.util.spec_from_file_location("story_evidence", Path(__file__).with_name("check-story-evidence.py"))
 gate = importlib.util.module_from_spec(SPEC)
@@ -9,6 +14,37 @@ SPEC.loader.exec_module(gate)
 
 
 class StoryEvidenceTests(unittest.TestCase):
+    def test_current_simulation_catalog_passes_without_historical_corpus(self):
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name('check-story-evidence.py'))], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('8 stories, 36 cases', result.stdout)
+
+    def test_public_gate_rejects_synthetic_route_and_unexplained_unavailability(self):
+        source = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'repository'
+            shutil.copytree(source, root, ignore=shutil.ignore_patterns('.git', '__pycache__', '*.egg-info', 'build', 'dist'))
+            binding = root / 'tests/recording/scenarios/bindings/codex.json'
+            original = json.loads(binding.read_text())
+            for mode, reason, diagnostic in [
+                ('offline-only', 'synthetic check', 'invalid simulation route'),
+                ('planned', '', 'unavailable route needs a reason'),
+            ]:
+                with self.subTest(mode=mode):
+                    changed = json.loads(json.dumps(original))
+                    changed['cases']['SDK-CASE-001']['execution'] = {'mode': mode, 'reason': reason}
+                    binding.write_text(json.dumps(changed))
+                    result = subprocess.run([sys.executable, str(root / 'scripts/check-story-evidence.py')], capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(diagnostic, result.stderr)
+
+    def test_case_mapping_rejects_unknown_owner_or_duplicate_identity(self):
+        case = {'id': 'SDK-CASE-001', 'storyId': 'SDK-US-001'}
+        self.assertEqual([], gate.case_mapping_errors(['SDK-US-001'], [case]))
+        self.assertTrue(gate.case_mapping_errors(['SDK-US-002'], [case]))
+        self.assertTrue(gate.case_mapping_errors(['SDK-US-001'], [case, case]))
+        self.assertTrue(gate.case_mapping_errors(['SDK-US-001'], [dict(case, id='SDK-US-001.01')]))
+
     def test_inventory_reports_missing_duplicate_and_unexpected_ids(self):
         expected = {"SDK-US-001", "SDK-US-002"}
         self.assertEqual([], gate.inventory_errors("| SDK-US-001 | x |\n| SDK-US-002 | y |", "SDK-US", expected))
@@ -17,14 +53,14 @@ class StoryEvidenceTests(unittest.TestCase):
 
     def test_relative_links_resolve_from_each_document(self):
         root = Path(__file__).resolve().parents[1]
-        self.assertEqual([], gate.link_errors(root / "docs/index.md", "[ok](testing.md) [web](https://example.org)"))
-        errors = gate.link_errors(root / "docs/index.md", "[bad](missing-issue8-file.md)")
+        self.assertEqual([], gate.link_errors(root / "docs/testing.md", "[ok](testing.md) [web](https://example.org)"))
+        errors = gate.link_errors(root / "docs/testing.md", "[bad](missing-issue8-file.md)")
         self.assertEqual(1, len(errors))
         self.assertIn("missing-issue8-file.md", errors[0])
 
     def test_local_fragment_must_name_a_real_heading(self):
         root = Path(__file__).resolve().parents[1]
-        path = root / "docs/index.md"
+        path = root / "docs/testing.md"
         self.assertEqual([], gate.link_errors(path, "[ok](testing.md#external-consumers)"))
         errors = gate.link_errors(path, "[bad](testing.md#missing-evidence-heading)")
         self.assertEqual(1, len(errors))

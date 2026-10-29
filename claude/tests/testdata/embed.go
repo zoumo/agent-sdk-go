@@ -1,10 +1,10 @@
-// Package fixturedata embeds sanitized recordings and explicitly synthetic fixtures
-// for offline tooling. Native SDK runtime packages do not depend on this package.
+// Package fixturedata embeds independently authored synthetic integration inputs.
+// Native SDK runtime packages do not depend on this package.
 package fixturedata
 
 import "embed"
 
-// Files contains the single published copy of offline fixture evidence.
+// Files contains synthetic protocol inputs; none is a provider recording.
 //
-//go:embed recordings synthetic-faults
+//go:embed integration
 var Files embed.FS

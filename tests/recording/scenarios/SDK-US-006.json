@@ -1,0 +1,501 @@
+{
+  "version": 4,
+  "id": "SDK-US-006",
+  "goal": "设置模型与思考配置并观察生效情况",
+  "cases": [
+    {
+      "id": "SDK-CASE-021",
+      "storyId": "SDK-US-006",
+      "goal": "创建会话时选择模型并执行任务",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-021",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Explain in two sentences how addition works."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "创建会话时选择模型并执行任务。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "creation",
+        "setting": "model"
+      }
+    },
+    {
+      "id": "SDK-CASE-022",
+      "storyId": "SDK-US-006",
+      "goal": "首次输入前修改模型并核对确认、生效顺序与可观察配置",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-022",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Reply with the word Ready.",
+        "input-2": "Reply with the word Done."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "configuration.apply"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-2"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "首次输入前修改模型并核对确认、生效顺序与可观察配置。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 2,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "configuration-timing"
+    },
+    {
+      "id": "SDK-CASE-023",
+      "storyId": "SDK-US-006",
+      "goal": "两次执行之间修改模型并继续输入",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-023",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Reply Ready.",
+        "input-2": "Reply Done."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-2"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "两次执行之间修改模型并继续输入。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 2,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "between-inputs",
+        "setting": "model"
+      }
+    },
+    {
+      "id": "SDK-CASE-024",
+      "storyId": "SDK-US-006",
+      "goal": "执行期间请求修改模型并观察结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-024",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Explain in two sentences how addition works."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "执行期间请求修改模型并观察结果。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "during-execution",
+        "setting": "model"
+      }
+    },
+    {
+      "id": "SDK-CASE-025",
+      "storyId": "SDK-US-006",
+      "goal": "创建会话时选择思考模式",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-025",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Explain in two sentences how addition works."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "创建会话时选择思考模式。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "creation",
+        "setting": "thinking"
+      }
+    },
+    {
+      "id": "SDK-CASE-026",
+      "storyId": "SDK-US-006",
+      "goal": "修改原生思考预算并执行任务",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-026",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Explain in two sentences how addition works."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "修改原生思考预算并执行任务。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "before-first-input",
+        "setting": "thinking"
+      }
+    },
+    {
+      "id": "SDK-CASE-027",
+      "storyId": "SDK-US-006",
+      "goal": "选择原生 effort 并执行任务",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-027",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Explain in two sentences how addition works."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "选择原生 effort 并执行任务。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "before-first-input",
+        "setting": "effort"
+      }
+    },
+    {
+      "id": "SDK-CASE-028",
+      "storyId": "SDK-US-006",
+      "goal": "修改思考展示配置并观察输出",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-028",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Explain in two sentences how addition works."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "修改思考展示配置并观察输出。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "structured-input",
+      "parameters": {
+        "configurationTiming": "before-first-input",
+        "setting": "display"
+      }
+    },
+    {
+      "id": "SDK-CASE-029",
+      "storyId": "SDK-US-006",
+      "goal": "配置根会话并观察子 Agent 的实际继承情况",
+      "required": true,
+      "implementation": "planned",
+      "execution": {
+        "mode": "planned",
+        "reason": "子 Agent 配置继承的真实录制驱动尚未实现。"
+      }
+    }
+  ]
+}

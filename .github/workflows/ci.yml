@@ -63,8 +63,17 @@ jobs:
         run: |
           python3 codex/scripts/check_whitespace.py
           mise exec -- bash claude/scripts/check-changes.sh "$BASE_SHA" "$HEAD_SHA"
-      - name: Native schemas, inventories, types, recordings, unit tests and examples
+      - name: Build the Go protocol peer from this checkout
+        run: |
+          GOPROXY=off GOSUMDB=off mise exec -- go build -o "$RUNNER_TEMP/agent-mock" ./tools/agent-mock
+          "$RUNNER_TEMP/agent-mock" version
+          echo "AGENT_MOCK_BIN=$RUNNER_TEMP/agent-mock" >> "$GITHUB_ENV"
+      - name: Native schemas, simulation tooling, integration tests and examples
         run: mise exec -- bash scripts/check-offline.sh
+      - name: Independently installed record-user-story package
+        run: |
+          python3 -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/record-user-story-wheel" ./tools/record-user-story
+          python3 scripts/check-agent-mock-package.py "$RUNNER_TEMP"/record-user-story-wheel/record_user_story-*.whl
       - name: Race tests (real-agent E2E tests visibly skip)
         env:
           GOPROXY: 'off'
@@ -81,9 +90,9 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ## Offline validation only
           Linux/macOS native unit/subprocess contracts, schemas/inventories, data-package
-          independence, sanitization, recorded replays, examples, race and vet are separate gates.
-          All real agent/model tests are **SKIPPED**. Historical live results retain their
-          original scope; successful current native subagent interoperability is unverified.
+          independence, simulation tooling, synthetic integration checks, examples, race and vet are separate gates.
+          All real agent/model tests are **SKIPPED**. Catalog availability and offline
+          checks do not establish any successful real recording.
           SUMMARY
 
   consumer:

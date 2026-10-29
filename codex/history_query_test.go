@@ -284,10 +284,46 @@ func queryTrace(t *testing.T, f fixture, starts int) []fakeEnvelope {
 	return queries
 }
 
+// Independent list -> choose child -> read content must never create a Session.
+func TestIndependentSavedChildQueries(t *testing.T) {
+	f := startFake(t, "query-children", codex.Limits{})
+	ctx := queryContext(t)
+	page, err := f.c.ListThreads(ctx, types.ThreadListParams{ParentThreadID: types.Some("saved-root")})
+	require.NoError(t, err)
+	require.Len(t, page.Data, 1)
+	require.Equal(t, "saved-child", page.Data[0].ID)
+	encoded, err := json.Marshal(page.Data[0])
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"parentThreadId":"saved-root"`)
+	content, err := f.c.ReadThread(ctx, types.ThreadReadParams{ThreadID: page.Data[0].ID, IncludeTurns: types.Some(true)})
+	require.NoError(t, err)
+	require.Equal(t, "saved-child", content.Thread.ID)
+	require.Len(t, content.Thread.Turns, 1)
+	require.Len(t, content.Thread.Turns[0].Items, 1)
+	require.Equal(t, "SYNTHETIC CHILD CONTENT", content.Thread.Turns[0].Items[0].AgentMessage.Text)
+	frames := queryTrace(t, f, 0)
+	require.Len(t, frames, 2)
+	require.JSONEq(t, `{"parentThreadId":"saved-root"}`, string(frames[0].Params))
+	require.JSONEq(t, `{"threadId":"saved-child","includeTurns":true}`, string(frames[1].Params))
+}
+
 // Owned by the subprocess's single-threaded peer, never shared across clients.
 var queryHeldID json.RawMessage
 
 func handleHistoryQueryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
+	if mode == "query-children" {
+		child := strings.ReplaceAll(queryThread, "native-thread-42", "saved-child")
+		child = strings.Replace(child, `"turns":[]`, `"parentThreadId":"saved-root","turns":[{"id":"child-turn","status":"completed","items":[{"type":"agentMessage","id":"child-item","text":"SYNTHETIC CHILD CONTENT"}]}]`, 1)
+		switch m.Method {
+		case "thread/list":
+			send(m.ID, `{"data":[`+child+`],"nextCursor":null}`)
+		case "thread/read":
+			send(m.ID, `{"thread":`+child+`}`)
+		default:
+			return false
+		}
+		return true
+	}
 	if mode != "query-pages" {
 		return false
 	}

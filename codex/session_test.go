@@ -131,6 +131,10 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 	if !strings.HasPrefix(mode, "session-") {
 		return false
 	}
+	if mode == "session-config-held-approval" && m.Method == "" {
+		// Approval replies are terminal JSON-RPC responses, with no reply of their own.
+		return true
+	}
 	switch m.Method {
 	case "thread/start":
 		p.starts++

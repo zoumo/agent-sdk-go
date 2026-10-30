@@ -345,10 +345,13 @@ class SimulationPipelineTests(unittest.TestCase):
                     def __init__(self, **_): pass
                     async def __aenter__(self): return self
                     async def __aexit__(self, *_): actions.append('close')
-                    async def query(self, _): actions.append('input')
+                    async def query(self, _, session_id):
+                        self_test.assertEqual(session_id, '')
+                        actions.append('input')
                     async def receive_response(self): yield ResultMessage()
+                self_test = self
                 sdk = ModuleType('claude_agent_sdk')
-                sdk.ClaudeSDKClient, sdk.ClaudeAgentOptions = Client, lambda **kw: kw
+                sdk.ClaudeSDKClient, sdk.ClaudeAgentOptions = Client, lambda **kw: SimpleNamespace(**kw)
                 sdk.Transport = object
                 sdk.PermissionResultAllow = sdk.PermissionResultDeny = lambda **kw: kw
                 sdk.ResultMessage = ResultMessage

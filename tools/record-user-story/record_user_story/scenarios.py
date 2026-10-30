@@ -178,6 +178,11 @@ def select_story_groups(selection, dataset=None):
 def _workflow(core):
     """Compile the supported declarative workflow forms, independently of IDs."""
     steps = core['steps']
+    if core['driverProfile'] == 'existing-children':
+        if core['inputs'] or core['limits']['inputs'] != 0 or steps != [
+                {'op': 'session.open'}, {'op': 'history.discover'}, {'op': 'session.close'}]:
+            raise ValueError('existing-child observation must not generate new input')
+        return [], 'sequential-results', None
     if not steps:
         if core['inputs']:
             raise ValueError('inputs without workflow')
@@ -258,7 +263,7 @@ def recipe(provider, story, directory=None, case_id=None):
     execution = dict(core['execution'], **binding.get('execution', {}))
     mode = execution['mode']
     prompts = binding.get('inputs', [core['inputs'][name] for name in submitted]) if mode == 'live-selected-path' else []
-    if mode == 'live-selected-path' and (not prompts or len(prompts) != len(submitted)):
+    if mode == 'live-selected-path' and ((not prompts and core['driverProfile'] != 'existing-children') or len(prompts) != len(submitted)):
         raise ValueError('provider inputs differ from workflow submissions')
     configuration = binding['configuration']
     if bool(configuration) != ({'op': 'configuration.apply'} in core['steps']):
@@ -284,7 +289,7 @@ def recipe(provider, story, directory=None, case_id=None):
                 reason=execution['reason'], prompts=prompts, files=files, submission=submission,
                 progressAction=trigger, requiredRequests=[requests[name] for name in core['expect']['requests']],
                 progressBarrier=binding['progressBarrier'], answers=answers, configuration=configuration,
-                steps=core['steps'] if prompts else [],
+                steps=core['steps'] if mode == 'live-selected-path' else [],
                 limits=dict(core['limits'], inputs=len(prompts)), scope=case['scope'])
     if 'parameters' in core or 'parameters' in binding:
         result['parameters'] = dict(core.get('parameters', {}), **binding.get('parameters', {}))

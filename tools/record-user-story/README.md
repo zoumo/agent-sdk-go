@@ -98,6 +98,20 @@ they intersect; an empty intersection fails. Story containers use v4, index v2,
 provider bindings v3; only current v4 plans execute. Explicit profiles select behavior independently of IDs.
 planned/unsupported routes require reasons and never execute substitute flows.
 
+Codex `SDK-CASE-012` is deferred at low priority (`planned`, recording disabled).
+The official Python SDK 0.161.0 and 0.163.0 run approval callbacks on the sole
+reader thread: retaining an approval blocks delivery of control acknowledgements
+and new events. Sending controls on another thread does not unblock delivery;
+answering first would change this case's acceptance target. We keep the Python
+driver and do not add Rust dependencies or a side observer. Re-enable this route
+when the Python SDK supports deferred approval with continued response/event
+delivery, then validate a fresh capture, strict replay and Go SDK simulation.
+This is a recorder limitation, not an unsupported native capability. Only this
+Codex case is deferred; the other `SDK-US-003` cases and Claude 012 retain their
+routes. The required acceptance target and Go synthetic held-approval test remain;
+the story still reports missing recording evidence rather than passing by skip.
+See the [client evaluation](../../codex/docs/rust-client-approval.md).
+
 prepare only probes CLI versions and freezes driver/catalog/configuration/peer
 identities. It creates a new private directory under the real OS temp path, outside
 Git, with separate HOME/config/project/tmp per case. --output must not exist.
@@ -130,6 +144,72 @@ but no native executable or authentication. It checks source/driver/plan/peer ha
 SDK outcomes, full consumption and client EOF, archiving old replay output.
 Failed/untriggered outcomes keep their meaning. Re-record into a new prepare directory;
 changed plans/drivers cannot reuse frozen sources. Publication rules are [below](#fixtures-私有仿真数据).
+
+History drivers separate seed execution from independent discovery and reading.
+Codex detaches the seed thread before list/read calls. Pagination follows opaque
+native cursors and compares the collected ordered content with a complete read;
+Claude checks offset/limit slices and the empty tail against saved messages.
+The model-inheritance case checks observed parent and child models separately
+from the requested model; it makes no claim about inherited reasoning settings.
+
+Existing-child observation requires a verified child-history seed from the same provider:
+
+```sh
+record-user-story prepare --provider claude --cases SDK-CASE-035 \
+  --history-seed /absolute/passed-034-case --output /absolute/new-dataset
+```
+
+Preparation copies only verified saved records and freezes their source hashes.
+Recording resumes the parent, observes its native identity, and discovers the
+already-saved children without submitting a new input. Replay uses the frozen
+copy and preserves the recorded project identity as explicit `historyProject`;
+that synthetic project directory must remain available. It does not rewrite a
+transcript's saved cwd to fit a new directory. Neither saved content nor requested
+resume identity becomes a live event. Codex uses `--provider codex --model
+gpt-6.1-terra` with a fresh Codex child-history seed whose manifest hashes the
+parent and child rollout files. It keeps immutable seed bytes separately from
+the writable native home and rebuilds indexes without copying source SQLite
+paths. The Go adapter restores `Open` with `Resume`, queries `ListSubagents`,
+and checks live delivery without projecting stored turns or granting authority.
+
+Codex remote-close records two connections to one isolated, authenticated native
+WebSocket service. Closing the first client must leave that service alive and
+able to answer the second connection. `remote-probe/raw/` preserves the second
+capture independently; the case manifest covers both phases. Cleanup then stops
+the owned service and requires exit 0. Offline replay consumes both captures and
+does not launch the service.
+
+For Go SDK acceptance, build the explicit offline adapter and supply a successful
+private case with its strict official-SDK replay. The command fails on unsupported
+profiles or missing evidence; it has no native fallback. Keep output separate
+from the immutable recording:
+
+```sh
+mise exec -- go build -o /absolute/bin/sdk-acceptance ./tests/recording/sdk
+python3.11 scripts/replay-sdk-recording.py --case /absolute/passed-case \
+  --adapter /absolute/bin/sdk-acceptance --output /absolute/new-acceptance
+```
+
+The adapter supports the executable local input, tool, approval, question, child,
+configuration, interrupt, close and history profiles, plus Codex remote-close.
+It calls public Go SDK operations and answers original native request handles;
+the Go mock retains strict matching against the unchanged recording.
+Claude continuation runs independently of local-history queries. Creation options
+and initialize fields are selected from the frozen source, including the official
+SDK's `default` main-stream input alias and initialization-time SDK MCP requests.
+
+To validate a private set, provide a JSON list of
+`{"provider":"claude","caseId":"SDK-CASE-001","case":"/absolute/passed-case"}`
+objects to `--cases-file` instead of `--case`. Each entry must have a complete real
+capture, successful case and strict official-SDK replay. The command checks all
+entries, keeps separate results and logs, writes `batch-result.json`, and fails if
+any entry fails. It neither records new data nor launches a native Agent.
+Keep this path list and its outputs outside Git alongside the private datasets.
+
+This entry exercises public Go SDK interfaces and verifies the mock's source hash,
+full consumption and client EOF. Child-detail acceptance compares preserve and
+suppress delivery against the same native capture, retaining protected and mixed
+events. An official-SDK replay or protocol self-replay alone is not Go SDK acceptance.
 
 <a id="mock-go-离线协议对端"></a>
 
@@ -306,7 +386,7 @@ Go fixture 适配器读取同一份嵌入数据，协议匹配由 `tools/agent-m
 | SDK-CASE-017 | SDK-US-005 | 观察嵌套子 Agent 的实际父子关系 | live-selected-path | unsupported | [配置](../../tests/recording/scenarios/SDK-US-005.json) |
 | SDK-CASE-018 | SDK-US-005 | 观察并行子 Agent 的独立输出 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-005.json) |
 | SDK-CASE-019 | SDK-US-005 | 根任务结束后继续观察后台子 Agent | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-005.json) |
-| SDK-CASE-020 | SDK-US-005 | 选择子详细交付策略并观察实际输出 | planned | planned | [配置](../../tests/recording/scenarios/SDK-US-005.json) |
+| SDK-CASE-020 | SDK-US-005 | 选择子详细交付策略并观察实际输出 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-005.json) |
 | SDK-CASE-021 | SDK-US-006 | 创建会话时选择模型并执行任务 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
 | SDK-CASE-022 | SDK-US-006 | 首次输入前修改模型并核对确认、生效顺序与可观察配置 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
 | SDK-CASE-023 | SDK-US-006 | 两次执行之间修改模型并继续输入 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
@@ -315,13 +395,13 @@ Go fixture 适配器读取同一份嵌入数据，协议匹配由 `tools/agent-m
 | SDK-CASE-026 | SDK-US-006 | 修改原生思考预算并执行任务 | unsupported | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
 | SDK-CASE-027 | SDK-US-006 | 选择原生 effort 并执行任务 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
 | SDK-CASE-028 | SDK-US-006 | 修改思考展示配置并观察输出 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
-| SDK-CASE-029 | SDK-US-006 | 配置根会话并观察子 Agent 的实际继承情况 | planned | planned | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
+| SDK-CASE-029 | SDK-US-006 | 配置根会话并观察子 Agent 的实际继承情况 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-006.json) |
 | SDK-CASE-030 | SDK-US-007 | 在执行进度后中断并读取确认及终态 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-007.json) |
 | SDK-CASE-031 | SDK-US-007 | 关闭拥有的会话并确认交互与进程结束 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-007.json) |
-| SDK-CASE-032 | SDK-US-007 | 关闭远端连接并保持远端服务可用 | planned | planned | [配置](../../tests/recording/scenarios/SDK-US-007.json) |
-| SDK-CASE-033 | SDK-US-008 | 独立发现会话、读取元数据和主会话内容 | planned | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
-| SDK-CASE-034 | SDK-US-008 | 独立发现并读取保存的子 Agent 内容 | planned | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
-| SDK-CASE-035 | SDK-US-008 | 发现当前 Session 观察前已有的子 Agent | planned | planned | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
-| SDK-CASE-036 | SDK-US-008 | 按原生分页或切片浏览保存的记录与内容 | planned | planned | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
+| SDK-CASE-032 | SDK-US-007 | 关闭远端连接并保持远端服务可用 | live-selected-path | planned | [配置](../../tests/recording/scenarios/SDK-US-007.json) |
+| SDK-CASE-033 | SDK-US-008 | 独立发现会话、读取元数据和主会话内容 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
+| SDK-CASE-034 | SDK-US-008 | 独立发现并读取保存的子 Agent 内容 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
+| SDK-CASE-035 | SDK-US-008 | 发现当前 Session 观察前已有的子 Agent | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
+| SDK-CASE-036 | SDK-US-008 | 按原生分页或切片浏览保存的记录与内容 | live-selected-path | live-selected-path | [配置](../../tests/recording/scenarios/SDK-US-008.json) |
 
 专项测试直接归属代码集成测试，不出现在本表。

@@ -34,7 +34,11 @@ type Options struct {
 	Effort string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
-	Thinking      *types.ThinkingConfig
+	// HandleSDKMCP answers application-hosted MCP requests, including requests
+	// received before initialization completes. Nil delivers them through Receive.
+	HandleSDKMCP func(context.Context, IncomingRequest) error
+	Thinking     *types.ThinkingConfig
+	Initialize   *types.InitializeOptions
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
@@ -63,6 +67,17 @@ func (o *Options) defaults() error {
 	}
 	if err := validateSDKMCPServers(o.SDKMCPServers); err != nil {
 		return dispatchFailure("open", err)
+	}
+	if o.Initialize != nil {
+		data, err := json.Marshal(o.Initialize)
+		if err != nil {
+			return dispatchFailure("initialize", err)
+		}
+		var frozen types.InitializeOptions
+		if err := json.Unmarshal(data, &frozen); err != nil {
+			return err
+		}
+		o.Initialize = &frozen
 	}
 	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
 	if o.CLIPath == "" {
@@ -200,7 +215,14 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 	go c.ownLifecycle()
 	initCtx, cancel := context.WithTimeout(ctx, options.InitializeTimeout)
 	defer cancel()
-	initialize := map[string]any{"subtype": "initialize", "hooks": nil, "forwardSubagentText": true}
+	forward := true
+	initialize := struct {
+		Subtype string `json:"subtype"`
+		types.InitializeOptions
+	}{Subtype: "initialize", InitializeOptions: types.InitializeOptions{ForwardSubagentText: &forward}}
+	if options.Initialize != nil {
+		initialize.InitializeOptions = *options.Initialize
+	}
 	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
 		c.mu.Lock()
 		if !c.closing {
@@ -496,6 +518,16 @@ func (c *interaction) route(event Event) error {
 		if err != nil {
 			return err
 		}
+		if c.ownsSDKMCPRequest(event.Control) && c.opts.HandleSDKMCP != nil {
+			work := incomingControl{subtype: event.Control.Subtype, permission: permission,
+				request: &IncomingRequest{permission: permission, method: event.Control.Subtype, raw: bytes.Clone(event.Raw)}}
+			select {
+			case c.responses <- work:
+			default:
+				return &ResourceLimitError{Resource: "incoming control queue", Limit: c.opts.Limits.ControlBuffer}
+			}
+			return nil
+		}
 		if c.session != nil && (event.Control.Subtype == "can_use_tool" || c.ownsSDKMCPRequest(event.Control)) {
 			return c.session.acceptRequest(event, permission)
 		}
@@ -589,6 +621,12 @@ func (c *interaction) respondControls() {
 		case <-c.done:
 			return
 		case request := <-c.responses:
+			if request.request != nil {
+				if err := c.opts.HandleSDKMCP(request.permission.Context(), *request.request); err != nil {
+					c.fail(&Error{Op: "SDK MCP handler", Err: err})
+				}
+				continue
+			}
 			_ = request.permission.answerUnsupported(context.Background(), request.subtype)
 		}
 	}

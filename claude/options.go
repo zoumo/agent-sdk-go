@@ -5,7 +5,7 @@ package claude
 import "github.com/zoumo/agent-sdk-go/claude/types"
 
 // OptionsFromTypes adapts callback-free configuration to runtime options.
-// Set runtime-only Subagents and ChildDetailPolicy on the returned value when needed.
+// Set runtime-only Subagents, ChildDetailPolicy and HandleSDKMCP on the returned value when needed.
 // Env is shared, as when copying Options; this function does not validate it.
 func OptionsFromTypes(config types.Options) Options {
 	return Options{
@@ -15,6 +15,7 @@ func OptionsFromTypes(config types.Options) Options {
 		Effort:            config.Effort,
 		SDKMCPServers:     config.SDKMCPServers,
 		Thinking:          config.Thinking,
+		Initialize:        config.Initialize,
 		ResumeID:          config.ResumeID,
 		Env:               config.Env,
 		InitializeTimeout: config.InitializeTimeout,
@@ -23,7 +24,7 @@ func OptionsFromTypes(config types.Options) Options {
 	}
 }
 
-// Types returns the process configuration. ChildDetailPolicy and Subagents stay with
+// Types returns the process configuration. ChildDetailPolicy, Subagents and HandleSDKMCP stay with
 // runtime Options and are not round-tripped.
 // Env retains the same backing slice.
 func (o Options) Types() types.Options {
@@ -34,6 +35,7 @@ func (o Options) Types() types.Options {
 		Effort:            o.Effort,
 		SDKMCPServers:     o.SDKMCPServers,
 		Thinking:          o.Thinking,
+		Initialize:        o.Initialize,
 		ResumeID:          o.ResumeID,
 		Env:               o.Env,
 		InitializeTimeout: o.InitializeTimeout,

@@ -86,7 +86,11 @@ func (c *interaction) sendInput(ctx context.Context, input Input) error {
 			return nil, err
 		}
 		// These envelope values are stream ownership markers, not target selectors.
+		// The official SDK also uses "default" for the same owned main stream.
 		for k, want := range map[string]string{"type": `"user"`, "session_id": `""`, "parent_tool_use_id": `null`} {
+			if k == "session_id" && bytes.Equal(bytes.TrimSpace(envelope[k]), []byte(`"default"`)) {
+				continue
+			}
 			if got, ok := envelope[k]; ok && !bytes.Equal(bytes.TrimSpace(got), []byte(want)) {
 				return nil, fmt.Errorf("%w: fixed %s", ErrInvalidInput, k)
 			}

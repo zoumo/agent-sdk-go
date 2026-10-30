@@ -61,8 +61,8 @@ shared Client sessions select independently.
 Filtering leaves native source output, parent tool results, relationships,
 approvals and lifecycle facts intact. Complete items and mixed/unknown frames
 remain visible, with their original bytes. It is not content redaction or a
-token-cost control. Low-level `Client.ResumeThread` is unchanged; no Session
-resume constructor is added. See the exact
+token-cost control. The policy also applies to `Open` with explicit `Resume`
+parameters. Low-level `Client.ResumeThread` is unchanged. See the exact
 [method and shape contract](../harness/modules/native-session/design.md#child-detail-可选子详细事件交付).
 `NativeIntegrationSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
 public API delivery and original peer bytes; real child interoperability remains
@@ -301,6 +301,28 @@ implementations run in the caller and must cooperate; the SDK cannot interrupt
 arbitrary Go code.
 
 ## Native resume and history queries
+
+Resume a public Session on a shared client or an owned stdio process:
+
+```go
+session, err := codex.Open(ctx, codex.SessionOptions{
+    Client: client,
+    Resume: &types.ThreadResumeParams{ThreadID: savedID},
+})
+```
+
+`Resume` requires a nonempty native ID and empty `Thread` start options. It
+reserves ownership before dispatch and returns only after the native response
+confirms the same identity. Live notifications around that response retain their
+arrival order. `ResumeResponse()` returns a detached copy of the actual native
+response; `StartResponse()` is absent. Saved turns do not enter `Receive`, grant
+answer authority, or establish live child membership. Use `ListSubagents` to
+query already saved descendants without submitting another turn.
+
+Recovery is explicit and preserves native resume side effects. It does not
+retry, create a replacement thread, or promise to recover missed events. Failed
+or uncertain dispatch performs bounded detachment; failed cleanup preserves an
+ownership fence. Shared clients remain open; owned processes are reaped.
 
 `Client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})` explicitly
 resumes a native thread. It does not create a Session or replay history through

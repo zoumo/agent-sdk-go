@@ -127,7 +127,7 @@
     "SDK-CASE-012": {
       "execution": {
         "mode": "planned",
-        "reason": "当前官方 SDK 同步审批回调不能完成持有审批期间的事件交付流程。"
+        "reason": "暂缓录制（低优先级）：仅使用官方 Python SDK，不引入 Rust 依赖。0.161.0 与 0.163.0 在唯一读取线程同步执行审批回调；持有审批会阻塞控制回执和事件，公开 API 无延后回答机制。先回答再观察不能满足本 case；待 Python SDK 支持持有期间分发后再启用。这是录制驱动限制，不是 Codex 原生能力不支持。"
       },
       "inputs": [],
       "files": {
@@ -236,7 +236,10 @@
       "requests": {},
       "answers": {},
       "configuration": {},
-      "progressBarrier": null
+      "progressBarrier": null,
+      "inputs": [
+        "Use spawn_agent exactly once. Ask the child to reply SYNTHETIC_SAVED_CHILD without tools. Wait for it to finish, report its output and finish. Use no other tools, files or network."
+      ]
     },
     "SDK-CASE-021": {
       "files": {
@@ -326,7 +329,10 @@
       "requests": {},
       "answers": {},
       "configuration": {},
-      "progressBarrier": null
+      "progressBarrier": null,
+      "inputs": [
+        "Use spawn_agent exactly once. Ask the child to reply SYNTHETIC_SAVED_CHILD without tools. Wait for it to finish, report its output and finish. Use no other tools, files or network."
+      ]
     },
     "SDK-CASE-030": {
       "files": {
@@ -360,11 +366,7 @@
       "requests": {},
       "answers": {},
       "configuration": {},
-      "progressBarrier": null,
-      "execution": {
-        "mode": "planned",
-        "reason": "独立发现、元数据与内容查询的完整录制驱动尚未实现。"
-      }
+      "progressBarrier": null
     },
     "SDK-CASE-034": {
       "files": {},
@@ -372,10 +374,9 @@
       "answers": {},
       "configuration": {},
       "progressBarrier": null,
-      "execution": {
-        "mode": "planned",
-        "reason": "当前官方 SDK 录制驱动尚未实现此独立查询流程。"
-      }
+      "inputs": [
+        "Use spawn_agent exactly once. Ask the child to reply SYNTHETIC_SAVED_CHILD without tools. Wait for it to finish, report its output and finish. Use no other tools, files or network."
+      ]
     },
     "SDK-CASE-035": {
       "files": {},

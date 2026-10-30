@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"slices"
+	"time"
 )
 
 // ChildDetailPolicy selects SDK delivery of confirmed-child detail. It never
@@ -26,11 +27,33 @@ const (
 func pureChildDetail(e Event) bool {
 	switch e.Type {
 	case "assistant":
-		if e.Assistant == nil || detailObject(e.Raw, "type", "session_id", "uuid", "parent_tool_use_id", "message") == nil {
+		envelope := detailObject(e.Raw, "type", "session_id", "uuid", "parent_tool_use_id", "message", "timestamp", "subagent_type", "task_description")
+		if e.Assistant == nil || envelope == nil {
 			return false
 		}
-		m := detailObject(e.Assistant.Raw, "type", "id", "role", "model", "content", "stop_reason", "stop_sequence", "usage")
+		// CLI 2.1.258's forwarded-message serializer copies the message timestamp
+		// and delegation labels. These labels do not establish membership or
+		// parentage; the caller still requires the original native task/tool edge.
+		for _, key := range []string{"timestamp", "subagent_type", "task_description"} {
+			if raw, ok := envelope[key]; ok {
+				var value string
+				if !detailString(raw, false) || json.Unmarshal(raw, &value) != nil || value == "" {
+					return false
+				}
+				if key == "timestamp" {
+					if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+						return false
+					}
+				}
+			}
+		}
+		m := detailObject(e.Assistant.Raw, "type", "id", "role", "model", "content", "stop_reason", "stop_sequence", "usage", "context_management")
 		if m == nil {
+			return false
+		}
+		// The same native serializer fills absent context_management with null.
+		// Any non-null value can carry context-editing facts and remains visible.
+		if raw, ok := m["context_management"]; ok && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return false
 		}
 		for _, key := range []string{"type", "id", "role", "model", "stop_reason", "stop_sequence"} {

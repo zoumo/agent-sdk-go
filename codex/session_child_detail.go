@@ -19,7 +19,8 @@ const (
 )
 
 // suppressChildDetailLocked is a closed shape check against protocol 0.162.1
-// (092d3acd), not a method-prefix filter. None of these shapes carries membership,
+// (092d3acd), with the 0.163.0 notification emission timestamp. It is not a
+// method-prefix filter. None of these shapes carries membership,
 // control or lifecycle facts. Extensions at either level make the whole frame
 // mixed, and are delivered unchanged. Untyped notifications use the same check.
 func (s *Session) suppressChildDetailLocked(value Received) bool {
@@ -41,7 +42,20 @@ func (s *Session) suppressChildDetailLocked(value Received) bool {
 		return false
 	}
 	envelope, err := objectFields(value.Raw)
-	if err != nil || len(envelope) != 2 || envelope["method"] == nil || envelope["params"] == nil {
+	if err != nil || envelope["method"] == nil || envelope["params"] == nil {
+		return false
+	}
+	expectedEnvelope := 2
+	if emitted, present := envelope["emittedAtMs"]; present {
+		// ServerNotificationEnvelope defines this as an optional Unix millisecond
+		// timestamp. It is emission metadata, not a child or lifecycle fact.
+		var milliseconds int64
+		if bytes.Equal(bytes.TrimSpace(emitted), []byte("null")) || json.Unmarshal(emitted, &milliseconds) != nil || milliseconds < 0 {
+			return false
+		}
+		expectedEnvelope++
+	}
+	if len(envelope) != expectedEnvelope {
 		return false
 	}
 	fields, err := objectFields(value.Params)

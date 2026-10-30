@@ -90,7 +90,11 @@ class ScenarioTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         validate_recipe(changed)
                     self.assertNotIn('offlineTest', definition)
-                    self.assertEqual(bool(definition['prompts']), definition['mode'] == 'live-selected-path')
+                    if definition['mode'] == 'live-selected-path' and definition['driverProfile'] == 'existing-children':
+                        self.assertEqual(definition['prompts'], [])
+                        self.assertEqual(definition['limits']['inputs'], 0)
+                    else:
+                        self.assertEqual(bool(definition['prompts']), definition['mode'] == 'live-selected-path')
         self.assertNotIn('nativeStories', recipe('codex', 'continuation'))
         with self.assertRaises(ValueError):
             recipe('codex', 'SDK-US-020')
@@ -107,9 +111,9 @@ class ScenarioTests(unittest.TestCase):
                 native = root / 'native'
                 native.write_text('#!' + sys.executable + '\nprint("99.0.0")\n')
                 native.chmod(0o700)
-                args = SimpleNamespace(provider='codex', stories='SDK-US-005' if child else 'SDK-US-001,SDK-US-005',
+                args = SimpleNamespace(provider='codex', stories='SDK-US-005' if child else 'SDK-US-001,SDK-US-003',
                                        output=str(root / 'suite'), source_config=str(source), cli=str(native),
-                                       child_case=mode == 'explicit-child', model='fixture', cases='SDK-CASE-016' if child else 'SDK-CASE-001,SDK-CASE-020')
+                                       child_case=mode == 'explicit-child', model='fixture', cases='SDK-CASE-016' if child else 'SDK-CASE-001,SDK-CASE-012')
                 with patch('record_user_story.environment.sdk_identity', return_value={'package': 'fixture', 'version': '0'}), patch.dict('os.environ', {'AGENT_MOCK_BIN': os.environ['AGENT_MOCK_BIN'], 'PATH': '/usr/bin:/bin', 'AGENT_MOCK_SCENARIOS': str(scenario_directory())}, clear=True):
                     prepare(args)
                 path = Path(args.output) / ('SDK-US-005' if child else 'SDK-US-001') / ('SDK-CASE-016' if child else 'SDK-CASE-001')
@@ -126,7 +130,7 @@ class ScenarioTests(unittest.TestCase):
                 else:
                     self.assertEqual(plan['version'], 4)
                     validate_recipe(plan)
-                    self.assertFalse((Path(args.output) / 'SDK-US-005').exists())
+                    self.assertFalse((Path(args.output) / 'SDK-US-003').exists())
                     self.assertEqual((path / 'project/numbers.txt').read_text(), '17\n25\n')
                 self.assertTrue((path / 'driver/record_user_story/scenarios.py').exists())
                 self.assertTrue((path / 'driver/scenarios/SDK-US-001.json').exists())
@@ -142,7 +146,7 @@ class ScenarioTests(unittest.TestCase):
     def test_prepare_offline_selection_never_reads_sdk_or_auth(self):
         with patch('record_user_story.environment.sdk_identity', side_effect=AssertionError('SDK accessed')):
             with self.assertRaisesRegex(ValueError, 'no live recording path'):
-                prepare(SimpleNamespace(provider='codex', cases='SDK-CASE-020'))
+                prepare(SimpleNamespace(provider='codex', cases='SDK-CASE-012'))
 
     def test_scoped_case_pass_does_not_require_other_us_branches(self):
         for number in ('continuation', 'media', 'active-input', 'tools', 'questions', 'configuration', 'interrupt'):

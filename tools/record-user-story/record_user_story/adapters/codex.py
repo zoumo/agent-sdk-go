@@ -180,10 +180,8 @@ def codex(plan, report, flow):
         if parameters.get('configurationTiming') == 'during-execution' and not configured_during:
             raise Untriggered('no execution progress barrier for configuration')
         if profile == 'history':
-            snapshot = serial(client.thread_read(identity, include_turns=True))
-            report['receipts'].append({'thread/read': snapshot})
-            if parameters.get('historyTarget') and not snapshot.get('thread', {}).get('turns'):
-                raise Untriggered('no saved thread content returned')
+            from ..history import codex as query_history
+            query_history(client, identity, plan, report, parameters)
         if profile == 'session-close':
             client.close()
             report['sessionClose'] = {'interactionClosed': True, 'postCloseRejected': False, 'processClosed': False}

@@ -42,16 +42,20 @@ func (p *resumePeer) handle(mode string, m fakeEnvelope, send func(json.RawMessa
 	case "thread/read":
 		send(m.ID, `{"thread":`+resumeThreadJSON(resumedNativeID)+`}`)
 	case "thread/resume", "thread/unsubscribe":
+		if strings.HasPrefix(mode, "resume-session-") && m.Method == "thread/unsubscribe" {
+			send(m.ID, `{"status":"unsubscribed"}`)
+			return true
+		}
 		switch mode {
 		case "resume-exit":
 			os.Exit(9)
-		case "resume-error", "resume-missing":
+		case "resume-error", "resume-missing", "resume-session-error":
 			code, message := -32603, "internal failure after possible work"
 			if mode == "resume-missing" {
 				code, message = -32600, "thread is missing or expired"
 			}
 			fmt.Fprintf(os.Stdout, `{"id":%s,"error":{"code":%d,"message":%q,"data":{"native":9007199254740993}}}`+"\n", m.ID, code, message)
-		case "resume-wait":
+		case "resume-wait", "resume-session-wait":
 			p.pending = append([]byte(nil), m.ID...)
 		case "resume-invalid":
 			send(m.ID, `{}`)
@@ -70,12 +74,31 @@ func (p *resumePeer) handle(mode string, m fakeEnvelope, send func(json.RawMessa
 					os.Exit(87)
 				}
 				id := params.ThreadID
-				if mode == "resume-mismatch" {
+				if mode == "resume-mismatch" || mode == "resume-session-mismatch" {
 					id = "different-native-id"
 				}
-				send(m.ID, resumeResponseJSON(id))
+				if mode == "resume-session" {
+					fmt.Fprintf(os.Stdout, `{"method":"future/beforeResume","params":{"threadId":%q}}`+"\n", id)
+				}
+				response := resumeResponseJSON(id)
+				if mode == "resume-session" {
+					response = strings.Replace(response, `"turns":[]`, `"turns":[`+nativeTurn+`]`, 1)
+				}
+				send(m.ID, response)
+				if mode == "resume-session" {
+					fmt.Fprintf(os.Stdout, `{"method":"future/afterResume","params":{"threadId":%q}}`+"\n", id)
+				}
 			}
 		}
+	case "thread/list":
+		child := strings.Replace(resumeThreadJSON("old-child"), `"source":"appServer"`, `"source":{"subAgent":{"thread_spawn":{"parent_thread_id":"parent","depth":1}}},"parentThreadId":`+fmt.Sprintf("%q", resumedNativeID), 1)
+		send(m.ID, `{"data":[`+child+`],"nextCursor":null}`)
+		// Stored discovery must not grant live child membership or authority.
+		fmt.Fprintln(os.Stdout, `{"method":"future/child","params":{"threadId":"old-child"}}`)
+		fmt.Fprintln(os.Stdout, `{"id":"old-approval","method":"future/approval","params":{"threadId":"old-child"}}`)
+	case "turn/start":
+		send(m.ID, `{"turn":`+nativeTurn+`}`)
+		fmt.Fprintf(os.Stdout, `{"method":"turn/completed","params":{"threadId":%q,"turn":%s}}`+"\n", resumedNativeID, nativeTurn)
 	case "resume-release":
 		send(p.pending, resumeResponseJSON("late-native-id"))
 		send(m.ID, `"fresh"`)
@@ -188,7 +211,7 @@ func (obs *observationSuite) TestResumeAndUnsubscribeFailureNeverReplay() {
 				f := obs.fixture(t, mode, codex.Limits{})
 				err := nativeOperation(f.c, method, context.Background())
 				switch mode {
-				case "resume-error", "resume-missing":
+				case "resume-error", "resume-missing", "resume-session-error":
 					callError(t, err, codex.Responded, nil)
 					var rpc *codex.RPCError
 					code := int64(-32603)

@@ -120,21 +120,111 @@
       "storyId": "SDK-US-008",
       "goal": "发现当前 Session 观察前已有的子 Agent",
       "required": true,
-      "implementation": "planned",
+      "implementation": "implemented",
+      "name": "simulation-035",
       "execution": {
-        "mode": "planned",
-        "reason": "已有子 Agent 的独立发现录制驱动尚未实现。"
-      }
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {}
+      },
+      "inputs": {},
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "history.discover"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "发现当前 Session 观察前已有的子 Agent。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 0,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "existing-children",
+      "parameters": {}
     },
     {
       "id": "SDK-CASE-036",
       "storyId": "SDK-US-008",
       "goal": "按原生分页或切片浏览保存的记录与内容",
       "required": true,
-      "implementation": "planned",
+      "implementation": "implemented",
+      "name": "simulation-036",
       "execution": {
-        "mode": "planned",
-        "reason": "分页或切片浏览的真实录制驱动尚未实现。"
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Reply with the word SYNTHETIC_SAVED.",
+        "input-2": "Reply with the word SYNTHETIC_SECOND_SAVED."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-2"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "按原生分页或切片浏览保存的记录与内容。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 2,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "history",
+      "parameters": {
+        "historyTarget": "pagination"
       }
     }
   ]

@@ -37,6 +37,15 @@ type ConfigurationReceipt struct {
 	Observed  json.RawMessage
 }
 
+// SetPermissionMode requests the native mode and retains its acknowledgement.
+// It does not answer or release any pending permission request.
+func (s *Session) SetPermissionMode(ctx context.Context, mode string) (ConfigurationReceipt, error) {
+	if mode == "" {
+		return ConfigurationReceipt{}, dispatchFailure("set_permission_mode", ErrInvalidInput)
+	}
+	return s.configure(ctx, "set_permission_mode", map[string]any{"subtype": "set_permission_mode", "mode": mode})
+}
+
 func (s *Session) SetModel(ctx context.Context, change ModelChange) (ConfigurationReceipt, error) {
 	request := map[string]any{"subtype": "set_model"}
 	if change.Model != nil {

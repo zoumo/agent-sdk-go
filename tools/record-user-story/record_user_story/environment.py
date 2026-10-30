@@ -214,6 +214,8 @@ def prepare(args):
         if args.provider == 'claude' and definition.get('parameters', {}).get('applicationTool'):
             native_args += ['--mcp-config', json.dumps({'mcpServers': {'fixture': {'type': 'sdk', 'name': 'fixture'}}})]
         parameters = definition.get('parameters', {})
+        if args.provider == 'codex' and parameters.get('historyTarget') == 'child-messages':
+            native_args += ['-c', 'agents.enabled=true', '-c', 'features.multi_agent=true']
         if args.provider == 'claude':
             if parameters.get('configurationTiming') == 'creation' and parameters.get('setting') == 'model':
                 chosen = args.model or env.get('ANTHROPIC_MODEL') or conf.get('model') or 'sonnet'
@@ -258,6 +260,15 @@ def prepare(args):
             path.write_text(content)
             os.chmod(path, 0o600)
         private_json(root / 'native.env.private.json', env)
+        if definition['driverProfile'] == 'existing-children':
+            from .existing_children import prepare_seed
+            source = getattr(args, 'history_seed', None)
+            if source is None:
+                raise ValueError('existing-child observation requires --history-seed')
+            plan['historySeed'] = prepare_seed(source, root, args.provider)
+            plan['historyProject'] = plan['historySeed']['sourceProject']
+            if args.provider == 'claude':
+                plan['args'] += ['--resume', plan['historySeed']['sessionId']]
         private_json(root / 'plan.json', plan)
     private_json(target / 'suite.json', {'provider': args.provider, 'driver': str(driver), 'cliVersion': version,
                                         'sourceSHA256': source_hash, 'sdkRevision': revision})
@@ -297,9 +308,12 @@ def manifest(root, report):
                 names = [item.get('env_key'), *item.get('env_http_headers', {}).values()]
                 secrets.extend(env[name] for name in names if name and env.get(name))
     captured_text = ''.join(path.read_text(errors='replace') for path in root.glob('*report.json')) + ''.join(path.read_text(errors='replace') for path in root.glob('*diagnostics.private.json')) + data + ''.join(path.read_text(errors='replace') for path in ((root / 'raw').iterdir() if (root / 'raw').exists() else []) if path.is_file() and path.name != 'raw.jsonl')
+    if plan.get('driverProfile') == 'remote-close':
+        from .remote import phase_files
+        captured_text += ''.join(read_regular(root / name, None).decode(errors='replace') for name in phase_files(root))
     scan = not any(secret in captured_text for secret in secrets)
     saved = {}
-    for path in (root / 'config/projects').rglob('*.jsonl') if (root / 'config/projects').exists() else []:
+    for path in [* (root / 'config/projects').rglob('*.jsonl'), * (root / 'config/sessions').rglob('*.jsonl')]:
         if path.is_symlink() or not path.is_file():
             raise ValueError('saved source is not a regular file')
         saved[str(path.relative_to(root))] = hashlib.sha256(read_regular(path)).hexdigest()
@@ -320,6 +334,9 @@ def manifest(root, report):
               'gaps': report.get('gaps', [])}
     if 'agentMock' in plan:
         result['agentMock'] = plan['agentMock']
+    if plan.get('driverProfile') == 'remote-close':
+        from .remote import phase_files
+        result['remotePhaseFiles'] = phase_files(root)
     if 'case' in report:
         result['case'] = report['case']
     if plan.get('version', 0) >= 4:
@@ -340,6 +357,9 @@ def scrub_auth(root):
 
 def verify_recording(root):
     item = json.loads((root / 'manifest.json').read_text())
+    if item.get('remotePhaseFiles'):
+        from .remote import verify_phase_files
+        verify_phase_files(root, item['remotePhaseFiles'])
     if item.get('planSHA256') and hashlib.sha256(read_regular(root / 'plan.json')).hexdigest() != item['planSHA256']:
         raise ValueError('recording plan changed')
     for name, digest in item['files'].items():
@@ -355,7 +375,7 @@ def verify_recording(root):
             raise ValueError('recording driver snapshot changed')
     for name, digest in item.get('savedFiles', {}).items():
         path = root / name
-        if not name.startswith('config/projects/') or '..' in Path(name).parts or path.is_symlink() or hashlib.sha256(read_regular(path)).hexdigest() != digest:
+        if not name.startswith(('config/projects/', 'config/sessions/')) or '..' in Path(name).parts or path.is_symlink() or hashlib.sha256(read_regular(path)).hexdigest() != digest:
             raise ValueError('saved recording source changed')
 
 

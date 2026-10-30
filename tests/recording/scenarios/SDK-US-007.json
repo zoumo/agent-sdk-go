@@ -124,11 +124,54 @@
       "storyId": "SDK-US-007",
       "goal": "关闭远端连接并保持远端服务可用",
       "required": true,
-      "implementation": "planned",
+      "implementation": "implemented",
+      "name": "simulation-032",
       "execution": {
-        "mode": "planned",
-        "reason": "当前仿真传输仅支持 stdio，远端连接关闭驱动尚未实现。"
-      }
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Reply Ready."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "关闭远端连接并保持远端服务可用。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "remote-close"
     }
   ]
 }

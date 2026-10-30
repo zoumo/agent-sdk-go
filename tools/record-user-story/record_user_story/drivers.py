@@ -39,7 +39,17 @@ def run(plan):
     else:
         try:
             report['officialSDK'] = sdk_identity(plan['provider'])
-            if plan['provider'] == 'codex':
+            if definition['driverProfile'] == 'existing-children':
+                if plan['provider'] == 'codex':
+                    from .existing_codex import observe
+                    observe(plan, report)
+                else:
+                    from .existing_children import observe_claude
+                    asyncio.run(observe_claude(plan, report))
+            elif definition['driverProfile'] == 'remote-close':
+                from .remote import codex as remote_codex
+                remote_codex(plan, report, flow)
+            elif plan['provider'] == 'codex':
                 codex(plan, report, flow)
             elif plan['provider'] == 'claude':
                 asyncio.run(claude(plan, report, flow))
@@ -136,12 +146,17 @@ def observe_wire(plan, report):
     from .adapters.common import observe_configuration
     path = Path(plan['root']) / 'raw/raw.jsonl'
     if not path.exists():
+        parameters = plan['scenario'].get('parameters', {})
+        if parameters.get('childConfiguration') or parameters.get('childDetailPolicy'):
+            raise Untriggered('native child configuration/detail capture is absent')
         if plan['provider'] == 'codex' and plan['scenario'].get('parameters', {}).get('requireSessionContinuation'):
             raise Untriggered('continuous session raw evidence is absent')
         if stdin_eof_action(plan) == 'interrupt':
             raise Untriggered('native interrupt lifecycle capture is absent')
         return
     frames = [json.loads(line) for line in path.read_bytes().splitlines()]
+    from .child_configuration import assess as assess_child_configuration
+    assess_child_configuration(plan['provider'], frames, report, plan['scenario'].get('parameters', {}), plan.get('model'))
     if plan['provider'] == 'codex' and plan['scenario'].get('parameters', {}).get('requireSessionContinuation'):
         from .continuation import require_codex_continuation
         require_codex_continuation(frames, report)

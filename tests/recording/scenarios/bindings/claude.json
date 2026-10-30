@@ -283,7 +283,11 @@
       "requests": {},
       "answers": {},
       "configuration": {},
-      "progressBarrier": null
+      "progressBarrier": null,
+      "execution": {
+        "mode": "planned",
+        "reason": "当前 Claude SDK 仅支持本地 stdio；原生 remote-control 需要 claude.ai 订阅登录，现有配置未提供可录制的远端 SDK 连接。"
+      }
     },
     "SDK-CASE-033": {
       "files": {},

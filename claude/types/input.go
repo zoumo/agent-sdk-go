@@ -14,7 +14,8 @@ type InputMessage struct {
 }
 
 // UserInput carries SDKUserMessage data from SDK 0.3.258. Session fixes the
-// outer type/session_id/parent_tool_use_id. Raw/Fields preserve extension and
+// outer type/parent_tool_use_id and accepts only empty or "default" session_id
+// for its owned main stream. Raw/Fields preserve extension and
 // presence data; they cannot select another execution target.
 type UserInput struct {
 	Message       InputMessage          `json:"message"`

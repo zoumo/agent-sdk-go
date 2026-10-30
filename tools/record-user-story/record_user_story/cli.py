@@ -239,6 +239,7 @@ def main(argv=None):
     parser.add_argument('--output')
     parser.add_argument('--cli')
     parser.add_argument('--source-config')
+    parser.add_argument('--history-seed', type=Path, help='verified private saved-child recording for existing observation')
     parser.add_argument('--stories', help='comma-separated story IDs')
     parser.add_argument('--cases', help='comma-separated case IDs')
     parser.add_argument('--model')

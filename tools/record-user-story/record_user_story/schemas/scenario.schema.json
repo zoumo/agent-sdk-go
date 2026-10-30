@@ -75,7 +75,8 @@
                     "input.submit",
                     "event.wait",
                     "execution.interrupt",
-                    "session.close"
+                    "session.close",
+                    "history.discover"
                   ]
                 },
                 "input": {
@@ -241,7 +242,8 @@
                   "metadata",
                   "messages",
                   "children",
-                  "child-messages"
+                  "child-messages",
+                  "pagination"
                 ]
               },
               "requirePostResultEvent": {
@@ -258,6 +260,17 @@
               },
               "requireSessionContinuation": {
                 "type": "boolean"
+              },
+              "childDetailPolicy": {
+                "enum": [
+                  "preserve",
+                  "suppress"
+                ]
+              },
+              "childConfiguration": {
+                "enum": [
+                  "model"
+                ]
               }
             },
             "additionalProperties": false

@@ -73,8 +73,9 @@ type MockOptions struct {
 	NativeArgs       []string
 }
 type Handlers struct {
-	Record func(context.Context, RecordOptions, IO) error
-	Mock   func(context.Context, MockOptions, IO) error
+	Record  func(context.Context, RecordOptions, IO) error
+	Mock    func(context.Context, MockOptions, IO) error
+	Connect func(context.Context, ConnectOptions, IO) error
 }
 
 // New wires both capabilities once. Each implementation lives in its own owned
@@ -88,7 +89,7 @@ func New(h Handlers, streams IO) *cobra.Command {
 	root.SetVersionTemplate("agent-mock {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return Fail(ExitConfiguration, err) })
-	root.AddCommand(recordCommand(h.Record, streams), mockCommand(h.Mock, streams))
+	root.AddCommand(recordCommand(h.Record, streams), mockCommand(h.Mock, streams), connectCommand(h.Connect, streams))
 	root.AddCommand(&cobra.Command{Use: "version", Short: "Print the executable version", Args: cobra.NoArgs, Run: func(c *cobra.Command, _ []string) { c.Print("agent-mock " + Version + "\n") }})
 	return root
 }

@@ -160,6 +160,10 @@ async def claude(plan, report, flow):
 
     options = ClaudeAgentOptions(cwd=plan['project'],
                 can_use_tool=permission, include_partial_messages=True)
+    if profile == 'history':
+        # Use the official option so the captured initialization matches the
+        # Go Session's explicit request for native child detail forwarding.
+        options.forward_subagent_text = True
     if parameters.get('applicationTool'):
         from claude_agent_sdk import tool, create_sdk_mcp_server
         @tool('fixture_read', 'Read only the synthetic numbers.txt file.', {'path': str})
@@ -214,7 +218,10 @@ async def claude(plan, report, flow):
                     yield {'type': 'user', 'message': {'role': 'user', 'content': content('claude', prompt, parameters.get('inputKind'))}, 'parent_tool_use_id': None}
                 await client.query(structured_input())
             else:
-                await client.query(prompt)
+                if profile == 'history':
+                    await client.query(prompt, session_id='')
+                else:
+                    await client.query(prompt)
             report['inputs'] += 1
             report['receipts'].append({'input-submitted': {'written': True, 'completionObserved': False}})
             interrupted = False
@@ -360,6 +367,9 @@ async def claude(plan, report, flow):
                 raise ValueError('history metadata identity differs from discovered session')
             messages = [serial(x) for x in get_session_messages(item.session_id, directory=plan['project'], limit=100)]
             report['receipts'].append({'get_session_messages': messages})
+            if parameters.get('historyTarget') == 'pagination':
+                from ..history import claude_slices
+                claude_slices(get_session_messages, item.session_id, plan['project'], report)
             if parameters.get('historyTarget') in ('children', 'child-messages'):
                 from claude_agent_sdk import list_subagents, get_subagent_messages
                 agents = list_subagents(item.session_id, directory=plan['project'])

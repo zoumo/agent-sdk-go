@@ -491,10 +491,55 @@
       "storyId": "SDK-US-006",
       "goal": "配置根会话并观察子 Agent 的实际继承情况",
       "required": true,
-      "implementation": "planned",
+      "implementation": "implemented",
+      "name": "simulation-029",
       "execution": {
-        "mode": "planned",
-        "reason": "子 Agent 配置继承的真实录制驱动尚未实现。"
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {}
+      },
+      "inputs": {
+        "input-1": "Use Agent exactly once with subagent_type general-purpose. Ask it to reply with SYNTHETIC_SAVED_CHILD and no tool calls. Wait for it, report its output and finish. Use no other tools, files or network."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [],
+        "missingEvidence": "untriggered",
+        "scope": "配置根会话并观察子 Agent 的实际继承情况。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "history",
+      "parameters": {
+        "historyTarget": "child-messages",
+        "childConfiguration": "model"
       }
     }
   ]

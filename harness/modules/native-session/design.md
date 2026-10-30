@@ -41,7 +41,11 @@ status: stable
 
 ### Session 与交付值
 
-两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams；Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking/effort，以及显式声明的 SDK MCP server 名称。已有连接不再是正常调用必须拼装的订阅对象。所有权在原生派发之前保留，失败明确报告。
+两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams，或以 Resume 指针选择原生 ThreadResumeParams（两者互斥）；Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking/effort，以及显式声明的 SDK MCP server 名称。已有连接不再是正常调用必须拼装的订阅对象。所有权在原生派发之前保留，失败明确报告。
+
+Codex `SessionOptions.Resume *types.ThreadResumeParams` 显式选择已有 thread，要求非空 ThreadID 和空 Thread 创建参数。Open 在派发前保留该身份的所有权及观察队列，接纳恢复应答前后的实时原生事实；仅在恢复应答确认同一身份后返回 Session。旧隔离记录不重新入队。恢复失败不重试、不创建替代 thread；已可能派发的恢复执行一次有界解除附着，失败保留不确定释放屏障，自有连接同时关闭回收。共享连接的其他 Session 不被关闭。
+
+`Session.ResumeResponse()` 独立返回原生恢复应答及其中的保存内容；新建时无恢复应答，恢复时无 StartResponse。保存的 turns 不转换为实时 Receive 事件，不建立子成员或旧审批权限。恢复后的 Submit、Receive、ListSubagents 使用同一个主身份；ListSubagents 仅发现保存关联。恢复是显式原生操作，保留其附着与执行副作用，不承诺纯订阅、自动重连或补齐断线期间事件。
 
 两个 `*Session` 都有以下方法；同名配套类型位于各自运行时包：
 
@@ -239,12 +243,13 @@ ErrInvalidInput 的错误，不忽略、不 clamp、不回退。选项在 Open �
 
 | 原生入口 | 精确范围 |
 |---|---|
-| codex.Open(ctx, codex.SessionOptions{ChildDetailPolicy: …}) | 仅新建的 Session；Client 和 Stdio 两种连接所有权一致。共享 Client 上各 Session 独立。 |
-| codex.Client.ResumeThread(ctx, types.ThreadResumeParams) | 原生低层显式 resume 保持原签名，无 ChildDetailPolicy wire 字段，不新建 Session、不重设现有策略；其附着/执行副作用保留。当前没有 Session 级 resume 构造，本扩展不新增它。 |
+| codex.Open(ctx, codex.SessionOptions{ChildDetailPolicy: …}) | 新建或显式 Resume 的 Session；Client 和 Stdio 两种连接所有权一致。共享 Client 上各 Session 独立。 |
+| codex.Client.ResumeThread(ctx, types.ThreadResumeParams) | 原生低层显式 resume 保持原签名，无 ChildDetailPolicy wire 字段，不新建 Session、不重设现有策略；其附着/执行副作用保留。Session 级恢复由 Open 的 Resume 参数选择，不通过此低层方法先恢复再附着。 |
 | claude.Open(ctx, claude.SessionOptions{ChildDetailPolicy: …}) | claude.Options 同名字段，经现有 SessionOptions 定义传递。零值创建和显式 ResumeID 均在 Open 固定策略；ResumeID 仍是原生恢复请求，不等于历史/纯订阅。 |
 | 两端 Client 原生读取、独立历史及诊断 | 不受该策略影响；无额外 child 输出参数。 |
 
-Claude initialize 必须继续显式发送 forwardSubagentText:true，不能因 suppress 改成
+Claude 默认 initialize 显式发送 forwardSubagentText:true；调用方可用 Initialize 原生选项
+显式选择该字段的值或省略。ChildDetailPolicy 不改写这些初始化选项，不能因 suppress 改成
 false/省略。过滤不是源输出控制，不修改提示词、工具、原生内部结果回父或模型配置。
 省略详细交付不能承诺降低上游 token/运行费用、源帧大小或全部内存使用。
 
@@ -321,7 +326,7 @@ assistant、系统通知和未知帧仍可能含文字/思考/工具内容。调
 
 | 场景 | 公开操作与独立预期 |
 |---|---|
-| 默认与固定策略 | 两原生 Open 未填/空/preserve 的输出逐帧相同；无新 wire 设置；Claude initialize 的 forwardSubagentText 始终 true。非法值在 fake peer 收到启动/RPC 前拒绝。Claude ResumeID + 两策略仍固定本次策略；Codex 低层 ResumeThread 不接受 SDK 策略、不生成新的 Session resume API。 |
+| 默认与固定策略 | 两原生 Open 未填/空/preserve 的输出逐帧相同；交付策略无新 wire 设置；Claude 默认 initialize 的 forwardSubagentText 为 true，显式 Initialize 配置独立于交付策略。非法值在 fake peer 收到启动/RPC 前拒绝。Claude ResumeID + 两策略仍固定本次策略；Codex 低层 ResumeThread 不接受 SDK 策略；Open 的 Resume 固定本次 Session 策略。 |
 | 纯详细帧 | 经原生关系确认后发送矩阵每个白名单方法/shape；preserve 交付，suppress 不交付。根同类帧照常。比较保留帧原始 bytes、来源、重复和 FIFO 相对次序，不能只统计条数。 |
 | 未知与混合帧 | child-before-confirmation 隔离且不回填；已入 Session 但来源不充分的帧保留。加入 unknown 字段/块、decode error、未列方法、known member unknown parent、sibling 和 foreign。mixed 详细+tool_result/关系/terminal/error 整帧与 Raw 不变；身份不从字符串猜。 |
 | 原请求权限 | 过滤开启时真实 child 原审批仍单次 Approve/Deny/Answer，保留取消 context、已答/撤销/终止和 OutcomeUnknown；观察及历史无回答权。普通 tool_use 不变成权限请求；未知来源请求保持原 registry 规则。 |

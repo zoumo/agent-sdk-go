@@ -2,7 +2,19 @@
 
 package types
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+// InitializeOptions selects native initialization fields. A nil Options.Initialize
+// requests forwardSubagentText=true; an explicit value preserves omission of that
+// field. Hooks and agent definitions retain their native JSON representation.
+type InitializeOptions struct {
+	Hooks               json.RawMessage `json:"hooks"`
+	Agents              json.RawMessage `json:"agents,omitempty"`
+	ForwardSubagentText *bool           `json:"forwardSubagentText,omitempty"`
+}
 
 // Limits bounds protocol and control resources. Zero fields select defaults. A bound exceeded
 // by incoming traffic terminates the connection explicitly; frames are not
@@ -38,6 +50,7 @@ type Options struct {
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
 	Thinking      *ThinkingConfig
+	Initialize    *InitializeOptions
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID          string

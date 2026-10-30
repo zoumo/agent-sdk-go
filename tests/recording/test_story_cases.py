@@ -58,12 +58,19 @@ class StoryCaseTests(unittest.TestCase):
 
     def test_unavailable_routes_cannot_be_promoted_by_forged_pass_reports(self):
         for provider in ('codex', 'claude'):
-            cases = case_recipes(provider, stories='SDK-US-008')
-            results = {case['caseId']: {'status': 'passed', 'evidenceLayer': 'protocol-replay'} for case in cases}
-            summary = summarize_story(provider, 'SDK-US-008', results, 'protocol-replay')
-            self.assertEqual(summary['status'], 'partial')
-            self.assertIn('SDK-CASE-035', summary['missingCases'])
-            self.assertIn('SDK-CASE-036', summary['missingCases'])
+            checked = 0
+            for story in story_documents():
+                cases = case_recipes(provider, stories=story['id'])
+                unavailable = [c['caseId'] for c in cases if c['mode'] != 'live-selected-path']
+                if not unavailable:
+                    continue
+                results = {case['caseId']: {'status': 'passed', 'evidenceLayer': 'protocol-replay'} for case in cases}
+                summary = summarize_story(provider, story['id'], results, 'protocol-replay')
+                self.assertEqual(summary['status'], 'partial')
+                for case_id in unavailable:
+                    self.assertIn(case_id, summary['missingCases'])
+                    checked += 1
+            self.assertGreater(checked, 0)
 
     def test_catalog_retains_stable_stories_and_all_small_validation_targets(self):
         stories = story_documents()

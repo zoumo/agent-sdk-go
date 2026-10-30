@@ -31,7 +31,7 @@ class SimulationCatalogTests(unittest.TestCase):
             shutil.copytree(CATALOG, directory)
             path = directory / 'bindings/codex.json'
             bindings = json.loads(path.read_text())
-            bindings['cases']['SDK-CASE-033']['execution']['reason'] = ''
+            bindings['cases']['SDK-CASE-033']['execution'] = {'mode': 'planned', 'reason': ''}
             path.write_text(json.dumps(bindings))
             result = self.catalog('--provider', 'codex', '--cases', 'SDK-CASE-033', directory=directory)
             self.assertNotEqual(result.returncode, 0)
@@ -45,7 +45,7 @@ class SimulationCatalogTests(unittest.TestCase):
         c, a = by_id(codex), by_id(claude)
         self.assertEqual(c['SDK-CASE-003']['mode'], 'unsupported')
         self.assertEqual(a['SDK-CASE-017']['mode'], 'unsupported')
-        self.assertEqual(c['SDK-CASE-033']['mode'], 'planned')
+        self.assertEqual(c['SDK-CASE-033']['mode'], 'live-selected-path')
         self.assertEqual(a['SDK-CASE-033']['driverProfile'], 'history')
         self.assertEqual(c['SDK-CASE-031']['driverProfile'], 'session-close')
         for cases in (codex, claude):
@@ -54,8 +54,11 @@ class SimulationCatalogTests(unittest.TestCase):
                     self.assertTrue(case['reason'].strip(), case['caseId'])
                     self.assertEqual(case['prompts'], [])
                     self.assertEqual(case['steps'], [])
-        self.assertEqual(c['SDK-CASE-035']['implementation'], 'planned')
-        self.assertIsNone(c['SDK-CASE-035']['driverProfile'])
+        self.assertEqual(c['SDK-CASE-035']['mode'], 'live-selected-path')
+        self.assertEqual(a['SDK-CASE-035']['driverProfile'], 'existing-children')
+        self.assertEqual(a['SDK-CASE-035']['prompts'], [])
+        self.assertEqual(a['SDK-CASE-035']['steps'], [
+            {'op': 'session.open'}, {'op': 'history.discover'}, {'op': 'session.close'}])
 
     def test_story_and_case_selection_intersect_without_fallback(self):
         result = self.catalog('--provider', 'claude', '--stories', 'SDK-US-008', '--cases', 'SDK-CASE-033')

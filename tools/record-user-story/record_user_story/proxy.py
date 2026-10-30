@@ -63,10 +63,15 @@ def run(plan):
     peer = planned_identity(plan, os.environ.get('AGENT_MOCK_BIN'))
     limits = plan.get('capturePolicy', {})
     root, raw = Path(plan['root']), Path(plan['raw'])
+    native_cwd = plan['project']
+    if plan['driverProfile'] == 'existing-children':
+        from .existing_children import verify_seed
+        verify_seed(plan)
+        native_cwd = plan['historyProject']
     if raw.exists():
         raise ValueError('Go record requires a new raw output directory')
     private_json(root / 'native.started', {'reserved': True, 'agentMock': peer})
-    command = [peer['path'], 'record', '--output', str(raw), '--cwd', plan['project'],
+    command = [peer['path'], 'record', '--output', str(raw), '--cwd', native_cwd,
                '--native-version', plan.get('cliVersion', ''),
                '--timeout', str(limits.get('timeoutSeconds', 0)),
                '--protocol-bytes', str(limits.get('protocolBytes', 0)),

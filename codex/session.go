@@ -17,10 +17,12 @@ var ErrInvalidInput = errors.New("codex: invalid or unsupported input")
 
 // SessionOptions selects an existing connection or an explicitly owned process.
 // Exactly one of Client or Stdio must be supplied. Thread uses native start options.
+// Resume selects an existing thread instead; Thread must then be empty.
 type SessionOptions struct {
 	Client *Client
 	Stdio  *StdioOptions
 	Thread types.ThreadStartParams
+	Resume *types.ThreadResumeParams
 	// ChildDetailPolicy fixes optional confirmed-child progress delivery for this Session.
 	ChildDetailPolicy ChildDetailPolicy
 	// MaxMembers bounds observation identities independently of parent knowledge.
@@ -60,6 +62,7 @@ type InterruptOptions struct{ TurnID string }
 // except cleanupOnce/cleanupErr is protected by the connection mutex.
 type Session struct {
 	startRaw          json.RawMessage
+	resumeRaw         json.RawMessage
 	client            *Client
 	root              string
 	owned             bool
@@ -82,6 +85,15 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	}
 	if ctx == nil {
 		return nil, errors.New("codex: nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if options.Resume != nil {
+		raw, err := json.Marshal(options.Thread)
+		if err != nil || string(raw) != "{}" || options.Resume.ThreadID == "" {
+			return nil, fmt.Errorf("%w: resume requires a thread ID and no start options", ErrInvalidInput)
+		}
 	}
 	if (options.Client == nil) == (options.Stdio == nil) {
 		return nil, errors.New("codex: select Client or Stdio")
@@ -126,22 +138,26 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	defer func() { c.mu.Lock(); c.sessionReservations--; c.mu.Unlock() }()
 	lifetime, cancel := context.WithCancel(context.Background())
 	s := &Session{client: c, owned: owned, done: lifetime.Done(), cancel: cancel, parents: graph, members: make(map[string]struct{}), maxMembers: options.MaxMembers, childDetailPolicy: options.ChildDetailPolicy}
-	var response types.ThreadStartResponse
-	err = c.callAccept(ctx, "thread/start", options.Thread, &response, false, func(raw json.RawMessage) error {
-		var r types.ThreadStartResponse
-		if err := json.Unmarshal(raw, &r); err != nil {
-			return err
-		}
-		if r.Thread.ID == "" {
-			return ErrProtocol
-		}
-		if err := s.bindLocked(r.Thread.ID); err != nil {
-			return err
-		}
-		c.attachments[r.Thread.ID].managed = true
-		s.startRaw = append(json.RawMessage(nil), raw...)
-		return nil
-	})
+	if options.Resume != nil {
+		err = s.resume(ctx, *options.Resume)
+	} else {
+		var response types.ThreadStartResponse
+		err = c.callAccept(ctx, "thread/start", options.Thread, &response, false, func(raw json.RawMessage) error {
+			var r types.ThreadStartResponse
+			if err := json.Unmarshal(raw, &r); err != nil {
+				return err
+			}
+			if r.Thread.ID == "" {
+				return ErrProtocol
+			}
+			if err := s.bindLocked(r.Thread.ID); err != nil {
+				return err
+			}
+			c.attachments[r.Thread.ID].managed = true
+			s.startRaw = append(json.RawMessage(nil), raw...)
+			return nil
+		})
+	}
 	if err != nil {
 		cancel()
 		if owned {

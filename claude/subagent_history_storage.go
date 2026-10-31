@@ -2,7 +2,6 @@ package claude
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"io"
 	"os"
@@ -17,13 +16,6 @@ type childDirectory struct {
 	info    os.FileInfo
 	entries map[string]os.FileInfo
 }
-type childSource struct {
-	parent     *childDirectory
-	name, path string
-	file       *os.File
-	info       os.FileInfo
-	hash       [32]byte
-}
 type childCandidate struct {
 	agent  string
 	parent *childDirectory
@@ -37,7 +29,7 @@ type childQuery struct {
 	c       *SubagentHistoryCoverage
 	root    *os.Root
 	dirs    []*childDirectory
-	files   []childSource
+	files   []*querySource
 	absent  []struct {
 		parent *childDirectory
 		name   string
@@ -46,7 +38,7 @@ type childQuery struct {
 
 func (q *childQuery) close() {
 	for _, f := range q.files {
-		_ = f.file.Close()
+		_ = f.close()
 	}
 	for i := len(q.dirs) - 1; i >= 0; i-- {
 		_ = q.dirs[i].root.Close()
@@ -272,47 +264,22 @@ func (q *childQuery) read(parent *childDirectory, name string, sidecar bool) ([]
 	if q.c.Files >= q.c.Limits.MaxFiles {
 		return nil, queryError("resource-limit", path, "files read", nil)
 	}
-	st, e := parent.root.Lstat(name)
-	if e != nil {
-		return nil, queryAccess(path, e)
-	}
-	if !st.Mode().IsRegular() {
-		return nil, queryError("unsupported", path, "non-regular source", ErrUnsupported)
-	}
-	if original, ok := parent.entries[name]; ok && (!os.SameFile(original, st) || original.Size() != st.Size() || !original.ModTime().Equal(st.ModTime())) {
-		return nil, queryError("changed", path, "source changed after inventory", nil)
-	}
 	limit := q.c.Limits.MaxBytes - q.c.Bytes
 	if sidecar {
 		limit = min(limit, q.c.Limits.MaxSidecarBytes, int64(q.c.Limits.MaxLineBytes))
 	}
-	if st.Size() > limit {
-		return nil, queryError("resource-limit", path, "source bytes", nil)
-	}
-	f, e := openDiscoveryFile(parent.root, name)
+	source, e := openQuerySource(q.ctx, q.root, parent.root, relative, parent.entries[name])
 	if e != nil {
-		if errors.Is(e, ErrUnsupported) {
-			return nil, queryError("unsupported", path, "local query platform", e)
-		}
-		return nil, queryAccess(path, e)
+		return nil, e
 	}
-	info, e := f.Stat()
+	data, e := source.readAll(limit)
 	if e != nil {
-		f.Close()
-		return nil, queryAccess(path, e)
-	}
-	if !os.SameFile(st, info) || !info.Mode().IsRegular() || info.Size() != st.Size() {
-		f.Close()
-		return nil, queryError("changed", path, "source replaced during open", nil)
-	}
-	data, e := readQueryRange(q.ctx, f, 0, info.Size())
-	if e != nil {
-		f.Close()
+		source.close()
 		return nil, e
 	}
 	q.c.Bytes += int64(len(data))
 	q.c.Files++
-	q.files = append(q.files, childSource{parent, name, relative, f, info, sha256.Sum256(data)})
+	q.files = append(q.files, source)
 	return data, nil
 }
 func (q *childQuery) load(candidate childCandidate, chain bool) (SubagentInfo, []SessionMessage, error) {
@@ -405,7 +372,7 @@ func (q *childQuery) verify() error {
 		}
 	}
 	for _, f := range q.files {
-		if e := verifyQuerySource(q.ctx, f.file, q.root, f.path, f.info, f.hash); e != nil {
+		if e := f.verify(); e != nil {
 			return e
 		}
 	}

@@ -3,7 +3,6 @@ package claude
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -148,33 +147,12 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 	defer projectRoot.Close()
 	page.Coverage.Path = filepath.Join(o.Scope.ConfigDir, "projects", rel)
 	page.Coverage.Status = "partial"
-	name := filepath.Base(rel)
-	st, e := projectRoot.Lstat(name)
+	source, e := openQuerySource(ctx, root, projectRoot, filepath.Join("projects", rel), nil)
 	if e != nil {
-		return page, queryAccess(page.Coverage.Path, e)
+		return page, e
 	}
-	if !st.Mode().IsRegular() {
-		return page, queryError("unsupported", page.Coverage.Path, "not a regular file", ErrUnsupported)
-	}
-	f, e := openDiscoveryFile(projectRoot, name)
-	if e != nil {
-		if errors.Is(e, ErrUnsupported) {
-			return page, queryError("unsupported", page.Coverage.Path, "local query platform", e)
-		}
-		return page, queryAccess(page.Coverage.Path, e)
-	}
-	defer f.Close()
-	initial, e := f.Stat()
-	if e != nil {
-		return page, queryAccess(page.Coverage.Path, e)
-	}
-	if !os.SameFile(st, initial) || !initial.Mode().IsRegular() {
-		return page, queryError("changed", page.Coverage.Path, "file changed during open", nil)
-	}
-	if initial.Size() > o.MaxBytes {
-		return page, queryError("resource-limit", page.Coverage.Path, "source bytes", nil)
-	}
-	data, e := readQueryRange(ctx, f, 0, initial.Size())
+	defer source.close()
+	data, e := source.readAll(o.MaxBytes)
 	if e != nil {
 		return page, e
 	}
@@ -201,34 +179,11 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 		visible++
 	}
 	// Verify the entire original prefix and file identity, not only returned rows.
-	if e = verifyQuerySource(ctx, f, root, filepath.Join("projects", rel), initial, sha256.Sum256(data)); e != nil {
+	if e = source.verify(); e != nil {
 		return page, e
 	}
 	page.Coverage.Status = "complete"
 	return page, nil
-}
-
-func readQueryRange(ctx context.Context, f *os.File, start, size int64) ([]byte, error) {
-	var b bytes.Buffer
-	r := io.NewSectionReader(f, start, size)
-	chunk := make([]byte, 64<<10)
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		n, e := r.Read(chunk)
-		b.Write(chunk[:n])
-		if e == io.EOF {
-			break
-		}
-		if e != nil {
-			return nil, e
-		}
-	}
-	if int64(b.Len()) != size {
-		return nil, queryError("changed", f.Name(), "source shortened", io.ErrUnexpectedEOF)
-	}
-	return b.Bytes(), nil
 }
 
 // Each directory is pinned separately. In-tree symlinks are rejected, including
@@ -314,27 +269,6 @@ func locateQuerySource(ctx context.Context, projects *os.Root, key, name string,
 		return fail(queryError("missing", name, "session not found in declared project scope", os.ErrNotExist))
 	}
 	return found, path, nil
-}
-
-// Verify using both the pinned source handle and the original root-relative
-// pathname, so replacement of an ancestor directory is also observable.
-func verifyQuerySource(ctx context.Context, f *os.File, root *os.Root, path string, initial os.FileInfo, digest [32]byte) error {
-	again, e := readQueryRange(ctx, f, 0, initial.Size())
-	if e != nil {
-		return e
-	}
-	final, e := f.Stat()
-	if e != nil {
-		return queryAccess(path, e)
-	}
-	current, e := root.Lstat(path)
-	if e != nil {
-		return queryError("changed", path, "source removed/replaced", e)
-	}
-	if !os.SameFile(initial, current) || final.Size() != initial.Size() || current.Size() != initial.Size() || !final.ModTime().Equal(initial.ModTime()) || digest != sha256.Sum256(again) {
-		return queryError("changed", path, "source append/rewrite/replacement observed", nil)
-	}
-	return ctx.Err()
 }
 
 // Shared scope resolution for messages, metadata and discovery. No default

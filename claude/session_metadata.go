@@ -272,60 +272,26 @@ func metadataEntries(ctx context.Context, root *os.Root, path string, c *Session
 
 func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id string, o ListSessionsOptions, c *SessionMetadataCoverage) (*SessionInfo, error) {
 	path := filepath.Join(o.Scope.ConfigDir, "projects", rel)
-	name := filepath.Base(rel)
 	info := &SessionInfo{SessionID: id, Path: path, Running: "unknown", Records: []json.RawMessage{}}
-	st, e := project.Lstat(name)
-	if e != nil {
-		return info, queryAccess(path, e)
+	source, e := openQuerySource(ctx, root, project, filepath.Join("projects", rel), nil)
+	if source.info != nil {
+		info.LastModified = source.info.ModTime()
+		info.FileSize = source.info.Size()
 	}
-	if !st.Mode().IsRegular() {
-		return info, queryError("unsupported", path, "not a regular file", ErrUnsupported)
-	}
-	info.LastModified = st.ModTime()
-	info.FileSize = st.Size()
-	f, e := openDiscoveryFile(project, name)
-	if e != nil {
-		if errors.Is(e, ErrUnsupported) {
-			return info, queryError("unsupported", path, "local metadata platform", e)
-		}
-		return info, queryAccess(path, e)
-	}
-	defer f.Close()
-	initial, e := f.Stat()
-	if e != nil {
-		return info, queryAccess(path, e)
-	}
-	if !initial.Mode().IsRegular() || !os.SameFile(st, initial) {
-		return info, queryError("changed", path, "source changed during open", nil)
-	}
-	info.LastModified = initial.ModTime()
-	info.FileSize = initial.Size()
-	headSize := min(initial.Size(), o.SampleBytes)
-	tailStart := max(headSize, initial.Size()-o.SampleBytes)
-	// Include the byte before a separated tail window to distinguish a whole
-	// first line from a fragment. The probe counts toward the read budget and
-	// source verification, but is not part of the caller's raw Tail window.
-	tailReadStart := tailStart
-	if tailStart > headSize {
-		tailReadStart--
-	}
-	tailSize := initial.Size() - tailReadStart
-	if headSize > o.MaxBytes-c.Bytes || tailSize > o.MaxBytes-c.Bytes-headSize {
-		return info, queryError("resource-limit", path, "metadata sample bytes", nil)
-	}
-	head, e := readQueryRange(ctx, f, 0, headSize)
 	if e != nil {
 		return info, e
 	}
-	tail, e := readQueryRange(ctx, f, tailReadStart, tailSize)
+	defer source.close()
+	sample, e := source.sample(o.SampleBytes, o.MaxBytes-c.Bytes)
 	if e != nil {
 		return info, e
 	}
+	head, tail := sample.head, sample.tail
 	c.Bytes += int64(len(head) + len(tail))
 	c.Files++
 	info.Head = head
 	info.Tail = tail
-	info.Sampled = tailStart > headSize
+	info.Sampled = sample.sampled
 	if info.Sampled {
 		info.Tail = tail[1:]
 	}
@@ -339,7 +305,7 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 		parseErr = errors.Join(parseErr, tailErr)
 	}
 	parseErr = errors.Join(parseErr, extractSessionMetadata(ctx, info, headRecords))
-	e = verifyMetadataSource(ctx, f, root, filepath.Join("projects", rel), initial, head, tail, tailReadStart)
+	e = source.verify()
 	if err := errors.Join(parseErr, e); err != nil {
 		return info, err
 	}
@@ -355,29 +321,6 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	}
 	return info, nil
 }
-func verifyMetadataSource(ctx context.Context, f *os.File, root *os.Root, path string, initial os.FileInfo, head, tail []byte, tailStart int64) error {
-	h, e := readQueryRange(ctx, f, 0, int64(len(head)))
-	if e != nil {
-		return e
-	}
-	t, e := readQueryRange(ctx, f, tailStart, int64(len(tail)))
-	if e != nil {
-		return e
-	}
-	final, e := f.Stat()
-	if e != nil {
-		return queryAccess(path, e)
-	}
-	current, e := root.Lstat(path)
-	if e != nil {
-		return queryError("changed", path, "source removed/replaced", e)
-	}
-	if !os.SameFile(initial, current) || final.Size() != initial.Size() || current.Size() != initial.Size() || !final.ModTime().Equal(initial.ModTime()) || !current.ModTime().Equal(initial.ModTime()) || !bytes.Equal(h, head) || !bytes.Equal(t, tail) {
-		return queryError("changed", path, "metadata source changed", nil)
-	}
-	return ctx.Err()
-}
-
 func parseSessionMetadata(ctx context.Context, info *SessionInfo, data []byte, head, tail bool, headLimit int, o ListSessionsOptions, c *SessionMetadataCoverage) (headRecords int, err error) {
 	if tail && len(data) > 0 && data[len(data)-1] != '\n' {
 		return headRecords, queryError("corrupt", info.Path, "incomplete final metadata line", nil)

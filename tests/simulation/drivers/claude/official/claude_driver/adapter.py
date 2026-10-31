@@ -158,7 +158,7 @@ async def claude(plan, report, flow):
         used.add(tool)
         return PermissionResultAllow(updated_input=values)
 
-    options = ClaudeAgentOptions(cwd=plan['project'],
+    options = ClaudeAgentOptions(cwd=plan.get('_fixtureProject', plan['project']),
                 can_use_tool=permission, include_partial_messages=True)
     if profile == 'history':
         # Use the official option so the captured initialization matches the
@@ -354,30 +354,30 @@ async def claude(plan, report, flow):
             raise ValueError('post-close official SDK query unexpectedly accepted')
     if profile == 'history':
         from claude_agent_sdk import list_sessions, get_session_info, get_session_messages
-        saved = list_sessions(directory=plan['project'], limit=10, include_worktrees=False)
+        saved = list_sessions(directory=plan.get('_fixtureProject', plan['project']), limit=10, include_worktrees=False)
         report['receipts'].append({'list_sessions': [serial(x) for x in saved]})
         if not saved:
             raise Untriggered('official SDK found no saved session')
         for item in saved:
-            info = get_session_info(item.session_id, directory=plan['project'])
+            info = get_session_info(item.session_id, directory=plan.get('_fixtureProject', plan['project']))
             report['receipts'].append({'get_session_info': serial(info)})
             if info is None:
                 raise Untriggered('discovered session has no readable metadata')
             if info.session_id != item.session_id:
                 raise ValueError('history metadata identity differs from discovered session')
-            messages = [serial(x) for x in get_session_messages(item.session_id, directory=plan['project'], limit=100)]
+            messages = [serial(x) for x in get_session_messages(item.session_id, directory=plan.get('_fixtureProject', plan['project']), limit=100)]
             report['receipts'].append({'get_session_messages': messages})
             if parameters.get('historyTarget') == 'pagination':
                 from record_user_story.history import claude_slices
-                claude_slices(get_session_messages, item.session_id, plan['project'], report)
+                claude_slices(get_session_messages, item.session_id, plan.get('_fixtureProject', plan['project']), report)
             if parameters.get('historyTarget') in ('children', 'child-messages'):
                 from claude_agent_sdk import list_subagents, get_subagent_messages
-                agents = list_subagents(item.session_id, directory=plan['project'])
+                agents = list_subagents(item.session_id, directory=plan.get('_fixtureProject', plan['project']))
                 report['receipts'].append({'list_subagents': {'sessionId': item.session_id, 'agentIds': agents}})
                 if not agents:
                     raise Untriggered('no saved native child discovered independently')
                 if parameters['historyTarget'] == 'child-messages':
-                    child_messages = [serial(x) for x in get_subagent_messages(item.session_id, agents[0], directory=plan['project'], limit=100)]
+                    child_messages = [serial(x) for x in get_subagent_messages(item.session_id, agents[0], directory=plan.get('_fixtureProject', plan['project']), limit=100)]
                     report['receipts'].append({'get_subagent_messages': {'sessionId': item.session_id, 'agentId': agents[0], 'messages': child_messages}})
                     if not child_messages:
                         raise Untriggered('saved child has no visible native messages')

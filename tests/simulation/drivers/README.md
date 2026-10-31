@@ -77,8 +77,53 @@ manifest.json、原始 raw、原生历史、driver 诊断与结果），以及�
 目录及其 summary/result 和每个选中连接的完整消费回执。调用方记录这些目录、源码
 revision 和使用的构建产物；source manifest 中的实际文件清单和哈希是来源依据。
 保存失败目录及 native ID/cwd，不修改原始帧，不把旧 driver 快照当执行入口。
-审核决定、数据索引、可迁移性与覆盖门禁由第二阶段负责，本入口不自动入库。
+审核决定、数据索引、可迁移性与覆盖门禁由下面的 corpus 入口负责，录制和回放不会自动入库。
 Go SDK 通过不是有效样本入库条件；入库后的仿真失败保留有效样本并阻断 SDK 门禁。
+
+### 审核采用和日常门禁
+
+```sh
+# After a completed official capture and a fresh official replay:
+bash scripts/simulation.sh review --source /private/capture --replay /private/official-replay --review /private/review.json
+# Inspect every selected file and its origin. Edit the generated review manually:
+# origin=real-agent, reviewer, reviewedAt (ISO 8601), and the three *Reviewed flags.
+bash scripts/simulation.sh adopt --source /private/capture --replay /private/official-replay --review /private/review.json
+# Every code change: rebuild current Go binaries and simulate the fixed corpus.
+bash scripts/simulation.sh gate
+mise exec -- bash scripts/check-offline.sh
+```
+
+`review` 只生成未批准的清单，不自动确认来源或发布权限。审核者核对完整来源、原生执行身份、
+官方 SDK 身份、业务结果、敏感内容和每个 `publishFiles`；三个审核标记须明确为 true。
+`captureFiles` 冻结完整原件，`replayFiles` 冻结官方业务报告、summary/result 和所有连接回执。
+官方 replay 的 summary 必须绑定原始 plan/manifest/report/result/summary；旧回执缺少绑定时，
+使用当前官方 driver 重新离线回放，不能补写成功回执。
+机器规则不能识别蓄意伪造的整套来源声明；真实性依赖具名的来源审核，不能用合成测试替代。
+
+`adopt` 先将完整原件保存到持久数据根的 `archives/<attempt>/capture/`，拒绝的尝试也留存。
+数据根与录制入口一致：AGENT_SDK_TESTIFY_DATA_DIR，或 XDG_DATA_HOME/agent-sdk-testify，
+默认 ~/.local/share/agent-sdk-testify；原件归档不依赖当前 worktree 的存续。
+可用 `--archive` 选择另一个持久私有目录。在 checkout 内只允许被 Git 忽略的 `.artifacts`。
+原始采集包不会整体发布，只有审核选中的必需材料进入
+`tests/simulation/recordings/<provider>/<story>/<case>/<attempt>/`，并更新固定 index。
+`adoption.json` 关联原件哈希、归档 ID 和公开文件清单；完整 review 同时保存。
+入库原件不做字节转换，初始文件来自 plan，历史来自经过校验的 config/history-seed 副本。
+两类官方驱动均在新 workspace 启动 SDK 子进程，Codex 原生请求的 cwd 参数仍保留原值。
+Claude 运行时也使用新 workspace，并按新目录键派生本地历史副本，仅替换顶层 cwd。
+原始 cwd/ID、raw、plan 和历史保持原样；materialization.json 保存来源／派生路径及哈希，
+官方回放审核和 Go 门禁都校验该记录及派生文件，支持旧 cwd 已不存在的环境。
+已有入库样本不能由该命令替换；新的失败尝试不会删除旧样本。
+`--index` 支持在独立目录验证完整固定索引，不支持缩小必需集合。
+
+`gate` 总是构建当前 Go SDK/driver，校验固定索引与采用哈希，再用统一运行器批量 simulate。
+它不要求安装官方 SDK、认证或真实 CLI。覆盖报告独立保存在
+`.artifacts/simulation/gates/<attempt>/coverage.json`，记录当前源码及二进制哈希。
+required/planned/unsupported 是要求，admitted/missing/untriggered 是数据状态，passed/failed 是
+本次验证结果。空集、缺样本、内容漂移和 Go 失败都会返回非零；通过可用子集不能通过固定门禁。
+采用后 Go 失败仍保留样本；应检查 SDK/driver，不能改帧、放宽协议匹配或弃样。
+`check-offline.sh` 包含该门禁，CI 即使缺样本仍继续打包、race 和 vet，并保存覆盖与诊断。
+当前固定覆盖为 67 required、2 planned、3 unsupported；仓库尚未附带真实样本，
+因此真实仿真门禁会如实失败，工具的合成测试通过不代表真实 corpus 通过。
 
 未指定 --output 时，输出保存在 AGENT_SDK_TESTIFY_DATA_DIR/attempts/<mode>/attempt-*；
 数据根默认 XDG_DATA_HOME/agent-sdk-testify，或 ~/.local/share/agent-sdk-testify。

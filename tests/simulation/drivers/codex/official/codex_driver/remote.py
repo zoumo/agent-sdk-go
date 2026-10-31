@@ -39,7 +39,7 @@ def codex(plan, report, flow):
         peer = plan['_peer'] if phase == 'main' else plan['_peer']['probe']
         return CodexClient(config=CodexConfig(
             launch_args_override=tuple([peer['command'], *peer.get('args', [])]),
-            cwd=plan['project'], client_name='official-python-remote-case',
+            cwd=plan.get('_fixtureProject', plan['project']), client_name='official-python-remote-case',
             client_title='Remote connection close'))
 
     with client('main') as first:

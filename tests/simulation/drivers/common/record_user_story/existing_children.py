@@ -85,7 +85,8 @@ async def observe_claude(plan, report):
             if self.proc and self.proc.returncode:
                 raise RuntimeError('existing-child observation transport failed')
 
-    options = ClaudeAgentOptions(cwd=plan['historyProject'], resume=seed['sessionId'], forward_subagent_text=True)
+    execution_project = plan.get('_fixtureProject', plan['historyProject']) if not check_source else plan['historyProject']
+    options = ClaudeAgentOptions(cwd=execution_project, resume=seed['sessionId'], forward_subagent_text=True)
     async with ClaudeSDKClient(options=options, transport=RawTransport()) as client:
         async def wait_observed():
             async for event in client.receive_messages():
@@ -104,7 +105,7 @@ async def observe_claude(plan, report):
             raise Untriggered('resume ended without observed native parent')
         report['receipts'].append({'existing-observation': observed})
         verify_seed(plan, check_source=check_source)
-        agents = list_subagents(seed['sessionId'], directory=plan['historyProject'])
+        agents = list_subagents(seed['sessionId'], directory=execution_project)
         if agents != seed['agentIds']:
             raise Untriggered('resumed observation did not discover the exact pre-existing children')
         report['receipts'].append({'existing-children': {'sessionId': seed['sessionId'], 'agentIds': agents,

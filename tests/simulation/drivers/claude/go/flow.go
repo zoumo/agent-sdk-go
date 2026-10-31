@@ -23,6 +23,7 @@ import (
 func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Project, Config, Model, DriverProfile string
+		FixtureProject                        string `json:"_fixtureProject"`
 		Args                                  []string
 	}
 	b, err := os.ReadFile(filepath.Join(root, "plan.json"))
@@ -145,7 +146,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 		}
 		return nil
 	}
-	options := claude.SessionOptions{ChildDetailPolicy: policy, CLIPath: launcher, WorkDir: plan.Project, Model: plan.Model, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &init, SDKMCPServers: servers}
+	options := claude.SessionOptions{ChildDetailPolicy: policy, CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject), Model: plan.Model, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &init, SDKMCPServers: servers}
 	for i := 0; i < len(plan.Args); i++ {
 		name, value, inline := strings.Cut(plan.Args[i], "=")
 		if name != "--model" && name != "--effort" && name != "--max-thinking-tokens" {
@@ -395,4 +396,12 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 		return errors.New("closed Session accepted input")
 	}
 	return nil
+}
+
+// Runtime workspace is distinct from the frozen native source identity.
+func executionProject(original, fixture string) string {
+	if fixture != "" {
+		return fixture
+	}
+	return original
 }

@@ -70,7 +70,7 @@ def codex(plan, report, flow):
             return {'decision': 'accept'}
         raise NotImplementedError('unsupported native request: ' + method)
 
-    config = CodexConfig(launch_args_override=tuple(proxy_command(plan)), cwd=plan['project'],
+    config = CodexConfig(launch_args_override=tuple(proxy_command(plan)), cwd=plan.get('_fixtureProject', plan['project']),
                          client_name='official-python-story-recorder', client_title='Protocol recording')
     with CodexClient(config=config, approval_handler=answer) as client:
         report['receipts'].append({'initialize': serial(client.initialize())})

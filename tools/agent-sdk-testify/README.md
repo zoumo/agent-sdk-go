@@ -183,5 +183,7 @@ mise exec -- bash scripts/with-agent-sdk-testify.sh go test ./tools/agent-sdk-te
 Runner tests use a synthetic native process and the real Go record/mock executable.
 They check fresh environments, unchanged source data, different tool identities,
 driver errors, false pass reports, capture completion and cancellation. Private
-real recordings can be supplied to replay/simulate; they are not bundled into CI.
+reviewed real recordings are indexed by the required corpus gate. See the
+[adoption and gate commands](../../tests/simulation/drivers/README.md#审核采用和日常门禁).
+Missing required data fails CI; synthetic tool tests do not fill that gap.
 Actual real-Agent execution is not implied by an offline or synthetic test pass.

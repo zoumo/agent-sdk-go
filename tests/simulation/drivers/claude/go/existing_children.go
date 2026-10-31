@@ -23,6 +23,7 @@ import (
 func AcceptExistingChildren(ctx context.Context, launcher, root string) (err error) {
 	var plan struct {
 		Project, Config, HistoryProject string
+		FixtureProject                  string `json:"_fixtureProject"`
 		HistorySeed                     struct {
 			SessionID     string
 			SourceProject string
@@ -105,7 +106,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if requests != 1 {
 		return errors.New("existing-child recording requires exactly one initialization")
 	}
-	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: plan.HistoryProject,
+	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: executionProject(plan.HistoryProject, plan.FixtureProject),
 		ResumeID: seed.SessionID, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}})
 	if err != nil {
 		return err

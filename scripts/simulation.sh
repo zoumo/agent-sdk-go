@@ -9,6 +9,7 @@ usage() {
 Usage: bash scripts/simulation.sh build
        bash scripts/simulation.sh record|replay codex|claude [runner flags]
        bash scripts/simulation.sh simulate [runner flags]
+       bash scripts/simulation.sh review|adopt|gate [corpus flags]
 Build creates agent-sdk-testify, sdk-driver, and the official-driver wheel.
 Set AGENT_SDK_TESTIFY_BUILD_DIR to choose the build directory; PYTHON selects
 the Python 3.11+ build interpreter (setuptools>=68 must already be installed).
@@ -18,6 +19,9 @@ Each operation is explicit and independent. Runner flags pass through unchanged.
 USAGE
 }
 case "${1:---help}" in
+  review|adopt|gate)
+    exec "$simulation_python" "$simulation_source/scripts/simulation-corpus.py" "$@"
+    ;;
   build)
     [[ $# == 1 ]] || { usage >&2; exit 2; }
     mkdir -p "$simulation_build"

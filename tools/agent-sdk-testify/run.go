@@ -23,6 +23,20 @@ func run(ctx context.Context, o options) (object, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Bind offline receipts to the source before replacing runtime paths. A raw
+	// hash alone cannot prove that official replay used this plan and history.
+	source := object{}
+	if o.Mode != "record" {
+		for _, name := range []string{"plan.json", "manifest.json", "report.json", "result.json", "summary.json"} {
+			digest, e := fileDigest(filepath.Join(o.Materials, name))
+			if e != nil && !os.IsNotExist(e) {
+				return nil, e
+			}
+			if e == nil {
+				source[name] = digest
+			}
+		}
+	}
 	// Legacy plans remain source evidence; stale runtime entries are not driver inputs.
 	delete(plan, "_mock")
 	delete(plan, "_peers")
@@ -51,6 +65,11 @@ func run(ctx context.Context, o options) (object, error) {
 	}
 	if err = copySaved(o.Materials, root); err != nil {
 		return nil, err
+	}
+	if o.Mode != "record" && provider == "claude" {
+		if err = materializeClaude(o.Materials, root, workspace, plan); err != nil {
+			return nil, err
+		}
 	}
 	if o.Mode == "record" && plan["driverProfile"] == "existing-children" && o.HistorySeed != "" {
 		if err = prepareHistorySeed(o.HistorySeed, root, plan); err != nil {
@@ -165,6 +184,12 @@ func run(ctx context.Context, o options) (object, error) {
 	}
 	runErr = errors.Join(runErr, resultErr, transportErr, scrubNative(root))
 	summary := object{"case": req.Case, "provider": provider, "mode": o.Mode, "result": outcome, "output": o.Output}
+	if o.Mode != "record" {
+		summary["source"] = source
+		if digest, e := fileDigest(filepath.Join(root, "materialization.json")); e == nil {
+			summary["materializationSHA256"] = digest
+		}
+	}
 	if runErr != nil {
 		summary["error"] = runErr.Error()
 	}

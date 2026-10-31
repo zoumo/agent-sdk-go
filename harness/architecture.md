@@ -105,7 +105,7 @@ direct asset references and evidence limits, and link back to these layout rules
 
 ### Simulation data and integration fixtures
 
-Simulation attempts are private datasets outside Git, grouped by `<story-id>/<case-id>/`.
+Simulation attempts are complete private datasets outside tracked Git content. Reviewed regression materials live under `tests/simulation/recordings/<provider>/<story-id>/<case-id>/<attempt>/`; `tests/simulation/recordings/index.json` owns the fixed required coverage and adoption references. The corpus CLI preserves private originals separately from the reviewed subset.
 Source identity, observed versions, raw hashes, sanitization and publication
 review follow the [recording data contract](modules/agent-sdk-testify/design.md#story-数据格式与存储).
 Preserve original bytes and provenance when moving data; synthetic data must never

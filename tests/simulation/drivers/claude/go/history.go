@@ -18,7 +18,10 @@ import (
 // AcceptSavedHistory uses a real captured mock process for Session execution,
 // then the public local-history API for the captured immutable saved files.
 func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
-	var plan struct{ Project, Config, DriverProfile string }
+	var plan struct {
+		Project, Config, DriverProfile string
+		FixtureProject                 string `json:"_fixtureProject"`
+	}
 	b, err := os.ReadFile(filepath.Join(root, "plan.json"))
 	if err != nil {
 		return err
@@ -73,7 +76,7 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	if len(inputs) == 0 || len(inputs) != len(terminals) {
 		return errors.New("history setup inputs/results differ")
 	}
-	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: plan.Project,
+	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject),
 		Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &initialize, ChildDetailPolicy: policy})
 	if err != nil {
 		return err
@@ -121,7 +124,7 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	if plan.DriverProfile == "continuation" {
 		return nil
 	}
-	scope := claude.SessionQueryScope{ConfigDir: plan.Config, ProjectDir: plan.Project}
+	scope := claude.SessionQueryScope{ConfigDir: plan.Config, ProjectDir: executionProject(plan.Project, plan.FixtureProject)}
 	listed, err := claude.ListSessions(ctx, claude.ListSessionsOptions{Scope: scope})
 	if err != nil {
 		return err

@@ -359,14 +359,18 @@ class ScenarioTests(unittest.TestCase):
         for number, progress in [('continuation', True), ('active-input', True), ('active-input', False), ('interrupt', True), ('interrupt', False)]:
             with self.subTest(number=number, progress=progress):
                 actions = []
+                launch_cwds, native_cwds = [], []
                 class Client:
-                    def __init__(self, **_):
+                    def __init__(self, **kwargs):
+                        launch_cwds.append(kwargs['config']['cwd'])
                         self.turns = 0
                         self.events = {}
                     def __enter__(self): return self
                     def __exit__(self, *_): actions.append('closed')
                     def initialize(self): return {}
-                    def thread_start(self, _): return Value(thread=Value(id='root'), model='fixture')
+                    def thread_start(self, params):
+                        native_cwds.append(params['cwd'])
+                        return Value(thread=Value(id='root'), model='fixture')
                     def turn_start(self, *_, **__):
                         self.turns += 1
                         identity = str(self.turns)
@@ -395,7 +399,7 @@ class ScenarioTests(unittest.TestCase):
                 model_module.ConfigDict = lambda **kw: kw
                 definition = recipe('codex', number)
                 flow = Flow(definition)
-                plan = dict(definition, _peer={'command': '/unused-peer', 'args': []}, root='/unused', project='/unused', model='fixture')
+                plan = dict(definition, _peer={'command': '/unused-peer', 'args': []}, root='/unused', project='/unused', _fixtureProject='/runtime-project', model='fixture')
                 modules = {'openai_codex.client': client_module, 'openai_codex.generated.v2_all': types_module, 'pydantic': model_module}
                 with tempfile.TemporaryDirectory() as tmp, patch.dict('sys.modules', modules):
                     plan['root'] = tmp
@@ -409,6 +413,8 @@ class ScenarioTests(unittest.TestCase):
                         ]
                         (raw / 'raw.jsonl').write_text(''.join(json.dumps(frame) + '\n' for frame in frames))
                     codex(plan, report(), flow)
+                self.assertEqual(['/runtime-project'], launch_cwds)
+                self.assertEqual(['/unused'], native_cwds)
                 if not progress and number in ('active-input', 'interrupt'):
                     with self.assertRaises(Untriggered): flow.finish()
                     self.assertNotIn('submit-2', actions)
@@ -479,13 +485,14 @@ class ScenarioTests(unittest.TestCase):
         for number, progress in [('continuation', True), ('active-input', True), ('active-input', False), ('interrupt', True), ('interrupt', False)]:
             with self.subTest(number=number, progress=progress):
                 actions = []
+                launch_cwds = []
                 @dataclass
                 class ResultMessage:
                     is_error: bool = False
                     session_id: str = 'root'
                 class StreamEvent: pass
                 class Client:
-                    def __init__(self, **_): pass
+                    def __init__(self, **kwargs): launch_cwds.append(kwargs['options']['cwd'])
                     async def __aenter__(self): return self
                     async def __aexit__(self, *_): actions.append('closed')
                     async def query(self, _): actions.append('submit')
@@ -507,7 +514,8 @@ class ScenarioTests(unittest.TestCase):
                 definition = recipe('claude', number)
                 flow = Flow(definition)
                 with patch.dict('sys.modules', {'claude_agent_sdk': sdk}):
-                    asyncio.run(claude(dict(definition, project='/unused', model='fixture'), report(), flow))
+                    asyncio.run(claude(dict(definition, project='/unused', _fixtureProject='/runtime-project', model='fixture'), report(), flow))
+                self.assertEqual(['/runtime-project'], launch_cwds)
                 if not progress and number in ('active-input', 'interrupt'):
                     with self.assertRaises(Untriggered): flow.finish()
                     self.assertEqual(actions.count('submit'), 1)

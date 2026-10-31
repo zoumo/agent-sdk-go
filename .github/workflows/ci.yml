@@ -73,14 +73,17 @@ jobs:
       - name: Native schemas, simulation tooling, integration tests and examples
         run: mise exec -- bash scripts/check-offline.sh
       - name: Independently installed agent-sdk-testify Python driver
+        if: ${{ !cancelled() }}
         run: |
           python3 scripts/check-agent-sdk-testify-package.py "$RUNNER_TEMP"/simulation/agent_sdk_testify_driver-*.whl
       - name: Race tests (real-agent E2E tests visibly skip)
+        if: ${{ !cancelled() }}
         env:
           GOPROXY: 'off'
           GOSUMDB: 'off'
         run: mise exec -- go test -race -p=1 -v -count=1 -timeout 300s ./...
       - name: Vet
+        if: ${{ !cancelled() }}
         env:
           GOPROXY: 'off'
           GOSUMDB: 'off'
@@ -94,7 +97,16 @@ jobs:
           independence, simulation tooling, synthetic integration checks, examples, race and vet are separate gates.
           All real agent/model tests are **SKIPPED**. Catalog availability and offline
           checks do not establish any successful real recording.
+          Fixed real-recording simulation coverage is required and fails closed
+          when reviewed samples are missing. It never falls back to real agents.
           SUMMARY
+      - name: Preserve simulation coverage and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: simulation-${{ matrix.os }}
+          path: .artifacts/simulation/gates/
+          if-no-files-found: warn
 
   consumer:
     name: External consumer (${{ matrix.os }}, pushed commit)

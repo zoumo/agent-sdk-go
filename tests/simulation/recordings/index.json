@@ -1,0 +1,509 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-001",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-002",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-003",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-004",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-005",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-002",
+      "caseId": "SDK-CASE-006",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-002",
+      "caseId": "SDK-CASE-007",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-008",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-009",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-010",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-011",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-012",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-004",
+      "caseId": "SDK-CASE-013",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-004",
+      "caseId": "SDK-CASE-014",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-004",
+      "caseId": "SDK-CASE-015",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-016",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-017",
+      "requirement": "unsupported",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-018",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-019",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-020",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-021",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-022",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-023",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-024",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-025",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-026",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-027",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-028",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-029",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-007",
+      "caseId": "SDK-CASE-030",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-007",
+      "caseId": "SDK-CASE-031",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-007",
+      "caseId": "SDK-CASE-032",
+      "requirement": "planned",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-033",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-034",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-035",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "claude",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-036",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-001",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-002",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-003",
+      "requirement": "unsupported",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-004",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-001",
+      "caseId": "SDK-CASE-005",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-002",
+      "caseId": "SDK-CASE-006",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-002",
+      "caseId": "SDK-CASE-007",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-008",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-009",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-010",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-011",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-003",
+      "caseId": "SDK-CASE-012",
+      "requirement": "planned",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-004",
+      "caseId": "SDK-CASE-013",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-004",
+      "caseId": "SDK-CASE-014",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-004",
+      "caseId": "SDK-CASE-015",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-016",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-017",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-018",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-019",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-005",
+      "caseId": "SDK-CASE-020",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-021",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-022",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-023",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-024",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-025",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-026",
+      "requirement": "unsupported",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-027",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-028",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-006",
+      "caseId": "SDK-CASE-029",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-007",
+      "caseId": "SDK-CASE-030",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-007",
+      "caseId": "SDK-CASE-031",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-007",
+      "caseId": "SDK-CASE-032",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-033",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-034",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-035",
+      "requirement": "required",
+      "adoption": "missing"
+    },
+    {
+      "provider": "codex",
+      "storyId": "SDK-US-008",
+      "caseId": "SDK-CASE-036",
+      "requirement": "required",
+      "adoption": "missing"
+    }
+  ]
+}

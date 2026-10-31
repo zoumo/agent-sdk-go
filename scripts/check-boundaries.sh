@@ -49,8 +49,8 @@ while IFS= read -r dependency; do
       } ;;
   esac
 done <<< "$sdk_dependencies"
-if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
-  echo "SDK production packages must not depend on agent-mock or its test bridge" >&2
+if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-testify* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
+  echo "SDK production packages must not depend on agent-sdk-testify or its test bridge" >&2
   exit 1
 fi
 for native in codex claude; do
@@ -75,8 +75,15 @@ while rows.strip():
 PY
 
 # Tool implementation and tests must remain independent of production SDKs.
-mock_dependencies=$(go list -deps -test -f '{{.ImportPath}}' ./tools/agent-mock/...)
+mock_dependencies=$(go list -deps -test -f '{{.ImportPath}}' ./tools/agent-sdk-testify/protocol/...)
 if [[ "$mock_dependencies" == *github.com/zoumo/agent-sdk-go/codex* || "$mock_dependencies" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
-  echo "agent-mock must not import production SDKs" >&2
+  echo "agent-sdk-testify must not import production SDKs" >&2
+  exit 1
+fi
+
+# The process runner must not import SDKs or their fixture/assertion adapters.
+runner_dependencies=$(go list -deps -f '{{.ImportPath}}' ./tools/agent-sdk-testify)
+if [[ "$runner_dependencies" == *github.com/zoumo/agent-sdk-go/codex* || "$runner_dependencies" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
+  echo "agent-sdk-testify runner must remain independent of SDK business assertions" >&2
   exit 1
 fi

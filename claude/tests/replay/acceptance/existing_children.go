@@ -47,7 +47,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	verify := func() error {
 		for name, expected := range seed.Files {
 			clean := filepath.Clean(name)
-			if clean != name || !strings.HasPrefix(clean, "config/projects/") || filepath.IsAbs(clean) {
+			if clean != name || (!strings.HasPrefix(clean, "config/projects/") && !strings.HasPrefix(clean, "history-seed/config/projects/")) || filepath.IsAbs(clean) {
 				return errors.New("seed copy path escaped its isolated project")
 			}
 			p := filepath.Join(root, name)

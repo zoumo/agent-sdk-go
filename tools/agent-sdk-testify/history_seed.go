@@ -1,0 +1,194 @@
+package main
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// A completed capture supplies native saved records. Preparing a later case
+// does not execute an SDK, start a session, or require the replay stage first.
+func prepareHistorySeed(source, root string, plan object) error {
+	var err error
+	source, err = filepath.Abs(source)
+	if err != nil {
+		return err
+	}
+	source, err = filepath.EvalSymlinks(source)
+	if err != nil {
+		return err
+	}
+	if err = verifyMaterials(source, true); err != nil {
+		return err
+	}
+	var previous, report, manifest object
+	for name, target := range map[string]*object{"plan.json": &previous, "report.json": &report, "manifest.json": &manifest} {
+		if err = readJSON(filepath.Join(source, name), target); err != nil {
+			return err
+		}
+	}
+	provider := str(plan["provider"])
+	if previous["provider"] != provider || previous["driverProfile"] != "history" || obj(obj(previous["scenario"])["parameters"])["historyTarget"] != "child-messages" || report["status"] != "passed" {
+		return errors.New("seed must be a completed, passed child-history capture for this Agent")
+	}
+	session := ""
+	agents := map[string]bool{}
+	ids := []string{}
+	for _, v := range array(report["receipts"]) {
+		receipt := obj(v)
+		if provider == "claude" {
+			if discovery := obj(receipt["list_subagents"]); len(discovery) > 0 {
+				if session != "" && session != str(discovery["sessionId"]) {
+					return errors.New("seed has ambiguous parents")
+				}
+				session = str(discovery["sessionId"])
+				for _, id := range stringsOf(discovery["agentIds"]) {
+					if !agents[id] {
+						ids = append(ids, id)
+					}
+					agents[id] = true
+				}
+			}
+		} else {
+			query := obj(receipt["history-query"])
+			params := obj(query["params"])
+			if query["method"] == "thread/list" && str(params["parentThreadId"]) != "" {
+				if session != "" && session != str(params["parentThreadId"]) {
+					return errors.New("seed has ambiguous parents")
+				}
+				session = str(params["parentThreadId"])
+				for _, child := range array(obj(query["response"])["data"]) {
+					if obj(child)["parentThreadId"] != session {
+						return errors.New("seed child parent differs")
+					}
+					id := str(obj(child)["id"])
+					if !agents[id] {
+						ids = append(ids, id)
+					}
+					agents[id] = true
+				}
+			}
+		}
+	}
+	if session == "" || len(agents) == 0 || agents[""] {
+		return errors.New("seed has no saved parent and child identities")
+	}
+	files := object{}
+	found := map[string]bool{}
+	for name, digest := range obj(manifest["savedFiles"]) {
+		if !filepath.IsLocal(name) {
+			return errors.New("seed file escapes source")
+		}
+		data, e := os.ReadFile(filepath.Join(source, name))
+		if e != nil {
+			return e
+		}
+		identity := ""
+		if provider == "codex" {
+			if !strings.HasPrefix(name, "config/sessions/") {
+				continue
+			}
+			first, _, _ := bytes.Cut(data, []byte{'\n'})
+			var row object
+			if e = json.Unmarshal(first, &row); e != nil {
+				return e
+			}
+			if row["type"] == "session_meta" {
+				identity = str(obj(row["payload"])["id"])
+			}
+		} else {
+			if !strings.HasPrefix(name, "config/projects/") {
+				continue
+			}
+			base := filepath.Base(name)
+			if base == session+".jsonl" {
+				identity = session
+			} else if strings.Contains(name, "/"+session+"/subagents/") {
+				identity = strings.TrimSuffix(strings.TrimPrefix(base, "agent-"), ".jsonl")
+			}
+		}
+		if identity != session && !agents[identity] {
+			continue
+		}
+		if found[identity] {
+			return errors.New("duplicate saved seed identity")
+		}
+		sum := sha256.Sum256(data)
+		actual := hex.EncodeToString(sum[:])
+		if actual != str(digest) {
+			return errors.New("seed content changed")
+		}
+		if e = copyFile(filepath.Join(source, name), filepath.Join(root, name)); e != nil {
+			return e
+		}
+		destination := filepath.Join("history-seed", name)
+		if e = copyFile(filepath.Join(source, name), filepath.Join(root, destination)); e != nil {
+			return e
+		}
+		files[destination] = object{"source": name, "sha256": actual}
+		found[identity] = true
+	}
+	if !found[session] || len(found) != len(agents)+1 {
+		return errors.New("seed manifest lacks saved parent or child records")
+	}
+	project := str(previous["project"])
+	if project != filepath.Join(source, "project") {
+		return errors.New("seed project must retain its source identity")
+	}
+	projectFiles := object{}
+	if err = filepath.WalkDir(project, func(p string, d os.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		if p == project {
+			return nil
+		}
+		name, e := filepath.Rel(project, p)
+		if e != nil {
+			return e
+		}
+		if d.IsDir() {
+			projectFiles[name] = "directory"
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("unsupported seed project entry: %s", name)
+		}
+		digest, e := fileDigest(p)
+		if e == nil {
+			projectFiles[name] = digest
+		}
+		return e
+	}); err != nil {
+		return err
+	}
+	sourceFiles := object{}
+	for _, name := range []string{"plan.json", "manifest.json", "report.json", "raw/raw.jsonl"} {
+		digest, e := fileDigest(filepath.Join(source, name))
+		if e != nil {
+			return e
+		}
+		sourceFiles[name] = digest
+	}
+	plan["historySeed"] = object{"provider": provider, "sourceRoot": source, "sourceProject": project, "sessionId": session, "agentIds": ids, "files": files, "sourceFiles": sourceFiles, "projectFiles": projectFiles}
+	plan["historyProject"] = project
+	if str(plan["model"]) == "" {
+		plan["model"] = previous["model"]
+	}
+	return nil
+}
+
+func fileDigest(path string) (string, error) {
+	b, e := os.ReadFile(path)
+	if e != nil {
+		return "", e
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
+}

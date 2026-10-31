@@ -174,7 +174,7 @@ func TestRunSessionPreservesEarlyFailure(t *testing.T) {
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--session-failure-peer", mode}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "EXPECTED_TURN=" + string(wire)}, Initialize: initialize})
+			c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--session-failure-peer", mode}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "EXPECTED_TURN=" + string(wire)}, Initialize: initialize})
 			require.NoError(t, err)
 			defer c.Close()
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
@@ -259,7 +259,7 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	executable := s.executable
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"--synthetic-peer"}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN")}, Initialize: init})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"--synthetic-peer"}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN")}, Initialize: init})
 	require.NoError(t, err)
 
 	defer c.Close()

@@ -21,11 +21,11 @@ import (
 const noticeScenario = `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"wire":{"method":"notice","type":"notice"}}]}`
 
 func TestExplicitExecutableRequired(t *testing.T) {
-	for _, path := range []string{"", "agent-mock", filepath.Join(t.TempDir(), "missing")} {
+	for _, path := range []string{"", "agent-sdk-testify", filepath.Join(t.TempDir(), "missing")} {
 		t.Run(path, func(t *testing.T) {
-			t.Setenv("AGENT_MOCK_BIN", path)
+			t.Setenv("AGENT_SDK_TESTIFY_BIN", path)
 			_, err := Executable()
-			require.ErrorContains(t, err, "AGENT_MOCK_BIN")
+			require.ErrorContains(t, err, "AGENT_SDK_TESTIFY_BIN")
 		})
 	}
 }

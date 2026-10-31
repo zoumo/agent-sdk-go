@@ -29,7 +29,7 @@ func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {
 	marker := filepath.Join(dir, "consumed")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := Open(ctx, SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
+	client, err := Open(ctx, SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
 	require.NoError(t, err)
 	defer client.Abort()
 	prompt := transcript.TaskFailurePrompt

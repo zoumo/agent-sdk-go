@@ -78,7 +78,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable, rawPath, rece
 	if err = json.Unmarshal(requests[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"mock", "--provider", "codex", "--scenario", rawPath, "--receipt", receipt}, Env: []string{}, Initialize: init})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", rawPath, "--receipt", receipt}, Env: []string{}, Initialize: init})
 	if err != nil {
 		return err
 	}

@@ -144,7 +144,7 @@ func codexTargetOptions(t *testing.T, scenario string) (codex.StdioOptions, stri
 	exe, e := os.Executable()
 	require.NoError(t, e)
 	path := filepath.Join(t.TempDir(), "wire.jsonl")
-	return codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "session-integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}}, path
+	return codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "session-integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}}, path
 }
 func claudeTargetOptions(t *testing.T, scenario string) (claude.SessionOptions, string) {
 	t.Helper()
@@ -154,7 +154,7 @@ func claudeTargetOptions(t *testing.T, scenario string) (claude.SessionOptions, 
 	dir, e = filepath.EvalSymlinks(dir)
 	require.NoError(t, e)
 	path := filepath.Join(dir, "wire.jsonl")
-	return claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "HOME=" + dir, "CLAUDE_CONFIG_DIR=" + filepath.Join(dir, "config"), "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}}, path
+	return claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "CLAUDE_CONFIG_DIR=" + filepath.Join(dir, "config"), "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}}, path
 }
 func codexUntil(t *testing.T, s *codex.Session, method string) []codex.Received {
 	t.Helper()
@@ -1899,7 +1899,7 @@ func codexIndependentHistory(t *testing.T) {
 	ctx := deadline(t)
 	exe, err := os.Executable()
 	must(t, err)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=history-query", "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "history-scenario", Version: "synthetic"}}})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=history-query", "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "history-scenario", Version: "synthetic"}}})
 	must(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	page, err := c.ListThreads(ctx, ct.ThreadListParams{})
@@ -2128,7 +2128,7 @@ func checkTaskFailureDrain(t *testing.T) {
 	dir := t.TempDir()
 	session, err := claude.Open(deadline(t), claude.SessionOptions{
 		CLIPath: exe, WorkDir: dir,
-		Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "HOME=" + dir, "PATH=", "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=task-failure-drain", "SDK_INTEGRATION_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"},
+		Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "PATH=", "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=task-failure-drain", "SDK_INTEGRATION_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Abort() })
@@ -2190,7 +2190,7 @@ func checkQuestionDrain(t *testing.T) {
 	require.NoError(t, err)
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	c, err := codex.NewStdio(deadline(t), codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "HOME=" + t.TempDir(), "PATH=", "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=question-drain", "SDK_INTEGRATION_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"}, Initialize: init})
+	c, err := codex.NewStdio(deadline(t), codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + t.TempDir(), "PATH=", "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=question-drain", "SDK_INTEGRATION_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"}, Initialize: init})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	completion := acceptFaultBarrier(t, barrier, 's')
@@ -2755,7 +2755,7 @@ func openClaudeDetail(s *NativeIntegrationSuite, policy claude.ChildDetailPolicy
 	require.NoError(t, err)
 	dir := t.TempDir()
 	trace := filepath.Join(dir, "trace.jsonl")
-	o := claude.SessionOptions{CLIPath: exe, WorkDir: dir, ResumeID: resume, ChildDetailPolicy: policy, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=child-detail", "SDK_INTEGRATION_TRACE=" + trace, "GORACE=atexit_sleep_ms=0"}}
+	o := claude.SessionOptions{CLIPath: exe, WorkDir: dir, ResumeID: resume, ChildDetailPolicy: policy, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=child-detail", "SDK_INTEGRATION_TRACE=" + trace, "GORACE=atexit_sleep_ms=0"}}
 	session, err := claude.Open(deadline(t), o)
 	require.NoError(t, err)
 	o.ChildDetailPolicy = claude.ChildDetailSuppress // construction fixes a value copy

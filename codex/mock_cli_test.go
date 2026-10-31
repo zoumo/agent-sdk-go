@@ -87,7 +87,7 @@ func (s *mockCLISuite) TestInteractions() {
 				frames = append(frames, `>{"id":92,"method":"consumer/expected","params":{}}`)
 			}
 			path := mockCLIScenario(t, frames...)
-			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: s.executable, Args: []string{"mock", "--provider", "codex", "--scenario", path, "app-server"}, Env: []string{"PATH="}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
+			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: s.executable, Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", path, "app-server"}, Env: []string{"PATH="}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
 			require.NoError(t, err)
 			defer client.Close()
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
@@ -148,7 +148,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	}
 	frames = append(frames, `>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`, `<{"id":93,"result":{}}`, `>{"id":"question","result":{"answers":{}}}`, `>{"id":94,"method":"consumer/release","params":{}}`, `!`)
 	path := mockCLIScenario(t, frames...)
-	client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: s.executable, Args: []string{"mock", "--provider", "codex", "--scenario", path, "app-server"}, Env: []string{"PATH="}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
+	client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: s.executable, Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", path, "app-server"}, Env: []string{"PATH="}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
 	require.NoError(t, err)
 	defer client.Close()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})

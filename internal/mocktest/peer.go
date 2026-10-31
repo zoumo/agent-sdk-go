@@ -51,7 +51,7 @@ func Run(ctx context.Context, provider string, in io.Reader, out io.Writer, scen
 	if err = os.WriteFile(path, scenario, 0600); err != nil {
 		return err
 	}
-	args := []string{"mock", "--provider", provider, "--scenario", path}
+	args := []string{"protocol", "mock", "--provider", provider, "--scenario", path}
 	if options.Handshakes != "" {
 		args = append(args, "--sdk-test-handshakes", options.Handshakes)
 	}

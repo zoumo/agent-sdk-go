@@ -90,7 +90,7 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	ctx := deadline(t)
 	exe, err := os.Executable()
 	must(t, err)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}})
 	must(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 
@@ -247,7 +247,7 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	must(t, err)
 	dir := t.TempDir()
 
-	opts := claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN"), "HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "GORACE=atexit_sleep_ms=0"}, Subagents: claude.SubagentOptions{MaxUnresolvedBytes: 1}}
+	opts := claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "GORACE=atexit_sleep_ms=0"}, Subagents: claude.SubagentOptions{MaxUnresolvedBytes: 1}}
 	if scenario == "history-observation" {
 		opts.Subagents.History = []claude.SubagentHistory{{SessionID: "s", TaskID: "child"}}
 	}

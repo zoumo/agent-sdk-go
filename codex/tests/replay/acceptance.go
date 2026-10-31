@@ -56,7 +56,7 @@ func AcceptSavedHistory(ctx context.Context, executable, recordingPath, receiptP
 		return err
 	}
 	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable,
-		Args: []string{"mock", "--provider", "codex", "--scenario", recordingPath, "--receipt", receiptPath},
+		Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", recordingPath, "--receipt", receiptPath},
 		Env:  []string{}, Initialize: init})
 	if err != nil {
 		return err

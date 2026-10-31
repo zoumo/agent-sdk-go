@@ -49,7 +49,7 @@ func AcceptFlow(ctx context.Context, executable, path, receipt string, deliverie
 	if err := json.Unmarshal(messages[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"mock", "--provider", "codex", "--scenario", path, "--receipt", receipt}, Env: []string{}, Initialize: init})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", path, "--receipt", receipt}, Env: []string{}, Initialize: init})
 	if err != nil {
 		return err
 	}

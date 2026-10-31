@@ -151,7 +151,7 @@ func (s *GoMockSuite) startSDK(sc mockScenarioDefinition) (*codex.Client, contex
 	require.NoError(s.T(), err)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	s.T().Cleanup(cancel)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"mock", "--provider", "codex", "--scenario", path, "app-server", "--listen=stdio://"}, Env: []string{}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"}}})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", path, "app-server", "--listen=stdio://"}, Env: []string{}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"}}})
 	require.NoError(s.T(), err)
 	s.T().Cleanup(func() { assert.NoError(s.T(), c.Close()) })
 	return c, ctx

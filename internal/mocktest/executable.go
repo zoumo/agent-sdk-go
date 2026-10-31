@@ -7,19 +7,19 @@ import (
 	"strings"
 )
 
-// Executable returns the explicit, prebuilt independent agent-mock binary.
+// Executable returns the explicit, prebuilt agent-sdk-testify binary.
 // Tests never search PATH, build tools implicitly, or fall back to an Agent.
 func Executable() (string, error) {
-	path := os.Getenv("AGENT_MOCK_BIN")
+	path := os.Getenv("AGENT_SDK_TESTIFY_BIN")
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("AGENT_MOCK_BIN must name an absolute Go agent-mock executable; build it with scripts/with-agent-mock.sh")
+		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN must name an absolute Go agent-sdk-testify executable; build it with scripts/with-agent-sdk-testify.sh")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("AGENT_MOCK_BIN: %w", err)
+		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN: %w", err)
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		return "", fmt.Errorf("AGENT_MOCK_BIN is not an executable file: %s", path)
+		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN is not an executable file: %s", path)
 	}
 	return path, nil
 }
@@ -36,12 +36,12 @@ func Launcher(dir, provider, scenario, receipt string) (string, error) {
 		return "", fmt.Errorf("unsupported mock provider %q", provider)
 	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
-	command := "#!/bin/sh\nexec " + quote(executable) + " mock --provider " + quote(provider) + " --scenario " + quote(scenario)
+	command := "#!/bin/sh\nexec " + quote(executable) + " protocol mock --provider " + quote(provider) + " --scenario " + quote(scenario)
 	if receipt != "" {
 		command += " --receipt " + quote(receipt)
 	}
 	command += " \"$@\"\n"
-	path := filepath.Join(dir, "agent-mock-"+provider)
+	path := filepath.Join(dir, "agent-sdk-testify-"+provider)
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	if err != nil {
 		return "", err

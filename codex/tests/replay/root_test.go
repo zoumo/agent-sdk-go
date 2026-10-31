@@ -55,7 +55,7 @@ func rootClient(t *testing.T, fs []Frame) (*codex.Client, context.Context) {
 	require.NoError(t, e)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
-	c, e := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--root-peer", path}, Env: []string{"AGENT_MOCK_BIN=" + os.Getenv("AGENT_MOCK_BIN")}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "synthetic-preflight", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
+	c, e := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--root-peer", path}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN")}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "synthetic-preflight", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
 	require.NoError(t, e)
 	t.Cleanup(func() { require.NoError(t, c.Close()) })
 	return c, ctx

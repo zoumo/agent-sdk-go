@@ -88,3 +88,10 @@ if [[ "$runner_dependencies" == *github.com/zoumo/agent-sdk-go/codex* || "$runne
   echo "agent-sdk-testify runner must remain independent of SDK business assertions" >&2
   exit 1
 fi
+
+# Capture owns its non-CLI contract; command parsing must not enter its core.
+capture_dependencies=$(go list -deps -f '{{.ImportPath}}' ./tools/agent-sdk-testify/protocol/capture)
+if [[ "$capture_dependencies" == *github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/command* || "$capture_dependencies" == *github.com/spf13/* || "$capture_dependencies" == *github.com/inconshreveable/mousetrap* ]]; then
+  echo "protocol capture must not depend on command parsing" >&2
+  exit 1
+fi

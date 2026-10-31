@@ -12,20 +12,22 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/command"
 	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/recording"
 )
 
-// Run owns streams for one invocation. Command flags have already been checked
-// by command; capture reports runtime errors and never probes native versions.
-func Run(ctx context.Context, o command.RecordOptions, streams command.IO) error {
+// Run owns streams for one invocation and reports capture failures without CLI
+// exit codes. Native version and proxy identity are supplied, never probed.
+func Run(ctx context.Context, o Options, streams IO) error {
+	if err := o.validate(); err != nil {
+		return &Error{Kind: Configuration, Err: err}
+	}
 	start := time.Now()
 	cmd, identity, err := prepare(o)
 	if err != nil {
-		return command.Fail(command.ExitConfiguration, fmt.Errorf("record preflight: %w", err))
+		return &Error{Kind: Configuration, Err: fmt.Errorf("record preflight: %w", err)}
 	}
 	if err = os.Mkdir(o.Output, 0700); err != nil {
-		return command.Fail(command.ExitConfiguration, fmt.Errorf("reserve output: %w", err))
+		return &Error{Kind: Configuration, Err: fmt.Errorf("reserve output: %w", err)}
 	}
 	journal, err := openJournal(o, start)
 	report := recording.TransportReport{Version: 1, Reason: "EOF", CleanupComplete: true}
@@ -43,11 +45,11 @@ func Run(ctx context.Context, o command.RecordOptions, streams command.IO) error
 	if err == nil {
 		return nil
 	}
-	code := command.ExitFailure
+	kind := Failure
 	if report.Reason == "deadline" || report.Reason == "canceled" {
-		code = command.ExitCanceled
+		kind = Canceled
 	}
-	return command.Fail(code, err)
+	return &Error{Kind: kind, Err: err}
 }
 
 type workerResult struct {
@@ -56,7 +58,7 @@ type workerResult struct {
 	eof  bool
 }
 
-func (j *journal) run(ctx context.Context, cmd *exec.Cmd, streams command.IO, report *recording.TransportReport) (runErr error) {
+func (j *journal) run(ctx context.Context, cmd *exec.Cmd, streams IO, report *recording.TransportReport) (runErr error) {
 	var owned []*os.File
 	closeFiles := func(files ...*os.File) {
 		for _, file := range files {

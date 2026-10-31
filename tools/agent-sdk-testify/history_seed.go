@@ -1,15 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // A completed capture supplies native saved records. Preparing a later case
@@ -37,44 +34,16 @@ func prepareHistorySeed(source, root string, plan object) error {
 	if previous["provider"] != provider || previous["driverProfile"] != "history" || obj(obj(previous["scenario"])["parameters"])["historyTarget"] != "child-messages" || report["status"] != "passed" {
 		return errors.New("seed must be a completed, passed child-history capture for this Agent")
 	}
-	session := ""
-	agents := map[string]bool{}
-	ids := []string{}
-	for _, v := range array(report["receipts"]) {
-		receipt := obj(v)
-		if provider == "claude" {
-			if discovery := obj(receipt["list_subagents"]); len(discovery) > 0 {
-				if session != "" && session != str(discovery["sessionId"]) {
-					return errors.New("seed has ambiguous parents")
-				}
-				session = str(discovery["sessionId"])
-				for _, id := range stringsOf(discovery["agentIds"]) {
-					if !agents[id] {
-						ids = append(ids, id)
-					}
-					agents[id] = true
-				}
-			}
-		} else {
-			query := obj(receipt["history-query"])
-			params := obj(query["params"])
-			if query["method"] == "thread/list" && str(params["parentThreadId"]) != "" {
-				if session != "" && session != str(params["parentThreadId"]) {
-					return errors.New("seed has ambiguous parents")
-				}
-				session = str(params["parentThreadId"])
-				for _, child := range array(obj(query["response"])["data"]) {
-					if obj(child)["parentThreadId"] != session {
-						return errors.New("seed child parent differs")
-					}
-					id := str(obj(child)["id"])
-					if !agents[id] {
-						ids = append(ids, id)
-					}
-					agents[id] = true
-				}
-			}
-		}
+	var session string
+	var agents map[string]bool
+	var ids []string
+	if provider == "claude" {
+		session, agents, ids, err = claudeHistorySeedReceipts(report)
+	} else {
+		session, agents, ids, err = codexHistorySeedReceipts(report)
+	}
+	if err != nil {
+		return err
 	}
 	if session == "" || len(agents) == 0 || agents[""] {
 		return errors.New("seed has no saved parent and child identities")
@@ -89,29 +58,18 @@ func prepareHistorySeed(source, root string, plan object) error {
 		if e != nil {
 			return e
 		}
-		identity := ""
+		var identity string
+		var matched bool
 		if provider == "codex" {
-			if !strings.HasPrefix(name, "config/sessions/") {
-				continue
-			}
-			first, _, _ := bytes.Cut(data, []byte{'\n'})
-			var row object
-			if e = json.Unmarshal(first, &row); e != nil {
-				return e
-			}
-			if row["type"] == "session_meta" {
-				identity = str(obj(row["payload"])["id"])
-			}
+			identity, matched, e = codexHistorySeedIdentity(name, data)
 		} else {
-			if !strings.HasPrefix(name, "config/projects/") {
-				continue
-			}
-			base := filepath.Base(name)
-			if base == session+".jsonl" {
-				identity = session
-			} else if strings.Contains(name, "/"+session+"/subagents/") {
-				identity = strings.TrimSuffix(strings.TrimPrefix(base, "agent-"), ".jsonl")
-			}
+			identity, matched, e = claudeHistorySeedIdentity(name, session)
+		}
+		if e != nil {
+			return e
+		}
+		if !matched {
+			continue
 		}
 		if identity != session && !agents[identity] {
 			continue

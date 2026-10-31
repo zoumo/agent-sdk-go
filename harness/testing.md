@@ -85,6 +85,13 @@ synthetic peers are targeted integration tests, not simulation evidence for user
 stories. Protocol peers remain in test files, and reusable recording/replay helpers follow the
 [tools layout](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
 
+The current driver tests use the single-request interface and supplied peers.
+Legacy Python preparation, proxy and batch execution paths are not alternate
+runners. Native business and provenance assertions remain on the current driver
+or the authoritative Go runner/protocol boundary. Child delivery comparisons use
+provider-owned assertions independent of production suppression code, and each
+preserve/suppress or remote main/probe run must have its own complete receipt.
+
 Go SDK simulation implementations and their regression tests live under
 `tests/simulation/sdk/codex` and `tests/simulation/sdk/claude`. Native
 `tests/replay` packages retain synthetic adapters and SDK integration assertions,

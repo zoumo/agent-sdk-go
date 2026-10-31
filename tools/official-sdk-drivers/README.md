@@ -17,8 +17,10 @@ Installed commands are `agent-sdk-testify-codex` and `agent-sdk-testify-claude`.
 They execute one supplied request; Go prepares the environment and recording or
 mock peer. Shared material helpers live under `common/`. The Python import remains
 `record_user_story` for the existing recording-source readers. Older
-preparation and schema readers remain for the existing datasets and offline
-regression tests; the Go runner is the operational entry point.
+manifest and schema readers retain existing dataset provenance. The catalog CLI
+only reads material definitions; preparation, recording, replay, fixture copies
+and native process cleanup belong to the Go runner. Saved Python driver snapshots
+are evidence, not executable orchestration entry points.
 
 SDK extras select dependencies without exact runtime-version gates.
 `requirements.lock` is a known installation snapshot, not a runtime allowlist.

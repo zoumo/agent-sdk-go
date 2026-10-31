@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
@@ -56,7 +57,7 @@ func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
 			require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(string(launch), ` "$@"`, "")), 0700))
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			require.NoError(t, AcceptFlow(ctx, launcher, root, io.Discard))
+			require.NoError(t, AcceptFlow(ctx, launcher, root, claude.ChildDetailPreserve, io.Discard))
 			b, err := os.ReadFile(receipt)
 			require.NoError(t, err)
 			var got struct{ FullConsumption, ClientEOF, NativeLaunched bool }

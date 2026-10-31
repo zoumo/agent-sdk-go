@@ -2,9 +2,7 @@
 import asyncio
 import hashlib
 import json
-import os
 from pathlib import Path
-import re
 
 from .adapters.common import proxy_command, serial
 from .environment import read_regular, recording_temp_root, verify_recording
@@ -24,66 +22,6 @@ def project_files(project):
         result[str(path.relative_to(project))] = 'directory' if path.is_dir() else sha(path)
     return result
 
-
-def prepare_seed(source, root, provider):
-    """Copy only verified saved data; keep source and copied identities explicit."""
-    if provider == 'codex':
-        from codex_driver.existing import prepare_seed as prepare_codex_seed
-        return prepare_codex_seed(source, root)
-    source, root = Path(source).resolve(strict=True), Path(root).resolve(strict=True)
-    verify_recording(source)
-    plan = json.loads(read_regular(source / 'plan.json'))
-    report = json.loads(read_regular(source / 'report.json'))
-    replay = json.loads(read_regular(source / 'replay-validation.json'))
-    if (plan.get('provider') != provider or plan.get('driverProfile') != 'history'
-            or plan.get('scenario', {}).get('parameters', {}).get('historyTarget') != 'child-messages'
-            or report.get('status') != 'passed' or replay.get('status') != 'passed'
-            or replay.get('fullConsumption') is not True):
-        raise ValueError('existing-child seed requires passed native child history and strict replay')
-    discoveries = [item['list_subagents'] for item in report.get('receipts', []) if 'list_subagents' in item]
-    if len(discoveries) != 1 or not discoveries[0].get('agentIds'):
-        raise ValueError('seed must identify one saved parent and its recorded children')
-    session = discoveries[0]['sessionId']
-    agents = discoveries[0]['agentIds']
-    if not re.fullmatch(r'[0-9a-fA-F-]{36}', session) or len(set(agents)) != len(agents):
-        raise ValueError('invalid seed identities')
-    project = Path(plan['project']).resolve(strict=True)
-    if project != source / 'project' or not project.is_relative_to(recording_temp_root()):
-        raise ValueError('seed history scope must be its original isolated temporary project')
-    # Native transcript cwd is evidence. Preserve both its bytes and project
-    # key instead of rewriting it to pretend it belongs to the new case cwd.
-    old_key = re.sub(r'[^a-zA-Z0-9]', '-', str(project))
-    if len(old_key) > 200:
-        raise ValueError('truncated native project keys are unsupported')
-    saved = json.loads(read_regular(source / 'manifest.json')).get('savedFiles', {})
-    prefix = Path('config/projects') / old_key
-    selected = {name: digest for name, digest in saved.items()
-                if Path(name) == prefix / (session + '.jsonl')
-                or Path(name).is_relative_to(prefix / session / 'subagents')}
-    main = str(prefix / (session + '.jsonl'))
-    if main not in selected:
-        raise ValueError('seed manifest lacks its parent transcript')
-    for agent in agents:
-        if not any(Path(name).name == 'agent-' + agent + '.jsonl' for name in selected):
-            raise ValueError('discovered seed child lacks a verified transcript')
-    copied = {}
-    for name, digest in selected.items():
-        relative = Path(name).relative_to(prefix)
-        destination = Path('config/projects') / old_key / relative
-        data = read_regular(source / name, None)
-        if hashlib.sha256(data).hexdigest() != digest:
-            raise ValueError('seed saved content changed before copying')
-        target = root / destination
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with target.open('xb') as stream:
-            stream.write(data)
-        target.chmod(0o600)
-        copied[str(destination)] = {'source': name, 'sha256': digest}
-    return {'provider': provider, 'sourceRoot': str(source), 'sourceProject': str(project),
-            'projectFiles': project_files(project), 'sessionId': session, 'agentIds': agents,
-            'sourceFiles': {name: sha(source / name) for name in
-                            ('plan.json', 'manifest.json', 'report.json', 'replay-validation.json', 'raw/raw.jsonl')},
-            'files': copied}
 
 
 def verify_seed(plan, *, check_source=True):
@@ -106,6 +44,7 @@ def verify_seed(plan, *, check_source=True):
         if project.resolve(strict=True) != project or project_files(project) != seed.get('projectFiles'):
             raise ValueError('source project changed during read-only observation')
         source = Path(seed['sourceRoot'])
+        verify_recording(source)
         for name, digest in seed['sourceFiles'].items():
             if sha(source / name) != digest:
                 raise ValueError('source recording identity changed')
@@ -120,7 +59,7 @@ async def observe_claude(plan, report):
     from .stream import json_messages
     # Replay owns frozen copies and their original source digests. It must not
     # require the old recording directory to remain available after capture.
-    check_source = not bool(os.environ.get('AGENT_RECORDING_MOCK'))
+    check_source = not bool(plan.get('_replay'))
     seed = verify_seed(plan, check_source=check_source)
     if '--resume' not in plan['args'] or plan['args'][plan['args'].index('--resume') + 1] != seed['sessionId']:
         raise ValueError('native resume must select the frozen seed parent')

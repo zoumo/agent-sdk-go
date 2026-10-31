@@ -23,6 +23,8 @@ agent-sdk-testify 产物。SDK 专项测试可以直接调用协议子命令，�
 协议模块通过进程命令和版本化录制数据供任意语言调用。
 Go Module 与包归属见[仓库架构](../../architecture.md)和[代码布局](../../architecture.md#layout-code-layout-standards)。
 运行器与协议实现不导入官方 SDK、Python 或本仓库生产 SDK。协议模块不依赖 story/case 编号或 fixture 布局。
+`capture` 自有参数、I/O 和分类错误合同，不依赖 CLI command 或 Cobra；CLI 负责参数及退出码映射。
+provider 的 CLI 参数、配置和历史材料准备与通用环境／进程编排分开维护，仍使用同一 Go 二进制。
 编译后的可执行文件不依赖 Git checkout，也不需要调用方安装 Go 编译器。
 
 录制与 mock 使用 stdio，覆盖 Codex、Claude 的 JSONL 消息协议。
@@ -151,6 +153,8 @@ Go 提供不同协议对端。只有显式 `record` 或 `protocol record` 才启
 case 身份、目标、输入、初始项目文件和预期业务值属于共享材料。相同 case 不按驱动语言复制材料；
 原生历史等无法共用字节的输入按 provider 区分。驱动中原生编写操作顺序和业务断言，
 材料不承载可执行步骤或跨语言测试 DSL。已有录制的计划与材料可以作为输入使用，原始文件不改写。
+Python 只保留单请求 driver、材料目录查询和既有来源读取／校验；旧 prepare、record、replay、worker、proxy
+执行入口不保留。保存的旧 driver 快照只说明录制来源，不参与当前执行。
 
 Go 创建每次独立的工作目录、输出目录、HOME、config 和 tmp，放置初始材料和选定原生配置，
 设置驱动环境并提供协议进程入口。驱动使用提供的材料，不反向声明环境需求。
@@ -162,8 +166,15 @@ Go 创建每次独立的工作目录、输出目录、HOME、config 和 tmp，�
 
 驱动命令为 `driver --request /path/to/request.json`；Go 可以为解释器或运行时配置固定前置参数。
 请求只包含 `case`、`materials`、`workspace`、`peer` 和 `output`。
-`peer` 包含 `command` 和 `args`，指向 Go 准备的录制代理或 mock 入口；不要求驱动辨别模式。
-case 特有的数据与原生参数属于 materials，驱动不自行替换协议对端。
+`peer` 的 `command` 和 `args` 指向 Go 准备的录制代理或 mock 入口，不要求驱动辨别模式。
+远端 case 的 `peer.probe` 明确提供第二次连接的 command/args；Go SDK 的双策略仿真通过
+`peer.suppress` 提供第二次执行的 command/args。每次执行有独立回执，运行器须检查所有已选择的对端完整结束。
+仅支持可执行路径的 SDK 使用运行器生成的无参 launcher，驱动不生成脚本或重建协议命令。
+Go SDK 远端仿真的 `peer.remote` 提供 `url`、`bearerToken`，指向运行器拥有的本地 WebSocket 服务；
+两次连接分别转接 main/probe 对端，服务及子进程由运行器清理。官方 SDK 使用显式 main/probe 进程入口。
+这些字段描述已有 case 所需入口，不构成多传输协商或步骤 DSL。
+case 特有的数据与原生参数属于 materials；materials 不承载 `_mock`、`_peers` 等运行时对端，
+驱动不自行替换协议对端。
 
 驱动在 output 下写 `result.json`，至少包含 `status` 和可选 `message`。
 状态为 `passed`、`failed`、`untriggered` 或 `unsupported`。详细回执和诊断由驱动自行保存，

@@ -5,13 +5,10 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
 
 from support import BOOTSTRAP
 from record_user_story.scenarios import case_recipes, recipe, scenario_directory, story_documents, summarize_story
 from record_user_story.policy import driver_profile
-from record_user_story.cli import execute
 
 
 class StoryCaseTests(unittest.TestCase):
@@ -30,31 +27,6 @@ class StoryCaseTests(unittest.TestCase):
             self.assertEqual(before['prompts'], after['prompts'])
             self.assertEqual(before['driverProfile'], after['driverProfile'])
 
-    def test_frozen_story_case_empty_intersection_never_launches_a_worker(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / 'suite.json').write_text('{}')
-            case = root / 'SDK-US-002' / 'SDK-CASE-004'
-            case.mkdir(parents=True)
-            (case / 'plan.json').write_text(json.dumps({'version': 4, 'story': 'SDK-US-002',
-                                                       'storyId': 'SDK-US-002', 'caseId': 'SDK-CASE-004'}))
-            args = SimpleNamespace(output=str(root), action='record', stories='SDK-US-001', cases='SDK-CASE-004')
-            with patch('subprocess.Popen', side_effect=AssertionError('worker launched')):
-                with self.assertRaisesRegex(ValueError, 'no intersection'):
-                    execute(args)
-
-    def test_worker_rejects_old_or_incomplete_plans_before_sdk_access(self):
-        from record_user_story.cli import main
-        for version in (2, 3, 4):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as tmp:
-                path = Path(tmp) / 'plan.json'
-                path.write_text(json.dumps({'version': version, 'provider': 'codex', 'story': 'SDK-US-001',
-                                            'root': tmp, 'childCase': True}))
-                with patch('record_user_story.drivers.sdk_identity', side_effect=AssertionError('SDK accessed')):
-                    self.assertEqual(main(['worker', '--plan', str(path)]), 1)
-                diagnostic = json.loads((Path(tmp) / 'worker-startup-diagnostics.private.json').read_text())
-                self.assertEqual(diagnostic['type'], 'ValueError')
-                self.assertIn('current simulation plan', diagnostic['error'])
 
     def test_unavailable_routes_cannot_be_promoted_by_forged_pass_reports(self):
         for provider in ('codex', 'claude'):

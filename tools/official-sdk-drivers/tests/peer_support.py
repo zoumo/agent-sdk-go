@@ -1,12 +1,11 @@
-"""Identity and process boundary for the separately installed Go executable."""
+"""Test-only identity check for the explicitly supplied Go protocol executable."""
 import hashlib
-import json
 import os
 from pathlib import Path
 import re
 import subprocess
 
-from .environment import read_regular
+from record_user_story.environment import read_regular
 
 
 class IdentityError(ValueError):
@@ -39,20 +38,3 @@ def identity(value=None, expected=None):
     if expected is not None and actual['version'] != expected.get('version'):
         raise IdentityError('prepared Go agent-sdk-testify version changed')
     return actual
-
-
-def planned_identity(plan, value=None):
-    expected = plan.get('agentMock')
-    if not expected:
-        raise IdentityError('current simulation plan requires a frozen Go identity')
-    return identity(value or expected['path'], expected)
-
-
-def verify_receipt(path, scenario, provider):
-    result = json.loads(read_regular(path))
-    if (result.get('version') != 1 or result.get('peer') != 'Go native mock' or
-            result.get('provider') != provider or result.get('fullConsumption') is not True or
-            result.get('nativeLaunched') is not False or result.get('clientEOF') is not True or
-            result.get('recordingSHA256') != hashlib.sha256(read_regular(scenario)).hexdigest()):
-        raise ValueError('Go mock receipt does not prove consumption of this recording')
-    return result

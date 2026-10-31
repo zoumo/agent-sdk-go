@@ -32,12 +32,11 @@ class ExistingCodexTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError): require_wire(plan, rows)
 
-    def test_codex_seed_freezes_rollout_bytes_without_copying_indexes(self):
+    def test_runner_codex_seed_keeps_immutable_and_native_copies_separate(self):
         import hashlib
         import json
         import tempfile
         from pathlib import Path
-        from codex_driver.existing import prepare_seed
         from record_user_story.existing_children import verify_seed
         with tempfile.TemporaryDirectory() as name:
             base = Path(name).resolve()
@@ -59,7 +58,17 @@ class ExistingCodexTests(unittest.TestCase):
                                'replay-validation': {'status': 'passed', 'fullConsumption': True}}.items():
                 (source / (key + '.json')).write_text(json.dumps(value))
             (source / 'raw/raw.jsonl').write_text('synthetic seed fixture')
-            seed = prepare_seed(source, target)
+            import shutil
+            for path in saved:
+                for name in [Path(path), Path('history-seed') / path]:
+                    destination = target / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source / path, destination)
+            seed = {'provider': 'codex', 'sourceRoot': str(source), 'sourceProject': str(source / 'project'),
+                    'projectFiles': {}, 'sessionId': 'parent', 'agentIds': ['child'],
+                    'files': {str(Path('history-seed') / path): {'source': path, 'sha256': digest} for path, digest in saved.items()},
+                    'sourceFiles': {path: hashlib.sha256((source / path).read_bytes()).hexdigest() for path in
+                                    ('plan.json', 'manifest.json', 'report.json', 'replay-validation.json', 'raw/raw.jsonl')}}
             current = {'root': str(target), 'historyProject': seed['sourceProject'], 'historySeed': seed}
             verify_seed(current)
             self.assertFalse((target / 'config/state_5.sqlite').exists())

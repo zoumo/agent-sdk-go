@@ -20,7 +20,7 @@ import (
 
 // AcceptFlow executes recorded operations with the public Go Session. Incoming
 // permissions retain their original handles, including held approvals.
-func AcceptFlow(ctx context.Context, launcher, root string, deliveries io.Writer) (err error) {
+func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Project, Config, Model, DriverProfile string
 		Args                                  []string
@@ -38,11 +38,12 @@ func AcceptFlow(ctx context.Context, launcher, root string, deliveries io.Writer
 		Wire      json.RawMessage
 	}
 	type control struct {
-		Type, Subtype string
-		RequestID     string `json:"request_id"`
-		SessionID     string `json:"session_id"`
-		Request       json.RawMessage
-		Response      struct {
+		Type, Subtype   string
+		RequestID       string `json:"request_id"`
+		SessionID       string `json:"session_id"`
+		ParentToolUseID string `json:"parent_tool_use_id"`
+		Request         json.RawMessage
+		Response        struct {
 			Subtype   string
 			RequestID string `json:"request_id"`
 			Response  json.RawMessage
@@ -144,7 +145,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, deliveries io.Writer
 		}
 		return nil
 	}
-	options := claude.SessionOptions{CLIPath: launcher, WorkDir: plan.Project, Model: plan.Model, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &init, SDKMCPServers: servers}
+	options := claude.SessionOptions{ChildDetailPolicy: policy, CLIPath: launcher, WorkDir: plan.Project, Model: plan.Model, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &init, SDKMCPServers: servers}
 	for i := 0; i < len(plan.Args); i++ {
 		name, value, inline := strings.Cut(plan.Args[i], "=")
 		if name != "--model" && name != "--effort" && name != "--max-thinking-tokens" {
@@ -251,12 +252,19 @@ func AcceptFlow(ctx context.Context, launcher, root string, deliveries io.Writer
 				continue
 			}
 			var native struct {
-				SessionID     string `json:"session_id"`
-				Type, Subtype string
+				SessionID       string `json:"session_id"`
+				ParentToolUseID string `json:"parent_tool_use_id"`
+				Type, Subtype   string
 			}
 			_ = json.Unmarshal(v.Wire, &native)
 			if native.Type == "system" && native.Subtype == "init" {
 				observedRoot = native.SessionID
+			}
+			if policy == claude.ChildDetailSuppress && native.Type == "assistant" && native.ParentToolUseID != "" {
+				// The final independent preserve/suppress comparison requires
+				// every protected fact unchanged. Do not await optional child
+				// text here: the Session may intentionally omit its delivery.
+				continue
 			}
 			if observedRoot != "" && native.SessionID == observedRoot {
 				if err := wait(v.Wire); err != nil {
@@ -380,6 +388,9 @@ func AcceptFlow(ctx context.Context, launcher, root string, deliveries io.Writer
 		return err
 	}
 	<-done
+	if receiveErr != nil && !errors.Is(receiveErr, io.EOF) {
+		return receiveErr
+	}
 	if _, e := s.Submit(ctx, claude.Input{Text: "must not be sent"}); !errors.Is(e, claude.ErrClosed) {
 		return errors.New("closed Session accepted input")
 	}

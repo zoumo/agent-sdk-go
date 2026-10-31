@@ -12,7 +12,6 @@ from unittest.mock import patch
 from support import BOOTSTRAP
 from claude_driver.adapter import claude
 from record_user_story.drivers import require_interrupt_wire, require_interrupt_close
-from record_user_story.cli import validate_replay
 from record_user_story.environment import stdin_eof_action
 from record_user_story.scenarios import Flow, recipe, Untriggered
 
@@ -35,19 +34,6 @@ def wire_evidence():
 
 
 class InterruptLifecycleTests(unittest.TestCase):
-    def test_replay_compares_interrupt_close_evidence(self):
-        for changed in [False, True]:
-            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                _, saved = wire_evidence()
-                saved.update(status='passed', inputs=1, results=1, requests=0)
-                replay = deepcopy(saved)
-                if changed: replay['interruptClose']['idle']['data']['session_id'] = 'other'
-                for filename, value in [('report.json', saved), ('replay-report.json', replay),
-                                        ('replay-peer.json', dict(fullConsumption=True, clientEOF=True,
-                                                                  nativeLaunched=False, peer='Go native mock'))]:
-                    (root / filename).write_text(json.dumps(value))
-                self.assertEqual(validate_replay(root, 0), 'failed' if changed else 'passed')
 
     def test_sdk_idle_cannot_borrow_a_matching_raw_uuid(self):
         for key, value in [('session_id', 'other'), ('parent_tool_use_id', 'child'), ('state', 'running')]:

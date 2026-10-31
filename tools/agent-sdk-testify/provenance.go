@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,7 +48,7 @@ func verifySourcePhase(root string, requireComplete bool) error {
 					return err
 				}
 			}
-			for _, group := range []string{"savedFiles", "caseFiles", "remotePhaseFiles"} {
+			for _, group := range []string{"savedFiles", "caseFiles", "remotePhaseFiles", "driverFiles"} {
 				for path, digest := range obj(m[group]) {
 					if err := verifyFile(root, path, str(digest)); err != nil {
 						return err
@@ -77,6 +78,13 @@ func verifySourcePhase(root string, requireComplete bool) error {
 func verifyFile(root, path, digest string) error {
 	if !filepath.IsLocal(path) {
 		return fmt.Errorf("source path escapes material directory: %s", path)
+	}
+	info, err := os.Lstat(filepath.Join(root, path))
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("source is not a regular file: %s", path)
 	}
 	b, err := os.ReadFile(filepath.Join(root, path))
 	if err != nil {
@@ -170,5 +178,7 @@ func writeSourceManifest(root string, outcome result) error {
 	if err = readJSON(filepath.Join(root, "raw/transport.json"), &transport); err != nil {
 		return err
 	}
-	return writeJSON(filepath.Join(root, "manifest.json"), object{"provenance": "capture", "planSHA256": digest, "files": files, "savedFiles": saved, "remotePhaseFiles": remote, "status": outcome.Status, "captureStatus": transport["captureStatus"]})
+	scan, scanErr := scanCaptureCredentials(root)
+	manifestErr := writeJSON(filepath.Join(root, "manifest.json"), object{"provenance": "capture", "planSHA256": digest, "files": files, "savedFiles": saved, "remotePhaseFiles": remote, "status": outcome.Status, "captureStatus": transport["captureStatus"], "credentialScan": scan})
+	return errors.Join(scanErr, manifestErr)
 }

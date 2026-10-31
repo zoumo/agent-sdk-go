@@ -4,11 +4,9 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/codex"
@@ -17,35 +15,17 @@ import (
 )
 
 func main() {
-	if len(os.Args) == 3 && os.Args[1] == "--request" {
-		if err := runRequest(os.Args[2]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
-	}
-	peer := flag.String("peer", "", "verified Go mock executable")
-	raw := flag.String("recording", "", "verified original raw JSONL recording")
-	receipt := flag.String("receipt", "", "new private Go mock receipt path")
-	provider := flag.String("provider", "codex", "native provider")
-	root := flag.String("case", "", "verified private case directory")
-	launcher := flag.String("launcher", "", "Claude mock-only process adapter")
-	policy := flag.String("policy", "preserve", "Go Session child-detail delivery policy")
-	observations := flag.String("observations", "", "new private actual Go Receive stream")
-	flag.Parse()
-	if *peer == "" || *raw == "" || *receipt == "" || *observations == "" || (*policy != "preserve" && *policy != "suppress") {
-		fmt.Fprintln(os.Stderr, "explicit peer, recording and receipt required")
+	if len(os.Args) != 3 || os.Args[1] != "--request" {
+		fmt.Fprintln(os.Stderr, "use --request /path/to/request.json")
 		os.Exit(2)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	if err := accept(ctx, *provider, *root, *peer, *raw, *receipt, *launcher, *policy, *observations); err != nil {
+	if err := runRequest(os.Args[2]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func accept(ctx context.Context, provider, root, peer, raw, receipt, launcher, policy, observations string) error {
+func accept(ctx context.Context, provider, root, raw string, peer driverPeer, policy, observations string) error {
 	out, err := os.OpenFile(observations, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err
@@ -62,21 +42,27 @@ func accept(ctx context.Context, provider, root, peer, raw, receipt, launcher, p
 	switch provider {
 	case "codex":
 		if plan.DriverProfile == "existing-children" {
-			err = codexsim.AcceptExistingChildren(ctx, root, peer, raw, receipt, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptExistingChildren(ctx, root, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
 		} else if plan.DriverProfile == "remote-close" {
-			err = codexsim.AcceptRemoteClose(ctx, root, peer, filepath.Dir(receipt))
+			if peer.Remote == nil {
+				return fmt.Errorf("remote endpoint is required")
+			}
+			err = codexsim.AcceptRemoteClose(ctx, root, peer.Remote.URL, peer.Remote.BearerToken)
 		} else if plan.DriverProfile == "history" || plan.DriverProfile == "continuation" {
-			err = codexsim.AcceptSavedHistory(ctx, peer, raw, receipt, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptSavedHistory(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
 		} else {
-			err = codexsim.AcceptFlow(ctx, peer, raw, receipt, out)
+			err = codexsim.AcceptFlow(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
 		}
 	case "claude":
+		if len(peer.Args) != 0 {
+			return fmt.Errorf("Claude requires a runner-prepared executable launcher")
+		}
 		if plan.DriverProfile == "existing-children" {
-			err = claudesim.AcceptExistingChildren(ctx, launcher, root)
+			err = claudesim.AcceptExistingChildren(ctx, peer.Command, root)
 		} else if plan.DriverProfile == "history" {
-			err = claudesim.AcceptSavedHistory(ctx, launcher, root, claude.ChildDetailPolicy(policy), out)
+			err = claudesim.AcceptSavedHistory(ctx, peer.Command, root, claude.ChildDetailPolicy(policy), out)
 		} else {
-			err = claudesim.AcceptFlow(ctx, launcher, root, out)
+			err = claudesim.AcceptFlow(ctx, peer.Command, root, claude.ChildDetailPolicy(policy), out)
 		}
 	default:
 		err = fmt.Errorf("unsupported provider")

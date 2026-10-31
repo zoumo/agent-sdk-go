@@ -13,11 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/command"
 	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/recording"
 )
 
-func environment(o command.RecordOptions) []string {
+func environment(o Options) []string {
 	var env []string
 	if !o.ClearEnv {
 		env = os.Environ()
@@ -35,7 +34,7 @@ func environment(o command.RecordOptions) []string {
 	}
 	return env
 }
-func prepare(o command.RecordOptions) (*exec.Cmd, recording.NativeIdentity, error) {
+func prepare(o Options) (*exec.Cmd, recording.NativeIdentity, error) {
 	identity := recording.NativeIdentity{Args: append([]string{}, o.Command[1:]...), Version: o.NativeVersion}
 	cwd := o.CWD
 	var err error

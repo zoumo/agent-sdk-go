@@ -1,4 +1,4 @@
-"""Current simulation flows through the worker CLI, without real Agents."""
+"""Current simulation flows through the single-request driver, without real Agents."""
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -8,8 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from support import BOOTSTRAP
-from record_user_story.cli import main
-from record_user_story.scenarios import recipe, digest, case_recipes
+from request_support import request_case
+from record_user_story.scenarios import digest, case_recipes
 from test_scenarios import Value
 
 
@@ -78,8 +78,8 @@ class SimulationPipelineTests(unittest.TestCase):
             errors.TransportClosedError = TransportClosedError
             modules = {'openai_codex.errors': errors, 'openai_codex.client': sdk, 'openai_codex.generated.v2_all': generated, 'pydantic': model}
             with patch.dict('sys.modules', modules), patch('record_user_story.drivers.sdk_identity', return_value={'package': 'synthetic', 'version': '1'}):
-                self.assertEqual(main(['worker', '--plan', str(root / 'plan.json')]), expected_exit)
-            return json.loads((root / 'report.json').read_text())
+                request_case(plan, expected_exit)
+            return json.loads(next(root.glob('*report.json')).read_text())
 
     def test_continuation_uses_one_client_and_consumes_both_results_without_idle_wait(self):
         from test_codex_observation_order import evidence
@@ -161,8 +161,8 @@ class SimulationPipelineTests(unittest.TestCase):
                 (root/'raw').mkdir()
                 (root/'raw/raw.jsonl').write_text(''.join(json.dumps(frame)+'\n' for frame in frames))
                 with patch.dict('sys.modules', {'claude_agent_sdk': sdk}), patch('record_user_story.drivers.sdk_identity', return_value={'package': 'synthetic', 'version': '1'}):
-                    self.assertEqual(main(['worker', '--plan', str(path)]), 0)
-                self.assertEqual(json.loads((root/'report.json').read_text())['status'], expected)
+                    request_case(plan)
+                self.assertEqual(json.loads(next(root.glob('*report.json')).read_text())['status'], expected)
 
     def test_configuration_acknowledgement_does_not_claim_effect_or_override_turns(self):
         actions = []
@@ -326,7 +326,7 @@ class SimulationPipelineTests(unittest.TestCase):
                 path = Path(tmp)/'plan.json'
                 path.write_text(json.dumps(plan))
                 with patch.dict('sys.modules', {'claude_agent_sdk': sdk}), patch('record_user_story.drivers.sdk_identity', return_value={'package': 'synthetic', 'version': '1'}):
-                    self.assertEqual(main(['worker', '--plan', str(path)]), code)
+                    request_case(plan, code)
                 report = json.loads((Path(tmp)/'report.json').read_text())
                 self.assertEqual(report['status'], expected)
                 if expected == 'passed':
@@ -372,7 +372,7 @@ class SimulationPipelineTests(unittest.TestCase):
                 path = Path(tmp) / 'plan.json'
                 path.write_text(json.dumps(plan))
                 with patch.dict('sys.modules', {'claude_agent_sdk': sdk}), patch('record_user_story.drivers.sdk_identity', return_value={'package': 'synthetic', 'version': '1'}):
-                    self.assertEqual(main(['worker', '--plan', str(path)]), 0)
+                    request_case(plan)
                 report = json.loads((Path(tmp) / 'report.json').read_text())
                 self.assertEqual(report['status'], 'passed' if metadata else 'untriggered')
                 self.assertEqual(actions[:4], ['input', 'close', 'list', 'info-discovered'])

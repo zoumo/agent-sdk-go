@@ -1,8 +1,6 @@
-"""Offline story orchestration and identity tests using actual Go subprocesses."""
+"""Single-request official adapter exercises actual Go capture and mock processes."""
 import hashlib
-import io
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,10 +10,10 @@ from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from record_user_story import drivers
-from record_user_story.cli import main, execute, snapshot_directory, validate_replay
-from record_user_story.environment import manifest, verify_recording
-from record_user_story.peer import identity, planned_identity
+from request_support import request_case
+from peer_support import identity
+from record_user_story.scenarios import recipe, digest
+import shlex
 
 
 class Value(SimpleNamespace):
@@ -54,15 +52,14 @@ for line in sys.stdin:
         print('{"method":"turn/completed","params":{"turn":{"id":"turn","status":{"value":"completed"}},"opaque":900719925474099312345,"ratio":1.2300}}', flush=True)
 ''')
         native.chmod(0o700)
-        command = ['prepare', '--provider', 'codex', '--stories', 'conversation', '--cases', 'two-inputs',
-                   '--cli', str(native), '--source-config', str(source), '--output', str(base/'dataset')]
-        if binary:
-            command += ['--peer', str(binary)]
-        with patch('record_user_story.environment.sdk_identity', return_value={'package': 'synthetic-sdk', 'version': '1'}), \
-             patch.dict(os.environ, {'AGENT_MOCK_SCENARIOS': str(Path(drivers.__file__).parent/'examples')}):
-            self.assertEqual(main(command), 0)
         root = base/'dataset/conversation/two-inputs'
-        return root, json.loads((root/'plan.json').read_bytes())
+        root.mkdir(parents=True)
+        definition = recipe('codex', 'conversation', case_id='two-inputs')
+        plan = dict(version=4, provider='codex', story='conversation', storyId='conversation', caseId='two-inputs',
+                    driverProfile='continuation', root=str(root), project=str(root), raw=str(root/'raw'),
+                    model='synthetic', scenario=definition, scenarioSHA256=digest(definition), prompts=definition['prompts'],
+                    cli=str(native), officialSDK={'package': 'synthetic-sdk', 'version': '1'})
+        return root, plan
 
     def test_official_adapter_substitute_records_and_replays_through_go(self):
         # Only the SDK implementation is replaced. The real story adapter,
@@ -102,79 +99,41 @@ for line in sys.stdin:
             root, plan = self.prepare(Path(temporary).resolve())
             modules = {'openai_codex.client': sdk, 'openai_codex.generated.v2_all': generated, 'pydantic': pydantic}
             with patch.dict(sys.modules, modules), patch('record_user_story.drivers.sdk_identity', return_value=plan['officialSDK']):
-                with patch.dict(os.environ, {'AGENT_MOCK_RECORD': '1'}):
-                    self.assertEqual(drivers.run(plan), 0)
+                binary = identity()['path']
+                launcher = root/'record-peer'
+                launcher.write_text('#!/bin/sh\nexec ' + shlex.join([binary, 'protocol', 'record', '--output', str(root/'raw'),
+                                                                         '--cwd', str(root), '--', plan['cli']]) + '\n')
+                launcher.chmod(0o700)
+                request_case(plan, peer={'command': str(launcher), 'args': []})
                 report = json.loads((root/'report.json').read_bytes())
                 self.assertEqual((report['inputs'], report['results'], report['status']), (2, 2, 'passed'))
-                self.assertTrue(manifest(root, report))
-                verify_recording(root)
                 before = {p.name: p.read_bytes() for p in (root/'raw').iterdir()}
                 go_manifest = json.loads(before['manifest.json'])
-                for name, digest in go_manifest['files'].items():
-                    self.assertEqual(hashlib.sha256(before[name]).hexdigest(), digest)
+                for name, checksum in go_manifest['files'].items():
+                    self.assertEqual(hashlib.sha256(before[name]).hexdigest(), checksum)
                 Path(plan['cli']).unlink()  # Replay must never look up or run native.
-                with patch.dict(os.environ, {'AGENT_RECORDING_MOCK': plan['agentMock']['path'],
-                                             'AGENT_RECORDING_SCENARIO': str(root/'raw/raw.jsonl')}):
-                    self.assertEqual(drivers.run(plan), 0)
-                self.assertEqual(validate_replay(root, 0), 'passed')
+                # The runner supplies a separate output and explicit peer for replay.
+                replay_root = root/'replay'
+                replay_root.mkdir()
+                (replay_root/'raw').mkdir()
+                shutil.copyfile(root/'raw/raw.jsonl', replay_root/'raw/raw.jsonl')
+                replay_plan = dict(plan, root=str(replay_root), raw=str(replay_root/'raw'))
+                launcher = replay_root/'mock-peer'
+                receipt = replay_root/'peer.json'
+                launcher.write_text('#!/bin/sh\nexec ' + shlex.join([binary, 'protocol', 'mock', '--provider', 'codex',
+                                                 '--scenario', str(root/'raw/raw.jsonl'), '--receipt', str(receipt)]) + '\n')
+                launcher.chmod(0o700)
+                request_case(replay_plan, peer={'command': str(launcher), 'args': []})
+                replay_report = next(replay_root.glob('*report.json'))
+                self.assertEqual(json.loads(replay_report.read_bytes())['status'], 'passed')
+                completion = json.loads(receipt.read_bytes())
+                self.assertTrue(completion['fullConsumption'])
+                self.assertTrue(completion['clientEOF'])
+                self.assertFalse(completion['nativeLaunched'])
+                self.assertEqual(completion['recordingSHA256'], hashlib.sha256(before['raw.jsonl']).hexdigest())
                 self.assertEqual(before, {p.name: p.read_bytes() for p in (root/'raw').iterdir()})
                 self.assertIn(b'1.2300', before['raw.jsonl'])
                 self.assertIn(b'900719925474099312345', before['raw.jsonl'])
-                self.assertEqual(json.loads((root/'replay-peer-identity.json').read_bytes()), plan['agentMock'])
-                verify_recording(root)
-
-    def test_changed_or_missing_go_binary_fails_before_launch_and_keeps_stdout_private(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary).resolve()
-            binary = base/'agent-sdk-testify'
-            shutil.copyfile(identity()['path'], binary)
-            binary.chmod(0o700)
-            root, plan = self.prepare(base, binary)
-            binary.write_bytes(b'private-config-canary-not-an-executable')
-            for action in ('record', 'replay'):
-                stdout, stderr = io.StringIO(), io.StringIO()
-                with patch('sys.stdout', stdout), patch('sys.stderr', stderr):
-                    self.assertEqual(main([action, '--output', str(base/'dataset')]), 1)
-                self.assertEqual(stdout.getvalue(), '')
-                self.assertNotIn('private-config-canary', stderr.getvalue())
-                self.assertIn('Go agent-sdk-testify binary changed', stderr.getvalue())
-                self.assertFalse((root/'native.started').exists())
-                self.assertFalse((root/'attempt.started').exists())
-            binary.unlink()
-            relocated = planned_identity(plan, identity()['path'])
-            self.assertEqual(relocated['sha256'], plan['agentMock']['sha256'])
-            with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(ValueError, 'unavailable'):
-                planned_identity(plan)
-            with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(ValueError, 'AGENT_SDK_TESTIFY_BIN'):
-                identity()
-
-    def test_prepared_plan_tampering_is_rejected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary).resolve()
-            root, plan = self.prepare(base)
-            plan['args'].append('unfrozen-argument')
-            (root/'plan.json').write_text(json.dumps(plan))
-            with self.assertRaisesRegex(ValueError, 'plan identity changed'):
-                execute(SimpleNamespace(action='record', output=str(base/'dataset'), stories=None, peer=None))
-            self.assertFalse((root/'attempt.started').exists())
-
-    def test_noncurrent_snapshots_cannot_launch_even_when_they_contain_a_mock(self):
-        for old in ('agent_mock', 'agent_recording'):
-            with self.subTest(package=old), tempfile.TemporaryDirectory() as temporary:
-                base = Path(temporary)
-                root = base/'story'/'case'
-                snapshot = root/'driver'/old
-                snapshot.mkdir(parents=True)
-                (snapshot/'mock.py').write_text('raise AssertionError("old mock executed")\n')
-                (snapshot/'bootstrap.py').write_text('raise AssertionError("old driver executed")\n')
-                (base/'suite.json').write_text('{}')
-                (root/'plan.json').write_text(json.dumps({'version':4, 'story':'story', 'storyId':'story', 'caseId':'case'}))
-                before = {str(p):p.read_bytes() for p in base.rglob('*') if p.is_file()}
-                self.assertEqual(snapshot_directory(root), root/'driver/record_user_story')
-                for action in ('record', 'replay'):
-                    with self.assertRaisesRegex(ValueError, 'current simulation driver snapshot'):
-                        execute(SimpleNamespace(action=action, output=temporary, stories=None, peer=None))
-                self.assertEqual(before, {str(p):p.read_bytes() for p in base.rglob('*') if p.is_file()})
 
 
 if __name__ == '__main__':

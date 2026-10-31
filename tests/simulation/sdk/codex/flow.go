@@ -16,7 +16,7 @@ import (
 
 // AcceptFlow executes recorded native operations through public Session and Client
 // APIs. The recording supplies inputs and expected facts, never outbound frames.
-func AcceptFlow(ctx context.Context, executable, path, receipt string, deliveries io.Writer) (err error) {
+func AcceptFlow(ctx context.Context, executable string, args []string, path string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func AcceptFlow(ctx context.Context, executable, path, receipt string, deliverie
 	if err := json.Unmarshal(messages[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", path, "--receipt", receipt}, Env: []string{}, Initialize: init})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: []string{}, Initialize: init})
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func AcceptFlow(ctx context.Context, executable, path, receipt string, deliverie
 	if err := json.Unmarshal(messages[startAt].Params, &start); err != nil {
 		return err
 	}
-	s, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: start})
+	s, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: start, ChildDetailPolicy: policy})
 	if err != nil {
 		return err
 	}
@@ -289,5 +289,8 @@ func AcceptFlow(ctx context.Context, executable, path, receipt string, deliverie
 		return err
 	}
 	<-done
+	if receiveErr != nil && !errors.Is(receiveErr, io.EOF) {
+		return receiveErr
+	}
 	return nil
 }

@@ -4,13 +4,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from record_user_story.existing_children import prepare_seed, require_observation_wire, verify_seed
+from record_user_story.existing_children import require_observation_wire, verify_seed
 
 
 class ExistingChildrenTests(unittest.TestCase):
-    def test_prepare_requires_passed_child_source_and_pins_both_copies(self):
+    def test_runner_seed_pins_source_and_copied_history(self):
         with tempfile.TemporaryDirectory() as name:
-            source, root = Path(name) / 'source', Path(name) / 'target'
+            source, root = Path(name).resolve() / 'source', Path(name).resolve() / 'target'
             for path in (source / 'project', source / 'raw', root / 'project', root / 'config'):
                 path.mkdir(parents=True)
             import re
@@ -32,7 +32,16 @@ class ExistingChildrenTests(unittest.TestCase):
                 {'list_subagents': {'sessionId': session, 'agentIds': ['old']}}]}))
             (source / 'replay-validation.json').write_text(json.dumps({'status': 'passed', 'fullConsumption': True}))
             (source / 'raw/raw.jsonl').write_text('synthetic source bytes, not a real recording claim')
-            seed = prepare_seed(source, root, 'claude')
+            import shutil
+            for path in saved:
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / path, target)
+            seed = {'provider': 'claude', 'sourceRoot': str(source), 'sourceProject': str(source / 'project'),
+                    'projectFiles': {}, 'sessionId': session, 'agentIds': ['old'],
+                    'files': {path: {'source': path, 'sha256': digest} for path, digest in saved.items()},
+                    'sourceFiles': {path: hashlib.sha256((source / path).read_bytes()).hexdigest() for path in
+                                    ('plan.json', 'manifest.json', 'report.json', 'replay-validation.json', 'raw/raw.jsonl')}}
             target_plan = {'root': str(root), 'historySeed': seed, 'historyProject': seed['sourceProject']}
             self.assertEqual(seed['sessionId'], session)
             self.assertEqual(seed['agentIds'], ['old'])
@@ -43,7 +52,6 @@ class ExistingChildrenTests(unittest.TestCase):
             # Offline replay depends on its immutable copy and frozen source
             # hashes, not continued availability of the prior capture directory.
             verify_seed(target_plan, check_source=False)
-            with self.assertRaises(ValueError): prepare_seed(source, root, 'claude')
             target_plan['historyProject'] = str(root / 'project')
             with self.assertRaises(ValueError): verify_seed(target_plan, check_source=False)
 

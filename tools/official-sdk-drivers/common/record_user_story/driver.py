@@ -5,7 +5,6 @@ Run directly with an installed SDK environment:
 """
 import argparse
 import json
-import os
 from pathlib import Path
 import sys
 
@@ -32,20 +31,18 @@ def main(argv=None, expected_provider=None, case_registry=None):
         plan['_fixtureProject'] = request['workspace']
         plan['_nativeCase'] = True
         prepare_case(plan, case_registry or {})
-        # This describes the supplied peer, not permission to discover a CLI.
-        # Offline inputs have raw protocol data; live capture creates it later.
-        if (output / 'raw/raw.jsonl').exists():
-            os.environ['AGENT_RECORDING_MOCK'] = plan['_mock']
-            os.environ['AGENT_SDK_TESTIFY_BIN'] = plan['_mock']
+        # Read-only evidence distinguishes saved inputs from a fresh capture;
+        # process commands and configuration come exclusively from request.peer.
+        plan['_replay'] = (output / 'raw/raw.jsonl').exists()
         from record_user_story.drivers import run
         run(plan)
-        report_path = output / ('replay-report.json' if os.environ.get('AGENT_RECORDING_MOCK') else 'report.json')
+        report_path = output / ('replay-report.json' if plan['_replay'] else 'report.json')
         report = json.loads(report_path.read_text())
         status = report['status']
         result = {'status': 'unsupported' if status in ('planned', 'unsupported') else status,
                   'message': '; '.join(report.get('gaps', [])),
                   'sdk': report.get('officialSDK')}
-        diagnostics = output / ('replay-diagnostics.private.json' if os.environ.get('AGENT_RECORDING_MOCK') else 'diagnostics.private.json')
+        diagnostics = output / ('replay-diagnostics.private.json' if plan['_replay'] else 'diagnostics.private.json')
         if status == 'failed' and diagnostics.exists():
             result['message'] = json.loads(diagnostics.read_text()).get('error', result['message'])
     except NotImplementedError as exc:

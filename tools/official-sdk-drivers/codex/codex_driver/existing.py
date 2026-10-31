@@ -1,64 +1,12 @@
 """Resume an independently saved Codex parent, then discover existing children."""
 import json
-import os
 from pathlib import Path
 
 from record_user_story.adapters.common import proxy_command, serial
-from record_user_story.environment import read_regular, recording_temp_root, verify_recording
+from record_user_story.environment import read_regular, recording_temp_root
 from record_user_story.existing_children import sha, project_files, verify_seed
 from record_user_story.history import pages
 
-
-def prepare_seed(source, root):
-    source, root = Path(source).resolve(strict=True), Path(root).resolve(strict=True)
-    verify_recording(source)
-    plan = json.loads(read_regular(source / 'plan.json'))
-    report = json.loads(read_regular(source / 'report.json'))
-    replay = json.loads(read_regular(source / 'replay-validation.json'))
-    if (plan.get('provider') != 'codex' or plan.get('driverProfile') != 'history'
-            or plan.get('scenario', {}).get('parameters', {}).get('historyTarget') != 'child-messages'
-            or report.get('status') != 'passed' or replay.get('status') != 'passed'
-            or replay.get('fullConsumption') is not True):
-        raise ValueError('Codex seed requires passed native child history and strict replay')
-    queries = [x['history-query'] for x in report['receipts'] if 'history-query' in x]
-    children = [x for x in queries if x['method'] == 'thread/list' and x['params'].get('parentThreadId')]
-    if len(children) != 1 or not children[0]['response'].get('data'):
-        raise ValueError('Codex seed requires an unambiguous saved parent and child list')
-    session = children[0]['params']['parentThreadId']
-    agents = [x['id'] for x in children[0]['response']['data']]
-    if len(set(agents)) != len(agents) or any(x.get('parentThreadId') != session for x in children[0]['response']['data']):
-        raise ValueError('Codex seed child parent identity differs')
-    project = Path(plan['project']).resolve(strict=True)
-    if project != source / 'project' or not project.is_relative_to(recording_temp_root()):
-        raise ValueError('seed must retain its isolated original project scope')
-    saved = json.loads(read_regular(source / 'manifest.json')).get('savedFiles', {})
-    copied, found = {}, set()
-    for name, digest in saved.items():
-        if not Path(name).is_relative_to('config/sessions'):
-            continue
-        data = read_regular(source / name, None)
-        first = json.loads(data.splitlines()[0])
-        identity = first.get('payload', {}).get('id') if first.get('type') == 'session_meta' else None
-        if identity not in [session, *agents]:
-            continue
-        if identity in found or sha(source / name) != digest:
-            raise ValueError('Codex saved seed is duplicated or changed')
-        found.add(identity)
-        # Immutable input evidence is separate from the native writable home.
-        # Do not copy SQLite indexes containing absolute source rollout paths.
-        for destination in [Path('history-seed') / name, Path(name)]:
-            target = root / destination
-            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            with target.open('xb') as stream: stream.write(data)
-            target.chmod(0o600)
-        copied[str(Path('history-seed') / name)] = {'source': name, 'sha256': digest}
-    if found != {session, *agents}:
-        raise ValueError('Codex seed manifest lacks hashed parent or child rollouts; record a fresh seed')
-    return {'provider': 'codex', 'sourceRoot': str(source), 'sourceProject': str(project),
-            'projectFiles': project_files(project), 'sessionId': session, 'agentIds': agents,
-            'sourceFiles': {name: sha(source / name) for name in
-                            ('plan.json', 'manifest.json', 'report.json', 'replay-validation.json', 'raw/raw.jsonl')},
-            'files': copied}
 
 
 def require_wire(plan, frames):
@@ -116,7 +64,7 @@ def observe(plan, report):
     from pydantic import BaseModel, ConfigDict
     class NativeResponse(BaseModel):
         model_config = ConfigDict(extra='allow')
-    check_source = not bool(os.environ.get('AGENT_RECORDING_MOCK'))
+    check_source = not bool(plan.get('_replay'))
     seed = verify_seed(plan, check_source=check_source)
     config = CodexConfig(launch_args_override=tuple(proxy_command(plan)), cwd=plan['historyProject'],
                          client_name='official-python-story-recorder', client_title='Protocol recording')

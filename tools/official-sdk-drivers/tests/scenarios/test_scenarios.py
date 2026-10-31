@@ -3,7 +3,6 @@ import asyncio
 from copy import deepcopy
 from dataclasses import dataclass
 import json
-import os
 from pathlib import Path
 import tempfile
 from types import ModuleType, SimpleNamespace
@@ -11,12 +10,11 @@ import unittest
 from unittest.mock import patch
 
 from support import BOOTSTRAP
-from record_user_story.scenarios import story_ids, Flow, Untriggered, recipe as native_recipe, digest, validate_recipe, scenario_directory, select_story_groups, case_recipes
+from record_user_story.scenarios import Flow, Untriggered, recipe as native_recipe, digest, validate_recipe, scenario_directory, select_story_groups, case_recipes
 from record_user_story.drivers import run
 from codex_driver.adapter import codex
 from claude_driver.adapter import claude
-from record_user_story.cli import validate_replay, digest_module
-from record_user_story.environment import private_json, verify_recording, prepare
+from record_user_story.environment import private_json, verify_recording
 
 
 def recipe(provider, flow_name, directory=None):
@@ -38,6 +36,7 @@ def recipe(provider, flow_name, directory=None):
 
 
 def plan_for(definition, **values):
+    values.setdefault('_peer', {'command': '/unused-peer', 'args': []})
     return dict(version=4, story=definition['storyId'], storyId=definition['storyId'],
                 caseId=definition['caseId'], driverProfile=definition['driverProfile'],
                 provider=definition['provider'], scenario=definition,
@@ -101,54 +100,6 @@ class ScenarioTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             recipe('codex', 'SDK-US-020')
 
-    def test_prepare_freezes_live_plan_and_preserves_child_profile(self):
-        import sys
-        for mode in ('standard', 'explicit-child', 'default-child'):
-            child = mode != 'standard'
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                source = root / 'source'
-                source.mkdir()
-                (source / 'config.toml').write_text('model="source-default"\n')
-                native = root / 'native'
-                native.write_text('#!' + sys.executable + '\nprint("99.0.0")\n')
-                native.chmod(0o700)
-                args = SimpleNamespace(provider='codex', stories='SDK-US-005' if child else 'SDK-US-001,SDK-US-003',
-                                       output=str(root / 'suite'), source_config=str(source), cli=str(native),
-                                       child_case=mode == 'explicit-child', model='fixture', cases='SDK-CASE-016' if child else 'SDK-CASE-001,SDK-CASE-012')
-                with patch('record_user_story.environment.sdk_identity', return_value={'package': 'fixture', 'version': '0'}), patch.dict('os.environ', {'AGENT_SDK_TESTIFY_BIN': os.environ['AGENT_SDK_TESTIFY_BIN'], 'PATH': '/usr/bin:/bin', 'AGENT_MOCK_SCENARIOS': str(scenario_directory())}, clear=True):
-                    prepare(args)
-                path = Path(args.output) / ('SDK-US-005' if child else 'SDK-US-001') / ('SDK-CASE-016' if child else 'SDK-CASE-001')
-                plan = json.loads((path / 'plan.json').read_text())
-                self.assertEqual(plan['cliVersion'], '99.0.0')
-                import tomllib
-                self.assertEqual(tomllib.loads((path / 'config/config.toml').read_text())['model'], 'fixture')
-                self.assertEqual((source / 'config.toml').read_text(), 'model="source-default"\n')
-                self.assertEqual(plan['capturePolicy'], {'timeoutSeconds': 0, 'protocolBytes': 0, 'stderrBytes': 0})
-                if child:
-                    self.assertEqual(plan['version'], 4)
-                    validate_recipe(plan)
-                    self.assertTrue((path / 'project/child-fixture.txt').exists())
-                else:
-                    self.assertEqual(plan['version'], 4)
-                    validate_recipe(plan)
-                    self.assertFalse((Path(args.output) / 'SDK-US-003').exists())
-                    self.assertEqual((path / 'project/numbers.txt').read_text(), '17\n25\n')
-                self.assertTrue((path / 'driver/record_user_story/scenarios.py').exists())
-                self.assertTrue((path / 'driver/scenarios/SDK-US-001.json').exists())
-                import subprocess
-                result = subprocess.run([sys.executable, '-c', "from record_user_story.scenarios import recipe; print(recipe('codex', 'SDK-US-001', case_id='SDK-CASE-005')['progressAction'])"],
-                                        cwd=tmp, env={'PYTHONPATH': str(path / 'driver'), 'PATH': '/usr/bin:/bin'},
-                                        capture_output=True, text=True, check=True)
-                self.assertEqual(result.stdout.strip(), 'submit-supplement')
-                before = digest_module(path / 'driver/record_user_story')
-                (path / 'driver/scenarios/SDK-US-001.json').write_text('{}')
-                self.assertNotEqual(before, digest_module(path / 'driver/record_user_story'))
-
-    def test_prepare_offline_selection_never_reads_sdk_or_auth(self):
-        with patch('record_user_story.environment.sdk_identity', side_effect=AssertionError('SDK accessed')):
-            with self.assertRaisesRegex(ValueError, 'no live recording path'):
-                prepare(SimpleNamespace(provider='codex', cases='SDK-CASE-012'))
 
     def test_scoped_case_pass_does_not_require_other_us_branches(self):
         for number in ('continuation', 'media', 'active-input', 'tools', 'questions', 'configuration', 'interrupt'):
@@ -392,40 +343,6 @@ class ScenarioTests(unittest.TestCase):
                 self.assertEqual(saved['inputs'], 0)
                 self.assertEqual(saved['status'], definition['mode'])
 
-    def test_replay_requires_flow_and_branch_identity_in_addition_to_wire_eof(self):
-        for field, changed in [('flowTrace', []), ('scenarioSHA256', 'changed'), ('branchStatus', 'untriggered'), ('branchStatus', 'passed')]:
-            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                original = dict(status='passed', inputs=1, results=1, requests=0, receipts=[],
-                                scenarioSHA256='frozen', branchStatus='passed', flowTrace=[{'step': 'result'}])
-                private_json(root / 'report.json', original)
-                private_json(root / 'replay-report.json', dict(original, **{field: changed}))
-                private_json(root / 'replay-peer.json', {'fullConsumption': True, 'nativeLaunched': False, 'peer': 'Go native mock', 'clientEOF': True})
-                self.assertEqual(validate_replay(root, 0), 'passed' if field == 'branchStatus' and changed == 'passed' else 'failed')
-
-    def test_replay_reproduces_untriggered_without_promoting_it_to_pass(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            original = dict(status='untriggered', inputs=1, results=1, requests=0, receipts=[],
-                            scenarioSHA256='frozen', branchStatus='untriggered', flowTrace=[{'step': 'result'}])
-            private_json(root / 'report.json', original)
-            private_json(root / 'replay-report.json', original)
-            private_json(root / 'replay-peer.json', {'fullConsumption': True, 'nativeLaunched': False, 'peer': 'Go native mock', 'clientEOF': True})
-            self.assertEqual(validate_replay(root, 1), 'expected-untriggered-reproduced')
-            self.assertEqual(json.loads((root / 'report.json').read_text()), original)
-
-    def test_replay_requires_same_case_scope_and_missing_evidence(self):
-        for field, changed in [('case', {'id': 'different'}), ('gaps', ['missing child']),
-                               ('limitations', ['changed scope']), ('branchStatus', 'failed')]:
-            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                original = dict(status='passed', inputs=1, results=1, requests=0, receipts=[],
-                                case={'id': 'child-read', 'scope': 'fixed read', 'outOfScope': ['nested']},
-                                gaps=[], limitations=[], branchStatus='passed')
-                private_json(root/'report.json', original)
-                private_json(root/'replay-report.json', dict(original, **{field: changed}))
-                private_json(root/'replay-peer.json', {'fullConsumption': True, 'nativeLaunched': False, 'peer': 'Go native mock', 'clientEOF': True})
-                self.assertEqual(validate_replay(root, 0), 'failed')
 
     def test_manifest_refuses_changed_plan(self):
         import hashlib
@@ -478,7 +395,7 @@ class ScenarioTests(unittest.TestCase):
                 model_module.ConfigDict = lambda **kw: kw
                 definition = recipe('codex', number)
                 flow = Flow(definition)
-                plan = dict(definition, root='/unused', project='/unused', model='fixture')
+                plan = dict(definition, _peer={'command': '/unused-peer', 'args': []}, root='/unused', project='/unused', model='fixture')
                 modules = {'openai_codex.client': client_module, 'openai_codex.generated.v2_all': types_module, 'pydantic': model_module}
                 with tempfile.TemporaryDirectory() as tmp, patch.dict('sys.modules', modules):
                     plan['root'] = tmp

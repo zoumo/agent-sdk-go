@@ -6,13 +6,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import record_user_story
-from record_user_story.peer import identity
-from record_user_story.cli import digest_module, snapshot_directory, main
+from peer_support import identity
 from record_user_story.environment import private_json, recording_temp_root
 from record_user_story.scenarios import case_recipes, _validate, recipe, digest
 
@@ -48,11 +46,10 @@ class RecordingTests(unittest.TestCase):
                     (root/'project'/name).write_text(value)
                 plan['agentMock'] = identity()
                 private_json(root/'plan.json', plan)
-                config_key = 'CODEX_HOME' if provider == 'codex' else 'CLAUDE_CONFIG_DIR'
-                private_json(root/'native.env.private.json', {'HOME':plan['home'], config_key:plan['config'], 'TMPDIR':str(root/'tmp')})
-                env = {'PYTHONPATH':str(Path(record_user_story.__file__).parent.parent), 'AGENT_MOCK_RECORD':'1', 'PATH':'/missing'}
-                captured = subprocess.run([sys.executable, '-S', '-m', 'record_user_story.bootstrap', 'proxy', '--plan', str(root/'plan.json')],
-                                          input=request, capture_output=True, timeout=10, cwd=root, env=env)
+                env = {'PATH': '/missing'}
+                captured = subprocess.run([identity()['path'], 'protocol', 'record', '--output', str(root/'raw'),
+                                           '--', sys.executable, str(native)], input=request,
+                                          capture_output=True, timeout=10, cwd=root, env=env)
                 self.assertEqual(captured.returncode, 0, (captured.stderr, {p.name: p.read_text() for p in root.glob('*diagnostics*.json')}))
                 self.assertEqual(captured.stdout, response)
                 transport = json.loads((root/'raw/transport.json').read_text())
@@ -67,7 +64,6 @@ class RecordingTests(unittest.TestCase):
                 receipt = root/'receipt.json'
                 command = [identity()['path'], 'protocol', 'mock', '--provider', provider,
                            '--scenario', str(raw), '--receipt', str(receipt)]
-                env.pop('AGENT_MOCK_RECORD')
                 replayed = subprocess.run(command, input=rebound, capture_output=True, timeout=10, cwd=root, env=env)
                 self.assertEqual(replayed.returncode, 0, replayed.stderr)
                 self.assertEqual(replayed.stdout, replay_response)
@@ -77,34 +73,6 @@ class RecordingTests(unittest.TestCase):
                 mismatch = subprocess.run(command[:-2], input=b'{}\n', capture_output=True, timeout=10, cwd=root, env=env)
                 self.assertEqual(mismatch.returncode, 1)
 
-    def test_prepare_freezes_nested_adapters_and_catalog_without_git(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary).resolve()
-            config = base/'source'
-            config.mkdir()
-            native = base/'fake-native'
-            native.write_text('#!' + sys.executable + '\nprint("synthetic 1.2.3")\n')
-            native.chmod(0o700)
-            args = SimpleNamespace(provider='codex', stories='conversation', cases='two-inputs',
-                                   output=str(base/'dataset'), source_config=str(config), cli=str(native), model='synthetic')
-            with patch.dict(os.environ, {'PATH':'/missing', 'AGENT_SDK_TESTIFY_BIN':identity()['path']}, clear=True), patch('record_user_story.environment.sdk_identity', return_value={'package':'synthetic', 'version':'1'}):
-                self.assertEqual(main(['prepare', '--provider', args.provider, '--stories', args.stories,
-                                       '--cases', args.cases, '--output', args.output, '--cli', args.cli,
-                                       '--source-config', args.source_config, '--model', args.model]), 0)
-            root = Path(args.output)/'conversation/two-inputs'
-            snapshot = snapshot_directory(root)
-            before = digest_module(snapshot)
-            self.assertEqual(json.loads((Path(args.output)/'suite.json').read_text())['moduleSHA256'], before)
-            adapter = snapshot/'adapters/common.py'
-            self.assertTrue(adapter.is_file())
-            self.assertTrue((snapshot/'schemas/scenario.schema.json').is_file())
-            env = {'PYTHONPATH':str(snapshot.parent), 'PATH':'/missing', 'AGENT_MOCK_SCENARIOS':'/missing'}
-            run = subprocess.run([sys.executable, '-S', '-m', 'record_user_story.bootstrap', 'catalog'], cwd=base,
-                                 env=env, capture_output=True, timeout=5)
-            self.assertEqual(run.returncode, 0, run.stderr)
-            self.assertEqual({item['caseId'] for item in json.loads(run.stdout)}, {'two-inputs'})
-            adapter.write_text(adapter.read_text() + '\n# changed\n')
-            self.assertNotEqual(before, digest_module(snapshot))
 
     def test_default_catalog_has_no_go_story_identity(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -113,13 +81,6 @@ class RecordingTests(unittest.TestCase):
                 self.assertEqual([item['caseId'] for item in definitions], ['two-inputs'])
                 self.assertEqual(definitions[0]['storyId'], 'conversation')
                 self.assertNotIn('offlineTest', definitions[0])
-
-    def test_only_current_driver_path_is_selected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            old = root/'driver/agent_recording'
-            old.mkdir(parents=True)
-            self.assertEqual(snapshot_directory(root), root/'driver/record_user_story')
 
 
 if __name__ == '__main__':

@@ -22,12 +22,22 @@ type command struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args,omitempty"`
 }
+type remoteEndpoint struct {
+	URL         string `json:"url"`
+	BearerToken string `json:"bearerToken"`
+}
+type driverPeer struct {
+	command
+	Probe    *command        `json:"probe,omitempty"`
+	Suppress *command        `json:"suppress,omitempty"`
+	Remote   *remoteEndpoint `json:"remote,omitempty"`
+}
 type request struct {
-	Case      string  `json:"case"`
-	Materials string  `json:"materials"`
-	Workspace string  `json:"workspace"`
-	Peer      command `json:"peer"`
-	Output    string  `json:"output"`
+	Case      string     `json:"case"`
+	Materials string     `json:"materials"`
+	Workspace string     `json:"workspace"`
+	Peer      driverPeer `json:"peer"`
+	Output    string     `json:"output"`
 }
 type result struct {
 	Status  string `json:"status"`

@@ -9,13 +9,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/command"
 	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/recording"
 )
 
 func TestRawArtifactWriteFailureRetainsFailedEvidence(t *testing.T) {
 	dir := t.TempDir()
-	journal, err := openJournal(command.RecordOptions{Output: dir}, time.Now())
+	journal, err := openJournal(Options{Output: dir}, time.Now())
 	require.NoError(t, err)
 	// Close the recording descriptor to force a storage failure independently of
 	// forwarding. A frame that cannot be recorded must never be forwarded as if

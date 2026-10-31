@@ -94,3 +94,97 @@ func TestIncompleteRemoteCaptureCannotPassReplay(t *testing.T) {
 		})
 	}
 }
+
+func TestSelectedConfigExcludesIntegrationsAndKeepsEndpointCredentialsTogether(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, "config"), 0700))
+	source := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(source, "config.toml"), []byte(`model="synthetic"
+model_provider="selected"
+notify=["must-not-run"]
+[projects.private]
+trust_level="trusted"
+[mcp_servers.private]
+command="must-not-run"
+[model_providers.selected]
+base_url="synthetic-endpoint"
+env_key="SYNTHETIC_CREDENTIAL"
+[model_providers.other]
+env_key="OTHER_CREDENTIAL"
+`), 0600))
+	self, err := os.Executable()
+	require.NoError(t, err)
+	require.NoError(t, prepareNative(context.Background(), &options{CLI: self, Config: source}, object{"provider": "codex", "project": root, "scenario": object{}}, root))
+	config, err := os.ReadFile(filepath.Join(root, "config/config.toml"))
+	require.NoError(t, err)
+	require.Contains(t, string(config), "synthetic-endpoint")
+	for _, excluded := range []string{"notify", "projects", "mcp_servers", "OTHER_CREDENTIAL"} {
+		require.NotContains(t, string(config), excluded)
+	}
+	env := map[string]string{"ANTHROPIC_BASE_URL": "other-endpoint", "ANTHROPIC_AUTH_TOKEN": "other-token"}
+	settings := filepath.Join(root, "settings.json")
+	require.NoError(t, writeJSON(settings, object{"env": object{"ANTHROPIC_BASE_URL": "selected-endpoint", "ANTHROPIC_API_KEY": "selected-key"}}))
+	claudeAuthEnvironment(settings, env)
+	require.Equal(t, map[string]string{"ANTHROPIC_BASE_URL": "selected-endpoint", "ANTHROPIC_API_KEY": "selected-key"}, env)
+}
+
+func TestCaptureScansConfiguredCredentialsWithoutKeySuffix(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, "config"), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "config/config.toml"), []byte("model_provider='selected'\n[model_providers.selected]\nenv_key='SYNTHETIC_CREDENTIAL'\n"), 0600))
+	require.NoError(t, writeJSON(filepath.Join(root, "native.env.private.json"), map[string]string{"SYNTHETIC_CREDENTIAL": "synthetic-scan-canary"}))
+	raw := filepath.Join(root, "raw/raw.jsonl")
+	require.NoError(t, os.WriteFile(raw, []byte("original synthetic-scan-canary bytes\n"), 0600))
+	status, err := scanCaptureCredentials(root)
+	require.Equal(t, "quarantined", status)
+	require.Error(t, err)
+	unchanged, err := os.ReadFile(raw)
+	require.NoError(t, err)
+	require.Equal(t, "original synthetic-scan-canary bytes\n", string(unchanged))
+	require.NoError(t, os.WriteFile(raw, []byte("safe synthetic data\n"), 0600))
+	status, err = scanCaptureCredentials(root)
+	require.NoError(t, err)
+	require.Equal(t, "pass", status)
+}
+
+func TestLegacyDriverSnapshotHashAndRegularSourceRemainRequired(t *testing.T) {
+	o := sample(t, "passed")
+	path := filepath.Join(o.Materials, "driver/source.py")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
+	original := []byte("# original saved driver source\n")
+	require.NoError(t, os.WriteFile(path, original, 0600))
+	sum := sha256.Sum256(original)
+	require.NoError(t, writeJSON(filepath.Join(o.Materials, "manifest.json"), object{"driverFiles": object{"driver/source.py": hex.EncodeToString(sum[:])}}))
+	_, err := loadMaterials(o)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte("changed"), 0600))
+	_, err = loadMaterials(o)
+	require.ErrorContains(t, err, "source hash mismatch")
+	saved := filepath.Join(t.TempDir(), "saved.py")
+	require.NoError(t, os.WriteFile(saved, original, 0600))
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.Symlink(saved, path))
+	_, err = loadMaterials(o)
+	require.ErrorContains(t, err, "not a regular file")
+}
+
+func TestClaudeConfigCopyRetainsNativeDefaultModelOnly(t *testing.T) {
+	root, source := t.TempDir(), t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, "config"), 0700))
+	settings := object{"model": "synthetic-default", "hooks": object{"must-not-run": true}, "env": object{"ANTHROPIC_BASE_URL": "selected-endpoint", "ANTHROPIC_API_KEY": "selected-key"}}
+	require.NoError(t, writeJSON(filepath.Join(source, "settings.json"), settings))
+	originalBytes, err := os.ReadFile(filepath.Join(source, "settings.json"))
+	require.NoError(t, err)
+	self, err := os.Executable()
+	require.NoError(t, err)
+	require.NoError(t, prepareNative(context.Background(), &options{CLI: self, Config: source}, object{"provider": "claude", "project": root, "scenario": object{}}, root))
+	var copied, original object
+	require.NoError(t, readJSON(filepath.Join(root, "config/settings.json"), &copied))
+	require.Equal(t, object{"model": "synthetic-default"}, copied)
+	require.NoError(t, readJSON(filepath.Join(source, "settings.json"), &original))
+	require.Equal(t, settings, original)
+	unchanged, err := os.ReadFile(filepath.Join(source, "settings.json"))
+	require.NoError(t, err)
+	require.Equal(t, originalBytes, unchanged)
+}

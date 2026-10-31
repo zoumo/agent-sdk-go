@@ -1,14 +1,11 @@
 """Native interactions driven exclusively by the selected official Python SDKs."""
 import asyncio
 import json
-import os
 from pathlib import Path
-import tempfile
 
 from .environment import private_json, sdk_identity, stdin_eof_action
 from .scenarios import Flow, Untriggered, validate_recipe
 from .stimuli import content
-
 
 
 def run(plan):
@@ -16,12 +13,7 @@ def run(plan):
     if definition['mode'] == 'live-selected-path' and definition['driverProfile'] in ('children', 'background-children'):
         return run_child_profile(plan)
     flow = Flow(definition)
-    replay = bool(os.environ.get('AGENT_RECORDING_MOCK'))
-    fixture = tempfile.TemporaryDirectory(prefix='official-sdk-replay-') if replay and not plan.get('_nativeCase') else None
-    if fixture:
-        plan = dict(plan, _fixtureProject=fixture.name)
-        for name, content in definition['files'].items():
-            (Path(fixture.name) / name).write_text(content)
+    replay = bool(plan.get('_replay'))
     report = {'provider': plan['provider'], 'story': plan['story'], 'status': 'passed',
               'inputs': 0, 'results': 0, 'events': 0, 'requests': 0, 'receipts': [],
               'facts': ['driver uses official Python SDK; raw bytes captured at native process boundary'],
@@ -73,23 +65,6 @@ def run(plan):
             report['captureStatus'] = 'failed'
             report['branchStatus'] = 'failed'
             private_json(Path(plan['root']) / ('replay-diagnostics.private.json' if replay else 'diagnostics.private.json'), {'error': str(exc), 'type': type(exc).__name__})
-    if not plan.get('_nativeCase') and not replay and (Path(plan['root']) / 'native.started').exists():
-        try:
-            transport = json.loads((Path(plan['raw']) / 'transport.json').read_text())
-            if transport.get('captureStatus') != 'complete':
-                raise RuntimeError('native transport failed: reason=' + str(transport.get('reason'))
-                                   + ', nativeExitCode=' + str(transport.get('nativeExitCode'))
-                                   + ', nativeSignal=' + str(transport.get('nativeSignal'))
-                                   + ', cleanupComplete=' + str(transport.get('cleanupComplete')))
-            if not transport.get('cleanupComplete'):
-                raise ValueError('native cleanup incomplete')
-        except Exception as exc:
-            report['status'] = 'failed'
-            report['captureStatus'] = 'failed'
-            report['gaps'].append(str(exc) if isinstance(exc, (RuntimeError, ValueError))
-                                  else 'native transport receipt unavailable: ' + type(exc).__name__)
-    if fixture:
-        fixture.cleanup()
     private_json(Path(plan['root']) / ('replay-report.json' if replay else 'report.json'), report)
     return int(report['captureStatus'] == 'failed')
 
@@ -97,7 +72,7 @@ def run(plan):
 def run_child_profile(plan):
     """Execute a current child flow and require its native relationship evidence."""
     definition = validate_recipe(plan)
-    replay = bool(os.environ.get('AGENT_RECORDING_MOCK'))
+    replay = bool(plan.get('_replay'))
     report = {'provider': plan['provider'], 'story': plan['story'], 'status': 'passed',
               'inputs': 0, 'results': 0, 'events': 0, 'requests': 0, 'receipts': [],
               'facts': ['official SDK child flow; native relationship evidence required'],
@@ -126,17 +101,6 @@ def run_child_profile(plan):
         report['captureStatus'] = 'failed'
         private_json(Path(plan['root']) / ('replay-diagnostics.private.json' if replay else 'diagnostics.private.json'),
                      {'error': str(exc), 'type': type(exc).__name__})
-    if not plan.get('_nativeCase') and not replay and (Path(plan['root']) / 'native.started').exists():
-        try:
-            transport = json.loads((Path(plan['raw']) / 'transport.json').read_text())
-            if transport.get('captureStatus') != 'complete':
-                raise RuntimeError('native transport failed')
-            if not transport.get('cleanupComplete'):
-                raise ValueError('native cleanup incomplete')
-        except Exception:
-            report['status'] = 'failed'
-            report['captureStatus'] = 'failed'
-            report['gaps'].append('native cleanup receipt unavailable or incomplete')
     private_json(Path(plan['root']) / ('replay-report.json' if replay else 'report.json'), report)
     return int(report['captureStatus'] == 'failed')
 

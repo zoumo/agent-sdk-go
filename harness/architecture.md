@@ -56,9 +56,9 @@ Both native SDKs use the same separation of responsibilities:
 | `tools/agent-sdk-testify/` | Single executable and Go environment/process runner; single-request native drivers own case execution and assertions |
 | `tools/official-sdk-drivers/codex/`, `tools/official-sdk-drivers/claude/` | Agent-owned official-SDK drivers; each Agent chooses its implementation language |
 | `tools/official-sdk-drivers/common/` | Shared material readers and native test helpers |
-| `tools/official-sdk-drivers/tests/` | Offline tests of official SDK drivers, shared helpers and recording/replay orchestration |
-| `tests/simulation/sdk/` | Go SDK simulation driver entry, request handling and delivery assertions; runs independently of the generic tool |
-| `tests/simulation/sdk/codex/`, `tests/simulation/sdk/claude/` | Provider-owned simulation flows, history, existing-child and remote acceptance; regression tests live alongside their implementation |
+| `tools/official-sdk-drivers/tests/` | Offline tests of current official SDK request drivers, source readers and public protocol processes |
+| `tests/simulation/sdk/` | Go SDK simulation driver entry, request handling and provider dispatch; runs independently of the generic tool |
+| `tests/simulation/sdk/codex/`, `tests/simulation/sdk/claude/` | Provider-owned simulation flows, history, existing-child, remote and child-delivery assertions; regression tests live alongside their implementation |
 | `tests/simulation/scenarios/` | Shared SDK story/case materials and provider bindings, supplied explicitly to either driver |
 | `codex/tests/replay`, `claude/tests/replay` | Synthetic fixture decoding/process adapters and SDK integration tests; SDK exercise helpers remain test-only; protocol matching belongs to agent-sdk-testify |
 | `internal/mocktest` | Shared standard-library test process bridge, without native matching or SDK imports |
@@ -81,6 +81,9 @@ or the production SDKs. Top-level
 The runner uses its own executable by default; callers need no separate peer binary.
 `protocol/` and its `capture`, `command`, `rawjson`, `recording` and `replay` packages
 own protocol processing and remain independent of case orchestration, drivers and SDKs.
+The capture core owns its options, I/O and typed errors; only the command boundary
+maps those errors to CLI exit codes. Provider-specific native preparation and
+history-seed interpretation stay in provider files, outside generic process orchestration.
 Do not add `cmd`, `pkg` or forwarding layers. Module responsibilities and dependency
 gates follow the module boundaries above.
 

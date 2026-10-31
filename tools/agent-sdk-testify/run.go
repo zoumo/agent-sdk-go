@@ -23,6 +23,9 @@ func run(ctx context.Context, o options) (object, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Legacy plans remain source evidence; stale runtime entries are not driver inputs.
+	delete(plan, "_mock")
+	delete(plan, "_peers")
 	provider := str(plan["provider"])
 	if provider != "codex" && provider != "claude" {
 		return nil, errors.New("materials must identify codex or claude")
@@ -118,7 +121,6 @@ func run(ctx context.Context, o options) (object, error) {
 	if err != nil {
 		return nil, err
 	}
-	plan["_mock"] = peer
 	self, err := os.Executable()
 	if err != nil {
 		return nil, err
@@ -135,10 +137,23 @@ func run(ctx context.Context, o options) (object, error) {
 			}
 		}()
 	}
-	peers := object{}
-	for _, phase := range []string{"main", "probe"} {
+	peers := map[string]command{}
+	phases := []string{"main"}
+	if plan["driverProfile"] == "remote-close" {
+		phases = append(phases, "probe")
+	}
+	if o.Mode == "simulate" && str(obj(obj(plan["scenario"])["parameters"])["childDetailPolicy"]) != "" {
+		phases = append(phases, "suppress")
+	}
+	for _, phase := range phases {
 		base := root
 		source := o.Materials
+		if phase == "suppress" {
+			base = filepath.Join(root, "suppress")
+			if err = preparePolicyCopy(root, base); err != nil {
+				return nil, err
+			}
+		}
 		if phase == "probe" {
 			base = filepath.Join(root, "remote-probe")
 			source = filepath.Join(o.Materials, "remote-probe")
@@ -167,15 +182,34 @@ func run(ctx context.Context, o options) (object, error) {
 		if err = writeJSON(peerPath, command{Command: peer, Args: args}); err != nil {
 			return nil, err
 		}
-		peers[phase] = command{Command: self, Args: []string{"peer", "--request", peerPath}}
+		launcher, e := writePeerLauncher(root, phase, command{Command: self, Args: []string{"peer", "--request", peerPath}})
+		if e != nil {
+			return nil, e
+		}
+		peers[phase] = command{Command: launcher}
 	}
-	plan["_peers"] = peers
+	driverPeers := driverPeer{command: peers["main"]}
+	if probe, ok := peers["probe"]; ok {
+		driverPeers.Probe = &probe
+	}
+	if suppress, ok := peers["suppress"]; ok {
+		driverPeers.Suppress = &suppress
+	}
+	var offlineRemote *mockRemoteService
+	if o.Mode == "simulate" && plan["driverProfile"] == "remote-close" {
+		offlineRemote, err = startMockRemote(ctx, peers["main"], peers["probe"], root)
+		if err != nil {
+			return nil, err
+		}
+		defer offlineRemote.close()
+		driverPeers.Remote = &offlineRemote.endpoint
+	}
 	// Keep original source data for provider-owned assertions; mutable runtime
 	// paths belong to this attempt. No exact SDK or executable version gate.
 	if err = writeJSON(filepath.Join(o.Output, "materials/case.json"), plan); err != nil {
 		return nil, err
 	}
-	req := request{Case: str(plan["caseId"]), Materials: filepath.Join(o.Output, "materials"), Workspace: workspace, Peer: peers["main"].(command), Output: root}
+	req := request{Case: str(plan["caseId"]), Materials: filepath.Join(o.Output, "materials"), Workspace: workspace, Peer: driverPeers, Output: root}
 	requestPath := filepath.Join(o.Output, "request.json")
 	if err = writeJSON(requestPath, req); err != nil {
 		return nil, err
@@ -230,11 +264,32 @@ func run(ctx context.Context, o options) (object, error) {
 			resultErr = fmt.Errorf("invalid driver status %q", outcome.Status)
 		}
 	}
+	if offlineRemote != nil {
+		runErr = errors.Join(runErr, offlineRemote.close())
+	}
 	transportErr := checkTransport(o.Mode, root, provider, outcome.Status)
+	if outcome.Status != "unsupported" {
+		for _, phase := range phases {
+			base := root
+			if phase == "probe" {
+				base = filepath.Join(root, "remote-probe")
+			}
+			if phase == "suppress" {
+				base = filepath.Join(root, "suppress")
+			}
+			name := "replay-peer.json"
+			if o.Mode == "record" {
+				name = "raw/transport.json"
+			}
+			if _, e := os.Stat(filepath.Join(base, name)); e != nil {
+				transportErr = errors.Join(transportErr, e)
+			}
+		}
+	}
 	if o.Mode == "record" {
 		transportErr = errors.Join(transportErr, writeSourceManifest(root, outcome))
 	}
-	runErr = errors.Join(runErr, resultErr, transportErr)
+	runErr = errors.Join(runErr, resultErr, transportErr, scrubNative(root))
 	summary := object{"case": req.Case, "provider": provider, "mode": o.Mode, "result": outcome, "output": o.Output}
 	if runErr != nil {
 		summary["error"] = runErr.Error()

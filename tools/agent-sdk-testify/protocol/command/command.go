@@ -1,4 +1,4 @@
-// Package command defines the stable CLI seam shared by capture and replay.
+// Package command defines protocol CLI parsing, dispatch and exit codes.
 package command
 
 import (

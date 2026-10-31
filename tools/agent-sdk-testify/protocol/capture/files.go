@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/command"
 	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/rawjson"
 	"github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/recording"
 )
@@ -36,7 +35,7 @@ func reason(err error) string {
 // In particular, blocked client output cannot prevent input from reaching a child.
 type journal struct {
 	mu                                 sync.Mutex
-	options                            command.RecordOptions
+	options                            Options
 	start                              time.Time
 	raw, stderr                        *os.File
 	frames, protocolBytes, stderrBytes int64
@@ -46,7 +45,7 @@ type journal struct {
 func createPrivate(dir, name string) (*os.File, error) {
 	return os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 }
-func openJournal(o command.RecordOptions, start time.Time) (*journal, error) {
+func openJournal(o Options, start time.Time) (*journal, error) {
 	j := &journal{options: o, start: start}
 	var err error
 	j.raw, err = createPrivate(o.Output, "raw.jsonl")
@@ -157,7 +156,7 @@ func (j *journal) finish(report *recording.TransportReport, identity recording.N
 	}
 	report.Frames, report.ProtocolBytes, report.StderrBytes = j.frames, j.protocolBytes, j.stderrBytes
 	report.Milliseconds = time.Since(j.start).Milliseconds()
-	manifest := recording.Manifest{Version: 1, RecordingFormat: recording.CurrentFormat(), ProxyVersion: command.Version, Native: identity, Files: map[string]string{}}
+	manifest := recording.Manifest{Version: 1, RecordingFormat: recording.CurrentFormat(), ProxyVersion: j.options.ProxyVersion, Native: identity, Files: map[string]string{}}
 	for _, name := range j.artifacts {
 		digest, err := hashFile(filepath.Join(j.options.Output, name))
 		if err != nil {

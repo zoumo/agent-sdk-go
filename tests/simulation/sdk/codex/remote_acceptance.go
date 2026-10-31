@@ -1,24 +1,12 @@
 package codexsim
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
-	"sync/atomic"
 
-	"github.com/coder/websocket"
 	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -57,13 +45,11 @@ func remoteRequests(path string) ([]remoteRPC, map[string]json.RawMessage, error
 	return requests, responses, nil
 }
 
-// AcceptRemoteClose runs NewRemote against one owned offline WebSocket service.
-// That service only forwards bytes to the Go protocol mock; it contains no
-// protocol matcher. These are SDK simulation results, not native remote E2E.
+// AcceptRemoteClose runs NewRemote against the runner-owned offline WebSocket service.
+// The runner independently verifies both peer receipts and service cleanup. These are SDK simulation results, not native remote E2E.
 // The caller verifies the case provenance before invoking this adapter.
-func AcceptRemoteClose(ctx context.Context, root, executable, outputDir string) (err error) {
+func AcceptRemoteClose(ctx context.Context, root, endpoint, token string) (err error) {
 	paths := []string{filepath.Join(root, "raw/raw.jsonl"), filepath.Join(root, "remote-probe/raw/raw.jsonl")}
-	receipts := []string{filepath.Join(outputDir, "main-peer.json"), filepath.Join(outputDir, "probe-peer.json")}
 	mainRequests, mainResponses, err := remoteRequests(paths[0])
 	if err != nil {
 		return err
@@ -78,38 +64,6 @@ func AcceptRemoteClose(ctx context.Context, root, executable, outputDir string) 
 	if len(probeRequests) != 3 || probeRequests[0].Method != "initialize" || probeRequests[1].Method != "initialized" || probeRequests[2].Method != "thread/read" {
 		return errors.New("remote probe must independently initialize and read")
 	}
-	var secret [32]byte
-	if _, err := rand.Read(secret[:]); err != nil {
-		return err
-	}
-	token := hex.EncodeToString(secret[:])
-	var connections atomic.Int32
-	type phaseResult struct {
-		index int
-		err   error
-	}
-	done := make(chan phaseResult, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+token {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		index := int(connections.Add(1)) - 1
-		if index >= len(paths) {
-			w.WriteHeader(http.StatusGone)
-			return
-		}
-		conn, e := websocket.Accept(w, r, nil)
-		if e != nil {
-			done <- phaseResult{index, e}
-			return
-		}
-		defer conn.CloseNow()
-		e = forwardRecordedSocket(ctx, conn, executable, paths[index], receipts[index], filepath.Join(outputDir, fmt.Sprintf("phase-%d-stderr.private", index)))
-		done <- phaseResult{index, e}
-	}))
-	defer server.Close()
-	endpoint := "ws" + strings.TrimPrefix(server.URL, "http")
 	open := func(rpc remoteRPC) (*codex.Client, error) {
 		var init types.InitializeParams
 		if err := json.Unmarshal(rpc.Params, &init); err != nil {
@@ -126,20 +80,6 @@ func AcceptRemoteClose(ctx context.Context, root, executable, outputDir string) 
 			return errors.New("remote SDK result differs from the original native recording")
 		}
 		return nil
-	}
-	awaitPhase := func(index int) error {
-		select {
-		case result := <-done:
-			if result.index != index {
-				return errors.New("remote phase order differs")
-			}
-			if result.err != nil {
-				return result.err
-			}
-			return checkRemoteReceipt(receipts[index], paths[index])
-		case <-ctx.Done():
-			return ctx.Err()
-		}
 	}
 	first, err := open(mainRequests[0])
 	if err != nil {
@@ -214,9 +154,6 @@ func AcceptRemoteClose(ctx context.Context, root, executable, outputDir string) 
 	if _, err := session.Submit(ctx, codex.Input{Input: turn.Input}); !errors.Is(err, codex.ErrClosed) {
 		return errors.New("closed remote Session did not reject input")
 	}
-	if err := awaitPhase(0); err != nil {
-		return err
-	}
 	second, err := open(probeRequests[0])
 	if err != nil {
 		return err
@@ -242,97 +179,5 @@ func AcceptRemoteClose(ctx context.Context, root, executable, outputDir string) 
 	if err := second.Close(); err != nil {
 		return err
 	}
-	if err := awaitPhase(1); err != nil {
-		return err
-	}
-	if connections.Load() != 2 {
-		return errors.New("remote close used an unexpected number of connections")
-	}
 	return nil
-}
-
-func checkRemoteReceipt(path, raw string) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var receipt struct {
-		FullConsumption, ClientEOF, NativeLaunched bool
-		RecordingSHA256, Peer, Provider            string
-	}
-	if err := json.Unmarshal(b, &receipt); err != nil {
-		return err
-	}
-	b, err = os.ReadFile(raw)
-	if err != nil {
-		return err
-	}
-	digest := sha256.Sum256(b)
-	if !receipt.FullConsumption || !receipt.ClientEOF || receipt.NativeLaunched || receipt.Peer != "Go native mock" || receipt.Provider != "codex" || receipt.RecordingSHA256 != hex.EncodeToString(digest[:]) {
-		return errors.New("remote mock receipt is incomplete or mismatched")
-	}
-	return nil
-}
-
-func forwardRecordedSocket(ctx context.Context, conn *websocket.Conn, executable, raw, receipt, stderrPath string) error {
-	cmd := exec.CommandContext(ctx, executable, "mock", "--provider", "codex", "--scenario", raw, "--receipt", receipt)
-	cmd.Env = []string{}
-	input, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer input.Close()
-	output, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	defer output.Close()
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	readDone := make(chan error, 1)
-	go func() {
-		for {
-			kind, frame, err := conn.Read(ctx)
-			if err != nil {
-				readDone <- nil
-				return
-			}
-			if kind != websocket.MessageText || bytes.ContainsAny(frame, "\r\n") {
-				readDone <- errors.New("invalid SDK WebSocket frame")
-				return
-			}
-			if _, err := input.Write(append(frame, '\n')); err != nil {
-				readDone <- err
-				return
-			}
-		}
-	}()
-	writeDone := make(chan error, 1)
-	go func() {
-		scan := bufio.NewScanner(output)
-		scan.Buffer(make([]byte, 4096), 4<<20)
-		for scan.Scan() {
-			if err := conn.Write(ctx, websocket.MessageText, scan.Bytes()); err != nil {
-				writeDone <- err
-				return
-			}
-		}
-		writeDone <- scan.Err()
-	}()
-	var inputErr, outputErr error
-	select {
-	case inputErr = <-readDone:
-		_ = input.Close()
-		outputErr = <-writeDone
-	case outputErr = <-writeDone:
-		_ = conn.CloseNow()
-		inputErr = <-readDone
-		_ = input.Close()
-	}
-	processErr := cmd.Wait()
-	logErr := os.WriteFile(stderrPath, stderr.Bytes(), 0600)
-	return errors.Join(inputErr, outputErr, processErr, logErr)
 }

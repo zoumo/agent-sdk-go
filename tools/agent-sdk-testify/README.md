@@ -122,9 +122,21 @@ Go starts `driver [prefix arguments] --request /absolute/request.json`:
 }
 ```
 
-Go supplies HOME, native config and tmp through the environment. `materials/case.json`
+Go supplies HOME, native config and tmp through the environment. Selected native
+configuration contributes connection settings and credentials only; inherited
+hooks, projects and integrations are excluded from the isolated attempt. New
+captures scan selected credentials without rewriting protocol evidence; a match
+marks `credentialScan: quarantined` and makes the run fail. `materials/case.json`
 contains case data and any provider-specific source inputs. The driver must use
 the supplied peer; it must not discover or launch an alternative real Agent.
+Remote cases also receive `peer.probe` with the second command/args. Go SDK
+child-policy comparisons receive `peer.suppress` with an independent command/args
+and receipt. Go prepares their writable material views before launching the driver.
+For Go SDK remote simulation, `peer.remote` supplies `url` and `bearerToken` for
+the runner-owned offline service; the driver performs SDK calls against that endpoint.
+SDKs that accept only an executable path receive a runner-generated launcher.
+Materials contain no runtime `_mock` or `_peers` entry.
+
 The private `peer` subcommand is a process-lifetime adapter, not a second control
 protocol. It preserves protocol stdio and gives client EOF time to drain on TERM.
 

@@ -32,7 +32,11 @@ def check(wheel):
         (root / 'request.json').write_text(json.dumps(request))
         run(python.parent / 'agent-sdk-testify-codex', '--request', root / 'request.json')
         assert json.loads((output / 'result.json').read_text())['status'] == 'unsupported'
-        run(python, '-I', '-m', 'record_user_story', '--help')
+        help_result = run(python, '-I', '-m', 'record_user_story.bootstrap', '--help')
+        assert '{catalog}' in help_result.stdout.decode()
+        run(python, '-I', '-c', "from importlib.util import find_spec; "
+            "assert all(find_spec('record_user_story.' + name) is None "
+            "for name in ('proxy', 'remote_proxy', 'peer'))")
         assert not (python.parent / 'record-user-story').exists()
     print('Installed agent-sdk-testify driver: request/result contract passed outside checkout; no SDK or Agent launched.')
 

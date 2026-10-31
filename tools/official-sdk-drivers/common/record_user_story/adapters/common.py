@@ -1,8 +1,5 @@
 """Native SDK serialization and capture process wiring."""
 from dataclasses import asdict, is_dataclass
-import os
-from pathlib import Path
-import sys
 
 def serial(value):
     if hasattr(value, 'model_dump'):
@@ -13,17 +10,8 @@ def serial(value):
 
 
 def proxy_command(plan):
-    if '_peer' in plan:
-        peer = plan['_peer']
-        return [peer['command'], *peer.get('args', [])]
-    if os.environ.get('AGENT_RECORDING_MOCK'):
-        return [sys.executable, str(Path(__file__).parent.parent / 'bootstrap.py'), 'mock-proxy',
-                '--provider', plan['provider'], '--peer', os.environ['AGENT_RECORDING_MOCK'],
-                '--scenario', os.environ['AGENT_RECORDING_SCENARIO'],
-                '--plan', str(Path(plan['root']) / 'plan.json')]
-    return [sys.executable, str(Path(__file__).parent.parent / 'bootstrap.py'), 'proxy',
-            '--plan', str(Path(plan['root']) / 'plan.json')]
-
+    peer = plan['_peer']
+    return [peer['command'], *peer.get('args', [])]
 
 
 def configuration_acknowledged(report, flow, requested, timing):

@@ -17,7 +17,7 @@ import (
 // typed Client methods. The caller verifies provenance; the Go mock owns matching.
 // It supports history and sequential continuation only, and fails closed on other
 // operations. It never writes recorded client frames directly to the transport.
-func AcceptSavedHistory(ctx context.Context, executable, recordingPath, receiptPath string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptSavedHistory(ctx context.Context, executable string, args []string, recordingPath string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	f, err := os.Open(recordingPath)
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func AcceptSavedHistory(ctx context.Context, executable, recordingPath, receiptP
 		return err
 	}
 	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable,
-		Args: []string{"protocol", "mock", "--provider", "codex", "--scenario", recordingPath, "--receipt", receiptPath},
+		Args: args,
 		Env:  []string{}, Initialize: init})
 	if err != nil {
 		return err

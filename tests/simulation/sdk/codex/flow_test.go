@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
@@ -48,7 +50,13 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			require.NoError(t, AcceptFlow(ctx, peer, source, receipt, io.Discard))
+			launcher := filepath.Join(t.TempDir(), "peer")
+			require.NoError(t, os.WriteFile(launcher, []byte(fmt.Sprintf("#!/bin/sh\nexec %q protocol mock --provider codex --scenario %q --receipt %q\n", peer, source, receipt)), 0700))
+			if decision == "accept" {
+				require.NoError(t, AcceptFlow(ctx, peer, []string{"protocol", "mock", "--provider", "codex", "--scenario", source, "--receipt", receipt}, source, codex.ChildDetailPreserve, io.Discard))
+			} else {
+				require.NoError(t, AcceptFlow(ctx, launcher, nil, source, codex.ChildDetailPreserve, io.Discard))
+			}
 			b, err := os.ReadFile(receipt)
 			require.NoError(t, err)
 			var got struct{ FullConsumption, ClientEOF, NativeLaunched bool }

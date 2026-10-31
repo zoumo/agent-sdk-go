@@ -1,16 +1,14 @@
 """Protocol conformance through the independent Go peer; no SDK, credentials or real CLI."""
-import io
 import json
 import os
 from pathlib import Path
 import signal
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
-from record_user_story.peer import identity
+from peer_support import identity
 
 BIN = identity()["path"]
 

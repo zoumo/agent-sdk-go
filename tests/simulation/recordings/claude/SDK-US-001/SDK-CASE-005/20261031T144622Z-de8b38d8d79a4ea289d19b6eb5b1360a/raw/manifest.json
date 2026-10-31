@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "recordingFormat": {
+    "name": "agent-mock-jsonl",
+    "version": 1,
+    "transport": "stdio-jsonl"
+  },
+  "proxyVersion": "0.1.0-dev",
+  "captureStatus": "complete",
+  "native": {
+    "executable": "/Users/jim/bin/claude",
+    "sha256": "0d036f0b635d239844e6df6996bc05263fe305df505b073c71f79f83668ea35a",
+    "args": [
+      "--print",
+      "--system-prompt",
+      "Complete the supplied synthetic task in the working directory. Be concise.",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--input-format",
+      "stream-json",
+      "--permission-prompt-tool",
+      "stdio",
+      "--include-partial-messages",
+      "--no-session-persistence",
+      "--model",
+      "theta/glm-5.3"
+    ],
+    "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-005/project"
+  },
+  "files": {
+    "raw.jsonl": "0580270977ea54bb8ee32de849fc5dacc9807f00ac8ce0946ec465c0101c1f5b",
+    "stderr.raw": "f1141d3168a6a8bbb7cf0e097b275ccaf33b77235982ba892cade7698d206dce",
+    "transport.json": "850deb4adec57e2fa3fa2b1961dce6d3a22b19c99f8a19d8548b4f8f32b50108"
+  }
+}

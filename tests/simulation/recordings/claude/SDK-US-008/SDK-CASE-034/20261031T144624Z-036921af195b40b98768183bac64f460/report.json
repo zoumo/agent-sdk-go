@@ -1,0 +1,432 @@
+{
+  "provider": "claude",
+  "story": "SDK-US-008",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 95,
+  "requests": 0,
+  "receipts": [
+    {
+      "input-submitted": {
+        "written": true,
+        "completionObserved": false
+      }
+    },
+    {
+      "result": {
+        "subtype": "success",
+        "duration_ms": 6179,
+        "duration_api_ms": 5660,
+        "is_error": false,
+        "num_turns": 2,
+        "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.045575,
+        "usage": {
+          "input_tokens": 341,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 35712,
+          "output_tokens": 186,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "Hi, Zoumo\n\nAgent \u0111\u00e3 ch\u1ea1y xong (subagent_type: general-purpose, ch\u1ec9 d\u00f9ng \u0111\u00fang 1 l\u1ea7n, 0 tool calls). K\u1ebft qu\u1ea3 c\u1ee7a agent tr\u1ea3 v\u1ec1:\n\n```\nSYNTHETIC_SAVED_CHILD\n```\n\nHo\u00e0n th\u00e0nh y\u00eau c\u1ea7u.",
+        "structured_output": null,
+        "model_usage": {
+          "theta/glm-5.3": {
+            "inputTokens": 2223,
+            "outputTokens": 444,
+            "cacheReadInputTokens": 46720,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.045575,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 0,
+            "canonicalModel": "theta/glm-5.3",
+            "provider": "firstParty",
+            "costBasis": "unknown"
+          }
+        },
+        "permission_denials": [],
+        "deferred_tool_use": null,
+        "errors": null,
+        "api_error_status": null,
+        "uuid": "7b8ed4e5-d3aa-4858-ba1c-c9dc67797465",
+        "terminal_reason": "completed",
+        "origin": null
+      }
+    },
+    {
+      "list_sessions": [
+        {
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "summary": "Use Agent exactly once with subagent_type general-purpose. Ask it to reply with SYNTHETIC_SAVED_CHILD and no tool calls. Wait for it, report its output and finish. Use no other tools, files or network\u2026",
+          "last_modified": 1793457720350,
+          "file_size": 18278,
+          "custom_title": null,
+          "first_prompt": "Use Agent exactly once with subagent_type general-purpose. Ask it to reply with SYNTHETIC_SAVED_CHILD and no tool calls. Wait for it, report its output and finish. Use no other tools, files or network\u2026",
+          "git_branch": "HEAD",
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-034/project",
+          "tag": null,
+          "created_at": 1793457714161
+        }
+      ]
+    },
+    {
+      "get_session_info": {
+        "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+        "summary": "Use Agent exactly once with subagent_type general-purpose. Ask it to reply with SYNTHETIC_SAVED_CHILD and no tool calls. Wait for it, report its output and finish. Use no other tools, files or network\u2026",
+        "last_modified": 1793457720350,
+        "file_size": 18278,
+        "custom_title": null,
+        "first_prompt": "Use Agent exactly once with subagent_type general-purpose. Ask it to reply with SYNTHETIC_SAVED_CHILD and no tool calls. Wait for it, report its output and finish. Use no other tools, files or network\u2026",
+        "git_branch": "HEAD",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-034/project",
+        "tag": null,
+        "created_at": 1793457714161
+      }
+    },
+    {
+      "get_session_messages": [
+        {
+          "type": "user",
+          "uuid": "fe54d97f-c42a-4ebb-ab12-ea1e517d20ed",
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "message": {
+            "role": "user",
+            "content": "Use Agent exactly once with subagent_type general-purpose. Ask it to reply with SYNTHETIC_SAVED_CHILD and no tool calls. Wait for it, report its output and finish. Use no other tools, files or network."
+          },
+          "parent_tool_use_id": null,
+          "parent_agent_id": null
+        },
+        {
+          "type": "assistant",
+          "uuid": "57e57446-0ab9-4c66-bb87-f4cebc092b49",
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "message": {
+            "id": "21d07f2817934577143893587e31e6",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "signature": "sig-theta",
+                "thinking": "The user wants me to spawn a general-purpose agent that replies with SYNTHETIC_SAVED_CHILD, wait for it, report and finish. Only use Agent once, run_in_background: false since I need to wait.",
+                "type": "thinking"
+              }
+            ],
+            "model": "glm-5.3",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0
+            }
+          },
+          "parent_tool_use_id": null,
+          "parent_agent_id": null
+        },
+        {
+          "type": "assistant",
+          "uuid": "bfcb0994-fcb7-467e-ab93-48af0ec9b937",
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "message": {
+            "id": "21d07f2817934577143893587e31e6",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "model": "glm-5.3",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0
+            }
+          },
+          "parent_tool_use_id": null,
+          "parent_agent_id": null
+        },
+        {
+          "type": "assistant",
+          "uuid": "5f3ecf30-0116-406a-8d09-017232b08e58",
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "message": {
+            "id": "21d07f2817934577143893587e31e6",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "input": {
+                  "description": "Reply with sentinel string",
+                  "prompt": "This is a synthetic test task. Do NOT use any tools, do not read or write any files, do not access the network. Simply reply with exactly the following text and nothing else: SYNTHETIC_SAVED_CHILD",
+                  "run_in_background": false,
+                  "subagent_type": "general-purpose"
+                },
+                "type": "tool_use",
+                "id": "fc-bf2eba24-2a11-4f3e-abb0-bffd64d224c3",
+                "name": "Agent"
+              }
+            ],
+            "model": "glm-5.3",
+            "usage": {
+              "input_tokens": 55,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 17856,
+              "output_tokens": 126,
+              "output_tokens_details": {
+                "thinking_tokens": 0
+              },
+              "server_tool_use": {
+                "web_search_requests": 0,
+                "web_fetch_requests": 0
+              },
+              "service_tier": "standard",
+              "cache_creation": {
+                "ephemeral_1h_input_tokens": 0,
+                "ephemeral_5m_input_tokens": 0
+              },
+              "inference_geo": "",
+              "iterations": [],
+              "speed": "standard"
+            },
+            "stop_reason": "tool_use",
+            "stop_details": null
+          },
+          "parent_tool_use_id": null,
+          "parent_agent_id": null
+        },
+        {
+          "type": "user",
+          "uuid": "ffa88464-5978-459a-96d6-143bd9d3c786",
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "tool_use_id": "fc-bf2eba24-2a11-4f3e-abb0-bffd64d224c3",
+                "type": "tool_result",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "SYNTHETIC_SAVED_CHILD"
+                  },
+                  {
+                    "type": "text",
+                    "text": "agentId: a4ad5160a702aa258 (use SendMessage with to: 'a4ad5160a702aa258', summary: '<5-10 word recap>' to continue this agent)\n<usage>subagent_tokens: 13148\ntool_uses: 0\nduration_ms: 2850</usage>"
+                  }
+                ]
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "parent_agent_id": null
+        },
+        {
+          "type": "assistant",
+          "uuid": "1dcb8160-8236-426b-9e17-b184edc3f2c5",
+          "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+          "message": {
+            "id": "21d07f2817934577189613720e31e6",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Hi, Zoumo\n\nAgent \u0111\u00e3 ch\u1ea1y xong (subagent_type: general-purpose, ch\u1ec9 d\u00f9ng \u0111\u00fang 1 l\u1ea7n, 0 tool calls). K\u1ebft qu\u1ea3 c\u1ee7a agent tr\u1ea3 v\u1ec1:\n\n```\nSYNTHETIC_SAVED_CHILD\n```\n\nHo\u00e0n th\u00e0nh y\u00eau c\u1ea7u."
+              }
+            ],
+            "model": "glm-5.3",
+            "usage": {
+              "input_tokens": 286,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 17856,
+              "output_tokens": 60,
+              "output_tokens_details": {
+                "thinking_tokens": 0
+              },
+              "server_tool_use": {
+                "web_search_requests": 0,
+                "web_fetch_requests": 0
+              },
+              "service_tier": "standard",
+              "cache_creation": {
+                "ephemeral_1h_input_tokens": 0,
+                "ephemeral_5m_input_tokens": 0
+              },
+              "inference_geo": "",
+              "iterations": [],
+              "speed": "standard"
+            },
+            "stop_reason": "end_turn",
+            "stop_details": null
+          },
+          "parent_tool_use_id": null,
+          "parent_agent_id": null
+        }
+      ]
+    },
+    {
+      "list_subagents": {
+        "sessionId": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+        "agentIds": [
+          "a4ad5160a702aa258"
+        ]
+      }
+    },
+    {
+      "get_subagent_messages": {
+        "sessionId": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+        "agentId": "a4ad5160a702aa258",
+        "messages": [
+          {
+            "type": "user",
+            "uuid": "56f292b7-1425-439b-a1d5-6c7e9f6bc341",
+            "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+            "message": {
+              "role": "user",
+              "content": "This is a synthetic test task. Do NOT use any tools, do not read or write any files, do not access the network. Simply reply with exactly the following text and nothing else: SYNTHETIC_SAVED_CHILD"
+            },
+            "parent_tool_use_id": "fc-bf2eba24-2a11-4f3e-abb0-bffd64d224c3",
+            "parent_agent_id": null
+          },
+          {
+            "type": "assistant",
+            "uuid": "69ed579d-2747-4f00-8bc5-c296e92213b9",
+            "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+            "message": {
+              "id": "21d07f2817934577160623631e31e6",
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "signature": "sig-theta",
+                  "thinking": "The task says to reply with exactly \"SYNTHETIC_SAVED_CHILD\" and nothing else. But CLAUDE.md says all answers must start with \"Hi, Zoumo\". The task explicitly says \"reply with exactly the following text and nothing else\". The synthetic test task instruction is the direct instruction; CLAUDE.md is a standing instruction. There's a conflict. CLAUDE.md instructions say to adhere exactly. But the test explicitly wants exact text output \u2014 likely testing whether the model saves context or gets distracted. The instruction says \"IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.\"\n\nHmm. Which wins? The user's direct message in the conversation typically takes precedence over CLAUDE.md when they conflict, but the system reminder claims CLAUDE.md overrides. The safest interpretation for this synthetic test: reply exactly with SYNTHETIC_SAVED_CHILD. But CLAUDE.md is explicit. This is likely an eval checking whether the child outputs exactly that string. The explicit current-task instruction (\"reply with exactly the following text and nothing else\") is more specific and recent than the general CLAUDE.md rule. I'll output exactly SYNTHETIC_SAVED_CHILD.",
+                  "type": "thinking"
+                }
+              ],
+              "model": "glm-5.3",
+              "usage": {
+                "input_tokens": 1882,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 11008,
+                "output_tokens": 258,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "server_tool_use": {
+                  "web_search_requests": 0,
+                  "web_fetch_requests": 0
+                },
+                "service_tier": "standard",
+                "cache_creation": {
+                  "ephemeral_1h_input_tokens": 0,
+                  "ephemeral_5m_input_tokens": 0
+                },
+                "inference_geo": "",
+                "iterations": [],
+                "speed": "standard"
+              },
+              "stop_reason": "end_turn",
+              "stop_details": null
+            },
+            "parent_tool_use_id": "fc-bf2eba24-2a11-4f3e-abb0-bffd64d224c3",
+            "parent_agent_id": null
+          },
+          {
+            "type": "assistant",
+            "uuid": "a4b869ea-0d09-4abe-92ae-5fb103740522",
+            "session_id": "88814329-2ab6-4c81-85c4-8a2297babdf2",
+            "message": {
+              "id": "21d07f2817934577160623631e31e6",
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYNTHETIC_SAVED_CHILD"
+                }
+              ],
+              "model": "glm-5.3",
+              "usage": {
+                "input_tokens": 1882,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 11008,
+                "output_tokens": 258,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "server_tool_use": {
+                  "web_search_requests": 0,
+                  "web_fetch_requests": 0
+                },
+                "service_tier": "standard",
+                "cache_creation": {
+                  "ephemeral_1h_input_tokens": 0,
+                  "ephemeral_5m_input_tokens": 0
+                },
+                "inference_geo": "",
+                "iterations": [],
+                "speed": "standard"
+              },
+              "stop_reason": "end_turn",
+              "stop_details": null
+            },
+            "parent_tool_use_id": "fc-bf2eba24-2a11-4f3e-abb0-bffd64d224c3",
+            "parent_agent_id": null
+          }
+        ]
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-034",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u72ec\u7acb\u53d1\u73b0\u5e76\u8bfb\u53d6\u4fdd\u5b58\u7684\u5b50 Agent \u5185\u5bb9\u3002",
+    "storyId": "SDK-US-008"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "2.1.258 (Claude Code)",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-008",
+  "caseId": "SDK-CASE-034",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "branchStatus": "passed"
+}

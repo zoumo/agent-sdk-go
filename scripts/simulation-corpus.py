@@ -67,7 +67,7 @@ def regular(root, name):
     return p
 
 
-def inventory(root):
+def inventory(root, *, allow_empty=False):
     root = Path(root)
     check(root.is_dir() and not root.is_symlink(), 'material directory is missing or linked')
     files = {}
@@ -77,7 +77,7 @@ def inventory(root):
             continue
         name = p.relative_to(root).as_posix()
         files[name] = digest(regular(root, name))
-    check(bool(files), 'empty material inventory')
+    check(allow_empty or bool(files), 'empty material inventory')
     return files
 
 
@@ -205,7 +205,7 @@ def required_materials(source, plan):
     for prefix in ('config/projects', 'config/sessions', 'history-seed'):
         directory = Path(source) / prefix
         if directory.exists():
-            names.update(prefix + '/' + n for n in inventory(directory))
+            names.update(prefix + '/' + n for n in inventory(directory, allow_empty=True))
     for name, evidence in plan.get('historySeed', {}).get('files', {}).items():
         verify_hashes(source, {name: evidence['sha256']})
         names.add(name)

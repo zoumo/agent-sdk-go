@@ -1,0 +1,504 @@
+{
+  "provider": "codex",
+  "story": "SDK-US-008",
+  "status": "passed",
+  "inputs": 2,
+  "results": 2,
+  "events": 59,
+  "requests": 0,
+  "receipts": [
+    {
+      "initialize": {
+        "userAgent": "official-python-story-recorder/0.163.0 (Mac OS 26.2.0; arm64) unknown (official-python-story-recorder; 0.161.0)",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "thread/start": {
+        "approvalPolicy": "on-request",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+        "disabledPluginIds": [],
+        "instructionSources": [],
+        "model": "theta/glm-5.3",
+        "modelProvider": "custom",
+        "sandbox": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread": {
+          "cliVersion": "0.163.0",
+          "createdAt": 1793457807,
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+          "ephemeral": false,
+          "historyMode": "paginated",
+          "id": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+          "model": "theta/glm-5.3",
+          "modelProvider": "custom",
+          "originator": "official-python-story-recorder",
+          "path": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/config/sessions/2026/10/31/rollout-2026-10-31T22-43-27-01a1926a-61f8-77c2-a67b-d885f7a66e6f.jsonl",
+          "preview": "",
+          "recencyAt": 1793457807,
+          "sessionId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+          "source": "vscode",
+          "status": {
+            "type": "idle"
+          },
+          "turns": [],
+          "updatedAt": 1793457807
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a1926a-623f-7192-8c28-8e43b9cb0049",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+        "turn": {
+          "completedAt": 1793457813,
+          "durationMs": 6040,
+          "id": "01a1926a-623f-7192-8c28-8e43b9cb0049",
+          "items": [
+            {
+              "id": "msg_18e3a4612431fc6000000099",
+              "phase": "final_answer",
+              "text": "SYNTHETIC_SAVED",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793457807,
+          "status": "completed"
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a1926a-79de-7fb1-8186-36e0ea9e026a",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+        "turn": {
+          "completedAt": 1793457816,
+          "durationMs": 2154,
+          "id": "01a1926a-79de-7fb1-8186-36e0ea9e026a",
+          "items": [
+            {
+              "id": "msg_18e3a461aa2137a00000009c",
+              "phase": "final_answer",
+              "text": "SYNTHETIC_SECOND_SAVED",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793457813,
+          "status": "completed"
+        }
+      }
+    },
+    {
+      "history-setup-ended": {
+        "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+        "response": {
+          "status": "unsubscribed"
+        }
+      }
+    },
+    {
+      "history-query": {
+        "method": "thread/list",
+        "params": {
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+          "sourceKinds": [
+            "cli",
+            "vscode",
+            "exec",
+            "appServer"
+          ],
+          "limit": 10
+        },
+        "response": {
+          "data": [
+            {
+              "id": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+              "environments": [
+                {
+                  "environmentId": "local",
+                  "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+                  "runtimeWorkspaceRoots": [
+                    "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project"
+                  ]
+                }
+              ],
+              "extra": null,
+              "sessionId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+              "forkedFromId": null,
+              "parentThreadId": null,
+              "preview": "Reply with the word SYNTHETIC_SAVED.",
+              "ephemeral": false,
+              "section": null,
+              "sectionEnteredAt": null,
+              "projectId": null,
+              "historyMode": "paginated",
+              "modelProvider": "custom",
+              "model": "theta/glm-5.3",
+              "reasoningEffort": null,
+              "createdAt": 1793457807,
+              "updatedAt": 1793457816,
+              "recencyAt": 1793457813,
+              "status": {
+                "type": "idle"
+              },
+              "path": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/config/sessions/2026/10/31/rollout-2026-10-31T22-43-27-01a1926a-61f8-77c2-a67b-d885f7a66e6f.jsonl",
+              "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+              "cliVersion": "0.163.0",
+              "originator": "official-python-story-recorder",
+              "source": "vscode",
+              "canAcceptDirectInput": null,
+              "threadSource": null,
+              "agentNickname": null,
+              "agentRole": null,
+              "gitInfo": null,
+              "name": null,
+              "daybreakEnabled": null,
+              "turns": []
+            }
+          ],
+          "readStates": {
+            "01a1926a-61f8-77c2-a67b-d885f7a66e6f": {
+              "firstUnread": {
+                "type": "turn",
+                "turnId": "01a1926a-623f-7192-8c28-8e43b9cb0049"
+              },
+              "revision": "ae78cbae-2beb-4c6e-9a19-333be4fb0e09"
+            }
+          },
+          "backwardsCursor": "2026-10-31T14:43:27.917Z"
+        }
+      }
+    },
+    {
+      "history-query": {
+        "method": "thread/read",
+        "params": {
+          "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+          "includeTurns": false
+        },
+        "response": {
+          "thread": {
+            "id": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+            "environments": [
+              {
+                "environmentId": "local",
+                "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+                "runtimeWorkspaceRoots": [
+                  "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project"
+                ]
+              }
+            ],
+            "extra": null,
+            "sessionId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+            "forkedFromId": null,
+            "parentThreadId": null,
+            "preview": "Reply with the word SYNTHETIC_SAVED.",
+            "ephemeral": false,
+            "section": null,
+            "sectionEnteredAt": null,
+            "projectId": null,
+            "historyMode": "paginated",
+            "modelProvider": "custom",
+            "model": "theta/glm-5.3",
+            "reasoningEffort": null,
+            "createdAt": 1793457807,
+            "updatedAt": 1793457816,
+            "recencyAt": 1793457813,
+            "status": {
+              "type": "idle"
+            },
+            "path": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/config/sessions/2026/10/31/rollout-2026-10-31T22-43-27-01a1926a-61f8-77c2-a67b-d885f7a66e6f.jsonl",
+            "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-036/project",
+            "cliVersion": "0.163.0",
+            "originator": "official-python-story-recorder",
+            "source": "vscode",
+            "canAcceptDirectInput": true,
+            "threadSource": null,
+            "agentNickname": null,
+            "agentRole": null,
+            "gitInfo": null,
+            "name": null,
+            "daybreakEnabled": null,
+            "turns": []
+          },
+          "readState": {
+            "firstUnread": {
+              "type": "turn",
+              "turnId": "01a1926a-623f-7192-8c28-8e43b9cb0049"
+            },
+            "revision": "ae78cbae-2beb-4c6e-9a19-333be4fb0e09"
+          }
+        }
+      }
+    },
+    {
+      "history-query": {
+        "method": "thread/turns/list",
+        "params": {
+          "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+          "limit": 1,
+          "sortDirection": "asc",
+          "itemsView": "full"
+        },
+        "response": {
+          "data": [
+            {
+              "id": "01a1926a-623f-7192-8c28-8e43b9cb0049",
+              "rootTurnId": "01a1926a-623f-7192-8c28-8e43b9cb0049",
+              "items": [
+                {
+                  "type": "userMessage",
+                  "id": "01a1926a-6dd2-7492-854a-5ac44d448918",
+                  "clientId": null,
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reply with the word SYNTHETIC_SAVED.",
+                      "text_elements": []
+                    }
+                  ]
+                },
+                {
+                  "type": "reasoning",
+                  "id": "rs_21d07f2817934578110376712e31e6_0",
+                  "summary": [
+                    "The user says \"Reply with the word SYNTHETIC_SAVED.\" This is an odd request\u2014no actual task supplied beyond that instruction. There is a synthetic project directory perhaps, but the user explicitly asks just to reply with a word. No need tools. We should comply exactly and concisely."
+                  ],
+                  "content": []
+                },
+                {
+                  "type": "agentMessage",
+                  "id": "msg_18e3a4612431fc6000000099",
+                  "text": "SYNTHETIC_SAVED",
+                  "phase": "final_answer",
+                  "memoryCitation": null,
+                  "delivery": null,
+                  "questions": null
+                }
+              ],
+              "itemsView": "full",
+              "status": "completed",
+              "error": null,
+              "startedAt": 1793457807,
+              "completedAt": 1793457813,
+              "durationMs": 6040
+            }
+          ],
+          "nextCursor": "{\"requestedThreadId\":\"01a1926a-61f8-77c2-a67b-d885f7a66e6f\",\"rolloutOrdinal\":1,\"includeAnchor\":false,\"scope\":{\"kind\":\"turns\"}}",
+          "backwardsCursor": "{\"requestedThreadId\":\"01a1926a-61f8-77c2-a67b-d885f7a66e6f\",\"rolloutOrdinal\":1,\"includeAnchor\":true,\"scope\":{\"kind\":\"turns\"}}"
+        }
+      }
+    },
+    {
+      "history-query": {
+        "method": "thread/turns/list",
+        "params": {
+          "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+          "limit": 1,
+          "sortDirection": "asc",
+          "itemsView": "full",
+          "cursor": "{\"requestedThreadId\":\"01a1926a-61f8-77c2-a67b-d885f7a66e6f\",\"rolloutOrdinal\":1,\"includeAnchor\":false,\"scope\":{\"kind\":\"turns\"}}"
+        },
+        "response": {
+          "data": [
+            {
+              "id": "01a1926a-79de-7fb1-8186-36e0ea9e026a",
+              "rootTurnId": "01a1926a-79de-7fb1-8186-36e0ea9e026a",
+              "items": [
+                {
+                  "type": "userMessage",
+                  "id": "01a1926a-7a86-7be1-9c81-486811059acb",
+                  "clientId": null,
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reply with the word SYNTHETIC_SECOND_SAVED.",
+                      "text_elements": []
+                    }
+                  ]
+                },
+                {
+                  "type": "agentMessage",
+                  "id": "msg_18e3a461aa2137a00000009c",
+                  "text": "SYNTHETIC_SECOND_SAVED",
+                  "phase": "final_answer",
+                  "memoryCitation": null,
+                  "delivery": null,
+                  "questions": null
+                }
+              ],
+              "itemsView": "full",
+              "status": "completed",
+              "error": null,
+              "startedAt": 1793457813,
+              "completedAt": 1793457816,
+              "durationMs": 2154
+            }
+          ],
+          "backwardsCursor": "{\"requestedThreadId\":\"01a1926a-61f8-77c2-a67b-d885f7a66e6f\",\"rolloutOrdinal\":16,\"includeAnchor\":true,\"scope\":{\"kind\":\"turns\"}}"
+        }
+      }
+    },
+    {
+      "history-query": {
+        "method": "thread/turns/list",
+        "params": {
+          "threadId": "01a1926a-61f8-77c2-a67b-d885f7a66e6f",
+          "limit": 100,
+          "sortDirection": "asc",
+          "itemsView": "full"
+        },
+        "response": {
+          "data": [
+            {
+              "id": "01a1926a-623f-7192-8c28-8e43b9cb0049",
+              "rootTurnId": "01a1926a-623f-7192-8c28-8e43b9cb0049",
+              "items": [
+                {
+                  "type": "userMessage",
+                  "id": "01a1926a-6dd2-7492-854a-5ac44d448918",
+                  "clientId": null,
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reply with the word SYNTHETIC_SAVED.",
+                      "text_elements": []
+                    }
+                  ]
+                },
+                {
+                  "type": "reasoning",
+                  "id": "rs_21d07f2817934578110376712e31e6_0",
+                  "summary": [
+                    "The user says \"Reply with the word SYNTHETIC_SAVED.\" This is an odd request\u2014no actual task supplied beyond that instruction. There is a synthetic project directory perhaps, but the user explicitly asks just to reply with a word. No need tools. We should comply exactly and concisely."
+                  ],
+                  "content": []
+                },
+                {
+                  "type": "agentMessage",
+                  "id": "msg_18e3a4612431fc6000000099",
+                  "text": "SYNTHETIC_SAVED",
+                  "phase": "final_answer",
+                  "memoryCitation": null,
+                  "delivery": null,
+                  "questions": null
+                }
+              ],
+              "itemsView": "full",
+              "status": "completed",
+              "error": null,
+              "startedAt": 1793457807,
+              "completedAt": 1793457813,
+              "durationMs": 6040
+            },
+            {
+              "id": "01a1926a-79de-7fb1-8186-36e0ea9e026a",
+              "rootTurnId": "01a1926a-79de-7fb1-8186-36e0ea9e026a",
+              "items": [
+                {
+                  "type": "userMessage",
+                  "id": "01a1926a-7a86-7be1-9c81-486811059acb",
+                  "clientId": null,
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reply with the word SYNTHETIC_SECOND_SAVED.",
+                      "text_elements": []
+                    }
+                  ]
+                },
+                {
+                  "type": "agentMessage",
+                  "id": "msg_18e3a461aa2137a00000009c",
+                  "text": "SYNTHETIC_SECOND_SAVED",
+                  "phase": "final_answer",
+                  "memoryCitation": null,
+                  "delivery": null,
+                  "questions": null
+                }
+              ],
+              "itemsView": "full",
+              "status": "completed",
+              "error": null,
+              "startedAt": 1793457813,
+              "completedAt": 1793457816,
+              "durationMs": 2154
+            }
+          ],
+          "backwardsCursor": "{\"requestedThreadId\":\"01a1926a-61f8-77c2-a67b-d885f7a66e6f\",\"rolloutOrdinal\":1,\"includeAnchor\":true,\"scope\":{\"kind\":\"turns\"}}"
+        }
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-036",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u6309\u539f\u751f\u5206\u9875\u6216\u5207\u7247\u6d4f\u89c8\u4fdd\u5b58\u7684\u8bb0\u5f55\u4e0e\u5185\u5bb9\u3002",
+    "storyId": "SDK-US-008"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "codex-cli 0.163.0",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-008",
+  "caseId": "SDK-CASE-036",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "submit",
+      "input": 1
+    },
+    {
+      "step": "result",
+      "input": 1
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "openai-codex",
+    "version": "0.161.0"
+  },
+  "branchStatus": "passed"
+}

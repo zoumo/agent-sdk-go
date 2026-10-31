@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "origin": "real-agent",
+  "reviewer": "Codex /root (local review authorized by user on 2026-10-31)",
+  "reviewedAt": "2026-10-31T22:46:21.982315+08:00",
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "sourceReviewed": true,
+  "contentReviewed": true,
+  "credentialsReviewed": true,
+  "captureFiles": {
+    "config/.claude.json": "16a5e4c6df50ea15b03ce779d960c062a6bd931625e2578a637d4ee8ea3d6533",
+    "config/.last-cleanup": "7bb7be99646b95638fe69ea6a3f41ea04bc77145bef41efe2c6a8a5d29000bd8",
+    "config/backups/.claude.json.backup.1793457503329": "7bc39f0548329cb25525ebef2b9627a5a6def73cf00d52fbff7a067dec71c108",
+    "manifest.json": "dc251571d36c4bbd7b90e5f61141cee9e4889ddfb5861c86a673071ed0942707",
+    "materials/case.json": "44e8986f2d75552867420ad1038e012952debbf3f4958f8f89b79dec8eb74be5",
+    "peer-main": "987b35f6308e8a7592282381951c5f219154b43d404b99b88613b4902498f95c",
+    "peer-main.json": "be46223d6e6f8e9fa0930ead8a49486353743387bd3b44a620375874cd349628",
+    "plan.json": "44e8986f2d75552867420ad1038e012952debbf3f4958f8f89b79dec8eb74be5",
+    "project/numbers.txt": "dcf7d0378a8e4f73292ceb621c258ebd4ae42b709fa70c57f5705a38318f0c19",
+    "raw/manifest.json": "2b007244423ffad5431848ff7a712deef674d249e17e4a6afe0799d5be55c9b4",
+    "raw/raw.jsonl": "fc835aac98888a4807ce9782076b0642e11b1ca04635b450daee230f5bc2ef56",
+    "raw/stderr.raw": "f1141d3168a6a8bbb7cf0e097b275ccaf33b77235982ba892cade7698d206dce",
+    "raw/transport.json": "8ef05d09a9c70626bad12fbe8c7c1cf4577076f5cc7141fa2674e10a18e65036",
+    "report.json": "3ca6c97f3dfdb98c2b74446b949b145fb8d028ab3592b28f4a2a04d3175df998",
+    "request.json": "d57bcbe12b26c436171a81f0f88cc54986e6fc03a42688a8af999d0b0d013ec8",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "dfddddcb8086e71af26360df64ce7b1cd4f2b708ae07ddd2b795af72ea6aea63"
+  },
+  "replayFiles": {
+    "materialization.json": "7c3232659e2ea7fed542db14aa58ef3c159ea67e9ca245c2457f7a2bc0f58ddb",
+    "replay-peer.json": "6fdd896f5684f04397f59c5019723856d42e314512a7f53b322630b4d7e01218",
+    "replay-report.json": "3ca6c97f3dfdb98c2b74446b949b145fb8d028ab3592b28f4a2a04d3175df998",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "summary.json": "03b578d7a3382bcf989e557a462ed5ac3b963b997caa5dab53dc05d8df5b62bd"
+  },
+  "publishFiles": [
+    "manifest.json",
+    "plan.json",
+    "raw/manifest.json",
+    "raw/raw.jsonl",
+    "raw/stderr.raw",
+    "raw/transport.json",
+    "report.json",
+    "result.json",
+    "summary.json"
+  ],
+  "reviewNotes": {
+    "scope": "Local corpus admission only; no remote publication. Recorded by this operator using the selected native CLI and official SDK. Original protocol and source bytes preserved.",
+    "checks": "Observed native CLI identity and requested model; official business result and strict full replay; allowlisted files read and credential-scanned; scenario outputs and native metadata inspected.",
+    "privacy": "Native IDs, local paths, model metadata, CLI skill-name inventory and personal greeting remain original evidence; connection configuration and authentication are excluded.",
+    "auditBytes": 68235,
+    "auditFindings": []
+  }
+}

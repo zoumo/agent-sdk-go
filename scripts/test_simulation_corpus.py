@@ -34,6 +34,13 @@ class CorpusTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value) + '\n')
 
+    def empty_index(self):
+        index = self.corpus.load_index(self.corpus.DEFAULT_INDEX)
+        index['cases'] = [{**{k: entry[k] for k in ('provider', 'caseId', 'storyId', 'requirement')},
+                           'adoption': 'missing'} for entry in index['cases']]
+        self.write(self.root, 'corpus/index.json', index)
+        return self.root / 'corpus/index.json'
+
     def test_fixed_coverage_is_not_discovered_from_available_recordings(self):
         index = self.corpus.load_index(self.corpus.DEFAULT_INDEX)
         self.assertEqual(72, len(index['cases']))
@@ -67,6 +74,8 @@ class CorpusTests(unittest.TestCase):
 
     def test_public_review_entry_never_approves_its_generated_candidate(self):
         self.evidence()
+        for name in ('config/projects', 'config/sessions', 'history-seed'):
+            (self.source / name / 'empty').mkdir(parents=True)
         candidate = self.root / 'candidate.json'
         result = subprocess.run(['bash', str(self.corpus.ROOT / 'scripts/simulation.sh'), 'review',
                                  '--source', str(self.source), '--replay', str(self.replay),
@@ -77,6 +86,18 @@ class CorpusTests(unittest.TestCase):
         self.assertFalse(review['sourceReviewed'])
         with self.assertRaises(ValueError):
             self.corpus.validate_admission(self.source, self.replay, review)
+
+    def test_optional_history_inventory_preserves_files_and_rejects_links(self):
+        self.evidence()
+        plan = self.corpus.source_plan(self.source)
+        history = 'config/projects/project/session.jsonl'
+        self.write(self.source, history, {'cwd': '/original/project'})
+        (self.source / 'config/sessions').mkdir()
+        selected = self.corpus.required_materials(self.source, plan)
+        self.assertIn(history, selected)
+        (self.source / 'config/sessions/linked').symlink_to(self.source / history)
+        with self.assertRaises(ValueError):
+            self.corpus.required_materials(self.source, plan)
 
     def test_selected_paths_cannot_escape_or_include_credentials(self):
         for path in ('../secret', '/absolute', 'config/auth.json', 'native.env.private.json', 'config/settings.json', 'stdout.log'):
@@ -166,9 +187,7 @@ class CorpusTests(unittest.TestCase):
         review['captureFiles'] = self.corpus.inventory(self.source)
         review_path = self.root / 'review.json'
         self.write(self.root, 'review.json', review)
-        index = self.root / 'corpus/index.json'
-        index.parent.mkdir()
-        shutil.copyfile(self.corpus.DEFAULT_INDEX, index)
+        index = self.empty_index()
         archive = self.root / 'archive'
         cli = Path(__file__).with_name('simulation-corpus.py')
         result = subprocess.run([sys.executable, str(cli), 'adopt', '--source', str(self.source),
@@ -191,9 +210,7 @@ class CorpusTests(unittest.TestCase):
         review = self.evidence()
         review['origin'] = 'synthetic'
         self.write(self.root, 'review.json', review)
-        index = self.root / 'corpus/index.json'
-        index.parent.mkdir()
-        shutil.copyfile(self.corpus.DEFAULT_INDEX, index)
+        index = self.empty_index()
         before = index.read_bytes()
         with self.assertRaises(ValueError):
             self.corpus.adopt(self.source, self.replay, self.root / 'review.json', index, self.root / 'archive')
@@ -292,9 +309,7 @@ class CorpusTests(unittest.TestCase):
         self.write(self.replay, 'replay-peer.json', receipt)
         review.update(captureFiles=self.corpus.inventory(self.source), replayFiles=self.corpus.inventory(self.replay))
         self.write(self.root, 'review.json', review)
-        index = self.root / 'corpus/index.json'
-        index.parent.mkdir()
-        shutil.copyfile(self.corpus.DEFAULT_INDEX, index)
+        index = self.empty_index()
         adopted = self.corpus.adopt(self.source, self.replay, self.root / 'review.json', index, self.root / 'archive')
         shutil.rmtree(self.source)
         shutil.rmtree(self.replay)

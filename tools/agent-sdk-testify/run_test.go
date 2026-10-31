@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,6 +41,12 @@ func TestMain(m *testing.M) {
 					break
 				}
 			}
+			os.Exit(0)
+		case "synthetic-remote-cleanup":
+			interrupted := make(chan os.Signal, 1)
+			signal.Notify(interrupted, os.Interrupt)
+			fmt.Println("ready")
+			<-interrupted
 			os.Exit(0)
 		}
 	}

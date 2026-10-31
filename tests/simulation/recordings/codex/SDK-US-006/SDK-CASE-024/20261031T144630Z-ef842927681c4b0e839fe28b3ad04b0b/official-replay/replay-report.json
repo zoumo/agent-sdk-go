@@ -1,0 +1,158 @@
+{
+  "provider": "codex",
+  "story": "SDK-US-006",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 39,
+  "requests": 0,
+  "receipts": [
+    {
+      "initialize": {
+        "userAgent": "official-python-story-recorder/0.163.0 (Mac OS 26.2.0; arm64) unknown (official-python-story-recorder; 0.161.0)",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "thread/start": {
+        "approvalPolicy": "on-request",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-024/project",
+        "disabledPluginIds": [],
+        "instructionSources": [],
+        "model": "theta/glm-5.3",
+        "modelProvider": "custom",
+        "sandbox": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread": {
+          "cliVersion": "0.163.0",
+          "createdAt": 1793457785,
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-024/project",
+          "ephemeral": true,
+          "historyMode": "paginated",
+          "id": "01a1926a-0af0-74c3-92bb-41fde87df3e6",
+          "model": "theta/glm-5.3",
+          "modelProvider": "custom",
+          "originator": "official-python-story-recorder",
+          "preview": "",
+          "recencyAt": 1793457785,
+          "sessionId": "01a1926a-0af0-74c3-92bb-41fde87df3e6",
+          "source": "vscode",
+          "status": {
+            "type": "idle"
+          },
+          "turns": [],
+          "updatedAt": 1793457785
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a1926a-0b81-7750-a8e1-8abfec0304f3",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "variant-configuration": {
+        "timing": "during-execution",
+        "requested": {
+          "threadId": "01a1926a-0af0-74c3-92bb-41fde87df3e6",
+          "model": "theta/glm-5.3"
+        },
+        "response": {},
+        "observed": null
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a1926a-0af0-74c3-92bb-41fde87df3e6",
+        "turn": {
+          "completedAt": 1793457790,
+          "durationMs": 5115,
+          "id": "01a1926a-0b81-7750-a8e1-8abfec0304f3",
+          "items": [
+            {
+              "id": "msg_18e3a45baa0bfd2800000079",
+              "phase": "final_answer",
+              "text": "Addition combines two or more quantities into a single total by counting or measuring them together. For example, adding 2 and 3 means starting at 2 and counting forward 3 more, resulting in 5.",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793457785,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-024",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u6267\u884c\u671f\u95f4\u8bf7\u6c42\u4fee\u6539\u6a21\u578b\u5e76\u89c2\u5bdf\u7ed3\u679c\u3002",
+    "storyId": "SDK-US-006"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "codex-cli 0.163.0",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-006",
+  "caseId": "SDK-CASE-024",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "configuration-acknowledged",
+      "timing": "during-execution",
+      "completedInputs": 0,
+      "requested": {
+        "threadId": "01a1926a-0af0-74c3-92bb-41fde87df3e6",
+        "model": "theta/glm-5.3"
+      }
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "openai-codex",
+    "version": "0.161.0"
+  },
+  "configurationEvidence": {
+    "requests": [
+      {
+        "requested": {
+          "threadId": "01a1926a-0af0-74c3-92bb-41fde87df3e6",
+          "model": "theta/glm-5.3"
+        },
+        "acknowledged": true,
+        "timing": "during-execution",
+        "completedInputs": 0
+      }
+    ],
+    "observed": [],
+    "effectiveScope": "unknown"
+  },
+  "branchStatus": "passed"
+}

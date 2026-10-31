@@ -1,0 +1,20 @@
+{
+  "case": "SDK-CASE-020",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/venvs/stage2-glm/bin/agent-sdk-testify-claude",
+  "driverArgs": null,
+  "materializationSHA256": "da02abada1faccad6ef3dee2133f7b699bf219f80a1742a831e8714cac970b37",
+  "mode": "replay",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-020",
+  "provider": "claude",
+  "recordingSHA256": "8c0a9be74fccdab39fbc339ed70187e2338027daeec5de06ee943584c169660b",
+  "result": {
+    "status": "passed"
+  },
+  "source": {
+    "manifest.json": "3d90e190c92199b626ba7b61330c6897c1722aa1478b8490b52a2b88c93e3437",
+    "plan.json": "9c183a3722ea32e1fb928c80b8d943ef27d7a0b352e533825d27f061022ae8de",
+    "report.json": "2df9f0b50d5c1d589000067870b5340c18110f7589ed0614ce074e94d30b1153",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "summary.json": "11267b1d0b4d432d2501e83a931338502aab421daffb60ef97d61b67402aa5e7"
+  }
+}

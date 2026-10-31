@@ -1,0 +1,35 @@
+{
+  "executionProject": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-029/project",
+  "originalHistoryProject": null,
+  "originalProject": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-029/project",
+  "transformations": [
+    {
+      "derived": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-029-project/c96e0cc7-4e21-4ac5-bb4f-c70625ab83e7/subagents/agent-a51ce2b8e8d877308.jsonl",
+      "derivedSHA256": "830d98aadd2e88bab04bf52af4a3b770bac8fb8bbac697893fe2e66f7960435c",
+      "executionCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-029/project",
+      "kind": "claude-project-cwd-copy",
+      "source": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-029-project/c96e0cc7-4e21-4ac5-bb4f-c70625ab83e7/subagents/agent-a51ce2b8e8d877308.jsonl",
+      "sourceCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-029/project",
+      "sourceSHA256": "49df7f6ab419115ea9631d7edb84797adb72de5dadfeca949caf84eb4cf8b99e"
+    },
+    {
+      "derived": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-029-project/c96e0cc7-4e21-4ac5-bb4f-c70625ab83e7/subagents/agent-a51ce2b8e8d877308.meta.json",
+      "derivedSHA256": "baabd23c7a9dd19dddd2c1e49418499640d3f0160aa23082d0806aab837e3e19",
+      "executionCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-029/project",
+      "kind": "claude-project-cwd-copy",
+      "source": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-029-project/c96e0cc7-4e21-4ac5-bb4f-c70625ab83e7/subagents/agent-a51ce2b8e8d877308.meta.json",
+      "sourceCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-029/project",
+      "sourceSHA256": "baabd23c7a9dd19dddd2c1e49418499640d3f0160aa23082d0806aab837e3e19"
+    },
+    {
+      "derived": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-029-project/c96e0cc7-4e21-4ac5-bb4f-c70625ab83e7.jsonl",
+      "derivedSHA256": "14744e6beb5b1d3212ca57b652e5bfaa8a82fe2988322dc6cff942f25906ac5b",
+      "executionCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-029/project",
+      "kind": "claude-project-cwd-copy",
+      "source": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-029-project/c96e0cc7-4e21-4ac5-bb4f-c70625ab83e7.jsonl",
+      "sourceCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-029/project",
+      "sourceSHA256": "991d4c79a0f2df0b631afca795adeddb22d240778a3321ff0086cec798f4714c"
+    }
+  ],
+  "version": 1
+}

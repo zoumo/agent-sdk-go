@@ -66,6 +66,42 @@ func TestChildPolicyKeepsProtectedFacts(t *testing.T) {
 	require.Error(t, CompareDelivery(source, writeDelivery(t, after)))
 }
 
+func TestChildPolicyReasoningProgress(t *testing.T) {
+	for _, params := range []string{
+		`"method":"item/reasoning/summaryPartAdded","params":{"threadId":"child","turnId":"turn","itemId":"item","summaryIndex":0}`,
+		`"method":"item/reasoning/summaryTextDelta","params":{"threadId":"child","turnId":"turn","itemId":"item","summaryIndex":0,"delta":"thinking"}`,
+		`"method":"item/reasoning/textDelta","params":{"threadId":"child","turnId":"turn","itemId":"item","contentIndex":0,"delta":"thinking"}`,
+	} {
+		for _, mutation := range []string{"valid", "extension", "invalid-index", "invalid-timestamp", "missing-identity"} {
+			t.Run(params+mutation, func(t *testing.T) {
+				before, after := codexDelivery()
+				var wire map[string]any
+				require.NoError(t, json.Unmarshal([]byte("{"+params+`,"emittedAtMs":1793457783332}`), &wire))
+				fields := wire["params"].(map[string]any)
+				switch mutation {
+				case "extension":
+					fields["unknown"] = true
+				case "invalid-index":
+					fields["summaryIndex"] = "zero"
+				case "invalid-timestamp":
+					wire["emittedAtMs"] = nil
+				case "missing-identity":
+					delete(fields, "itemId")
+				}
+				raw, err := json.Marshal(wire)
+				require.NoError(t, err)
+				before[1]["raw"] = string(raw)
+				err = CompareDelivery(writeDelivery(t, before), writeDelivery(t, after))
+				if mutation == "valid" {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
+		}
+	}
+}
+
 func TestChildDeliveryRequiresRelationsCompletionAndBackgroundOrder(t *testing.T) {
 	before, _ := codexDelivery()
 	member, child, root := before[0], before[2], before[3]

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "origin": "real-agent",
+  "reviewer": "Codex /root (local review authorized by user on 2026-10-31)",
+  "reviewedAt": "2026-10-31T22:46:23.513032+08:00",
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "sourceReviewed": true,
+  "contentReviewed": true,
+  "credentialsReviewed": true,
+  "captureFiles": {
+    "config/.claude.json": "e60b02a5ccc0ceb0dd768d8ff1743d847ddf1fe2c4f5d8a2d3a258f7f16074ee",
+    "config/.last-cleanup": "261384ea5e45f667a6c96ab7d8dd5249f40eddf368872b36ab3690d3817207f8",
+    "config/backups/.claude.json.backup.1793457685359": "93eb770bbe5b24b1390f98ec8dcbba65b5390ace373f24d50d608d1a72f01348",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.jsonl": "8dbd1d0e685269c14f1202e037bd58bcb30df9d9fe1e460896626e4eb7c0d9aa",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.meta.json": "dbb68ff56e5059f55fb6f0b6f82ca465f75ca4e7017587e1f773bb3922cbba0a",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63.jsonl": "0d06f8580c81fe0d276f9f3f86686791e79104fa45accc86e5280812996134c3",
+    "manifest.json": "3d90e190c92199b626ba7b61330c6897c1722aa1478b8490b52a2b88c93e3437",
+    "materials/case.json": "9c183a3722ea32e1fb928c80b8d943ef27d7a0b352e533825d27f061022ae8de",
+    "peer-main": "c5e6c1ac1c9ffb38db7845a7b9e2767c49e0eed8fe99e88663d8e4e0e44855b0",
+    "peer-main.json": "a59009e8bfa732f6974158a6ae6f7d94b0ff488d9987ed47ff4c6fd361fececf",
+    "plan.json": "9c183a3722ea32e1fb928c80b8d943ef27d7a0b352e533825d27f061022ae8de",
+    "raw/manifest.json": "b185b328800e7a910d3576dc6565d32dcdf4e999dcb8c55f12a3c0c10fa33dac",
+    "raw/raw.jsonl": "8c0a9be74fccdab39fbc339ed70187e2338027daeec5de06ee943584c169660b",
+    "raw/stderr.raw": "f1141d3168a6a8bbb7cf0e097b275ccaf33b77235982ba892cade7698d206dce",
+    "raw/transport.json": "f42c2a3e8995374e277944ff782215a631f4f90f1986537ef247a75b6aa683d2",
+    "report.json": "2df9f0b50d5c1d589000067870b5340c18110f7589ed0614ce074e94d30b1153",
+    "request.json": "27ca2bb6483fbbd7a0b0525d2802707c583f3a42fc0a0d57801882e656675b1d",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "11267b1d0b4d432d2501e83a931338502aab421daffb60ef97d61b67402aa5e7"
+  },
+  "replayFiles": {
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63.jsonl": "a048f0dd5a19bbc7283d60bfbda55458193cc429cccb090ef1bb94aa095baa02",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.jsonl": "f58bdb92034aef920e3fd486da05ce646babd1ca8a315cf5a864df7dd60a462b",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.meta.json": "dbb68ff56e5059f55fb6f0b6f82ca465f75ca4e7017587e1f773bb3922cbba0a",
+    "materialization.json": "da02abada1faccad6ef3dee2133f7b699bf219f80a1742a831e8714cac970b37",
+    "replay-peer.json": "f7b437f566a3eaba5b338ec3f75cffd85db87d452f966a3f60c19bed36734e52",
+    "replay-report.json": "2c1880ac382e8a8fc1642398c27061378c7a2aa691e09d0053b1c44025b350e7",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "summary.json": "9f537ee3b84f506f1433b59f34804cbc813eb3666254bfe6de76e28fa6f6ab9e"
+  },
+  "publishFiles": [
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63.jsonl",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.jsonl",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.meta.json",
+    "manifest.json",
+    "plan.json",
+    "raw/manifest.json",
+    "raw/raw.jsonl",
+    "raw/stderr.raw",
+    "raw/transport.json",
+    "report.json",
+    "result.json",
+    "summary.json"
+  ],
+  "reviewNotes": {
+    "scope": "Local corpus admission only; no remote publication. Recorded by this operator using the selected native CLI and official SDK. Original protocol and source bytes preserved.",
+    "checks": "Observed native CLI identity and requested model; official business result and strict full replay; allowlisted files read and credential-scanned; scenario outputs and native metadata inspected.",
+    "privacy": "Native IDs, local paths, model metadata, CLI skill-name inventory and personal greeting remain original evidence; connection configuration and authentication are excluded.",
+    "auditBytes": 118598,
+    "auditFindings": []
+  }
+}

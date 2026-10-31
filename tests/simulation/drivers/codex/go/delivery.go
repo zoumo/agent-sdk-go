@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -95,11 +96,11 @@ func CompareDelivery(preserved, suppressed string) error {
 
 		params := mapping(wire["params"])
 		child := text(source["ThreadID"])
-		if child == "" || child == root || !children[child] || !confirmed[child] || wire["method"] != "item/agentMessage/delta" || params["threadId"] != child || len(params) != 4 || !only(params, "threadId", "turnId", "itemId", "delta") {
+		if child == "" || child == root || !children[child] || !confirmed[child] || params["threadId"] != child {
 			return errors.New("suppression removed unconfirmed or mixed Codex detail")
 		}
-		if _, ok := params["delta"].(string); !ok {
-			return errors.New("suppression removed non-text Codex detail")
+		if !reviewedProgress(wire) {
+			return errors.New("suppression removed unreviewed Codex detail")
 		}
 		if !only(wire, "method", "params", "emittedAtMs") {
 			return errors.New("suppression removed unknown Codex fields")
@@ -125,6 +126,52 @@ func CompareDelivery(preserved, suppressed string) error {
 		return errors.New("policy comparison lacks the single original root result")
 	}
 	return nil
+}
+
+// Independent protocol assertions for the text and reasoning progress exercised
+// by this case. Complete items, lifecycle frames and extensions are protected.
+func reviewedProgress(wire map[string]any) bool {
+	fields := mapping(wire["params"])
+	keys := []string{"threadId", "turnId", "itemId"}
+	for _, key := range keys {
+		if text(fields[key]) == "" {
+			return false
+		}
+	}
+	index := ""
+	hasText := true
+	switch wire["method"] {
+	case "item/agentMessage/delta":
+	case "item/reasoning/summaryPartAdded":
+		index, hasText = "summaryIndex", false
+	case "item/reasoning/summaryTextDelta":
+		index = "summaryIndex"
+	case "item/reasoning/textDelta":
+		index = "contentIndex"
+	default:
+		return false
+	}
+	if hasText {
+		if _, ok := fields["delta"].(string); !ok {
+			return false
+		}
+		keys = append(keys, "delta")
+	}
+	if index != "" {
+		if !protocolInteger(fields[index]) {
+			return false
+		}
+		keys = append(keys, index)
+	}
+	if value, exists := wire["emittedAtMs"]; exists && (!protocolInteger(value) || value.(float64) < 0) {
+		return false
+	}
+	return len(fields) == len(keys) && only(fields, keys...)
+}
+
+func protocolInteger(value any) bool {
+	n, ok := value.(float64)
+	return ok && n >= -math.Exp2(63) && n < math.Exp2(63) && math.Trunc(n) == n
 }
 func only(v map[string]any, keys ...string) bool {
 	allowed := map[string]bool{}

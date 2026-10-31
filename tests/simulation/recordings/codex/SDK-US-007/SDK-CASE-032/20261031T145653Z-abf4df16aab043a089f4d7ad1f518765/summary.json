@@ -1,0 +1,12 @@
+{
+  "case": "SDK-CASE-032",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/venvs/stage2-glm/bin/agent-sdk-testify-codex",
+  "driverArgs": null,
+  "mode": "record",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-032-fixed-cleanup",
+  "provider": "codex",
+  "recordingSHA256": "7e43bc059038f70e6ef00800ac5860f9ff3c3bde18fca2c29b0d4135622de5dd",
+  "result": {
+    "status": "passed"
+  }
+}

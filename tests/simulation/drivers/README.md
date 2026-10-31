@@ -122,16 +122,17 @@ required/planned/unsupported 是要求，admitted/missing/untriggered 是数据�
 本次验证结果。空集、缺样本、内容漂移和 Go 失败都会返回非零；通过可用子集不能通过固定门禁。
 采用后 Go 失败仍保留样本；应检查 SDK/driver，不能改帧、放宽协议匹配或弃样。
 `check-offline.sh` 包含该门禁，CI 即使缺样本仍继续打包、race 和 vet，并保存覆盖与诊断。
-当前固定覆盖为 67 required、2 planned、3 unsupported；仓库尚未附带真实样本，
-因此真实仿真门禁会如实失败，工具的合成测试通过不代表真实 corpus 通过。
+当前固定覆盖为 67 required、2 planned、3 unsupported；真实样本及采用哈希见
+[固定索引](../recordings/index.json)。缺少任何 required 样本时门禁仍失败，
+工具的合成测试通过不代表真实 corpus 通过。
 
 未指定 --output 时，输出保存在 AGENT_SDK_TESTIFY_DATA_DIR/attempts/<mode>/attempt-*；
 数据根默认 XDG_DATA_HOME/agent-sdk-testify，或 ~/.local/share/agent-sdk-testify。
 新输出目录不会覆盖既有目录；临时测试资源由测试显式选择。
 
 
-仿真测试的来源是实际 Agent 交互。当前仓库不附带已录制的仿真数据集，
-也不以目录可用性或代码测试结果声称真实流程通过。[操作说明](#repository-recording)描述新录制与回放。
+仿真测试的来源是实际 Agent 交互。已录制样本的来源和审核记录随样本保存，
+本次验证结果以 gate 的覆盖报告为准。[操作说明](#repository-recording)描述新录制与回放。
 
 <a id="fixtures-私有仿真数据"></a>
 

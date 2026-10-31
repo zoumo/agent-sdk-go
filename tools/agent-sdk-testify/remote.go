@@ -96,7 +96,7 @@ func (r *remoteService) close() error {
 	_ = r.cmd.Process.Signal(os.Interrupt)
 	select {
 	case err := <-r.done:
-		_ = writeJSON(filepath.Join(r.root, "remote-service.json"), object{"cleanupComplete": err == nil, "serverExitCode": r.cmd.ProcessState.ExitCode()})
+		_ = writeJSON(filepath.Join(r.root, "remote-service.json"), object{"cleanupComplete": err == nil, "serverExitCode": r.cmd.ProcessState.ExitCode(), "forcedCleanup": false})
 		return err
 	case <-time.After(3 * time.Second):
 		_ = r.cmd.Process.Signal(syscall.SIGKILL)

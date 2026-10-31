@@ -26,12 +26,14 @@ def check(wheel):
             "assert all('extra ==' in r for r in d.requires or [])")
         materials, output = root / 'materials', root / 'output'
         materials.mkdir(); output.mkdir()
-        (materials / 'case.json').write_text(json.dumps({'caseId': 'not-implemented', 'provider': 'codex', 'scenario': {}}))
-        request = {'case': 'not-implemented', 'materials': str(materials), 'workspace': str(root),
-                   'peer': {'command': '/must-not-launch'}, 'output': str(output)}
-        (root / 'request.json').write_text(json.dumps(request))
-        run(python.parent / 'agent-sdk-testify-codex', '--request', root / 'request.json')
-        assert json.loads((output / 'result.json').read_text())['status'] == 'unsupported'
+        for provider in ('codex', 'claude'):
+            (materials / 'case.json').write_text(json.dumps({'caseId': 'not-implemented', 'provider': provider, 'scenario': {}}))
+            request = {'case': 'not-implemented', 'materials': str(materials), 'workspace': str(root),
+                       'peer': {'command': '/must-not-launch'}, 'output': str(output)}
+            (root / 'request.json').write_text(json.dumps(request))
+            run(python.parent / ('agent-sdk-testify-' + provider), '--request', root / 'request.json')
+            assert json.loads((output / 'result.json').read_text())['status'] == 'unsupported'
+            (output / 'result.json').unlink()
         help_result = run(python, '-I', '-m', 'record_user_story.bootstrap', '--help')
         assert '{catalog}' in help_result.stdout.decode()
         run(python, '-I', '-c', "from importlib.util import find_spec; "

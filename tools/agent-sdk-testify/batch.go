@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 )
@@ -23,14 +22,7 @@ func runBatch(ctx context.Context, o options) (object, error) {
 		return nil, errors.New("empty batch")
 	}
 	var err error
-	if o.Output == "" {
-		o.Output, err = os.MkdirTemp("", "agent-sdk-testify-batch-")
-	} else {
-		o.Output, err = filepath.Abs(o.Output)
-		if err == nil {
-			err = os.Mkdir(o.Output, 0700)
-		}
-	}
+	o.Output, err = createOutput(o.Output, o.Mode)
 	if err != nil {
 		return nil, err
 	}

@@ -93,7 +93,7 @@ provider-owned assertions independent of production suppression code, and each
 preserve/suppress or remote main/probe run must have its own complete receipt.
 
 Go SDK simulation implementations and their regression tests live under
-`tests/simulation/sdk/codex` and `tests/simulation/sdk/claude`. Native
+`tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`. Native
 `tests/replay` packages retain synthetic adapters and SDK integration assertions,
 including original request handles, event delivery, cancellation and cleanup.
 Keep adapter-specific serialization/completion checks there; maintain pure ID
@@ -112,7 +112,8 @@ pushed revision outside the checkout, without `replace` or `go.work`.
 agent-sdk-testify 的专项测试通过与调用方相同的进程接口验证录制与回放，
 并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-sdk-testify/design.md#测试与依赖)。
 录制与 mock 的正确性不得仅由 Go SDK 测试间接证明。
-官方 SDK 回放是可选校验，不是 Go SDK 离线验收的前置条件；
+新样本入库前须完成官方 SDK 回放与来源／内容审核；已有材料的 Go 仿真独立执行，
+Go SDK 通过不是入库条件，入库后仿真失败须保留样本并阻断 SDK 门禁；
 流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
 
 ## 环境与结果

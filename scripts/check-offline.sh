@@ -10,8 +10,8 @@ export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
 python3 -m unittest discover -s scripts -p test_story_evidence.py -v
-PYTHONPATH=tools/official-sdk-drivers/common:tools/official-sdk-drivers/codex:tools/official-sdk-drivers/claude python3 -m unittest discover -s tools/official-sdk-drivers/tests -p 'test_*.py' -v
-python3 -m unittest discover -s tools/official-sdk-drivers/tests/scenarios -p 'test_*.py' -v
+PYTHONPATH=tests/simulation/drivers/common:tests/simulation/drivers/codex/official:tests/simulation/drivers/claude/official python3 -m unittest discover -s tests/simulation/drivers/tests -p 'test_*.py' -v
+python3 -m unittest discover -s tests/simulation/drivers/tests/scenarios -p 'test_*.py' -v
 python3 scripts/check-story-evidence.py
 bash scripts/check-boundaries.sh
 go mod verify

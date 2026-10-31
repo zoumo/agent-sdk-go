@@ -19,7 +19,7 @@ import (
 // No private runtime peer fields are present in the original materials.
 func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 	driver := filepath.Join(t.TempDir(), "sdk-driver")
-	build := exec.Command("go", "build", "-o", driver, "../../tests/simulation/sdk")
+	build := exec.Command("go", "build", "-o", driver, "../../tests/simulation/drivers")
 	data, err := build.CombinedOutput()
 	require.NoError(t, err, "%s", data)
 	fixture, err := fixturedata.Files.ReadFile("integration/lifecycle.jsonl")

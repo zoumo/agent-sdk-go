@@ -63,17 +63,18 @@ jobs:
         run: |
           python3 codex/scripts/check_whitespace.py
           mise exec -- bash claude/scripts/check-changes.sh "$BASE_SHA" "$HEAD_SHA"
-      - name: Build the unified test tool from this checkout
+      - name: Install Python build dependencies
+        run: python3 -m pip install 'setuptools>=68' wheel
+      - name: Build the tool and both driver artifacts from this checkout
         run: |
-          GOPROXY=off GOSUMDB=off mise exec -- go build -o "$RUNNER_TEMP/agent-sdk-testify" ./tools/agent-sdk-testify
-          "$RUNNER_TEMP/agent-sdk-testify" version
-          echo "AGENT_SDK_TESTIFY_BIN=$RUNNER_TEMP/agent-sdk-testify" >> "$GITHUB_ENV"
+          PYTHON=python3 AGENT_SDK_TESTIFY_BUILD_DIR="$RUNNER_TEMP/simulation" GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build
+          "$RUNNER_TEMP/simulation/agent-sdk-testify" version
+          echo "AGENT_SDK_TESTIFY_BIN=$RUNNER_TEMP/simulation/agent-sdk-testify" >> "$GITHUB_ENV"
       - name: Native schemas, simulation tooling, integration tests and examples
         run: mise exec -- bash scripts/check-offline.sh
       - name: Independently installed agent-sdk-testify Python driver
         run: |
-          python3 -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/agent-sdk-testify-wheel" ./tools/official-sdk-drivers
-          python3 scripts/check-agent-sdk-testify-package.py "$RUNNER_TEMP"/agent-sdk-testify-wheel/agent_sdk_testify_driver-*.whl
+          python3 scripts/check-agent-sdk-testify-package.py "$RUNNER_TEMP"/simulation/agent_sdk_testify_driver-*.whl
       - name: Race tests (real-agent E2E tests visibly skip)
         env:
           GOPROXY: 'off'

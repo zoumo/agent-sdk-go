@@ -10,8 +10,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/tests/simulation/sdk/claude"
-	"github.com/zoumo/agent-sdk-go/tests/simulation/sdk/codex"
+	"github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
+	"github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
 )
 
 func main() {

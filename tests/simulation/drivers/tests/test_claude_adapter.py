@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'claude'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'claude' / 'official'))
 from claude_driver.adapter import claude
 
 

@@ -7,8 +7,8 @@ import tempfile
 import sys
 import unittest
 
-ROOT = Path(__file__).resolve().parents[4]
-BOOTSTRAP = ROOT / 'tools/official-sdk-drivers/common/record_user_story/bootstrap.py'
+ROOT = Path(__file__).resolve().parents[5]
+BOOTSTRAP = ROOT / 'tests/simulation/drivers/common/record_user_story/bootstrap.py'
 CATALOG = ROOT / 'tests/simulation/scenarios'
 
 
@@ -82,7 +82,7 @@ class SimulationCatalogTests(unittest.TestCase):
                 self.assertNotEqual(self.catalog('--provider', 'codex', directory=directory).returncode, 0)
 
     def test_standalone_catalog_accepts_application_defined_identities(self):
-        result = self.catalog('--provider', 'claude', directory=ROOT / 'tools/official-sdk-drivers/common/record_user_story/examples')
+        result = self.catalog('--provider', 'claude', directory=ROOT / 'tests/simulation/drivers/common/record_user_story/examples')
         self.assertEqual(result.returncode, 0, result.stderr)
         cases = json.loads(result.stdout)
         self.assertEqual([(case['storyId'], case['caseId']) for case in cases], [('conversation', 'two-inputs')])

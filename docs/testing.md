@@ -4,7 +4,7 @@ The [testing standards](../harness/testing.md) define test levels and required
 coverage.
 This guide describes current commands and configured gates. Simulation catalog
 availability and synthetic checks do not prove real recordings; see
-[data provenance](../tools/official-sdk-drivers/README.md#fixtures-仿真录制与测试输入).
+[data provenance](../tests/simulation/drivers/README.md#fixtures-仿真录制与测试输入).
 
 Run from the repository root with the pinned compiler:
 
@@ -28,9 +28,9 @@ protocol faults, resource boundaries, cancellation and races have no story regis
 
 Go tool implementation and its own tests live in `tools/agent-sdk-testify/`.
 Go SDK targeted integration tests remain in `tests/integration/`; the separate
-simulation driver and shared case materials live in `tests/simulation/sdk/` and
+simulation driver and shared case materials live in `tests/simulation/drivers/` and
 `tests/simulation/scenarios/`. Official SDK drivers, shared Python helpers and
-their offline tests live independently in `tools/official-sdk-drivers/`.
+their offline tests share `tests/simulation/drivers/`, grouped by Agent in official/ and go/.
 The offline script discovers both its `tests/` and `tests/scenarios/` suites.
 
 The remaining gates check module and native dependency boundaries, standard-library-only
@@ -130,11 +130,11 @@ is bundled. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
 Go SDK simulation flow implementations and their regression tests live in
-`tests/simulation/sdk/codex` and `tests/simulation/sdk/claude`; the parent directory
-owns the driver entry and delivery checks. Native `tests/replay` packages retain
+`tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`; the drivers root
+owns the process entry and delivery checks. Native `tests/replay` packages retain
 SDK integration tests and synthetic fixture/process adapters. Pure protocol
 matching tests live under `tools/agent-sdk-testify/protocol`.
-Recording and optional official-SDK replay use the [agent-sdk-testify guide](../tools/agent-sdk-testify/README.md).
+Recording and official-SDK replay use the [agent-sdk-testify guide](../tools/agent-sdk-testify/README.md).
 
 ## Focused checks
 

@@ -56,17 +56,38 @@ func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 		}
 		require.NoError(t, os.WriteFile(path, out.Bytes(), 0600))
 	}
-	for _, profile := range []string{"structured-input", "remote-close", "background-children", "remote-close-postprocess"} {
-		t.Run(profile, func(t *testing.T) {
-			postprocessFailure := profile == "remote-close-postprocess"
-			if postprocessFailure {
-				profile = "remote-close"
-			}
+	for _, tc := range []struct {
+		name, profile, missingReceipt  string
+		postprocessFailure, missingRaw bool
+	}{
+		{name: "structured-input", profile: "structured-input"},
+		{name: "remote-close", profile: "remote-close"},
+		{name: "background-children", profile: "background-children"},
+		{name: "remote-close-postprocess", profile: "remote-close", postprocessFailure: true},
+		{name: "missing-probe-receipt", profile: "remote-close", missingReceipt: "remote-probe"},
+		{name: "missing-suppress-receipt", profile: "background-children", missingReceipt: "suppress"},
+		{name: "missing-suppress-raw-invalid-receipt", profile: "background-children", missingRaw: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile := tc.profile
 			o := sample(t, "sdk-request")
 			o.Mode, o.Driver, o.DriverArgs = "simulate", driver, nil
-			if postprocessFailure {
+			if tc.postprocessFailure {
 				wrapper := filepath.Join(t.TempDir(), "driver")
 				require.NoError(t, os.WriteFile(wrapper, []byte(fmt.Sprintf("#!/bin/sh\nmkdir %q\nexec %q \"$@\"\n", filepath.Join(o.Output, "phase-0-stderr.private"), driver)), 0700))
+				o.Driver = wrapper
+			}
+			if tc.missingReceipt != "" || tc.missingRaw {
+				wrapper := filepath.Join(t.TempDir(), "driver")
+				script := fmt.Sprintf("#!/bin/sh\nset -e\n%q \"$@\"\n", driver)
+				if tc.missingReceipt != "" {
+					script += fmt.Sprintf("rm %q\n", filepath.Join(o.Output, tc.missingReceipt, "replay-peer.json"))
+				} else {
+					// Removing the output alias must not hide a selected run from
+					// verification or change which source its receipt describes.
+					script += fmt.Sprintf("rm %q\nprintf '%%s' '{}' > %q\n", filepath.Join(o.Output, "suppress/raw"), filepath.Join(o.Output, "suppress/replay-peer.json"))
+				}
+				require.NoError(t, os.WriteFile(wrapper, []byte(script), 0700))
 				o.Driver = wrapper
 			}
 			frames := main
@@ -113,8 +134,15 @@ func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 				log, _ := os.ReadFile(filepath.Join(o.Output, "stderr.log"))
 				t.Log(string(log))
 			}
-			if postprocessFailure {
-				require.ErrorContains(t, err, "is a directory")
+			if tc.postprocessFailure || tc.missingReceipt != "" || tc.missingRaw {
+				switch {
+				case tc.postprocessFailure:
+					require.ErrorContains(t, err, "is a directory")
+				case tc.missingReceipt == "remote-probe":
+					require.ErrorContains(t, err, "probe peer:")
+				default:
+					require.ErrorContains(t, err, "suppress peer:")
+				}
 				var outcome result
 				require.NoError(t, readJSON(filepath.Join(o.Output, "result.json"), &outcome))
 				require.Equal(t, "passed", outcome.Status)
@@ -125,11 +153,8 @@ func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 			require.NoError(t, readJSON(filepath.Join(o.Output, "materials/case.json"), &plan))
 			require.NotContains(t, plan, "_mock")
 			require.NotContains(t, plan, "_peers")
-			require.NoError(t, checkTransport("simulate", o.Output, "codex", "passed"))
 			if profile == "background-children" {
 				require.FileExists(t, filepath.Join(o.Output, "suppress/replay-peer.json"))
-				require.NoError(t, os.Remove(filepath.Join(o.Output, "suppress/replay-peer.json")))
-				require.Error(t, checkTransport("simulate", o.Output, "codex", "passed"))
 			}
 		})
 	}

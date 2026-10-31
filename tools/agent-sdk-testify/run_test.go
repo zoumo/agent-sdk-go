@@ -90,6 +90,29 @@ func testDriver(args []string) int {
 		status = "passed"
 		_ = os.Remove(filepath.Join(r.Output, "replay-peer.json"))
 	}
+	if r.Case == "unsupported" || r.Case == "untriggered" {
+		status = r.Case
+		_ = os.Remove(filepath.Join(r.Output, "replay-peer.json"))
+	}
+	field := map[string]string{"wrong-hash": "recordingSHA256", "wrong-provider": "provider", "not-consumed": "fullConsumption", "no-eof": "clientEOF", "native-launched": "nativeLaunched"}[r.Case]
+	if field != "" {
+		path := filepath.Join(r.Output, "replay-peer.json")
+		var receipt object
+		if readJSON(path, &receipt) != nil {
+			return 2
+		}
+		switch field {
+		case "recordingSHA256", "provider":
+			receipt[field] = "wrong"
+		case "nativeLaunched":
+			receipt[field] = true
+		default:
+			receipt[field] = false
+		}
+		if writeJSON(path, receipt) != nil {
+			return 2
+		}
+	}
 	if readJSON(filepath.Join(r.Materials, "case.json"), &object{}) != nil {
 		return 2
 	}
@@ -124,7 +147,7 @@ func sample(t *testing.T, id string) options {
 }
 
 func TestDriverContract(t *testing.T) {
-	for _, id := range []string{"passed", "failed", "crash", "bad-result", "false-pass"} {
+	for _, id := range []string{"passed", "failed", "crash", "bad-result", "false-pass", "wrong-hash", "wrong-provider", "not-consumed", "no-eof", "native-launched", "unsupported", "untriggered"} {
 		t.Run(id, func(t *testing.T) {
 			o := sample(t, id)
 			before, e := os.ReadFile(filepath.Join(o.Materials, "raw/raw.jsonl"))
@@ -141,6 +164,15 @@ func TestDriverContract(t *testing.T) {
 				require.Equal(t, "passed", summary["result"].(result).Status)
 			} else {
 				require.Error(t, e)
+				if id == "unsupported" {
+					require.ErrorContains(t, e, "driver reported unsupported")
+					require.NotContains(t, e.Error(), "peer:")
+				} else if id == "untriggered" {
+					require.ErrorContains(t, e, "main peer:")
+				} else if id != "failed" && id != "crash" && id != "bad-result" {
+					require.Equal(t, "passed", summary["result"].(result).Status)
+					require.ErrorContains(t, e, "main peer:")
+				}
 			}
 			after, e := os.ReadFile(filepath.Join(o.Materials, "raw/raw.jsonl"))
 			require.NoError(t, e)
@@ -151,6 +183,16 @@ func TestDriverContract(t *testing.T) {
 			require.FileExists(t, filepath.Join(o.Output, "project/numbers.txt"))
 		})
 	}
+}
+
+func TestUnselectedPeerMaterialsDoNotRequireReceipt(t *testing.T) {
+	o := sample(t, "passed")
+	probe := filepath.Join(o.Materials, "remote-probe/raw")
+	require.NoError(t, os.MkdirAll(probe, 0700))
+	require.NoError(t, copyFile(filepath.Join(o.Materials, "raw/raw.jsonl"), filepath.Join(probe, "raw.jsonl")))
+	_, err := run(context.Background(), o)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(o.Output, "remote-probe/replay-peer.json"))
 }
 
 func TestCancellation(t *testing.T) {

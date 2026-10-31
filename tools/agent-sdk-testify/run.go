@@ -68,26 +68,6 @@ func run(ctx context.Context, o options) (object, error) {
 		return nil, errors.New("existing-child recording needs supplied saved-history materials")
 	}
 	if o.Mode != "record" {
-		if _, err = os.Stat(filepath.Join(o.Materials, "raw/raw.jsonl")); err != nil {
-			return nil, fmt.Errorf("offline recording: %w", err)
-		}
-		// The original native cwd is protocol data. Only writable fixture files
-		// and native history copies move; original recordings remain untouched.
-		for _, name := range []string{"raw", "remote-probe/raw"} {
-			source := filepath.Join(o.Materials, name)
-			if _, e := os.Stat(source); os.IsNotExist(e) {
-				continue
-			} else if e != nil {
-				return nil, e
-			}
-			target := filepath.Join(root, name)
-			if err = os.MkdirAll(filepath.Dir(target), 0700); err != nil {
-				return nil, err
-			}
-			if err = os.Symlink(source, target); err != nil {
-				return nil, err
-			}
-		}
 		for _, name := range []string{"remote-service.json"} {
 			if _, e := os.Stat(filepath.Join(o.Materials, name)); e == nil {
 				if err = copyFile(filepath.Join(o.Materials, name), filepath.Join(root, name)); err != nil {
@@ -109,22 +89,6 @@ func run(ctx context.Context, o options) (object, error) {
 	if str(plan["project"]) == "" {
 		plan["project"] = workspace
 	}
-	peerName := o.Peer
-	if peerName == "" {
-		var err error
-		peerName, err = os.Executable()
-		if err != nil {
-			return nil, err
-		}
-	}
-	peer, err := absoluteExecutable(peerName)
-	if err != nil {
-		return nil, err
-	}
-	self, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
 	var service *remoteService
 	if o.Mode == "record" && plan["driverProfile"] == "remote-close" {
 		service, err = startRemote(ctx, o, plan)
@@ -137,79 +101,17 @@ func run(ctx context.Context, o options) (object, error) {
 			}
 		}()
 	}
-	peers := map[string]command{}
-	phases := []string{"main"}
-	if plan["driverProfile"] == "remote-close" {
-		phases = append(phases, "probe")
+	peers, err := preparePeerRuns(ctx, o, plan, service)
+	if err != nil {
+		return nil, err
 	}
-	if o.Mode == "simulate" && str(obj(obj(plan["scenario"])["parameters"])["childDetailPolicy"]) != "" {
-		phases = append(phases, "suppress")
-	}
-	for _, phase := range phases {
-		base := root
-		source := o.Materials
-		if phase == "suppress" {
-			base = filepath.Join(root, "suppress")
-			if err = preparePolicyCopy(root, base); err != nil {
-				return nil, err
-			}
-		}
-		if phase == "probe" {
-			base = filepath.Join(root, "remote-probe")
-			source = filepath.Join(o.Materials, "remote-probe")
-			if err = os.MkdirAll(base, 0700); err != nil {
-				return nil, err
-			}
-		}
-		var args []string
-		if o.Mode == "record" {
-			if phase == "probe" && service == nil {
-				continue
-			}
-			cwd := str(plan["project"])
-			if plan["driverProfile"] == "existing-children" {
-				cwd = str(plan["historyProject"])
-			}
-			args = []string{"protocol", "record", "--output", filepath.Join(base, "raw"), "--cwd", cwd, "--stdin-eof-action", str(plan["stdinEOFAction"]), "--", str(plan["cli"])}
-			args = append(args, stringsOf(plan["args"])...)
-			if service != nil {
-				args = []string{"protocol", "record", "--output", filepath.Join(base, "raw"), "--cwd", str(plan["project"]), "--", peer, "protocol", "connect", "--url", service.endpoint, "--token-file", service.token}
-			}
-		} else {
-			args = []string{"protocol", "mock", "--provider", provider, "--scenario", filepath.Join(source, "raw/raw.jsonl"), "--receipt", filepath.Join(base, "replay-peer.json")}
-		}
-		peerPath := filepath.Join(o.Output, "peer-"+phase+".json")
-		if err = writeJSON(peerPath, command{Command: peer, Args: args}); err != nil {
-			return nil, err
-		}
-		launcher, e := writePeerLauncher(root, phase, command{Command: self, Args: []string{"peer", "--request", peerPath}})
-		if e != nil {
-			return nil, e
-		}
-		peers[phase] = command{Command: launcher}
-	}
-	driverPeers := driverPeer{command: peers["main"]}
-	if probe, ok := peers["probe"]; ok {
-		driverPeers.Probe = &probe
-	}
-	if suppress, ok := peers["suppress"]; ok {
-		driverPeers.Suppress = &suppress
-	}
-	var offlineRemote *mockRemoteService
-	if o.Mode == "simulate" && plan["driverProfile"] == "remote-close" {
-		offlineRemote, err = startMockRemote(ctx, peers["main"], peers["probe"], root)
-		if err != nil {
-			return nil, err
-		}
-		defer offlineRemote.close()
-		driverPeers.Remote = &offlineRemote.endpoint
-	}
+	defer peers.close()
 	// Keep original source data for provider-owned assertions; mutable runtime
 	// paths belong to this attempt. No exact SDK or executable version gate.
 	if err = writeJSON(filepath.Join(o.Output, "materials/case.json"), plan); err != nil {
 		return nil, err
 	}
-	req := request{Case: str(plan["caseId"]), Materials: filepath.Join(o.Output, "materials"), Workspace: workspace, Peer: driverPeers, Output: root}
+	req := request{Case: str(plan["caseId"]), Materials: filepath.Join(o.Output, "materials"), Workspace: workspace, Peer: peers.driver, Output: root}
 	requestPath := filepath.Join(o.Output, "request.json")
 	if err = writeJSON(requestPath, req); err != nil {
 		return nil, err
@@ -264,28 +166,7 @@ func run(ctx context.Context, o options) (object, error) {
 			resultErr = fmt.Errorf("invalid driver status %q", outcome.Status)
 		}
 	}
-	if offlineRemote != nil {
-		runErr = errors.Join(runErr, offlineRemote.close())
-	}
-	transportErr := checkTransport(o.Mode, root, provider, outcome.Status)
-	if outcome.Status != "unsupported" {
-		for _, phase := range phases {
-			base := root
-			if phase == "probe" {
-				base = filepath.Join(root, "remote-probe")
-			}
-			if phase == "suppress" {
-				base = filepath.Join(root, "suppress")
-			}
-			name := "replay-peer.json"
-			if o.Mode == "record" {
-				name = "raw/transport.json"
-			}
-			if _, e := os.Stat(filepath.Join(base, name)); e != nil {
-				transportErr = errors.Join(transportErr, e)
-			}
-		}
-	}
+	transportErr := peers.finish(outcome.Status)
 	if o.Mode == "record" {
 		transportErr = errors.Join(transportErr, writeSourceManifest(root, outcome))
 	}
@@ -336,43 +217,6 @@ func waitDriver(ctx context.Context, cmd *exec.Cmd) error {
 		}
 		return ctx.Err()
 	}
-}
-
-func checkTransport(mode, root, provider, status string) error {
-	if status == "unsupported" {
-		return nil
-	}
-	for _, phase := range []string{"", "remote-probe", "suppress"} {
-		base := filepath.Join(root, phase)
-		if phase != "" {
-			if _, e := os.Stat(filepath.Join(base, "raw/raw.jsonl")); os.IsNotExist(e) {
-				continue
-			}
-		}
-		if mode == "record" {
-			var t object
-			if err := readJSON(filepath.Join(base, "raw/transport.json"), &t); err != nil {
-				return err
-			}
-			if t["captureStatus"] != "complete" || t["cleanupComplete"] != true {
-				return errors.New("recording did not complete and clean up")
-			}
-			continue
-		}
-		var receipt object
-		if err := readJSON(filepath.Join(base, "replay-peer.json"), &receipt); err != nil {
-			return err
-		}
-		b, err := os.ReadFile(filepath.Join(base, "raw/raw.jsonl"))
-		if err != nil {
-			return err
-		}
-		h := sha256.Sum256(b)
-		if receipt["provider"] != provider || receipt["fullConsumption"] != true || receipt["clientEOF"] != true || receipt["nativeLaunched"] != false || receipt["recordingSHA256"] != hex.EncodeToString(h[:]) {
-			return errors.New("mock receipt does not prove full consumption of the selected recording")
-		}
-	}
-	return nil
 }
 
 func driverEnvironment(o options, plan object) ([]string, error) {

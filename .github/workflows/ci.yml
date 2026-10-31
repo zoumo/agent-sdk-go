@@ -30,6 +30,7 @@ jobs:
       GOENV: 'off'
       GORACE: 'atexit_sleep_ms=0'
       GOMAXPROCS: '2'
+      PYTHON: python3
       CODEX_E2E_STDIO: '0'
       CODEX_E2E_INTERACTIONS: '0'
       CODEX_E2E_WEBSOCKET: '0'
@@ -67,7 +68,7 @@ jobs:
         run: python3 -m pip install 'setuptools>=68' wheel
       - name: Build the tool and both driver artifacts from this checkout
         run: |
-          PYTHON=python3 AGENT_SDK_TESTIFY_BUILD_DIR="$RUNNER_TEMP/simulation" GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build
+          AGENT_SDK_TESTIFY_BUILD_DIR="$RUNNER_TEMP/simulation" GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build
           "$RUNNER_TEMP/simulation/agent-sdk-testify" version
           echo "AGENT_SDK_TESTIFY_BIN=$RUNNER_TEMP/simulation/agent-sdk-testify" >> "$GITHUB_ENV"
       - name: Native schemas, simulation tooling, integration tests and examples

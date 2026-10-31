@@ -36,7 +36,7 @@ def case_mapping_errors(stories, cases):
 
 
 def recording_mapping(root):
-    directory = root / 'tests/recording/scenarios'
+    directory = root / 'tests/simulation/scenarios'
     index = json.loads((directory / 'index.json').read_text())
     stories = [json.loads((directory / (name + '.json')).read_text()) for name in index['stories']]
     providers = {p: json.loads((directory / 'bindings' / (p + '.json')).read_text()) for p in ('codex', 'claude')}
@@ -51,7 +51,7 @@ def recording_mapping(root):
                     continue
                 binding = bindings['cases'][case['id']]
                 routes.append(dict(case['execution'], **binding.get('execution', {}))['mode'])
-            target = f"[配置](../../tests/recording/scenarios/{story['id']}.json)"
+            target = f"[配置](../../tests/simulation/scenarios/{story['id']}.json)"
             rows.append('| ' + ' | '.join([case['id'], story['id'], case['goal'], *routes, target]) + ' |')
     return cases, rows
 
@@ -100,7 +100,7 @@ def check(root):
             errors.append(case['id'] + ': normative and configured ownership differ')
         if case.get('implementation') not in ('implemented', 'planned'):
             errors.append(case['id'] + ': simulation case must be implemented or planned')
-    directory = root / 'tests/recording/scenarios'
+    directory = root / 'tests/simulation/scenarios'
     index = json.loads((directory / 'index.json').read_text())
     if set(index['stories']) != common or len(index['stories']) != len(common):
         errors.append('Simulation catalog must contain exactly the eight user stories')
@@ -118,11 +118,11 @@ def check(root):
                 errors.append(provider + '/' + case['id'] + ': unavailable route needs a reason')
             if 'offlineTest' in case or 'offlineTest' in binding:
                 errors.append(provider + '/' + case['id'] + ': code integration checks are not simulation routes')
-    mapping = (root / 'tools/record-user-story/README.md').read_text()
+    mapping = (root / 'tools/official-sdk-drivers/README.md').read_text()
     errors += inventory_errors(mapping, 'SDK-CASE', case_ids)
     if [line for line in mapping.splitlines() if line.startswith('| SDK-CASE-')] != rows:
         errors.append('Story/case mapping must match exact identities and provider routes')
-    documents = [root / name for name in ('AGENTS.md', 'README.md', 'CHANGELOG.md', 'GLOSSARY.md', 'tools/record-user-story/README.md')]
+    documents = [root / name for name in ('AGENTS.md', 'README.md', 'CHANGELOG.md', 'GLOSSARY.md', 'tools/official-sdk-drivers/README.md')]
     for directory in ('harness', 'docs', 'codex', 'claude'):
         documents += sorted((root / directory).rglob('*.md'))
     for path in documents:

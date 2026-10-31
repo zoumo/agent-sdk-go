@@ -9,7 +9,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/record-user-story'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/official-sdk-drivers/common'))
 from record_user_story.environment import verify_recording
 from record_user_story.peer import planned_identity, verify_receipt
 
@@ -155,7 +155,7 @@ def run_adapter(adapter, root, plan, peer, output, policy):
                '--policy', policy, '--observations', str(output / 'deliveries.jsonl')]
     if plan['provider'] == 'claude':
         launcher = output / 'mock-cli'
-        launcher.write_text('#!/bin/sh\nexec ' + shlex.join([peer['path'], 'mock', '--provider', 'claude',
+        launcher.write_text('#!/bin/sh\nexec ' + shlex.join([peer['path'], 'protocol', 'mock', '--provider', 'claude',
                             '--scenario', str(root / 'raw/raw.jsonl'), '--receipt', str(receipt)]) + '\n')
         launcher.chmod(0o700)
         command += ['--launcher', str(launcher)]

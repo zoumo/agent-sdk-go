@@ -57,9 +57,10 @@ Both native SDKs use the same separation of responsibilities:
 | `tools/official-sdk-drivers/codex/`, `tools/official-sdk-drivers/claude/` | Agent-owned official-SDK drivers; each Agent chooses its implementation language |
 | `tools/official-sdk-drivers/common/` | Shared material readers and native test helpers |
 | `tools/official-sdk-drivers/tests/` | Offline tests of official SDK drivers, shared helpers and recording/replay orchestration |
-| `tests/simulation/sdk/` | Go SDK simulation driver and its business assertions; runs independently of the generic tool |
+| `tests/simulation/sdk/` | Go SDK simulation driver entry, request handling and delivery assertions; runs independently of the generic tool |
+| `tests/simulation/sdk/codex/`, `tests/simulation/sdk/claude/` | Provider-owned simulation flows, history, existing-child and remote acceptance; regression tests live alongside their implementation |
 | `tests/simulation/scenarios/` | Shared SDK story/case materials and provider bindings, supplied explicitly to either driver |
-| `codex/tests/replay`, `claude/tests/replay` | Fixture decoding and Go SDK assertion/process adapters; delegate protocol replay to the agent-sdk-testify tool |
+| `codex/tests/replay`, `claude/tests/replay` | Synthetic fixture decoding/process adapters and SDK integration tests; SDK exercise helpers remain test-only; protocol matching belongs to agent-sdk-testify |
 | `internal/mocktest` | Shared standard-library test process bridge, without native matching or SDK imports |
 | `codex/tests/testdata/integration`, `claude/tests/testdata/integration` | Explicitly synthetic protocol inputs owned by code integration tests |
 | `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
@@ -88,7 +89,11 @@ container because `go:embed` cannot read a parent directory. Embedded paths
 resolve within the container, independently of the caller’s working directory.
 SDK tests and offline examples reuse fixture access; example-local synthetic data
 may remain with its example. The mock tool owns protocol matching; fixture adapters
-only decode data, bridge processes and assert SDK results.
+only decode data and bridge processes. SDK integration tests assert SDK results;
+simulation operation sequences and business assertions live with the provider driver
+under `tests/simulation/sdk/`. Test-local SDK policies belong in `*_test.go`, not
+exported runtime helper packages. Pure protocol matching matrices live with the
+protocol module, without duplicate copies in SDK test adapters.
 
 Move data rather than copying it. Update imports, embeds, scripts, examples, CI
 and documentation links whenever paths change. Recording inventories retain

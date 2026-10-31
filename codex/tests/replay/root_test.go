@@ -7,7 +7,6 @@ import (
 	"fmt"
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,13 +121,6 @@ func TestExactNativeRequestPolicyAndSingleAnswer(t *testing.T) {
 	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
 	require.NoError(t, c.Close())
 }
-func TestStrictAddedControlsDoNotPermitExtraOrChangedRequests(t *testing.T) {
-	fs := []Frame{frame(1, "c2s", `{"id":1,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`), frame(2, "s2c", `{"id":1,"result":{}}`)}
-	for _, input := range []string{`{"id":9,"method":"turn/interrupt","params":{"threadId":"root","turnId":"other"}}` + "\n", `{"id":9,"method":"thread/resume","params":{"threadId":"root"}}` + "\n"} {
-		require.Error(t, Peer(bytes.NewBufferString(input), io.Discard, fs))
-	}
-}
-
 func TestExecutionTimeInputAndExplicitInterrupt(t *testing.T) {
 	fs := rootPrefix(t)
 	addRoot(&fs, "c2s", `{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"Produce a short numbered list from one to ten."}],"environments":[]}}`)

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/claude"
-	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay/acceptance"
 	"github.com/zoumo/agent-sdk-go/codex"
-	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
+	"github.com/zoumo/agent-sdk-go/tests/simulation/sdk/claude"
+	"github.com/zoumo/agent-sdk-go/tests/simulation/sdk/codex"
 )
 
 func main() {
@@ -62,21 +62,21 @@ func accept(ctx context.Context, provider, root, peer, raw, receipt, launcher, p
 	switch provider {
 	case "codex":
 		if plan.DriverProfile == "existing-children" {
-			err = recording.AcceptExistingChildren(ctx, root, peer, raw, receipt, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptExistingChildren(ctx, root, peer, raw, receipt, codex.ChildDetailPolicy(policy), out)
 		} else if plan.DriverProfile == "remote-close" {
-			err = recording.AcceptRemoteClose(ctx, root, peer, filepath.Dir(receipt))
+			err = codexsim.AcceptRemoteClose(ctx, root, peer, filepath.Dir(receipt))
 		} else if plan.DriverProfile == "history" || plan.DriverProfile == "continuation" {
-			err = recording.AcceptSavedHistory(ctx, peer, raw, receipt, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptSavedHistory(ctx, peer, raw, receipt, codex.ChildDetailPolicy(policy), out)
 		} else {
-			err = recording.AcceptFlow(ctx, peer, raw, receipt, out)
+			err = codexsim.AcceptFlow(ctx, peer, raw, receipt, out)
 		}
 	case "claude":
 		if plan.DriverProfile == "existing-children" {
-			err = transcript.AcceptExistingChildren(ctx, launcher, root)
+			err = claudesim.AcceptExistingChildren(ctx, launcher, root)
 		} else if plan.DriverProfile == "history" {
-			err = transcript.AcceptSavedHistory(ctx, launcher, root, claude.ChildDetailPolicy(policy), out)
+			err = claudesim.AcceptSavedHistory(ctx, launcher, root, claude.ChildDetailPolicy(policy), out)
 		} else {
-			err = transcript.AcceptFlow(ctx, launcher, root, out)
+			err = claudesim.AcceptFlow(ctx, launcher, root, out)
 		}
 	default:
 		err = fmt.Errorf("unsupported provider")

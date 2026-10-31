@@ -1,9 +1,0 @@
-{"ordinal":1,"direction":"client","channel":"control","data":{"type":"control_request","request_id":"a","request":{"subtype":"first"}}}
-{"ordinal":2,"direction":"server","channel":"protocol","data":{"type":"future_event","source":"synthetic"}}
-{"ordinal":3,"direction":"client","channel":"control","data":{"type":"control_request","request_id":2,"request":{"subtype":"second"}}}
-{"ordinal":4,"direction":"server","channel":"control","data":{"type":"control_response","response":{"request_id":2,"subtype":"success"}}}
-{"ordinal":5,"direction":"server","channel":"control","data":{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_use_id":"synthetic-tool"}}}
-{"ordinal":6,"direction":"client","channel":"control","data":{"type":"control_response","response":{"request_id":"permission","response":{"behavior":"deny"}}}}
-{"ordinal":7,"direction":"server","channel":"control","data":{"type":"control_response","response":{"request_id":"a","subtype":"success"}}}
-{"ordinal":8,"direction":"server","channel":"control","data":{"type":"control_request","request_id":"cancelled","request":{"subtype":"can_use_tool"}}}
-{"ordinal":9,"direction":"server","channel":"control","data":{"type":"control_cancel_request","request_id":"cancelled"}}

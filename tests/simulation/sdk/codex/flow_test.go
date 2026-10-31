@@ -1,4 +1,4 @@
-package recording
+package codexsim
 
 import (
 	"bytes"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
+	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
@@ -19,7 +21,7 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 		t.Run(decision, func(t *testing.T) {
 			fs := rootPrefix(t)
 			// Real initializations may emit notifications before initialized.
-			fs = append(fs[:2], append([]Frame{frame(0, "s2c", `{"method":"remoteControl/status/changed","params":{"enabled":false}}`)}, fs[2:]...)...)
+			fs = append(fs[:2], append([]recording.Frame{frame(0, "s2c", `{"method":"remoteControl/status/changed","params":{"enabled":false}}`)}, fs[2:]...)...)
 			addRoot(&fs, "c2s", `{"id":103,"method":"thread/settings/update","params":{"threadId":"thread-001","model":"synthetic-model"}}`)
 			addRoot(&fs, "s2c", `{"id":103,"result":{"futureReceipt":true}}`)
 			addRoot(&fs, "c2s", `{"id":104,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"synthetic input"}]}}`)
@@ -57,3 +59,18 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 		})
 	}
 }
+
+func frame(n int, d, w string) recording.Frame {
+	return recording.Frame{Ordinal: n, Direction: d, Epoch: 1, Channel: "protocol", Wire: json.RawMessage(w)}
+}
+func rootPrefix(t *testing.T) []recording.Frame {
+	t.Helper()
+	b, err := fixturedata.Files.ReadFile("integration/lifecycle.jsonl")
+	require.NoError(t, err)
+	fs, err := recording.Decode(bytes.NewReader(b))
+	require.NoError(t, err)
+	fs = fs[:5]
+	fs[0].Wire = json.RawMessage(`{"id":101,"method":"initialize","params":{"clientInfo":{"name":"synthetic-preflight","version":"1"},"capabilities":{"experimentalApi":true}}}`)
+	return fs
+}
+func addRoot(fs *[]recording.Frame, d, w string) { *fs = append(*fs, frame(len(*fs)+1, d, w)) }

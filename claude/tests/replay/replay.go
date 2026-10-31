@@ -7,8 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	"io"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 type Frame struct {
@@ -19,24 +20,10 @@ type Frame struct {
 	DelayMillis int             `json:"delay_ms,omitempty"`
 }
 
-var ErrDisconnected = mocktest.ErrDisconnected
-
-type ReplayOptions struct {
-	Context   context.Context
-	MaxFrames int
-}
-
+// Replay wraps synthetic JSONL for the protocol process. complete reports frame
+// consumption so callers can end input; success also requires a valid client EOF.
 func Replay(input io.Reader, output io.Writer, capture io.Reader, complete func() error) error {
-	return ReplayWithOptions(input, output, capture, complete, ReplayOptions{})
-}
-func ReplayWithOptions(input io.Reader, output io.Writer, capture io.Reader, complete func() error, options ReplayOptions) error {
-	ctx := options.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if options.MaxFrames < 0 || options.MaxFrames > 10000 {
-		return fmt.Errorf("invalid frame limit")
-	}
+	ctx := context.Background()
 	data, err := io.ReadAll(io.LimitReader(capture, (16<<20)+1))
 	if err != nil {
 		return err
@@ -46,18 +33,14 @@ func ReplayWithOptions(input io.Reader, output io.Writer, capture io.Reader, com
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 4096), 2<<20)
-	var frames []json.RawMessage
+	var rows [][]byte
 	for scanner.Scan() {
-		frames = append(frames, append(json.RawMessage(nil), scanner.Bytes()...))
+		rows = append(rows, append([]byte(nil), scanner.Bytes()...))
 	}
 	if err = scanner.Err(); err != nil {
 		return err
 	}
-	var rows [][]byte
-	for _, frame := range frames {
-		rows = append(rows, frame)
-	}
 	wrapped := append([]byte(`{"version":1,"provenance":"synthetic","frames":[`), bytes.Join(rows, []byte(","))...)
 	wrapped = append(wrapped, ']', '}')
-	return mocktest.Run(ctx, "claude", input, output, wrapped, mocktest.Options{MaxFrames: options.MaxFrames, Complete: complete})
+	return mocktest.Run(ctx, "claude", input, output, wrapped, mocktest.Options{Complete: complete})
 }

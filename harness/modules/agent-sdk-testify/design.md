@@ -129,7 +129,10 @@ SDK 测试通过 fixture 与进程 Adapter 调用模块，依赖与代码归属�
 官方 SDK 驱动独立放在 `tools/official-sdk-drivers/`，按 codex、claude 组织，语言由各 Agent 自行选择，共用读取与结果处理放在 common，自有离线测试放在 tests。
 官方 SDK 驱动使用对应语言原生编写 case，负责 SDK 调用、异步事件、原始请求句柄、
 审批与工具回调、流程推进和全部业务断言。驱动报告结果，Go 不重新解释 SDK 事件或判定业务。
-Go SDK 仿真使用相同的运行方式，业务操作与断言由 `tests/simulation/sdk/` 的独立 Go SDK 测试程序负责。
+Go SDK 仿真使用相同的运行方式，入口位于 `tests/simulation/sdk/`。
+provider 的流程实现、历史与子 Agent 验收及其回归测试集中在该目录的 `codex/`、`claude/`。
+SDK 自有 `tests/replay` 只保留合成输入适配、专项集成测试和测试私有辅助代码，
+不承载可执行仿真流程。
 共享 case 材料放在 `tests/simulation/scenarios/`，由调用方显式提供；Go SDK 专项集成测试保留在 `tests/integration/`。
 
 <a id="story-录制生命周期"></a>

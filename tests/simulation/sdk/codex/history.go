@@ -1,4 +1,4 @@
-package recording
+package codexsim
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/zoumo/agent-sdk-go/codex"
+	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -21,7 +22,7 @@ func AcceptSavedHistory(ctx context.Context, executable, recordingPath, receiptP
 	if err != nil {
 		return err
 	}
-	frames, err := Decode(f)
+	frames, err := recording.Decode(f)
 	_ = f.Close()
 	if err != nil {
 		return err

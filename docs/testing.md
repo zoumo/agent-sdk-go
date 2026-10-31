@@ -129,6 +129,11 @@ The catalog defines eight stories and 36 flows. No recorded simulation dataset
 is bundled. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
+Go SDK simulation flow implementations and their regression tests live in
+`tests/simulation/sdk/codex` and `tests/simulation/sdk/claude`; the parent directory
+owns the driver entry and delivery checks. Native `tests/replay` packages retain
+SDK integration tests and synthetic fixture/process adapters. Pure protocol
+matching tests live under `tools/agent-sdk-testify/protocol`.
 Recording and optional official-SDK replay use the [agent-sdk-testify guide](../tools/agent-sdk-testify/README.md).
 
 ## Focused checks

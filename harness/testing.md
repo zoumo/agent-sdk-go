@@ -85,6 +85,16 @@ synthetic peers are targeted integration tests, not simulation evidence for user
 stories. Protocol peers remain in test files, and reusable recording/replay helpers follow the
 [tools layout](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
 
+Go SDK simulation implementations and their regression tests live under
+`tests/simulation/sdk/codex` and `tests/simulation/sdk/claude`. Native
+`tests/replay` packages retain synthetic adapters and SDK integration assertions,
+including original request handles, event delivery, cancellation and cleanup.
+Keep adapter-specific serialization/completion checks there; maintain pure ID
+matching, handshake, EOF and envelope-validation matrices in the protocol tool.
+Do not retain unused publication scanners or export helpers used only by tests.
+Moving an assertion does not change its evidence level: synthetic driver tests
+are not successful real-recording simulation evidence.
+
 Use mise's pinned compiler and retain offline, race, vet, generation, inventory,
 simulation source/hash validation, dependency-boundary and independent-consumer gates on
 Linux/macOS. External consumer modules must fetch the new repository's precise

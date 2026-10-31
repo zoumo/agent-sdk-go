@@ -1,4 +1,4 @@
-package recording
+package codexsim
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/zoumo/agent-sdk-go/codex"
+	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -20,7 +21,7 @@ func AcceptFlow(ctx context.Context, executable, path, receipt string, deliverie
 	if err != nil {
 		return err
 	}
-	frames, err := Decode(f)
+	frames, err := recording.Decode(f)
 	_ = f.Close()
 	if err != nil {
 		return err

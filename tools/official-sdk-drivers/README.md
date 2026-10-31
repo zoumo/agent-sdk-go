@@ -62,7 +62,7 @@ private attempt. See the [design](../../harness/modules/agent-sdk-testify/design
 | 输入 | 代码归属与来源 |
 |---|---|
 | Codex 生命周期与故障、原生问题 | [生命周期](../../codex/tests/testdata/integration/lifecycle.jsonl)、[问题](../../codex/tests/testdata/integration/question.jsonl) |
-| Claude 控制协议与任务失败 | [控制](../../claude/tests/testdata/integration/controls.jsonl)、[任务失败](../../claude/tests/testdata/integration/task-failure.jsonl) |
+| Claude 任务失败 | [任务失败](../../claude/tests/testdata/integration/task-failure.jsonl) |
 | 共享原生对端 | [tests/integration](../../tests/integration/peer_test.go)、[会话对端](../../tests/integration/session_peer_test.go) |
 | Claude 子任务示例 | [合成事件](../../claude/examples/subagents-offline/testdata/events.ndjson) |
 

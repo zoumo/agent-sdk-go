@@ -1,4 +1,4 @@
-package recording
+package codexsim
 
 import (
 	"bufio"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/zoumo/agent-sdk-go/codex"
+	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -35,7 +36,7 @@ func remoteRequests(path string) ([]remoteRPC, map[string]json.RawMessage, error
 	if err != nil {
 		return nil, nil, err
 	}
-	frames, err := Decode(f)
+	frames, err := recording.Decode(f)
 	_ = f.Close()
 	if err != nil {
 		return nil, nil, err

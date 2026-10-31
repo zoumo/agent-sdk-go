@@ -49,7 +49,7 @@ while IFS= read -r dependency; do
       } ;;
   esac
 done <<< "$sdk_dependencies"
-if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-testify* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
+if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-testify* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tests/* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
   echo "SDK production packages must not depend on agent-sdk-testify or its test bridge" >&2
   exit 1
 fi
@@ -61,7 +61,7 @@ for native in codex claude; do
 done
 python3 - <<'PY'
 import json, subprocess
-rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...'], text=True)
+rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...', './tests/simulation/sdk/codex/...', './tests/simulation/sdk/claude/...'], text=True)
 decoder = json.JSONDecoder()
 while rows.strip():
     item, end = decoder.raw_decode(rows.lstrip())
@@ -71,6 +71,7 @@ while rows.strip():
     other = 'claude' if own == 'codex' else 'codex'
     for dep in item.get('Imports', []) + item.get('TestImports', []) + item.get('XTestImports', []):
         assert not dep.startswith('github.com/zoumo/agent-sdk-go/' + other), (path, dep)
+        assert not dep.startswith('github.com/zoumo/agent-sdk-go/tests/simulation/sdk/' + other), (path, dep)
         assert not dep.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dep)
 PY
 

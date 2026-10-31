@@ -19,7 +19,7 @@ module import paths have no compatibility forwarding packages.
 |---|---|
 | Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
 | Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
-| Test, record or inspect evidence | [Offline validation](docs/testing.md), [recording](tools/record-user-story/README.md#repository-recording) |
+| Test, record or inspect evidence | [Offline validation](docs/testing.md), [agent-sdk-testify](tools/agent-sdk-testify/README.md) |
 | Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
 | Check licensing | [Licenses and native attribution](NOTICE) |
 

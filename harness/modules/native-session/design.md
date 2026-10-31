@@ -341,7 +341,7 @@ assistant、系统通知和未知帧仍可能含文字/思考/工具内容。调
 
 ### 真实拓扑与取证
 
-以下拓扑规定需要观察的证据；执行与发布规则统一遵循[录制模块设计](../agent-mock/design.md#story-官方-sdk-仿真测试)。
+以下拓扑规定需要观察的证据；执行与发布规则统一遵循[录制模块设计](../agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
 
 - direct：root 请求 A 返回固定标记 ALPHA；记录创建证据、子文本、父工具结果和 terminal。
 - nested/parallel：root 请求 A、B，A 请求 C，分别只返回 ALPHA/BRAVO/CHARLIE；

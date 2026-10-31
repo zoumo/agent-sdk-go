@@ -15,9 +15,10 @@
   including conflict/cycle rejection, ancestors, depth and resource bounds.
   Native event parsing, creation evidence, Claude aliases and
   transport ownership remain in their respective SDKs.
-- Consolidates stdio recording and protocol matching in the Go `tools/agent-mock`
-  executable. Python `tools/record-user-story` owns official SDK drivers and case
-  evidence; native Go fixture adapters delegate matching to the executable.
+- Unifies recording, replay and simulation in one `agent-sdk-testify` executable.
+  Its independent `protocol` module owns stdio capture, strict matching and transport
+  bridging; native SDK drivers own case operations and assertions. SDK fixture
+  adapters invoke protocol subcommands without requiring a case runner or official SDK.
 - Adds versioned offline scenario peers
   for offline integration tests using the real SDKs, with strict bidirectional
   matching, bounded faults and independent fetched-module consumer checks.

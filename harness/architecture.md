@@ -52,10 +52,14 @@ Both native SDKs use the same separation of responsibilities:
 | Location | Responsibility |
 |---|---|
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
-| `tools/agent-mock/` | Generic Go stdio recording proxy, protocol mock, command and tool-owned tests; uses the root Go module |
-| `tools/record-user-story/` | Official-SDK story drivers in the required languages; capture orchestration and case evidence |
-| `tests/recording/` | Real-flow simulation catalogs and tests of recording/replay orchestration |
-| `codex/tests/replay`, `claude/tests/replay` | Fixture decoding and Go SDK assertion/process adapters; delegate protocol replay to the agent-mock tool |
+| `tools/agent-sdk-testify/protocol/` | Generic Go stdio recording proxy, protocol mock, command and tool-owned tests; uses the root Go module |
+| `tools/agent-sdk-testify/` | Single executable and Go environment/process runner; single-request native drivers own case execution and assertions |
+| `tools/official-sdk-drivers/codex/`, `tools/official-sdk-drivers/claude/` | Agent-owned official-SDK drivers; each Agent chooses its implementation language |
+| `tools/official-sdk-drivers/common/` | Shared material readers and native test helpers |
+| `tools/official-sdk-drivers/tests/` | Offline tests of official SDK drivers, shared helpers and recording/replay orchestration |
+| `tests/simulation/sdk/` | Go SDK simulation driver and its business assertions; runs independently of the generic tool |
+| `tests/simulation/scenarios/` | Shared SDK story/case materials and provider bindings, supplied explicitly to either driver |
+| `codex/tests/replay`, `claude/tests/replay` | Fixture decoding and Go SDK assertion/process adapters; delegate protocol replay to the agent-sdk-testify tool |
 | `internal/mocktest` | Shared standard-library test process bridge, without native matching or SDK imports |
 | `codex/tests/testdata/integration`, `claude/tests/testdata/integration` | Explicitly synthetic protocol inputs owned by code integration tests |
 | `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
@@ -63,15 +67,21 @@ Both native SDKs use the same separation of responsibilities:
 | Each native `*_test.go` | Public API checks and SDK integration against mock CLI processes |
 | `tests/integration` | Shared code integration suite, native test adapters and synthetic protocol peers |
 
-SDK mock integration tests launch agent-mock through the native public process
+SDK mock integration tests launch `agent-sdk-testify protocol mock` through the native public process
 options. Mock commands are tested through their public process interface. External fetched-module checks
 retain public import/configuration and fixture packaging smoke tests, plus public
 example and documentation compilation; they do not duplicate SDK interaction suites.
 
-`tools/agent-mock/` is the executable main package. Its `capture`, `command`,
-`rawjson`, `recording` and `replay` packages sit directly below it, without extra
-`cmd`, `pkg` or `internal` layers. Module responsibilities and dependency gates
-follow the module boundaries above.
+`tools/agent-sdk-testify/` is the tool executable; `tests/simulation/sdk/` is a
+separate Go SDK acceptance driver executable. The tool must not import that driver
+or the production SDKs. Top-level
+`record`, `replay` and `simulate` commands own case orchestration; `protocol record`,
+`protocol mock` and `protocol connect` expose the independently usable protocol module.
+The runner uses its own executable by default; callers need no separate peer binary.
+`protocol/` and its `capture`, `command`, `rawjson`, `recording` and `replay` packages
+own protocol processing and remain independent of case orchestration, drivers and SDKs.
+Do not add `cmd`, `pkg` or forwarding layers. Module responsibilities and dependency
+gates follow the module boundaries above.
 
 Each native `tests/testdata/embed.go` is a small standard-library-only fixture
 container because `go:embed` cannot read a parent directory. Embedded paths
@@ -89,8 +99,8 @@ direct asset references and evidence limits, and link back to these layout rules
 ### Simulation data and integration fixtures
 
 Simulation attempts are private datasets outside Git, grouped by `<story-id>/<case-id>/`.
-Identity, frozen versions and drivers, raw hashes, sanitization and publication
-review follow the [recording data contract](modules/agent-mock/design.md#story-数据格式与存储).
+Source identity, observed versions, raw hashes, sanitization and publication
+review follow the [recording data contract](modules/agent-sdk-testify/design.md#story-数据格式与存储).
 Preserve original bytes and provenance when moving data; synthetic data must never
 be labeled real.
 
@@ -99,7 +109,7 @@ code integration tests, with semantic names rather than simulation case identiti
 Test-only peers and fault controls stay in test code, without a separate
 technical-check registry. Story/case scope follows the [case catalog](sdk/validation-cases.md).
 
-agent-mock reads explicitly supplied recordings or synthetic scenarios. Its tool
+agent-sdk-testify reads explicitly supplied recordings or synthetic scenarios. Its tool
 tests do not become a published SDK simulation corpus.
 
 ## 编码约定

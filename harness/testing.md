@@ -92,11 +92,11 @@ pushed revision outside the checkout, without `replace` or `go.work`.
 
 
 
-agent-mock 的专项测试通过与调用方相同的进程接口验证录制与回放，
-并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-mock/design.md#测试与依赖)。
+agent-sdk-testify 的专项测试通过与调用方相同的进程接口验证录制与回放，
+并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-sdk-testify/design.md#测试与依赖)。
 录制与 mock 的正确性不得仅由 Go SDK 测试间接证明。
 官方 SDK 回放是可选校验，不是 Go SDK 离线验收的前置条件；
-流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-mock/design.md#story-官方-sdk-仿真测试)。
+流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
 
 ## 环境与结果
 

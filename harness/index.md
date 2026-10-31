@@ -15,5 +15,5 @@ okf_version: "0.2"
 | 用户目标与 36 条验收流程 | [共同验收](sdk/validation-cases.md) |
 | Session 接口、权限、事件、关系与子详细交付 | [Session 合同](modules/native-session/design.md) |
 | 独立发现、metadata、主／子历史 | [历史查询合同](contracts/history-query.md) |
-| 录制代理、mock 与官方 SDK 驱动 | [录制合同](modules/agent-mock/design.md) |
+| 测试编排、协议录制／回放与原生 SDK 驱动 | [测试工具设计](modules/agent-sdk-testify/design.md) |
 | 术语 | [GLOSSARY](../GLOSSARY.md) |

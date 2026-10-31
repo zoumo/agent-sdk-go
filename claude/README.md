@@ -133,7 +133,7 @@ types do not imply full official SDK parity. Original code uses Apache-2.0; see
 [NOTICE](NOTICE), [LICENSE](LICENSE) and [type provenance](docs/type-sources.md).
 
 Validation commands and evidence limits are maintained in [testing](../docs/testing.md)
-and [recording provenance](../tools/record-user-story/README.md#fixtures-仿真录制与测试输入).
+and [recording provenance](../tools/official-sdk-drivers/README.md#fixtures-仿真录制与测试输入).
 Breaking changes are in the [migration guide](../docs/migration.md#session).
 
 ## Child observation
@@ -258,4 +258,4 @@ func answerQuestions(request *claude.IncomingRequest,answers map[string]string)e
 
 Set `SessionOptions.SDKMCPServers` to explicit application server names. Native `mcp_message` controls for those names arrive through `Receive` as original `IncomingRequest` handles. `MCPRequest()` returns the server name and exact JSON-RPC message; implement native initialize, notifications, tools/list and tools/call in the application. `ReplyMCP(ctx, response)` wraps the unchanged JSON-RPC object in native `mcp_response`, validates its original ID, and consumes only that handle. A notification has no inner ID but its outer control still requires acknowledgment. `Approve`, `Deny` and permission `Answer` are separate and reject this request kind. Invalid answers retain authority; canceled/closed/used handles cannot answer again. Unknown delivery outcomes are not retried.
 
-The SDK forwards a native `--mcp-config` declaration with `type:sdk` for each name, without starting an external server, adding a callback, or implementing tool dispatch. Names are frozen at Open. Other server names and unsupported controls retain the existing explicit rejection behavior. See [test input and simulation boundaries](../tools/record-user-story/README.md#fixtures-仿真录制与测试输入) for the evidence distinction.
+The SDK forwards a native `--mcp-config` declaration with `type:sdk` for each name, without starting an external server, adding a callback, or implementing tool dispatch. Names are frozen at Open. Other server names and unsupported controls retain the existing explicit rejection behavior. See [test input and simulation boundaries](../tools/official-sdk-drivers/README.md#fixtures-仿真录制与测试输入) for the evidence distinction.

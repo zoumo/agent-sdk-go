@@ -4,7 +4,7 @@ Read the standards relevant to the task:
 
 - SDK, protocol, module, dependency or path changes: [development standards](harness/architecture.md).
 - Tests, helpers or generators: [testing standards](harness/testing.md).
-- Recording evidence: [recording and fixture provenance](tools/record-user-story/README.md#fixtures-仿真录制与测试输入).
+- Recording evidence: [recording and fixture provenance](tools/official-sdk-drivers/README.md#fixtures-仿真录制与测试输入).
 
 Use the mise-managed compiler pinned in `mise.toml`. Preserve native protocol
 contracts and recording provenance. Default validation is offline; this guide

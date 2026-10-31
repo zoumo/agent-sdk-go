@@ -7,7 +7,7 @@
     "manager": "mise",
     "GOTOOLCHAIN": "local"
   },
-  "live_validation": "Historical partial CLI 0.162.1 coverage at original SDK/schema bases; current bindings and managed subagents have no E3/E4 pass. See ../../README.md#compatibility and ../../../tools/record-user-story/README.md#fixtures-仿真录制与测试输入.",
+  "live_validation": "Historical partial CLI 0.162.1 coverage at original SDK/schema bases; current bindings and managed subagents have no E3/E4 pass. See ../../README.md#compatibility and ../../../tools/official-sdk-drivers/README.md#fixtures-仿真录制与测试输入.",
   "records": [
     {
       "id": "ticket01-model-unit",

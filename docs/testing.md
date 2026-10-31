@@ -4,7 +4,7 @@ The [testing standards](../harness/testing.md) define test levels and required
 coverage.
 This guide describes current commands and configured gates. Simulation catalog
 availability and synthetic checks do not prove real recordings; see
-[data provenance](../tools/record-user-story/README.md#fixtures-仿真录制与测试输入).
+[data provenance](../tools/official-sdk-drivers/README.md#fixtures-仿真录制与测试输入).
 
 Run from the repository root with the pinned compiler:
 
@@ -12,13 +12,13 @@ Run from the repository root with the pinned compiler:
 mise install
 mise exec -- go mod download
 mise exec -- bash scripts/check-offline.sh
-GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-mock.sh mise exec -- go test -race -p=1 -count=1 -timeout 300s ./...
+GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-sdk-testify.sh mise exec -- go test -race -p=1 -count=1 -timeout 300s ./...
 mise exec -- go vet ./...
 ```
 
-The offline script builds `tools/agent-mock` from this checkout unless an absolute
-`AGENT_MOCK_BIN` is supplied. Direct SDK tests need the same binary; use
-`scripts/with-agent-mock.sh` to build it temporarily. Select Python 3.11 or newer
+The offline script builds `tools/agent-sdk-testify` from this checkout unless an absolute
+`AGENT_SDK_TESTIFY_BIN` is supplied. Direct SDK tests need the same binary; use
+`scripts/with-agent-sdk-testify.sh` to build it temporarily. Select Python 3.11 or newer
 as `python3` on PATH before running the script.
 
 The offline script validates the current simulation catalog, case ownership,
@@ -26,13 +26,20 @@ provider availability and local documentation links with `scripts/check-story-ev
 It runs recording-tool tests and code integration tests independently. Synthetic
 protocol faults, resource boundaries, cancellation and races have no story registry.
 
+Go tool implementation and its own tests live in `tools/agent-sdk-testify/`.
+Go SDK targeted integration tests remain in `tests/integration/`; the separate
+simulation driver and shared case materials live in `tests/simulation/sdk/` and
+`tests/simulation/scenarios/`. Official SDK drivers, shared Python helpers and
+their offline tests live independently in `tools/official-sdk-drivers/`.
+The offline script discovers both its `tests/` and `tests/scenarios/` suites.
+
 The remaining gates check module and native dependency boundaries, standard-library-only
 types packages, native inventory, reproducible Codex generation, unit/subprocess tests
 and offline examples. `GOMAXPROCS=2`, package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
-The installed-wheel smoke check runs outside the checkout and verifies catalog assets,
-Go peer identity, preserved numeric bytes, strict consumption and no native fallback.
+The installed-wheel smoke check runs outside the checkout and verifies driver packaging
+and the request/result contract without installing an official SDK or launching an Agent.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -122,7 +129,7 @@ The catalog defines eight stories and 36 flows. No recorded simulation dataset
 is bundled. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
-Recording and optional official-SDK replay use the [recording guide](../tools/record-user-story/README.md#repository-recording).
+Recording and optional official-SDK replay use the [agent-sdk-testify guide](../tools/agent-sdk-testify/README.md).
 
 ## Focused checks
 
@@ -132,7 +139,7 @@ Run these from the repository root; default live gates remain disabled:
 python3 scripts/check-story-evidence.py
 python3 codex/docs/protocol/verify_inventory.py
 mise exec -- bash -c 'cd codex && bash scripts/check_generated.sh'
-bash scripts/with-agent-mock.sh mise exec -- go test -count=1 ./tests/integration ./codex ./claude
+bash scripts/with-agent-sdk-testify.sh mise exec -- go test -count=1 ./tests/integration ./codex ./claude
 ```
 
 Codex generation uses the checked-in schema without downloading upstream sources;

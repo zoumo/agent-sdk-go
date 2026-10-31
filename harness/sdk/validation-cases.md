@@ -27,7 +27,7 @@ User story 表达完整使用目标，使用 `SDK-US-NNN`；验证 case 表达�
 | SDK-US-007 | 中断执行并关闭会话或连接 | SDK-CASE-030～SDK-CASE-032 |
 | SDK-US-008 | 独立发现并读取已有会话及子 Agent 保存内容 | SDK-CASE-033～SDK-CASE-036 |
 
-配置及 provider 绑定见[仿真录制配置](../modules/agent-mock/design.md#story-场景配置)。
+配置及 provider 绑定见[仿真录制配置](../modules/agent-sdk-testify/design.md#story-场景配置)。
 
 <a id="stories-共同边界"></a>
 

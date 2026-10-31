@@ -37,3 +37,7 @@ pushed module and dependencies over the network, then compiles public imports,
 examples and documentation snippets without invoking a real CLI or model.
 Simulation catalog availability and source inspection do not establish successful
 real recordings. Code integration tests use explicitly synthetic input.
+The offline entry also requires the fixed reviewed corpus in
+`tests/simulation/recordings/index.json`; absent recordings fail the simulation
+gate. Adoption and coverage commands are documented in the
+[driver guide](tests/simulation/drivers/README.md#审核采用和日常门禁).

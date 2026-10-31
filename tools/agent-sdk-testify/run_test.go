@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,6 +41,12 @@ func TestMain(m *testing.M) {
 					break
 				}
 			}
+			os.Exit(0)
+		case "synthetic-remote-cleanup":
+			interrupted := make(chan os.Signal, 1)
+			signal.Notify(interrupted, os.Interrupt)
+			fmt.Println("ready")
+			<-interrupted
 			os.Exit(0)
 		}
 	}
@@ -225,8 +232,13 @@ func TestCaptureWithSyntheticNative(t *testing.T) {
 	replay.Mode = "replay"
 	replay.Materials = o.Output
 	replay.Output = filepath.Join(t.TempDir(), "replay")
-	_, e = run(context.Background(), replay)
+	validated, e := run(context.Background(), replay)
 	require.NoError(t, e)
+	for _, name := range []string{"plan.json", "manifest.json"} {
+		digest, err := fileDigest(filepath.Join(replay.Materials, name))
+		require.NoError(t, err)
+		require.Equal(t, digest, obj(validated["source"])[name])
+	}
 }
 
 func TestSharedMaterialsContainNoExecutableSteps(t *testing.T) {

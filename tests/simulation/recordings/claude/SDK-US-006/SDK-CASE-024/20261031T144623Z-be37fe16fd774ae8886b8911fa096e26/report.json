@@ -1,0 +1,152 @@
+{
+  "provider": "claude",
+  "story": "SDK-US-006",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 22,
+  "requests": 0,
+  "receipts": [
+    {
+      "input-submitted": {
+        "written": true,
+        "completionObserved": false
+      }
+    },
+    {
+      "variant-configuration": {
+        "timing": "during-execution",
+        "requested": {
+          "subtype": "set_model",
+          "model": "theta/glm-5.3"
+        },
+        "acknowledged": true,
+        "observed": null
+      }
+    },
+    {
+      "result": {
+        "subtype": "success",
+        "duration_ms": 1589,
+        "duration_api_ms": 1397,
+        "is_error": false,
+        "num_turns": 1,
+        "session_id": "99d34bc3-7fb7-42b9-9b96-00b8698174ab",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.010138000000000001,
+        "usage": {
+          "input_tokens": 17,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 17856,
+          "output_tokens": 45,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "Hi, Zoumo\n\n\u52a0\u6cd5\u662f\u628a\u4e24\u4e2a\u6216\u591a\u4e2a\u6570\u5408\u5e76\u6210\u4e00\u4e2a\u603b\u6570\u7684\u8fd0\u7b97\uff0c\u4f8b\u5982 2 + 3 = 5\u3002\u5b83\u9075\u5faa\u4ea4\u6362\u5f8b\u548c\u7ed3\u5408\u5f8b\uff0c\u5373\u987a\u5e8f\u548c\u5206\u7ec4\u4e0d\u5f71\u54cd\u7ed3\u679c\u3002",
+        "structured_output": null,
+        "model_usage": {
+          "theta/glm-5.3": {
+            "inputTokens": 17,
+            "outputTokens": 45,
+            "cacheReadInputTokens": 17856,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.010138000000000001,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 0,
+            "canonicalModel": "theta/glm-5.3",
+            "provider": "firstParty",
+            "costBasis": "unknown"
+          }
+        },
+        "permission_denials": [],
+        "deferred_tool_use": null,
+        "errors": null,
+        "api_error_status": null,
+        "uuid": "2e0106c3-909d-4a46-83ce-8f5d5846c74f",
+        "terminal_reason": "completed",
+        "origin": null
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-024",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u6267\u884c\u671f\u95f4\u8bf7\u6c42\u4fee\u6539\u6a21\u578b\u5e76\u89c2\u5bdf\u7ed3\u679c\u3002",
+    "storyId": "SDK-US-006"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "2.1.258 (Claude Code)",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-006",
+  "caseId": "SDK-CASE-024",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "configuration-acknowledged",
+      "timing": "during-execution",
+      "completedInputs": 0,
+      "requested": {
+        "subtype": "set_model",
+        "model": "theta/glm-5.3"
+      }
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "configurationEvidence": {
+    "requests": [
+      {
+        "requested": {
+          "subtype": "set_model",
+          "model": "theta/glm-5.3"
+        },
+        "acknowledged": true,
+        "timing": "during-execution",
+        "completedInputs": 0
+      }
+    ],
+    "observed": [
+      {
+        "source": "assistant",
+        "scope": "assistant-message",
+        "model": "glm-5.3"
+      }
+    ],
+    "effectiveScope": "unknown"
+  },
+  "branchStatus": "passed"
+}

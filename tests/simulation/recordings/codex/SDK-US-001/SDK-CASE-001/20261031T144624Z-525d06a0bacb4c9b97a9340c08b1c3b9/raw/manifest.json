@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "recordingFormat": {
+    "name": "agent-mock-jsonl",
+    "version": 1,
+    "transport": "stdio-jsonl"
+  },
+  "proxyVersion": "0.1.0-dev",
+  "captureStatus": "complete",
+  "native": {
+    "executable": "/Users/jim/.bun/install/global/node_modules/@openai/codex/bin/codex.js",
+    "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "args": [
+      "app-server",
+      "--stdio",
+      "-c",
+      "features.default_mode_request_user_input=true"
+    ],
+    "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/smoke-codex/project"
+  },
+  "files": {
+    "raw.jsonl": "e6f633c18b4ec0b72819efd7273c59d473611f0912b3e0657231dc2a3e5662f4",
+    "stderr.raw": "e1aae0abd2994c18f7820fa5ef014340f6c508c2ffc0e0575cc1b51bad38d5c2",
+    "transport.json": "abf8ce202c8667e5ee7ecaa8d2397e2662ac36c653d5a0be3a890ba56fd0060f"
+  }
+}

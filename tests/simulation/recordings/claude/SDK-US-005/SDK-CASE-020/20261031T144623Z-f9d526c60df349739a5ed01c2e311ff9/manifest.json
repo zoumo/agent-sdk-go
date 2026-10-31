@@ -1,0 +1,18 @@
+{
+  "captureStatus": "complete",
+  "credentialScan": "pass",
+  "files": {
+    "manifest.json": "b185b328800e7a910d3576dc6565d32dcdf4e999dcb8c55f12a3c0c10fa33dac",
+    "raw.jsonl": "8c0a9be74fccdab39fbc339ed70187e2338027daeec5de06ee943584c169660b",
+    "stderr.raw": "f1141d3168a6a8bbb7cf0e097b275ccaf33b77235982ba892cade7698d206dce",
+    "transport.json": "f42c2a3e8995374e277944ff782215a631f4f90f1986537ef247a75b6aa683d2"
+  },
+  "planSHA256": "9c183a3722ea32e1fb928c80b8d943ef27d7a0b352e533825d27f061022ae8de",
+  "provenance": "capture",
+  "remotePhaseFiles": {},
+  "savedFiles": {
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63.jsonl": "0d06f8580c81fe0d276f9f3f86686791e79104fa45accc86e5280812996134c3",
+    "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-020-project/083c719b-c04d-4f45-88d6-e88f807c1d63/subagents/agent-a00b215f7f506828a.jsonl": "8dbd1d0e685269c14f1202e037bd58bcb30df9d9fe1e460896626e4eb7c0d9aa"
+  },
+  "status": "passed"
+}

@@ -1,0 +1,111 @@
+{
+  "provider": "claude",
+  "story": "SDK-US-001",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 52,
+  "requests": 0,
+  "receipts": [
+    {
+      "input-submitted": {
+        "written": true,
+        "completionObserved": false
+      }
+    },
+    {
+      "result": {
+        "subtype": "success",
+        "duration_ms": 3197,
+        "duration_api_ms": 2963,
+        "is_error": false,
+        "num_turns": 1,
+        "session_id": "6b9bd42f-bd8c-49b3-8dea-b3577fc09a65",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.020555,
+        "usage": {
+          "input_tokens": 1876,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 16000,
+          "output_tokens": 127,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "Hi, Zoumo\n\n\u672c\u6b21\u4f1a\u8bdd\u63d0\u4f9b\u7684\u5408\u6210\u5185\u5bb9\u662f\u4e00\u5957\u6a21\u62df\u7684 Claude Agent \u73af\u5883\u914d\u7f6e\u8bf4\u660e\uff0c\u4e3b\u8981\u5305\u62ec\uff1a\n\n1. **\u9879\u76ee\u6307\u4ee4\uff08CLAUDE.md\uff09**\uff1a\u8981\u6c42\u6240\u6709\u56de\u7b54\u4ee5 \"Hi, Zoumo\" \u5f00\u5934\u3001\u4e2d\u6587\u56de\u7b54\u95ee\u9898\u4f46\u4ee3\u7801\u6ce8\u91ca\u7528\u82f1\u6587\uff0c\u5e76\u5217\u51fa\u53ef\u7528\u7684 `/graphify` \u7b49\u6280\u80fd\u8bf4\u660e\u3002\n\n2. **\u5f53\u524d\u65e5\u671f**\uff1a2026 \u5e74 10 \u6708 31 \u65e5\u3002\n\n\u603b\u4f53\u800c\u8a00\uff0c\u8fd9\u662f\u4e00\u6bb5\u7528\u4e8e\u6d4b\u8bd5\u4ee3\u7406\u884c\u4e3a\u7684\u4e0a\u4e0b\u6587\u6ce8\u5165\u5185\u5bb9\uff0c\u6838\u5fc3\u8003\u5bdf\u70b9\u662f\u662f\u5426\u9075\u5faa\u5176\u4e2d\u5b9a\u4e49\u7684\u81ea\u5b9a\u4e49\u89c4\u5219\uff08\u95ee\u5019\u8bed\u3001\u8bed\u8a00\u4e60\u60ef\uff09\u3002",
+        "structured_output": null,
+        "model_usage": {
+          "theta/glm-5.3": {
+            "inputTokens": 1876,
+            "outputTokens": 127,
+            "cacheReadInputTokens": 16000,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.020555,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 0,
+            "canonicalModel": "theta/glm-5.3",
+            "provider": "firstParty",
+            "costBasis": "unknown"
+          }
+        },
+        "permission_denials": [],
+        "deferred_tool_use": null,
+        "errors": null,
+        "api_error_status": null,
+        "uuid": "16a96e15-659d-4110-abbd-09421bb2f5e6",
+        "terminal_reason": "completed",
+        "origin": null
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-003",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u63d0\u4ea4\u6587\u6863\u5e76\u8bfb\u53d6\u7ed3\u679c\u3002",
+    "storyId": "SDK-US-001"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "2.1.258 (Claude Code)",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-001",
+  "caseId": "SDK-CASE-003",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "branchStatus": "passed"
+}

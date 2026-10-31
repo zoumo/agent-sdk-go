@@ -10,8 +10,9 @@ export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
 python3 -m unittest discover -s scripts -p test_story_evidence.py -v
-PYTHONPATH=tools/official-sdk-drivers/common:tools/official-sdk-drivers/codex:tools/official-sdk-drivers/claude python3 -m unittest discover -s tools/official-sdk-drivers/tests -p 'test_*.py' -v
-python3 -m unittest discover -s tools/official-sdk-drivers/tests/scenarios -p 'test_*.py' -v
+python3 -m unittest discover -s scripts -p test_simulation_corpus.py -v
+PYTHONPATH=tests/simulation/drivers/common:tests/simulation/drivers/codex/official:tests/simulation/drivers/claude/official python3 -m unittest discover -s tests/simulation/drivers/tests -p 'test_*.py' -v
+python3 -m unittest discover -s tests/simulation/drivers/tests/scenarios -p 'test_*.py' -v
 python3 scripts/check-story-evidence.py
 bash scripts/check-boundaries.sh
 go mod verify
@@ -23,3 +24,6 @@ go test -p=1 -count=1 -timeout 180s ./...
 for example in codex/examples/history-query-offline codex/examples/observe-subagents-offline claude/examples/subagents-offline claude/examples/session-messages-offline claude/examples/session-metadata-offline; do
   go run "./$example"
 done
+# Required real-recording regression is independent of the synthetic tests above.
+# Missing trusted inputs fail closed; this command never records or uses accounts.
+python3 scripts/simulation-corpus.py gate

@@ -61,7 +61,7 @@ for native in codex claude; do
 done
 python3 - <<'PY'
 import json, subprocess
-rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...', './tests/simulation/sdk/codex/...', './tests/simulation/sdk/claude/...'], text=True)
+rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...', './tests/simulation/drivers/codex/go/...', './tests/simulation/drivers/claude/go/...'], text=True)
 decoder = json.JSONDecoder()
 while rows.strip():
     item, end = decoder.raw_decode(rows.lstrip())
@@ -71,7 +71,7 @@ while rows.strip():
     other = 'claude' if own == 'codex' else 'codex'
     for dep in item.get('Imports', []) + item.get('TestImports', []) + item.get('XTestImports', []):
         assert not dep.startswith('github.com/zoumo/agent-sdk-go/' + other), (path, dep)
-        assert not dep.startswith('github.com/zoumo/agent-sdk-go/tests/simulation/sdk/' + other), (path, dep)
+        assert not dep.startswith('github.com/zoumo/agent-sdk-go/tests/simulation/drivers/' + other), (path, dep)
         assert not dep.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dep)
 PY
 

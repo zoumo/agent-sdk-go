@@ -4,17 +4,21 @@ Go prepares environments and runs one native SDK test driver per case. The drive
 owns SDK operations and business assertions; Go reads its final result and checks
 process/capture/mock completion. No command/event negotiation or driver catalog.
 
-Build from the repository root:
+Build the tool, Go simulation driver and official-driver wheel together:
 
 ```sh
-mise exec -- go build -o /absolute/bin/agent-sdk-testify ./tools/agent-sdk-testify
-mise exec -- go build -o /absolute/bin/sdk-driver ./tests/simulation/sdk
+bash scripts/simulation.sh build
 ```
 
-Official SDK drivers live independently in `tools/official-sdk-drivers/`, organized by Agent (`codex`, `claude`), with shared helpers in `common` and offline tests in `tests`. The Go SDK acceptance driver lives in `tests/simulation/sdk`; shared case materials live in `tests/simulation/scenarios`. SDK targeted integration tests remain in `tests/integration`.
+The default build directory is `.artifacts/simulation`; set
+`AGENT_SDK_TESTIFY_BUILD_DIR` to use another absolute directory. `PYTHON` selects
+Python 3.11+ with setuptools>=68 installed. Builds do not run an Agent or install
+SDK dependencies. Both driver implementations live together under
+`tests/simulation/drivers/<agent>/{official,go}`. Shared case materials remain in
+`tests/simulation/scenarios`; SDK targeted integration remains in `tests/integration`.
 
 Use any installed driver executable. For Python, install the official SDK extras
-from [Agent drivers](../official-sdk-drivers/README.md) and select its interpreter/script
+from [Agent drivers](../../tests/simulation/drivers/README.md) and select its interpreter/script
 or the installed `agent-sdk-testify-codex` or `agent-sdk-testify-claude` command. TS/Rust drivers can implement
 the same request/result convention without adding language logic to Go.
 
@@ -51,7 +55,10 @@ agent-sdk-testify simulate \
 
 Both commands are offline. They use the current selected driver and mock, require
 no native CLI/credentials, and do not require matching old tool/SDK versions.
-Official replay is independent of Go SDK simulation. Existing plan.json supplies
+Existing materials can be simulated independently. New samples follow build →
+official record → official replay → source/content review → dataset admission →
+current Go simulation. Go passing is not an admission condition; an admitted
+sample is retained when Go simulation fails and blocks the SDK gate. Existing plan.json supplies
 data and native protocol identities, not a frozen-driver execution requirement.
 Existing source manifest hashes are checked for original frames, plan data and
 saved history; this does not lock the driver, SDK or mock binary. Original raw frames are read without rewriting. Saved native history is copied
@@ -96,7 +103,7 @@ steps. Native drivers own their case code. Shared files and prompts are reused;
 provider-specific native inputs stay explicit. `--config` copies only the selected
 provider's configuration/credential files, never an entire HOME; inherited auth
 and proxy environment values are selected explicitly. Those copies are removed
-when execution finishes. Private output is not automatically published.
+when execution finishes. Private output is not automatically admitted or published.
 
 Existing-child case 035 takes `--history-seed /absolute/completed-034-capture`.
 Go prepares saved native records directly from that completed capture; no SDK
@@ -160,14 +167,23 @@ reaps owned processes and preserves diagnostics. Recording output is directly
 reusable as the next stage's material directory, with a source-data manifest.
 Protocol matching and business assertions remain strict.
 
+Without `--output`, attempts persist under `$AGENT_SDK_TESTIFY_DATA_DIR/attempts/<mode>/attempt-*`.
+The data root defaults to `$XDG_DATA_HOME/agent-sdk-testify`, or
+`~/.local/share/agent-sdk-testify` when XDG_DATA_HOME is unset. Explicit output must
+be a new directory whose parent exists; existing attempts are never overwritten.
+Tests pass their own temporary output paths. Failures remain for review.
+See the [driver handoff contract](../../tests/simulation/drivers/README.md#stage-handoff) for the next stage.
+
 ## Offline validation
 
 ```sh
-mise exec -- bash scripts/with-agent-sdk-testify.sh go test ./tools/agent-sdk-testify ./tests/simulation/sdk
+mise exec -- bash scripts/with-agent-sdk-testify.sh go test ./tools/agent-sdk-testify ./tests/simulation/drivers
 ```
 
 Runner tests use a synthetic native process and the real Go record/mock executable.
 They check fresh environments, unchanged source data, different tool identities,
 driver errors, false pass reports, capture completion and cancellation. Private
-real recordings can be supplied to replay/simulate; they are not bundled into CI.
+reviewed real recordings are indexed by the required corpus gate. See the
+[adoption and gate commands](../../tests/simulation/drivers/README.md#审核采用和日常门禁).
+Missing required data fails CI; synthetic tool tests do not fill that gap.
 Actual real-Agent execution is not implied by an offline or synthetic test pass.

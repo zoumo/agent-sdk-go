@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "recordingFormat": {
+    "name": "agent-mock-jsonl",
+    "version": 1,
+    "transport": "stdio-jsonl"
+  },
+  "proxyVersion": "0.1.0-dev",
+  "captureStatus": "complete",
+  "native": {
+    "executable": "/Users/jim/.bun/install/global/node_modules/@openai/codex/bin/codex.js",
+    "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "args": [
+      "app-server",
+      "--stdio",
+      "-c",
+      "features.default_mode_request_user_input=true"
+    ],
+    "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-013/project"
+  },
+  "files": {
+    "raw.jsonl": "f965192015f612f3c8d3602fe47ca3bcbbc4c9491d7c10946a27203835e138d7",
+    "stderr.raw": "0f6f320af8b19f2335edff9043bde31b39543caf2d1f83c94d323763b72bd91c",
+    "transport.json": "5a404e73772d0f53d411ad40886494e7345c77bfd3d45d90cde57b6cafadc140"
+  }
+}

@@ -54,11 +54,10 @@ Both native SDKs use the same separation of responsibilities:
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
 | `tools/agent-sdk-testify/protocol/` | Generic Go stdio recording proxy, protocol mock, command and tool-owned tests; uses the root Go module |
 | `tools/agent-sdk-testify/` | Single executable and Go environment/process runner; single-request native drivers own case execution and assertions |
-| `tools/official-sdk-drivers/codex/`, `tools/official-sdk-drivers/claude/` | Agent-owned official-SDK drivers; each Agent chooses its implementation language |
-| `tools/official-sdk-drivers/common/` | Shared material readers and native test helpers |
-| `tools/official-sdk-drivers/tests/` | Offline tests of current official SDK request drivers, source readers and public protocol processes |
-| `tests/simulation/sdk/` | Go SDK simulation driver entry, request handling and provider dispatch; runs independently of the generic tool |
-| `tests/simulation/sdk/codex/`, `tests/simulation/sdk/claude/` | Provider-owned simulation flows, history, existing-child, remote and child-delivery assertions; regression tests live alongside their implementation |
+| `tests/simulation/drivers/` | Go simulation process entry, Python packaging and driver documentation |
+| `tests/simulation/drivers/codex/official/`, `tests/simulation/drivers/claude/official/` | Agent-owned official SDK drivers |
+| `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |
+| `tests/simulation/drivers/common/`, `tests/simulation/drivers/tests/` | Shared official material readers, native helpers and offline driver/process tests |
 | `tests/simulation/scenarios/` | Shared SDK story/case materials and provider bindings, supplied explicitly to either driver |
 | `codex/tests/replay`, `claude/tests/replay` | Synthetic fixture decoding/process adapters and SDK integration tests; SDK exercise helpers remain test-only; protocol matching belongs to agent-sdk-testify |
 | `internal/mocktest` | Shared standard-library test process bridge, without native matching or SDK imports |
@@ -73,7 +72,7 @@ options. Mock commands are tested through their public process interface. Extern
 retain public import/configuration and fixture packaging smoke tests, plus public
 example and documentation compilation; they do not duplicate SDK interaction suites.
 
-`tools/agent-sdk-testify/` is the tool executable; `tests/simulation/sdk/` is a
+`tools/agent-sdk-testify/` is the tool executable; `tests/simulation/drivers/` is a
 separate Go SDK acceptance driver executable. The tool must not import that driver
 or the production SDKs. Top-level
 `record`, `replay` and `simulate` commands own case orchestration; `protocol record`,
@@ -94,7 +93,7 @@ SDK tests and offline examples reuse fixture access; example-local synthetic dat
 may remain with its example. The mock tool owns protocol matching; fixture adapters
 only decode data and bridge processes. SDK integration tests assert SDK results;
 simulation operation sequences and business assertions live with the provider driver
-under `tests/simulation/sdk/`. Test-local SDK policies belong in `*_test.go`, not
+under `tests/simulation/drivers/<agent>/go/`. Test-local SDK policies belong in `*_test.go`, not
 exported runtime helper packages. Pure protocol matching matrices live with the
 protocol module, without duplicate copies in SDK test adapters.
 
@@ -106,7 +105,7 @@ direct asset references and evidence limits, and link back to these layout rules
 
 ### Simulation data and integration fixtures
 
-Simulation attempts are private datasets outside Git, grouped by `<story-id>/<case-id>/`.
+Simulation attempts are complete private datasets outside tracked Git content. Reviewed regression materials live under `tests/simulation/recordings/<provider>/<story-id>/<case-id>/<attempt>/`; `tests/simulation/recordings/index.json` owns the fixed required coverage and adoption references. The corpus CLI preserves private originals separately from the reviewed subset.
 Source identity, observed versions, raw hashes, sanitization and publication
 review follow the [recording data contract](modules/agent-sdk-testify/design.md#story-数据格式与存储).
 Preserve original bytes and provenance when moving data; synthetic data must never

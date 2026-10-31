@@ -1,0 +1,118 @@
+{
+  "provider": "claude",
+  "story": "SDK-US-002",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 51,
+  "requests": 2,
+  "receipts": [
+    {
+      "application-MCP-ready": "native tools/list response fully written before first input"
+    },
+    {
+      "input-submitted": {
+        "written": true,
+        "completionObserved": false
+      }
+    },
+    {
+      "result": {
+        "subtype": "success",
+        "duration_ms": 3531,
+        "duration_api_ms": 2993,
+        "is_error": false,
+        "num_turns": 2,
+        "session_id": "8cce136a-d04b-40be-8200-7af43340e237",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.029945,
+        "usage": {
+          "input_tokens": 2339,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 33600,
+          "output_tokens": 58,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "Hi, Zoumo\n\nnumbers.txt \u4e2d\u7684\u6570\u5b57\u662f\uff1a\n\n- 7\n- 11",
+        "structured_output": null,
+        "model_usage": {
+          "theta/glm-5.3": {
+            "inputTokens": 2339,
+            "outputTokens": 58,
+            "cacheReadInputTokens": 33600,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.029945,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 0,
+            "canonicalModel": "theta/glm-5.3",
+            "provider": "firstParty",
+            "costBasis": "unknown"
+          }
+        },
+        "permission_denials": [],
+        "deferred_tool_use": null,
+        "errors": null,
+        "api_error_status": null,
+        "uuid": "3bcc160f-42b8-4d8f-b503-de8160ef39db",
+        "terminal_reason": "completed",
+        "origin": null
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-007",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u5904\u7406\u5e94\u7528\u5de5\u5177\u8bf7\u6c42\u5e76\u7b49\u5f85\u4efb\u52a1\u5b8c\u6210\u3002",
+    "storyId": "SDK-US-002"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "2.1.258 (Claude Code)",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-002",
+  "caseId": "SDK-CASE-007",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "request",
+      "name": "fixture_read"
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "branchStatus": "passed"
+}

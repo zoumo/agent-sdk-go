@@ -51,7 +51,7 @@ def recording_mapping(root):
                     continue
                 binding = bindings['cases'][case['id']]
                 routes.append(dict(case['execution'], **binding.get('execution', {}))['mode'])
-            target = f"[配置](../../tests/simulation/scenarios/{story['id']}.json)"
+            target = f"[配置](../scenarios/{story['id']}.json)"
             rows.append('| ' + ' | '.join([case['id'], story['id'], case['goal'], *routes, target]) + ' |')
     return cases, rows
 
@@ -118,11 +118,11 @@ def check(root):
                 errors.append(provider + '/' + case['id'] + ': unavailable route needs a reason')
             if 'offlineTest' in case or 'offlineTest' in binding:
                 errors.append(provider + '/' + case['id'] + ': code integration checks are not simulation routes')
-    mapping = (root / 'tools/official-sdk-drivers/README.md').read_text()
+    mapping = (root / 'tests/simulation/drivers/README.md').read_text()
     errors += inventory_errors(mapping, 'SDK-CASE', case_ids)
     if [line for line in mapping.splitlines() if line.startswith('| SDK-CASE-')] != rows:
         errors.append('Story/case mapping must match exact identities and provider routes')
-    documents = [root / name for name in ('AGENTS.md', 'README.md', 'CHANGELOG.md', 'GLOSSARY.md', 'tools/official-sdk-drivers/README.md')]
+    documents = [root / name for name in ('AGENTS.md', 'README.md', 'CHANGELOG.md', 'GLOSSARY.md', 'tests/simulation/drivers/README.md')]
     for directory in ('harness', 'docs', 'codex', 'claude'):
         documents += sorted((root / directory).rglob('*.md'))
     for path in documents:

@@ -1,0 +1,17 @@
+{
+  "executionProject": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-033/project",
+  "originalHistoryProject": null,
+  "originalProject": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-033/project",
+  "transformations": [
+    {
+      "derived": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-replay-claude-SDK-CASE-033-project/d1fad5bb-1e12-4fae-9d99-03c84a7e235a.jsonl",
+      "derivedSHA256": "56bccf69ee05cc2bddffbe348825b775f5c175b291062e177876210a6dc0db11",
+      "executionCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-claude-SDK-CASE-033/project",
+      "kind": "claude-project-cwd-copy",
+      "source": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-10-31-glm53-record-claude-SDK-CASE-033-project/d1fad5bb-1e12-4fae-9d99-03c84a7e235a.jsonl",
+      "sourceCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-claude-SDK-CASE-033/project",
+      "sourceSHA256": "b9119d2363a53295bf596242fa811e9b9217e84ef7f044fc9165a6f4fe0fc074"
+    }
+  ],
+  "version": 1
+}

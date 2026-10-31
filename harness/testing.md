@@ -39,7 +39,10 @@ CI 可下载工具链和依赖；测试执行不依赖真实 Agent、模型服�
 仿真须经被测 SDK 的公共接口执行流程，同时检查业务预期、协议匹配、
 录制完整消费和进程清理。单独将录制中的客户端帧送入 mock，只证明协议自回放，
 不能替代 SDK 仿真验收。录制缺失或目标行为未触发须报告未验证；
-必需仿真覆盖缺失时不能用跳过或自动连接真实 Agent 使门禁通过。
+必需仿真覆盖缺失时不能用跳过或自动连接真实 Agent 使门禁通过。固定索引及采用规则见
+[审核采用与门禁合同](modules/agent-sdk-testify/design.md#审核采用与固定回归门禁)。
+统一离线入口必须构建当前 driver 并运行该门禁；缺材料也保留独立 UT、专项集成、race、
+vet、生成、依赖与打包检查，CI 保存覆盖及失败诊断。
 
 真实 E2E 须区分流程断言、采集完整性和清理结果。
 录制成功不等于目标达成，回放复现失败也不等于用户流程通过。
@@ -93,7 +96,7 @@ provider-owned assertions independent of production suppression code, and each
 preserve/suppress or remote main/probe run must have its own complete receipt.
 
 Go SDK simulation implementations and their regression tests live under
-`tests/simulation/sdk/codex` and `tests/simulation/sdk/claude`. Native
+`tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`. Native
 `tests/replay` packages retain synthetic adapters and SDK integration assertions,
 including original request handles, event delivery, cancellation and cleanup.
 Keep adapter-specific serialization/completion checks there; maintain pure ID
@@ -112,7 +115,8 @@ pushed revision outside the checkout, without `replace` or `go.work`.
 agent-sdk-testify 的专项测试通过与调用方相同的进程接口验证录制与回放，
 并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-sdk-testify/design.md#测试与依赖)。
 录制与 mock 的正确性不得仅由 Go SDK 测试间接证明。
-官方 SDK 回放是可选校验，不是 Go SDK 离线验收的前置条件；
+新样本入库前须完成官方 SDK 回放与来源／内容审核；已有材料的 Go 仿真独立执行，
+Go SDK 通过不是入库条件，入库后仿真失败须保留样本并阻断 SDK 门禁；
 流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
 
 ## 环境与结果

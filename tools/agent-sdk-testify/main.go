@@ -98,7 +98,7 @@ func execute(ctx context.Context, args []string) error {
 	f.IntVar(&o.Jobs, "jobs", 1, "parallel cases in a batch")
 	f.StringVar(&o.Case, "case", "", "case ID when selecting shared materials")
 	f.StringVar(&o.Provider, "provider", "", "native provider (inferred from an existing recording)")
-	f.StringVar(&o.Output, "output", "", "new output directory (default: unique temporary directory)")
+	f.StringVar(&o.Output, "output", "", "new output directory (default: persistent AGENT_SDK_TESTIFY_DATA_DIR/attempts/<mode>)")
 	f.StringVar(&o.Driver, "driver", "", "installed driver executable or interpreter")
 	f.Func("driver-arg", "driver prefix argument; repeat for an interpreter/script", func(s string) error { o.DriverArgs = append(o.DriverArgs, s); return nil })
 	self, err := os.Executable()

@@ -1,0 +1,19 @@
+{
+  "case": "SDK-CASE-022",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/venvs/stage2-glm/bin/agent-sdk-testify-codex",
+  "driverArgs": null,
+  "mode": "replay",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/replay-codex-SDK-CASE-022",
+  "provider": "codex",
+  "recordingSHA256": "8f7e67f4773dbde8e91d419f4c3110d070f7bbd08c399f37bfa251850e475cdc",
+  "result": {
+    "status": "passed"
+  },
+  "source": {
+    "manifest.json": "dd5ca2b4b203f9460178da4b46050c19705742cfe91cced8d29dadc8fe769942",
+    "plan.json": "105634da6941b7fa836cc887aa837176e74322deb78c97b58ada145a2fb768e9",
+    "report.json": "4732e8a25fab6e535634628ce2a930235ad73ffcb517772b940c93b41bae526d",
+    "result.json": "a12bffc24bc0c4a90a041fe128326ed57302a0d26c20d42fd3398ed84981e190",
+    "summary.json": "285451a45af4e566971ddf5435b2e72e47fdd9864af5f3a30caeb33eb1a1d6f7"
+  }
+}

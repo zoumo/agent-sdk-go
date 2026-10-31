@@ -1,0 +1,126 @@
+{
+  "provider": "claude",
+  "story": "SDK-US-007",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 75,
+  "requests": 0,
+  "receipts": [
+    {
+      "input-submitted": {
+        "written": true,
+        "completionObserved": false
+      }
+    },
+    {
+      "result": {
+        "subtype": "success",
+        "duration_ms": 2153,
+        "duration_api_ms": 1906,
+        "is_error": false,
+        "num_turns": 1,
+        "session_id": "5de7112e-bf22-4e1b-b88c-c409283ba8ce",
+        "stop_reason": "end_turn",
+        "total_cost_usd": 0.012233,
+        "usage": {
+          "input_tokens": 11,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 17856,
+          "output_tokens": 130,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "Hi, Zoumo\n\n\u6211\u5df2\u51c6\u5907\u5c31\u7eea\u3002\u8bf7\u544a\u8bc9\u6211\u4f60\u9700\u8981\u505a\u4ec0\u4e48\uff0c\u6bd4\u5982\uff1a\n\n- \u67e5\u770b\u6216\u4fee\u6539\u5f53\u524d\u5de5\u4f5c\u76ee\u5f55\u4e2d\u7684\u4ee3\u7801\n- \u6392\u67e5 bug\u3001\u5199\u6d4b\u8bd5\u3001\u505a\u91cd\u6784\n- \u8fd0\u884c\u547d\u4ee4\u3001\u5206\u6790\u65e5\u5fd7\n- \u8c03\u7528\u5404\u7c7b\u6280\u80fd\uff08\u5982 `/graphify`\u3001`/feedback` \u7b49\uff09\n\n\u8bf7\u63cf\u8ff0\u4f60\u7684\u9700\u6c42\uff5e",
+        "structured_output": null,
+        "model_usage": {
+          "theta/glm-5.3": {
+            "inputTokens": 11,
+            "outputTokens": 130,
+            "cacheReadInputTokens": 17856,
+            "cacheCreationInputTokens": 0,
+            "webSearchRequests": 0,
+            "costUSD": 0.012233,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 0,
+            "canonicalModel": "theta/glm-5.3",
+            "provider": "firstParty",
+            "costBasis": "unknown"
+          }
+        },
+        "permission_denials": [],
+        "deferred_tool_use": null,
+        "errors": null,
+        "api_error_status": null,
+        "uuid": "3a0c627e-c277-4413-aab6-027c56634778",
+        "terminal_reason": "completed",
+        "origin": null
+      }
+    },
+    {
+      "post-close-submit": {
+        "rejected": true,
+        "type": "CLIConnectionError",
+        "reason": "Not connected. Call connect() first."
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-031",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u5173\u95ed\u62e5\u6709\u7684\u4f1a\u8bdd\u5e76\u786e\u8ba4\u4ea4\u4e92\u4e0e\u8fdb\u7a0b\u7ed3\u675f\u3002",
+    "storyId": "SDK-US-007"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "2.1.258 (Claude Code)",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-007",
+  "caseId": "SDK-CASE-031",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "session-close"
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "sessionClose": {
+    "interactionClosed": true,
+    "postCloseRejected": true,
+    "processClosed": true
+  },
+  "branchStatus": "passed"
+}

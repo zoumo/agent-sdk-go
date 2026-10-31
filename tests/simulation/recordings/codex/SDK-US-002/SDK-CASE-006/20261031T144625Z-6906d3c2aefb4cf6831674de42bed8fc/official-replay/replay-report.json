@@ -1,0 +1,131 @@
+{
+  "provider": "codex",
+  "story": "SDK-US-002",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 47,
+  "requests": 2,
+  "receipts": [
+    {
+      "initialize": {
+        "userAgent": "official-python-story-recorder/0.163.0 (Mac OS 26.2.0; arm64) unknown (official-python-story-recorder; 0.161.0)",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "thread/start": {
+        "approvalPolicy": "on-request",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-006/project",
+        "disabledPluginIds": [],
+        "instructionSources": [],
+        "model": "theta/glm-5.3",
+        "modelProvider": "custom",
+        "sandbox": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread": {
+          "cliVersion": "0.163.0",
+          "createdAt": 1793457723,
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-10-31-glm53/record-codex-SDK-CASE-006/project",
+          "ephemeral": true,
+          "historyMode": "paginated",
+          "id": "01a19269-1698-7903-ae2e-74eecf095db9",
+          "model": "theta/glm-5.3",
+          "modelProvider": "custom",
+          "originator": "official-python-story-recorder",
+          "preview": "",
+          "recencyAt": 1793457723,
+          "sessionId": "01a19269-1698-7903-ae2e-74eecf095db9",
+          "source": "vscode",
+          "status": {
+            "type": "idle"
+          },
+          "turns": [],
+          "updatedAt": 1793457723
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a19269-16d7-7950-a182-dec257d6beb1",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a19269-1698-7903-ae2e-74eecf095db9",
+        "turn": {
+          "completedAt": 1793457735,
+          "durationMs": 12250,
+          "id": "01a19269-16d7-7950-a182-dec257d6beb1",
+          "items": [
+            {
+              "id": "msg_18e3a44ed1c408180000001a",
+              "phase": "final_answer",
+              "text": "Added 17 + 25 = 42 and wrote `summary.txt` with `sum=42`.",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793457723,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-006",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u89c2\u5bdf\u6587\u4ef6\u5de5\u5177\u7684\u6267\u884c\u4e0e\u4efb\u52a1\u5b8c\u6210\u3002",
+    "storyId": "SDK-US-002"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "codex-cli 0.163.0",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-002",
+  "caseId": "SDK-CASE-006",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "request",
+      "name": "fixture_read"
+    },
+    {
+      "step": "request",
+      "name": "fixture_write"
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "openai-codex",
+    "version": "0.161.0"
+  },
+  "branchStatus": "passed"
+}

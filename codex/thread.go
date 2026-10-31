@@ -14,17 +14,8 @@ import (
 // Native history/path selectors can select another identity; such a response is
 // an ErrProtocol failure under this method's strict identity contract.
 func (c *Client) ResumeThread(ctx context.Context, p types.ThreadResumeParams) (types.ThreadResumeResponse, error) {
-	finish, err := c.beginThreadOperation(p.ThreadID)
-	if err != nil {
-		return types.ThreadResumeResponse{}, err
-	}
-	defer finish()
-	return c.resumeThread(ctx, p)
-}
-
-func (c *Client) resumeThread(ctx context.Context, p types.ThreadResumeParams) (types.ThreadResumeResponse, error) {
 	r := resumeThreadResult{expectedID: p.ThreadID}
-	err := c.Call(ctx, "thread/resume", p, &r)
+	err := c.ownership.call(ctx, p.ThreadID, "thread/resume", p, &r)
 	return r.response, err
 }
 
@@ -51,25 +42,12 @@ func (r *resumeThreadResult) UnmarshalJSON(data []byte) error {
 // thread once and returns the native status. It does not close a coordinated Session
 // values or imply interruption, deletion, or completion of a thread's work.
 func (c *Client) UnsubscribeThread(ctx context.Context, p types.ThreadUnsubscribeParams) (types.ThreadUnsubscribeResponse, error) {
-	c.mu.Lock()
-	if c.sessions[p.ThreadID] != nil || c.attachmentBusyLocked(p.ThreadID) {
-		c.mu.Unlock()
-		return types.ThreadUnsubscribeResponse{}, &CallError{Method: "thread/unsubscribe", Dispatch: NotSent, Cause: ErrOwnershipConflict}
+	var r types.ThreadUnsubscribeResponse
+	err := c.ownership.call(ctx, p.ThreadID, "thread/unsubscribe", p, &r)
+	if err == ErrOwnershipConflict {
+		return r, &CallError{Method: "thread/unsubscribe", Dispatch: NotSent, Cause: err}
 	}
-	if c.threadOperations == nil {
-		c.threadOperations = make(map[string]int)
-	}
-	c.threadOperations[p.ThreadID]++
-	c.mu.Unlock()
-	defer func() {
-		c.mu.Lock()
-		c.threadOperations[p.ThreadID]--
-		if c.threadOperations[p.ThreadID] == 0 {
-			delete(c.threadOperations, p.ThreadID)
-		}
-		c.mu.Unlock()
-	}()
-	return c.unsubscribeThread(ctx, p)
+	return r, err
 }
 
 // Only resource owners use this dispatch after reserving the release fence.

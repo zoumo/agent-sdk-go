@@ -49,40 +49,37 @@ type outbound struct {
 // It never reconnects or replays requests. Calls are
 // safe concurrently; a context only cancels local waiting, never server execution.
 type Client struct {
-	mu                  sync.Mutex
-	limits              Limits
-	cmd                 *exec.Cmd
-	stdin               *os.File
-	stdout              *os.File
-	stderr              *os.File
-	remote              *websocket.Conn
-	remoteToken         string
-	queue               chan outbound
-	pending             map[ID]*pendingCall
-	reverse             map[ID]*requestState
-	requestHistory      map[requestKey]*requestState
-	attachments         map[string]*sessionAttachment
-	sessions            map[string]*Session
-	sessionReservations int
-	quarantine          []UnattributedRecord
-	quarantineBytes     int
-	quarantineSequence  uint64
-	quarantineEvicted   uint64
-	quarantineExpired   uint64
-	quarantineTimer     *time.Timer
-	threadOperations    map[string]int
-	nextID              int64
-	ready               bool
-	experimentalAPI     bool
-	cause               error
-	done                chan struct{}
-	cleaned             chan struct{}
-	reaped              chan struct{}
-	readDone            chan struct{}
-	closeErr            error
-	serverInfo          json.RawMessage
-	diag                DiagnosticSnapshot
-	workers             sync.WaitGroup
+	mu                 sync.Mutex
+	limits             Limits
+	cmd                *exec.Cmd
+	stdin              *os.File
+	stdout             *os.File
+	stderr             *os.File
+	remote             *websocket.Conn
+	remoteToken        string
+	queue              chan outbound
+	pending            map[ID]*pendingCall
+	reverse            map[ID]*requestState
+	requestHistory     map[requestKey]*requestState
+	ownership          sessionOwnership
+	quarantine         []UnattributedRecord
+	quarantineBytes    int
+	quarantineSequence uint64
+	quarantineEvicted  uint64
+	quarantineExpired  uint64
+	quarantineTimer    *time.Timer
+	nextID             int64
+	ready              bool
+	experimentalAPI    bool
+	cause              error
+	done               chan struct{}
+	cleaned            chan struct{}
+	reaped             chan struct{}
+	readDone           chan struct{}
+	closeErr           error
+	serverInfo         json.RawMessage
+	diag               DiagnosticSnapshot
+	workers            sync.WaitGroup
 }
 
 // NewStdio starts the explicitly selected executable, completes initialize then
@@ -165,7 +162,9 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	return &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c.ownership.client = c
+	return c
 }
 
 func (c *Client) initialize(ctx context.Context, params types.InitializeParams) (*Client, error) {
@@ -232,13 +231,8 @@ func (c *Client) ReadThread(ctx context.Context, p types.ThreadReadParams) (type
 // StartTurn returns only the native response. Events, including early or stale
 // completions, never change its result. Open a Session before starting a turn to retain its native facts.
 func (c *Client) StartTurn(ctx context.Context, p types.TurnStartParams) (types.TurnStartResponse, error) {
-	finish, err := c.beginThreadOperation(p.ThreadID)
-	if err != nil {
-		return types.TurnStartResponse{}, err
-	}
-	defer finish()
 	var r types.TurnStartResponse
-	err = c.Call(ctx, "turn/start", p, &r)
+	err := c.ownership.call(ctx, p.ThreadID, "turn/start", p, &r)
 	return r, err
 }
 
@@ -495,7 +489,7 @@ func (c *Client) fail(cause error) {
 			r.finishLocked(cause)
 		}
 	}
-	for _, s := range c.sessions {
+	for s := range c.ownership.sessionsLocked() {
 		terminal := cause
 		if cause == ErrClosed {
 			terminal = nil

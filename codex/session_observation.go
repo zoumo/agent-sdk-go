@@ -34,7 +34,7 @@ func (s *Session) addMemberLocked(id, method string) bool {
 		s.finishLocked(ErrLimit)
 		return false
 	}
-	if !s.retainAttachmentLocked(id) {
+	if !s.client.ownership.retainLocked(s, id) {
 		s.observeLocked(Observation{ThreadID: id, Method: method, Reason: "attachment-owned-or-release-unconfirmed"})
 		return false
 	}
@@ -92,7 +92,7 @@ func (c *Client) publishSessionsLocked(method string, params json.RawMessage, ra
 	identity := treeIdentity(params)
 	child, parents := nativeThreadParents(method, params)
 	accepted := false
-	for _, s := range c.sessions {
+	for s := range c.ownership.sessionsLocked() {
 		if s.closed {
 			continue
 		}

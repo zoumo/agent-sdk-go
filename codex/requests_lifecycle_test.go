@@ -25,7 +25,7 @@ func TestNativeRequestLifetimeWithControlledTime(t *testing.T) {
 				require.NoError(t, err)
 				lifetime, cancel := context.WithCancel(context.Background())
 				s := &Session{client: c, done: lifetime.Done(), cancel: cancel, parents: g, members: make(map[string]struct{}), maxMembers: 4}
-				require.NoError(t, s.bindLocked("thread"))
+				require.NoError(t, c.ownership.bindLocked(s, "thread"))
 				defer c.fail(ErrClosed)
 				old := receiveLifecycleRequest(t, c, s)
 				time.Sleep(6 * time.Minute)

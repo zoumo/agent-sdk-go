@@ -120,77 +120,13 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 			return nil, err
 		}
 	}
-	c.mu.Lock()
-	if c.cause != nil {
-		err = c.cause
-	} else if len(c.sessions)+c.sessionReservations >= c.limits.Subscriptions {
-		err = ErrLimit
-	} else {
-		c.sessionReservations++
-	}
-	c.mu.Unlock()
-	if err != nil {
-		if owned {
-			_ = c.Close()
-		}
-		return nil, err
-	}
-	defer func() { c.mu.Lock(); c.sessionReservations--; c.mu.Unlock() }()
 	lifetime, cancel := context.WithCancel(context.Background())
 	s := &Session{client: c, owned: owned, done: lifetime.Done(), cancel: cancel, parents: graph, members: make(map[string]struct{}), maxMembers: options.MaxMembers, childDetailPolicy: options.ChildDetailPolicy}
-	if options.Resume != nil {
-		err = s.resume(ctx, *options.Resume)
-	} else {
-		var response types.ThreadStartResponse
-		err = c.callAccept(ctx, "thread/start", options.Thread, &response, false, func(raw json.RawMessage) error {
-			var r types.ThreadStartResponse
-			if err := json.Unmarshal(raw, &r); err != nil {
-				return err
-			}
-			if r.Thread.ID == "" {
-				return ErrProtocol
-			}
-			if err := s.bindLocked(r.Thread.ID); err != nil {
-				return err
-			}
-			c.attachments[r.Thread.ID].managed = true
-			s.startRaw = append(json.RawMessage(nil), raw...)
-			return nil
-		})
-	}
-	if err != nil {
-		cancel()
-		if owned {
-			_ = c.Close()
-		}
+	if err := c.ownership.open(ctx, s, options); err != nil {
 		return nil, err
 	}
 	go func() { <-s.done; _ = s.Close() }()
 	return s, nil
-}
-
-// bindLocked registers identity before the reader processes the next wire record.
-func (s *Session) bindLocked(id string) error {
-	c := s.client
-	if c.threadOperations[id] > 0 || c.sessions[id] != nil {
-		return ErrOwnershipConflict
-	}
-	if len(c.sessions) >= c.limits.Subscriptions {
-		return ErrLimit
-	}
-	if c.sessions == nil {
-		c.sessions = make(map[string]*Session)
-	}
-	if err := s.parents.Root(id); err != nil {
-		return err
-	}
-	if !s.retainAttachmentLocked(id) {
-		return ErrOwnershipConflict
-	}
-	s.members[id] = struct{}{}
-	s.root = id
-	c.sessions[id] = s
-	return nil
 }
 
 // StartResponse returns an independent copy of the actual native thread/start
@@ -203,6 +139,19 @@ func (s *Session) StartResponse() (types.ThreadStartResponse, bool) {
 	}
 	var response types.ThreadStartResponse
 	_ = json.Unmarshal(s.startRaw, &response) // immutable bytes validated before Open returned
+	return response, true
+}
+
+// ResumeResponse returns an independent copy of the native thread/resume
+// response, including saved turns and unknown fields. It is absent for starts.
+func (s *Session) ResumeResponse() (types.ThreadResumeResponse, bool) {
+	s.client.mu.Lock()
+	defer s.client.mu.Unlock()
+	if len(s.resumeRaw) == 0 {
+		return types.ThreadResumeResponse{}, false
+	}
+	var response types.ThreadResumeResponse
+	_ = json.Unmarshal(s.resumeRaw, &response)
 	return response, true
 }
 
@@ -276,23 +225,7 @@ func (s *Session) finishLocked(cause error) {
 // waits for a consumer. Shared physical attachments detach only after their
 // last Session observer releases them.
 func (s *Session) Close() error {
-	s.cleanupOnce.Do(func() {
-		c := s.client
-		c.mu.Lock()
-		s.finishLocked(nil)
-		c.mu.Unlock()
-		if s.owned {
-			s.cleanupErr = c.Close()
-			_ = s.releaseAttachments()
-		} else {
-			s.cleanupErr = s.releaseAttachments()
-		}
-		c.mu.Lock()
-		if c.sessions[s.root] == s && (s.cleanupErr == nil || c.cause != nil) {
-			delete(c.sessions, s.root)
-		}
-		c.mu.Unlock()
-	})
+	s.cleanupOnce.Do(func() { s.cleanupErr = s.client.ownership.close(s) })
 	return s.cleanupErr
 }
 

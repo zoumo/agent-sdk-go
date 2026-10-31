@@ -23,30 +23,6 @@ type HistoryOptions struct {
 	MaxIndexBytes int
 }
 
-func (c *Client) beginThreadOperation(id string) (func(), error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.attachmentBusyLocked(id) {
-		return nil, ErrOwnershipConflict
-	}
-	if s := c.sessions[id]; s != nil {
-		return nil, ErrOwnershipConflict
-	}
-
-	if c.threadOperations == nil {
-		c.threadOperations = make(map[string]int)
-	}
-	c.threadOperations[id]++
-	return func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.threadOperations[id]--
-		if c.threadOperations[id] == 0 {
-			delete(c.threadOperations, id)
-		}
-	}, nil
-}
-
 // ListThreadTurns returns one native page without resuming or projecting events.
 // Direction, item detail, limits and opaque cursors are interpreted by the server.
 func (c *Client) ListThreadTurns(ctx context.Context, p types.ThreadTurnsListParams) (types.ThreadTurnsListResponse, error) {

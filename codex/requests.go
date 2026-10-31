@@ -363,14 +363,14 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 // creates authority; membership only routes that original capability. Ambiguous
 // ranges never select a map iteration winner or broadcast answer authority.
 func (c *Client) requestOwnerLocked(thread string) *Session {
-	if owner := c.sessions[thread]; owner != nil {
+	if owner := c.ownership.ownerLocked(thread); owner != nil {
 		if !owner.closed {
 			return owner
 		}
 		return nil
 	}
 	var owner *Session
-	for _, s := range c.sessions {
+	for s := range c.ownership.sessionsLocked() {
 		if !s.closed && s.member(thread) {
 			if owner != nil {
 				return nil

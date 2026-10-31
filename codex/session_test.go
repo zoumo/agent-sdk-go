@@ -125,7 +125,10 @@ func TestSessionFaultCleansUpAndPreservesAcceptedFacts(t *testing.T) {
 
 // This peer uses pinned native envelopes and sends facts immediately after the
 // start response, independent of application scheduling or consumption.
-type sessionPeer struct{ starts int }
+type sessionPeer struct {
+	starts int
+	held   []fakeEnvelope
+}
 
 func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
 	if !strings.HasPrefix(mode, "session-") {
@@ -139,6 +142,10 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 	case "thread/start":
 		p.starts++
 		id := fmt.Sprintf("main-%d", p.starts)
+		if mode == "session-start-wait" && p.starts == 1 {
+			p.held = append(p.held, m)
+			return true
+		}
 		send(m.ID, strings.ReplaceAll(startResult, "native-thread-42", id))
 		fmt.Fprintf(os.Stdout, `{"method":"future/opened","params":{"threadId":%q}}`+"\n", id)
 		if mode == "session-owned-diagnostic" {
@@ -217,13 +224,33 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 			return true
 		}
 		send(m.ID, `{}`)
+	case "session-release-start":
+		for _, held := range p.held {
+			send(held.ID, strings.ReplaceAll(startResult, "native-thread-42", "main-1"))
+		}
+		p.held = nil
+		send(m.ID, `{}`)
+	case "session-release-operations":
+		for _, held := range p.held {
+			send(held.ID, `{"turn":`+nativeTurn+`}`)
+		}
+		p.held = nil
+		send(m.ID, `{}`)
 	case "turn/start":
+		if mode == "session-operations" {
+			p.held = append(p.held, m)
+			return true
+		}
 		if mode == "session-wait" {
 			return true
 		}
 		send(m.ID, `{"turn":`+nativeTurn+`}`)
 	case "thread/unsubscribe":
-		if mode == "session-detach-error" {
+		var params types.ThreadUnsubscribeParams
+		if json.Unmarshal(m.Params, &params) != nil {
+			os.Exit(97)
+		}
+		if mode == "session-detach-error" || (mode == "session-shared-detach-error" && params.ThreadID == "shared") {
 			fmt.Fprintf(os.Stdout, `{"id":%s,"error":{"code":-32001,"message":"detach failed"}}`+"\n", m.ID)
 		} else {
 			send(m.ID, `{"status":"unsubscribed"}`)

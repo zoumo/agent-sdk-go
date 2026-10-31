@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -163,7 +164,7 @@ func TestHistoryReaderIntegrity(t *testing.T) {
 					assert.Empty(t, h.Raw())
 				}
 			}
-			assert.Empty(t, c.sessions, "queries must not create Session owners")
+			assert.Empty(t, slices.Collect(c.ownership.sessionsLocked()), "queries must not create Session owners")
 			for _, e := range events {
 				require.NotNil(t, e.History)
 				assert.Empty(t, e.Raw)

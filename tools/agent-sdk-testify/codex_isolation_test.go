@@ -128,3 +128,62 @@ func TestCodexIsolationBeforeRecording(t *testing.T) {
 	var summary json.RawMessage
 	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &summary))
 }
+
+func TestCodexIsolationRejectsSuppliedDiscoveryArguments(t *testing.T) {
+	for _, args := range [][]string{
+		{"app-server", "-c", `developer_instructions="PRIVATE"`},
+		{"app-server", `--config=model_instructions_file="/personal/instructions"`},
+		{"app-server", `-cskills.paths=["/personal/skills"]`},
+		{"app-server", "-c", `agents.private.config_file="/personal/agent.toml"`},
+		{"app-server", "-c", `model_catalog_json="/personal/catalog.json"`},
+		{"app-server", "--cd", "/personal/project"},
+		{"app-server", "--profile=personal"},
+		{"app-server", "-c", `'developer_instructions'="PRIVATE"`},
+		{"app-server", "--code-mode-host", "https://example.invalid"},
+	} {
+		t.Run(args[len(args)-1], func(t *testing.T) {
+			cmd, output, _ := codexIsolationCommand(t, args, false)
+			data, err := cmd.CombinedOutput()
+			require.Error(t, err, "%s", data)
+			assert.Contains(t, string(data), "Codex recording isolation")
+			assert.NoFileExists(t, filepath.Join(output, "observation.json"))
+			assert.NoFileExists(t, filepath.Join(output, "raw/raw.jsonl"))
+		})
+	}
+}
+
+func TestCodexIsolationRejectsWorkspaceDiscoveryRoots(t *testing.T) {
+	for _, path := range []string{".agents/skills/private/SKILL.md", ".codex/config.toml"} {
+		t.Run(path, func(t *testing.T) {
+			cmd, output, _ := codexIsolationCommand(t, nil, false)
+			materials := filepath.Join(filepath.Dir(output), "materials/plan.json")
+			var plan object
+			require.NoError(t, readJSON(materials, &plan))
+			obj(obj(plan["scenario"])["files"])[path] = "PRIVATE"
+			require.NoError(t, writeJSON(materials, plan))
+			data, err := cmd.CombinedOutput()
+			require.Error(t, err, "%s", data)
+			assert.Contains(t, string(data), "Codex recording isolation")
+			assert.NoFileExists(t, filepath.Join(output, "observation.json"))
+		})
+	}
+}
+
+func TestCodexIsolationPreservesSuppliedCaseCapabilitiesWithoutConfig(t *testing.T) {
+	args := []string{"app-server", "--stdio", "--enable", "multi_agent", "-c", `model="case/model"`,
+		"-c", `sandbox_mode="read-only"`, "--config=agents.max_depth=2", "-cfeatures.shell_tool=false",
+		"-c", "features.multi_agent_v2.enabled=true", "-c", "features.multi_agent_v2_dynamic_tools=true",
+		"-c", "project_root_markers=[\".git\"]", "-c", "project_doc_max_bytes=99999",
+		"-c", "tool_output_token_limit=4096"}
+	cmd, output, _ := codexIsolationCommand(t, args, false)
+	data, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", data)
+	var observed struct {
+		Args []string
+		Env  map[string]string
+	}
+	require.NoError(t, readJSON(filepath.Join(output, "observation.json"), &observed))
+	assert.Equal(t, append(args, "-c", "project_root_markers=[]", "-c", "project_doc_max_bytes=0"), observed.Args)
+	assert.Equal(t, filepath.Join(output, "home"), observed.Env["HOME"])
+	assert.Empty(t, observed.Env["ISOLATION_AUTH"])
+}

@@ -115,6 +115,11 @@ func prepareNative(ctx context.Context, o *options, plan object, root string) er
 			return err
 		}
 	}
+	if provider == "codex" {
+		if err = prepareCodexIsolation(root, plan); err != nil {
+			return err
+		}
+	}
 	// No arbitrary source HOME, dependency installation or SDK version probes.
 	return writeJSON(filepath.Join(root, "native.env.private.json"), env)
 }

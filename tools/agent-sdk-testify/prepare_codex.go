@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -13,8 +14,89 @@ import (
 // zero instruction bytes excludes AGENTS.md and configured fallback files.
 // Apply after all argument preparation, including supplied recording plans.
 func prepareCodexIsolation(root string, plan object) error {
-	plan["args"] = append(stringsOf(plan["args"]), "-c", "project_root_markers=[]", "-c", "project_doc_max_bytes=0")
+	// Skill-specific case inputs need an explicit future contract; do not let
+	// ordinary case files reopen the discovery roots filtered from user config.
+	for _, name := range []string{".agents", ".codex"} {
+		if _, err := os.Lstat(filepath.Join(str(plan["project"]), name)); err == nil {
+			return fmt.Errorf("Codex recording isolation: workspace contains %s", name)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	args := stringsOf(plan["args"])
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		var override string
+		switch {
+		case arg == "-c" || arg == "--config":
+			if i+1 == len(args) {
+				return fmt.Errorf("Codex recording isolation: missing config override")
+			}
+			i++
+			override = args[i]
+		case strings.HasPrefix(arg, "--config="):
+			override = strings.TrimPrefix(arg, "--config=")
+		case strings.HasPrefix(arg, "-c") && !strings.HasPrefix(arg, "--"):
+			override = strings.TrimPrefix(arg, "-c")
+		case arg == "--cd" || strings.HasPrefix(arg, "--cd=") || strings.HasPrefix(arg, "-C"),
+			arg == "--profile" || strings.HasPrefix(arg, "--profile=") || strings.HasPrefix(arg, "-p"),
+			arg == "--code-mode-host" || strings.HasPrefix(arg, "--code-mode-host="):
+			return fmt.Errorf("Codex recording isolation: external workspace, profile or host")
+		default:
+			continue
+		}
+		key, _, ok := strings.Cut(override, "=")
+		var config object
+		if !ok {
+			return fmt.Errorf("Codex recording isolation: malformed config override")
+		}
+		if err := toml.Unmarshal([]byte(override), &config); err != nil {
+			// Native CLI accepts non-TOML values as strings. Parse the key
+			// separately so quoted instruction keys cannot bypass the check.
+			if err = toml.Unmarshal([]byte(key+`=""`), &config); err != nil {
+				return fmt.Errorf("Codex recording isolation: malformed config key")
+			}
+		}
+		if codexPersonalInputOverride(config) {
+			return fmt.Errorf("Codex recording isolation: personal discovery or instruction override")
+		}
+		if path, ok := config["model_catalog_json"]; ok {
+			if path != filepath.Join(root, "config/file-tool-model.json") {
+				return fmt.Errorf("Codex recording isolation: external model catalog")
+			}
+		}
+	}
+	plan["args"] = append(args, "-c", "project_root_markers=[]", "-c", "project_doc_max_bytes=0")
 	return nil
+}
+
+// Reject sources of personal context, not unrelated native capability knobs.
+func codexPersonalInputOverride(config object) bool {
+	for key, value := range config {
+		switch key {
+		case "skills", "plugins", "marketplaces", "mcp_servers", "profiles",
+			"instructions", "base_instructions", "developer_instructions",
+			"model_instructions_file", "experimental_instructions_file":
+			return true
+		case "agents":
+			var personalRole func(object) bool
+			personalRole = func(fields object) bool {
+				for name, value := range fields {
+					if name == "config_file" || name == "developer_instructions" {
+						return true
+					}
+					if nested, ok := value.(map[string]any); ok && personalRole(nested) {
+						return true
+					}
+				}
+				return false
+			}
+			if personalRole(obj(value)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func codexNativeArgs(profile string, params object) []string {

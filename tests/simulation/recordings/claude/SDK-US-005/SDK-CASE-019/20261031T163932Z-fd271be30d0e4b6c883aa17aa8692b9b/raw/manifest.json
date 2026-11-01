@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "recordingFormat": {
+    "name": "agent-mock-jsonl",
+    "version": 1,
+    "transport": "stdio-jsonl"
+  },
+  "proxyVersion": "0.1.0-dev",
+  "captureStatus": "complete",
+  "native": {
+    "executable": "/Users/jim/bin/claude",
+    "sha256": "0d036f0b635d239844e6df6996bc05263fe305df505b073c71f79f83668ea35a",
+    "args": [
+      "--print",
+      "--system-prompt",
+      "Complete the supplied synthetic task in the working directory. Be concise.",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--input-format",
+      "stream-json",
+      "--permission-prompt-tool",
+      "stdio",
+      "--include-partial-messages",
+      "--no-session-persistence",
+      "--forward-subagent-text",
+      "--settings",
+      "{\"permissions\":{\"ask\":[\"Agent\",\"Read\"]}}",
+      "--model",
+      "theta/glm-5.3"
+    ],
+    "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-claude-SDK-CASE-019/project"
+  },
+  "files": {
+    "raw.jsonl": "a08d2a506ee276c2110a37ba8cd2fa8fc4b309e1da16823ff24e85a727aabc46",
+    "stderr.raw": "f1141d3168a6a8bbb7cf0e097b275ccaf33b77235982ba892cade7698d206dce",
+    "transport.json": "0bafa488ace783c5da85bd92b62e7e5ed4b74c7ae37110f0320780c163b8670c"
+  }
+}

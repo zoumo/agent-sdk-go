@@ -1,0 +1,12 @@
+{
+  "case": "SDK-CASE-019",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/venv/bin/agent-sdk-testify-claude",
+  "driverArgs": null,
+  "mode": "record",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-claude-SDK-CASE-019",
+  "provider": "claude",
+  "recordingSHA256": "a08d2a506ee276c2110a37ba8cd2fa8fc4b309e1da16823ff24e85a727aabc46",
+  "result": {
+    "status": "passed"
+  }
+}

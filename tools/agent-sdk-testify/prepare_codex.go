@@ -21,7 +21,54 @@ func codexNativeArgs(profile string, params object) []string {
 	if params["approvalKind"] == "command" {
 		args = append(args, "-c", `sandbox_mode="read-only"`)
 	}
+	if params["nativeFileTool"] == "apply_patch" {
+		args = append(args, "-c", "features.shell_tool=false")
+	}
+	if params["childTools"] == "inherited-dynamic-v2" {
+		args = append(args, "-c", "features.multi_agent_v2.enabled=true",
+			"-c", "features.multi_agent_v2.non_code_mode_only=false",
+			"-c", "features.multi_agent_v2.hide_spawn_agent_metadata=false",
+			"-c", "features.multi_agent_v2_dynamic_tools=true",
+			"-c", "features.shell_tool=false")
+	}
 	return args
+}
+
+// Unknown model slugs otherwise get fallback metadata without apply_patch.
+// Declare the case's tool contract without substituting a different model.
+func prepareCodexFileTool(root string, plan object) error {
+	model := str(plan["model"])
+	if model == "" {
+		data, err := os.ReadFile(filepath.Join(root, "config/config.toml"))
+		if err != nil {
+			return fmt.Errorf("file approval case needs an explicit model: %w", err)
+		}
+		var config struct{ Model string }
+		if err = toml.Unmarshal(data, &config); err != nil {
+			return err
+		}
+		model = config.Model
+	}
+	if model == "" {
+		return fmt.Errorf("file approval case needs an explicit model")
+	}
+	plan["model"] = model
+	path := filepath.Join(root, "config", "file-tool-model.json")
+	catalog := object{"models": []object{{
+		"slug": model, "display_name": model, "description": "Synthetic file approval case",
+		"supported_reasoning_levels": []object{}, "shell_type": "disabled",
+		"visibility": "hide", "supported_in_api": true, "priority": 0,
+		"support_verbosity": false, "apply_patch_tool_type": "freeform",
+		"base_instructions":            "Complete the synthetic file approval task using apply_patch.",
+		"truncation_policy":            object{"mode": "bytes", "limit": 10000},
+		"experimental_supported_tools": []string{},
+	}}}
+	if err := writeJSON(path, catalog); err != nil {
+		return err
+	}
+	quoted, _ := json.Marshal(path)
+	plan["args"] = append(stringsOf(plan["args"]), "-c", "model_catalog_json="+string(quoted))
+	return nil
 }
 
 func prepareCodexChildFixture(root string) error {

@@ -186,8 +186,11 @@
       "configuration": {},
       "progressBarrier": null,
       "inputs": [
-        "Use Agent exactly once with subagent_type fixture_reader, prompt exactly \"Use Read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly SYNTHETIC_CHILD_TOKEN. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\", and run_in_background=true. Return ROOT_RETURNED immediately after launch; do not wait or use TaskOutput. The root must not read files, use shell/network/other tools, or create another child."
-      ]
+        "Use Agent exactly once with subagent_type fixture_reader, prompt exactly \"Use Read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly the text returned by that read. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\", and run_in_background=true. Return ROOT_RETURNED immediately after launch; do not wait or use TaskOutput. The root must not read files, use shell/network/other tools, or create another child."
+      ],
+      "parameters": {
+        "backgroundReadBarrier": true
+      }
     },
     "SDK-CASE-020": {
       "files": {},

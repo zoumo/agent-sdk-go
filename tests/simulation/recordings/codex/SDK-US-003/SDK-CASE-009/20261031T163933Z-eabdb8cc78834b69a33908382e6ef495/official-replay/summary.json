@@ -1,0 +1,19 @@
+{
+  "case": "SDK-CASE-009",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/venv/bin/agent-sdk-testify-codex",
+  "driverArgs": null,
+  "mode": "replay",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/replay-codex-SDK-CASE-009",
+  "provider": "codex",
+  "recordingSHA256": "90e0e63c3616c8261de9626bb914d897059ec332ec65972f8b744c58df6a3090",
+  "result": {
+    "status": "passed"
+  },
+  "source": {
+    "manifest.json": "7f79fb9ae3d9c4eebf61170e75bd7192f48763f3464f594ff02e148cbf3841e2",
+    "plan.json": "acb3832523844b1e8f4ffc326f6af5eb441b4401a06273187e485a8112e634d2",
+    "report.json": "cd8d206818c493ec006dcd300274ef8a6323d7e40146e98ed1e4655e9ee937da",
+    "result.json": "a12bffc24bc0c4a90a041fe128326ed57302a0d26c20d42fd3398ed84981e190",
+    "summary.json": "96111c21859e8310cbf3dec089cc75b267299cc9edee42b0dc73fb83aaf5fcc9"
+  }
+}

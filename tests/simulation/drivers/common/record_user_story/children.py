@@ -2,9 +2,11 @@
 import asyncio
 import json
 from pathlib import Path
+import sys
 import threading
+from contextlib import contextmanager
 
-from .child_policy import CHILD_FILE, CHILD_ROLE, CHILD_TEXT, child_task
+from .child_policy import CHILD_FILE, CHILD_ROLE, CHILD_TEXT, child_task, role_file
 from .adapters.common import proxy_command, serial
 from .environment import read_regular
 from .policy import driver_profile
@@ -20,6 +22,31 @@ def limitations(report):
     limitation(report, 'parent/child and background facts require actual native source records')
 
 
+@contextmanager
+def codex_child_environment(plan, strict, background):
+    marker = Path(plan['root']) / 'tmp' / 'child-root-completed'
+    if strict and not plan.get('_replay'):
+        config = Path(plan['root']) / 'config'
+        (config / 'agents').mkdir(parents=True, exist_ok=True)
+        (config / 'agents' / 'fixture_reader.toml').write_text(role_file(strict=True, background=background))
+        if background:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            if marker.exists():
+                raise ValueError('stale child completion barrier')
+            script = marker.parent / 'child_gate.py'
+            script.write_bytes(Path(__file__).with_name('child_gate.py').read_bytes())
+            with (config / 'config.toml').open('a') as target:
+                target.write('\n[mcp_servers.child_gate]\ncommand=' + json.dumps(sys.executable)
+                             + '\nargs=' + json.dumps([str(script), str(marker)])
+                             + '\ntool_timeout_sec=70\nenabled_tools=["wait_for_root"]\n'
+                             + '[mcp_servers.child_gate.tools.wait_for_root]\napproval_mode="approve"\n')
+    try:
+        yield marker
+    finally:
+        if strict and background:
+            marker.unlink(missing_ok=True)
+
+
 def codex(plan, report):
     from openai_codex.client import CodexClient, CodexConfig
     root_id = None
@@ -28,19 +55,34 @@ def codex(plan, report):
     tool_callers = set()
     tool_turns = {}
     background = driver_profile(plan) == 'background-children'
+    strict = plan.get('scenario', {}).get('parameters', {}).get('childTools') == 'inherited-dynamic-v2'
+    root_done = False
     limitations(report)
 
     def answer(method, params):
         report['requests'] += 1
         params = params or {}
         if method in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval'):
+            if strict:
+                report['gaps'].append('unexpected native child approval request')
+                return {'decision': 'decline'}
             return {'decision': 'accept'}
         if method != 'item/tool/call' or params.get('tool') != 'fixture_read':
             raise NotImplementedError('unsupported native child request: ' + method)
         caller = params.get('threadId')
+        if strict and (not caller or caller == root_id or not params.get('turnId')
+                       or params.get('arguments') != {'path': CHILD_FILE}
+                       or caller in tool_callers or (background and not plan.get('_replay')
+                                                    and (not root_done or not marker.is_file()))):
+            report['gaps'].append('unauthorized, repeated or pre-root fixture_read')
+            return {'contentItems': [{'type': 'inputText', 'text': 'Fixture read is not authorized.'}], 'success': False}
         # The callback reads only the newly generated synthetic file. Native
         # membership evidence is recorded separately, never inferred from this ID.
-        content = read_regular(Path(plan['project']) / CHILD_FILE).decode()
+        content = read_regular(Path(plan.get('_fixtureProject', plan['project'])) / CHILD_FILE).decode()
+        if strict and background:
+            # Subscribe before answering the read: completion may arrive before
+            # thread/read returns. Registering after a snapshot loses that event.
+            client.register_turn_notifications(params['turnId'])
         tool_callers.add(caller)
         tool_turns.setdefault(caller, set()).add(params.get('turnId'))
         report['receipts'].append({'fixture_read': {'nativeThreadId': caller, 'text': content}})
@@ -49,7 +91,7 @@ def codex(plan, report):
 
     config = CodexConfig(launch_args_override=tuple(proxy_command(plan)), cwd=plan['project'],
                          client_name='official-python-child-case', client_title='Synthetic child read case')
-    with CodexClient(config=config, approval_handler=answer) as client:
+    with codex_child_environment(plan, strict, background) as marker, CodexClient(config=config, approval_handler=answer) as client:
         report['receipts'].append({'initialize': serial(client.initialize())})
         params = {'cwd': plan['project'], 'sandbox': 'workspace-write', 'approvalPolicy': 'on-request', 'ephemeral': False,
                   'baseInstructions': 'Complete the supplied synthetic child task.',
@@ -80,6 +122,11 @@ def codex(plan, report):
                 report['receipts'].append({'root/completed': native})
                 if event.payload.turn.status.value == 'failed':
                     raise ValueError('native root child-case turn failed')
+                if strict and (native.get('threadId') != root_id or event.payload.turn.status.value != 'completed'):
+                    raise ValueError('native root child-case completion identity or status mismatch')
+                root_done = True
+                if strict and background and not plan.get('_replay'):
+                    marker.touch(exist_ok=False)
                 break
         post_root_complete = False
         for child in sorted(child_ids):
@@ -94,14 +141,15 @@ def codex(plan, report):
                     for child_turn in snapshot.get('thread', {}).get('turns', []):
                         if child_turn.get('status') == 'failed':
                             raise RuntimeError('native child turn failed')
-                        if child_turn.get('status') == 'inProgress':
+                        if child_turn.get('status') == 'inProgress' or (strict and child_turn.get('status') == 'completed'
+                                                                     and child_turn.get('id') in tool_turns.get(child, set())):
                             completed = serial(client.wait_for_turn_completed(child_turn['id']))
                             report['receipts'].append({'post-root-native-child/completed': completed})
                             if completed.get('turn', {}).get('status') == 'failed':
                                 raise RuntimeError('native child turn failed')
                             if completed.get('threadId') != child or completed.get('turn', {}).get('id') != child_turn['id']:
                                 raise ValueError('native child completion returned a different identity')
-                            post_root_complete = completed.get('turn', {}).get('status') == 'completed'
+                            post_root_complete = post_root_complete or completed.get('turn', {}).get('status') == 'completed'
                             snapshot = serial(client.thread_read(child, include_turns=True))
                             report['receipts'].append({'post-root-native-child/read': snapshot})
                 thread = snapshot.get('thread', {})
@@ -126,12 +174,41 @@ def codex(plan, report):
                 raise
         if not child_ids:
             report['gaps'].append('no child identity confirmed by native collaboration records; child creation untriggered')
+        if strict and len(child_ids) != 1:
+            report['gaps'].append('exactly one native child identity is required')
         if not read_done.is_set():
             report['gaps'].append('no child fixture_read observed; no read or child output was fabricated')
         if tool_callers - child_ids:
             report['gaps'].append('fixture caller has no confirmed native collaboration membership')
         if background and not post_root_complete:
             report['gaps'].append('native post-root child completion is not established')
+        if strict and background and plan.get('_replay'):
+            assess_codex_background_order(plan, report, root_id, turn.turn.id, tool_turns)
+
+
+def assess_codex_background_order(plan, report, root_id, root_turn, tool_turns):
+    """Replay dispatch may run ahead of the consumer; use immutable wire order."""
+    root_completed = None
+    reads = set()
+    with (Path(plan['raw']) / 'raw.jsonl').open() as source:
+        for index, line in enumerate(source):
+            frame = json.loads(line)
+            if frame.get('direction') != 's2c':
+                continue
+            wire = frame.get('wire', {})
+            params = wire.get('params', {})
+            if (wire.get('method') == 'turn/completed' and params.get('threadId') == root_id
+                    and params.get('turn', {}).get('id') == root_turn
+                    and params['turn'].get('status') == 'completed'):
+                root_completed = index
+            if wire.get('method') == 'item/tool/call' and params.get('tool') == 'fixture_read':
+                caller, child_turn = params.get('threadId'), params.get('turnId')
+                if caller in tool_turns and child_turn in tool_turns[caller]:
+                    if root_completed is None or index <= root_completed:
+                        report['gaps'].append('native fixture read preceded root completion')
+                    reads.add((caller, child_turn))
+    if not reads or reads != {(child, turn) for child, turns in tool_turns.items() for turn in turns}:
+        report['gaps'].append('native post-root fixture read wire evidence is absent')
 
 
 async def claude(plan, report):
@@ -144,6 +221,11 @@ async def claude(plan, report):
     events = []
     read_requests = {}
     background = driver_profile(plan) == 'background-children'
+    strict = plan.get('scenario', {}).get('parameters', {}).get('backgroundReadBarrier') is True
+    root_session = None
+    root_released = asyncio.Event()
+    aborted = False
+    read_pending = False
 
     class RawTransport(Transport):
         def __init__(self): self.proc = None
@@ -167,8 +249,31 @@ async def claude(plan, report):
                     self.proc.terminate(); await asyncio.wait_for(self.proc.wait(),5)
 
     async def permission(tool, values, context):
-        nonlocal agent_tool_id
+        nonlocal agent_tool_id, read_pending
         report['requests'] += 1
+        if strict:
+            allowed_agent = (tool == 'Agent' and not getattr(context, 'agent_id', None) and not agent_tool_id
+                             and getattr(context, 'tool_use_id', None)
+                             and values.get('subagent_type') == CHILD_ROLE and values.get('run_in_background') is True
+                             and values.get('prompt') == child_task('claude', strict=True))
+            path = values.get('file_path')
+            allowed_read = (tool == 'Read' and getattr(context, 'agent_id', None)
+                            and getattr(context, 'tool_use_id', None) and agent_tool_id
+                            and isinstance(path, str)
+                            and (Path(plan['project']) / path).resolve() == (Path(plan['project']) / CHILD_FILE).resolve()
+                            and not read_requests and not read_pending)
+            if not allowed_agent and not allowed_read:
+                report['gaps'].append('unauthorized or repeated child tool request: ' + tool)
+                return PermissionResultDeny(message='Only one fixture_reader child and its fixture Read are authorized.')
+            if allowed_read:
+                read_pending = True
+                try:
+                    await asyncio.wait_for(root_released.wait(), 60)
+                except asyncio.TimeoutError:
+                    report['gaps'].append('root result did not release the child Read')
+                    return PermissionResultDeny(message='Root completion barrier timed out.')
+                if aborted:
+                    return PermissionResultDeny(message='Root execution ended without successful completion.')
         if tool == 'Agent' and getattr(context, 'agent_id', None) is None:
             used.add('Agent')
             agent_tool_id = context.tool_use_id
@@ -180,6 +285,7 @@ async def claude(plan, report):
         return PermissionResultAllow(updated_input=values)
 
     def observe(event):
+        nonlocal root_session
         report['events'] += 1
         kind, native = type(event).__name__, serial(event)
         events.append({'kind': kind, 'native': native})
@@ -187,6 +293,9 @@ async def claude(plan, report):
         if (kind == 'TaskStartedMessage' or native.get('subtype') == 'task_started') and native.get('tool_use_id') == agent_tool_id:
             if agent_tool_id and native.get('task_id') and native.get('session_id'):
                 child_tasks[native['task_id']] = native['session_id']
+                if root_session is not None and root_session != native['session_id']:
+                    raise ValueError('native child task changed root session')
+                root_session = native['session_id']
         if kind == 'TaskNotificationMessage' or native.get('subtype') == 'task_notification':
             if (agent_tool_id and native.get('tool_use_id') == agent_tool_id
                     and native.get('task_id') in child_tasks
@@ -197,26 +306,36 @@ async def claude(plan, report):
         return False
 
     definition = AgentDefinition(description='Read the synthetic child-fixture.txt and return its token.',
-                 prompt=child_task('claude'), background=background, model='inherit')
+                 prompt=child_task('claude', strict=strict), background=background, model='inherit',
+                 **({'tools': ['Read']} if strict else {}))
     options = ClaudeAgentOptions(cwd=plan['project'], can_use_tool=permission,
                agents={CHILD_ROLE: definition}, include_partial_messages=True)
     async with ClaudeSDKClient(options=options, transport=RawTransport()) as client:
-        await client.query(plan['prompts'][0]); report['inputs'] += 1
-        async for event in client.receive_response():
-            child_completed = observe(event) or child_completed
-            if isinstance(event,ResultMessage):
-                report['results'] += 1; report['receipts'].append({'root/result':serial(event)})
-                if event.is_error: raise ValueError('native root child-case result is_error')
-        if background and agent_tool_id and not child_completed:
-            async def observe_background():
-                async for event in client.receive_messages():
-                    if observe(event):
-                        report['receipts'].append({'post-root-native-task':serial(event)})
-                        return True
-            if not await observe_background():
-                report['gaps'].append('no native post-root child completion observed')
-        elif background:
-            report['gaps'].append('native child did not complete after the root result')
+        try:
+            await client.query(plan['prompts'][0]); report['inputs'] += 1
+            async for event in client.receive_response():
+                child_completed = observe(event) or child_completed
+                if isinstance(event,ResultMessage):
+                    report['results'] += 1; report['receipts'].append({'root/result':serial(event)})
+                    if event.is_error: raise ValueError('native root child-case result is_error')
+                    if strict:
+                        native = serial(event)
+                        if not root_session or native.get('session_id') != root_session or native.get('parent_tool_use_id'):
+                            raise ValueError('native root result has no matching child task session')
+                        root_released.set()
+            if background and agent_tool_id and not child_completed:
+                async def observe_background():
+                    async for event in client.receive_messages():
+                        if observe(event):
+                            report['receipts'].append({'post-root-native-task':serial(event)})
+                            return True
+                if not await observe_background():
+                    report['gaps'].append('no native post-root child completion observed')
+            elif background:
+                report['gaps'].append('native child did not complete after the root result')
+        finally:
+            aborted = True
+            root_released.set()
     if 'Agent' not in used: report['gaps'].append('no authorized root Agent permission request observed; child creation is not inferred')
     if 'Read' not in used: report['gaps'].append('no authorized child Read permission observed; no fixed-file read was fabricated')
     assess_claude_child(report, events, agent_tool_id, read_requests, background)
@@ -237,7 +356,7 @@ def assess_claude_child(report, events, parent_tool_id, read_requests, backgroun
     root_result = None
     for index, event in enumerate(events):
         kind, native = event['kind'], event['native']
-        if kind == 'ResultMessage' and native.get('session_id') == root:
+        if kind == 'ResultMessage' and native.get('session_id') == root and root_result is None:
             root_result = index
         if index <= started or native.get('session_id') != root:
             continue

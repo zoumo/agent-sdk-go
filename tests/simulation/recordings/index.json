@@ -166,7 +166,9 @@
       "storyId": "SDK-US-005",
       "caseId": "SDK-CASE-019",
       "requirement": "required",
-      "adoption": "missing"
+      "adoption": "admitted",
+      "materials": "claude/SDK-US-005/SDK-CASE-019/20261031T163932Z-fd271be30d0e4b6c883aa17aa8692b9b",
+      "adoptionSHA256": "683a81bd8a2f94a9d6fefb388e5e0210cc93c4fd845b282017c6d2eb49e84944"
     },
     {
       "provider": "claude",
@@ -385,14 +387,18 @@
       "storyId": "SDK-US-003",
       "caseId": "SDK-CASE-008",
       "requirement": "required",
-      "adoption": "missing"
+      "adoption": "admitted",
+      "materials": "codex/SDK-US-003/SDK-CASE-008/20261031T163933Z-3d32285a84c043ac96fb03b994a2096b",
+      "adoptionSHA256": "a3160263787eac30792cebb99e7690320fd0c2cdfa82f482df86d78bc93f5137"
     },
     {
       "provider": "codex",
       "storyId": "SDK-US-003",
       "caseId": "SDK-CASE-009",
       "requirement": "required",
-      "adoption": "missing"
+      "adoption": "admitted",
+      "materials": "codex/SDK-US-003/SDK-CASE-009/20261031T163933Z-eabdb8cc78834b69a33908382e6ef495",
+      "adoptionSHA256": "7953a10e78e3ce6e99cc9b278903b3c0d5c27f04f9c76f4af5cb4c1cbae316fb"
     },
     {
       "provider": "codex",
@@ -451,7 +457,9 @@
       "storyId": "SDK-US-005",
       "caseId": "SDK-CASE-016",
       "requirement": "required",
-      "adoption": "missing"
+      "adoption": "admitted",
+      "materials": "codex/SDK-US-005/SDK-CASE-016/20261031T163933Z-8b16af47130f4615a0dd2c6ce11e3c6b",
+      "adoptionSHA256": "498f7ace4ecfa3c1db4fadff61871139e9214f94f129ca5047052b10f1e4cbf0"
     },
     {
       "provider": "codex",
@@ -476,7 +484,9 @@
       "storyId": "SDK-US-005",
       "caseId": "SDK-CASE-019",
       "requirement": "required",
-      "adoption": "missing"
+      "adoption": "admitted",
+      "materials": "codex/SDK-US-005/SDK-CASE-019/20261031T164045Z-2f4635261b2742a28245b218ce9a9a33",
+      "adoptionSHA256": "8a289de45b0f24346aa2a7ee4c5ac7832a655d57e98aae618a3f2d06e86c9589"
     },
     {
       "provider": "codex",

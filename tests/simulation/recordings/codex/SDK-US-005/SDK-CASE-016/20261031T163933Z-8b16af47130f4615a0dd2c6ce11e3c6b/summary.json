@@ -1,0 +1,12 @@
+{
+  "case": "SDK-CASE-016",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/venv/bin/agent-sdk-testify-codex",
+  "driverArgs": null,
+  "mode": "record",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-016",
+  "provider": "codex",
+  "recordingSHA256": "a3f36246ed76c6e2b9ce9ab9f307b6f8c691df046a6c40dffdb294292e283d82",
+  "result": {
+    "status": "passed"
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "provider": "codex",
+  "story": "SDK-US-003",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 56,
+  "requests": 1,
+  "receipts": [
+    {
+      "initialize": {
+        "userAgent": "official-python-story-recorder/0.163.0 (Mac OS 26.2.0; arm64) unknown (official-python-story-recorder; 0.161.0)",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "thread/start": {
+        "approvalPolicy": "on-request",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-009/project",
+        "disabledPluginIds": [],
+        "instructionSources": [],
+        "model": "theta/glm-5.3",
+        "modelProvider": "custom",
+        "sandbox": {
+          "networkAccess": false,
+          "type": "readOnly"
+        },
+        "thread": {
+          "cliVersion": "0.163.0",
+          "createdAt": 1793464367,
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-009/project",
+          "ephemeral": true,
+          "historyMode": "paginated",
+          "id": "01a192ce-7916-7863-951c-1edc6286cd82",
+          "model": "theta/glm-5.3",
+          "modelProvider": "custom",
+          "originator": "official-python-story-recorder",
+          "preview": "",
+          "recencyAt": 1793464367,
+          "sessionId": "01a192ce-7916-7863-951c-1edc6286cd82",
+          "source": "vscode",
+          "status": {
+            "type": "idle"
+          },
+          "turns": [],
+          "updatedAt": 1793464367
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a192ce-792e-7892-872d-6c7b2706dfeb",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a192ce-7916-7863-951c-1edc6286cd82",
+        "turn": {
+          "completedAt": 1793464378,
+          "durationMs": 11502,
+          "id": "01a192ce-792e-7892-872d-6c7b2706dfeb",
+          "items": [
+            {
+              "id": "msg_18e3aa599473ed5000000272",
+              "phase": "final_answer",
+              "text": "Applied the patch successfully: `approved.txt` now exists in the working directory containing `SYNTHETIC_APPROVED` followed by a newline. The native file change approval was allowed, and no retry or alternate tool was needed.",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793464367,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-009",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u6279\u51c6\u6587\u4ef6\u5199\u5165\u5ba1\u6279\u5e76\u89c2\u5bdf\u540e\u7eed\u7ed3\u679c\u3002",
+    "storyId": "SDK-US-003"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "codex-cli 0.163.0",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-003",
+  "caseId": "SDK-CASE-009",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "request",
+      "name": "approval_answer"
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "openai-codex",
+    "version": "0.161.0"
+  },
+  "branchStatus": "passed"
+}

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "recordingFormat": {
+    "name": "agent-mock-jsonl",
+    "version": 1,
+    "transport": "stdio-jsonl"
+  },
+  "proxyVersion": "0.1.0-dev",
+  "captureStatus": "complete",
+  "native": {
+    "executable": "/Users/jim/.bun/install/global/node_modules/@openai/codex/bin/codex.js",
+    "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "args": [
+      "app-server",
+      "--stdio",
+      "-c",
+      "features.default_mode_request_user_input=true",
+      "-c",
+      "features.shell_tool=false",
+      "-c",
+      "model_catalog_json=\"/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-008/config/file-tool-model.json\""
+    ],
+    "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-008/project"
+  },
+  "files": {
+    "raw.jsonl": "9ab8850968ae7237f26cf7ca2f3740d3aee6b17cd6a65c081dfbd1684659f23d",
+    "stderr.raw": "dade9d9940c0678d4cbe984210800ae5f9fee0641ad16aeb3d3a2e98da1587ce",
+    "transport.json": "af2a06193e6d292c5e885a78306443fc1522b3cd65ce62d7894e09049605145c"
+  }
+}

@@ -18,6 +18,33 @@ class TransportClosedError(RuntimeError):
 
 
 class SimulationPipelineTests(unittest.TestCase):
+    def test_file_approval_never_accepts_shell_approval_as_file_evidence(self):
+        for case, native_kind, expected, decision in (
+            ('SDK-CASE-008', 'fileChange', 'passed', 'decline'),
+            ('SDK-CASE-009', 'fileChange', 'passed', 'accept'),
+            ('SDK-CASE-009', 'commandExecution', 'untriggered', 'decline'),
+            ('SDK-CASE-010', 'commandExecution', 'passed', 'accept'),
+        ):
+            with self.subTest(case=case, native_kind=native_kind):
+                decisions, test = [], self
+                class Client:
+                    def __init__(self, approval_handler, **_): self.answer = approval_handler
+                    def __enter__(self): return self
+                    def __exit__(self, *_): pass
+                    def initialize(self): return {}
+                    def thread_start(self, params):
+                        test.assertEqual(params['sandbox'], 'read-only')
+                        test.assertNotIn('dynamicTools', params)
+                        return Value(thread=Value(id='root'), model='selected-model')
+                    def turn_start(self, *_args, **_kwargs): return Value(turn=Value(id='turn'))
+                    def next_turn_notification(self, _):
+                        decisions.append(self.answer('item/' + native_kind + '/requestApproval', {}))
+                        return Value(method='turn/completed', payload=Value(threadId='root',
+                                     turn=Value(id='turn', status=Value(value='completed'))))
+                result = self.worker(case, Client)
+                self.assertEqual(result['status'], expected)
+                self.assertEqual(decisions, [{'decision': decision}])
+
     def test_claude_holds_permission_until_an_event_after_control_ack(self):
         import asyncio
         from claude_driver.adapter import claude
@@ -248,7 +275,8 @@ class SimulationPipelineTests(unittest.TestCase):
                     def next_turn_notification(self, _):
                         self.event += 1
                         if self.event == 1:
-                            self.answer('item/tool/call', {'threadId': 'child', 'turnId': 'child-turn', 'tool': 'fixture_read'})
+                            self.answer('item/tool/call', {'threadId': 'child', 'turnId': 'child-turn', 'tool': 'fixture_read',
+                                                         'arguments': {'path': 'child-fixture.txt'}})
                             return Value(method='item/completed', payload=Value(threadId='root',
                                          item={'type': 'collabAgentToolCall', 'receiverThreadIds': ['child']}))
                         return Value(method='turn/completed', payload=Value(threadId='root',

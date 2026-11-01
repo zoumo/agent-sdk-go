@@ -95,6 +95,15 @@
             "properties": {
               "requirePostResultEvent": {
                 "type": "boolean"
+              },
+              "nativeFileTool": {
+                "const": "apply_patch"
+              },
+              "childTools": {
+                "const": "inherited-dynamic-v2"
+              },
+              "backgroundReadBarrier": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false

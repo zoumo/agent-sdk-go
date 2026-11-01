@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "recordingFormat": {
+    "name": "agent-mock-jsonl",
+    "version": 1,
+    "transport": "stdio-jsonl"
+  },
+  "proxyVersion": "0.1.0-dev",
+  "captureStatus": "complete",
+  "native": {
+    "executable": "/Users/jim/.bun/install/global/node_modules/@openai/codex/bin/codex.js",
+    "sha256": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "args": [
+      "app-server",
+      "--stdio",
+      "-c",
+      "features.default_mode_request_user_input=true",
+      "-c",
+      "agents.enabled=true",
+      "-c",
+      "features.multi_agent=true",
+      "-c",
+      "features.multi_agent_v2.enabled=true",
+      "-c",
+      "features.multi_agent_v2.non_code_mode_only=false",
+      "-c",
+      "features.multi_agent_v2.hide_spawn_agent_metadata=false",
+      "-c",
+      "features.multi_agent_v2_dynamic_tools=true",
+      "-c",
+      "features.shell_tool=false"
+    ],
+    "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-019-gate-approval/project"
+  },
+  "files": {
+    "raw.jsonl": "d5096f1c7aad8be83de96c83d4f5dabcdbd8c920e599c43a740edef9ebaed8a7",
+    "stderr.raw": "f8353be90faec385334724e4f1d4efa5982beb817d40f349abeefb0dcb9cd102",
+    "transport.json": "10b4de7f164845c9525aecf924b16efa7ddf41e58f6c822bc8f785c45271bbf4"
+  }
+}

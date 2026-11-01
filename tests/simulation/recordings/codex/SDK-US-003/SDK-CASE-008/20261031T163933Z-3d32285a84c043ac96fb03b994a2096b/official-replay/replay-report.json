@@ -1,0 +1,124 @@
+{
+  "provider": "codex",
+  "story": "SDK-US-003",
+  "status": "passed",
+  "inputs": 1,
+  "results": 1,
+  "events": 105,
+  "requests": 1,
+  "receipts": [
+    {
+      "initialize": {
+        "userAgent": "official-python-story-recorder/0.163.0 (Mac OS 26.2.0; arm64) unknown (official-python-story-recorder; 0.161.0)",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "thread/start": {
+        "approvalPolicy": "on-request",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-008/project",
+        "disabledPluginIds": [],
+        "instructionSources": [],
+        "model": "theta/glm-5.3",
+        "modelProvider": "custom",
+        "sandbox": {
+          "networkAccess": false,
+          "type": "readOnly"
+        },
+        "thread": {
+          "cliVersion": "0.163.0",
+          "createdAt": 1793464367,
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-codex-SDK-CASE-008/project",
+          "ephemeral": true,
+          "historyMode": "paginated",
+          "id": "01a192ce-77d4-76e3-a78f-08b0ef40e743",
+          "model": "theta/glm-5.3",
+          "modelProvider": "custom",
+          "originator": "official-python-story-recorder",
+          "preview": "",
+          "recencyAt": 1793464367,
+          "sessionId": "01a192ce-77d4-76e3-a78f-08b0ef40e743",
+          "source": "vscode",
+          "status": {
+            "type": "idle"
+          },
+          "turns": [],
+          "updatedAt": 1793464367
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a192ce-784c-79d0-8036-33688bd1e568",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a192ce-77d4-76e3-a78f-08b0ef40e743",
+        "turn": {
+          "completedAt": 1793464378,
+          "durationMs": 11716,
+          "id": "01a192ce-784c-79d0-8036-33688bd1e568",
+          "items": [
+            {
+              "id": "msg_18e3aa59925f5d6000000271",
+              "phase": "final_answer",
+              "text": "The `apply_patch` request was denied; `denied.txt` was not created, and I won't retry or use any other tool.",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793464367,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-008",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u62d2\u7edd\u6587\u4ef6\u5199\u5165\u5ba1\u6279\u5e76\u89c2\u5bdf\u540e\u7eed\u7ed3\u679c\u3002",
+    "storyId": "SDK-US-003"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "codex-cli 0.163.0",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-003",
+  "caseId": "SDK-CASE-008",
+  "flowTrace": [
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "request",
+      "name": "approval_answer"
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "openai-codex",
+    "version": "0.161.0"
+  },
+  "branchStatus": "passed"
+}

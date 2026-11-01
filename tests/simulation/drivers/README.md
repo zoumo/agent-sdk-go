@@ -80,6 +80,17 @@ revision 和使用的构建产物；source manifest 中的实际文件清单和�
 审核决定、数据索引、可迁移性与覆盖门禁由下面的 corpus 入口负责，录制和回放不会自动入库。
 Go SDK 通过不是有效样本入库条件；入库后的仿真失败保留有效样本并阻断 SDK 门禁。
 
+Codex 008/009 的新 binding 显式提供当前模型的 `apply_patch` catalog，并关闭 shell；
+不替换模型身份，也不把 command approval 当作 file approval。Codex 016/019 使用
+V2 和 `multi_agent_v2_dynamic_tools`：0.163.0 的 V1 新子线程不继承 root dynamic tools，
+见 [原生继承条件](https://github.com/openai/codex/blob/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/core/src/agent/control/spawn.rs#L819-L829)。
+019 的 Codex 子任务先调用本地 MCP completion barrier，再读取 fixture；等待不占用
+Python SDK 的同步读循环。driver 在回答读取前订阅该子 turn，防止快完成事件丢失。
+只有受控本地 `child_gate.wait_for_root` 配置为预批准，不修改其他 MCP 工具的审批策略。
+Claude 019 在异步 Read 权限回调中等待对应 root result。两者均不靠固定延时制造顺序，
+也不在提示词中提供待读取 token。离线测试只验证驱动、协议和时序，不代表新录制通过；
+原有失败材料和必需覆盖门禁保持不变。
+
 ### 审核采用和日常门禁
 
 ```sh

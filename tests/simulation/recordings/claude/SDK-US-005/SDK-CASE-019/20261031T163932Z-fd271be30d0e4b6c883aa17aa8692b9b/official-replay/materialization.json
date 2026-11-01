@@ -1,0 +1,17 @@
+{
+  "executionProject": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/replay-claude-SDK-CASE-019/project",
+  "originalHistoryProject": null,
+  "originalProject": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-claude-SDK-CASE-019/project",
+  "transformations": [
+    {
+      "derived": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-11-01-five-case-fix-replay-claude-SDK-CASE-019-project/b36db395-15b9-416a-925e-64f3b63ea559/subagents/agent-a76ecf4eec614a2ad.meta.json",
+      "derivedSHA256": "823d2612ea6952ebfb3e5a0467828322b28665618d34ea4ffaec108a721dcbfb",
+      "executionCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/replay-claude-SDK-CASE-019/project",
+      "kind": "claude-project-cwd-copy",
+      "source": "config/projects/-Users-jim--local-share-agent-sdk-testify-campaigns-2026-11-01-five-case-fix-record-claude-SDK-CASE-019-project/b36db395-15b9-416a-925e-64f3b63ea559/subagents/agent-a76ecf4eec614a2ad.meta.json",
+      "sourceCWD": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/record-claude-SDK-CASE-019/project",
+      "sourceSHA256": "823d2612ea6952ebfb3e5a0467828322b28665618d34ea4ffaec108a721dcbfb"
+    }
+  ],
+  "version": 1
+}

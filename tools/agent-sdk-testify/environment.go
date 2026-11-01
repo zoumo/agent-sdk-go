@@ -110,6 +110,11 @@ func prepareNative(ctx context.Context, o *options, plan object, root string) er
 			}
 		}
 	}
+	if provider == "codex" && params["nativeFileTool"] == "apply_patch" {
+		if err = prepareCodexFileTool(root, plan); err != nil {
+			return err
+		}
+	}
 	// No arbitrary source HOME, dependency installation or SDK version probes.
 	return writeJSON(filepath.Join(root, "native.env.private.json"), env)
 }

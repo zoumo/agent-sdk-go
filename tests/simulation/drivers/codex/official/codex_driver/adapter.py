@@ -66,6 +66,8 @@ def codex(plan, report, flow):
                 if kind != parameters['approvalKind']:
                     flow.issues.append('unexpected approval kind: ' + kind)
                 flow.request('approval_answer')
+                if parameters.get('nativeFileTool') == 'apply_patch' and kind != 'file':
+                    return {'decision': 'decline'}
                 return {'decision': 'accept' if parameters['approvalDecision'] == 'allow' else 'decline'}
             return {'decision': 'accept'}
         raise NotImplementedError('unsupported native request: ' + method)

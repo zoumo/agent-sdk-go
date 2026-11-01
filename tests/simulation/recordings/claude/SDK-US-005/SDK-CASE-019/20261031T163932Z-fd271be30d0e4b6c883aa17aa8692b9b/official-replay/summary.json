@@ -1,0 +1,20 @@
+{
+  "case": "SDK-CASE-019",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/venv/bin/agent-sdk-testify-claude",
+  "driverArgs": null,
+  "materializationSHA256": "d254a155c2f99697d7be26d643d5140dac8c075e4fde268db761f8c973b1d3cd",
+  "mode": "replay",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01-five-case-fix/replay-claude-SDK-CASE-019",
+  "provider": "claude",
+  "recordingSHA256": "a08d2a506ee276c2110a37ba8cd2fa8fc4b309e1da16823ff24e85a727aabc46",
+  "result": {
+    "status": "passed"
+  },
+  "source": {
+    "manifest.json": "1e5da8269d627e753ff3d5a234128bcd3d6dab8e8809312f2524926f74691619",
+    "plan.json": "8356878c92a2580652cac6c6bd047eda0669520a0c6af11f41a14b1b99971662",
+    "report.json": "b1c17b188302777f9a037293b3bfdb3ae831f7be8a5fe76286ec146491c1d7e3",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "summary.json": "2d4ed6195ada6a8e8e0666e7486441d7ee30d9504f892af4e4a8fd6dd87837e0"
+  }
+}

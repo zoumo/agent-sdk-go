@@ -79,7 +79,7 @@
     },
     "SDK-CASE-008": {
       "inputs": [
-        "Use the native file change tool to write denied.txt with content denied followed by a newline in the working directory. The permission request will be denied; report the denial without retrying."
+        "Use apply_patch exactly once to add denied.txt with content denied followed by a newline in the working directory. The native file change approval will be denied. Report the decision without retrying or using shell or another tool."
       ],
       "files": {
         "numbers.txt": "17\n25\n"
@@ -89,7 +89,10 @@
       },
       "answers": {},
       "configuration": {},
-      "progressBarrier": null
+      "progressBarrier": null,
+      "parameters": {
+        "nativeFileTool": "apply_patch"
+      }
     },
     "SDK-CASE-009": {
       "files": {
@@ -100,7 +103,13 @@
       },
       "answers": {},
       "configuration": {},
-      "progressBarrier": null
+      "progressBarrier": null,
+      "parameters": {
+        "nativeFileTool": "apply_patch"
+      },
+      "inputs": [
+        "Use apply_patch exactly once to add approved.txt with content SYNTHETIC_APPROVED followed by a newline in the working directory. The native file change approval will be allowed. Report the decision without retrying or using shell or another tool."
+      ]
     },
     "SDK-CASE-010": {
       "files": {
@@ -202,8 +211,11 @@
       "configuration": {},
       "progressBarrier": null,
       "inputs": [
-        "Use spawn_agent exactly once with agent_type fixture_reader and message exactly \"Use fixture_read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly SYNTHETIC_CHILD_TOKEN. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\". Wait for this one child with wait, then report its result. The root must not read files, use shell/network/other tools, or create another child."
-      ]
+        "Use collaboration.spawn_agent exactly once with agent_type fixture_reader, task_name fixture_read_task, and message exactly \"Use fixture_read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly the text returned by that read. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\". Wait for this child with collaboration.wait_agent, then report its result. The root must not read files, call the child gate, use shell/network/other tools, or create another child."
+      ],
+      "parameters": {
+        "childTools": "inherited-dynamic-v2"
+      }
     },
     "SDK-CASE-017": {
       "files": {},
@@ -228,8 +240,11 @@
       "configuration": {},
       "progressBarrier": null,
       "inputs": [
-        "Use spawn_agent exactly once with agent_type fixture_reader and message exactly \"Use fixture_read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly SYNTHETIC_CHILD_TOKEN. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\". Return ROOT_RETURNED immediately after launch, without waiting or closing the child. The root must not read files, use shell/network/other tools, or create another child."
-      ]
+        "Use collaboration.spawn_agent exactly once with agent_type fixture_reader, task_name fixture_read_task, and message exactly \"First call mcp__child_gate__wait_for_root with no arguments and wait for its success. Use fixture_read exactly once to read only child-fixture.txt in the inherited working directory. Return exactly the text returned by that read. Do not create agents or descendants. Do not use shell, network, search, writes, or any other file or tool.\". Return ROOT_RETURNED immediately after launch, without waiting, messaging or interrupting the child. The root must not read files, call the child gate, use shell/network/other tools, or create another child."
+      ],
+      "parameters": {
+        "childTools": "inherited-dynamic-v2"
+      }
     },
     "SDK-CASE-020": {
       "files": {},

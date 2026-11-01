@@ -9,6 +9,14 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// Empty project root markers confine native .agents/.codex discovery to cwd;
+// zero instruction bytes excludes AGENTS.md and configured fallback files.
+// Apply after all argument preparation, including supplied recording plans.
+func prepareCodexIsolation(root string, plan object) error {
+	plan["args"] = append(stringsOf(plan["args"]), "-c", "project_root_markers=[]", "-c", "project_doc_max_bytes=0")
+	return nil
+}
+
 func codexNativeArgs(profile string, params object) []string {
 	var args []string
 	args = []string{"app-server", "--stdio", "-c", "features.default_mode_request_user_input=true"}

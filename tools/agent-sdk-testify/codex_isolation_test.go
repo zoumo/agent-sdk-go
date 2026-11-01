@@ -42,7 +42,7 @@ pathlib.Path(request['output'], 'result.json').write_text('{"status":"passed"}')
 
 func codexIsolationCommand(t *testing.T, args []string, configured bool) (*exec.Cmd, string, string) {
 	t.Helper()
-	python, err := exec.LookPath("python3.11")
+	python, err := exec.LookPath("python3")
 	require.NoError(t, err)
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)

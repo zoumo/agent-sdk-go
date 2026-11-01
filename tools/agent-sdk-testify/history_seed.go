@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 )
 
+const isolatedRecording = "personal-skills-v1"
+
 // A completed capture supplies native saved records. Preparing a later case
 // does not execute an SDK, start a session, or require the replay stage first.
 func prepareHistorySeed(source, root string, plan object) error {
@@ -29,6 +31,11 @@ func prepareHistorySeed(source, root string, plan object) error {
 		if err = readJSON(filepath.Join(source, name), target); err != nil {
 			return err
 		}
+	}
+	// This startup assertion is emitted only by new recording setup and bound
+	// by the capture's existing plan hash. It is not a content-safety verdict.
+	if previous["recordingIsolation"] != isolatedRecording || manifest["provenance"] != "capture" || str(manifest["planSHA256"]) == "" || manifest["captureStatus"] != "complete" || manifest["status"] != "passed" {
+		return errors.New("seed must come from an isolated recording")
 	}
 	provider := str(plan["provider"])
 	if previous["provider"] != provider || previous["driverProfile"] != "history" || obj(obj(previous["scenario"])["parameters"])["historyTarget"] != "child-messages" || report["status"] != "passed" {
@@ -98,6 +105,13 @@ func prepareHistorySeed(source, root string, plan object) error {
 	project := str(previous["project"])
 	if project != filepath.Join(source, "project") {
 		return errors.New("seed project must retain its source identity")
+	}
+	if provider == "codex" {
+		// Resume keeps the source cwd as a native identity. Check its discovery
+		// roots too; prepareNative separately isolates the new workspace/args.
+		if err = prepareCodexIsolation(root, object{"project": project}); err != nil {
+			return err
+		}
 	}
 	projectFiles := object{}
 	if err = filepath.WalkDir(project, func(p string, d os.DirEntry, e error) error {

@@ -20,7 +20,7 @@ func TestHistorySeedUsesCaptureWithoutReplay(t *testing.T) {
 			require.NoError(t, os.MkdirAll(filepath.Join(source, "raw"), 0700))
 			require.NoError(t, os.WriteFile(filepath.Join(source, "raw/raw.jsonl"), []byte("{}\n"), 0600))
 			require.NoError(t, writeJSON(filepath.Join(source, "raw/transport.json"), object{"captureStatus": "complete", "cleanupComplete": true}))
-			plan := object{"provider": provider, "driverProfile": "history", "project": filepath.Join(source, "project"), "model": "synthetic-model", "scenario": object{"parameters": object{"historyTarget": "child-messages"}}}
+			plan := object{"provider": provider, "driverProfile": "history", "project": filepath.Join(source, "project"), "model": "synthetic-model", "recordingIsolation": isolatedRecording, "scenario": object{"parameters": object{"historyTarget": "child-messages"}}}
 			require.NoError(t, writeJSON(filepath.Join(source, "plan.json"), plan))
 			receipts := []object{{"list_subagents": object{"sessionId": "parent", "agentIds": []string{"child"}}}}
 			if provider == "codex" {
@@ -38,7 +38,9 @@ func TestHistorySeedUsesCaptureWithoutReplay(t *testing.T) {
 				require.NoError(t, e)
 				saved[name] = digest
 			}
-			require.NoError(t, writeJSON(filepath.Join(source, "manifest.json"), object{"savedFiles": saved}))
+			planDigest, err := fileDigest(filepath.Join(source, "plan.json"))
+			require.NoError(t, err)
+			require.NoError(t, writeJSON(filepath.Join(source, "manifest.json"), object{"savedFiles": saved, "planSHA256": planDigest, "provenance": "capture", "status": "passed", "captureStatus": "complete"}))
 			target := object{"provider": provider}
 			require.NoError(t, prepareHistorySeed(source, root, target))
 			seed := obj(target["historySeed"])

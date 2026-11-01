@@ -106,9 +106,22 @@ and proxy environment values are selected explicitly. Those copies are removed
 when execution finishes. Private output is not automatically admitted or published.
 
 Existing-child case 035 takes `--history-seed /absolute/completed-034-capture`.
-Go prepares saved native records directly from that completed capture; no SDK
-replay is required first. Original parent/child IDs and project identity remain
-unchanged, and the case observes them without new input.
+The seed must be a passed child-history capture produced by the isolated recording
+runner. Go prepares saved native records directly from that completed capture;
+no SDK replay is required first. Original parent/child IDs, saved bytes, hashes
+and project identity remain unchanged, and the case observes them without new
+input. Codex also checks the source project's discovery roots before resuming;
+the original cwd is not replaced to conceal personal skill inputs.
+
+New `record` attempts do not copy saved records from `--materials`, and ignore
+embedded `historySeed`, `historyProject` and old isolation assertions in loaded
+plans. Only explicit `--history-seed` imports saved context. Successful native
+setup stamps `recordingIsolation: personal-skills-v1` in the new plan, bound by
+the existing capture manifest's plan hash. This is a startup-policy assertion,
+not a scan or proof of native skill loading or source authenticity. A legacy
+capture without that assertion cannot seed a new recording; do not retrofit the
+assertion into old evidence. Existing offline `replay` and `simulate` continue
+to accept legacy materials without this assertion and never certify them.
 
 Codex remote-close uses a Go-owned authenticated native service and two Go-owned
 recording peers. The driver only performs and asserts the two SDK connections.

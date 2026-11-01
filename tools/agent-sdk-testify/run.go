@@ -40,6 +40,12 @@ func run(ctx context.Context, o options) (object, error) {
 	// Legacy plans remain source evidence; stale runtime entries are not driver inputs.
 	delete(plan, "_mock")
 	delete(plan, "_peers")
+	if o.Mode == "record" {
+		// Loaded plans are inputs, not proof of this attempt's startup policy.
+		delete(plan, "recordingIsolation")
+		delete(plan, "historySeed")
+		delete(plan, "historyProject")
+	}
 	provider := str(plan["provider"])
 	if provider != "codex" && provider != "claude" {
 		return nil, errors.New("materials must identify codex or claude")
@@ -63,8 +69,12 @@ func run(ctx context.Context, o options) (object, error) {
 	if err = writeFiles(workspace, obj(obj(plan["scenario"])["files"])); err != nil {
 		return nil, err
 	}
-	if err = copySaved(o.Materials, root); err != nil {
-		return nil, err
+	// Saved material reuse belongs to offline runs. New captures may only
+	// import history through the explicit, provenance-checked seed path.
+	if o.Mode != "record" {
+		if err = copySaved(o.Materials, root); err != nil {
+			return nil, err
+		}
 	}
 	if o.Mode != "record" && provider == "claude" {
 		if err = materializeClaude(o.Materials, root, workspace, plan); err != nil {
@@ -92,6 +102,7 @@ func run(ctx context.Context, o options) (object, error) {
 		if err = prepareNative(ctx, &o, plan, root); err != nil {
 			return nil, err
 		}
+		plan["recordingIsolation"] = isolatedRecording
 	}
 	plan["root"] = root
 	plan["home"] = filepath.Join(root, "home")

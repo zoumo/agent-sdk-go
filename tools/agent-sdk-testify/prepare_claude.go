@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strings"
 )
 
 func claudeNativeArgs(profile string, params object) []string {
@@ -43,13 +44,33 @@ func claudeNativeArgs(profile string, params object) []string {
 }
 
 func prepareClaudeArgs(plan object, args []string, profile string) []string {
+	// Apply at the common preparation boundary, including supplied legacy args.
+	// Only the isolated, filtered user settings remain discoverable. Native
+	// project/local sources also control ancestor CLAUDE.md and rules loading.
+	var isolated []string
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			positional = args[i:]
+			break
+		}
+		if args[i] == "--setting-sources" {
+			i++
+			continue
+		}
+		if strings.HasPrefix(args[i], "--setting-sources=") {
+			continue
+		}
+		isolated = append(isolated, args[i])
+	}
+	args = append(isolated, "--setting-sources", "user", "--disable-slash-commands", "--strict-mcp-config")
 	if str(plan["model"]) != "" {
 		args = append(args, "--model", str(plan["model"]))
 	}
 	if profile == "existing-children" {
 		args = append(args, "--resume", str(obj(plan["historySeed"])["sessionId"]), "--forward-subagent-text")
 	}
-	return args
+	return append(args, positional...)
 }
 
 func claudeAuthEnvironment(path string, env map[string]string) {
@@ -63,9 +84,16 @@ func claudeAuthEnvironment(path string, env map[string]string) {
 				delete(env, k)
 			}
 		}
-		for k, v := range selected {
-			if s, ok := v.(string); ok {
-				env[k] = s
+		// Settings env is untrusted discovery input too: HOME, config roots,
+		// plugin paths and process injection must not escape this attempt.
+		for _, key := range []string{
+			"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR",
+			"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_CUSTOM_HEADERS",
+			"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
+			"ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+		} {
+			if s, ok := selected[key].(string); ok {
+				env[key] = s
 			}
 		}
 	}

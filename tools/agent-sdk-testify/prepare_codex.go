@@ -16,7 +16,7 @@ import (
 func prepareCodexIsolation(root string, plan object) error {
 	// Skill-specific case inputs need an explicit future contract; do not let
 	// ordinary case files reopen the discovery roots filtered from user config.
-	for _, name := range []string{".agents", ".codex"} {
+	for _, name := range []string{".agents/skills", ".codex/skills", ".codex/config.toml"} {
 		if _, err := os.Lstat(filepath.Join(str(plan["project"]), name)); err == nil {
 			return fmt.Errorf("Codex recording isolation: workspace contains %s", name)
 		} else if !os.IsNotExist(err) {

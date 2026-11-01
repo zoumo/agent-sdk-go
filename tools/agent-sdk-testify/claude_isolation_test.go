@@ -14,7 +14,7 @@ import (
 )
 
 // These peers observe startup configuration, not Claude's runtime skill loader.
-func claudeIsolationRun(t *testing.T, settings object, args []string) (object, options, string) {
+func claudeIsolationRun(t *testing.T, settings object, args []string, rejected ...string) (object, options, string) {
 	t.Helper()
 	python, err := exec.LookPath("python3")
 	require.NoError(t, err)
@@ -76,6 +76,12 @@ sys.exit(child.returncode)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	_, err = run(ctx, o)
+	if len(rejected) != 0 {
+		require.ErrorContains(t, err, rejected[0])
+		assert.NoFileExists(t, filepath.Join(o.Output, "native-observation.json"))
+		assert.NoFileExists(t, filepath.Join(o.Output, "raw/raw.jsonl"))
+		return nil, o, personal
+	}
 	if err != nil {
 		log, _ := os.ReadFile(filepath.Join(o.Output, "stderr.log"))
 		t.Log(string(log))
@@ -94,6 +100,59 @@ sys.exit(child.returncode)
 	require.NoError(t, err)
 	assert.Equal(t, "SOURCE_PERSONAL\n", string(data))
 	return observed, o, personal
+}
+
+func TestClaudeRecordingRejectsExternalSettings(t *testing.T) {
+	for _, args := range [][]string{
+		{"--settings", "/personal/settings.json"},
+		{"--settings=/personal/settings.json"},
+		{"--settings", `{"env":{"HOME":"/personal"}}`},
+		{`--settings={"hooks":{}}`},
+		{"--settings", `{"enabledPlugins":{"personal":true}}`},
+		{"--settings", `{"permissions":{"additionalDirectories":["/personal"]}}`},
+		{"--settings", `{"permissions":{"ask":"Read"}}`},
+		{"--settings", `null`},
+		{"--settings"},
+	} {
+		t.Run(args[len(args)-1], func(t *testing.T) {
+			claudeIsolationRun(t, nil, args, "Claude recording isolation")
+		})
+	}
+}
+
+func TestClaudeRecordingRejectsExternalInstructionAndMCPInputs(t *testing.T) {
+	for _, flag := range []string{"--system-prompt-file", "--append-system-prompt-file", "--append-subagent-system-prompt-file", "--mcp-config", "--agents", "--plugin-dir"} {
+		for _, args := range [][]string{{flag, "/personal/input.json"}, {flag + "=/personal/input.json"}} {
+			t.Run(args[0], func(t *testing.T) {
+				claudeIsolationRun(t, nil, args, "Claude recording isolation")
+			})
+		}
+	}
+	for _, args := range [][]string{
+		{"--mcp-config", `{"mcpServers":{}}`, "/personal/mcp.json"},
+		{`--mcp-config={"mcpServers":{}}`, "/personal/mcp.json"},
+		{"--mcp-config", "null"},
+		{"--mcp-config"},
+	} {
+		t.Run(args[len(args)-1], func(t *testing.T) {
+			claudeIsolationRun(t, nil, args, "Claude recording isolation")
+		})
+	}
+}
+
+func TestClaudeRecordingPreservesInlineCaseConfiguration(t *testing.T) {
+	args := []string{"--print", `--settings={"permissions":{"ask":["Read"],"allow":["Bash"],"deny":["Write"],"defaultMode":"default"}}`,
+		`--agents={"fixture":{"description":"Synthetic","prompt":"Read numbers.txt"}}`,
+		`--mcp-config={"mcpServers":{"fixture":{"type":"sdk","name":"fixture"}}}`,
+		`{"mcpServers":{"other":{"type":"sdk","name":"other"}}}`,
+		"--system-prompt", "--settings=/personal/prompt-text.json", "--append-system-prompt", "--plugin-dir=/personal/prompt-text",
+		"--append-subagent-system-prompt", "--mcp-config=/personal/prompt-text.json", "--forward-subagent-text"}
+	observed, _, _ := claudeIsolationRun(t, nil, args)
+	got := stringsOf(observed["args"])
+	assert.Contains(t, got, `{"permissions":{"ask":["Read"],"allow":["Bash"],"deny":["Write"],"defaultMode":"default"}}`)
+	for _, arg := range args[2:] {
+		assert.Contains(t, got, arg)
+	}
 }
 
 func TestClaudeRecordingRejectsDiscoveryEnvironmentFromSelectedSettings(t *testing.T) {

@@ -129,6 +129,35 @@ func TestCodexIsolationBeforeRecording(t *testing.T) {
 	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &summary))
 }
 
+func TestCodexIsolationRejectsCredentialEnvironmentOverrides(t *testing.T) {
+	for _, field := range []string{"env_key", "env_http_headers"} {
+		for _, name := range []string{"CODEX_HOME", "HOME", "PATH", "TMPDIR", "XDG_CONFIG_HOME", "CODEX_SKILLS_DIR", "CLAUDE_CONFIG_DIR", "NODE_OPTIONS", "PYTHONPATH", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "AGENT_SDK_TESTIFY_BIN"} {
+			t.Run(field+"/"+name, func(t *testing.T) {
+				cmd, output, personal := codexIsolationCommand(t, nil, true)
+				path := filepath.Join(personal, ".codex/config.toml")
+				var config object
+				data, err := os.ReadFile(path)
+				require.NoError(t, err)
+				require.NoError(t, toml.Unmarshal(data, &config))
+				provider := obj(obj(config["model_providers"])["fixture"])
+				if field == "env_key" {
+					provider[field] = name
+				} else {
+					provider[field] = object{"X-Unsafe": name}
+				}
+				data, err = toml.Marshal(config)
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(path, data, 0600))
+				data, err = cmd.CombinedOutput()
+				require.Error(t, err, "%s", data)
+				assert.Contains(t, string(data), "Codex recording isolation: reserved credential environment")
+				assert.NoFileExists(t, filepath.Join(output, "observation.json"))
+				assert.NoFileExists(t, filepath.Join(output, "raw/raw.jsonl"))
+			})
+		}
+	}
+}
+
 func TestCodexIsolationRejectsSuppliedDiscoveryArguments(t *testing.T) {
 	for _, args := range [][]string{
 		{"app-server", "-c", `developer_instructions="PRIVATE"`},

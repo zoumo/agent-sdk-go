@@ -55,7 +55,10 @@ func prepareNative(ctx context.Context, o *options, plan object, root string) er
 		}
 	}
 	if provider == "claude" {
-		args = prepareClaudeArgs(plan, args, profile)
+		args, err = prepareClaudeArgs(plan, args, profile)
+		if err != nil {
+			return err
+		}
 	}
 	plan["args"] = args
 	plan["stdinEOFAction"] = "close"

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -43,7 +44,7 @@ func claudeNativeArgs(profile string, params object) []string {
 	return args
 }
 
-func prepareClaudeArgs(plan object, args []string, profile string) []string {
+func prepareClaudeArgs(plan object, args []string, profile string) ([]string, error) {
 	// Apply at the common preparation boundary, including supplied legacy args.
 	// Only the isolated, filtered user settings remain discoverable. Native
 	// project/local sources also control ancestor CLAUDE.md and rules loading.
@@ -61,6 +62,56 @@ func prepareClaudeArgs(plan object, args []string, profile string) []string {
 		if strings.HasPrefix(args[i], "--setting-sources=") {
 			continue
 		}
+		flag, value, inline := strings.Cut(args[i], "=")
+		switch flag {
+		case "--system-prompt", "--append-system-prompt", "--append-subagent-system-prompt":
+			// Required prompt values are text, even when they look like flags.
+			isolated = append(isolated, args[i])
+			if !inline {
+				if i+1 == len(args) {
+					return nil, fmt.Errorf("Claude recording isolation: missing %s value", flag)
+				}
+				i++
+				isolated = append(isolated, args[i])
+			}
+			continue
+		case "--system-prompt-file", "--append-system-prompt-file", "--append-subagent-system-prompt-file", "--plugin-dir":
+			return nil, fmt.Errorf("Claude recording isolation: external instruction or plugin input")
+		case "--settings", "--mcp-config", "--agents":
+			if !inline {
+				if i+1 == len(args) {
+					return nil, fmt.Errorf("Claude recording isolation: missing %s value", flag)
+				}
+				i++
+				value = args[i]
+			}
+			if flag == "--settings" && !claudeCasePermissions(value) {
+				return nil, fmt.Errorf("Claude recording isolation: settings must contain only inline case permissions")
+			}
+			if flag != "--settings" {
+				var fields object
+				if json.Unmarshal([]byte(value), &fields) != nil || fields == nil {
+					return nil, fmt.Errorf("Claude recording isolation: %s requires inline case JSON", flag)
+				}
+			}
+			if inline && flag != "--settings" {
+				isolated = append(isolated, flag+"="+value)
+			} else {
+				isolated = append(isolated, flag, value)
+			}
+			// MCP takes multiple space-separated configs, each a file or JSON.
+			if flag == "--mcp-config" {
+				for i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+					var fields object
+					if json.Unmarshal([]byte(args[i]), &fields) != nil || fields == nil {
+						return nil, fmt.Errorf("Claude recording isolation: MCP requires inline case JSON")
+					}
+					isolated = append(isolated, args[i])
+				}
+			}
+			continue
+		}
 		isolated = append(isolated, args[i])
 	}
 	args = append(isolated, "--setting-sources", "user", "--disable-slash-commands", "--strict-mcp-config")
@@ -70,7 +121,42 @@ func prepareClaudeArgs(plan object, args []string, profile string) []string {
 	if profile == "existing-children" {
 		args = append(args, "--resume", str(obj(plan["historySeed"])["sessionId"]), "--forward-subagent-text")
 	}
-	return append(args, positional...)
+	return append(args, positional...), nil
+}
+
+// Settings can load env, hooks and plugins even with discovery sources disabled.
+// Only case approval rules and the native permission mode belong at this seam.
+func claudeCasePermissions(value string) bool {
+	var settings map[string]json.RawMessage
+	if json.Unmarshal([]byte(value), &settings) != nil || settings == nil {
+		return false
+	}
+	for key, raw := range settings {
+		if key != "permissions" {
+			return false
+		}
+		var permissions map[string]json.RawMessage
+		if json.Unmarshal(raw, &permissions) != nil || permissions == nil {
+			return false
+		}
+		for field, rule := range permissions {
+			switch field {
+			case "allow", "deny", "ask":
+				var rules []string
+				if json.Unmarshal(rule, &rules) != nil || rules == nil {
+					return false
+				}
+			case "defaultMode":
+				var mode string
+				if json.Unmarshal(rule, &mode) != nil || mode == "" {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func claudeAuthEnvironment(path string, env map[string]string) {

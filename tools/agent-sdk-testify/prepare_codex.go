@@ -197,11 +197,38 @@ func codexAuthEnvironment(path string, env map[string]string) error {
 		names = append(names, name)
 	}
 	for _, name := range names {
+		if codexReservedCredentialEnvironment(name) {
+			return fmt.Errorf("Codex recording isolation: reserved credential environment")
+		}
 		if value, ok := os.LookupEnv(name); name != "" && ok {
 			env[name] = value
 		}
 	}
 	return nil
+}
+
+// Provider header/key references are not permission to override process setup.
+// Keep custom credential names, but reserve discovery and executable-loader
+// namespaces even when the referenced variable is currently unset.
+func codexReservedCredentialEnvironment(name string) bool {
+	name = strings.ToUpper(name)
+	if name == "CODEX_API_KEY" {
+		return false
+	}
+	switch name {
+	case "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA",
+		"PATH", "PATHEXT", "PWD", "OLDPWD", "TMP", "TEMP", "TMPDIR",
+		"SHELL", "COMSPEC", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
+		"ENV", "BASH_ENV", "BASHOPTS", "SHELLOPTS", "ZDOTDIR", "FPATH", "CDPATH", "IFS", "PS4", "PROMPT_COMMAND",
+		"LANG", "LANGUAGE", "LOCPATH", "GCONV_PATH", "TERMINFO", "TERMINFO_DIRS":
+		return true
+	}
+	for _, prefix := range []string{"CODEX_", "CLAUDE_", "XDG_", "AGENT_SDK_", "LD_", "DYLD_", "LC_", "NODE_", "NPM_", "PYTHON", "RUBY", "GEM_", "PERL", "GIT_"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // Only connection selection crosses into the isolated configuration. User

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "origin": "real-agent",
+  "qualification": {
+    "method": "official-sdk",
+    "qualifiedAt": "2026-11-01T06:55:58.517867+00:00"
+  },
+  "officialSDK": {
+    "package": "claude-agent-sdk",
+    "version": "0.2.174"
+  },
+  "captureFiles": {
+    "config/.claude.json": "4ced78eb4dc58cecff82250085c1212aa190c08a72ea1a9f0ef53203fb17015a",
+    "config/backups/.claude.json.backup.1793514964131": "17c7ba9499dca7fe55eff3f3d504e52c2f914052c6136d8998bef31fa352bb12",
+    "manifest.json": "7f90a4810a9238f289c32071d93603ba6db35e61259e9c2bf27d841a1a8fc69b",
+    "materials/case.json": "e299a512dede51aad4ee9ec6b7da08c82fe5eb32fbae331de31b1854191a705e",
+    "peer-main": "26e7af2abfadc72267c957b027cc32a4120d6b23eefdf6f138eb2b45179fb6d4",
+    "peer-main.json": "44c80f9a1d9bdb88710f2d3207d854ee2b73cf25b8ef43e7c76ca10d82ff8d6c",
+    "plan.json": "e299a512dede51aad4ee9ec6b7da08c82fe5eb32fbae331de31b1854191a705e",
+    "project/numbers.txt": "dcf7d0378a8e4f73292ceb621c258ebd4ae42b709fa70c57f5705a38318f0c19",
+    "raw/manifest.json": "256b5b7309ba848874e81cb96d9f22592f78c9111f57d177448fc23dc537d70f",
+    "raw/raw.jsonl": "273a2e771fc78a448abaeffef0caa47c815a734e52b49e21b496406a4bd37c2d",
+    "raw/stderr.raw": "f1141d3168a6a8bbb7cf0e097b275ccaf33b77235982ba892cade7698d206dce",
+    "raw/transport.json": "73add9fce696765346ff5400dfe1a5b599283487e0b4f7b7d98bd1e5e1a14d3c",
+    "report.json": "44d2a486c2be5f187fb44d232a0e5c52f696703ee744c77a3fe868755b641039",
+    "request.json": "e267c5989cf2b3e6263586d1f8e67a06ca0898ac2c0ea478fd93c9dcb837586b",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "dbf2ed4522f79ea158faee88212cb4b0b52a09c693f20cbba03bf5ecfe803209",
+    "tmp/.bun-502-b8dc28c582cad463.node": "4adf0cdc8b8d8c18c121586bb39e768541c8cb4b1a32de8c3decedc3455a62e5"
+  },
+  "replayFiles": {
+    "materialization.json": "4b7b0a0fab633e872907d85c72291f13cadde1de6886b89ce76a633e5ff1eb8c",
+    "replay-peer.json": "af50256c05d3f4955531f5c8ab5781db02f40ff3122c7e4806dcaade8c67a0d4",
+    "replay-report.json": "44d2a486c2be5f187fb44d232a0e5c52f696703ee744c77a3fe868755b641039",
+    "result.json": "2903bef6fdd7a08db8e23a199dcb8cf84ba12f88e68ea063cff83fafee8e3dc5",
+    "summary.json": "2b1de1084e2f125f1af449cdc5f8031fd1aa755d2484e493f950d88cad71949c"
+  },
+  "publishFiles": [
+    "manifest.json",
+    "plan.json",
+    "raw/manifest.json",
+    "raw/raw.jsonl",
+    "raw/stderr.raw",
+    "raw/transport.json",
+    "report.json",
+    "result.json",
+    "summary.json"
+  ]
+}

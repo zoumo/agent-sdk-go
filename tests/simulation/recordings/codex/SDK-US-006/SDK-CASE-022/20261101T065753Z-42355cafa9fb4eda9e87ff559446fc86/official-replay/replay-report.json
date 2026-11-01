@@ -1,0 +1,261 @@
+{
+  "provider": "codex",
+  "story": "SDK-US-006",
+  "status": "passed",
+  "inputs": 2,
+  "results": 2,
+  "events": 26,
+  "requests": 0,
+  "receipts": [
+    {
+      "initialize": {
+        "userAgent": "official-python-story-recorder/0.163.0 (Mac OS 26.2.0; arm64) unknown (official-python-story-recorder; 0.161.0)",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "thread/start": {
+        "approvalPolicy": "on-request",
+        "approvalsReviewer": "user",
+        "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01T143429-isolated-glm53/captures/codex-batch/codex-SDK-CASE-022/project",
+        "disabledPluginIds": [],
+        "instructionSources": [],
+        "model": "theta/glm-5.3",
+        "modelProvider": "theta",
+        "sandbox": {
+          "excludeSlashTmp": false,
+          "excludeTmpdirEnvVar": false,
+          "networkAccess": false,
+          "type": "workspaceWrite",
+          "writableRoots": []
+        },
+        "thread": {
+          "cliVersion": "0.163.0",
+          "createdAt": 1793515046,
+          "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01T143429-isolated-glm53/captures/codex-batch/codex-SDK-CASE-022/project",
+          "ephemeral": true,
+          "historyMode": "paginated",
+          "id": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "model": "theta/glm-5.3",
+          "modelProvider": "theta",
+          "originator": "official-python-story-recorder",
+          "preview": "",
+          "recencyAt": 1793515046,
+          "sessionId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "source": "vscode",
+          "status": {
+            "type": "idle"
+          },
+          "turns": [],
+          "updatedAt": 1793515046
+        }
+      }
+    },
+    {
+      "thread/settings/update": {
+        "requested": {
+          "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "model": "theta/glm-5.3"
+        },
+        "accepted": true,
+        "response": {}
+      }
+    },
+    {
+      "thread/settings/update": {
+        "requested": {
+          "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "effort": "low"
+        },
+        "accepted": true,
+        "response": {}
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a195d3-c5e3-7561-b856-7d198c6513e1",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+        "turn": {
+          "completedAt": 1793515047,
+          "durationMs": 1145,
+          "id": "01a195d3-c5e3-7561-b856-7d198c6513e1",
+          "items": [
+            {
+              "id": "msg_18e3d86ee359a6d8000016ca",
+              "phase": "final_answer",
+              "text": "Ready",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793515046,
+          "status": "completed"
+        }
+      }
+    },
+    {
+      "input-submitted": {
+        "turn": {
+          "id": "01a195d3-ca61-7611-8aa8-04dcefbb901d",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress"
+        }
+      }
+    },
+    {
+      "turn/completed": {
+        "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+        "turn": {
+          "completedAt": 1793515048,
+          "durationMs": 1344,
+          "id": "01a195d3-ca61-7611-8aa8-04dcefbb901d",
+          "items": [
+            {
+              "id": "msg_18e3d86f205b9258000016cb",
+              "phase": "final_answer",
+              "text": "Done",
+              "type": "agentMessage"
+            }
+          ],
+          "itemsView": "summary",
+          "startedAt": 1793515047,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "facts": [
+    "driver uses official Python SDK; raw bytes captured at native process boundary"
+  ],
+  "case": {
+    "id": "SDK-CASE-022",
+    "outOfScope": [
+      "\u5176\u4ed6 case \u7684\u4f7f\u7528\u6d41\u7a0b",
+      "\u4eba\u5de5\u6784\u9020\u7684\u534f\u8bae\u9519\u8bef\u548c\u7cbe\u786e\u7ade\u6001"
+    ],
+    "scope": "\u9996\u6b21\u8f93\u5165\u524d\u4fee\u6539\u6a21\u578b\u5e76\u6838\u5bf9\u786e\u8ba4\u3001\u751f\u6548\u987a\u5e8f\u4e0e\u53ef\u89c2\u5bdf\u914d\u7f6e\u3002",
+    "storyId": "SDK-US-006"
+  },
+  "gaps": [],
+  "captureStatus": "complete",
+  "cliVersion": "codex-cli 0.163.0",
+  "scenarioSHA256": null,
+  "storyId": "SDK-US-006",
+  "caseId": "SDK-CASE-022",
+  "flowTrace": [
+    {
+      "step": "configuration-acknowledged",
+      "timing": "before-first-input",
+      "completedInputs": 0,
+      "requested": {
+        "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+        "model": "theta/glm-5.3"
+      }
+    },
+    {
+      "step": "configuration-acknowledged",
+      "timing": "before-first-input",
+      "completedInputs": 0,
+      "requested": {
+        "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+        "effort": "low"
+      }
+    },
+    {
+      "step": "submit",
+      "input": 0
+    },
+    {
+      "step": "result",
+      "input": 0
+    },
+    {
+      "step": "submit",
+      "input": 1
+    },
+    {
+      "step": "result",
+      "input": 1
+    },
+    {
+      "step": "close-drain"
+    }
+  ],
+  "officialSDK": {
+    "package": "openai-codex",
+    "version": "0.161.0"
+  },
+  "configurationEvidence": {
+    "requests": [
+      {
+        "requested": {
+          "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "model": "theta/glm-5.3"
+        },
+        "acknowledged": true,
+        "timing": "before-first-input",
+        "completedInputs": 0
+      },
+      {
+        "requested": {
+          "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "effort": "low"
+        },
+        "acknowledged": true,
+        "timing": "before-first-input",
+        "completedInputs": 0
+      }
+    ],
+    "observed": [
+      {
+        "source": "thread/settings/updated",
+        "scope": "thread-settings",
+        "native": {
+          "threadId": "01a195d3-c5d0-74e3-a59f-d7a9f18e4786",
+          "threadSettings": {
+            "disabledPluginIds": [],
+            "cwd": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01T143429-isolated-glm53/captures/codex-batch/codex-SDK-CASE-022/project",
+            "approvalPolicy": "on-request",
+            "approvalsReviewer": "user",
+            "sandboxPolicy": {
+              "type": "workspaceWrite",
+              "writableRoots": [],
+              "networkAccess": false,
+              "excludeTmpdirEnvVar": false,
+              "excludeSlashTmp": false
+            },
+            "activePermissionProfile": null,
+            "model": "theta/glm-5.3",
+            "modelProvider": "theta",
+            "serviceTier": null,
+            "effort": "low",
+            "summary": null,
+            "collaborationMode": {
+              "mode": "default",
+              "settings": {
+                "model": "theta/glm-5.3",
+                "reasoning_effort": "low",
+                "developer_instructions": null
+              }
+            },
+            "multiAgentMode": "explicitRequestOnly",
+            "personality": null
+          }
+        }
+      }
+    ],
+    "effectiveScope": "unknown"
+  },
+  "branchStatus": "passed"
+}

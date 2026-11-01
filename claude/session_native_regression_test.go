@@ -18,6 +18,25 @@ import (
 const nativeChildSnapshot = ` {"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"},{"type":"thinking","thinking":"private","signature":"sig"}],"usage":{"output_tokens":7}},"future":null} `
 const nativeRootTool = `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`
 
+func TestSessionToolProgressRetainsNativeRetryAndChildAttribution(t *testing.T) {
+	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) {
+			s := openSessionFixture(t, func(o *SessionOptions) { o.ChildDetailPolicy = policy })
+			for _, frame := range []string{creationInit, nativeRootTool, creationTask("a", "spawn", "false")} {
+				submitFrame(t, s, frame)
+				sessionNative(t, s)
+			}
+			frame := `{"type":"tool_progress","session_id":"s","parent_tool_use_id":"spawn","tool_use_id":"native-progress","tool_name":"Agent","elapsed_time_seconds":0,"subagent_retry":{"agent_id":"a","attempt":1,"error_status":null}}`
+			submitFrame(t, s, frame)
+			r := sessionNative(t, s)
+			require.Equal(t, frame, string(r.Raw))
+			require.Equal(t, "a", r.Source.TaskID)
+			require.Empty(t, r.Source.AgentID, "retry metadata cannot establish an alias")
+			require.Empty(t, s.Unattributed().Records)
+		})
+	}
+}
+
 func TestSessionNativeUsageTerminalAndSnapshotsStaySeparate(t *testing.T) {
 	s := openSessionFixture(t)
 	frames := []string{creationInit, nativeRootTool, creationTask("a", "spawn", "false"),

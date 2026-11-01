@@ -277,9 +277,9 @@ func (s *Session) accept(e Event) error {
 			source = member
 		}
 	}
-	// Forwarded stream/message parent_tool_use_id can use an already confirmed
+	// Forwarded stream/message/progress parent_tool_use_id can use an already confirmed
 	// native task/tool alias. Matching an unknown agent_id string cannot do so.
-	if (e.Assistant != nil || e.User != nil || e.Stream != nil) && e.ParentToolUseID != nil && *e.ParentToolUseID != "" {
+	if (e.Assistant != nil || e.User != nil || e.Stream != nil || e.Type == "tool_progress") && e.ParentToolUseID != nil && *e.ParentToolUseID != "" {
 		source.ToolUseID = *e.ParentToolUseID
 		if alias, ok := s.childTools[source.ToolUseID]; ok {
 			key = alias

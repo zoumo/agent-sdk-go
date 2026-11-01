@@ -25,6 +25,9 @@ func TestMain(m *testing.M) {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		case "protocol":
+			main()
+			os.Exit(0)
 		case "driver":
 			os.Exit(testDriver(os.Args[2:]))
 		case "--version":
@@ -120,8 +123,27 @@ func testDriver(args []string) int {
 			return 2
 		}
 	}
-	if readJSON(filepath.Join(r.Materials, "case.json"), &object{}) != nil {
+	var plan object
+	if readJSON(filepath.Join(r.Materials, "case.json"), &plan) != nil {
 		return 2
+	}
+	if plan["corpusTestBusiness"] == true {
+		name := "report.json"
+		if _, err := os.Stat(filepath.Join(r.Output, "replay-peer.json")); err == nil {
+			name = "replay-report.json"
+			if plan["corpusTestReplayFail"] == true {
+				status = "failed"
+			}
+		}
+		if plan["corpusTestFail"] == true {
+			status = "failed"
+		}
+		business := object{"status": status, "branchStatus": status, "captureStatus": "complete",
+			"provider": plan["provider"], "caseId": plan["caseId"], "storyId": plan["storyId"],
+			"officialSDK": object{"package": "openai-codex", "version": "synthetic-test-only"}}
+		if writeJSON(filepath.Join(r.Output, name), business) != nil {
+			return 2
+		}
 	}
 	if os.Getenv("HOME") == "" || os.Getenv("CODEX_HOME") == "" {
 		return 2

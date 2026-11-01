@@ -68,7 +68,7 @@ Only explicit record launches the selected native CLI. All runner flags, includi
 batch selection, pass through; heterogeneous batches can use the binary directly
 with per-case drivers. The installed console command identities remain unchanged.
 
-新样本顺序固定为：构建 → 官方 SDK 真实录制 → 官方 SDK 回放 → 来源／内容审核 → 数据入库 → 当前 Go SDK 仿真。
+新样本顺序固定为：构建 → 官方 SDK 真实录制 → 官方 SDK 回放 → 资格校验及本地替换 → 当前 Go SDK 仿真。
 录制、官方回放、Go 仿真分别生成 summary.json；result.json 是 driver 的业务结果，
 summary 的 error 与每个协议回执共同决定运行是否有效，业务 passed 不能抵消传输失败。
 
@@ -77,7 +77,10 @@ manifest.json、原始 raw、原生历史、driver 诊断与结果），以及�
 目录及其 summary/result 和每个选中连接的完整消费回执。调用方记录这些目录、源码
 revision 和使用的构建产物；source manifest 中的实际文件清单和哈希是来源依据。
 保存失败目录及 native ID/cwd，不修改原始帧，不把旧 driver 快照当执行入口。
-审核决定、数据索引、可迁移性与覆盖门禁由下面的 corpus 入口负责，录制和回放不会自动入库。
+数据索引、可迁移性与覆盖门禁由下面的 corpus 入口负责。
+`bash scripts/simulation.sh record` 自动执行官方回放、资格校验与本地替换；
+Go 二进制的 `record --index` 执行同一自动流程；不带 `--index` 时只采集私有材料。
+独立 `replay` 不更新索引。`corpus review|qualify|adopt|gate` 均由 Go 二进制实现。
 Go SDK 通过不是有效样本入库条件；入库后的仿真失败保留有效样本并阻断 SDK 门禁。
 
 Codex 008/009 的新 binding 显式提供当前模型的 `apply_patch` catalog，并关闭 shell；
@@ -94,17 +97,22 @@ Claude 019 在异步 Read 权限回调中等待对应 root result。两者均不
 ### 审核采用和日常门禁
 
 ```sh
-# After a completed official capture and a fresh official replay:
-bash scripts/simulation.sh review --source /private/capture --replay /private/official-replay --review /private/review.json
-# Inspect every selected file and its origin. Edit the generated review manually:
-# origin=real-agent, reviewer, reviewedAt (ISO 8601), and the three *Reviewed flags.
-bash scripts/simulation.sh adopt --source /private/capture --replay /private/official-replay --review /private/review.json
+# Normal repository recording: capture, official replay, qualification, replacement.
+bash scripts/simulation.sh record codex --materials tests/simulation/scenarios --case SDK-CASE-001 --cli /path/to/codex --config /private/config --model provider/model
+# Reuse a completed capture and official replay without new model calls:
+bash scripts/simulation.sh qualify --source /private/capture --replay /private/official-replay --review /private/qualification.json
+bash scripts/simulation.sh adopt --source /private/capture --replay /private/official-replay --review /private/qualification.json
 # Every code change: rebuild current Go binaries and simulate the fixed corpus.
 bash scripts/simulation.sh gate
 mise exec -- bash scripts/check-offline.sh
 ```
 
-`review` 只生成未批准的清单，不自动确认来源或发布权限。审核者核对完整来源、原生执行身份、
+`qualify` 要求带录制时隔离标记的新采集，校验官方 SDK 录制和回放，生成机器资格记录，
+不填写人工审核标记，不执行内容扫描。旧版未隔离采集不能走自动采用路径。
+只选择固定允许范围内的必需回归材料；资格有效不等于内容已脱敏或可任意公开。
+`record` 为每个通过的 case 执行这条路径，替换现有本地回归数据并保存 admission-summary.json。
+批次部分失败时仍采用通过的 case，失败 case 保留旧版本，整批返回非零。不自动 commit/push。
+`review` 仍可生成未批准的人工审核清单，不自动确认来源或发布权限。审核者核对完整来源、原生执行身份、
 官方 SDK 身份、业务结果、敏感内容和每个 `publishFiles`；三个审核标记须明确为 true。
 `captureFiles` 冻结完整原件，`replayFiles` 冻结官方业务报告、summary/result 和所有连接回执。
 官方 replay 的 summary 必须绑定原始 plan/manifest/report/result/summary；旧回执缺少绑定时，
@@ -123,10 +131,14 @@ mise exec -- bash scripts/check-offline.sh
 Claude 运行时也使用新 workspace，并按新目录键派生本地历史副本，仅替换顶层 cwd。
 原始 cwd/ID、raw、plan 和历史保持原样；materialization.json 保存来源／派生路径及哈希，
 官方回放审核和 Go 门禁都校验该记录及派生文件，支持旧 cwd 已不存在的环境。
-已有入库样本不能由该命令替换；新的失败尝试不会删除旧样本。
+已有入库样本会被通过验证的新样本替换。旧样本及旧索引项先存入私有归档的
+previous-regression/ 和 previous-entry.json；新文件写入完成后原子切换索引，再移除旧回归目录。
+新的失败尝试或索引切换失败不会删除旧样本。Go 仿真不参与采用资格判定。
 `--index` 支持在独立目录验证完整固定索引，不支持缩小必需集合。
 
-`gate` 总是构建当前 Go SDK/driver，校验固定索引与采用哈希，再用统一运行器批量 simulate。
+仓库 shell 的 `gate` 总是构建当前 Go 工具和 SDK driver，校验固定索引与采用哈希，
+再用统一运行器批量 simulate。Go 二进制的 `corpus gate --sdk-driver` 使用显式指定的构建产物，
+不依赖 checkout 或编译器；`--source-root` 可选，仓库 shell 用它绑定源码文件哈希和 revision。
 它不要求安装官方 SDK、认证或真实 CLI。覆盖报告独立保存在
 `.artifacts/simulation/gates/<attempt>/coverage.json`，记录当前源码及二进制哈希。
 required/planned/unsupported 是要求，admitted/missing/untriggered 是数据状态，passed/failed 是
@@ -151,8 +163,8 @@ required/planned/unsupported 是要求，admitted/missing/untriggered 是数据�
 
 私有数据按 `<story-id>/<case-id>/` 保存；文件清单见[数据合同](../../../harness/modules/agent-sdk-testify/design.md#story-数据格式与存储)。
 
-配置和认证副本按录制流程清理。原始材料不会因录制或回放通过自动公开。
-数据来源、哈希与遗漏以该次 manifest 为准；发布任何新数据须单独审核。
+配置和认证副本按录制流程清理。私有诊断不随官方验证通过而进入回归区；不得直接发布完整采集包。
+数据来源、哈希与遗漏以该次 manifest 为准；本地替换不自动触发远程发布。
 规范见[仿真工具](../../../harness/modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)和[布局](../../../harness/architecture.md#layout-code-layout-standards)。
 
 <a id="fixtures-代码集成测试输入"></a>

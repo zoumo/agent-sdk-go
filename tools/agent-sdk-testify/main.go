@@ -65,7 +65,7 @@ func main() {
 			fmt.Println("agent-sdk-testify " + protocolcmd.Version)
 			return
 		case "--help", "-h":
-			fmt.Println("Usage: agent-sdk-testify record|replay|simulate [flags]\n       agent-sdk-testify protocol record|mock|connect [flags]\n       agent-sdk-testify version")
+			fmt.Println("Usage: agent-sdk-testify record|replay|simulate [flags]\n       agent-sdk-testify corpus review|qualify|adopt|gate [flags]\n       agent-sdk-testify protocol record|mock|connect [flags]\n       agent-sdk-testify version")
 			return
 		}
 	}
@@ -88,11 +88,18 @@ func execute(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("use record, replay or simulate with --materials and --driver; use protocol for standalone protocol operations")
 	}
+	if args[0] == "corpus" {
+		return executeCorpus(ctx, args[1:])
+	}
 	o := options{Mode: args[0]}
 	if o.Mode != "record" && o.Mode != "replay" && o.Mode != "simulate" {
 		return errors.New("expected record, replay or simulate")
 	}
 	f := flag.NewFlagSet(o.Mode, flag.ContinueOnError)
+	c := corpus{}
+	if o.Mode == "record" {
+		c.flags(f)
+	}
 	f.StringVar(&o.Materials, "materials", "", "shared case directory or existing private recording")
 	f.StringVar(&o.CasesFile, "cases-file", "", "JSON list of selected recording paths; optional per-case driver command")
 	f.IntVar(&o.Jobs, "jobs", 1, "parallel cases in a batch")
@@ -123,20 +130,29 @@ func execute(ctx context.Context, args []string) error {
 	if o.Timeout < 0 {
 		return errors.New("timeout must be nonnegative")
 	}
+	if c.Index != "" {
+		if err := c.normalize(); err != nil {
+			return err
+		}
+	} else if c.Scenarios != "" {
+		return errors.New("scenarios requires index")
+	}
 	if o.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
 		defer cancel()
 	}
 	var summary object
-	if o.CasesFile != "" {
+	if c.Index != "" {
+		summary, err = c.recordAndAdopt(ctx, o)
+	} else if o.CasesFile != "" {
 		summary, err = runBatch(ctx, o)
 	} else {
 		summary, err = run(ctx, o)
 	}
 	if summary != nil {
 		printed := summary
-		if o.CasesFile != "" {
+		if o.CasesFile != "" && c.Index == "" {
 			printed = object{"selected": summary["selected"], "passed": summary["passed"], "output": summary["output"]}
 		}
 		b, _ := json.Marshal(printed)

@@ -26,6 +26,11 @@ func TestSimulationEntryStagesOutsideCheckout(t *testing.T) {
 	script, err := filepath.Abs("../../scripts/simulation.sh")
 	require.NoError(t, err)
 	capture := filepath.Join(outside, "record")
+	index := filepath.Join(outside, "corpus", "index.json")
+	indexBytes, err := os.ReadFile("../../tests/simulation/recordings/index.json")
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(index), 0700))
+	require.NoError(t, os.WriteFile(index, indexBytes, 0600))
 	for _, mode := range []string{"record", "replay", "simulate"} {
 		materials := capture
 		args := []string{script, mode}
@@ -34,19 +39,35 @@ func TestSimulationEntryStagesOutsideCheckout(t *testing.T) {
 		}
 		if mode == "record" {
 			materials = o.Materials
-			args = append(args, "--cli", o.Driver)
+			args = append(args, "--cli", o.Driver, "--index", index, "--archive", filepath.Join(outside, "archive"))
 		}
 		output := filepath.Join(outside, mode)
 		args = append(args, "--materials", materials, "--output", output)
 		cmd := exec.Command("bash", args...)
 		cmd.Dir = outside
 		log, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%s", log)
+		if mode == "record" {
+			// A synthetic transport pass lacks official SDK business evidence.
+			// The repository entry must reject adoption, but retain the capture.
+			require.Error(t, err, "%s", log)
+			var admission struct {
+				Passed int `json:"passed"`
+			}
+			require.NoError(t, readJSON(filepath.Join(output, "admission-summary.json"), &admission))
+			require.Zero(t, admission.Passed)
+			unchanged, readErr := os.ReadFile(index)
+			require.NoError(t, readErr)
+			require.Equal(t, indexBytes, unchanged)
+		} else {
+			require.NoError(t, err, "%s", log)
+		}
 		var summary struct {
 			Mode   string `json:"mode"`
 			Result result `json:"result"`
 		}
-		require.NoError(t, json.Unmarshal(log, &summary))
+		data, err := os.ReadFile(filepath.Join(output, "summary.json"))
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(data, &summary))
 		require.Equal(t, mode, summary.Mode)
 		require.Equal(t, "passed", summary.Result.Status)
 		require.FileExists(t, filepath.Join(output, "summary.json"))

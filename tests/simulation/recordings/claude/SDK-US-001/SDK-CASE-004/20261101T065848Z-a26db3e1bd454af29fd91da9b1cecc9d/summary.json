@@ -1,0 +1,12 @@
+{
+  "case": "SDK-CASE-004",
+  "driver": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01T143429-isolated-glm53/venv/bin/agent-sdk-testify-claude",
+  "driverArgs": null,
+  "mode": "record",
+  "output": "/Users/jim/.local/share/agent-sdk-testify/campaigns/2026-11-01T143429-isolated-glm53/captures/claude-batch/claude-SDK-CASE-004",
+  "provider": "claude",
+  "recordingSHA256": "99fac49a95248ca8a33ace74cf8ad862ebb7f338658d48fbe5e2711a4d003b0a",
+  "result": {
+    "status": "passed"
+  }
+}

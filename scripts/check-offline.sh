@@ -10,7 +10,6 @@ export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
 python3 -m unittest discover -s scripts -p test_story_evidence.py -v
-python3 -m unittest discover -s scripts -p test_simulation_corpus.py -v
 PYTHONPATH=tests/simulation/drivers/common:tests/simulation/drivers/codex/official:tests/simulation/drivers/claude/official python3 -m unittest discover -s tests/simulation/drivers/tests -p 'test_*.py' -v
 python3 -m unittest discover -s tests/simulation/drivers/tests/scenarios -p 'test_*.py' -v
 python3 scripts/check-story-evidence.py
@@ -26,4 +25,4 @@ for example in codex/examples/history-query-offline codex/examples/observe-subag
 done
 # Required real-recording regression is independent of the synthetic tests above.
 # Missing trusted inputs fail closed; this command never records or uses accounts.
-python3 scripts/simulation-corpus.py gate
+AGENT_SDK_TESTIFY_BUILD_DIR="$(dirname "$AGENT_SDK_TESTIFY_BIN")" bash scripts/simulation.sh gate

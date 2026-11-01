@@ -37,7 +37,7 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	scanner.Buffer(make([]byte, 4096), 4<<20)
 	var inputs []types.UserInput
 	var initialize types.InitializeOptions
-	var terminals []json.RawMessage
+	var terminals [][]json.RawMessage
 	for scanner.Scan() {
 		var frame struct {
 			Direction string
@@ -65,16 +65,26 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 				return err
 			}
 			inputs = append(inputs, input)
+			terminals = append(terminals, nil)
 		}
 		if frame.Direction == "s2c" && wire.Type == "result" {
-			terminals = append(terminals, frame.Wire)
+			if len(terminals) == 0 {
+				return errors.New("history result precedes input")
+			}
+			last := len(terminals) - 1
+			terminals[last] = append(terminals[last], frame.Wire)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	if len(inputs) == 0 || len(inputs) != len(terminals) {
-		return errors.New("history setup inputs/results differ")
+	if len(inputs) == 0 {
+		return errors.New("history setup has no inputs")
+	}
+	for _, results := range terminals {
+		if len(results) == 0 {
+			return errors.New("history input has no recorded result")
+		}
 	}
 	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject),
 		Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &initialize, ChildDetailPolicy: policy})
@@ -87,7 +97,9 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 		if _, err := s.Submit(ctx, claude.Input{User: &inputs[i]}); err != nil {
 			return err
 		}
-		for {
+		// Background work may produce another result without a new submission.
+		// Consume every recorded result before the next captured input.
+		for terminal := 0; terminal < len(terminals[i]); {
 			got, err := s.Receive(ctx)
 			if err != nil {
 				return err
@@ -108,10 +120,10 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 			if got.Event == nil || got.Event.Result == nil {
 				continue
 			}
-			if got.Event.Result.IsError || !sameJSON(got.Raw, terminals[i]) {
+			if got.Event.Result.IsError || !sameJSON(got.Raw, terminals[i][terminal]) {
 				return errors.New("Go Session terminal differs from native recording")
 			}
-			break
+			terminal++
 		}
 	}
 	id, known := s.SessionID()

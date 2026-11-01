@@ -198,5 +198,14 @@ They check fresh environments, unchanged source data, different tool identities,
 driver errors, false pass reports, capture completion and cancellation. Private
 reviewed real recordings are indexed by the required corpus gate. See the
 [adoption and gate commands](../../tests/simulation/drivers/README.md#审核采用和日常门禁).
+The Go binary owns `corpus review|qualify|adopt|gate`. `record --index` automatically
+runs official replay, qualifies evidence, and replaces the local corpus entry;
+`record` without `--index` captures private data only. The repository shell entry
+supplies its index and scenario paths. Neither entry commits or pushes Git data.
+`corpus gate --sdk-driver /absolute/sdk-driver --index /corpus/index.json
+--scenarios /catalog` uses prebuilt binaries without a checkout, compiler, Python,
+official SDK, or account. Optional `--source-root` binds checkout source hashes;
+the shell gate rebuilds both Go binaries and supplies it. Coverage also records
+binary hashes and available Go build revision metadata.
 Missing required data fails CI; synthetic tool tests do not fill that gap.
 Actual real-Agent execution is not implied by an offline or synthetic test pass.

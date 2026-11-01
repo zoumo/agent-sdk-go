@@ -23,7 +23,8 @@ class StoryEvidenceTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'repository'
-            shutil.copytree(source, root, ignore=shutil.ignore_patterns('.git', '__pycache__', '*.egg-info', 'build', 'dist'))
+            shutil.copytree(source, root, ignore=shutil.ignore_patterns('.git', '.artifacts', '__pycache__',
+                                                                       '*.egg-info', 'build', 'dist'))
             binding = root / 'tests/simulation/scenarios/bindings/codex.json'
             original = json.loads(binding.read_text())
             for mode, reason, diagnostic in [

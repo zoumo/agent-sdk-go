@@ -31,7 +31,7 @@ func isTreeTaskEvent(e Event) bool {
 
 func isTreeRootEvent(e Event) bool {
 	switch e.Type {
-	case "assistant", "user", "result", "stream_event":
+	case "assistant", "user", "result", "stream_event", "tool_progress":
 		return true
 	case "system":
 		// Subtypes reviewed in official TS 0.3.302. Unknown future subtypes stay

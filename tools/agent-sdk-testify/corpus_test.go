@@ -35,6 +35,8 @@ func (s *corpusSuite) SetupTest() {
 			delete(e, key)
 		}
 		e["adoption"] = "missing"
+		e["verification"] = "unverified"
+		e["verificationReason"] = "synthetic suite has no admitted evidence"
 	}
 	s.write(filepath.Dir(s.c.Index), "index.json", index)
 }
@@ -136,8 +138,8 @@ func (s *corpusSuite) TestFixedCoverageCannotShrink() {
 	for _, value := range array(index["cases"]) {
 		counts[str(obj(value)["requirement"])]++
 	}
-	s.Equal(map[string]int{"required": 67, "planned": 2, "unsupported": 3}, counts)
-	for _, change := range []string{"empty", "omit", "downgrade", "duplicate"} {
+	s.Equal(map[string]int{"required": 64, "optional": 8}, counts)
+	for _, change := range []string{"empty", "omit", "downgrade", "duplicate", "verification", "reason", "unbacked-pass"} {
 		s.Run(change, func() {
 			bad := s.read(filepath.Dir(s.c.Index), "index.json")
 			cases := array(bad["cases"])
@@ -150,6 +152,12 @@ func (s *corpusSuite) TestFixedCoverageCannotShrink() {
 				obj(cases[0])["requirement"] = "planned"
 			case "duplicate":
 				cases = append(cases, cases[0])
+			case "verification":
+				obj(cases[0])["verification"] = "planned"
+			case "reason":
+				delete(obj(cases[0]), "verificationReason")
+			case "unbacked-pass":
+				obj(cases[0])["verification"] = "passed"
 			}
 			bad["cases"] = cases
 			p := filepath.Join(s.root, change+".json")
@@ -169,6 +177,102 @@ func (s *corpusSuite) TestInventoryRetainsPrivateOriginalsAndRejectsSymlinks() {
 	s.Require().NoError(os.Symlink(filepath.Join(s.source, "plan.json"), filepath.Join(s.source, "linked")))
 	_, err := corpusInventory(s.source, false)
 	s.Error(err)
+}
+
+func (s *corpusSuite) TestRequirementsAreIndependentOfRoutes() {
+	catalog, err := s.c.catalog()
+	s.Require().NoError(err)
+	for _, key := range []string{"codex/SDK-CASE-012"} {
+		s.Equal("required", obj(catalog[key])["requirement"], key)
+		s.NotEqual("live-selected-path", obj(catalog[key])["route"], key)
+	}
+	for _, id := range []string{"SDK-CASE-017", "SDK-CASE-032"} {
+		s.Equal("optional", obj(catalog["claude/"+id])["requirement"])
+		s.Equal("required", obj(catalog["codex/"+id])["requirement"])
+	}
+	for _, provider := range []string{"codex", "claude"} {
+		for _, id := range []string{"SDK-CASE-003", "SDK-CASE-025", "SDK-CASE-026"} {
+			s.Equal("optional", obj(catalog[provider+"/"+id])["requirement"])
+		}
+		s.Equal("required", obj(catalog[provider+"/SDK-CASE-027"])["requirement"], "optional thinking mode must not waive effort")
+	}
+	s.Equal("unsupported", obj(catalog["codex/SDK-CASE-025"])["route"], "effort cannot substitute for an independent thinking mode")
+}
+
+func (s *corpusSuite) TestProviderRequirementOverrideMustBeBoolean() {
+	scenarios := filepath.Join(s.root, "scenarios")
+	s.Require().NoError(copyTree(s.c.Scenarios, scenarios))
+	bindings := s.read(scenarios, "bindings/claude.json")
+	obj(obj(bindings["cases"])["SDK-CASE-017"])["required"] = "optional"
+	s.write(scenarios, "bindings/claude.json", bindings)
+	c := s.c
+	c.Scenarios = scenarios
+	_, err := c.catalog()
+	s.ErrorContains(err, "provider requirement must be boolean")
+}
+
+func (s *corpusSuite) TestOptionalAdmissionAndIntegrity() {
+	s.evidence()
+	plan := s.read(s.source, "plan.json")
+	plan["caseId"], plan["driverProfile"] = "SDK-CASE-003", "structured-input"
+	s.write(s.source, "plan.json", plan)
+	manifest := s.read(s.source, "manifest.json")
+	manifest["planSHA256"] = s.hash(s.source, "plan.json")
+	s.write(s.source, "manifest.json", manifest)
+	for _, pair := range [][2]string{{s.source, "report.json"}, {s.replay, "replay-report.json"}} {
+		report := s.read(pair[0], pair[1])
+		report["caseId"] = "SDK-CASE-003"
+		s.write(pair[0], pair[1], report)
+		summary := s.read(pair[0], "summary.json")
+		summary["case"] = "SDK-CASE-003"
+		s.write(pair[0], "summary.json", summary)
+	}
+	s.bindReplay()
+	s.adopt(s.qualify())
+	entry := s.entry()
+	s.Equal("optional", entry["requirement"])
+	s.Equal("passed", entry["verification"])
+	index := s.read(filepath.Dir(s.c.Index), "index.json")
+	for _, value := range array(index["cases"]) {
+		e := obj(value)
+		if e["adoption"] == "admitted" {
+			e["verification"], e["verificationReason"] = "failed", "synthetic known business gap"
+		}
+	}
+	s.write(filepath.Dir(s.c.Index), "index.json", index)
+	s.adopt(s.qualify())
+	entry = s.entry()
+	s.Equal("failed", entry["verification"], "re-adoption must not clear a diagnosis for identical frames")
+	s.Equal("synthetic known business gap", entry["verificationReason"])
+	target, err := s.c.verifyAdopted(entry)
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(filepath.Join(target, "raw/raw.jsonl"), []byte("tampered\n"), 0600))
+	_, err = s.c.verifyAdopted(entry)
+	s.Error(err, "optional does not waive source integrity")
+}
+
+func TestCorpusGateRequirementPolicy(t *testing.T) {
+	passed := func() object {
+		return object{"provider": "codex", "caseId": "SDK-CASE-001", "requirement": "required", "adoption": "admitted", "verification": "passed", "simulationStatus": "passed", "status": "passed"}
+	}
+	for _, state := range []string{"failed", "unverified", "blocked", "unsupported"} {
+		t.Run(state, func(t *testing.T) {
+			optional := object{"requirement": "optional", "status": state, "verification": state, "simulationStatus": "failed"}
+			require.NoError(t, corpusGateResult([]object{passed(), optional}))
+			required := passed()
+			required["caseId"], required["verification"], required["status"] = "SDK-CASE-012", state, state
+			require.ErrorContains(t, corpusGateResult([]object{passed(), required, optional}), "codex/SDK-CASE-012")
+			// Even a passing replay cannot override failed or unknown business evidence.
+			required["status"] = "passed"
+			require.Error(t, corpusGateResult([]object{required}))
+		})
+	}
+	for _, field := range []string{"adoption", "simulationStatus"} {
+		row := passed()
+		row[field] = "missing"
+		require.Error(t, corpusGateResult([]object{row}))
+	}
+	require.ErrorContains(t, corpusGateResult(nil), "empty required corpus")
 }
 func (s *corpusSuite) TestReviewNeverApprovesCandidate() {
 	s.evidence()
@@ -569,7 +673,7 @@ func (s *corpusSuite) TestAdoptedMaterialsRunCurrentSDKAndRetainFailures() {
 	s.FileExists(filepath.Join(o.Output, "summary.json"))
 	err = s.c.gate(context.Background(), filepath.Join(s.root, "gate"), driver, 1)
 	s.Error(err)
-	s.Equal(object{"passed": float64(1), "missing": float64(66), "planned": float64(2), "unsupported": float64(3)}, obj(s.read(filepath.Join(s.root, "gate"), "coverage.json")["counts"]))
+	s.Equal(object{"passed": float64(1), "unverified": float64(71)}, obj(s.read(filepath.Join(s.root, "gate"), "coverage.json")["counts"]))
 	s.Equal(before, s.hash(filepath.Dir(s.c.Index), "index.json"))
 	s.Equal(inventory, s.inventory(target))
 }

@@ -45,7 +45,7 @@ func (c corpus) validateAdmission(source, replay string, review object) (object,
 	if story == nil {
 		story = plan["story"]
 	}
-	v.check(definition["story"] == story && definition["requirement"] == "required", "unknown, unavailable or wrongly owned case")
+	v.check(definition["story"] == story && (definition["requirement"] == "required" || definition["requirement"] == "optional"), "unknown or wrongly owned case")
 	v.check(plan["driverProfile"] == definition["driverProfile"], "capture driver profile differs from case")
 	manifest := v.read(source, "manifest.json")
 	v.check(manifest["provenance"] == "capture" && manifest["status"] == "passed" && manifest["captureStatus"] == "complete" && manifest["credentialScan"] == "pass", "real source capture, business pass and credential scan required")
@@ -422,6 +422,11 @@ func (c corpus) adoptWithIndexReplacement(source, replay, reviewPath string, rep
 	entry["adoption"] = "admitted"
 	entry["materials"] = name
 	entry["adoptionSHA256"] = hash
+	// Re-adopting identical frames cannot clear a known business evidence gap.
+	if previous == "" || previousHashes["raw/raw.jsonl"] != files["raw/raw.jsonl"] || entry["verification"] == "passed" {
+		entry["verification"] = "passed"
+		delete(entry, "verificationReason")
+	}
 	temp, err := os.CreateTemp(filepath.Dir(c.Index), ".index-*")
 	if err != nil {
 		return target, err

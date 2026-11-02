@@ -116,7 +116,11 @@ func prepareClaudeArgs(plan object, args []string, profile string) ([]string, er
 	}
 	args = append(isolated, "--setting-sources", "user", "--disable-slash-commands", "--strict-mcp-config")
 	if str(plan["model"]) != "" {
-		args = append(args, "--model", str(plan["model"]))
+		model := str(plan["initialModel"])
+		if model == "" {
+			model = str(plan["model"])
+		}
+		args = append(args, "--model", model)
 	}
 	if profile == "existing-children" {
 		args = append(args, "--resume", str(obj(plan["historySeed"])["sessionId"]), "--forward-subagent-text")

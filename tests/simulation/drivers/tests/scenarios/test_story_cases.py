@@ -12,6 +12,29 @@ from record_user_story.policy import driver_profile
 
 
 class StoryCaseTests(unittest.TestCase):
+    def test_provider_requirement_override_works_with_packaged_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / 'scenarios'
+            shutil.copytree(scenario_directory(), directory)
+            (directory / 'bindings.schema.json').unlink()
+            selected = recipe('claude', 'SDK-US-005', directory, case_id='SDK-CASE-017')
+            self.assertFalse(selected['required'])
+            binding_path = directory / 'bindings/claude.json'
+            binding = json.loads(binding_path.read_text())
+            binding['cases']['SDK-CASE-017']['required'] = 'optional'
+            binding_path.write_text(json.dumps(binding))
+            with self.assertRaises(ValueError):
+                recipe('claude', 'SDK-US-005', directory, case_id='SDK-CASE-017')
+
+    def test_provider_optional_requirements_do_not_waive_codex_or_display(self):
+        for provider in ('claude', 'codex'):
+            cases = {case['caseId']: case for case in case_recipes(provider)}
+            self.assertEqual(sum(case['required'] for case in cases.values()), 31 if provider == 'claude' else 33)
+            for case_id in ('SDK-CASE-017', 'SDK-CASE-032'):
+                self.assertEqual(cases[case_id]['required'], provider == 'codex')
+            self.assertTrue(cases['SDK-CASE-028']['required'])
+            self.assertIn('不作为门禁条件', cases['SDK-CASE-028']['scope'])
+
     def test_case_identity_survives_story_text_and_case_order_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp) / 'scenarios'
@@ -33,7 +56,7 @@ class StoryCaseTests(unittest.TestCase):
             checked = 0
             for story in story_documents():
                 cases = case_recipes(provider, stories=story['id'])
-                unavailable = [c['caseId'] for c in cases if c['mode'] != 'live-selected-path']
+                unavailable = [c['caseId'] for c in cases if c['required'] and c['mode'] != 'live-selected-path']
                 if not unavailable:
                     continue
                 results = {case['caseId']: {'status': 'passed', 'evidenceLayer': 'protocol-replay'} for case in cases}
@@ -42,14 +65,16 @@ class StoryCaseTests(unittest.TestCase):
                 for case_id in unavailable:
                     self.assertIn(case_id, summary['missingCases'])
                     checked += 1
-            self.assertGreater(checked, 0)
+            self.assertEqual(checked, 0 if provider == 'claude' else 1)
 
     def test_catalog_retains_stable_stories_and_all_small_validation_targets(self):
         stories = story_documents()
         self.assertEqual([item['id'] for item in stories], [f'SDK-US-{i:03}' for i in range(1, 9)])
         cases = [case for story in stories for case in story['cases']]
         self.assertEqual(len(cases), 36)
-        self.assertEqual(sum(case['required'] for case in cases), 36)
+        self.assertEqual(sum(case['required'] for case in cases), 33)
+        self.assertEqual([case['id'] for case in cases if not case['required']],
+                         ['SDK-CASE-003', 'SDK-CASE-025', 'SDK-CASE-026'])
         self.assertEqual(len({case['id'] for case in cases}), len(cases))
         self.assertTrue(all(len(story['cases']) > 1 for story in stories))
         for provider in ('codex', 'claude'):
@@ -64,7 +89,7 @@ class StoryCaseTests(unittest.TestCase):
         results = {'SDK-CASE-001': {'status': 'passed', 'evidenceLayer': 'protocol-replay'}}
         summary = summarize_story('claude', 'SDK-US-001', results, 'protocol-replay')
         self.assertEqual(summary['status'], 'partial')
-        self.assertEqual(summary['missingCases'], ['SDK-CASE-002', 'SDK-CASE-003', 'SDK-CASE-004', 'SDK-CASE-005'])
+        self.assertEqual(summary['missingCases'], ['SDK-CASE-002', 'SDK-CASE-004', 'SDK-CASE-005'])
         results.update({key: {'status': 'passed', 'evidenceLayer': 'go-sdk'} for key in summary['missingCases']})
         self.assertEqual(summarize_story('claude', 'SDK-US-001', results, 'protocol-replay')['status'], 'partial')
         for result in results.values():
@@ -72,6 +97,37 @@ class StoryCaseTests(unittest.TestCase):
         self.assertEqual(summarize_story('claude', 'SDK-US-001', results, 'go-sdk')['status'], 'passed')
         results['SDK-CASE-002']['status'] = 'failed'
         self.assertEqual(summarize_story('claude', 'SDK-US-001', results, 'go-sdk')['status'], 'failed')
+
+    def test_optional_thinking_mode_does_not_waive_required_effort(self):
+        for provider in ('codex', 'claude'):
+            cases = {case['caseId']: case for case in case_recipes(provider, stories='SDK-US-006')}
+            self.assertFalse(cases['SDK-CASE-025']['required'])
+            self.assertTrue(cases['SDK-CASE-027']['required'])
+            if provider == 'codex':
+                self.assertEqual(cases['SDK-CASE-025']['mode'], 'unsupported')
+            results = {key: {'status': 'passed', 'evidenceLayer': 'go-sdk'}
+                       for key, case in cases.items() if case['required']}
+            self.assertEqual(summarize_story(provider, 'SDK-US-006', results, 'go-sdk')['status'], 'passed')
+            results['SDK-CASE-025'] = {'status': 'unsupported', 'evidenceLayer': 'go-sdk'}
+            self.assertEqual(summarize_story(provider, 'SDK-US-006', results, 'go-sdk')['status'], 'passed')
+            del results['SDK-CASE-027']
+            summary = summarize_story(provider, 'SDK-US-006', results, 'go-sdk')
+            self.assertEqual(summary['status'], 'partial')
+            self.assertIn('SDK-CASE-027', summary['missingCases'])
+
+    def test_optional_failures_do_not_waive_or_block_required_cases(self):
+        for provider in ('codex', 'claude'):
+            cases = case_recipes(provider, stories='SDK-US-001')
+            results = {case['caseId']: {'status': 'passed', 'evidenceLayer': 'go-sdk'}
+                       for case in cases if case['required']}
+            self.assertEqual(summarize_story(provider, 'SDK-US-001', results, 'go-sdk')['status'], 'passed')
+            results['SDK-CASE-003'] = {'status': 'failed', 'evidenceLayer': 'go-sdk'}
+            self.assertEqual(summarize_story(provider, 'SDK-US-001', results, 'go-sdk')['status'], 'passed')
+        cases = case_recipes('codex', stories='SDK-US-003')
+        results = {case['caseId']: {'status': 'passed', 'evidenceLayer': 'go-sdk'} for case in cases}
+        summary = summarize_story('codex', 'SDK-US-003', results, 'go-sdk')
+        self.assertEqual(summary['status'], 'partial')
+        self.assertIn('SDK-CASE-012', summary['missingCases'])
 
     def test_multiple_executable_cases_in_one_story_do_not_select_a_default(self):
         with tempfile.TemporaryDirectory() as tmp:

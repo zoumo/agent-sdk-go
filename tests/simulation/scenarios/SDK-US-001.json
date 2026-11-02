@@ -87,7 +87,7 @@
         }
       },
       "inputs": {
-        "input-1": "Describe the supplied synthetic content briefly. Do not use tools."
+        "input-1": "Reply with only the dominant color name of the supplied image. Do not use tools."
       },
       "steps": [
         {
@@ -131,7 +131,7 @@
       "id": "SDK-CASE-003",
       "storyId": "SDK-US-001",
       "goal": "提交文档并读取结果",
-      "required": true,
+      "required": false,
       "implementation": "implemented",
       "name": "simulation-003",
       "execution": {
@@ -144,7 +144,7 @@
         }
       },
       "inputs": {
-        "input-1": "Describe the supplied synthetic content briefly. Do not use tools."
+        "input-1": "Reply with only the text printed in the supplied document. Do not use tools."
       },
       "steps": [
         {
@@ -201,7 +201,7 @@
         }
       },
       "inputs": {
-        "input-1": "Describe the supplied synthetic content briefly. Do not use tools."
+        "input-1": "Reply with only the dominant color name of the supplied image. Do not use tools."
       },
       "steps": [
         {

@@ -286,7 +286,7 @@
           "permission.held-event"
         ],
         "missingEvidence": "untriggered",
-        "scope": "持有审批期间观察事件与控制回执。",
+        "scope": "审批未回答期间，既接收独立原生事件，也发出控制操作并收到关联回执；随后回答审批并观察结束。",
         "outOfScope": [
           "其他 case 的使用流程",
           "人工构造的协议错误和精确竞态"

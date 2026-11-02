@@ -46,6 +46,7 @@ type result struct {
 type options struct {
 	Mode, Materials, Case, Provider, Output, Driver, Peer, CLI, Config, Model string
 	HistorySeed                                                               string
+	InitialModel                                                              string
 	CasesFile                                                                 string
 	Jobs                                                                      int
 	DriverArgs                                                                []string
@@ -116,6 +117,7 @@ func execute(ctx context.Context, args []string) error {
 	f.StringVar(&o.CLI, "cli", "", "native CLI (record only)")
 	f.StringVar(&o.Config, "config", "", "selected native configuration directory (record only)")
 	f.StringVar(&o.Model, "model", "", "native model (record only)")
+	f.StringVar(&o.InitialModel, "initial-model", "", "initial native model for a change to --model (record only)")
 	f.StringVar(&o.HistorySeed, "history-seed", "", "completed child-history capture used by an existing-child case")
 	f.DurationVar(&o.Timeout, "timeout", 0, "optional whole-task timeout; zero disables it")
 	if err := f.Parse(args[1:]); err != nil {

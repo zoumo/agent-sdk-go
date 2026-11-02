@@ -144,7 +144,7 @@
       "expect": {
         "requests": [],
         "missingEvidence": "untriggered",
-        "scope": "发现当前 Session 观察前已有的子 Agent。",
+        "scope": "发现当前观察入口建立前已经存在的子 Agent 及已证实关系；不回补历史实时事件。",
         "outOfScope": [
           "其他 case 的使用流程",
           "人工构造的协议错误和精确竞态"
@@ -209,7 +209,7 @@
       "expect": {
         "requests": [],
         "missingEvidence": "untriggered",
-        "scope": "按原生分页或切片浏览保存的记录与内容。",
+        "scope": "使用原生分页或切片连续读取至少两个窗口，核对顺序和边界；不伪造 cursor、total 或原子快照。",
         "outOfScope": [
           "其他 case 的使用流程",
           "人工构造的协议错误和精确竞态"

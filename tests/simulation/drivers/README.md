@@ -141,12 +141,39 @@ previous-regression/ 和 previous-entry.json；新文件写入完成后原子切
 不依赖 checkout 或编译器；`--source-root` 可选，仓库 shell 用它绑定源码文件哈希和 revision。
 它不要求安装官方 SDK、认证或真实 CLI。覆盖报告独立保存在
 `.artifacts/simulation/gates/<attempt>/coverage.json`，记录当前源码及二进制哈希。
-required/planned/unsupported 是要求，admitted/missing/untriggered 是数据状态，passed/failed 是
-本次验证结果。空集、缺样本、内容漂移和 Go 失败都会返回非零；通过可用子集不能通过固定门禁。
+能力要求 requirement 只有 required/optional，由共享 case 的 required 字段及 provider binding 的显式 required 覆盖决定；
+provider 路径 planned/unsupported 不改变要求。adoption 是采用状态（admitted/missing/untriggered），
+verification 是业务验证（passed/failed/unverified/blocked/unsupported）；非 passed 必须有
+verificationReason，passed 必须有已采用材料。coverage 另记本轮 simulationStatus，最终 status
+不能把已知失败或未知业务证据因回放成功提升为 passed。
+必需项须同时满足已采用、业务验证 passed、本轮 Go 仿真 passed；缺任一条件返回非零。
+可选项缺失、业务失败或仿真失败仅报告，不阻断必需验收；任何已采用材料的来源／哈希损坏仍失败。
 采用后 Go 失败仍保留样本；应检查 SDK/driver，不能改帧、放宽协议匹配或弃样。
 `check-offline.sh` 包含该门禁，CI 即使缺样本仍继续打包、race 和 vet，并保存覆盖与诊断。
-当前固定覆盖为 67 required、2 planned、3 unsupported；真实样本及采用哈希见
-[固定索引](../recordings/index.json)。缺少任何 required 样本时门禁仍失败，
+固定覆盖为 64 required、8 optional（36 case × 两个 provider）；真实样本及采用哈希见
+[固定索引](../recordings/index.json)。003、025、026 可选；027 思考强度仍为必需。
+Claude 017、032 为可选，保留 unsupported／blocked 状态；Codex 对应 case 仍必需。
+目前只有 Codex 012 的必需验证未满足：受官方 Python SDK 审批分发限制，保持 blocked。
+Claude 003 文档输入的旧结果称未收到内容，使用 DeepSeek 补录仍未识别文档，保留旧样本并标记 failed；Claude 026 只确认设置回执，
+实际预算生效范围未知，标记 unverified。原始报告和录制不改写；复现它们不等于业务目标通过。
+003 的 DeepSeek 尝试在原生进程边界包含完整 base64 PDF，解码后与生成输入一致，
+独立 PDF 解析可读出预期文字；这些证据仅排除了 driver 未发送文档或 PDF 无法解析，尚未定位原生处理或上游模型的失败原因。
+不能以本地提取文字代替原生文档输入，或把后续普通终态当作文档读取成功。
+Codex 025 的旧样本配置的是 effort，不证明独立思考模式；该模式路径与业务验证均标记
+unsupported，保留原始材料。027 的必需要求不受影响。
+两端 002、004 的旧结果未识别图片，已以 `theta/DeepSeek-V4.1-Flash-1017` 补录替换。
+媒体驱动要求回答附件本身的信息，不能以提交内容块和普通终态作为读取证明。
+两端 022～024 已补录从 `theta/glm-5.3` 到 `theta/DeepSeek-V4.1-Flash-1017` 的不同模型请求。
+022、023 分开保留回执与后续原生模型观察；Codex 仅证明 thread settings，
+Claude 保留带 theta 前缀的请求及不带前缀的原生 assistant model，不伪装成同一个字段。
+024 仅证明执行期间请求、回执和当前终态，不承诺当前执行立即切换模型。
+两端 028 验证配置原生透传、关联成功响应处理和后续执行完成，现有材料满足该范围，标记 passed；
+实际展示效果不作为门禁条件，不补录、不改写历史报告。原生错误不得当作成功回执。
+Codex 012 仍阻断必需门禁；实时结论以固定索引及本轮覆盖报告为准。
+语义、要求和业务状态同步到场景与索引；历史 plan、manifest、原生版本、模型及来源哈希不追改。
+corpus 可同时保留不同模型的录制，不因本轮补录模型变化而重录所有既有合格样本。
+各 case 的通过证据、配置生效范围与不包含的承诺以[流程语义](../../../harness/sdk/validation-cases.md#流程语义)
+为准；共享 expect.scope 仅概述范围，不代替驱动中的实际断言。
 工具的合成测试通过不代表真实 corpus 通过。
 
 未指定 --output 时，输出保存在 AGENT_SDK_TESTIFY_DATA_DIR/attempts/<mode>/attempt-*；
@@ -193,43 +220,43 @@ Go fixture 适配器读取同一份嵌入数据，协议匹配由 `tools/agent-s
 这些状态不代表录制或回放已通过。实际结果由每次私有数据集中的来源、报告与回放回执证明。
 待实现和不支持的理由保存在 provider 绑定及 catalog 输出中；它们不执行替代流程。
 
-| Case ID | Story ID | 完整流程 | Codex | Claude | 来源 |
-|---|---|---|---|---|---|
-| SDK-CASE-001 | SDK-US-001 | 连续提交文本输入并在结果后继续观察 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
-| SDK-CASE-002 | SDK-US-001 | 提交图片并读取结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
-| SDK-CASE-003 | SDK-US-001 | 提交文档并读取结果 | unsupported | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
-| SDK-CASE-004 | SDK-US-001 | 提交混合结构化内容并读取结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
-| SDK-CASE-005 | SDK-US-001 | 执行中追加输入并保留原生调度结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
-| SDK-CASE-006 | SDK-US-002 | 观察文件工具的执行与任务完成 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-002.json) |
-| SDK-CASE-007 | SDK-US-002 | 处理应用工具请求并等待任务完成 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-002.json) |
-| SDK-CASE-008 | SDK-US-003 | 拒绝文件写入审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
-| SDK-CASE-009 | SDK-US-003 | 批准文件写入审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
-| SDK-CASE-010 | SDK-US-003 | 批准命令审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
-| SDK-CASE-011 | SDK-US-003 | 拒绝命令审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
-| SDK-CASE-012 | SDK-US-003 | 持有审批期间观察事件与控制回执 | planned | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
-| SDK-CASE-013 | SDK-US-004 | 回答选择题并继续任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-004.json) |
-| SDK-CASE-014 | SDK-US-004 | 提供自由文本答案并继续任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-004.json) |
-| SDK-CASE-015 | SDK-US-004 | 回答一个请求中的多道问题 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-004.json) |
-| SDK-CASE-016 | SDK-US-005 | 观察直接子 Agent 的身份、输出与结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
-| SDK-CASE-017 | SDK-US-005 | 观察嵌套子 Agent 的实际父子关系 | live-selected-path | unsupported | [配置](../scenarios/SDK-US-005.json) |
-| SDK-CASE-018 | SDK-US-005 | 观察并行子 Agent 的独立输出 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
-| SDK-CASE-019 | SDK-US-005 | 根任务结束后继续观察后台子 Agent | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
-| SDK-CASE-020 | SDK-US-005 | 选择子详细交付策略并观察实际输出 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
-| SDK-CASE-021 | SDK-US-006 | 创建会话时选择模型并执行任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-022 | SDK-US-006 | 首次输入前修改模型并核对确认、生效顺序与可观察配置 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-023 | SDK-US-006 | 两次执行之间修改模型并继续输入 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-024 | SDK-US-006 | 执行期间请求修改模型并观察结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-025 | SDK-US-006 | 创建会话时选择思考模式 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-026 | SDK-US-006 | 修改原生思考预算并执行任务 | unsupported | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-027 | SDK-US-006 | 选择原生 effort 并执行任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-028 | SDK-US-006 | 修改思考展示配置并观察输出 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-029 | SDK-US-006 | 配置根会话并观察子 Agent 的实际继承情况 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
-| SDK-CASE-030 | SDK-US-007 | 在执行进度后中断并读取确认及终态 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-007.json) |
-| SDK-CASE-031 | SDK-US-007 | 关闭拥有的会话并确认交互与进程结束 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-007.json) |
-| SDK-CASE-032 | SDK-US-007 | 关闭远端连接并保持远端服务可用 | live-selected-path | planned | [配置](../scenarios/SDK-US-007.json) |
-| SDK-CASE-033 | SDK-US-008 | 独立发现会话、读取元数据和主会话内容 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
-| SDK-CASE-034 | SDK-US-008 | 独立发现并读取保存的子 Agent 内容 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
-| SDK-CASE-035 | SDK-US-008 | 发现当前 Session 观察前已有的子 Agent | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
-| SDK-CASE-036 | SDK-US-008 | 按原生分页或切片浏览保存的记录与内容 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
+| Case ID | Story ID | 能力要求 | 完整流程 | Codex 路径 | Claude 路径 | 来源 |
+|---|---|---|---|---|---|---|
+| SDK-CASE-001 | SDK-US-001 | required | 连续提交文本输入并在结果后继续观察 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
+| SDK-CASE-002 | SDK-US-001 | required | 提交图片并读取结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
+| SDK-CASE-003 | SDK-US-001 | optional | 提交文档并读取结果 | unsupported | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
+| SDK-CASE-004 | SDK-US-001 | required | 提交混合结构化内容并读取结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
+| SDK-CASE-005 | SDK-US-001 | required | 执行中追加输入并保留原生调度结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-001.json) |
+| SDK-CASE-006 | SDK-US-002 | required | 观察文件工具的执行与任务完成 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-002.json) |
+| SDK-CASE-007 | SDK-US-002 | required | 处理应用工具请求并等待任务完成 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-002.json) |
+| SDK-CASE-008 | SDK-US-003 | required | 拒绝文件写入审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
+| SDK-CASE-009 | SDK-US-003 | required | 批准文件写入审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
+| SDK-CASE-010 | SDK-US-003 | required | 批准命令审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
+| SDK-CASE-011 | SDK-US-003 | required | 拒绝命令审批并观察后续结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
+| SDK-CASE-012 | SDK-US-003 | required | 持有审批期间观察事件与控制回执 | planned | live-selected-path | [配置](../scenarios/SDK-US-003.json) |
+| SDK-CASE-013 | SDK-US-004 | required | 回答选择题并继续任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-004.json) |
+| SDK-CASE-014 | SDK-US-004 | required | 提供自由文本答案并继续任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-004.json) |
+| SDK-CASE-015 | SDK-US-004 | required | 回答一个请求中的多道问题 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-004.json) |
+| SDK-CASE-016 | SDK-US-005 | required | 观察直接子 Agent 的身份、输出与结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
+| SDK-CASE-017 | SDK-US-005 | required (claude optional) | 观察嵌套子 Agent 的实际父子关系 | live-selected-path | unsupported | [配置](../scenarios/SDK-US-005.json) |
+| SDK-CASE-018 | SDK-US-005 | required | 观察并行子 Agent 的独立输出 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
+| SDK-CASE-019 | SDK-US-005 | required | 根任务结束后继续观察后台子 Agent | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
+| SDK-CASE-020 | SDK-US-005 | required | 选择子详细交付策略并观察实际输出 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-005.json) |
+| SDK-CASE-021 | SDK-US-006 | required | 创建会话时选择模型并执行任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-022 | SDK-US-006 | required | 首次输入前修改模型并核对确认、生效顺序与可观察配置 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-023 | SDK-US-006 | required | 两次执行之间修改模型并继续输入 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-024 | SDK-US-006 | required | 执行期间请求修改模型并观察结果 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-025 | SDK-US-006 | optional | 创建会话时选择思考模式 | unsupported | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-026 | SDK-US-006 | optional | 修改原生思考预算并执行任务 | unsupported | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-027 | SDK-US-006 | required | 选择原生 effort 并执行任务 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-028 | SDK-US-006 | required | 验证思考展示配置透传和原生响应处理 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-029 | SDK-US-006 | required | 配置根会话并观察子 Agent 的实际继承情况 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-006.json) |
+| SDK-CASE-030 | SDK-US-007 | required | 在执行进度后中断并读取确认及终态 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-007.json) |
+| SDK-CASE-031 | SDK-US-007 | required | 关闭拥有的会话并确认交互与进程结束 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-007.json) |
+| SDK-CASE-032 | SDK-US-007 | required (claude optional) | 关闭远端连接并保持远端服务可用 | live-selected-path | planned | [配置](../scenarios/SDK-US-007.json) |
+| SDK-CASE-033 | SDK-US-008 | required | 独立发现会话、读取元数据和主会话内容 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
+| SDK-CASE-034 | SDK-US-008 | required | 独立发现并读取保存的子 Agent 内容 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
+| SDK-CASE-035 | SDK-US-008 | required | 发现当前 Session 观察前已有的子 Agent | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
+| SDK-CASE-036 | SDK-US-008 | required | 按原生分页或切片浏览保存的记录与内容 | live-selected-path | live-selected-path | [配置](../scenarios/SDK-US-008.json) |
 
 专项测试直接归属代码集成测试，不出现在本表。

@@ -14,6 +14,20 @@ SPEC.loader.exec_module(gate)
 
 
 class StoryEvidenceTests(unittest.TestCase):
+    def test_requirements_are_independent_of_provider_routes(self):
+        root = Path(__file__).resolve().parents[1]
+        cases, rows = gate.recording_mapping(root)
+        by_id = {case['id']: case for case in cases}
+        self.assertEqual(["SDK-CASE-003", "SDK-CASE-025", "SDK-CASE-026"],
+                         [case['id'] for case in cases if not case['required']])
+        self.assertTrue(by_id['SDK-CASE-012']['required'])
+        approval = next(row for row in rows if row.startswith('| SDK-CASE-012 |'))
+        self.assertIn('| required |', approval)
+        self.assertIn('| planned |', approval)
+        for case_id in ('SDK-CASE-017', 'SDK-CASE-032'):
+            row = next(row for row in rows if row.startswith('| ' + case_id + ' |'))
+            self.assertIn('| required (claude optional) |', row)
+
     def test_current_simulation_catalog_passes_without_historical_corpus(self):
         result = subprocess.run([sys.executable, str(Path(__file__).with_name('check-story-evidence.py'))], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

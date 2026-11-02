@@ -224,10 +224,17 @@ func (c corpus) catalog() (object, error) {
 				if x := str(obj(obj(obj(binding["cases"])[id])["execution"])["mode"]); x != "" {
 					mode = x
 				}
-				if mode == "live-selected-path" {
-					mode = "required"
+				required, ok := definition["required"].(bool)
+				v.check(ok, "case requirement must be explicit")
+				if override, exists := obj(obj(binding["cases"])[id])["required"]; exists {
+					required, ok = override.(bool)
+					v.check(ok, "provider requirement must be boolean")
 				}
-				out[provider+"/"+id] = object{"story": story, "requirement": mode, "driverProfile": definition["driverProfile"]}
+				requirement := "optional"
+				if required {
+					requirement = "required"
+				}
+				out[provider+"/"+id] = object{"story": story, "requirement": requirement, "route": mode, "driverProfile": definition["driverProfile"]}
 			}
 		}
 	}
@@ -256,7 +263,10 @@ func (c corpus) loadIndex() (object, error) {
 		v.check(e["storyId"] == t["story"] && e["requirement"] == t["requirement"], "corpus requirement differs from catalog")
 		state := str(e["adoption"])
 		v.check(state == "" || state == "missing" || state == "untriggered" || state == "admitted", "invalid adoption state")
-		v.check(state != "admitted" || e["requirement"] == "required", "unavailable case cannot be admitted")
+		verification := str(e["verification"])
+		v.check(corpusSet([]string{"passed", "failed", "unverified", "blocked", "unsupported"})[verification] == true, "invalid verification state")
+		v.check(verification == "passed" || strings.TrimSpace(str(e["verificationReason"])) != "", "non-passing verification needs a reason")
+		v.check(verification != "passed" || state == "admitted", "passing verification requires admitted evidence")
 	}
 	v.check(len(seen) > 0 && len(seen) == len(expected), "corpus index omits required identities")
 	return index, v.err

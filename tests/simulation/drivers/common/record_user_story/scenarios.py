@@ -244,6 +244,7 @@ def recipe(provider, story, directory=None, case_id=None):
     if core['id'] not in binding_file['cases']:
         raise ValueError('case has no provider binding')
     binding = binding_file['cases'][core['id']]
+    identity['required'] = binding.get('required', core['required'])
     execution = dict(core['execution'], **binding.get('execution', {}))
     if execution['mode'] != 'live-selected-path' and not execution['reason'].strip():
         raise ValueError('unavailable simulation case requires a reason')

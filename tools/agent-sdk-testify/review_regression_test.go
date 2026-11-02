@@ -188,3 +188,44 @@ func TestClaudeConfigCopyRetainsNativeDefaultModelOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originalBytes, unchanged)
 }
+
+func TestClaudeInitialModelIsDistinctFromChangeTarget(t *testing.T) {
+	plan := object{"model": "target", "initialModel": "initial"}
+	args, err := prepareClaudeArgs(plan, nil, "structured-input")
+	require.NoError(t, err)
+	require.Equal(t, []string{"--model", "initial"}, args[len(args)-2:])
+	require.Equal(t, "target", plan["model"])
+	delete(plan, "initialModel")
+	args, err = prepareClaudeArgs(plan, nil, "structured-input")
+	require.NoError(t, err)
+	require.Equal(t, []string{"--model", "target"}, args[len(args)-2:])
+}
+
+func TestInitialModelRecordingScope(t *testing.T) {
+	cli, err := os.Executable()
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, initial, target string
+		parameters            object
+		wantError             string
+	}{
+		{"same model", "a", "a", object{}, "different explicit target"},
+		{"missing target", "a", "", object{}, "different explicit target"},
+		{"not model change", "a", "b", object{"setting": "effort"}, "only valid for model-change"},
+		{"creation", "a", "b", object{"setting": "model", "configurationTiming": "creation"}, "only valid for model-change"},
+		{"change", "a", "b", object{"setting": "model", "configurationTiming": "between-inputs"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			plan := object{"provider": "claude", "project": root, "scenario": object{"parameters": tc.parameters}}
+			err := prepareNative(context.Background(), &options{CLI: cli, Model: tc.target, InitialModel: tc.initial}, plan, root)
+			if tc.wantError != "" {
+				require.ErrorContains(t, err, tc.wantError)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.initial, plan["initialModel"])
+			require.Equal(t, tc.target, plan["model"])
+		})
+	}
+}

@@ -52,7 +52,13 @@ def recording_mapping(root):
                 binding = bindings['cases'][case['id']]
                 routes.append(dict(case['execution'], **binding.get('execution', {}))['mode'])
             target = f"[配置](../scenarios/{story['id']}.json)"
-            rows.append('| ' + ' | '.join([case['id'], story['id'], case['goal'], *routes, target]) + ' |')
+            requirement = 'required' if case['required'] else 'optional'
+            overrides = [provider + ' ' + ('required' if bindings['cases'][case['id']]['required'] else 'optional')
+                         for provider, bindings in providers.items()
+                         if 'required' in bindings['cases'][case['id']]]
+            if overrides:
+                requirement += ' (' + ', '.join(overrides) + ')'
+            rows.append('| ' + ' | '.join([case['id'], story['id'], requirement, case['goal'], *routes, target]) + ' |')
     return cases, rows
 
 
@@ -95,11 +101,19 @@ def check(root):
     normative = (root / 'harness/sdk/validation-cases.md').read_text()
     errors += inventory_errors(normative, 'SDK-CASE', case_ids)
     owners = dict(re.findall(r'^\| (SDK-CASE-\d{3}) \| (SDK-US-\d{3}) \|', normative, re.M))
+    requirements = dict(re.findall(r'^\| (SDK-CASE-\d{3}) \| SDK-US-\d{3} \| (required|optional)(?: \([^)]*\))? \|', normative, re.M))
+    requirement_labels = dict(re.findall(r'^\| (SDK-CASE-\d{3}) \| SDK-US-\d{3} \| ([^|]+) \|', normative, re.M))
+    for row in rows:
+        cells = row.split('|')
+        if requirement_labels.get(cells[1].strip(), '').strip() != cells[3].strip():
+            errors.append(cells[1].strip() + ': normative and provider requirements differ')
     for case in cases:
         if owners.get(case['id']) != case['storyId']:
             errors.append(case['id'] + ': normative and configured ownership differ')
         if case.get('implementation') not in ('implemented', 'planned'):
             errors.append(case['id'] + ': simulation case must be implemented or planned')
+        if not isinstance(case.get('required'), bool) or requirements.get(case['id']) != ('required' if case['required'] else 'optional'):
+            errors.append(case['id'] + ': normative and configured requirement differ')
     directory = root / 'tests/simulation/scenarios'
     index = json.loads((directory / 'index.json').read_text())
     if set(index['stories']) != common or len(index['stories']) != len(common):

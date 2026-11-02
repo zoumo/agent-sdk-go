@@ -116,8 +116,10 @@ code integration tests, with semantic names rather than simulation case identiti
 Test-only peers and fault controls stay in test code, without a separate
 technical-check registry. Story/case scope follows the [case catalog](sdk/validation-cases.md).
 
-agent-sdk-testify reads explicitly supplied recordings or synthetic scenarios. Its tool
-tests do not become a published SDK simulation corpus.
+agent-sdk-testify 的通用协议入口读取显式提供的录制或合成输入；内置场景入口从随版本
+发布的合格材料中选择并准备资源。发布资格、环境和下游边界见
+[工具设计](modules/agent-sdk-testify/design.md#内置材料与下游直接使用)。
+工具专项测试不构成已发布的真实录制仿真证据。
 
 ## 编码约定
 

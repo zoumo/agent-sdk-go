@@ -260,7 +260,7 @@
       "expect": {
         "requests": [],
         "missingEvidence": "untriggered",
-        "scope": "选择子详细交付策略并观察实际输出。",
+        "scope": "创建 Session 时固定子详情交付策略；比较同一材料的 preserve/suppress，须实际过滤允许的详情且完整保留受保护事件。",
         "outOfScope": [
           "其他 case 的使用流程",
           "人工构造的协议错误和精确竞态"

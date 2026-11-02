@@ -34,6 +34,13 @@ func prepareNative(ctx context.Context, o *options, plan object, root string) er
 	if o.Model != "" {
 		plan["model"] = o.Model
 	}
+	delete(plan, "initialModel")
+	if o.InitialModel != "" {
+		if o.InitialModel == str(plan["model"]) || str(plan["model"]) == "" {
+			return errors.New("initial model requires a different explicit target model")
+		}
+		plan["initialModel"] = o.InitialModel
+	}
 	var version bytes.Buffer
 	probe := exec.Command(cli, "--version")
 	probe.Stdout = &version
@@ -46,6 +53,17 @@ func prepareNative(ctx context.Context, o *options, plan object, root string) er
 	provider := str(plan["provider"])
 	profile := str(plan["driverProfile"])
 	params := obj(obj(plan["scenario"])["parameters"])
+	if o.InitialModel != "" {
+		configuration := obj(obj(plan["scenario"])["configuration"])
+		timing := str(params["configurationTiming"])
+		modelSetting := params["setting"] == "model"
+		if timing == "" && str(configuration["modelSource"]) != "" {
+			timing, modelSetting = str(configuration["timing"]), true
+		}
+		if !modelSetting || (timing != "before-first-input" && timing != "between-inputs" && timing != "during-execution") {
+			return errors.New("initial model is only valid for model-change recordings")
+		}
+	}
 	args := stringsOf(plan["args"])
 	if len(args) == 0 {
 		if provider == "codex" {

@@ -136,7 +136,7 @@
     "SDK-CASE-012": {
       "execution": {
         "mode": "planned",
-        "reason": "暂缓录制（低优先级）：仅使用官方 Python SDK，不引入 Rust 依赖。0.161.0 与 0.163.0 在唯一读取线程同步执行审批回调；持有审批会阻塞控制回执和事件，公开 API 无延后回答机制。先回答再观察不能满足本 case；待 Python SDK 支持持有期间分发后再启用。这是录制驱动限制，不是 Codex 原生能力不支持。"
+        "reason": "必需能力的录制验证阻塞：现有官方 Python SDK 0.161.0 与 0.163.0 在唯一读取线程同步执行审批回调，持有审批会阻塞控制回执和事件，公开 API 无延后回答机制。先回答再观察不满足本 case；planned 仅表示当前驱动路径未完成，不豁免必需门禁。这是语言驱动限制，不是 Codex 原生协议不支持，也不是 Go SDK 已验证失败。"
       },
       "inputs": [],
       "files": {
@@ -306,7 +306,11 @@
       "requests": {},
       "answers": {},
       "configuration": {},
-      "progressBarrier": null
+      "progressBarrier": null,
+      "execution": {
+        "mode": "unsupported",
+        "reason": "Codex exposes reasoning effort, not an independent thinking mode; effort is required and verified by SDK-CASE-027. The old SDK-CASE-025 recording remains retained as effort evidence only."
+      }
     },
     "SDK-CASE-026": {
       "files": {

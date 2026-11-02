@@ -13,6 +13,9 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "required": {
+            "type": "boolean"
+          },
           "execution": {
             "type": "object",
             "properties": {

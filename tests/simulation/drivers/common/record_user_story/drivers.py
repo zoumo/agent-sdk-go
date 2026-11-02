@@ -139,6 +139,8 @@ def observe_wire(plan, report):
             observe_configuration(report, native.get('method'), native.get('params'))
         else:
             observe_configuration(report, native.get('type'), native)
+    from .configuration_evidence import assess
+    assess(plan, frames, report)
 
 
 def require_interrupt_wire(frames, report):

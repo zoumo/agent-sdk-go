@@ -278,23 +278,19 @@ func (c corpus) gate(ctx context.Context, output, driver string, jobs int) (err 
 		}
 	}
 	selected := []object{}
+	var integrityErr error
 	for _, item := range array(index["cases"]) {
 		e := obj(item)
-		state := str(e["requirement"])
-		if state == "required" {
-			state = str(e["adoption"])
-			if state == "" {
-				state = "missing"
-			}
-		}
-		row := object{"provider": e["provider"], "storyId": e["storyId"], "caseId": e["caseId"], "requirement": e["requirement"], "adoption": e["adoption"], "status": state}
+		row := object{"provider": e["provider"], "storyId": e["storyId"], "caseId": e["caseId"], "requirement": e["requirement"], "adoption": e["adoption"], "verification": e["verification"], "verificationReason": e["verificationReason"], "status": e["verification"], "simulationStatus": "not-run"}
 		if e["adoption"] == "admitted" {
 			material, e2 := c.verifyAdopted(e)
 			if e2 != nil {
 				row["status"] = "failed"
+				row["simulationStatus"] = "invalid-material"
 				row["error"] = e2.Error()
+				integrityErr = errors.Join(integrityErr, e2)
 			} else {
-				row["status"] = "pending"
+				row["simulationStatus"] = "pending"
 				selected = append(selected, object{"case": material, "provider": e["provider"], "caseId": e["caseId"]})
 			}
 		}
@@ -309,7 +305,7 @@ func (c corpus) gate(ctx context.Context, output, driver string, jobs int) (err 
 		_, simulateErr := runBatch(ctx, o)
 		report["simulateError"] = errorText(simulateErr)
 		for _, row := range rows {
-			if row["status"] != "pending" {
+			if row["simulationStatus"] != "pending" {
 				continue
 			}
 			var material string
@@ -322,29 +318,41 @@ func (c corpus) gate(ctx context.Context, output, driver string, jobs int) (err 
 			v := &corpusValidation{}
 			plan := v.read(material, "plan.json")
 			v.replay(material, filepath.Join(o.Output, str(row["provider"])+"-"+str(row["caseId"])), plan, "simulate")
-			row["status"] = "passed"
+			row["simulationStatus"] = "passed"
 			if v.err != nil {
-				row["status"] = "failed"
+				row["simulationStatus"] = "failed"
 				row["error"] = v.err.Error()
 			}
-		}
-		if simulateErr != nil {
-			return simulateErr
+			// Reproducing a recording cannot upgrade its business verification.
+			if row["verification"] == "passed" {
+				row["status"] = row["simulationStatus"]
+			}
 		}
 	}
+	if err = errors.Join(integrityErr, ctx.Err(), corpusGateResult(rows)); err != nil {
+		return err
+	}
+	report["status"] = "passed"
+	return nil
+}
+
+func corpusGateResult(rows []object) error {
 	required := 0
+	var failures []string
 	for _, row := range rows {
 		if row["requirement"] == "required" {
 			required++
-			if row["status"] != "passed" {
-				return errors.New("required recording regression did not pass")
+			if row["verification"] != "passed" || row["adoption"] != "admitted" || row["simulationStatus"] != "passed" || row["status"] != "passed" {
+				failures = append(failures, str(row["provider"])+"/"+str(row["caseId"])+": "+str(row["status"]))
 			}
 		}
 	}
 	if required == 0 {
 		return errors.New("empty required corpus")
 	}
-	report["status"] = "passed"
+	if len(failures) > 0 {
+		return fmt.Errorf("required recording regression did not pass: %s", strings.Join(failures, "; "))
+	}
 	return nil
 }
 

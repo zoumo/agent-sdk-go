@@ -80,7 +80,7 @@ def codex(plan, report, flow):
                   'ephemeral': profile != 'history' and not parameters.get('topology'), 'baseInstructions': SYSTEM,
                   'developerInstructions': 'Complete the supplied task in the synthetic project.'}
         if plan['model']:
-            params['model'] = plan['model']
+            params['model'] = plan.get('initialModel') or plan['model']
         if profile == 'fixture-tools':
             params['dynamicTools'] = [
                 {'type': 'function', 'name': 'fixture_read', 'description': 'Read synthetic numbers.txt once.',
@@ -100,7 +100,7 @@ def codex(plan, report, flow):
         identity = thread.thread.id
         report['receipts'].append({'thread/start': serial(thread)})
         def configure():
-            requested_settings = [{'threadId': identity, 'model': thread.model}]
+            requested_settings = [{'threadId': identity, 'model': plan['model'] or thread.model}]
             thinking = flow.definition['configuration'].get('thinking')
             if thinking:
                 requested_settings.append({'threadId': identity, **thinking})
@@ -116,7 +116,7 @@ def codex(plan, report, flow):
         def variant_configuration():
             requested = {'threadId': identity}
             setting = parameters.get('setting')
-            key, value = ('effort', 'low') if setting == 'effort' else (('summary', 'none') if setting == 'display' else ('model', thread.model))
+            key, value = ('effort', 'low') if setting == 'effort' else (('summary', 'none') if setting == 'display' else ('model', plan['model']))
             requested[key] = value
             response = client.request('thread/settings/update', requested, response_model=NativeAcknowledgement)
             configuration_acknowledged(report, flow, requested, parameters['configurationTiming'])

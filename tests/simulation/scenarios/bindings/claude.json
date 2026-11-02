@@ -170,7 +170,8 @@
       "execution": {
         "mode": "unsupported",
         "reason": "Claude 原生子 Agent 不支持创建嵌套子 Agent。"
-      }
+      },
+      "required": false
     },
     "SDK-CASE-018": {
       "files": {},
@@ -290,7 +291,8 @@
       "execution": {
         "mode": "planned",
         "reason": "当前 Claude SDK 仅支持本地 stdio；原生 remote-control 需要 claude.ai 订阅登录，现有配置未提供可录制的远端 SDK 连接。"
-      }
+      },
+      "required": false
     },
     "SDK-CASE-033": {
       "files": {},

@@ -99,9 +99,11 @@ func metadataOptions(o ListSessionsOptions) (ListSessionsOptions, error) {
 	}
 	return o, nil
 }
+
 func metadataCoverage(o ListSessionsOptions) SessionMetadataCoverage {
 	return SessionMetadataCoverage{Status: "unknown", ConfigDir: o.Scope.ConfigDir, ProjectDir: o.Scope.ProjectDir, Limits: o}
 }
+
 func metadataContext(ctx context.Context) error {
 	if ctx == nil {
 		return queryError("invalid-input", "", "nil context", ErrInvalidInput)
@@ -118,8 +120,8 @@ func GetSessionInfo(ctx context.Context, id string, options SessionInfoOptions) 
 	if e != nil {
 		return result, e
 	}
-	if e = metadataContext(ctx); e != nil {
-		return result, e
+	if ctxErr := metadataContext(ctx); ctxErr != nil {
+		return result, ctxErr
 	}
 	if !historyUUID.MatchString(id) {
 		return result, queryError("invalid-input", id, "native session UUID required", ErrInvalidInput)
@@ -157,8 +159,8 @@ func ListSessions(ctx context.Context, options ListSessionsOptions) (page Sessio
 	if e != nil {
 		return page, e
 	}
-	if e = metadataContext(ctx); e != nil {
-		return page, e
+	if ctxErr := metadataContext(ctx); ctxErr != nil {
+		return page, ctxErr
 	}
 	root, projects, key, e := openQueryScope(o.Scope)
 	if e != nil {
@@ -241,29 +243,29 @@ func ListSessions(ctx context.Context, options ListSessionsOptions) (page Sessio
 	return page, err
 }
 
-func metadataEntries(ctx context.Context, root *os.Root, path string, c *SessionMetadataCoverage, max int, visit func(os.DirEntry) error) error {
+func metadataEntries(ctx context.Context, root *os.Root, path string, c *SessionMetadataCoverage, maxEntries int, visit func(os.DirEntry) error) error {
 	f, e := root.Open(".")
 	if e != nil {
 		return queryAccess(path, e)
 	}
 	defer f.Close()
 	for {
-		if e = ctx.Err(); e != nil {
+		if e := ctx.Err(); e != nil {
 			return e
 		}
 		entries, e := f.ReadDir(1)
-		if len(entries) == 0 && e == io.EOF {
+		if len(entries) == 0 && errors.Is(e, io.EOF) {
 			return nil
 		}
-		if e != nil && e != io.EOF {
+		if e != nil && !errors.Is(e, io.EOF) {
 			return queryAccess(path, e)
 		}
 		for _, entry := range entries {
-			if c.Entries >= max {
+			if c.Entries >= maxEntries {
 				return queryError("resource-limit", path, "discovery entries", nil)
 			}
 			c.Entries++
-			if e = visit(entry); e != nil {
+			if e := visit(entry); e != nil {
 				return e
 			}
 		}
@@ -296,7 +298,7 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 		info.Tail = tail[1:]
 	}
 	var parseErr error
-	headRecords := 0
+	var headRecords int
 	if !info.Sampled {
 		headRecords, parseErr = parseSessionMetadata(ctx, info, append(bytes.Clone(head), tail...), true, true, len(head), o, c)
 	} else {
@@ -321,6 +323,7 @@ func readSessionMetadata(ctx context.Context, root, project *os.Root, rel, id st
 	}
 	return info, nil
 }
+
 func parseSessionMetadata(ctx context.Context, info *SessionInfo, data []byte, head, tail bool, headLimit int, o ListSessionsOptions, c *SessionMetadataCoverage) (headRecords int, err error) {
 	if tail && len(data) > 0 && data[len(data)-1] != '\n' {
 		return headRecords, queryError("corrupt", info.Path, "incomplete final metadata line", nil)
@@ -461,7 +464,6 @@ func extractSessionMetadata(ctx context.Context, info *SessionInfo, headRecords 
 				*target = v
 			}
 		}
-
 	}
 	if info.FirstPrompt == nil && command != "" {
 		info.FirstPrompt = &command
@@ -481,8 +483,10 @@ func extractSessionMetadata(ctx context.Context, info *SessionInfo, headRecords 
 	return nil
 }
 
-var metadataCommand = regexp.MustCompile(`<command-name>(.*?)</command-name>`)
-var metadataSkipPrompt = regexp.MustCompile(`^(?:<local-command-stdout>|<session-start-hook>|<tick>|<goal>|\[Request interrupted by user[^\]]*\]|\s*<ide_opened_file>[\s\S]*</ide_opened_file>\s*$|\s*<ide_selection>[\s\S]*</ide_selection>\s*$)`)
+var (
+	metadataCommand    = regexp.MustCompile(`<command-name>(.*?)</command-name>`)
+	metadataSkipPrompt = regexp.MustCompile(`^(?:<local-command-stdout>|<session-start-hook>|<tick>|<goal>|\[Request interrupted by user[^\]]*\]|\s*<ide_opened_file>[\s\S]*</ide_opened_file>\s*$|\s*<ide_selection>[\s\S]*</ide_selection>\s*$)`)
+)
 
 func metadataPromptTexts(fields map[string]json.RawMessage) []string {
 	for _, key := range []string{"isMeta", "isCompactSummary", "isSidechain"} {

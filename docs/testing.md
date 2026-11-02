@@ -6,15 +6,17 @@ This guide describes current commands and configured gates. Simulation catalog
 availability and synthetic checks do not prove real recordings; see
 [data provenance](../tests/simulation/drivers/README.md#fixtures-仿真录制与测试输入).
 
-Run from the repository root with the pinned compiler:
+Run from the repository root with Go 1.26 or newer:
 
 ```sh
-mise install
-mise exec -- go mod download
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2
+go mod download
+make fmt-check
+make lint
 export AGENT_SDK_TESTIFY_BIN=/absolute/prebuilt/agent-sdk-testify
-mise exec -- bash scripts/check-offline.sh
-GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-sdk-testify.sh mise exec -- go test -race -p=1 -count=1 -timeout 300s ./...
-mise exec -- go vet ./...
+bash scripts/check-offline.sh
+GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-sdk-testify.sh go test -race -p=1 -count=1 -timeout 300s ./...
+go vet ./...
 ```
 
 Set absolute `AGENT_SDK_TESTIFY_BIN` to a separately built external binary before
@@ -61,8 +63,8 @@ After pushing a commit, validate the new module from independent temporary
 consumer modules using its full SHA:
 
 ```sh
-mise exec -- bash scripts/check-consumers.sh "$(git rev-parse HEAD)"
-mise exec -- bash claude/scripts/check-managed-consumer.sh "$(git rev-parse HEAD)"
+bash scripts/check-consumers.sh "$(git rev-parse HEAD)"
+bash claude/scripts/check-managed-consumer.sh "$(git rev-parse HEAD)"
 ```
 
 Both scripts create their modules and module caches in private temporary directories, disable
@@ -133,8 +135,8 @@ Run these from the repository root; default live gates remain disabled:
 
 ```sh
 python3 codex/docs/protocol/verify_inventory.py
-mise exec -- bash -c 'cd codex && bash scripts/check_generated.sh'
-bash scripts/with-agent-sdk-testify.sh mise exec -- go test -count=1 ./tests/integration ./codex ./claude
+(cd codex && bash scripts/check_generated.sh)
+bash scripts/with-agent-sdk-testify.sh go test -count=1 ./tests/integration ./codex ./claude
 ```
 
 Codex generation uses the checked-in schema without downloading upstream sources;

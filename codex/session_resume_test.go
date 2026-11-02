@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -124,9 +125,11 @@ func TestSessionResumeOwnedProcessReaped(t *testing.T) {
 	dir := t.TempDir()
 	pid := filepath.Join(dir, "pid")
 	s, err := codex.Open(context.Background(), codex.SessionOptions{
-		Stdio: &codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"},
+		Stdio: &codex.StdioOptions{
+			Executable: exe, Args: []string{"-test.run=^TestFakeChild$"},
 			Env:        append(os.Environ(), "CODEX_SDK_HELPER=resume-normal", "CODEX_SDK_PID="+pid, "CODEX_SDK_TRACE="+filepath.Join(dir, "trace")),
-			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "resume-test", Version: "1"}}},
+			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "resume-test", Version: "1"}},
+		},
 		Resume: &types.ThreadResumeParams{ThreadID: resumedNativeID},
 	})
 	require.NoError(t, err)

@@ -6,9 +6,8 @@ simulation_build=${AGENT_SDK_TESTIFY_BUILD_DIR:-"$simulation_source/.artifacts/s
 case "${1:---help}" in
  build)
   mkdir -p "$simulation_build"
-  [[ "$(mise exec -C "$simulation_source" -- go env GOVERSION)" == go1.26.9 ]] || { echo "mise must provide Go 1.26.9" >&2; exit 2; }
-  mise exec -C "$simulation_source" -- go -C "$simulation_source" build -o "$simulation_build/sdk-driver" ./tests/simulation/drivers
-  mise exec -C "$simulation_source" -- go -C "$simulation_source" build -o "$simulation_build/sdk-simulate" ./tests/simulation/simulate
+  go -C "$simulation_source" build -o "$simulation_build/sdk-driver" ./tests/simulation/drivers
+  go -C "$simulation_source" build -o "$simulation_build/sdk-simulate" ./tests/simulation/simulate
   ;;
  simulate|gate)
   simulation_mode=$1; shift

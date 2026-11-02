@@ -25,6 +25,7 @@ func mcpRequestFixture(t *testing.T) (*Session, string, *IncomingRequest) {
 		}
 	}
 }
+
 func TestNativeSDKMCPOriginalAuthority(t *testing.T) {
 	s, path, r := mcpRequestFixture(t)
 	require.Equal(t, "mcp_message", r.Method())
@@ -63,6 +64,7 @@ func TestNativeSDKMCPOriginalAuthority(t *testing.T) {
 	}
 	require.True(t, found)
 }
+
 func TestNativeSDKMCPRevocationAndInvalidConfiguration(t *testing.T) {
 	for _, mode := range []string{"cancel", "close"} {
 		t.Run(mode, func(t *testing.T) {

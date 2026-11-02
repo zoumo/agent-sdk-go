@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
@@ -113,7 +114,7 @@ func TestSessionPermissionConcurrentAnswersAndClose(t *testing.T) {
 					start := make(chan struct{})
 					results := make(chan error, 16)
 					var workers sync.WaitGroup
-					var answerCtx context.Context = context.Background()
+					answerCtx := context.Background()
 					var held *heldPermissionAnswerContext
 					var releaseOnce sync.Once
 					release := func() {
@@ -191,12 +192,11 @@ func TestSessionPermissionConcurrentAnswersAndClose(t *testing.T) {
 						// the preceding complete response, not merely a local write result.
 						require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
 					}
-					require.Equal(t, want, len(permissionResponses(t, permissionTranscript(t, path))))
+					require.Len(t, permissionResponses(t, permissionTranscript(t, path)), want)
 					require.NoError(t, s.Close())
 					require.Error(t, p.Context().Err())
 				})
 			}
-
 		})
 	}
 }
@@ -219,8 +219,8 @@ func TestSessionPermissionHistoryLimitsAndDuplicateNeverRegrant(t *testing.T) {
 				id = "overflow"
 			}
 			if kind == "cancel-before-request" {
-				id = "cancelled"
-				submitFrame(t, s, `{"type":"control_cancel_request","request_id":"cancelled"}`)
+				id = "canceled"
+				submitFrame(t, s, `{"type":"control_cancel_request","request_id":"canceled"}`)
 			}
 			submitFrame(t, s, `{"type":"control_request","request_id":"`+id+`","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`)
 			select {
@@ -271,7 +271,7 @@ func TestSessionPermissionNotSentKeepsOriginalHandle(t *testing.T) {
 			require.Equal(t, NotSent, dispatch.State)
 			require.ErrorIs(t, err, ErrUnsupported)
 			require.NoError(t, p.Context().Err())
-			require.Error(t, p.Approve(nil, ApprovalOptions{}))
+			require.Error(t, p.Approve(nil, ApprovalOptions{})) //nolint:staticcheck // verifies nil-context rejection.
 			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
 			require.Equal(t, "init", sessionNative(t, s).Event.Subtype)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -279,7 +279,6 @@ func TestSessionPermissionNotSentKeepsOriginalHandle(t *testing.T) {
 			err = p.Approve(ctx, ApprovalOptions{})
 			require.ErrorIs(t, err, context.Canceled)
 			require.NoError(t, p.Deny(context.Background(), DenialOptions{Message: "later"}))
-
 		})
 	}
 }

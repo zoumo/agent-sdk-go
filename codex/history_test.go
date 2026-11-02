@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -55,7 +56,7 @@ func handleHistoryPeer(mode string, m fakeEnvelope, send func(json.RawMessage, s
 
 func TestHistoryNativePagesWithoutResume(t *testing.T) {
 	f := startFake(t, "history-isolation", codex.Limits{})
-	page, err := f.c.ListThreadItems(context.Background(), types.ThreadItemsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr("native-cursor")})})
+	page, err := f.c.ListThreadItems(context.Background(), types.ThreadItemsListParams{ThreadID: "second", SortDirection: types.Some(types.SortDirectionAsc), Cursor: types.Some(types.ThreadItemsListCursor{Value: new("native-cursor")})})
 	require.NoError(t, err)
 	require.Len(t, page.Data, 1)
 	require.Equal(t, int64(123), page.Data[0].StartedAtMs.ValueOr(0))

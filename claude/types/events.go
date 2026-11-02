@@ -5,6 +5,7 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 )
@@ -227,13 +228,13 @@ func ParseEvent(frame []byte) (Event, error) {
 	var event Event
 	type eventWire Event
 	if !utf8.Valid(frame) {
-		return event, fmt.Errorf("frame is not valid UTF-8")
+		return event, errors.New("frame is not valid UTF-8")
 	}
 	if err := unmarshalExact(frame, (*eventWire)(&event)); err != nil {
 		return event, err
 	}
 	if event.Type == "" {
-		return event, fmt.Errorf("frame has no nonempty string type")
+		return event, errors.New("frame has no nonempty string type")
 	}
 	event.Raw = bytes.Clone(frame)
 	var err error
@@ -257,7 +258,7 @@ func ParseEvent(frame []byte) (Event, error) {
 		err = json.Unmarshal(envelope.Message, m)
 		m.Raw = envelope.Message
 		if err == nil && len(m.Content.Raw) == 0 {
-			err = fmt.Errorf("message has no content")
+			err = errors.New("message has no content")
 		}
 		if event.Type == "assistant" {
 			event.Assistant = m
@@ -290,7 +291,7 @@ func ParseEvent(frame []byte) (Event, error) {
 		err = unmarshalExact(frame, event.Cancel)
 		event.Cancel.Raw = event.Raw
 		if err == nil && event.Cancel.RequestID == "" {
-			err = fmt.Errorf("control cancellation has no request_id")
+			err = errors.New("control cancellation has no request_id")
 		}
 	case "control_request":
 		event.Control = new(ControlRequest)
@@ -303,7 +304,7 @@ func ParseEvent(frame []byte) (Event, error) {
 			event.Control.Subtype = h.Subtype
 		}
 		if err == nil && (event.Control.RequestID == "" || event.Control.Subtype == "") {
-			err = fmt.Errorf("control request has no request_id or subtype")
+			err = errors.New("control request has no request_id or subtype")
 		}
 	}
 	return event, err

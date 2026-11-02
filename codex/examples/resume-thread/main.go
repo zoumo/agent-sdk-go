@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -19,9 +20,10 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	if len(os.Args) != 5 {
-		return fmt.Errorf("usage: resume-thread /path/to/codex native-thread-id /absolute/cwd /absolute/codex-home")
+		return errors.New("usage: resume-thread /path/to/codex native-thread-id /absolute/cwd /absolute/codex-home")
 	}
 	ctx := context.Background()
 	client, err := codex.NewStdio(ctx, codex.StdioOptions{

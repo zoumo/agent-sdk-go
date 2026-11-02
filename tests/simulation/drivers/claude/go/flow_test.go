@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
@@ -20,9 +21,9 @@ func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
 	for _, mcp := range []bool{false, true} {
 		t.Run(fmt.Sprint("startup-mcp=", mcp), func(t *testing.T) {
 			root := t.TempDir()
-			require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0700))
+			require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0o700))
 			plan, _ := json.Marshal(map[string]string{"Project": root, "Config": root, "DriverProfile": "continuation"})
-			require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), plan, 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), plan, 0o600))
 			rows := []string{`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null}}`}
 			if mcp {
 				rows = append(rows,
@@ -45,8 +46,8 @@ func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
 				}
 				fmt.Fprintf(&capture, `{"ordinal":%d,"direction":%q,"channel":"protocol","epoch":1,"elapsedMs":0,"wire":%s}`+"\n", i+1, direction, row[1:])
 			}
-			source := filepath.Join(root, "raw/raw.jsonl")
-			require.NoError(t, os.WriteFile(source, []byte(capture.String()), 0600))
+			source := filepath.Join(root, "raw", "raw.jsonl")
+			require.NoError(t, os.WriteFile(source, []byte(capture.String()), 0o600))
 			receipt := filepath.Join(root, "peer.json")
 			launcher, err := mocktest.Launcher(root, "claude", source, receipt)
 			require.NoError(t, err)
@@ -54,7 +55,7 @@ func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
 			// the frozen mock receives only its explicit recording arguments.
 			launch, err := os.ReadFile(launcher)
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(string(launch), ` "$@"`, "")), 0700))
+			require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(string(launch), ` "$@"`, "")), 0o700))
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			require.NoError(t, AcceptFlow(ctx, launcher, root, claude.ChildDetailPreserve, io.Discard))

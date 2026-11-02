@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -18,9 +19,10 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	if len(os.Args) != 2 {
-		return fmt.Errorf("usage: observe-turn /explicit/path/to/codex")
+		return errors.New("usage: observe-turn /explicit/path/to/codex")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -38,8 +40,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer session.Abort()
-	submitted, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}}})
+	defer func() { _ = session.Abort() }()
+	submitted, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: new(types.TextUserInput{Text: "Say hello briefly."})}}})
 	if err != nil {
 		return err
 	}

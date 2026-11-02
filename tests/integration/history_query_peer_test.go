@@ -22,7 +22,7 @@ func historyQueryScenarioPeer() error {
 			return err
 		}
 		methods = append(methods, m.Method)
-		result := `{}`
+		var result string
 		switch m.Method {
 		case "initialize":
 			result = `{"userAgent":"synthetic","codexHome":"/server","platformFamily":"unix","platformOs":"linux"}`

@@ -6,16 +6,15 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
 func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionHandle() {
 	t := s.T()
 
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-
 	})
 	input := json.RawMessage(`{"questions":[{"question":"Which output format should I use?","header":"Format","options":[{"label":"Summary","description":"Short","future":{"x":true}},{"label":"Detailed","description":"Long"}],"multiSelect":false,"future":[null]},{"question":"Which sections should I include?","header":"Sections","options":[{"label":"Intro"},{"label":"End"}],"multiSelect":true}],"unknown":{"nested":[false,1]}}`)
 	// An assistant tool_use can be displayed/decoded, but cannot grant authority.
@@ -28,7 +27,7 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 	}
 	{
 		got := permissionResponses(t, permissionSnapshot(t, c))
-		require.EqualValues(t, 0, len(got), "assistant event answered", got)
+		require.Empty(t, got, "assistant event answered", got)
 	}
 	emitPermissionFrame(t, c, map[string]any{"type": "control_request", "request_id": "request/original", "future": true, "request": map[string]any{
 		"subtype": "can_use_tool", "tool_name": "AskUserQuestion", "tool_use_id": "tool/question", "agent_id": "agent", "title": "Choose", "permission_suggestions": nil, "input": input, "future": map[string]any{"nested": false},
@@ -40,16 +39,16 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 	observed, err := event.Control.PermissionMetadata()
 	require.NoError(t, err)
 	require.Equal(t, metadata, observed, "metadata differs", metadata)
-	require.EqualValues(t, "agent", metadata.AgentID, "metadata differs", metadata)
-	require.EqualValues(t, "AskUserQuestion", metadata.ToolName, "metadata differs", metadata)
+	require.Equal(t, "agent", metadata.AgentID, "metadata differs", metadata)
+	require.Equal(t, "AskUserQuestion", metadata.ToolName, "metadata differs", metadata)
 	metadata.ToolUseID = "tampered"
 	metadata.Input[0] = '!'
 	observed.Raw[0] = '!'
 	fresh, err := p.Metadata()
 	require.NoError(t, err, "metadata changed authority", err)
-	require.EqualValues(t, "tool/question", fresh.ToolUseID, "metadata changed authority", err)
+	require.Equal(t, "tool/question", fresh.ToolUseID, "metadata changed authority", err)
 	require.EqualValues(t, '{', fresh.Input[0], "metadata changed authority", err)
-	require.EqualValues(t, "request/original", p.RequestID(), "metadata changed authority", err)
+	require.Equal(t, "request/original", p.RequestID(), "metadata changed authority", err)
 	var questions AskUserQuestionInput
 	{
 		err := json.Unmarshal(p.Input(), &questions)
@@ -79,9 +78,9 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		require.NoError(t, err)
 	}
 	wire := envelope.Wire
-	require.EqualValues(t, "control_response", wire.Type, "wrong response envelope", wire)
-	require.EqualValues(t, "request/original", wire.Response.RequestID, "wrong response envelope", wire)
-	require.EqualValues(t, "success", wire.Response.Subtype, "wrong response envelope", wire)
+	require.Equal(t, "control_response", wire.Type, "wrong response envelope", wire)
+	require.Equal(t, "request/original", wire.Response.RequestID, "wrong response envelope", wire)
+	require.Equal(t, "success", wire.Response.Subtype, "wrong response envelope", wire)
 	var decision types.PermissionResult
 	{
 		err := json.Unmarshal(wire.Response.Response, &decision)
@@ -92,8 +91,8 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		err := json.Unmarshal(decision.UpdatedInput, &answered)
 		require.NoError(t, err)
 	}
-	require.EqualValues(t, types.PermissionAllow, decision.Behavior, "questions or answers changed")
-	require.EqualValues(t, custom, *answered.Answers[questions.Questions[0].Question].Text, "questions or answers changed")
+	require.Equal(t, types.PermissionAllow, decision.Behavior, "questions or answers changed")
+	require.Equal(t, custom, *answered.Answers[questions.Questions[0].Question].Text, "questions or answers changed")
 	require.Equal(t, answered.Questions, questions.Questions, "questions or answers changed")
 	var got, want any
 	{
@@ -104,7 +103,7 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		err := json.Unmarshal(updated, &want)
 		require.NoError(t, err)
 	}
-	require.Equal(t, got, want, "unknown input lost", got, want)
+	require.Equal(t, want, got, "unknown input lost", got, want)
 	copyHandle := *p
 	{
 		err := copyHandle.Answer(context.Background(), PermissionAnswer{Behavior: PermissionDeny})
@@ -112,7 +111,7 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 	}
 	{
 		got := permissionResponses(t, permissionSnapshot(t, c))
-		require.EqualValues(t, 1, len(got), "response count", got)
+		require.Len(t, got, 1, "response count", got)
 	}
 }
 
@@ -120,7 +119,6 @@ func (s *controlInteractionSuite) TestQuestionPreparedAnswerCannotBypassCancella
 	t := s.T()
 
 	c := s.openFixture(t, "permission_controls", func(opts *Options) {
-
 	})
 	p := emitPermission(t, c, "cancel/question", "AskUserQuestion", json.RawMessage(`{"questions":[{"question":"Proceed?","options":[]}]}`)).Permission
 	metadata, err := p.Metadata()
@@ -144,7 +142,7 @@ func (s *controlInteractionSuite) TestQuestionPreparedAnswerCannotBypassCancella
 	}
 	{
 		got := permissionResponses(t, permissionSnapshot(t, c))
-		require.EqualValues(t, 0, len(got), "late answer written", got)
+		require.Empty(t, got, "late answer written", got)
 	}
 	deny := emitPermission(t, c, "deny/question", "AskUserQuestion", json.RawMessage(`{"questions":[]}`)).Permission
 	{

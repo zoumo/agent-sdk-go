@@ -2,6 +2,7 @@
 package claude
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -72,17 +73,17 @@ func normalizedSubagentOptions(options Options) (SubagentOptions, error) {
 		}
 	}
 	if bounds.MaxUnresolvedWait < 0 || bounds.MaxUnresolvedWait > time.Minute {
-		return SubagentOptions{}, fmt.Errorf("claude: MaxUnresolvedWait must be between 0 and 1 minute")
+		return SubagentOptions{}, errors.New("claude: MaxUnresolvedWait must be between 0 and 1 minute")
 	}
 	if bounds.MaxUnresolvedWait == 0 {
 		bounds.MaxUnresolvedWait = 5 * time.Second
 	}
 	if len(bounds.History) > bounds.MaxNodes {
-		return SubagentOptions{}, fmt.Errorf("claude: history exceeds MaxNodes")
+		return SubagentOptions{}, errors.New("claude: history exceeds MaxNodes")
 	}
 	for _, seed := range bounds.History {
 		if seed.SessionID == "" || seed.TaskID == "" {
-			return SubagentOptions{}, fmt.Errorf("claude: history requires session and task IDs")
+			return SubagentOptions{}, errors.New("claude: history requires session and task IDs")
 		}
 	}
 	return bounds, nil

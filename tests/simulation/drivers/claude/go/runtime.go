@@ -18,7 +18,7 @@ func runtimePaths(root, project, config string) (string, string, error) {
 		return "", "", err
 	}
 	var r struct{ Workspace, Config string }
-	if err = json.Unmarshal(b, &r); err != nil {
+	if err := json.Unmarshal(b, &r); err != nil {
 		return "", "", err
 	}
 	return r.Workspace, r.Config, nil

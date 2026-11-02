@@ -10,7 +10,7 @@ import (
 )
 
 func TestReplayAdapterCompletion(t *testing.T) {
-	cap := `{"ordinal":1,"direction":"client","channel":"control","data":{"type":"control_request","request_id":"old","request":{"forwardSubagentText":true}}}
+	recording := `{"ordinal":1,"direction":"client","channel":"control","data":{"type":"control_request","request_id":"old","request":{"forwardSubagentText":true}}}
 {"ordinal":2,"direction":"server","channel":"protocol","data":{"type":"notice"}}
 {"ordinal":3,"direction":"server","channel":"control","data":{"type":"control_response","response":{"request_id":"old"}}}
 `
@@ -18,17 +18,17 @@ func TestReplayAdapterCompletion(t *testing.T) {
 	var out bytes.Buffer
 	done := false
 	{
-		err := Replay(strings.NewReader(input), &out, strings.NewReader(cap), func() error { done = true; return nil })
+		err := Replay(strings.NewReader(input), &out, strings.NewReader(recording), func() error { done = true; return nil })
 		require.NoError(t, err)
 	}
 	require.True(t, done, out.String())
 	require.Contains(t, out.String(), `"request_id":"new"`, out.String())
-	require.False(t, strings.Index(out.String(), "notice") > strings.Index(out.String(), "response"), out.String())
+	require.LessOrEqual(t, strings.Index(out.String(), "notice"), strings.Index(out.String(), "response"), out.String())
 	for _, tc := range []struct{ name, input string }{
 		{"eof", ""}, {"mismatch", strings.Replace(input, "true", "false", 1)}, {"extra", input + input},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Error(t, Replay(strings.NewReader(tc.input), &bytes.Buffer{}, strings.NewReader(cap), nil), "accepted mismatch/EOF/extra")
+			require.Error(t, Replay(strings.NewReader(tc.input), &bytes.Buffer{}, strings.NewReader(recording), nil), "accepted mismatch/EOF/extra")
 		})
 	}
 }

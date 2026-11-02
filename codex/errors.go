@@ -78,6 +78,7 @@ type RPCError struct {
 func (e *RPCError) Error() string { return fmt.Sprintf("codex RPC error %d: %s", e.Code, e.Message) }
 
 // SubscriptionOverflowError describes the former bounded event delivery policy.
+
 // Deprecated: dynamic subscription queues no longer produce this error.
 type SubscriptionOverflowError struct{ Capacity int }
 

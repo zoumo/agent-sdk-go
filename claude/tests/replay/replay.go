@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
@@ -29,7 +29,7 @@ func Replay(input io.Reader, output io.Writer, capture io.Reader, complete func(
 		return err
 	}
 	if len(data) > 16<<20 {
-		return fmt.Errorf("capture byte limit exceeded")
+		return errors.New("capture byte limit exceeded")
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 4096), 2<<20)
@@ -37,7 +37,7 @@ func Replay(input io.Reader, output io.Writer, capture io.Reader, complete func(
 	for scanner.Scan() {
 		rows = append(rows, append([]byte(nil), scanner.Bytes()...))
 	}
-	if err = scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil {
 		return err
 	}
 	wrapped := append([]byte(`{"version":1,"provenance":"synthetic","frames":[`), bytes.Join(rows, []byte(","))...)

@@ -4,7 +4,7 @@ package types
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"reflect"
 	"strings"
 	"unicode/utf8"
@@ -21,11 +21,11 @@ func unmarshalExact(data []byte, dst any) error {
 		return err
 	}
 	if fields == nil {
-		return fmt.Errorf("expected JSON object")
+		return errors.New("expected JSON object")
 	}
 	value := reflect.ValueOf(dst).Elem()
 	typ := value.Type()
-	for i := 0; i < typ.NumField(); i++ {
+	for i := range typ.NumField() {
 		key := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
 		if key == "" || key == "-" {
 			continue
@@ -41,10 +41,10 @@ func unmarshalExact(data []byte, dst any) error {
 
 func validateJSONDocument(data []byte) error {
 	if !json.Valid(data) {
-		return fmt.Errorf("protocol: invalid JSON")
+		return errors.New("protocol: invalid JSON")
 	}
 	if !utf8.Valid(data) {
-		return fmt.Errorf("protocol: invalid UTF-8 in JSON")
+		return errors.New("protocol: invalid UTF-8 in JSON")
 	}
 	for i := 0; i < len(data); i++ {
 		if data[i] != '"' {
@@ -62,15 +62,15 @@ func validateJSONDocument(data []byte) error {
 			i += 4
 			if code >= 0xD800 && code <= 0xDBFF {
 				if i+6 >= len(data) || data[i+1] != '\\' || data[i+2] != 'u' {
-					return fmt.Errorf("protocol: unpaired Unicode surrogate in JSON")
+					return errors.New("protocol: unpaired Unicode surrogate in JSON")
 				}
 				low := hexQuad(data[i+3 : i+7])
 				if low < 0xDC00 || low > 0xDFFF {
-					return fmt.Errorf("protocol: unpaired Unicode surrogate in JSON")
+					return errors.New("protocol: unpaired Unicode surrogate in JSON")
 				}
 				i += 6
 			} else if code >= 0xDC00 && code <= 0xDFFF {
-				return fmt.Errorf("protocol: unpaired Unicode surrogate in JSON")
+				return errors.New("protocol: unpaired Unicode surrogate in JSON")
 			}
 		}
 	}
@@ -110,10 +110,10 @@ func validateUniqueMembers(decoder *json.Decoder) error {
 			}
 			name, ok := key.(string)
 			if !ok {
-				return fmt.Errorf("protocol: invalid object member")
+				return errors.New("protocol: invalid object member")
 			}
 			if seen[name] {
-				return fmt.Errorf("protocol: duplicate JSON object member")
+				return errors.New("protocol: duplicate JSON object member")
 			}
 			seen[name] = true
 			if err := validateUniqueMembers(decoder); err != nil {

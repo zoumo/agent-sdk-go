@@ -101,10 +101,10 @@ func TestLauncherWithoutPythonAndReceipt(t *testing.T) {
 	for _, provider := range []string{"codex", "claude"} {
 		t.Run(provider, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "space and ' quote")
-			require.NoError(t, os.Mkdir(dir, 0700))
+			require.NoError(t, os.Mkdir(dir, 0o700))
 			scenario := filepath.Join(dir, "scenario.json")
 			receipt := filepath.Join(dir, "receipt.json")
-			require.NoError(t, os.WriteFile(scenario, []byte(noticeScenario), 0600))
+			require.NoError(t, os.WriteFile(scenario, []byte(noticeScenario), 0o600))
 			launcher, err := Launcher(dir, provider, scenario, receipt)
 			require.NoError(t, err)
 			script, err := os.ReadFile(launcher)
@@ -152,15 +152,18 @@ type gateWriter struct {
 func newGateWriter() *gateWriter {
 	return &gateWriter{written: make(chan struct{}), closing: make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{})}
 }
+
 func (w *gateWriter) Write(p []byte) (int, error) {
 	w.writeOnce.Do(func() { close(w.written) })
 	<-w.closing
 	return 0, io.ErrClosedPipe
 }
+
 func (w *gateWriter) Close() error {
 	w.closeOnce.Do(func() { close(w.closing); <-w.release; close(w.closed) })
 	return nil
 }
+
 func TestCancellationJoinsStreamCleanup(t *testing.T) {
 	output := newGateWriter()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -235,7 +238,7 @@ func TestDisconnectDrainsOutputBeforeReturn(t *testing.T) {
 	}
 	require.False(t, returned, "Run returned before buffered protocol output drained")
 	require.NoError(t, readErr)
-	require.Equal(t, "{\"method\":\"notice\",\"type\":\"notice\"}\n", string(data))
+	require.Equal(t, "{\"method\":\"notice\",\"type\":\"notice\"}\n", string(data)) //nolint:testifylint // preserves framing bytes and trailing newline
 	require.ErrorIs(t, early, ErrDisconnected)
 	require.NoError(t, ctx.Err())
 }

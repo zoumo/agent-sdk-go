@@ -2,11 +2,13 @@ package codex
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/internal/lineage"
 )
 
@@ -31,7 +33,7 @@ func TestNativeRequestLifetimeWithControlledTime(t *testing.T) {
 				time.Sleep(6 * time.Minute)
 				synctest.Wait()
 				require.NoError(t, old.Handle().Err(), "deprecated local timeout must not expire native requests")
-				if cause == ErrRequestCanceled {
+				if errors.Is(cause, ErrRequestCanceled) {
 					require.NoError(t, old.Handle().Cancel())
 				} else {
 					require.NoError(t, c.routeFrame([]byte(`{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"reused"}}`)))
@@ -61,7 +63,7 @@ func receiveLifecycleRequest(t *testing.T, c *Client, s *Session) Request {
 	t.Helper()
 	{
 		err := c.routeFrame([]byte(`{"id":"reused","method":"future/approval","params":{"threadId":"thread"}}`))
-		require.NoError(t, err, err)
+		require.NoError(t, err)
 	}
 	received, err := s.Receive(context.Background())
 	require.NoError(t, err)

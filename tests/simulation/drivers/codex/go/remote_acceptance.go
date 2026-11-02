@@ -49,7 +49,7 @@ func remoteRequests(path string) ([]remoteRPC, map[string]json.RawMessage, error
 // The runner independently verifies both peer receipts and service cleanup. These are SDK simulation results, not native remote E2E.
 // The caller verifies the case provenance before invoking this adapter.
 func AcceptRemoteClose(ctx context.Context, root, mainEndpoint, mainToken, probeEndpoint, probeToken string) (err error) {
-	paths := []string{filepath.Join(root, "raw/raw.jsonl"), filepath.Join(root, "remote-probe/raw/raw.jsonl")}
+	paths := []string{filepath.Join(root, "raw", "raw.jsonl"), filepath.Join(root, "remote-probe", "raw", "raw.jsonl")}
 	mainRequests, mainResponses, err := remoteRequests(paths[0])
 	if err != nil {
 		return err

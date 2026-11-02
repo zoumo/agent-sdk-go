@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
 )
 
@@ -23,7 +25,7 @@ func TestMain(m *testing.M) {
 	runnerBinary = filepath.Join(dir, "simulate")
 	driverBinary = filepath.Join(dir, "driver")
 	for _, entry := range [][2]string{{runnerBinary, "."}, {driverBinary, "../drivers"}} {
-		cmd := exec.Command("go", "build", "-o", entry[0], entry[1])
+		cmd := exec.CommandContext(context.Background(), "go", "build", "-o", entry[0], entry[1])
 		if b, e := cmd.CombinedOutput(); e != nil {
 			os.Stderr.Write(b)
 			os.RemoveAll(dir)
@@ -34,13 +36,15 @@ func TestMain(m *testing.M) {
 	os.RemoveAll(dir)
 	os.Exit(code)
 }
+
 func writeJSONTest(t *testing.T, path string, v any) {
 	t.Helper()
 	b, e := json.Marshal(v)
 	require.NoError(t, e)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
-	require.NoError(t, os.WriteFile(path, b, 0600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, b, 0o600))
 }
+
 func controlledCapture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -56,27 +60,30 @@ func controlledCapture(t *testing.T) string {
 		if i == 0 {
 			direction = "c2s"
 		}
-		row, _ := json.Marshal(map[string]any{"ordinal": len(rows) + 1, "direction": direction, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": json.RawMessage(wire)})
+		row, err := json.Marshal(map[string]any{"ordinal": len(rows) + 1, "direction": direction, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": json.RawMessage(wire)})
+		require.NoError(t, err)
 		rows = append(rows, row)
 	}
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "raw"), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "raw/raw.jsonl"), append(bytes.Join(rows, []byte("\n")), 10), 0600))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "raw"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "raw", "raw.jsonl"), append(bytes.Join(rows, []byte("\n")), 10), 0o600))
 	writeJSONTest(t, filepath.Join(dir, "plan.json"), map[string]any{"provider": "codex", "caseId": "custom-structured", "project": "/fixture/project", "driverProfile": "structured-input", "scenario": map[string]any{"files": map[string]string{"numbers.txt": "7\n11\n"}}})
 	bindTest(t, dir)
 	return dir
 }
+
 func bindTest(t *testing.T, dir string) {
 	t.Helper()
 	plan, e := os.ReadFile(filepath.Join(dir, "plan.json"))
 	require.NoError(t, e)
-	raw, e := os.ReadFile(filepath.Join(dir, "raw/raw.jsonl"))
+	raw, e := os.ReadFile(filepath.Join(dir, "raw", "raw.jsonl"))
 	require.NoError(t, e)
 	writeJSONTest(t, filepath.Join(dir, "manifest.json"), map[string]any{"provenance": "synthetic", "planSHA256": digest(plan), "files": map[string]string{"raw.jsonl": digest(raw)}})
 }
+
 func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 	source := controlledCapture(t)
 	output := filepath.Join(t.TempDir(), "run")
-	cmd := exec.Command(runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
+	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 	var summary struct {
@@ -111,7 +118,7 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 			var plan map[string]any
 			require.NoError(t, readJSON(filepath.Join(source, "plan.json"), &plan))
 			plan["driverProfile"] = tc.profile
-			raw, err := os.ReadFile(filepath.Join(source, "raw/raw.jsonl"))
+			raw, err := os.ReadFile(filepath.Join(source, "raw", "raw.jsonl"))
 			require.NoError(t, err)
 			rows := bytes.Split(bytes.TrimSpace(raw), []byte("\n"))
 			if tc.profile == "background-children" {
@@ -144,7 +151,7 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 				writeJSONTest(t, filepath.Join(source, "report.json"), map[string]any{"childEvidence": []any{map[string]any{"childThreadId": "child", "parentThreadId": "thread-001"}}, "receipts": []any{map[string]any{"child-detail-selection": map[string]any{"rootId": "thread-001", "childIds": []string{"child"}}}}})
 			}
 			writeJSONTest(t, filepath.Join(source, "plan.json"), plan)
-			require.NoError(t, os.WriteFile(filepath.Join(source, "raw/raw.jsonl"), append(bytes.Join(rows, []byte("\n")), 10), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(source, "raw", "raw.jsonl"), append(bytes.Join(rows, []byte("\n")), 10), 0o600))
 			bindTest(t, source)
 			if tc.profile == "remote-close" {
 				probe := append([][]byte{}, rows[:3]...)
@@ -160,13 +167,13 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 					probe = append(probe, b)
 				}
 				probeRoot := filepath.Join(source, "remote-probe")
-				require.NoError(t, os.MkdirAll(filepath.Join(probeRoot, "raw"), 0700))
-				require.NoError(t, os.WriteFile(filepath.Join(probeRoot, "raw/raw.jsonl"), append(bytes.Join(probe, []byte("\n")), 10), 0600))
+				require.NoError(t, os.MkdirAll(filepath.Join(probeRoot, "raw"), 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(probeRoot, "raw", "raw.jsonl"), append(bytes.Join(probe, []byte("\n")), 10), 0o600))
 				writeJSONTest(t, filepath.Join(probeRoot, "plan.json"), plan)
 				bindTest(t, probeRoot)
 				var manifest map[string]any
 				require.NoError(t, readJSON(filepath.Join(source, "manifest.json"), &manifest))
-				b, err := os.ReadFile(filepath.Join(probeRoot, "raw/raw.jsonl"))
+				b, err := os.ReadFile(filepath.Join(probeRoot, "raw", "raw.jsonl"))
 				require.NoError(t, err)
 				manifest["remotePhaseFiles"] = map[string]string{"remote-probe/raw/raw.jsonl": digest(b)}
 				writeJSONTest(t, filepath.Join(source, "manifest.json"), manifest)
@@ -177,7 +184,7 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 				driver = filepath.Join(t.TempDir(), "driver")
 				script := "#!/bin/sh\nset -e\n"
 				if tc.mutation == "postprocess" {
-					script += "mkdir " + quote(filepath.Join(output, "preserve/sdk/phase-main-stderr.private")) + "\n"
+					script += "mkdir " + quote(filepath.Join(output, "preserve", "sdk", "phase-main-stderr.private")) + "\n"
 				}
 				if tc.mutation == "crash" {
 					script += "exit 9\n"
@@ -187,17 +194,17 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 
 				switch tc.mutation {
 				case "probe":
-					script += "rm " + quote(filepath.Join(output, "preserve/probe.receipt.json")) + "\n"
+					script += "rm " + quote(filepath.Join(output, "preserve", "probe.receipt.json")) + "\n"
 				case "suppress":
-					script += "if [ -f " + quote(filepath.Join(output, "suppress/main.receipt.json")) + " ]; then rm " + quote(filepath.Join(output, "suppress/main.receipt.json")) + "; fi\n"
+					script += "if [ -f " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + " ]; then rm " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + "; fi\n"
 				case "cross-run":
-					script += "if [ -f " + quote(filepath.Join(output, "suppress/main.receipt.json")) + " ]; then cp " + quote(filepath.Join(output, "preserve/main.receipt.json")) + " " + quote(filepath.Join(output, "suppress/main.receipt.json")) + "; fi\n"
+					script += "if [ -f " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + " ]; then cp " + quote(filepath.Join(output, "preserve", "main.receipt.json")) + " " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + "; fi\n"
 				case "raw":
-					script += "if [ -f " + quote(filepath.Join(output, "suppress/main.receipt.json")) + " ]; then rm " + quote(filepath.Join(output, "suppress/sdk/raw/raw.jsonl")) + "; echo '{}' > " + quote(filepath.Join(output, "suppress/main.receipt.json")) + "; fi\n"
+					script += "if [ -f " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + " ]; then rm " + quote(filepath.Join(output, "suppress", "sdk", "raw", "raw.jsonl")) + "; echo '{}' > " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + "; fi\n"
 				}
-				require.NoError(t, os.WriteFile(driver, []byte(script), 0700))
+				require.NoError(t, os.WriteFile(driver, []byte(script), 0o700))
 			}
-			cmd := exec.Command(runnerBinary, "--recording", source, "--output", output, "--driver", driver)
+			cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driver)
 			b, err := cmd.CombinedOutput()
 			if tc.want != "" {
 				require.Error(t, err, string(b))
@@ -208,7 +215,7 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 			var result summary
 			require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
 			var first descriptor
-			require.NoError(t, readJSON(filepath.Join(output, "preserve/run.json"), &first))
+			require.NoError(t, readJSON(filepath.Join(output, "preserve", "run.json"), &first))
 			require.NoDirExists(t, first.ResourceRoot)
 			var immutable map[string]any
 			require.NoError(t, readJSON(first.Contract, &immutable))
@@ -224,7 +231,7 @@ func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
 			if tc.profile == "background-children" {
 				require.Len(t, result.Runs, 2)
 				var second descriptor
-				require.NoError(t, readJSON(filepath.Join(output, "suppress/run.json"), &second))
+				require.NoError(t, readJSON(filepath.Join(output, "suppress", "run.json"), &second))
 				require.NotEqual(t, first.RunID, second.RunID)
 				require.NotEqual(t, first.Env["CODEX_HOME"], second.Env["CODEX_HOME"])
 				require.NoDirExists(t, second.ResourceRoot)
@@ -247,21 +254,21 @@ func TestAdoptedMaterialsRunCurrentSDKAndRetainFailures(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "success")
 	wrapper := filepath.Join(t.TempDir(), "driver")
 	script := "#!/bin/sh\nset -e\ncp numbers.txt " + quote(filepath.Join(filepath.Dir(output), "initial-numbers.txt")) + "\nexec " + quote(driverBinary) + " \"$@\"\n"
-	require.NoError(t, os.WriteFile(wrapper, []byte(script), 0700))
-	cmd := exec.Command(runnerBinary, "--recording", source, "--output", output, "--driver", wrapper)
+	require.NoError(t, os.WriteFile(wrapper, []byte(script), 0o700))
+	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", wrapper)
 	b, e := cmd.CombinedOutput()
 	require.NoError(t, e, string(b))
 	numbers, e := os.ReadFile(filepath.Join(filepath.Dir(output), "initial-numbers.txt"))
 	require.NoError(t, e)
 	require.Equal(t, "7\n11\n", string(numbers))
 	failed := filepath.Join(t.TempDir(), "failed")
-	cmd = exec.Command(runnerBinary, "--recording", source, "--output", failed, "--driver", "/usr/bin/false")
+	cmd = exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", failed, "--driver", "/usr/bin/false")
 	b, e = cmd.CombinedOutput()
 	require.Error(t, e, string(b))
 	require.FileExists(t, filepath.Join(failed, "summary.json"))
-	require.FileExists(t, filepath.Join(failed, "preserve/finish.json"))
+	require.FileExists(t, filepath.Join(failed, "preserve", "finish.json"))
 	gateOut := filepath.Join(t.TempDir(), "gate")
-	cmd = exec.Command(runnerBinary, "--gate", "--recording", source, "--output", gateOut, "--driver", driverBinary, "--jobs", "2")
+	cmd = exec.CommandContext(t.Context(), runnerBinary, "--gate", "--recording", source, "--output", gateOut, "--driver", driverBinary, "--jobs", "2")
 	b, e = cmd.CombinedOutput()
 	require.Error(t, e, string(b))
 	var c coverage
@@ -270,6 +277,7 @@ func TestAdoptedMaterialsRunCurrentSDKAndRetainFailures(t *testing.T) {
 	require.Equal(t, map[string]int{"passed": 1, "unverified": 71}, c.Counts)
 	require.Equal(t, before, inventoryTest(t, source))
 }
+
 func inventoryTest(t *testing.T, root string) map[string]string {
 	t.Helper()
 	result := map[string]string{}

@@ -18,7 +18,7 @@ func Configure(ctx context.Context, executable string) (*codex.Client, error) {
 
 // Observe consumes one Session. The application supplies all request decisions.
 func Observe(ctx context.Context, session *codex.Session, prompt string) error {
-	if _, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}}); err != nil {
+	if _, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: new(types.TextUserInput{Text: prompt})}}}); err != nil {
 		return err
 	}
 	for {

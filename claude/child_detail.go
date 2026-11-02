@@ -153,6 +153,7 @@ func detailObject(raw json.RawMessage, keys ...string) map[string]json.RawMessag
 	}
 	return fields
 }
+
 func detailString(raw json.RawMessage, nullable bool) bool {
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return nullable
@@ -160,10 +161,12 @@ func detailString(raw json.RawMessage, nullable bool) bool {
 	var value string
 	return len(raw) > 0 && json.Unmarshal(raw, &value) == nil
 }
+
 func detailCount(raw json.RawMessage) bool {
 	var n int64
 	return len(raw) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) && json.Unmarshal(raw, &n) == nil && n >= 0
 }
+
 func detailUsage(raw json.RawMessage) bool {
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return true

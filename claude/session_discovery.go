@@ -90,8 +90,8 @@ func freezeDiscoveryScope(o *Options) discoveryScope {
 	value := func(key string) string {
 		v := ""
 		for _, e := range env {
-			if strings.HasPrefix(e, key+"=") {
-				v = strings.TrimPrefix(e, key+"=")
+			if after, ok := strings.CutPrefix(e, key+"="); ok {
+				v = after
 			}
 		}
 		return v
@@ -230,6 +230,7 @@ func (s *Session) ListSubagents(ctx context.Context, q SubagentQuery) (SubagentP
 	}
 	return p, nil
 }
+
 func discoveryError(p SubagentPage) error {
 	errs := []error{ErrDiscoveryCoverage}
 	for _, i := range p.Coverage.Issues {
@@ -250,6 +251,7 @@ type discoveryReader struct {
 func (d *discoveryReader) issue(path, reason string, err error) {
 	d.page.Coverage.Issues = append(d.page.Coverage.Issues, DiscoveryIssue{path, reason, err})
 }
+
 func (d *discoveryReader) check() error {
 	if err := d.ctx.Err(); err != nil {
 		return err
@@ -261,6 +263,7 @@ func (d *discoveryReader) check() error {
 		return nil
 	}
 }
+
 func (d *discoveryReader) limit(resource string, n int) error {
 	return &ResourceLimitError{Resource: "discovery " + resource, Limit: n}
 }
@@ -273,7 +276,7 @@ func (d *discoveryReader) openDirectory(path string) (*os.Root, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, part := range strings.Split(filepath.Clean(path), string(filepath.Separator)) {
+	for part := range strings.SplitSeq(filepath.Clean(path), string(filepath.Separator)) {
 		if part == "." {
 			continue
 		}
@@ -305,6 +308,7 @@ func (d *discoveryReader) openDirectory(path string) (*os.Root, error) {
 	}
 	return current, nil
 }
+
 func (d *discoveryReader) directory(path string) error {
 	r, err := d.openDirectory(path)
 	if err == nil {
@@ -312,6 +316,7 @@ func (d *discoveryReader) directory(path string) error {
 	}
 	return err
 }
+
 func (d *discoveryReader) read(path string) ([]json.RawMessage, error) {
 	if err := d.check(); err != nil {
 		return nil, err
@@ -387,6 +392,7 @@ func (d *discoveryReader) read(path string) ([]json.RawMessage, error) {
 	}
 	return lines, resultErr
 }
+
 func (d *discoveryReader) walk(path string, depth int) {
 	if d.stopped {
 		return
@@ -467,6 +473,7 @@ func (d *discoveryReader) walk(path string, depth int) {
 		}
 	}
 }
+
 func (d *discoveryReader) agent(path, name string) {
 	id := strings.TrimSuffix(strings.TrimPrefix(name, "agent-"), ".jsonl")
 	if id == "" || !utf8.ValidString(id) {

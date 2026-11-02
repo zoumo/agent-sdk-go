@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -61,7 +63,7 @@ func (p *requestPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 			os.Exit(91)
 		}
 		path := os.Getenv("CODEX_SDK_TRACE")
-		_ = os.WriteFile(path+".dispatch", []byte("response byte received"), 0600)
+		_ = os.WriteFile(path+".dispatch", []byte("response byte received"), 0o600)
 		resolved := false
 		for {
 			if _, err := os.Stat(path + ".resolve"); err == nil && !resolved {
@@ -96,7 +98,7 @@ func (p *requestPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 		if _, err := os.Stdin.Read(one); err != nil {
 			os.Exit(89)
 		}
-		_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".dispatch", []byte("response byte received"), 0600)
+		_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".dispatch", []byte("response byte received"), 0o600)
 		time.Sleep(time.Hour)
 		os.Exit(90)
 	}
@@ -112,6 +114,7 @@ func requestFrame(id, method, params string) string {
 	}
 	return frame + `}`
 }
+
 func emitRequests(t *testing.T, c *codex.Client, frames ...string) {
 	t.Helper()
 	{
@@ -119,6 +122,7 @@ func emitRequests(t *testing.T, c *codex.Client, frames ...string) {
 		require.NoError(t, err)
 	}
 }
+
 func awaitAnswer(t *testing.T, h codex.AnswerHandle, cause error) {
 	t.Helper()
 	select {
@@ -128,6 +132,7 @@ func awaitAnswer(t *testing.T, h codex.AnswerHandle, cause error) {
 	}
 	require.ErrorIs(t, h.Err(), cause, "handle error = %v, want %v", h.Err(), cause)
 }
+
 func answerError(t *testing.T, err error, r codex.Request, dispatch codex.DispatchState, cause error) {
 	t.Helper()
 	var ae *codex.AnswerError
@@ -139,6 +144,7 @@ func answerError(t *testing.T, err error, r codex.Request, dispatch codex.Dispat
 		require.ErrorIs(t, err, cause)
 	}
 }
+
 func answerFrames(t *testing.T, path string) []map[string]json.RawMessage {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -162,15 +168,17 @@ func answerFrames(t *testing.T, path string) []map[string]json.RawMessage {
 	}
 	return out
 }
+
 func responseBarrier(t *testing.T, f fixture) {
 	t.Helper()
 	var echo string
 	{
 		err := f.c.Call(context.Background(), "echo", "response-barrier", &echo)
 		require.NoError(t, err)
-		require.False(t, echo != "response-barrier", "barrier: %q %v", echo, err)
+		require.Equal(t, "response-barrier", echo, "barrier: %q %v", echo, err)
 	}
 }
+
 func waitResponsePrefix(t *testing.T, f fixture) {
 	t.Helper()
 	deadline := time.NewTimer(3 * time.Second)
@@ -267,8 +275,8 @@ func runServerRequestRawAndTypedCopies(t *testing.T, f fixture) {
 	require.False(t, !ok || p.ThreadID != "native-thread-42" || p.ItemID != "native-item-9" || p.StartedAtMs != 9007199254740993 || !p.ApprovalID.IsNull() || p.Command.ValueOr("missing") != "" || string(p.UnknownFields["future"]) != `{"large":9007199254740993}`, "typed request lost fields: %#v %v", data, err)
 	p.ThreadID = "mutated"
 	p.UnknownFields["future"][0] = '['
-	bytes := r.Params()
-	bytes[0] = '['
+	paramsCopy := r.Params()
+	paramsCopy[0] = '['
 	fresh, err := r.Data()
 	require.NoError(t, err)
 	require.False(t, fresh.(*types.CommandExecutionRequestApprovalParams).ThreadID != "native-thread-42" || string(fresh.(*types.CommandExecutionRequestApprovalParams).UnknownFields["future"]) != `{"large":9007199254740993}` || string(r.Params()) != approvalParams, "caller mutation reached immutable request")
@@ -311,7 +319,7 @@ func TestStalledServerRequestsDoNotBlockCallsOrEvents(t *testing.T) {
 	}
 	e := *nextSessionNative(t, s).Event
 	require.False(t, e.Method != "future/duringApproval" || string(e.Params) != `{"threadId":"native-thread-42","large":9007199254740993}`, "event stopped behind approval UI: %#v", e)
-	require.Len(t, answerFrames(t, f.trace), 0, "SDK automatically answered a server request")
+	require.Empty(t, answerFrames(t, f.trace), "SDK automatically answered a server request")
 }
 
 func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
@@ -322,7 +330,7 @@ func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	answerError(t, h.Answer(ctx, "canceled"), r, codex.NotSent, context.Canceled)
-	answerError(t, h.Answer(nil, nil), r, codex.NotSent, nil)
+	answerError(t, h.Answer(nil, nil), r, codex.NotSent, nil) //nolint:staticcheck // verifies nil-context rejection.
 	answerError(t, h.Answer(context.Background(), make(chan int)), r, codex.NotSent, nil)
 	answerError(t, h.Answer(context.Background(), json.RawMessage(`{"bad":`)), r, codex.NotSent, nil)
 	answerError(t, h.Answer(context.Background(), strings.Repeat("x", 8192)), r, codex.NotSent, codex.ErrFrameTooLarge)
@@ -335,7 +343,7 @@ func TestAnswerPreflightFailuresLeaveHandleUsable(t *testing.T) {
 	default:
 	}
 	responseBarrier(t, f)
-	require.Len(t, answerFrames(t, f.trace), 0, "preflight failure emitted response bytes")
+	require.Empty(t, answerFrames(t, f.trace), "preflight failure emitted response bytes")
 	{
 		err := h.Answer(context.Background(), "valid retry")
 		require.NoError(t, err)
@@ -407,7 +415,7 @@ func TestServerRequestCapacityFailureIsExplicit(t *testing.T) {
 				answerError(t, first.Handle().Answer(context.Background(), "late"), first, codex.NotSent, codex.ErrRequestOverflow)
 			}
 			_ = f.c.Close()
-			require.Len(t, answerFrames(t, f.trace), 0, "overflow guessed an approval or rejection")
+			require.Empty(t, answerFrames(t, f.trace), "overflow guessed an approval or rejection")
 		})
 	}
 }
@@ -470,7 +478,7 @@ func runConcurrentServerRequestAnswerIsOneShot(t *testing.T, f fixture) {
 			answerError(t, err, r, codex.NotSent, codex.ErrRequestAnswered)
 		}
 	}
-	require.EqualValues(t, 1, success, "successful answers = %d, want 1", success)
+	require.Equal(t, 1, success, "successful answers = %d, want 1", success)
 	awaitAnswer(t, r.Handle(), codex.ErrRequestAnswered)
 	responseBarrier(t, f)
 	require.Len(t, answerFrames(t, f.trace), 1, "concurrent callers emitted duplicate response")
@@ -484,7 +492,7 @@ func runServerRequestDuplicateActiveIDTerminates(t *testing.T, f fixture) {
 	callError(t, err, codex.OutcomeUnknown, codex.ErrProtocol)
 	awaitAnswer(t, r.Handle(), codex.ErrProtocol)
 	_ = f.c.Close()
-	require.Len(t, answerFrames(t, f.trace), 0, "duplicate correlation produced a guessed response")
+	require.Empty(t, answerFrames(t, f.trace), "duplicate correlation produced a guessed response")
 }
 
 func TestPartialServerRequestAnswerIsUnknownAndNeverReplayed(t *testing.T) {
@@ -513,10 +521,11 @@ func TestPartialServerRequestAnswerIsUnknownAndNeverReplayed(t *testing.T) {
 				require.ErrorIs(t, err, codex.ErrRequestAnswered, "Cancel stole a claimed response: %v", err)
 			}
 			cause := codex.ErrWriteTimeout
-			if stop == "cancel" {
+			switch stop {
+			case "cancel":
 				cause = context.Canceled
 				cancel()
-			} else if stop == "close" {
+			case "close":
 				cause = codex.ErrClosed
 				_ = f.c.Close()
 			}
@@ -538,7 +547,7 @@ func TestPartialServerRequestAnswerIsUnknownAndNeverReplayed(t *testing.T) {
 			}
 			_ = f.c.Close()
 			assertReaped(t, f.pid)
-			require.Len(t, answerFrames(t, f.trace), 0, "peer unexpectedly received a complete or replayed answer")
+			require.Empty(t, answerFrames(t, f.trace), "peer unexpectedly received a complete or replayed answer")
 		})
 	}
 }
@@ -573,7 +582,7 @@ func TestEverySupportedServerRequestTypedNativeRoundTrip(t *testing.T) {
 			r := nextOwnedRequest(t, f)
 			data, err := r.Data()
 			require.NoError(t, err)
-			require.False(t, reflect.TypeOf(data) != reflect.TypeOf(tc.paramsType), "typed payload = %T, want %T: %v", data, tc.paramsType, err)
+			require.Equal(t, reflect.TypeOf(data), reflect.TypeOf(tc.paramsType), "typed payload = %T, want %T: %v", data, tc.paramsType, err)
 			raw, err := json.Marshal(data)
 			require.NoError(t, err)
 			require.True(t, reflect.DeepEqual(decodeExactJSON(t, raw), decodeExactJSON(t, []byte(tc.params))), "native payload changed on typed round trip: %s", raw)
@@ -644,7 +653,7 @@ func TestServerRequestQueueAdmissionFailureIsReusable(t *testing.T) {
 	f := startRequestFake(t, "request-cooperative-gate", codex.Limits{OutboundQueue: 1, WriteTimeout: 5 * time.Second, ShutdownTimeout: 200 * time.Millisecond})
 	var frames []string
 	for i := range 4 {
-		frames = append(frames, requestFrame(fmt.Sprint(100+i), "future/approval", `{"threadId":"native-thread-42"}`))
+		frames = append(frames, requestFrame(strconv.Itoa(100+i), "future/approval", `{"threadId":"native-thread-42"}`))
 	}
 	emitRequests(t, f.c, frames...)
 	var requests []codex.Request
@@ -680,7 +689,7 @@ func TestServerRequestQueueAdmissionFailureIsReusable(t *testing.T) {
 		}
 	}
 	{
-		err := os.WriteFile(f.trace+".release", []byte("resume"), 0600)
+		err := os.WriteFile(f.trace+".release", []byte("resume"), 0o600)
 		require.NoError(t, err)
 	}
 	select {
@@ -766,7 +775,7 @@ func TestNoncooperativeAnswerMarshalerCannotBlockReaderOrClose(t *testing.T) {
 			if stop == "cancel" {
 				responseBarrier(t, f)
 			}
-			require.Len(t, answerFrames(t, f.trace), 0, "stale marshal emitted response after terminal state")
+			require.Empty(t, answerFrames(t, f.trace), "stale marshal emitted response after terminal state")
 		})
 	}
 }
@@ -788,7 +797,7 @@ func TestZeroAnswerHandleFailsLocally(t *testing.T) {
 func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) {
 	for _, stop := range []string{"caller-cancel", "native-resolved"} {
 		t.Run(stop, func(t *testing.T) {
-			cause := error(context.Canceled)
+			cause := context.Canceled
 			if stop == "native-resolved" {
 				cause = codex.ErrRequestResolved
 			}
@@ -827,7 +836,7 @@ func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) 
 			if stop == "caller-cancel" {
 				cancel()
 			} else {
-				require.NoError(t, os.WriteFile(f.trace+".resolve", nil, 0600))
+				require.NoError(t, os.WriteFile(f.trace+".resolve", nil, 0o600))
 			}
 			select {
 			case err := <-answers:
@@ -841,7 +850,7 @@ func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) 
 				require.ErrorIs(t, r.Handle().Err(), cause)
 			}
 			{
-				err := os.WriteFile(f.trace+".release", []byte("resume"), 0600)
+				err := os.WriteFile(f.trace+".release", []byte("resume"), 0o600)
 				require.NoError(t, err)
 			}
 			select {
@@ -851,7 +860,7 @@ func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) 
 				require.FailNow(t, "unrelated writer failed to resume")
 			}
 			responseBarrier(t, f)
-			require.Len(t, answerFrames(t, f.trace), 0, "canceled queued answer was written later")
+			require.Empty(t, answerFrames(t, f.trace), "canceled queued answer was written later")
 			if stop == "caller-cancel" {
 				require.NoError(t, r.Handle().Answer(context.Background(), "explicit retry"))
 				responseBarrier(t, f)
@@ -867,7 +876,7 @@ func TestSessionQueuedAnswerCancellationIsNotSentAndRetainsHandle(t *testing.T) 
 func runConcurrentAnswerAndCancelHaveOneWinner(t *testing.T, f fixture) {
 	f = ownRequestFixture(t, f)
 	for iteration := range 8 {
-		emitRequests(t, f.c, requestFrame(fmt.Sprint(iteration+1000), "future/approval", `{"threadId":"native-thread-42"}`))
+		emitRequests(t, f.c, requestFrame(strconv.Itoa(iteration+1000), "future/approval", `{"threadId":"native-thread-42"}`))
 		r := nextOwnedRequest(t, f)
 		start := make(chan struct{})
 		type result struct {
@@ -896,7 +905,7 @@ func runConcurrentAnswerAndCancelHaveOneWinner(t *testing.T, f fixture) {
 				require.True(t, errors.Is(result.err, codex.ErrRequestAnswered) || errors.Is(result.err, codex.ErrRequestCanceled), "unexpected race loss: %v", result.err)
 			}
 		}
-		require.EqualValues(t, 1, winners, "Answer/Cancel race had %d successful operations", winners)
+		require.Equal(t, 1, winners, "Answer/Cancel race had %d successful operations", winners)
 		cause := codex.ErrRequestAnswered
 		if canceled {
 			cause = codex.ErrRequestCanceled
@@ -929,12 +938,12 @@ func TestMalformedServerRequestEnvelopeTerminates(t *testing.T) {
 		`{"id":"x","method":"future/\ud800","params":{}}`,
 	}
 	for i, frame := range frames {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			f := startRequestFake(t, "request-normal", codex.Limits{})
 			err := f.c.Call(context.Background(), "request-frames", []string{frame}, nil)
 			callError(t, err, codex.OutcomeUnknown, codex.ErrProtocol)
 			_ = f.c.Close()
-			require.Len(t, answerFrames(t, f.trace), 0, "malformed envelope received a guessed answer")
+			require.Empty(t, answerFrames(t, f.trace), "malformed envelope received a guessed answer")
 		})
 	}
 }
@@ -945,7 +954,7 @@ func TestMalformedServerRequestEnvelopeTerminates(t *testing.T) {
 func runConcurrentAnswerAndNativeResolutionHaveOneOutcome(t *testing.T, f fixture) {
 	f = ownRequestFixture(t, f)
 	for iteration := range 16 {
-		id := fmt.Sprint(iteration + 2000)
+		id := strconv.Itoa(iteration + 2000)
 		emitRequests(t, f.c, requestFrame(id, "item/commandExecution/requestApproval", approvalParams))
 		r := nextOwnedRequest(t, f)
 		entered, release, settled := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -1008,10 +1017,8 @@ func TestReusedServerRequestIDDoesNotReviveOldHandle(t *testing.T) {
 			cause := codex.ErrRequestCanceled
 			switch firstOutcome {
 			case "cancel":
-				{
-					err := old.Handle().Cancel()
-					require.NoError(t, err)
-				}
+				err := old.Handle().Cancel()
+				require.NoError(t, err)
 			case "resolved":
 				cause = codex.ErrRequestResolved
 				emitRequests(t, f.c, `{"method":"serverRequest/resolved","params":{"threadId":"native-thread-42","requestId":"reused"}}`)
@@ -1088,7 +1095,7 @@ func TestLegacyRequestResolutionUsesConversationIdentity(t *testing.T) {
 			awaitAnswer(t, r.Handle(), codex.ErrRequestResolved)
 			answerError(t, r.Handle().Answer(context.Background(), "late"), r, codex.NotSent, codex.ErrRequestResolved)
 			responseBarrier(t, f)
-			require.Len(t, answerFrames(t, f.trace), 0, "legacy resolution fabricated wire answer")
+			require.Empty(t, answerFrames(t, f.trace), "legacy resolution fabricated wire answer")
 		})
 	}
 }
@@ -1124,10 +1131,12 @@ func ownRequestFixture(t *testing.T, f fixture) fixture {
 	t.Cleanup(func() { _ = f.session.Close() })
 	return f
 }
+
 func startRequestFake(t *testing.T, mode string, limits codex.Limits) fixture {
 	t.Helper()
 	return ownRequestFixture(t, startFake(t, mode, limits))
 }
+
 func nextOwnedRequest(t *testing.T, f fixture) codex.Request {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

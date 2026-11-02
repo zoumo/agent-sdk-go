@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 )
 
@@ -46,6 +47,7 @@ func fixtureEmit(value any) {
 		os.Exit(4)
 	}
 }
+
 func runFixture(mode string) {
 	if mode == "lifecycle_descendant" {
 		runLifecycleDescendant()
@@ -62,13 +64,15 @@ func runFixture(mode string) {
 	}
 	if path := os.Getenv("CLAUDE_GO_CAPTURE"); path != "" {
 		cwd, _ := os.Getwd()
-		data, _ := json.Marshal(map[string]any{"argv": os.Args[1:], "init": init, "cwd": cwd, "home": os.Getenv("HOME"), "pid": os.Getpid()})
-		if os.WriteFile(path, data, 0600) != nil {
+		data, err := json.Marshal(map[string]any{"argv": os.Args[1:], "init": init, "cwd": cwd, "home": os.Getenv("HOME"), "pid": os.Getpid()})
+		if err != nil {
+			os.Exit(8)
+		}
+		if os.WriteFile(path, data, 0o600) != nil {
 			os.Exit(7)
 		}
 	}
 	switch mode {
-
 	case "tree_early":
 		request, _ := init["request"].(map[string]any)
 		if request["forwardSubagentText"] != true {
@@ -194,7 +198,7 @@ func runFixture(mode string) {
 			time.Sleep(time.Hour)
 			return
 		case "overflow":
-			for i := 0; i < 20; i++ {
+			for i := range 20 {
 				fixtureEmit(map[string]any{"type": "sequence", "seq": i})
 			}
 		case "exit_error":
@@ -209,7 +213,10 @@ func runFixture(mode string) {
 			fixtureEmit(map[string]any{"type": "control_request", "request_id": "unsupported-2", "request": map[string]any{"subtype": "future_control"}})
 		case "fragmented":
 			value := "start " + strings.Repeat("雪 ", 14000) + " end\nnext"
-			data, _ := json.Marshal(map[string]any{"type": "user", "session_id": "s", "message": map[string]any{"role": "user", "content": value}})
+			data, err := json.Marshal(map[string]any{"type": "user", "session_id": "s", "message": map[string]any{"role": "user", "content": value}})
+			if err != nil {
+				os.Exit(18)
+			}
 			for i := 0; i < len(data); {
 				end := min(i+137, len(data))
 				os.Stdout.Write(data[i:end])
@@ -222,6 +229,14 @@ func runFixture(mode string) {
 	}
 }
 
+func mustMarshalJSON(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 func fixtureOptions(t *testing.T, mode string) Options {
 	t.Helper()
 	exe, err := os.Executable()
@@ -229,6 +244,7 @@ func fixtureOptions(t *testing.T, mode string) Options {
 	dir := t.TempDir()
 	return Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_GO_FIXTURE=" + mode, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}
 }
+
 func openFixture(t *testing.T, mode string, configure ...func(*Options)) *interaction {
 	t.Helper()
 	opts := fixtureOptions(t, mode)
@@ -240,6 +256,7 @@ func openFixture(t *testing.T, mode string, configure ...func(*Options)) *intera
 	t.Cleanup(func() { _ = c.Abort() })
 	return c
 }
+
 func receive(t *testing.T, c *interaction) Event {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -248,6 +265,7 @@ func receive(t *testing.T, c *interaction) Event {
 	require.NoError(t, err)
 	return event
 }
+
 func send(t *testing.T, c *interaction, text string) {
 	t.Helper()
 	{
@@ -255,6 +273,7 @@ func send(t *testing.T, c *interaction, text string) {
 		require.NoError(t, err)
 	}
 }
+
 func awaitDone(t *testing.T, c *interaction) {
 	t.Helper()
 	select {
@@ -310,7 +329,7 @@ func testOpenUsesLiteralArgumentsAndMatchedInitialize(t *testing.T, opts Options
 	workDirInfo, err := os.Stat(opts.WorkDir)
 	require.NoError(t, err)
 	require.Falsef(t, !cwdInfo.IsDir() || !workDirInfo.IsDir() || !os.SameFile(cwdInfo, workDirInfo), "cwd does not identify requested WorkDir: %s", data)
-	require.EqualValuesf(t, opts.WorkDir, captured.Home, "HOME not preserved literally: %s", data)
+	require.Equalf(t, opts.WorkDir, captured.Home, "HOME not preserved literally: %s", data)
 	require.Falsef(t, string(captured.Init["type"]) != `"control_request"` || len(captured.Init["request_id"]) < 3, "initialize envelope: %s", data)
 	var request map[string]any
 	json.Unmarshal(captured.Init["request"], &request)
@@ -343,7 +362,7 @@ func (s *clientProtocolSuite) TestTypedViewsAndLosslessUnknowns() {
 	}
 	want := []string{"system", "assistant", "user", "stream_event", "result"}
 	for i, event := range events {
-		require.EqualValuesf(t, want[i], eventKind(event), "event %d: %s", i, eventKind(event))
+		require.Equalf(t, want[i], eventKind(event), "event %d: %s", i, eventKind(event))
 	}
 	require.Falsef(t, events[0].System.SessionID != "native-123" || !bytes.HasPrefix(events[0].Raw, []byte(" {")) || !bytes.Contains(events[0].Raw, []byte(`"new_field"`)), "system/raw: %s", events[0].Raw)
 	a := events[1].Assistant
@@ -357,14 +376,14 @@ func (s *clientProtocolSuite) TestTypedViewsAndLosslessUnknowns() {
 	require.False(t, events[4].Result.Result != "done" || events[4].Result.NumTurns != 1, "missing result view")
 	require.Eventually(t, func() bool { return len(c.session.Unattributed().Records) == 1 }, 3*time.Second, time.Millisecond)
 	unknownEvent := c.session.Unattributed().Records[0].Event
-	require.Equal(t, `{"type":"future_event","nested":{"x":[true,1,"raw"]}}`, string(unknownEvent.Raw))
+	require.Equal(t, `{"type":"future_event","nested":{"x":[true,1,"raw"]}}`, string(unknownEvent.Raw)) //nolint:testifylint // preserves exact protocol bytes
 	parsed, err := ParseEvent(unknownEvent.Raw)
 	require.NoError(t, err)
 	require.Equal(t, "future_event", parsed.Type)
 	// A result and an assistant AskUserQuestion block cause no implicit close or
 	// fabricated tool reply: a second user frame is still accepted by the peer.
 	send(t, c, "second")
-	require.EqualValues(t, "system", eventKind(receive(t, c)), "second turn missing")
+	require.Equal(t, "system", eventKind(receive(t, c)), "second turn missing")
 }
 
 func (s *clientProtocolSuite) TestFragmentedUnicodeAndLargeFrame() {
@@ -385,7 +404,7 @@ func TestStartupFailuresAreBounded(t *testing.T) {
 			start := time.Now()
 			c, err := openTestInteraction(context.Background(), opts)
 			require.Falsef(t, c != nil || err == nil, "Open = %v, %v", c, err)
-			require.False(t, time.Since(start) > 3*time.Second, "startup cleanup was not bounded")
+			require.LessOrEqual(t, time.Since(start), 3*time.Second, "startup cleanup was not bounded")
 			if mode == "init_hang" || mode == "init_wrong" {
 				require.ErrorIsf(t, err, context.DeadlineExceeded, "timeout lost: %v", err)
 			}
@@ -404,7 +423,7 @@ func (s *clientProtocolSuite) TestMalformedFramesRetainAcceptedEvents() {
 			c := openFixture(t, mode, func(o *Options) { o.Limits.FrameBytes = 1024 })
 			send(t, c, "go")
 			e := receive(t, c)
-			require.EqualValuesf(t, "accepted", eventKind(e), "first = %s", eventKind(e))
+			require.Equalf(t, "accepted", eventKind(e), "first = %s", eventKind(e))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			_, err := nextNative(c, ctx)
@@ -424,7 +443,7 @@ func (s *clientProtocolSuite) TestMalformedFramesRetainAcceptedEvents() {
 
 func (s *clientProtocolSuite) TestSlowConsumerDrainsDynamicBacklogAfterClose() {
 	t := s.T()
-	c := openFixture(t, "overflow", func(o *Options) { o.Limits.EventBuffer = 2 })
+	c := openFixture(t, "overflow", func(o *Options) { o.Limits.EventBuffer = 2 }) //nolint:staticcheck // verifies the deprecated input is ignored
 	send(t, c, "go")
 	require.NoError(t, c.Interrupt(context.Background()))
 	// Explicit close waits for the reader, never for Receive to drain the burst.
@@ -435,11 +454,11 @@ func (s *clientProtocolSuite) TestSlowConsumerDrainsDynamicBacklogAfterClose() {
 	cancel()
 	_, err := c.session.Receive(canceled)
 	require.ErrorIs(t, err, context.Canceled)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		event := receive(t, c)
 		var v struct{ Seq int }
 		require.NoError(t, json.Unmarshal(event.Raw, &v))
-		require.EqualValues(t, i, v.Seq)
+		require.Equal(t, i, v.Seq)
 	}
 	_, err = nextNative(c, context.Background())
 	require.ErrorIs(t, err, io.EOF)
@@ -500,7 +519,7 @@ func (s *clientProtocolSuite) TestPermissionWaitsAndUnknownControlErrors() {
 		id, _ := echo.Wire.Response["request_id"].(string)
 		replies[id] = echo.Wire.Response
 	}
-	require.EqualValuesf(t, 2, requests, "observed requests = %d", requests)
+	require.Equalf(t, 2, requests, "observed requests = %d", requests)
 	deny := replies["permission-1"]
 	require.Falsef(t, deny["subtype"] != "success" || deny["response"].(map[string]any)["behavior"] != "deny", "permission = %#v", deny)
 	require.Falsef(t, replies["unsupported-2"]["subtype"] != "error" || !strings.Contains(replies["unsupported-2"]["error"].(string), "future_control"), "unsupported = %#v", replies)
@@ -574,11 +593,9 @@ func TestConcurrentSendPreservesFrames(t *testing.T) {
 	const count = 24
 	workerErrors := make(chan error, count)
 	for i := range count {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			workerErrors <- c.Send(context.Background(), fmt.Sprintf("message-%d", i))
-		}()
+		})
 	}
 	wg.Wait()
 	close(workerErrors)
@@ -593,7 +610,7 @@ func TestConcurrentSendPreservesFrames(t *testing.T) {
 		require.NoError(t, json.Unmarshal(receive(t, c).Raw, &echo))
 		got[echo.Wire.Message.Content] = true
 	}
-	require.EqualValuesf(t, count, len(got), "got %d unique frames", len(got))
+	require.Lenf(t, got, count, "got %d unique frames", len(got))
 }
 
 func TestConcurrentCloseAndReceiveWake(t *testing.T) {
@@ -603,11 +620,9 @@ func TestConcurrentCloseAndReceiveWake(t *testing.T) {
 	var wg sync.WaitGroup
 	workerErrors := make(chan error, 12)
 	for range 12 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			workerErrors <- c.Close()
-		}()
+		})
 	}
 	wg.Wait()
 	close(workerErrors)
@@ -695,7 +710,7 @@ func (s *clientProtocolSuite) TestCloseAfterDoneRetainsFinalProtocolError() {
 	}
 	{
 		e := receive(t, c)
-		require.EqualValues(t, "accepted", eventKind(e), "accepted event lost")
+		require.Equal(t, "accepted", eventKind(e), "accepted event lost")
 	}
 	_, err := nextNative(c, context.Background())
 	require.ErrorIsf(t, err, ErrProtocol, "Receive = %v", err)

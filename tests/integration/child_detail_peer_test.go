@@ -14,7 +14,7 @@ func claudeChildDetailPeer() error {
 		return err
 	}
 	defer trace.Close()
-	args, _ := json.Marshal(os.Args[1:])
+	args := mustMarshalJSON(os.Args[1:])
 	fmt.Fprintln(trace, string(args))
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 4096), 16<<20)

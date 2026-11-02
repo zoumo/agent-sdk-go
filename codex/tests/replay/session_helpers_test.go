@@ -354,8 +354,9 @@ func readSynthetic(root string) ([]byte, error) {
 	}
 	return b, err
 }
+
 func writeSynthetic(root, text string) error {
-	f, err := os.OpenFile(root+"/summary.txt", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(root+"/summary.txt", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

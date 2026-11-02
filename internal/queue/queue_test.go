@@ -42,7 +42,7 @@ func (s *QueueSuite) TestContracts() {
 			require.Equal(t, 1, q.Stats().Items)
 			assert.EqualValues(t, 4, q.Stats().Bytes)
 			assert.Zero(t, q.Stats().OldestAge)
-			_, err := q.Pop(nil)
+			_, err := q.Pop(nil) //nolint:staticcheck // verifies nil-context rejection.
 			require.ErrorIs(t, err, ErrNilContext)
 			assert.Equal(t, 1, q.Stats().Items)
 			value, err := q.Pop(context.Background())

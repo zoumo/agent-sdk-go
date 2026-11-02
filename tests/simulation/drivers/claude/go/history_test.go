@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
@@ -20,10 +21,10 @@ func TestHistorySetupConsumesBackgroundResultsBeforeNextInput(t *testing.T) {
 	for _, changedResult := range []bool{false, true} {
 		t.Run(fmt.Sprint("changed-result=", changedResult), func(t *testing.T) {
 			root := t.TempDir()
-			require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0700))
+			require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0o700))
 			plan, err := json.Marshal(map[string]string{"Project": root, "Config": root, "DriverProfile": "continuation"})
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), plan, 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), plan, 0o600))
 			rows := []string{
 				`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null}}`,
 				`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}`,
@@ -42,20 +43,20 @@ func TestHistorySetupConsumesBackgroundResultsBeforeNextInput(t *testing.T) {
 				}
 				fmt.Fprintf(&capture, `{"ordinal":%d,"direction":%q,"channel":"protocol","epoch":1,"elapsedMs":0,"wire":%s}`+"\n", i+1, direction, row[1:])
 			}
-			source := filepath.Join(root, "raw/raw.jsonl")
-			require.NoError(t, os.WriteFile(source, []byte(capture.String()), 0600))
+			source := filepath.Join(root, "raw", "raw.jsonl")
+			require.NoError(t, os.WriteFile(source, []byte(capture.String()), 0o600))
 			receipt := filepath.Join(root, "peer.json")
 			launcher, err := mocktest.Launcher(root, "claude", source, receipt)
 			require.NoError(t, err)
 			launch, err := os.ReadFile(launcher)
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(string(launch), ` "$@"`, "")), 0700))
+			require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(string(launch), ` "$@"`, "")), 0o700))
 			if changedResult {
-				require.NoError(t, os.WriteFile(source, []byte(strings.Replace(capture.String(), `"result":"background"`, `"result":"wrong"`, 1)), 0600))
+				require.NoError(t, os.WriteFile(source, []byte(strings.Replace(capture.String(), `"result":"background"`, `"result":"wrong"`, 1)), 0o600))
 				// The peer reads its frozen source, while the driver checks a different expectation.
 				peerSource := filepath.Join(root, "peer-source.jsonl")
-				require.NoError(t, os.WriteFile(peerSource, []byte(capture.String()), 0600))
-				require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(strings.ReplaceAll(string(launch), ` "$@"`, ""), source, peerSource)), 0700))
+				require.NoError(t, os.WriteFile(peerSource, []byte(capture.String()), 0o600))
+				require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(strings.ReplaceAll(string(launch), ` "$@"`, ""), source, peerSource)), 0o700))
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

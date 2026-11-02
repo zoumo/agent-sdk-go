@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 )
 
@@ -41,27 +42,35 @@ func TestServerRequestLifecycleSuite(t *testing.T) { suite.Run(t, new(serverRequ
 func (s *serverRequestLifecycleSuite) TestServerRequestIDsAndNativeReplyEnvelopes() {
 	runServerRequestIDsAndNativeReplyEnvelopes(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestServerRequestRawAndTypedCopies() {
 	runServerRequestRawAndTypedCopies(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestResolvedServerRequestUsesExactIDAndKeepsEvent() {
 	runResolvedServerRequestUsesExactIDAndKeepsEvent(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestServerRequestCloseInvalidatesAndUnblocks() {
 	runServerRequestCloseInvalidatesAndUnblocks(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestConcurrentServerRequestAnswerIsOneShot() {
 	runConcurrentServerRequestAnswerIsOneShot(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestServerRequestDuplicateActiveIDTerminates() {
 	runServerRequestDuplicateActiveIDTerminates(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestMalformedOrUnrelatedResolutionKeepsHandle() {
 	runMalformedOrUnrelatedResolutionKeepsHandle(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestConcurrentAnswerAndCancelHaveOneWinner() {
 	runConcurrentAnswerAndCancelHaveOneWinner(s.T(), s.peer)
 }
+
 func (s *serverRequestLifecycleSuite) TestConcurrentAnswerAndNativeResolutionHaveOneOutcome() {
 	runConcurrentAnswerAndNativeResolutionHaveOneOutcome(s.T(), s.peer)
 }

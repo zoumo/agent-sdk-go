@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -266,7 +267,7 @@ func TestSessionDiscoveryExplicitNativeFiltersAndUnknownMetadata(t *testing.T) {
 	page, err := s.ListSubagents(context.Background(), codex.SubagentQuery{
 		Cursor: types.Some("future"), Limit: types.Some(uint32(7)), Archived: types.Null[bool](), SourceKinds: types.Null[[]types.ThreadSourceKind](),
 		ModelProviders: types.Some([]string{"native-provider"}), SortKey: types.Some(types.ThreadSortKeyUpdatedAt), SortDirection: types.Some(types.SortDirectionAsc),
-		Cwd: types.Some(types.ThreadListCwdFilter{Value: types.Ptr("/chosen")}), UseStateDbOnly: types.Some(true),
+		Cwd: types.Some(types.ThreadListCwdFilter{Value: new("/chosen")}), UseStateDbOnly: types.Some(true),
 	})
 	require.NoError(t, err)
 	require.True(t, page.Coverage.EndReached)

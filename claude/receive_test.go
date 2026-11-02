@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
@@ -71,7 +72,7 @@ func (s *controlInteractionSuite) TestAbortDiscardsNativeBacklogAndRejectsReceiv
 			name = "protocol failure"
 		}
 		t.Run(name, func(t *testing.T) {
-			c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 1 })
+			c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 1 }) //nolint:staticcheck // verifies the deprecated input is ignored
 			send(t, c, "fill")
 			send(t, c, "overflow")
 			// The control reply follows the entire burst without consuming any events.

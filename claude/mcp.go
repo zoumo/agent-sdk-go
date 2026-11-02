@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -25,6 +26,7 @@ func validateSDKMCPServers(names []string) error {
 	}
 	return nil
 }
+
 func decodeSDKMCPRequest(raw json.RawMessage) (SDKMCPRequest, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
@@ -40,6 +42,7 @@ func decodeSDKMCPRequest(raw json.RawMessage) (SDKMCPRequest, error) {
 	}
 	return SDKMCPRequest{ServerName: name, Message: bytes.Clone(message)}, nil
 }
+
 func (c *interaction) ownsSDKMCPRequest(request *ControlRequest) bool {
 	if request.Subtype != "mcp_message" {
 		return false
@@ -48,13 +51,9 @@ func (c *interaction) ownsSDKMCPRequest(request *ControlRequest) bool {
 	if e != nil {
 		return false
 	}
-	for _, name := range c.opts.SDKMCPServers {
-		if name == metadata.ServerName {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.opts.SDKMCPServers, metadata.ServerName)
 }
+
 func (r IncomingRequest) MCPRequest() (SDKMCPRequest, error) {
 	if r.method != "mcp_message" || r.permission == nil {
 		return SDKMCPRequest{}, ErrUnsupported
@@ -85,7 +84,7 @@ func (r IncomingRequest) ReplyMCP(ctx context.Context, response json.RawMessage)
 	if len(response) == 0 || response[0] != '{' || !json.Valid(response) || !utf8.Valid(response) {
 		return ErrInvalidInput
 	}
-	if e = validateInputEncoding(response); e != nil {
+	if e := validateInputEncoding(response); e != nil {
 		return e
 	}
 	var request, reply map[string]json.RawMessage
@@ -109,7 +108,7 @@ func (r IncomingRequest) ReplyMCP(ctx context.Context, response json.RawMessage)
 	if hasResult == hasError {
 		return ErrInvalidInput
 	}
-	if e = r.permission.reserveAnswer(ctx); e != nil {
+	if e := r.permission.reserveAnswer(ctx); e != nil {
 		return e
 	}
 	return r.permission.writeResponse(ctx, map[string]any{"subtype": "success", "request_id": r.ID(), "response": map[string]any{"mcp_response": json.RawMessage(bytes.Clone(response))}})

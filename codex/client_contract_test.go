@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,13 +21,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-const initResult = `{"userAgent":"fake/only","codexHome":"/synthetic-home","platformFamily":"unix","platformOs":"linux","future":null}`
-const threadJSON = `{"id":"native-thread-42","sessionId":"native-session-7","cliVersion":"0.160.1","createdAt":9007199254740993,"updatedAt":2,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[],"future":{"large":9007199254740993}}`
-const startResult = `{"thread":` + threadJSON + `,"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}`
+const (
+	initResult  = `{"userAgent":"fake/only","codexHome":"/synthetic-home","platformFamily":"unix","platformOs":"linux","future":null}`
+	threadJSON  = `{"id":"native-thread-42","sessionId":"native-session-7","cliVersion":"0.160.1","createdAt":9007199254740993,"updatedAt":2,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[],"future":{"large":9007199254740993}}`
+	startResult = `{"thread":` + threadJSON + `,"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}`
+)
 
 type fakeEnvelope struct {
 	ID     json.RawMessage `json:"id"`
@@ -45,15 +49,18 @@ func TestFakeChild(t *testing.T) {
 		time.Sleep(time.Second)
 		os.Exit(0)
 	}
-	_ = os.WriteFile(os.Getenv("CODEX_SDK_PID"), []byte(fmt.Sprint(os.Getpid())), 0600)
+	_ = os.WriteFile(os.Getenv("CODEX_SDK_PID"), []byte(strconv.Itoa(os.Getpid())), 0o600)
 	transcript, err := os.Create(os.Getenv("CODEX_SDK_TRACE"))
 	if err != nil {
 		os.Exit(80)
 	}
 	defer transcript.Close()
 	cwd, _ := os.Getwd()
-	processData, _ := json.Marshal(map[string]any{"args": os.Args[1:], "cwd": cwd, "literal": os.Getenv("CODEX_SDK_LITERAL"), "inherited": os.Getenv("CODEX_SDK_PARENT_ONLY")})
-	_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".process", processData, 0600)
+	processData, err := json.Marshal(map[string]any{"args": os.Args[1:], "cwd": cwd, "literal": os.Getenv("CODEX_SDK_LITERAL"), "inherited": os.Getenv("CODEX_SDK_PARENT_ONLY")})
+	if err != nil {
+		os.Exit(81) //nolint:gocritic // Fixture exits immediately; deferred cleanup is irrelevant.
+	}
+	_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".process", processData, 0o600)
 	if mode == "exit-before-init" {
 		os.Exit(7)
 	}
@@ -95,7 +102,7 @@ func TestFakeChild(t *testing.T) {
 				if _, err := os.Stdin.Read(buf); err != nil {
 					os.Exit(85)
 				}
-				_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".dispatch", []byte("received"), 0600)
+				_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".dispatch", []byte("received"), 0o600)
 				time.Sleep(time.Hour)
 				os.Exit(86)
 			}
@@ -104,7 +111,7 @@ func TestFakeChild(t *testing.T) {
 				os.Exit(82)
 			}
 			if mode == "exit-open-pipe" {
-				child := exec.Command(os.Args[0], "-test.run=^TestFakeChild$")
+				child := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestFakeChild$")
 				child.Env = append(os.Environ(), "CODEX_SDK_HELPER=hold-pipe")
 				child.Stdout = os.Stdout
 				child.Stderr = os.Stderr
@@ -199,6 +206,7 @@ func startFake(t *testing.T, mode string, limits codex.Limits) fixture {
 	})
 	return f
 }
+
 func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	t.Helper()
 	if remoteVariant(t) != "" {
@@ -218,6 +226,7 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	f.c, err = codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: env, Initialize: init, Limits: limits})
 	return f, err
 }
+
 func trace(t *testing.T, path string) []fakeEnvelope {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -227,14 +236,13 @@ func trace(t *testing.T, path string) []fakeEnvelope {
 	scan.Buffer(make([]byte, 4096), 32<<20)
 	for scan.Scan() {
 		var m fakeEnvelope
-		{
-			err = json.Unmarshal(scan.Bytes(), &m)
-			require.NoError(t, err)
-		}
+		err = json.Unmarshal(scan.Bytes(), &m)
+		require.NoError(t, err)
 		out = append(out, m)
 	}
 	return out
 }
+
 func waitTrace(t *testing.T, path, method string) {
 	t.Helper()
 	waitTraceWithin(t, path, method, 2*time.Second)
@@ -259,6 +267,7 @@ func waitTraceWithin(t *testing.T, path, method string, timeout time.Duration) {
 		}
 	}
 }
+
 func callError(t *testing.T, err error, state codex.DispatchState, cause error) {
 	t.Helper()
 	var ce *codex.CallError
@@ -279,14 +288,10 @@ func runOwnedStdioLifecycle(t *testing.T, f fixture) {
 	require.Equal(t, r.Thread.ID, got.Thread.ID, "thread ID changed")
 	require.True(t, got.Thread.ProjectID.IsNull(), "required null was lost")
 	require.Equal(t, `{"large":9007199254740993}`, string(got.Thread.UnknownFields["future"]), "unknown field changed")
-	{
-		err = f.c.Close()
-		require.NoError(t, err)
-	}
-	{
-		err = f.c.Close()
-		require.NoError(t, err)
-	}
+	err = f.c.Close()
+	require.NoError(t, err)
+	err = f.c.Close()
+	require.NoError(t, err)
 	frames := trace(t, f.trace)
 	want := []string{"initialize", "initialized", "thread/start", "thread/read"}
 	require.Len(t, frames, len(want), "unexpected calls: %+v", frames)
@@ -300,6 +305,7 @@ func runOwnedStdioLifecycle(t *testing.T, f fixture) {
 	require.False(t, read["threadId"] != "native-thread-42" || read["includeTurns"] != true, string(frames[3].Params))
 	assertReaped(t, f.pid)
 }
+
 func assertReaped(t *testing.T, pidPath string) {
 	t.Helper()
 	// Remote fixtures own their own peers; the SDK must not reap them.
@@ -317,11 +323,10 @@ func assertReaped(t *testing.T, pidPath string) {
 	if err != nil {
 		return
 	}
-	{
-		err = p.Signal(syscall.Signal(0))
-		require.Error(t, err, "owned child %d still exists", pid)
-	}
+	err = p.Signal(syscall.Signal(0))
+	require.Error(t, err, "owned child %d still exists", pid)
 }
+
 func TestIDExactness(t *testing.T) {
 	for _, wire := range []string{`1`, `"1"`, `9007199254740993`, `9223372036854775807`, `-9223372036854775808`, `"雪/with\\escape"`, `""`} {
 		t.Run("valid/"+wire, func(t *testing.T) {
@@ -350,10 +355,11 @@ func TestIDExactness(t *testing.T) {
 	{
 		err := f.c.Call(context.Background(), "collision", nil, &got)
 		require.NoError(t, err)
-		require.False(t, got != "right", "collision %q %v", got, err)
+		require.Equal(t, "right", got, "collision %q %v", got, err)
 	}
 	require.EqualValues(t, 2, f.c.Diagnostics().UnmatchedResponses, f.c.Diagnostics())
 }
+
 func runCancellationAndLateResponse(t *testing.T, f fixture) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -370,13 +376,14 @@ func runCancellationAndLateResponse(t *testing.T, f fixture) {
 	{
 		err := f.c.Call(context.Background(), "after-late", nil, &got)
 		require.NoError(t, err)
-		require.False(t, got != "fresh", "late %q %v", got, err)
+		require.Equal(t, "fresh", got, "late %q %v", got, err)
 	}
 	require.EqualValues(t, 1, f.c.Diagnostics().UnmatchedResponses, f.c.Diagnostics())
 	for _, m := range trace(t, f.trace) {
 		require.NotEqual(t, "not-sent", m.Method, "canceled request sent")
 	}
 }
+
 func runRPCErrorNoReplay(t *testing.T, f fixture) {
 	err := f.c.Call(context.Background(), "rpc-error", nil, nil)
 	callError(t, err, codex.Responded, nil)
@@ -389,14 +396,16 @@ func runRPCErrorNoReplay(t *testing.T, f fixture) {
 			n++
 		}
 	}
-	require.EqualValues(t, 1, n, "replayed %d times", n)
+	require.Equal(t, 1, n, "replayed %d times", n)
 }
+
 func runConnectionLossIsUnknown(t *testing.T, f fixture) {
 	err := f.c.Call(context.Background(), "exit", nil, nil)
 	callError(t, err, codex.OutcomeUnknown, io.EOF)
 	_ = f.c.Close()
 	assertReaped(t, f.pid)
 }
+
 func TestMalformedFrames(t *testing.T) {
 	for _, method := range []string{"invalid-id", "null-id", "duplicate-id", "partial", "array", "trailing", "blank", "both", "bad-error", "oversized"} {
 		t.Run(method, func(t *testing.T) {
@@ -408,6 +417,7 @@ func TestMalformedFrames(t *testing.T) {
 		})
 	}
 }
+
 func TestInitializeFailures(t *testing.T) {
 	for _, mode := range []string{"init-fail", "bad-init", "exit-before-init"} {
 		t.Run(mode, func(t *testing.T) {
@@ -421,6 +431,7 @@ func TestInitializeFailures(t *testing.T) {
 		})
 	}
 }
+
 func TestPendingAdmissionLimit(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{PendingCalls: 1})
 	errch := make(chan error, 1)
@@ -430,6 +441,7 @@ func TestPendingAdmissionLimit(t *testing.T) {
 	_ = f.c.Close()
 	callError(t, <-errch, codex.OutcomeUnknown, codex.ErrClosed)
 }
+
 func TestStderrAndUnknownNotifications(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{DiagnosticBytes: 33})
 	{
@@ -443,6 +455,7 @@ func TestStderrAndUnknownNotifications(t *testing.T) {
 	d := f.c.Diagnostics()
 	require.False(t, d.StderrBytes == 0 || len(d.Tail) > 33 || strings.Contains(d.Tail, "secret") || d.Notifications != 1, "unsafe diagnostics %+v", d)
 }
+
 func TestBlockedWriteAndConcurrentClose(t *testing.T) {
 	reportPeerError := collectTransportPeerErrors(t)
 
@@ -463,13 +476,15 @@ func TestBlockedWriteAndConcurrentClose(t *testing.T) {
 	wg.Wait()
 	assertReaped(t, f.pid)
 }
+
 func TestCloseKillsOnlyOwnedChild(t *testing.T) {
 	f := startFake(t, "ignore-eof", codex.Limits{ShutdownTimeout: 200 * time.Millisecond})
 	start := time.Now()
 	_ = f.c.Close()
-	require.False(t, time.Since(start) > time.Second, "Close exceeded bound")
+	require.LessOrEqual(t, time.Since(start), time.Second, "Close exceeded bound")
 	assertReaped(t, f.pid)
 }
+
 func TestOwnedChildExitWithOpenOutput(t *testing.T) {
 	f, err := openFake(t, "exit-open-pipe", codex.Limits{ShutdownTimeout: 400 * time.Millisecond})
 	if err == nil {
@@ -482,6 +497,7 @@ func TestOwnedChildExitWithOpenOutput(t *testing.T) {
 	}
 	assertReaped(t, f.pid)
 }
+
 func TestOutgoingFrameLimit(t *testing.T) {
 	// Real process/socket initialization uses the normal startup budget. The
 	// default call deadline is checked separately with controlled time.
@@ -491,7 +507,7 @@ func TestOutgoingFrameLimit(t *testing.T) {
 	{
 		err := f.c.Call(context.Background(), "echo", "still usable", &result)
 		require.NoError(t, err)
-		require.False(t, result != "still usable", "frame rejection damaged connection: result=%q error=%v", result, err)
+		require.Equal(t, "still usable", result, "frame rejection damaged connection: result=%q error=%v", result, err)
 	}
 	for _, m := range trace(t, f.trace) {
 		require.False(t, m.Method == "echo" && string(m.Params) != `"still usable"`, "oversized request reached peer")
@@ -598,13 +614,19 @@ func TestExplicitCommandEnvironmentAndDirectory(t *testing.T) {
 		Args                    []string
 		Cwd, Literal, Inherited string
 	}
-	{
-		err = json.Unmarshal(raw, &got)
-		require.NoError(t, err)
-	}
-	expected, _ := json.Marshal(args)
-	actual, _ := json.Marshal(got.Args)
+	err = json.Unmarshal(raw, &got)
+	require.NoError(t, err)
+	expected := mustMarshalJSON(args)
+	actual := mustMarshalJSON(got.Args)
 	require.False(t, !bytes.Equal(expected, actual) || !sameTestDirectory(t, got.Cwd, dir) || got.Literal != "literal-$HOME" || got.Inherited != "", "command was transformed: %s", raw)
+}
+
+func mustMarshalJSON(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }
 
 // sameTestDirectory compares filesystem identity: a child may report a physical
@@ -626,7 +648,7 @@ func TestSameTestDirectory(t *testing.T) {
 	child := filepath.Join(dir, "child")
 	for _, path := range []string{dir, other, child} {
 		{
-			err := os.MkdirAll(path, 0700)
+			err := os.MkdirAll(path, 0o700)
 			require.NoError(t, err)
 		}
 	}

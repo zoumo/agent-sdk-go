@@ -43,8 +43,10 @@ type Observation struct {
 }
 
 // Submission proves only a complete local write, never CLI acceptance.
-type Submission struct{ Written bool }
-type InterruptOptions struct{}
+type (
+	Submission       struct{ Written bool }
+	InterruptOptions struct{}
+)
 
 // Session owns admission, native identity, observation knowledge and one FIFO.
 // interaction supplies process I/O and authoritative native control correlation; it
@@ -134,6 +136,7 @@ func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
 	err := s.client.sendInput(ctx, input)
 	return Submission{Written: err == nil}, err
 }
+
 func (s *Session) Interrupt(ctx context.Context, _ InterruptOptions) error {
 	if ctx == nil {
 		return queue.ErrNilContext
@@ -153,6 +156,7 @@ func (s *Session) Interrupt(ctx context.Context, _ InterruptOptions) error {
 		return ctx.Err()
 	}
 }
+
 func (s *Session) Close() error {
 	s.mu.Lock()
 	c := s.client
@@ -349,6 +353,7 @@ func (s *Session) confirmParent(child, parent string, source SubagentIdentity) R
 	}
 	return s.observation(reason, "cli-2.1.258-task-tool-owner", source, s.parent(child))
 }
+
 func (s *Session) parent(key string) *SubagentIdentity {
 	if key == "" {
 		return nil
@@ -366,6 +371,7 @@ func (s *Session) parent(key string) *SubagentIdentity {
 	}
 	return &id
 }
+
 func (s *Session) observation(reason, evidence string, source SubagentIdentity, parent *SubagentIdentity) Received {
 	return Received{Kind: ReceivedObservation, Observation: &Observation{Reason: reason, Evidence: evidence, Source: source, Parent: parent}, Origin: "live"}
 }
@@ -395,6 +401,7 @@ func (s *Session) expire(now time.Time) {
 		s.expired++
 	}
 }
+
 func (s *Session) isolate(e Event, reason string) {
 	now := time.Now()
 	s.expire(now)
@@ -412,6 +419,7 @@ func (s *Session) isolate(e Event, reason string) {
 	s.quarantineBytes += len(e.Raw)
 	s.scheduleExpiry()
 }
+
 func (s *Session) Unattributed() UnattributedSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()

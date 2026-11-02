@@ -16,10 +16,10 @@ func TestQuerySourceIntegrity(t *testing.T) {
 		for _, change := range []string{"append", "rewrite", "replacement", "directory-replacement", "truncate"} {
 			t.Run(mode+"/"+change, func(t *testing.T) {
 				dir := t.TempDir()
-				require.NoError(t, os.Mkdir(filepath.Join(dir, "project"), 0700))
+				require.NoError(t, os.Mkdir(filepath.Join(dir, "project"), 0o700))
 				path := filepath.Join(dir, "project", "source")
 				data := []byte("original\n")
-				require.NoError(t, os.WriteFile(path, data, 0600))
+				require.NoError(t, os.WriteFile(path, data, 0o600))
 				root, e := os.OpenRoot(dir)
 				require.NoError(t, e)
 				defer root.Close()
@@ -38,21 +38,21 @@ func TestQuerySourceIntegrity(t *testing.T) {
 				initial := source.info
 				switch change {
 				case "append":
-					w, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-					require.NoError(t, e)
-					_, e = w.WriteString("new\n")
-					require.NoError(t, e)
+					w, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+					require.NoError(t, err)
+					_, err = w.WriteString("new\n")
+					require.NoError(t, err)
 					require.NoError(t, w.Close())
 				case "rewrite":
-					require.NoError(t, os.WriteFile(path, []byte("rewritten"), 0600))
+					require.NoError(t, os.WriteFile(path, []byte("rewritten"), 0o600))
 					require.NoError(t, os.Chtimes(path, initial.ModTime(), initial.ModTime()))
 				case "replacement":
 					require.NoError(t, os.Rename(path, path+".old"))
-					require.NoError(t, os.WriteFile(path, data, 0600))
+					require.NoError(t, os.WriteFile(path, data, 0o600))
 				case "directory-replacement":
 					require.NoError(t, os.Rename(filepath.Dir(path), filepath.Dir(path)+".old"))
-					require.NoError(t, os.Mkdir(filepath.Dir(path), 0700))
-					require.NoError(t, os.WriteFile(path, data, 0600))
+					require.NoError(t, os.Mkdir(filepath.Dir(path), 0o700))
+					require.NoError(t, os.WriteFile(path, data, 0o600))
 				case "truncate":
 					require.NoError(t, os.Truncate(path, 1))
 				}
@@ -73,7 +73,7 @@ func TestQuerySourceSampleCoverage(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "source")
 			data := []byte("head-middle-tail\n")
-			require.NoError(t, os.WriteFile(path, data, 0600))
+			require.NoError(t, os.WriteFile(path, data, 0o600))
 			root, err := os.OpenRoot(dir)
 			require.NoError(t, err)
 			defer root.Close()
@@ -92,7 +92,7 @@ func TestQuerySourceSampleCoverage(t *testing.T) {
 			require.NoError(t, err)
 			position := map[string]int{"head": 0, "tail-probe": len(data) - 5, "tail": len(data) - 1, "gap": 5}[change]
 			data[position] = 'X'
-			require.NoError(t, os.WriteFile(path, data, 0600))
+			require.NoError(t, os.WriteFile(path, data, 0o600))
 			require.NoError(t, os.Chtimes(path, sample.info.ModTime(), sample.info.ModTime()))
 			childQueryKind(t, full.verify(), "changed")
 			if change == "gap" {

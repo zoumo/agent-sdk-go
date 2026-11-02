@@ -71,6 +71,7 @@ func (r IncomingRequest) Approve(ctx context.Context, options ApprovalOptions) e
 	}
 	return r.permission.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: options.UpdatedInput, UpdatedPermissions: options.UpdatedPermissions, ToolUseID: options.ToolUseID, DecisionClassification: options.DecisionClassification})
 }
+
 func (r IncomingRequest) Deny(ctx context.Context, options DenialOptions) error {
 	if r.method != "can_use_tool" {
 		return &DispatchError{Op: "deny", State: NotSent, Err: ErrUnsupported}

@@ -21,12 +21,13 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 func remoteVariant(t *testing.T) string {
-	for _, part := range strings.Split(t.Name(), "/") {
+	for part := range strings.SplitSeq(t.Name(), "/") {
 		if part == "ws" || part == "wss" {
 			return part
 		}
@@ -47,12 +48,12 @@ func openRemoteFake(t *testing.T, mode string, limits codex.Limits) (fixture, er
 	pid := filepath.Join(dir, "fixture-owned-pid")
 	// Trace exists before requests; the child replaces it before initialize.
 	{
-		err := os.WriteFile(f.trace, nil, 0600)
+		err := os.WriteFile(f.trace, nil, 0o600)
 		require.NoError(t, err)
 	}
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	cmd := exec.Command(exe, "-test.run=^TestFakeChild$")
+	cmd := exec.CommandContext(t.Context(), exe, "-test.run=^TestFakeChild$")
 	cmd.Env = append(os.Environ(), "CODEX_SDK_HELPER="+mode, "CODEX_SDK_TRACE="+f.trace, "CODEX_SDK_PID="+pid)
 	inputR, input, err := os.Pipe()
 	require.NoError(t, err)
@@ -256,7 +257,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 			require.True(t, ok)
 			read, err := f.c.ReadThread(ctx, types.ThreadReadParams{ThreadID: started.Thread.ID})
 			require.NoError(t, err)
-			require.False(t, read.Thread.ID != started.Thread.ID, "read native thread: %#v %v", read, err)
+			require.Equal(t, read.Thread.ID, started.Thread.ID, "read native thread: %#v %v", read, err)
 			events := session
 			type outcome struct {
 				turn types.TurnStartResponse
@@ -290,7 +291,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 			require.NoError(t, session.Close())
 			detached, err := f.c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: started.Thread.ID})
 			require.NoError(t, err)
-			require.False(t, detached.Status != "unsubscribed", "unsubscribe: %#v %v", detached, err)
+			require.Equal(t, types.ThreadUnsubscribeStatus("unsubscribed"), detached.Status, "unsubscribe: %#v %v", detached, err)
 			{
 				err := f.c.Close()
 				require.NoError(t, err)
@@ -304,7 +305,7 @@ func TestRemoteNativeWorkflow(t *testing.T) {
 			next := startFake(t, "request-normal", codex.Limits{})
 			resumed, err := next.c.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: started.Thread.ID})
 			require.NoError(t, err)
-			require.False(t, resumed.Thread.ID != started.Thread.ID, "resume: %#v %v", resumed, err)
+			require.Equal(t, resumed.Thread.ID, started.Thread.ID, "resume: %#v %v", resumed, err)
 			{
 				err := next.c.Close()
 				require.NoError(t, err)

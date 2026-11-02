@@ -14,14 +14,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-const nativeTurn = `{"id":"native-turn-response","items":[],"status":"inProgress","future":9007199254740993}`
-const turnDelta = `{"threadId":"native-thread-42","turnId":"native-turn-response","itemId":"native-item-7","delta":"hello","future":{"x":9007199254740993}}`
-const knownItem = `{"type":"agentMessage","id":"native-item-7","text":"hello","phase":"final_answer"}`
-const unknownItem = `{"type":"futureItem","id":"native-item-future","unknown":[null,9007199254740993]}`
+const (
+	nativeTurn  = `{"id":"native-turn-response","items":[],"status":"inProgress","future":9007199254740993}`
+	turnDelta   = `{"threadId":"native-thread-42","turnId":"native-turn-response","itemId":"native-item-7","delta":"hello","future":{"x":9007199254740993}}`
+	knownItem   = `{"type":"agentMessage","id":"native-item-7","text":"hello","phase":"final_answer"}`
+	unknownItem = `{"type":"futureItem","id":"native-item-future","unknown":[null,9007199254740993]}`
+)
 
 // Fake-peer modes below are independently written. The peer deliberately
 // withholds the start response until a second RPC, proving early delivery without
@@ -64,7 +67,7 @@ func (p *turnPeer) handle(mode string, m fakeEnvelope, send func(json.RawMessage
 		emit("item/completed", `{"threadId":"native-thread-42","turnId":"native-turn-response","completedAtMs":8,"item":`+unknownItem+`}`)
 		send(m.ID, `{}`)
 	case "turn-flood":
-		for i := 0; i < 4096; i++ {
+		for i := range 4096 {
 			emit("future/ordered", fmt.Sprintf(`{"threadId":"native-thread-42","sequence":%d}`, i))
 		}
 		send(m.ID, `"reader-still-routing"`)
@@ -98,10 +101,12 @@ func openTurnSession(t *testing.T, c *codex.Client, ctx context.Context) *codex.
 	t.Cleanup(func() { _ = s.Abort() })
 	return s
 }
+
 func nextTurnEvent(t *testing.T, s *codex.Session) types.Event {
 	t.Helper()
 	return *nextSessionNative(t, s).Event
 }
+
 func awaitTurnSession(t *testing.T, s *codex.Session, cause error) {
 	t.Helper()
 	select {
@@ -111,11 +116,13 @@ func awaitTurnSession(t *testing.T, s *codex.Session, cause error) {
 	}
 	require.ErrorIs(t, s.Err(), cause)
 }
+
 func turnInput(p types.TurnStartParams) codex.Input {
 	return codex.Input{Input: p.Input, ServiceTier: p.ServiceTier, DisabledPluginIDs: p.DisabledPluginIDs, OutputSchema: p.OutputSchema, ParentTurnID: p.ParentTurnID, RootTurnID: p.RootTurnID}
 }
+
 func startParams() types.TurnStartParams {
-	return types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "synthetic input"})}}, ServiceTier: types.Null[string](), DisabledPluginIDs: types.Some([]string{}), OutputSchema: types.Some(json.RawMessage(`{"type":"string"}`))}
+	return types.TurnStartParams{ThreadID: "native-thread-42", Input: []types.UserInput{{Text: new(types.TextUserInput{Text: "synthetic input"})}}, ServiceTier: types.Null[string](), DisabledPluginIDs: types.Some([]string{}), OutputSchema: types.Some(json.RawMessage(`{"type":"string"}`))}
 }
 
 func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
@@ -136,7 +143,7 @@ func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
 	}()
 	var events []types.Event
 
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		e := nextTurnEvent(t, s)
 		require.False(t, e.DecodeError != nil || e.Data == nil, "event %d: %#v", i, e)
 
@@ -145,7 +152,7 @@ func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
 	require.False(t, events[0].Data.(*types.TurnCompletedNotification).Turn.ID != "stale-turn" || events[2].Data.(*types.AgentMessageDeltaNotification).TurnID != "other-turn", "interleaved native identities changed")
 	require.Contains(t, string(f.c.Unattributed().Records[0].Raw), "other-thread-turn")
 	require.Equal(t, "native-item-7", events[4].Data.(*types.ItemStartedNotification).Item.AgentMessage.ID, "native item identity changed")
-	require.Equal(t, unknownItem, string(events[5].Data.(*types.ItemCompletedNotification).Item.Unknown), "unknown native variant lost")
+	require.Equal(t, unknownItem, string(events[5].Data.(*types.ItemCompletedNotification).Item.Unknown), "unknown native variant lost") //nolint:testifylint // preserves exact protocol bytes
 	require.Equal(t, "native-turn-response", events[6].Data.(*types.TurnCompletedNotification).Turn.ID, "early completion lost")
 	select {
 	case <-result:
@@ -154,7 +161,7 @@ func (obs *observationSuite) TestTurnEarlyEventsKeepResponseIdentity() {
 	}
 	{
 		err := f.c.Call(context.Background(), "release-start", nil, nil)
-		require.NoError(t, err, err)
+		require.NoError(t, err)
 	}
 	got := <-result
 	require.False(t, got.err != nil || got.r.Turn.ID != "native-turn-response" || got.r.Turn.Status != types.TurnStatusInProgress, "response replaced by event: %+v %v", got.r, got.err)
@@ -176,7 +183,7 @@ func (obs *observationSuite) TestNotificationRawAndDecodeErrors() {
 	s := openTurnSession(t, f.c, context.Background())
 	{
 		err := f.c.Call(context.Background(), "turn-mixed", nil, nil)
-		require.NoError(t, err, err)
+		require.NoError(t, err)
 	}
 	expected := []string{
 		`{ "n" : 9007199254740993, "nested": [null, true] }`, `null`, ``,
@@ -273,7 +280,7 @@ func (obs *observationSuite) TestSessionSlowConsumerNeverBlocksResponse() {
 	require.NoError(t, s.Err())
 	require.NoError(t, s.Close())
 	awaitTurnSession(t, s, nil)
-	for i := 0; i < 4096; i++ {
+	for i := range 4096 {
 		e := nextTurnEvent(t, s)
 		var params struct {
 			Sequence int `json:"sequence"`
@@ -314,7 +321,7 @@ func (obs *observationSuite) TestSessionOwnsPayloadAndNoReplay() {
 	emitRequests(t, f.c, item)
 	a, b = nextTurnEvent(t, first), nextTurnEvent(t, second)
 	a.Data.(*types.ItemCompletedNotification).Item.Unknown[0] = '!'
-	require.Equal(t, unknownItem, string(b.Data.(*types.ItemCompletedNotification).Item.Unknown))
+	require.Equal(t, unknownItem, string(b.Data.(*types.ItemCompletedNotification).Item.Unknown)) //nolint:testifylint // preserves exact protocol bytes
 }
 
 func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
@@ -339,7 +346,7 @@ func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
 	// all writes/notifications before the explicit interrupt have been handled.
 	{
 		err := f.c.Call(context.Background(), "release-start", nil, nil)
-		require.NoError(t, err, err)
+		require.NoError(t, err)
 	}
 	for _, m := range trace(t, f.trace) {
 		require.False(t, m.Method == "turn/interrupt" || strings.Contains(m.Method, "cancel"), "implicit cancellation sent: %s", m.Method)
@@ -356,7 +363,7 @@ func (obs *observationSuite) TestCancellationDoesNotInterruptTurn() {
 	for _, m := range trace(t, f.trace) {
 		if m.Method == "turn/interrupt" {
 			count++
-			require.Equal(t, `{"threadId":"native-thread-42","turnId":"native-turn-response"}`, string(m.Params), "interrupt params: %s", m.Params)
+			require.Equal(t, `{"threadId":"native-thread-42","turnId":"native-turn-response"}`, string(m.Params), "interrupt params: %s", m.Params) //nolint:testifylint // preserves exact protocol bytes
 		}
 	}
 	require.Equal(t, 1, count, "interrupt count: %d", count)
@@ -432,7 +439,7 @@ func (obs *observationSuite) TestSessionTerminalStatus() {
 				cancel()
 			}
 			_, err := s.Receive(ctx)
-			want := error(context.DeadlineExceeded)
+			want := context.DeadlineExceeded
 			if stop == "cancel-full" {
 				want = context.Canceled
 			}
@@ -492,7 +499,7 @@ func (obs *observationSuite) TestSessionAdmissionValidation() {
 		require.Error(t, err)
 	}
 	f := obs.fixture(t, "normal", codex.Limits{Subscriptions: 1})
-	_, err := codex.Open(nil, codex.SessionOptions{Client: f.c})
+	_, err := codex.Open(nil, codex.SessionOptions{Client: f.c}) //nolint:staticcheck // verifies nil-context rejection.
 	require.Error(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

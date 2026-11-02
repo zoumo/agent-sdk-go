@@ -47,8 +47,8 @@ func run(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer session.Abort()
-	if err = client.Call(ctx, "fixture/emit", nil, nil); err != nil {
+	defer func() { _ = session.Abort() }()
+	if err := client.Call(ctx, "fixture/emit", nil, nil); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "live:")

@@ -29,6 +29,7 @@ func (c *Client) expireQuarantineLocked(now time.Time) {
 		c.quarantineExpired = saturatingAdd(c.quarantineExpired, 1)
 	}
 }
+
 func (c *Client) removeQuarantineLocked() {
 	c.quarantineBytes -= len(c.quarantine[0].Raw)
 	c.quarantine[0] = UnattributedRecord{}
@@ -37,6 +38,7 @@ func (c *Client) removeQuarantineLocked() {
 		c.quarantine = nil
 	}
 }
+
 func (c *Client) scheduleQuarantineLocked() {
 	if c.quarantineTimer != nil {
 		c.quarantineTimer.Stop()
@@ -51,6 +53,7 @@ func (c *Client) scheduleQuarantineLocked() {
 		c.scheduleQuarantineLocked()
 	})
 }
+
 func (c *Client) quarantineLocked(raw []byte) {
 	now := time.Now()
 	c.expireQuarantineLocked(now)

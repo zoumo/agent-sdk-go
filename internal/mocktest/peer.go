@@ -125,7 +125,7 @@ func Run(ctx context.Context, provider string, in io.Reader, out io.Writer, scen
 			<-cleanupDone
 		}
 	}()
-	if err = cmd.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return err
 	}
 	peerExited := make(chan struct{})

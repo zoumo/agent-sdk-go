@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -48,6 +49,7 @@ func objectFields(raw []byte) (map[string]json.RawMessage, error) {
 	}
 	return out, nil
 }
+
 func (c *Client) readLoop() {
 	if c.remote != nil {
 		c.readRemote()
@@ -72,7 +74,7 @@ func (c *Client) readLoop() {
 			return
 		}
 		frame = append(frame, part...)
-		if err == bufio.ErrBufferFull {
+		if errors.Is(err, bufio.ErrBufferFull) {
 			continue
 		}
 		if err != nil {
@@ -92,6 +94,7 @@ func (c *Client) readLoop() {
 		frame = frame[:0]
 	}
 }
+
 func (c *Client) routeFrame(raw []byte) error {
 	f, err := objectFields(raw)
 	if err != nil {

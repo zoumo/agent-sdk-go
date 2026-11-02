@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -40,13 +41,14 @@ func (q *childQuery) close() {
 	for _, f := range q.files {
 		_ = f.close()
 	}
-	for i := len(q.dirs) - 1; i >= 0; i-- {
-		_ = q.dirs[i].root.Close()
+	for _, v := range slices.Backward(q.dirs) {
+		_ = v.root.Close()
 	}
 	if q.root != nil {
 		_ = q.root.Close()
 	}
 }
+
 func (q *childQuery) directory(parent *os.Root, name, path string) (*childDirectory, error) {
 	if len(q.dirs) >= q.c.Limits.MaxDirectories {
 		return nil, queryError("resource-limit", path, "directories", nil)
@@ -65,6 +67,7 @@ func (q *childQuery) directory(parent *os.Root, name, path string) (*childDirect
 	q.c.Directories = append(q.c.Directories, filepath.Join(q.scope.ConfigDir, path))
 	return d, nil
 }
+
 func (q *childQuery) scan(d *childDirectory) (map[string]os.FileInfo, error) {
 	f, e := d.root.Open(".")
 	if e != nil {
@@ -73,7 +76,7 @@ func (q *childQuery) scan(d *childDirectory) (map[string]os.FileInfo, error) {
 	defer f.Close()
 	entries := map[string]os.FileInfo{}
 	for {
-		if e = q.ctx.Err(); e != nil {
+		if e := q.ctx.Err(); e != nil {
 			return nil, e
 		}
 		batch, readErr := f.ReadDir(1)
@@ -98,6 +101,7 @@ func (q *childQuery) scan(d *childDirectory) (map[string]os.FileInfo, error) {
 	d.entries = entries
 	return entries, nil
 }
+
 func (q *childQuery) optionalDir(parent *childDirectory, name string) (*childDirectory, error) {
 	_, e := parent.root.Lstat(name)
 	if errors.Is(e, os.ErrNotExist) {
@@ -112,6 +116,7 @@ func (q *childQuery) optionalDir(parent *childDirectory, name string) (*childDir
 	}
 	return q.directory(parent.root, name, filepath.Join(parent.path, name))
 }
+
 func (q *childQuery) inventory() ([]childCandidate, error) {
 	root, projects, key, e := openQueryScope(q.scope)
 	if e != nil {
@@ -131,22 +136,22 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 			return nil, e
 		}
 	} else {
-		entries, e := q.scan(pd)
-		if e != nil {
-			return nil, e
+		entries, err := q.scan(pd)
+		if err != nil {
+			return nil, err
 		}
 		names := childSortedNames(entries)
 		for _, name := range names {
-			d, e := q.directory(pd.root, name, filepath.Join("projects", name))
-			if e != nil {
-				return nil, e
+			d, err := q.directory(pd.root, name, filepath.Join("projects", name))
+			if err != nil {
+				return nil, err
 			}
-			_, e = d.root.Lstat(q.session + ".jsonl")
-			if errors.Is(e, os.ErrNotExist) {
+			_, err = d.root.Lstat(q.session + ".jsonl")
+			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			if e != nil {
-				return nil, queryAccess(d.path, e)
+			if err != nil {
+				return nil, queryAccess(d.path, err)
 			}
 			if project != nil {
 				return nil, queryError("ambiguous", q.session, "parent in multiple projects", nil)
@@ -190,9 +195,9 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 		if depth > q.c.Limits.MaxDepth {
 			return queryError("resource-limit", d.path, "directory depth", nil)
 		}
-		entries, e := q.scan(d)
-		if e != nil {
-			return e
+		entries, err := q.scan(d)
+		if err != nil {
+			return err
 		}
 		for _, name := range childSortedNames(entries) {
 			info := entries[name]
@@ -201,12 +206,12 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 				if depth >= q.c.Limits.MaxDepth {
 					return queryError("resource-limit", d.path, "directory depth", nil)
 				}
-				next, e := q.directory(d.root, name, filepath.Join(d.path, name))
-				if e != nil {
-					return e
+				next, err := q.directory(d.root, name, filepath.Join(d.path, name))
+				if err != nil {
+					return err
 				}
-				if e = walk(next, depth+1); e != nil {
-					return e
+				if err := walk(next, depth+1); err != nil {
+					return err
 				}
 			case !info.Mode().IsRegular():
 				return queryError("unsupported", filepath.Join(d.path, name), "non-regular child entry", ErrUnsupported)
@@ -242,7 +247,7 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 		}
 		return nil
 	}
-	if e = walk(sub, 0); e != nil {
+	if e := walk(sub, 0); e != nil {
 		return nil, e
 	}
 	sort.Slice(candidates, func(i, j int) bool {
@@ -250,6 +255,7 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 	})
 	return candidates, nil
 }
+
 func childSortedNames(entries map[string]os.FileInfo) []string {
 	names := make([]string, 0, len(entries))
 	for n := range entries {
@@ -258,6 +264,7 @@ func childSortedNames(entries map[string]os.FileInfo) []string {
 	sort.Strings(names)
 	return names
 }
+
 func (q *childQuery) read(parent *childDirectory, name string, sidecar bool) ([]byte, error) {
 	relative := filepath.Join(parent.path, name)
 	path := filepath.Join(q.scope.ConfigDir, relative)
@@ -282,6 +289,7 @@ func (q *childQuery) read(parent *childDirectory, name string, sidecar bool) ([]
 	q.files = append(q.files, source)
 	return data, nil
 }
+
 func (q *childQuery) load(candidate childCandidate, chain bool) (SubagentInfo, []SessionMessage, error) {
 	path := filepath.Join(q.scope.ConfigDir, candidate.parent.path, candidate.name)
 	q.c.Path = path
@@ -317,11 +325,12 @@ func (q *childQuery) load(candidate childCandidate, chain bool) (SubagentInfo, [
 	if q.c.AgentID != "" {
 		q.c.SidecarStatus = "present"
 	}
-	if e = q.parseSidecar(data, path, metaPath, candidate.agent, &info); e != nil {
+	if e := q.parseSidecar(data, path, metaPath, candidate.agent, &info); e != nil {
 		return info, nil, e
 	}
 	return info, records, nil
 }
+
 func (q *childQuery) verify() error {
 	for _, d := range q.dirs {
 		if e := q.ctx.Err(); e != nil {
@@ -347,10 +356,10 @@ func (q *childQuery) verify() error {
 					f.Close()
 					return queryError("changed", d.path, "entry added", nil)
 				}
-				now, e := d.root.Lstat(entry.Name())
-				if e != nil || !os.SameFile(old, now) || old.Mode() != now.Mode() {
+				now, err := d.root.Lstat(entry.Name())
+				if err != nil || !os.SameFile(old, now) || old.Mode() != now.Mode() {
 					f.Close()
-					return queryError("changed", d.path, "entry replaced", e)
+					return queryError("changed", d.path, "entry replaced", err)
 				}
 				count++
 			}

@@ -26,14 +26,17 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 // These peers are independently authored, external-package fixtures. They use
 // only loopback sockets and synthetic credentials, with no Codex process/model.
-const securityToken = "synthetic-security-secret.ABC_123~+/=="
-const securityInitResult = `{"userAgent":"security-peer/only","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}`
+const (
+	securityToken      = "synthetic-security-secret.ABC_123~+/=="
+	securityInitResult = `{"userAgent":"security-peer/only","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}`
+)
 
 type securityEnvelope struct {
 	ID     json.RawMessage `json:"id"`
@@ -73,7 +76,7 @@ func securityRead(ctx context.Context, ws *websocket.Conn) (securityEnvelope, er
 }
 
 func securityResponse(id json.RawMessage, result string) []byte {
-	return []byte(fmt.Sprintf(`{"id":%s,"result":%s}`, id, result))
+	return fmt.Appendf(nil, `{"id":%s,"result":%s}`, id, result)
 }
 
 // securityServer performs a native initialize handshake, then runs the supplied
@@ -105,11 +108,9 @@ func securityServer(t *testing.T, secure bool, script func(context.Context, *web
 			reportPeerError("expected initialized notification: envelope=%+v error=%v", envelope, err)
 			return
 		}
-		{
-			err = script(ctx, ws, r)
-			if err != nil {
-				reportPeerError("independent peer: %v", err)
-			}
+		err = script(ctx, ws, r)
+		if err != nil {
+			reportPeerError("independent peer: %v", err)
 		}
 	}))
 	s.Config.ErrorLog = log.New(io.Discard, "", 0)
@@ -132,9 +133,9 @@ func securityEcho(ctx context.Context, ws *websocket.Conn, _ *http.Request) erro
 	for {
 		envelope, err := securityRead(ctx, ws)
 		if err != nil {
-			return nil // Client cleanup or cancellation closes the socket.
+			return nil //nolint:nilerr // Client cleanup or cancellation closes the socket.
 		}
-		if err = ws.Write(ctx, websocket.MessageText, securityResponse(envelope.ID, `{"ok":true}`)); err != nil {
+		if err := ws.Write(ctx, websocket.MessageText, securityResponse(envelope.ID, `{"ok":true}`)); err != nil {
 			return err
 		}
 	}
@@ -192,7 +193,7 @@ func TestRemoteSecurityExactBearerAndNoOrigin(t *testing.T) {
 					assert.False(t, present, "non-browser client must not send Origin")
 				}
 				assert.False(t, r.URL.Path != "/app-server" || r.URL.RawQuery != "" || r.Header.Get("Cookie") != "", "authentication leaked outside the explicit Authorization header")
-				assert.Equal(t, "", r.Header.Get("Sec-WebSocket-Extensions"), "bounded protocol transport must not negotiate compression")
+				assert.Empty(t, r.Header.Get("Sec-WebSocket-Extensions"), "bounded protocol transport must not negotiate compression")
 				assert.False(t, secure && (r.TLS == nil || r.TLS.Version < tls.VersionTLS12), "secure transport negotiated less than TLS 1.2")
 			case <-time.After(time.Second):
 				require.FailNow(t, "peer did not observe completed initialization")
@@ -281,7 +282,6 @@ func TestRemoteSecurityRejectsInvalidInputBeforeDial(t *testing.T) {
 		}})
 	}
 	for _, token := range []string{"", "=", "===", "hello world", "abc\r\nInjected: true", "abc\t", "abc:def", "abc=def", "synthetic-é", "Bearer value"} {
-		token := token
 		cases = append(cases, struct {
 			name   string
 			change func(*codex.RemoteOptions)
@@ -289,7 +289,6 @@ func TestRemoteSecurityRejectsInvalidInputBeforeDial(t *testing.T) {
 	}
 	// Every configurable bound rejects negatives before a socket is opened.
 	for _, field := range []string{"MaxFrameBytes", "OutboundQueue", "PendingCalls", "Subscriptions", "EventQueue", "DiagnosticBytes", "ActiveRequests", "RequestQueue", "RequestTimeout", "CallTimeout", "WriteTimeout", "ShutdownTimeout"} {
-		field := field
 		cases = append(cases, struct {
 			name   string
 			change func(*codex.RemoteOptions)
@@ -309,12 +308,12 @@ func TestRemoteSecurityRejectsInvalidInputBeforeDial(t *testing.T) {
 		})
 	}
 	defaults := reflect.ValueOf(codex.DefaultLimits())
-	for i := 0; i < defaults.NumField(); i++ {
+	for i := range defaults.NumField() {
 		if defaults.Type().Field(i).Name == "RequestTimeout" {
 			assert.Zero(t, defaults.Field(i).Int())
 			continue
 		}
-		assert.False(t, defaults.Field(i).Int() <= 0, "default %s is unbounded", defaults.Type().Field(i).Name)
+		assert.Positive(t, defaults.Field(i).Int(), "default %s is unbounded", defaults.Type().Field(i).Name)
 	}
 }
 
@@ -327,14 +326,13 @@ func TestRemoteSecurityRedirectsNeverForwardCredentials(t *testing.T) {
 				var initial, target atomic.Int64
 				destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					target.Add(1)
-					http.Error(w, "redirect followed", 400)
+					http.Error(w, "redirect followed", http.StatusBadRequest)
 				}))
 				t.Cleanup(destination.Close)
-				var source *httptest.Server
-				source = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == "/redirect-target" {
 						target.Add(1)
-						http.Error(w, "redirect followed", 400)
+						http.Error(w, "redirect followed", http.StatusBadRequest)
 						return
 					}
 					initial.Add(1)
@@ -401,7 +399,7 @@ func TestRemoteSecurityReflectedCloseReasonIsSafe(t *testing.T) {
 	securityNoSecret(t, err)
 	require.ErrorIs(t, err, codex.ErrRemoteTransport, "unexpected close classification: %v", err)
 	securityNoSecret(t, c.Err())
-	require.False(t, strings.Contains(fmt.Sprintf("%+v", c.Diagnostics()), securityToken), "diagnostics disclosed close reason credential")
+	require.NotContains(t, fmt.Sprintf("%+v", c.Diagnostics()), securityToken, "diagnostics disclosed close reason credential")
 }
 
 func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
@@ -412,9 +410,10 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 			for _, encoding := range []string{"literal", "unicode-escaped", "url-encoded", "duplicate-values-literal", "duplicate-values-unicode", "duplicate-keys-unicode", "no-secret"} {
 				t.Run(fmt.Sprintf("tls=%v/%s/%s", secure, phase, encoding), func(t *testing.T) {
 					reflection := securityToken
-					if encoding == "url-encoded" {
+					switch encoding {
+					case "url-encoded":
 						reflection = url.QueryEscape(reflection)
-					} else if encoding == "no-secret" {
+					case "no-secret":
 						reflection = "public synthetic information"
 					}
 					quoted, err := json.Marshal("peer reflected Bearer " + reflection)
@@ -435,7 +434,7 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 						rpcJSON = fmt.Sprintf(`{"code":-32001,"message":"safe message","data":{"duplicates":%s,"safeLarge":9007199254740993,"safeText":"retain me"},"future":%s,"safeMax":9223372036854775807}`, duplicates, duplicates)
 					}
 					respond := func(ctx context.Context, ws *websocket.Conn, id json.RawMessage) error {
-						return ws.Write(ctx, websocket.MessageText, []byte(fmt.Sprintf(`{"id":%s,"error":%s}`, id, rpcJSON)))
+						return ws.Write(ctx, websocket.MessageText, fmt.Appendf(nil, `{"id":%s,"error":%s}`, id, rpcJSON))
 					}
 					var options codex.RemoteOptions
 					if phase == "call" {
@@ -444,7 +443,7 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 							if err != nil {
 								return err
 							}
-							if err = respond(ctx, ws, envelope.ID); err != nil {
+							if err := respond(ctx, ws, envelope.ID); err != nil {
 								return err
 							}
 							return securityEcho(ctx, ws, r)
@@ -468,11 +467,9 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 								reportPeerError("%v", err)
 								return
 							}
-							{
-								_, _, err = ws.Read(ctx)
-								if err == nil {
-									reportPeerError("client sent another envelope after failed initialization")
-								}
+							_, _, err = ws.Read(ctx)
+							if err == nil {
+								reportPeerError("client sent another envelope after failed initialization")
 							}
 						}))
 						if secure {
@@ -526,14 +523,10 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 					}
 					assert.False(t, strings.Contains(rpc.Message, securityToken) || strings.Contains(rpc.Message, url.QueryEscape(securityToken)), "RPCError.Message still contains reflected bearer token")
 					var data, raw map[string]json.RawMessage
-					{
-						err = json.Unmarshal(rpc.Data, &data)
-						require.NoError(t, err)
-					}
-					{
-						err = json.Unmarshal(rpc.Raw, &raw)
-						require.NoError(t, err)
-					}
+					err = json.Unmarshal(rpc.Data, &data)
+					require.NoError(t, err)
+					err = json.Unmarshal(rpc.Raw, &raw)
+					require.NoError(t, err)
 					require.False(t, string(data["safeLarge"]) != "9007199254740993" || string(data["safeText"]) != `"retain me"` || string(raw["safeMax"]) != "9223372036854775807" || len(raw["future"]) == 0, "redaction damaged unrelated native fields or exact numeric values")
 					if strings.HasPrefix(encoding, "duplicate-") {
 						for _, duplicateObject := range []json.RawMessage{data["duplicates"], raw["future"]} {
@@ -552,10 +545,8 @@ func TestRemoteSecurityReflectedNativeRPCErrorsAreSafe(t *testing.T) {
 					}
 					assert.False(t, encoding == "no-secret" && string(rpc.Raw) != rpcJSON, "unaffected native error Raw bytes were modified")
 					if c != nil {
-						{
-							err = c.Call(context.Background(), "synthetic/after-rpc-error", nil, nil)
-							require.NoError(t, err, "native error unnecessarily terminated connection: %v", err)
-						}
+						err = c.Call(context.Background(), "synthetic/after-rpc-error", nil, nil)
+						require.NoError(t, err, "native error unnecessarily terminated connection: %v", err)
 					}
 				})
 			}
@@ -575,7 +566,7 @@ func TestRemoteSecurityReflectedNumericDecodeErrorIsSafe(t *testing.T) {
 					return err
 				}
 				result := `{"thread":{"cliVersion":"synthetic","createdAt":` + token + `,"cwd":"/synthetic","ephemeral":true,"id":"synthetic-thread","modelProvider":"mock","preview":"","projectId":null,"sessionId":"synthetic-session","source":"appServer","status":{"type":"idle"},"turns":[],"updatedAt":1}}`
-				if err = ws.Write(ctx, websocket.MessageText, securityResponse(envelope.ID, result)); err != nil {
+				if err := ws.Write(ctx, websocket.MessageText, securityResponse(envelope.ID, result)); err != nil {
 					return err
 				}
 				return securityEcho(ctx, ws, r)
@@ -586,12 +577,10 @@ func TestRemoteSecurityReflectedNumericDecodeErrorIsSafe(t *testing.T) {
 			var call *codex.CallError
 			require.False(t, !errors.Is(err, codex.ErrProtocol) || !errors.As(err, &call) || call.Dispatch != codex.Responded, "typed decode error lost protocol/response evidence: %v", err)
 			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
-				assert.False(t, strings.Contains(fmt.Sprintf("%+v", cause), token), "public typed decode error or its cause disclosed reflected token")
+				assert.NotContains(t, fmt.Sprintf("%+v", cause), token, "public typed decode error or its cause disclosed reflected token")
 			}
-			{
-				err = c.Call(context.Background(), "synthetic/after-decode-error", nil, nil)
-				require.NoError(t, err, "decode failure unnecessarily terminated connection: %v", err)
-			}
+			err = c.Call(context.Background(), "synthetic/after-decode-error", nil, nil)
+			require.NoError(t, err, "decode failure unnecessarily terminated connection: %v", err)
 		})
 	}
 }
@@ -650,14 +639,15 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				want := context.Canceled
-				if mode == "deadline" {
+				switch mode {
+				case "deadline":
 					ctx, cancel = context.WithTimeout(context.Background(), 150*time.Millisecond)
 					defer cancel()
 					want = context.DeadlineExceeded
-				} else if mode == "call-timeout" {
+				case "call-timeout":
 					options.Limits.CallTimeout = 150 * time.Millisecond
 					want = context.DeadlineExceeded
-				} else {
+				default:
 					go func() {
 						select {
 						case <-entered:
@@ -693,21 +683,19 @@ func TestRemoteSecurityConstructionContext(t *testing.T) {
 		cancel()
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = c.Close() })
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			callCtx, callCancel := context.WithCancel(context.Background())
 			err = c.Call(callCtx, "synthetic/still-open", nil, nil)
 			callCancel()
 			require.NoError(t, err, "completed construction/call context closed the established connection at call %d: %v", i, err)
 		}
-		{
-			err = c.Call(context.Background(), "synthetic/after-all-cancellations", nil, nil)
-			require.NoError(t, err, "canceling a completed call closed the shared transport: %v", err)
-		}
+		err = c.Call(context.Background(), "synthetic/after-all-cancellations", nil, nil)
+		require.NoError(t, err, "canceling a completed call closed the shared transport: %v", err)
 	})
 }
 
 func TestRemoteSecurityStalledTLSHandshakeIsBounded(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
 	accepted := make(chan struct{})
@@ -786,14 +774,15 @@ func TestRemoteSecurityMalformedUpgradeBodyCannotOutliveConstruction(t *testing.
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				want := context.Canceled
-				if mode == "call-timeout" {
+				switch mode {
+				case "call-timeout":
 					options.Limits.CallTimeout = 150 * time.Millisecond
 					want = context.DeadlineExceeded
-				} else if mode == "deadline" {
+				case "deadline":
 					ctx, cancel = context.WithTimeout(context.Background(), 150*time.Millisecond)
 					defer cancel()
 					want = context.DeadlineExceeded
-				} else {
+				default:
 					go func() {
 						select {
 						case <-entered:
@@ -941,7 +930,7 @@ func TestRemoteSecurityWebSocketMessageFraming(t *testing.T) {
 				switch mode {
 				case "pretty-json":
 					var pretty bytes.Buffer
-					if err = json.Indent(&pretty, payload, "", "  "); err != nil {
+					if err := json.Indent(&pretty, payload, "", "  "); err != nil {
 						return err
 					}
 					err = ws.Write(ctx, websocket.MessageText, pretty.Bytes())
@@ -964,7 +953,7 @@ func TestRemoteSecurityWebSocketMessageFraming(t *testing.T) {
 					if _, err = writer.Write(payload[len(payload)/2:]); err != nil {
 						return err
 					}
-					if err = writer.Close(); err != nil {
+					if err := writer.Close(); err != nil {
 						return err
 					}
 					<-closed.Done()
@@ -1020,7 +1009,7 @@ func TestRemoteSecurityWebSocketMessageFraming(t *testing.T) {
 			valid := mode == "pretty-json" || mode == "fragmented-with-ping" || mode == "exact-limit"
 			if valid {
 				require.NoError(t, err)
-				require.False(t, !result.OK, "valid WebSocket message rejected: result=%+v error=%v", result, err)
+				require.True(t, result.OK, "valid WebSocket message rejected: result=%+v error=%v", result, err)
 				if mode == "fragmented-with-ping" {
 					select {
 					case err := <-pingResult:

@@ -85,7 +85,7 @@ explicitly. No automatic retry or cache fallback runs.
 
 ## Open, submit and receive
 
-Go 1.26.9 is pinned with mise. This example is compiled by external-consumer
+Go 1.26 or newer is required. This example is compiled by external-consumer
 validation; default tests do not launch the selected real executable.
 
 ```go
@@ -341,7 +341,7 @@ and the [offline example](examples/history-query-offline).
 
 ## Offline examples and validation
 
-Run the root offline gate with the mise-managed compiler. The offline
+Run the root offline gate with Go 1.26 or newer. The offline
 examples use explicit synthetic peers and code-owned protocol inputs, never an
 installed agent. [Migration details](../docs/migration.md#session) distinguish
 native limitations, resource options and breaking lifecycle changes.
@@ -349,6 +349,6 @@ native limitations, resource options and breaking lifecycle changes.
 Run from the repository root:
 
 ```sh
-mise exec -- go run ./codex/examples/history-query-offline
-mise exec -- go run ./codex/examples/observe-subagents-offline
+go run ./codex/examples/history-query-offline
+go run ./codex/examples/observe-subagents-offline
 ```

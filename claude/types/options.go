@@ -23,6 +23,7 @@ type InitializeOptions struct {
 // at most 16 MiB. Invalid configuration is rejected before starting a process.
 type Limits struct {
 	// EventBuffer values outside 0..65,536 are rejected before process startup.
+
 	// Deprecated: ignored; Receive backlog grows dynamically.
 	EventBuffer     int
 	FrameBytes      int

@@ -42,7 +42,7 @@ func runSessionFixture(mode string, reader *bufio.Reader) {
 		}
 		if transcript != nil {
 			if _, err := transcript.Write(line); err != nil {
-				os.Exit(10)
+				os.Exit(10) //nolint:gocritic // Fixture exits immediately; deferred cleanup is irrelevant.
 			}
 		}
 		var wire struct {
@@ -133,7 +133,7 @@ func awaitInterrupt(t *testing.T, result <-chan error) error {
 func receiveInterrupt(t *testing.T, c *interaction) string {
 	t.Helper()
 	event := receive(t, c)
-	require.EqualValuesf(t, "control_seen", eventKind(event), "expected control_seen, got %s: %s", eventKind(event), event.Raw)
+	require.Equalf(t, "control_seen", eventKind(event), "expected control_seen, got %s: %s", eventKind(event), event.Raw)
 	var observed struct {
 		Wire map[string]json.RawMessage `json:"wire"`
 	}
@@ -162,7 +162,7 @@ func sessionCommand(t *testing.T, c *interaction, command, wantType string) Even
 	t.Helper()
 	send(t, c, command)
 	event := receive(t, c)
-	require.EqualValuesf(t, wantType, eventKind(event), "%s: got %s, want %s: %s", command, eventKind(event), wantType, event.Raw)
+	require.Equalf(t, wantType, eventKind(event), "%s: got %s, want %s: %s", command, eventKind(event), wantType, event.Raw)
 	return event
 }
 
@@ -177,13 +177,13 @@ func assertSessionID(t *testing.T, c *interaction, want string, known bool) {
 func (s *sessionControlSuite) TestSessionIdentityDistinguishesRequestAndObservation() {
 	t := s.T()
 	c := openFixture(t, "session_controls")
-	require.Equal(t, "", c.session.RequestedResumeID())
+	require.Empty(t, c.session.RequestedResumeID())
 	id, known := c.session.SessionID()
 	require.Empty(t, id)
 	require.False(t, known)
 	send(t, c, "unknown:untrusted-future")
 	require.Eventually(t, func() bool { return len(c.session.Unattributed().Records) == 1 }, 3*time.Second, time.Millisecond)
-	require.Equal(t, `{"session_id":"untrusted-future","type":"future_event"}`, string(c.session.Unattributed().Records[0].Event.Raw))
+	require.Equal(t, `{"session_id":"untrusted-future","type":"future_event"}`, string(c.session.Unattributed().Records[0].Event.Raw)) //nolint:testifylint // preserves exact protocol bytes
 	sessionCommand(t, c, "assistant:fixed-main", "assistant")
 	id, known = c.session.SessionID()
 	require.Equal(t, "fixed-main", id)
@@ -231,7 +231,7 @@ func (s *sessionControlSuite) TestResumeUsesFreshProcessLiteralArgAndNoReplay() 
 	require.NoError(t, err)
 	first := firstSession.client
 	t.Cleanup(func() { _ = firstSession.Abort() })
-	require.EqualValues(t, "", first.RequestedResumeID(), "fresh session has requested identity")
+	require.Empty(t, first.RequestedResumeID(), "fresh session has requested identity")
 	assertSessionID(t, first, "", false)
 	send(t, first, "old prompt that must never replay")
 	_ = receive(t, first) // Echo of this explicit Session input.
@@ -257,7 +257,7 @@ func (s *sessionControlSuite) TestResumeUsesFreshProcessLiteralArgAndNoReplay() 
 			resumed := resumedSession.client
 			t.Cleanup(func() { _ = resumedSession.Abort() })
 			assertSessionID(t, resumed, "", false)
-			require.EqualValues(t, requested, resumed.RequestedResumeID(), "resume request was changed")
+			require.Equal(t, requested, resumed.RequestedResumeID(), "resume request was changed")
 			data, err := os.ReadFile(capture)
 			require.NoError(t, err)
 			var recorded struct{ Argv []string }
@@ -272,7 +272,7 @@ func (s *sessionControlSuite) TestResumeUsesFreshProcessLiteralArgAndNoReplay() 
 				}
 				require.Falsef(t, arg == "--resume" || arg == requested, "resume value became separate argv: %#v", recorded.Argv)
 			}
-			require.EqualValuesf(t, 1, count, "literal resume option count = %d: %#v", count, recorded.Argv)
+			require.Equalf(t, 1, count, "literal resume option count = %d: %#v", count, recorded.Argv)
 			send(t, resumed, "new prompt")
 			_ = receive(t, resumed)
 			_ = receive(t, resumed)
@@ -309,7 +309,7 @@ func (s *sessionControlSuite) TestInterruptCorrelatesOutOfOrderAndUnknownRespons
 	firstID := receiveInterrupt(t, c)
 	second := interruptAsync(c, context.Background())
 	secondID := receiveInterrupt(t, c)
-	require.NotEqualValues(t, secondID, firstID, "request IDs were reused")
+	require.NotEqual(t, secondID, firstID, "request IDs were reused")
 	sessionCommand(t, c, "error:unknown-id", "barrier")
 	sessionCommand(t, c, "error:"+secondID, "barrier")
 	var controlErr *ControlError
@@ -321,9 +321,9 @@ func (s *sessionControlSuite) TestInterruptCorrelatesOutOfOrderAndUnknownRespons
 	sessionCommand(t, c, "ack:"+firstID, "barrier")
 	{
 		err := awaitInterrupt(t, first)
-		require.Nilf(t, err, "first request received an unrelated error: %v", err)
+		require.NoErrorf(t, err, "first request received an unrelated error: %v", err)
 	}
-	require.Nil(t, c.Err(), c.Err())
+	require.NoError(t, c.Err())
 }
 
 func (s *sessionControlSuite) TestInterruptAcknowledgmentIsSeparateFromTurnResult() {
@@ -360,7 +360,7 @@ func (s *sessionControlSuite) TestInterruptImmediateAcknowledgments() {
 		receiveInterrupt(t, c)
 		{
 			err := awaitInterrupt(t, pending)
-			require.Nilf(t, err, "immediate response missed its waiter: %v", err)
+			require.NoErrorf(t, err, "immediate response missed its waiter: %v", err)
 		}
 	}
 }
@@ -385,11 +385,11 @@ func (s *sessionControlSuite) TestInterruptCancellationAndStaleResponse() {
 	sessionCommand(t, c, "ack:"+secondID, "barrier")
 	{
 		err := awaitInterrupt(t, second)
-		require.Nilf(t, err, "stale response affected a new control: %v", err)
+		require.NoErrorf(t, err, "stale response affected a new control: %v", err)
 	}
 	{
 		err := c.Err()
-		require.Nilf(t, err, "canceling the response wait terminated the connection: %v", err)
+		require.NoErrorf(t, err, "canceling the response wait terminated the connection: %v", err)
 	}
 }
 
@@ -413,7 +413,7 @@ func (s *sessionControlSuite) TestInterruptTimeoutAndPreCanceledContext() {
 		require.Falsef(t, !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrUnknownOutcome), "timed-out written interrupt: %v", err)
 	}
 	sessionCommand(t, c, "ack:"+id, "barrier")
-	require.Nil(t, c.Err(), c.Err())
+	require.NoError(t, c.Err())
 }
 
 func (s *sessionControlSuite) TestInterruptPendingLimitRejectsWithoutWriting() {
@@ -446,10 +446,8 @@ func (s *sessionControlSuite) TestInterruptWaitersWakeOnTermination() {
 			want := ErrClosed
 			switch mode {
 			case "close":
-				{
-					err := c.Close()
-					require.NoError(t, err)
-				}
+				err := c.Close()
+				require.NoError(t, err)
 			case "disconnect":
 				want = ErrUnexpectedEOF
 				send(t, c, mode)
@@ -543,9 +541,7 @@ func TestSessionIdentityConcurrentReaders(t *testing.T) {
 	var wg sync.WaitGroup
 	defer func() { close(stop); wg.Wait() }()
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -555,7 +551,7 @@ func TestSessionIdentityConcurrentReaders(t *testing.T) {
 					c.RequestedResumeID()
 				}
 			}
-		}()
+		})
 	}
 	for range 20 {
 		sessionCommand(t, c, "system:id-0", "system")

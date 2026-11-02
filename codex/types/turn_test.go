@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -59,7 +60,6 @@ func TestTurnNotificationRequiredNativeFields(t *testing.T) {
 				require.Error(t, err,
 					"malformed native payload accepted")
 			}
-
 		})
 	}
 }

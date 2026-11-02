@@ -21,13 +21,14 @@ func deliveries(path string) ([]map[string]any, error) {
 	var out []map[string]any
 	for s.Scan() {
 		var v map[string]any
-		if e = json.Unmarshal(s.Bytes(), &v); e != nil {
+		if e := json.Unmarshal(s.Bytes(), &v); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
 	}
 	return out, s.Err()
 }
+
 func mapping(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	if m == nil {
@@ -87,7 +88,7 @@ func CompareDelivery(preserved, suppressed string) error {
 			return errors.New("suppression removed a protected SDK fact")
 		}
 		var wire map[string]any
-		if e = json.Unmarshal([]byte(text(v["raw"])), &wire); e != nil {
+		if e := json.Unmarshal([]byte(text(v["raw"])), &wire); e != nil {
 			return e
 		}
 		source := mapping(v["source"])
@@ -148,6 +149,7 @@ func CompareDelivery(preserved, suppressed string) error {
 	}
 	return nil
 }
+
 func only(v map[string]any, keys ...string) bool {
 	allowed := map[string]bool{}
 	for _, k := range keys {

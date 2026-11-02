@@ -3,13 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type object = map[string]any
@@ -17,11 +18,11 @@ type object = map[string]any
 func TestClaudeMovedMaterialsUseCurrentSDKAndDerivedHistory(t *testing.T) {
 	source := t.TempDir()
 	output := filepath.Join(t.TempDir(), "simulation")
-	require.NoError(t, os.Mkdir(filepath.Join(source, "raw"), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(source, "raw"), 0o700))
 	const session = "11111111-1111-4111-8111-111111111111"
 	originalCWD := filepath.Join(t.TempDir(), "no-longer-present")
 	key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(originalCWD, "-")
-	name := filepath.Join("config/projects", key, session+".jsonl")
+	name := filepath.Join("config", "projects", key, session+".jsonl")
 	var saved bytes.Buffer
 	expected := []object{}
 	for i, kind := range []string{"user", "assistant"} {
@@ -34,8 +35,8 @@ func TestClaudeMovedMaterialsUseCurrentSDKAndDerivedHistory(t *testing.T) {
 		require.NoError(t, json.NewEncoder(&saved).Encode(object{"type": kind, "uuid": id, "parentUuid": parent, "sessionId": session, "cwd": originalCWD, "message": message}))
 		expected = append(expected, object{"type": kind, "uuid": id, "session_id": session, "message": message})
 	}
-	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(source, name)), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(source, name), saved.Bytes(), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(source, name)), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(source, name), saved.Bytes(), 0o600))
 	plan := object{"provider": "claude", "caseId": "SDK-CASE-033", "project": originalCWD, "driverProfile": "history", "scenario": object{"files": object{"numbers.txt": "7\n11\n"}}}
 	require.NoError(t, writeJSON(filepath.Join(source, "plan.json"), plan))
 	require.NoError(t, writeJSON(filepath.Join(source, "report.json"), object{"receipts": []object{{"get_session_messages": expected}}}))
@@ -54,7 +55,7 @@ func TestClaudeMovedMaterialsUseCurrentSDKAndDerivedHistory(t *testing.T) {
 		}
 		require.NoError(t, json.NewEncoder(&raw).Encode(object{"ordinal": i + 1, "direction": direction, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": row}))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(source, "raw/raw.jsonl"), raw.Bytes(), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(source, "raw", "raw.jsonl"), raw.Bytes(), 0o600))
 	// Move the full material package and remove its original location.
 	moved := filepath.Join(t.TempDir(), "adopted-copy")
 	require.NoError(t, os.Rename(source, moved))
@@ -68,12 +69,12 @@ func TestClaudeMovedMaterialsUseCurrentSDKAndDerivedHistory(t *testing.T) {
 	driver := filepath.Join(t.TempDir(), "history-driver")
 	snapshot := filepath.Join(output, "before-finish-config")
 	script := "#!/bin/sh\nset -e\n" + quote(driverBinary) + " \"$@\"\ncp -R \"$CLAUDE_CONFIG_DIR\" " + quote(snapshot) + "\n"
-	require.NoError(t, os.WriteFile(driver, []byte(script), 0700))
-	cmd := exec.Command(runnerBinary, "--recording", source, "--output", output, "--driver", driver)
+	require.NoError(t, os.WriteFile(driver, []byte(script), 0o700))
+	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driver)
 	log, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(log))
 	var d descriptor
-	require.NoError(t, readJSON(filepath.Join(output, "preserve/run.json"), &d))
+	require.NoError(t, readJSON(filepath.Join(output, "preserve", "run.json"), &d))
 	require.NotEmpty(t, d.MaterializationSHA256)
 	var transformed struct {
 		ExecutionProject string
@@ -98,7 +99,7 @@ func TestClaudeMovedMaterialsUseCurrentSDKAndDerivedHistory(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, item.hash, digest)
 	}
-	unchanged, err := os.ReadFile(filepath.Join(source, "raw/raw.jsonl"))
+	unchanged, err := os.ReadFile(filepath.Join(source, "raw", "raw.jsonl"))
 	require.NoError(t, err)
 	require.Equal(t, raw.Bytes(), unchanged)
 	require.NoDirExists(t, originalCWD)
@@ -107,7 +108,7 @@ func TestClaudeMovedMaterialsUseCurrentSDKAndDerivedHistory(t *testing.T) {
 		Status          string
 		CleanupComplete bool
 	}
-	require.NoError(t, readJSON(filepath.Join(output, "preserve/finish.json"), &finish))
+	require.NoError(t, readJSON(filepath.Join(output, "preserve", "finish.json"), &finish))
 	require.Equal(t, "passed", finish.Status)
 	require.True(t, finish.CleanupComplete)
 }

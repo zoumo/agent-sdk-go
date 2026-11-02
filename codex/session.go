@@ -12,8 +12,10 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
-var ErrOwnershipConflict = errors.New("codex: session ownership conflict")
-var ErrInvalidInput = errors.New("codex: invalid or unsupported input")
+var (
+	ErrOwnershipConflict = errors.New("codex: session ownership conflict")
+	ErrInvalidInput      = errors.New("codex: invalid or unsupported input")
+)
 
 // SessionOptions selects an existing connection or an explicitly owned process.
 // Exactly one of Client or Stdio must be supplied. Thread uses native start options.
@@ -55,8 +57,10 @@ type Received struct {
 	Origin      string
 }
 
-type Submission struct{ Response types.TurnStartResponse }
-type InterruptOptions struct{ TurnID string }
+type (
+	Submission       struct{ Response types.TurnStartResponse }
+	InterruptOptions struct{ TurnID string }
+)
 
 // Session owns main identity, admission and a single FIFO. All mutable state
 // except cleanupOnce/cleanupErr is protected by the connection mutex.
@@ -171,6 +175,7 @@ func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
 	err := s.client.callOwned(ctx, "turn/start", p, &response, false, nil, s)
 	return Submission{Response: response}, err
 }
+
 func (s *Session) Interrupt(ctx context.Context, options InterruptOptions) error {
 	if options.TurnID == "" {
 		return errors.New("codex: explicit turn ID required")
@@ -179,6 +184,7 @@ func (s *Session) Interrupt(ctx context.Context, options InterruptOptions) error
 	err := s.client.callOwned(ctx, "turn/interrupt", types.TurnInterruptParams{ThreadID: s.root, TurnID: options.TurnID}, &response, false, nil, s)
 	return err
 }
+
 func (s *Session) finishLocked(cause error) {
 	if s.closed {
 		return
@@ -188,17 +194,18 @@ func (s *Session) finishLocked(cause error) {
 	// End this owner's wait without canceling an already-dispatched write.
 	// The connection writer retains its own deadline and genuine fault handling.
 	for _, p := range s.client.pending {
-		if p.owner == s {
-			dispatch := NotSent
-			if p.started {
-				dispatch = OutcomeUnknown
-			}
-			reason := cause
-			if reason == nil {
-				reason = ErrClosed
-			}
-			s.client.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: dispatch, Cause: reason})
+		if p.owner != s {
+			continue
 		}
+		dispatch := NotSent
+		if p.started {
+			dispatch = OutcomeUnknown
+		}
+		reason := cause
+		if reason == nil {
+			reason = ErrClosed
+		}
+		s.client.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: dispatch, Cause: reason})
 	}
 	for _, r := range s.client.reverse {
 		if r.owner == s {

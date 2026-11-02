@@ -20,9 +20,11 @@ func (s *Session) acceptLocked(value Received) {
 		s.finishLocked(err)
 	}
 }
+
 func (s *Session) observeLocked(o Observation) {
 	s.acceptLocked(Received{Kind: ReceivedObservation, Observation: &o, Origin: "live"})
 }
+
 func (s *Session) addMemberLocked(id, method string) bool {
 	if id == "" || s.closed {
 		return false
@@ -42,6 +44,7 @@ func (s *Session) addMemberLocked(id, method string) bool {
 	s.observeLocked(Observation{ThreadID: id, Method: method, Reason: "member-confirmed"})
 	return true
 }
+
 func (s *Session) parentLocked(child, parent, method string) {
 	if child == "" || parent == "" || s.closed {
 		return
@@ -64,15 +67,15 @@ func (s *Session) parentLocked(child, parent, method string) {
 // Thread metadata is evidence of a parent, independent of the membership set.
 func nativeThreadParents(method string, params json.RawMessage) (child string, parents []string) {
 	if method != "thread/started" {
-		return
+		return child, parents
 	}
 	fields, err := objectFields(params)
 	if err != nil {
-		return
+		return child, parents
 	}
 	thread, err := objectFields(fields["thread"])
 	if err != nil {
-		return
+		return child, parents
 	}
 	child, _ = nativeIdentity(thread["id"])
 	direct, _ := nativeIdentity(thread["parentThreadId"])
@@ -86,8 +89,9 @@ func nativeThreadParents(method string, params json.RawMessage) (child string, p
 	if parent != "" && parent != direct {
 		parents = append(parents, parent)
 	}
-	return
+	return child, parents
 }
+
 func (c *Client) publishSessionsLocked(method string, params json.RawMessage, raw []byte) {
 	identity := treeIdentity(params)
 	child, parents := nativeThreadParents(method, params)

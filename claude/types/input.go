@@ -42,10 +42,12 @@ func (v *InputMessage) UnmarshalJSON(data []byte) error {
 	*v = InputMessage(next)
 	return nil
 }
+
 func (v InputMessage) MarshalJSON() ([]byte, error) {
 	type wire InputMessage
 	return objectJSON(wire(v), v.Raw, v.Fields)
 }
+
 func (v *UserInput) UnmarshalJSON(data []byte) error {
 	if err := objectOnly(data); err != nil {
 		return err
@@ -59,6 +61,7 @@ func (v *UserInput) UnmarshalJSON(data []byte) error {
 	*v = UserInput(next)
 	return nil
 }
+
 func (v UserInput) MarshalJSON() ([]byte, error) {
 	type wire UserInput
 	return objectJSON(wire(v), v.Raw, v.Fields)

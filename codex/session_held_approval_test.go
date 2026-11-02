@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -43,7 +44,7 @@ func TestSessionHeldApprovalAllowsControlAndEventBeforeOriginalAnswer(t *testing
 	got, err := s.Receive(ctx)
 	require.NoError(t, err)
 	require.Equal(t, codex.ReceivedEvent, got.Kind)
-	require.Equal(t, event, string(got.Raw))
+	require.Equal(t, event, string(got.Raw)) //nolint:testifylint // preserves exact protocol bytes
 	require.NoError(t, got.Event.DecodeError)
 	settings, ok := got.Event.Data.(*types.ThreadSettingsUpdatedNotification)
 	require.True(t, ok)

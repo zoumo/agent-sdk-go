@@ -21,7 +21,7 @@ var (
 	ErrInvalidPermissionAnswer  = errors.New("claude: invalid permission answer")
 	ErrPermissionUsed           = errors.New("claude: permission answer already attempted")
 	ErrPermissionWriteFailed    = errors.New("claude: permission response attempt failed")
-	ErrPermissionCancelled      = errors.New("claude: permission request cancelled")
+	ErrPermissionCancelled      = errors.New("claude: permission request canceled")
 	ErrPermissionStale          = errors.New("claude: permission handle belongs to another connection epoch")
 )
 

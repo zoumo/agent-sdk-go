@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -35,7 +37,7 @@ func (obs *observationSuite) TestSessionCurrentVersionMetadata() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
-			require.NoError(t, err, err)
+			require.NoError(t, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation))
 			nextSessionNative(t, s)
@@ -91,7 +93,7 @@ func (obs *observationSuite) TestSessionTextThinkingAndUsageStayAtNativeSource()
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "request-normal", codex.Limits{})
 			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
-			require.NoError(t, err, err)
+			require.NoError(t, err)
 			defer s.Close()
 			emitRequests(t, f.c, treeFrame("thread/started", boundsRelation))
 			// Drain initial diagnostic, association, and its native notification.
@@ -130,7 +132,7 @@ func (obs *observationSuite) TestSessionParentIdleChildActive() {
 		t.Run(transport, func(t *testing.T) {
 			f := obs.fixture(t, "tree-lifecycle", codex.Limits{})
 			s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
-			require.NoError(t, err, err)
+			require.NoError(t, err)
 			defer s.Close()
 			_, err = s.Submit(context.Background(), codex.Input{Input: []types.UserInput{}})
 			require.NoError(t, err)
@@ -141,7 +143,7 @@ func (obs *observationSuite) TestSessionParentIdleChildActive() {
 					continue
 				}
 				if e.Event.Method == "item/completed" && strings.Contains(string(e.Raw), "subAgentActivity") {
-					require.NoError(t, e.Event.DecodeError, e.Event.DecodeError)
+					require.NoError(t, e.Event.DecodeError)
 					activities++
 				}
 				if e.Event.Method == "thread/status/changed" {
@@ -172,14 +174,10 @@ func (obs *observationSuite) TestSessionParentIdleChildActive() {
 				require.FailNow(t, "test invariant", "parent ended observation")
 			default:
 			}
-			{
-				err = f.c.Call(context.Background(), "tree-step", nil, nil)
-				require.NoError(t, err, err)
-			}
-			{
-				e := nextSessionNative(t, s)
-				require.False(t, e.Event == nil || string(e.Raw) != treeChildRaw, "child no longer observed")
-			}
+			err = f.c.Call(context.Background(), "tree-step", nil, nil)
+			require.NoError(t, err)
+			e := nextSessionNative(t, s)
+			require.False(t, e.Event == nil || string(e.Raw) != treeChildRaw, "child no longer observed")
 		})
 	}
 }
@@ -276,8 +274,8 @@ func (obs *observationSuite) TestSessionLegacyNativeChildEvidence() {
 								break
 							}
 							deltas++
-							require.Equal(t, treeChildRaw, string(r.Raw))
-							require.Equal(t, treeChildParams, string(r.Params))
+							require.Equal(t, treeChildRaw, string(r.Raw))       //nolint:testifylint // preserves exact protocol bytes
+							require.Equal(t, treeChildParams, string(r.Params)) //nolint:testifylint // preserves exact protocol bytes
 							require.Equal(t, types.EventIdentity{ThreadID: "child-1", TurnID: "child-turn", ItemID: "child-item"}, r.Source)
 							require.Equal(t, "[null,9007199254740993]", string(r.Event.Data.(*types.AgentMessageDeltaNotification).UnknownFields["future"]))
 						case "future/child":
@@ -330,8 +328,8 @@ func (obs *observationSuite) TestSessionV2StartedActivityAndDuplicateFacts() {
 				require.Equal(t, "[null,9007199254740993]", string(a.UnknownFields["future"]))
 			}
 			require.Equal(t, done, string(events[2].Raw))
-			require.Equal(t, treeChildRaw, string(events[3].Raw))
-			require.Equal(t, treeChildRaw, string(f.c.Unattributed().Records[0].Raw))
+			require.Equal(t, treeChildRaw, string(events[3].Raw))                     //nolint:testifylint // preserves exact protocol bytes
+			require.Equal(t, treeChildRaw, string(f.c.Unattributed().Records[0].Raw)) //nolint:testifylint // preserves exact protocol bytes
 		})
 	}
 }
@@ -365,7 +363,7 @@ func (obs *observationSuite) TestSessionNativeNestedConflictsKeepFacts() {
 					t.Fatal("quarantined grandchild was backfilled")
 				case "item/agentMessage/delta":
 					delta++
-					require.Equal(t, treeChildRaw, string(r.Raw))
+					require.Equal(t, treeChildRaw, string(r.Raw)) //nolint:testifylint // preserves exact protocol bytes
 				case "item/completed":
 					if strings.Contains(string(r.Raw), "futureItem") {
 						unknown++
@@ -462,7 +460,7 @@ func (obs *observationSuite) TestSessionChildRequestBacklogEpochAndWaitCancellat
 						}
 						require.Equal(t, 1, successes)
 						for range 32 {
-							require.Equal(t, treeChildRaw, string(nextSessionNative(t, s).Raw))
+							require.Equal(t, treeChildRaw, string(nextSessionNative(t, s).Raw)) //nolint:testifylint // preserves exact protocol bytes
 						}
 						responseBarrier(t, f)
 						answers := answerFrames(t, f.trace)
@@ -497,7 +495,7 @@ func (obs *observationSuite) TestSessionChildRequestBacklogEpochAndWaitCancellat
 
 func TestSessionLargeFaultBacklogAndConcurrentAbort(t *testing.T) {
 	for _, fault := range []bool{false, true} {
-		t.Run(fmt.Sprint(fault), func(t *testing.T) {
+		t.Run(strconv.FormatBool(fault), func(t *testing.T) {
 			f := startRequestFake(t, "request-normal", codex.Limits{})
 			var frames []string
 			for i := range 8192 {

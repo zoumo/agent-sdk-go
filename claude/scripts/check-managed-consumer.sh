@@ -15,7 +15,7 @@ export GOPATH="$consumer_dir/go" GOMODCACHE="$consumer_dir/module-cache"
 cat > "$consumer_dir/go.mod" <<MOD
 module managed-consumer
 
-go 1.26.9
+go 1.26
 
 MOD
 cat > "$consumer_dir/consumer_test.go" <<'GO'

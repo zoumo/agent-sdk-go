@@ -23,6 +23,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+type processLifecycleSuite struct{ suite.Suite }
+
 func (s *processLifecycleSuite) TestCloseReapsUncooperativeChild() {
 	t := s.T()
 	opts := fixtureOptions(t, "ignore_eof")
@@ -39,7 +41,7 @@ func (s *processLifecycleSuite) TestCloseReapsUncooperativeChild() {
 		err := c.Close()
 		require.NoError(t, err)
 	}
-	require.False(t, time.Since(start) > 3*time.Second, "Close exceeded bound")
+	require.LessOrEqual(t, time.Since(start), 3*time.Second, "Close exceeded bound")
 	{
 		err := syscall.Kill(process.PID, 0)
 		require.ErrorIsf(t, err, syscall.ESRCH, "child still exists or is unreaped: pid %d, %v", process.PID, err)
@@ -76,7 +78,7 @@ func runLifecycleDescendant() {
 	_, _ = ready.Write([]byte{1})
 	_ = ready.Close()
 	<-signals
-	_ = os.WriteFile(os.Getenv("CLAUDE_GO_TERMINATED"), []byte("SIGTERM received"), 0600)
+	_ = os.WriteFile(os.Getenv("CLAUDE_GO_TERMINATED"), []byte("SIGTERM received"), 0o600)
 }
 
 func runLifecycleFixture(mode string, reader *bufio.Reader) {
@@ -98,7 +100,7 @@ func runLifecycleFixture(mode string, reader *bufio.Reader) {
 		os.Exit(31)
 	}
 	exe, _ := os.Executable()
-	descendant := exec.Command(exe)
+	descendant := exec.CommandContext(context.Background(), exe)
 	descendant.Env = []string{"HOME=" + os.Getenv("HOME"), "CLAUDE_GO_FIXTURE=lifecycle_descendant", "CLAUDE_GO_TERMINATED=" + os.Getenv("CLAUDE_GO_TERMINATED"), "GORACE=atexit_sleep_ms=0"}
 	if mode == "lifecycle_closed_pipes" {
 		descendant.Env = append(descendant.Env, "CLAUDE_GO_CLOSE_OUTPUT=1")
@@ -136,7 +138,7 @@ func (s *processLifecycleSuite) TestCloseEscalatesToKillForIgnoredSIGTERM() {
 		err := c.Close()
 		require.NoError(t, err)
 	}
-	require.False(t, time.Since(start) > 3*time.Second, "kill escalation was unbounded")
+	require.LessOrEqual(t, time.Since(start), 3*time.Second, "kill escalation was unbounded")
 	{
 		err := syscall.Kill(info.PID, 0)
 		require.ErrorIsf(t, err, syscall.ESRCH, "direct child not reaped: %v", err)
@@ -146,7 +148,7 @@ func (s *processLifecycleSuite) TestCloseEscalatesToKillForIgnoredSIGTERM() {
 func (s *processLifecycleSuite) TestProcessGroupTeardownAndDescendantHoldingStdout() {
 	t := s.T()
 	ps, err := exec.LookPath("ps")
-	require.Nil(t, err, "process-state verification requires ps:", err)
+	require.NoError(t, err, "process-state verification requires ps:", err)
 	for _, mode := range []string{"lifecycle_tree", "lifecycle_parent_exit", "lifecycle_closed_pipes"} {
 		t.Run(mode, func(t *testing.T) {
 			marker := filepath.Join(t.TempDir(), "terminated")
@@ -170,7 +172,7 @@ func (s *processLifecycleSuite) TestProcessGroupTeardownAndDescendantHoldingStdo
 			} else {
 				require.NoError(t, err)
 			}
-			require.False(t, time.Since(start) > 3*time.Second, "descendant pipe kept close blocked")
+			require.LessOrEqual(t, time.Since(start), 3*time.Second, "descendant pipe kept close blocked")
 			{
 				err := syscall.Kill(info.PID, 0)
 				require.ErrorIsf(t, err, syscall.ESRCH, "direct child unreaped: %v", err)
@@ -185,7 +187,7 @@ func (s *processLifecycleSuite) TestProcessGroupTeardownAndDescendantHoldingStdo
 			// zombie can await the host reaper; it must no longer be alive or hold pipes.
 			deadline := time.Now().Add(3 * time.Second)
 			for {
-				out, err := exec.Command(ps, "-o", "stat=", "-p", strconv.Itoa(info.Descendant)).Output()
+				out, err := exec.CommandContext(context.Background(), ps, "-o", "stat=", "-p", strconv.Itoa(info.Descendant)).Output()
 				state := strings.TrimSpace(string(out))
 				if err == nil && strings.HasPrefix(state, "Z") {
 					break
@@ -199,8 +201,5 @@ func (s *processLifecycleSuite) TestProcessGroupTeardownAndDescendantHoldingStdo
 		})
 	}
 }
-
-// Process lifecycle cases retain their platform-specific isolated peers.
-type processLifecycleSuite struct{ suite.Suite }
 
 func TestProcessLifecycleSuite(t *testing.T) { suite.Run(t, new(processLifecycleSuite)) }

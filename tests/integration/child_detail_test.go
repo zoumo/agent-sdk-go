@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	ct "github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -102,12 +104,15 @@ func openChildDetail(t *testing.T, policy codex.ChildDetailPolicy, owned bool) (
 	t.Cleanup(func() { _ = s.Abort() })
 	return s, c, path
 }
+
 func detailFrame(method, params string) string {
 	return fmt.Sprintf(`{"method":%q,"params":%s}`, method, params)
 }
+
 func detailRelation(child, parent string) string {
 	return detailFrame("thread/started", fmt.Sprintf(`{"thread":{"id":%q,"parentThreadId":%q}}`, child, parent))
 }
+
 func pureDetails(id string) []string {
 	base := fmt.Sprintf(`"threadId":%q,"turnId":"turn","itemId":"item"`, id)
 	return []string{
@@ -120,17 +125,19 @@ func pureDetails(id string) []string {
 		detailFrame("item/mcpToolCall/progress", `{`+base+`,"message":"progress"}`),
 	}
 }
+
 func emitChildDetail(t *testing.T, c *codex.Client, frames []string) {
 	t.Helper()
 	require.NoError(t, c.Call(deadline(t), "fixture/emit", frames, nil))
 }
+
 func drainChildDetail(t *testing.T, s *codex.Session) []codex.Received {
 	t.Helper()
 	require.NoError(t, s.Close())
 	var values []codex.Received
 	for {
 		r, err := s.Receive(deadline(t))
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -138,6 +145,7 @@ func drainChildDetail(t *testing.T, s *codex.Session) []codex.Received {
 	}
 	return values
 }
+
 func (s *NativeIntegrationSuite) TestOptionalChildDetail() {
 	s.Run("codex", func() {
 		s.Run("F1-default-options", func() { s.checkCodexChildDetailOptions() })

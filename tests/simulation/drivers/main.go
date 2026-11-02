@@ -4,14 +4,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
-	"github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
+	claudesim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
+	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 }
 
 func accept(ctx context.Context, provider, root, raw string, peer driverPeer, policy, observations string) error {
-	out, err := os.OpenFile(observations, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	out, err := os.OpenFile(observations, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
@@ -41,36 +42,38 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, po
 	}
 	switch provider {
 	case "codex":
-		if plan.DriverProfile == "existing-children" {
+		switch plan.DriverProfile {
+		case "existing-children":
 			err = codexsim.AcceptExistingChildren(ctx, root, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
-		} else if plan.DriverProfile == "remote-close" {
+		case "remote-close":
 			if peer.Remote == nil {
-				return fmt.Errorf("remote endpoint is required")
+				return errors.New("remote endpoint is required")
 			}
 			main, mainOK := peer.Remote.Connections["main"]
 			probe, probeOK := peer.Remote.Connections["probe"]
 			if !mainOK || !probeOK {
-				return fmt.Errorf("remote main and probe endpoints are required")
+				return errors.New("remote main and probe endpoints are required")
 			}
 			err = codexsim.AcceptRemoteClose(ctx, root, main.URL, main.BearerToken, probe.URL, probe.BearerToken)
-		} else if plan.DriverProfile == "history" || plan.DriverProfile == "continuation" {
+		case "history", "continuation":
 			err = codexsim.AcceptSavedHistory(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
-		} else {
+		default:
 			err = codexsim.AcceptFlow(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
 		}
 	case "claude":
 		if len(peer.Args) != 0 {
-			return fmt.Errorf("Claude requires a runner-prepared executable launcher")
+			return errors.New("claude requires a runner-prepared executable launcher")
 		}
-		if plan.DriverProfile == "existing-children" {
+		switch plan.DriverProfile {
+		case "existing-children":
 			err = claudesim.AcceptExistingChildren(ctx, peer.Command, root)
-		} else if plan.DriverProfile == "history" {
+		case "history":
 			err = claudesim.AcceptSavedHistory(ctx, peer.Command, root, claude.ChildDetailPolicy(policy), out)
-		} else {
+		default:
 			err = claudesim.AcceptFlow(ctx, peer.Command, root, claude.ChildDetailPolicy(policy), out)
 		}
 	default:
-		err = fmt.Errorf("unsupported provider")
+		err = errors.New("unsupported provider")
 	}
 	return err
 }

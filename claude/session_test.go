@@ -34,6 +34,7 @@ func sessionNative(t *testing.T, s *Session) Received {
 		}
 	}
 }
+
 func submitFrame(t *testing.T, s *Session, frame string) {
 	t.Helper()
 	receipt, err := s.Submit(context.Background(), Input{Text: frame})
@@ -104,7 +105,7 @@ func TestSessionCloseDrainsAndAbortDiscards(t *testing.T) {
 			s := openSessionFixture(t)
 			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
 			sessionNative(t, s)
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				submitFrame(t, s, `{"type":"result","session_id":"s","uuid":"repeat","result":"done"}`)
 			}
 			// A native control acknowledgement is a reader barrier, independent of consumption.
@@ -169,12 +170,12 @@ func TestSessionLongMainConversationHasNoUUIDLedgerLimit(t *testing.T) {
 	s := openSessionFixture(t)
 	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
 	sessionNative(t, s)
-	for i := 0; i < 8300; i++ {
+	for i := range 8300 {
 		frame := fmt.Sprintf(`{"type":"assistant","session_id":"s","uuid":"u%d","message":{"content":"text"}}`, i)
 		submitFrame(t, s, frame)
 	}
 	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
-	for i := 0; i < 8300; i++ {
+	for i := range 8300 {
 		require.Equal(t, fmt.Sprintf("u%d", i), sessionNative(t, s).Event.UUID)
 	}
 	require.NoError(t, s.Err())
@@ -219,7 +220,6 @@ func TestSessionWaitCancellationAndQuarantineExpiry(t *testing.T) {
 			require.Eventually(t, func() bool { return s.Unattributed().Expired == 1 }, time.Second, time.Millisecond)
 			require.Empty(t, s.Unattributed().Records)
 			require.True(t, s.Unattributed().CoverageGap)
-
 		})
 	}
 }
@@ -257,7 +257,6 @@ func TestSessionFaultDrainsAcceptedFactsAndKeepsFirstCause(t *testing.T) {
 			require.Equal(t, cause, err)
 			_ = s.Close()
 			require.Equal(t, cause, s.Err())
-
 		})
 	}
 }

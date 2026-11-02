@@ -60,11 +60,11 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 					Original []byte `json:"originalBase64"`
 				}
 			}
-			b, e := os.ReadFile(filepath.Join(root, "assertion-inputs.json"))
+			raw, e := os.ReadFile(filepath.Join(root, "assertion-inputs.json"))
 			if e != nil {
 				return e
 			}
-			if e = json.Unmarshal(b, &described); e != nil {
+			if e := json.Unmarshal(raw, &described); e != nil {
 				return e
 			}
 			if described.SchemaVersion != 1 {
@@ -113,7 +113,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 		return err
 	}
 	// The native capture must contain only initialization, not setup inputs.
-	b, err = os.ReadFile(filepath.Join(root, "raw/raw.jsonl"))
+	b, err = os.ReadFile(filepath.Join(root, "raw", "raw.jsonl"))
 	if err != nil {
 		return err
 	}
@@ -145,8 +145,10 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if requests != 1 {
 		return errors.New("existing-child recording requires exactly one initialization")
 	}
-	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: executionProject(plan.HistoryProject, plan.FixtureProject),
-		ResumeID: seed.SessionID, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}})
+	s, err := claude.Open(ctx, claude.SessionOptions{
+		CLIPath: launcher, WorkDir: executionProject(plan.HistoryProject, plan.FixtureProject),
+		ResumeID: seed.SessionID, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config},
+	})
 	if err != nil {
 		return err
 	}
@@ -197,7 +199,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	sort.Strings(ids)
 	sort.Strings(want)
 	if !reflect.DeepEqual(ids, want) {
-		return errors.New("Go Session omitted or invented pre-existing children")
+		return errors.New("go session omitted or invented pre-existing children")
 	}
 	return verify()
 }

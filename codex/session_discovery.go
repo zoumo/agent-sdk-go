@@ -8,8 +8,10 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-var ErrUnsupportedDiscovery = errors.New("codex: descendant queries require experimentalApi initialization")
-var ErrDiscoveryCursor = errors.New("codex: descendant query cursor did not advance or repeated")
+var (
+	ErrUnsupportedDiscovery = errors.New("codex: descendant queries require experimentalApi initialization")
+	ErrDiscoveryCursor      = errors.New("codex: descendant query cursor did not advance or repeated")
+)
 
 // SubagentQuery selects stored descendants of the Session's fixed main thread.
 // It cannot redirect the ancestor or select a direct-parent-only query.
@@ -23,7 +25,7 @@ type SubagentQuery struct {
 	SortKey        types.Optional[types.ThreadSortKey]
 	SortDirection  types.Optional[types.SortDirection]
 	Cwd            types.Optional[types.ThreadListCwdFilter]
-	UseStateDbOnly types.Optional[bool]
+	UseStateDbOnly types.Optional[bool] //nolint:staticcheck // Mirrors the native wire spelling.
 	SectionID      types.Optional[string]
 	ProjectID      types.Optional[string]
 	SearchTerm     types.Optional[string]

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
@@ -44,7 +45,7 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 			}
 			root := t.TempDir()
 			source, receipt := filepath.Join(root, "raw.jsonl"), filepath.Join(root, "peer.json")
-			require.NoError(t, os.WriteFile(source, capture.Bytes(), 0600))
+			require.NoError(t, os.WriteFile(source, capture.Bytes(), 0o600))
 			peer, err := mocktest.Executable()
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -73,6 +74,7 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 func frame(n int, d, w string) recording.Frame {
 	return recording.Frame{Ordinal: n, Direction: d, Epoch: 1, Channel: "protocol", Wire: json.RawMessage(w)}
 }
+
 func rootPrefix(t *testing.T) []recording.Frame {
 	t.Helper()
 	b, err := fixturedata.Files.ReadFile("integration/lifecycle.jsonl")

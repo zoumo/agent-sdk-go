@@ -30,5 +30,4 @@ func TestOfflineTranscript(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(expected), output.String(),
 		"transcript differs:\n%s", output.String())
-
 }

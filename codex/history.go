@@ -50,7 +50,7 @@ func (c *Client) historyThreadOwned(ctx context.Context, o HistoryOptions, owner
 		return types.Thread{}, raw, err
 	}
 	t := r.Thread
-	if t.ID != o.ThreadID || filepath.Clean(string(t.Cwd)) != filepath.Clean(o.CWD) {
+	if t.ID != o.ThreadID || filepath.Clean(t.Cwd) != filepath.Clean(o.CWD) {
 		return t, raw, errors.New("codex history: thread/cwd identity mismatch")
 	}
 	if t.Ephemeral || t.Status.Active != nil || t.Status.SystemError != nil || len(t.Status.Unknown) > 0 {

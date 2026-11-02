@@ -22,8 +22,9 @@ func writeJSON(path string, v any) error {
 	if e != nil {
 		return e
 	}
-	return os.WriteFile(path, append(b, 10), 0600)
+	return os.WriteFile(path, append(b, 10), 0o600)
 }
+
 func readJSON(path string, v any) error {
 	b, e := os.ReadFile(path)
 	if e != nil {
@@ -51,17 +52,19 @@ func main() {
 	flag.BoolVar(&o.Gate, "gate", false, "Run catalog; fail required gaps")
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	if err := execute(ctx, o); err != nil {
+		stop()
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	stop()
 }
+
 func execute(ctx context.Context, o options) error {
 	if !filepath.IsAbs(o.Output) || !filepath.IsAbs(o.Driver) || o.Jobs < 1 || o.Timeout <= 0 {
 		return errors.New("absolute --output/--driver, positive --jobs/--timeout required")
 	}
-	if err := os.Mkdir(o.Output, 0700); err != nil {
+	if err := os.Mkdir(o.Output, 0o700); err != nil {
 		return err
 	}
 	tool, err := discoverTool(ctx)

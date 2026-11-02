@@ -22,6 +22,7 @@ type ApprovalOptions struct {
 func (r IncomingRequest) Approve(ctx context.Context, options ApprovalOptions) error {
 	return r.approval(ctx, options, true)
 }
+
 func (r IncomingRequest) Deny(ctx context.Context, options ApprovalOptions) error {
 	return r.approval(ctx, options, false)
 }
@@ -30,15 +31,16 @@ func (r IncomingRequest) Deny(ctx context.Context, options ApprovalOptions) erro
 // answer arrays and native extensions. It never submits an ordinary turn input.
 func (r IncomingRequest) Answer(ctx context.Context, answer types.ToolRequestUserInputResponse) error {
 	if r.Method() != "item/tool/requestUserInput" {
-		return r.Handle().answerError(NotSent, ErrInvalidInput)
+		return r.Handle().answerError(ErrInvalidInput)
 	}
 	if answer.Answers == nil {
-		return r.Handle().answerError(NotSent, ErrInvalidInput)
+		return r.Handle().answerError(ErrInvalidInput)
 	}
 	return r.Handle().Answer(ctx, answer)
 }
+
 func (r IncomingRequest) approval(ctx context.Context, o ApprovalOptions, approve bool) error {
-	invalid := func() error { return r.Handle().answerError(NotSent, ErrInvalidInput) }
+	invalid := func() error { return r.Handle().answerError(ErrInvalidInput) }
 	count := 0
 	for _, present := range []bool{o.CommandExecution != nil, o.FileChange != nil, o.Permissions != nil, o.ApplyPatch != nil, o.ExecCommand != nil} {
 		if present {
@@ -110,7 +112,7 @@ func (r IncomingRequest) approval(ctx context.Context, o ApprovalOptions, approv
 	// from the native codec, and the validated bytes are exactly those dispatched.
 	raw, err := json.Marshal(response)
 	if err != nil {
-		return r.Handle().answerError(NotSent, err)
+		return r.Handle().answerError(err)
 	}
 	if r.Method() == "item/permissions/requestApproval" {
 		if scope, ok := o.Permissions.Scope.Get(); ok && scope != types.PermissionGrantScopeTurn && scope != types.PermissionGrantScopeSession {

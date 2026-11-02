@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -56,7 +58,7 @@ func openBlockedRemote(t *testing.T, limits codex.Limits, resolveID string) *blo
 			return m, err
 		}
 		send := func(id json.RawMessage, result string) error {
-			return ws.Write(context.Background(), websocket.MessageText, []byte(fmt.Sprintf(`{"id":%s,"result":%s}`, id, result)))
+			return ws.Write(context.Background(), websocket.MessageText, fmt.Appendf(nil, `{"id":%s,"result":%s}`, id, result))
 		}
 		init, err := read()
 		if err != nil || init.Method != "initialize" {
@@ -76,8 +78,8 @@ func openBlockedRemote(t *testing.T, limits codex.Limits, resolveID string) *blo
 		if send(start.ID, startResult) != nil {
 			return
 		}
-		for i := 0; i < 4; i++ {
-			if ws.Write(context.Background(), websocket.MessageText, []byte(requestFrame(fmt.Sprint(100+i), "future/approval", `{"threadId":"native-thread-42"}`))) != nil {
+		for i := range 4 {
+			if ws.Write(context.Background(), websocket.MessageText, []byte(requestFrame(strconv.Itoa(100+i), "future/approval", `{"threadId":"native-thread-42"}`))) != nil {
 				return
 			}
 		}
@@ -164,12 +166,11 @@ func openBlockedRemote(t *testing.T, limits codex.Limits, resolveID string) *blo
 	})
 	p.session, err = codex.Open(context.Background(), codex.SessionOptions{Client: p.client})
 	require.NoError(t, err)
-	{
-		err = p.client.Call(context.Background(), "gate", nil, nil)
-		require.NoError(t, err)
-	}
+	err = p.client.Call(context.Background(), "gate", nil, nil)
+	require.NoError(t, err)
 	return p
 }
+
 func awaitPrefix(t *testing.T, p *blockedRemotePeer) {
 	t.Helper()
 	select {
@@ -338,7 +339,7 @@ func TestRemoteCloseLeavesListenerAvailable(t *testing.T) {
 				if json.Unmarshal(raw, &m) != nil {
 					return
 				}
-				if ws.Write(context.Background(), websocket.MessageText, []byte(fmt.Sprintf(`{"id":%s,"result":%s}`, m.ID, initResult))) != nil {
+				if ws.Write(context.Background(), websocket.MessageText, fmt.Appendf(nil, `{"id":%s,"result":%s}`, m.ID, initResult)) != nil {
 					return
 				}
 				for {
@@ -358,7 +359,7 @@ func TestRemoteCloseLeavesListenerAvailable(t *testing.T) {
 			}
 			defer server.Close()
 			options.URL = "ws" + strings.TrimPrefix(server.URL, "http")
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				c, err := codex.NewRemote(context.Background(), options)
 				require.NoError(t, err)
 				var wg sync.WaitGroup

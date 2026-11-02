@@ -58,8 +58,8 @@ func parseQueryTranscript(ctx context.Context, data []byte, session string, o Se
 			return nil, bad("corrupt", "missing/invalid type")
 		}
 		for _, key := range []string{"sessionId", "session_id"} {
-			v, e := str(key)
-			if e != nil || (v != nil && *v != session) {
+			v, err := str(key)
+			if err != nil || (v != nil && *v != session) {
 				return nil, bad("corrupt", "session identity mismatch")
 			}
 		}
@@ -397,7 +397,9 @@ func recoverQueryTools(ctx context.Context, records, chain []*queryRecord, seen 
 		}
 		sortTime(siblings)
 		sortTime(orphaned)
-		recovered := append(siblings, orphaned...)
+		recovered := make([]*queryRecord, 0, len(siblings)+len(orphaned))
+		recovered = append(recovered, siblings...)
+		recovered = append(recovered, orphaned...)
 		for _, r := range recovered {
 			seen[r.UUID] = true
 		}

@@ -30,7 +30,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 	if err != nil {
 		return err
 	}
-	if err = json.Unmarshal(b, &plan); err != nil {
+	if err := json.Unmarshal(b, &plan); err != nil {
 		return err
 	}
 	type frame struct {
@@ -54,7 +54,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(filepath.Join(root, "raw/raw.jsonl"))
+	f, err := os.Open(filepath.Join(root, "raw", "raw.jsonl"))
 	if err != nil {
 		return err
 	}
@@ -117,13 +117,15 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 	changed := make(chan struct{}, 1)
 	done := make(chan struct{})
 	var receiveErr error
-	key := func(raw json.RawMessage) string {
+	key := func(raw json.RawMessage) (string, error) {
 		var v any
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.UseNumber()
-		_ = decoder.Decode(&v)
-		b, _ := json.Marshal(v)
-		return string(b)
+		if err := decoder.Decode(&v); err != nil {
+			return "", err
+		}
+		b, err := json.Marshal(v)
+		return string(b), err
 	}
 	encoder := json.NewEncoder(deliveries)
 	observe := func(got claude.Received) error {
@@ -139,7 +141,11 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 			return err
 		}
 		if len(got.Raw) > 0 {
-			seen[key(got.Raw)]++
+			k, err := key(got.Raw)
+			if err != nil {
+				return err
+			}
+			seen[k]++
 		}
 		if got.Request != nil {
 			requests[got.Request.ID()] = got.Request
@@ -217,12 +223,16 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 	wait := func(raw json.RawMessage) error {
 		for {
 			mu.Lock()
-			k := key(raw)
+			k, e := key(raw)
+			if e != nil {
+				mu.Unlock()
+				return e
+			}
 			ok := seen[k] > consumed[k]
 			if ok {
 				consumed[k]++
 			}
-			e := receiveErr
+			e = receiveErr
 			mu.Unlock()
 			if ok {
 				return nil
@@ -233,7 +243,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 			select {
 			case <-changed:
 			case <-done:
-				return errors.New("Session ended before expected native fact")
+				return errors.New("session ended before expected native fact")
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -336,7 +346,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 			if expected.Response.Subtype == "error" {
 				var native *claude.ControlError
 				if e == nil || !errors.As(e, &native) {
-					return fmt.Errorf("%s did not reproduce native rejection: %v", request.Subtype, e)
+					return fmt.Errorf("%s did not reproduce native rejection: %w", request.Subtype, e)
 				}
 				continue
 			}

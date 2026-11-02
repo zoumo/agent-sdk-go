@@ -1,6 +1,7 @@
 package lineage
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,7 @@ func newGraph(t *testing.T, limits Limits) *Graph[string] {
 	require.NoError(t, err)
 	return g
 }
+
 func accept(t *testing.T, err error) {
 	t.Helper()
 	require.NoError(t, err)
@@ -55,9 +57,7 @@ func (s *GraphSuite) TestUnknownParentAndAncestors() {
 func snapshot(g *Graph[string]) any {
 	copyMap := func(m map[string]string) map[string]string {
 		r := make(map[string]string)
-		for k, v := range m {
-			r[k] = v
-		}
+		maps.Copy(r, m)
 		return r
 	}
 	nodes, roots := make(map[string]bool), make(map[string]bool)
@@ -69,6 +69,7 @@ func snapshot(g *Graph[string]) any {
 	}
 	return []any{nodes, roots, copyMap(g.parents)}
 }
+
 func reject(t *testing.T, g *Graph[string], want error, action func() error) {
 	t.Helper()
 	before := snapshot(g)
@@ -124,7 +125,6 @@ func (s *GraphSuite) TestLiteralLimitsAndLateAncestors() {
 			reject(t, g, ErrDepthLimit, func() error { return g.Confirm("b", "a") })
 		}
 	}
-
 }
 
 func (s *GraphSuite) TestMergeRepointsAllDescendants() {

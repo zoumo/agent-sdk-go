@@ -155,7 +155,7 @@ redaction nor token-cost control; see the
 
 ```sh
 # From the repository root; executes only a synthetic peer:
-mise exec -- go run ./claude/examples/subagents-offline
+go run ./claude/examples/subagents-offline
 ```
 
 ## Saved history
@@ -199,8 +199,8 @@ main chain nor replaces independent package-level ListSubagents/GetSubagentMessa
 
 ```sh
 # From the repository root; uses temporary synthetic storage:
-mise exec -- go run ./claude/examples/session-metadata-offline
-mise exec -- go run ./claude/examples/session-messages-offline
+go run ./claude/examples/session-metadata-offline
+go run ./claude/examples/session-messages-offline
 ```
 
 ## Message JSON

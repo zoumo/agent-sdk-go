@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +12,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	codex "github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 func TestRootPlanRejectsUnboundedOrChildInputs(t *testing.T) {
@@ -44,12 +45,13 @@ func init() {
 		os.Exit(0)
 	}
 }
+
 func rootClient(t *testing.T, fs []Frame) (*codex.Client, context.Context) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "synthetic.json")
 	b, e := json.Marshal(fs)
 	require.NoError(t, e)
-	require.NoError(t, os.WriteFile(path, b, 0600))
+	require.NoError(t, os.WriteFile(path, b, 0o600))
 	exe, e := os.Executable()
 	require.NoError(t, e)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -59,6 +61,7 @@ func rootClient(t *testing.T, fs []Frame) (*codex.Client, context.Context) {
 	t.Cleanup(func() { require.NoError(t, c.Close()) })
 	return c, ctx
 }
+
 func rootPrefix(t *testing.T) []Frame {
 	t.Helper()
 	b, e := fixtures.ReadFile("integration/lifecycle.jsonl")
@@ -74,6 +77,7 @@ func completeRoot(fs *[]Frame, id, turn string) {
 	addRoot(fs, "s2c", `{"id":`+id+`,"result":{"turn":{"id":"`+turn+`","items":[],"status":"inProgress"}}}`)
 	addRoot(fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"`+turn+`","items":[],"status":"completed","error":null}}}`)
 }
+
 func TestRootContinuationStructuredInputAndNativeReceipts(t *testing.T) {
 	fs := rootPrefix(t)
 	addRoot(&fs, "c2s", `{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"Reply with the word Ready."}],"environments":[],"outputSchema":{"type":"object","properties":{"word":{"type":"string"}},"required":["word"],"additionalProperties":false}}}`)
@@ -101,6 +105,7 @@ func TestRootContinuationStructuredInputAndNativeReceipts(t *testing.T) {
 	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
 	require.NoError(t, c.Close())
 }
+
 func TestExactNativeRequestPolicyAndSingleAnswer(t *testing.T) {
 	params := `{"threadId":"thread-001","turnId":"turn-1","itemId":"item-1","startedAtMs":1,"command":"DO NOT EXECUTE"}`
 	fs := rootPrefix(t)
@@ -121,6 +126,7 @@ func TestExactNativeRequestPolicyAndSingleAnswer(t *testing.T) {
 	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
 	require.NoError(t, c.Close())
 }
+
 func TestExecutionTimeInputAndExplicitInterrupt(t *testing.T) {
 	fs := rootPrefix(t)
 	addRoot(&fs, "c2s", `{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"Produce a short numbered list from one to ten."}],"environments":[]}}`)
@@ -148,6 +154,7 @@ func TestExecutionTimeInputAndExplicitInterrupt(t *testing.T) {
 	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
 	require.NoError(t, c.Close())
 }
+
 func TestIndependentSavedQueryStrictPagesAndUnknownEvidence(t *testing.T) {
 	prefix := rootPrefix(t)
 	var response struct {
@@ -232,6 +239,7 @@ func TestHeldNativeRequestContinuesReceiveAfterNonGeneratingControl(t *testing.T
 	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
 	require.NoError(t, c.Close())
 }
+
 func TestNativeStructuredInputRetainsTextElementsAndImageVariantOffline(t *testing.T) {
 	fs := rootPrefix(t)
 	input := `[{"type":"text","text":"Synthetic [image] input.","text_elements":[{"byteRange":{"start":10,"end":17},"placeholder":"[image]"}]},{"type":"image","url":"data:image/png;base64,synthetic-only"}]`
@@ -271,6 +279,7 @@ func TestNativeTaskFailureStopsBeforeConfigurationAndSecondInput(t *testing.T) {
 	require.NoError(t, c.Call(ctx, "replay/assert", nil, nil))
 	require.NoError(t, c.Close())
 }
+
 func TestR2PolicyCannotHideMissingQuestionOutcome(t *testing.T) {
 	denial := ExactRequest{Method: "item/fileChange/requestApproval", Params: json.RawMessage(`{}`), Result: json.RawMessage(`{"decision":"decline"}`)}
 	require.Error(t, ValidateR2Policy([]ExactRequest{denial}))

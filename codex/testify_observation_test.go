@@ -3,9 +3,9 @@ package codex_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 )
 
@@ -17,21 +17,22 @@ type observationSuite struct {
 	clients []fixture
 }
 
-func TestObservationSuite(t *testing.T) { suite.Run(t, new(observationSuite)) }
-func (s *observationSuite) SetupTest()  { s.clients = nil }
-func (s *observationSuite) TearDownTest() {
-	for _, f := range s.clients {
-		assert.NoError(s.T(), f.c.Close())
+func TestObservationSuite(t *testing.T)  { suite.Run(t, new(observationSuite)) }
+func (obs *observationSuite) SetupTest() { obs.clients = nil }
+func (obs *observationSuite) TearDownTest() {
+	for _, f := range obs.clients {
+		obs.NoError(f.c.Close())
 	}
 }
-func (s *observationSuite) fixture(t *testing.T, mode string, limits codex.Limits) fixture {
+
+func (obs *observationSuite) fixture(t *testing.T, mode string, limits codex.Limits) fixture {
 	t.Helper()
-	if t != s.T() {
+	if t != obs.T() {
 		return startFake(t, mode, limits)
 	}
 	f, err := openFake(t, mode, limits)
 	require.NoError(t, err)
-	s.clients = append(s.clients, f)
+	obs.clients = append(obs.clients, f)
 	return f
 }
 

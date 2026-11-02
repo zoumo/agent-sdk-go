@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -33,7 +34,6 @@ func TestResumeOptionalNativeSemantics(t *testing.T) {
 			}
 			require.Equal(t, p, decoded,
 				"optional state changed: %+v", decoded)
-
 		})
 	}
 	{
@@ -41,7 +41,6 @@ func TestResumeOptionalNativeSemantics(t *testing.T) {
 		require.Error(t, err,
 			"non-null bool encoded as null")
 	}
-
 }
 
 func TestResumeFullExperimentalFields(t *testing.T) {
@@ -75,7 +74,6 @@ func TestResumeFullExperimentalFields(t *testing.T) {
 	}
 	require.Equal(t, decode([]byte(raw)), decode(encoded),
 		"experimental fields changed: %s", encoded)
-
 }
 
 func TestResumeAndUnsubscribeRequiredFields(t *testing.T) {
@@ -99,7 +97,6 @@ func TestResumeAndUnsubscribeRequiredFields(t *testing.T) {
 				require.Error(t, err,
 					"invalid native model accepted")
 			}
-
 		})
 	}
 }

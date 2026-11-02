@@ -7,15 +7,19 @@ import (
 	"strings"
 )
 
-const treeChildParams = `{ "threadId" : "child-1", "turnId":"child-turn", "itemId":"child-item", "delta":"child text", "future":[null,9007199254740993] }`
-const treeChildRaw = `{"method":"item/agentMessage/delta","params":` + treeChildParams + `,"futureEnvelope":null}`
+const (
+	treeChildParams = `{ "threadId" : "child-1", "turnId":"child-turn", "itemId":"child-item", "delta":"child text", "future":[null,9007199254740993] }`
+	treeChildRaw    = `{"method":"item/agentMessage/delta","params":` + treeChildParams + `,"futureEnvelope":null}`
+)
 
 func treeSpawnParams(tool, status string) string {
 	return `{"threadId":"native-thread-42","turnId":"root-turn","completedAtMs":8,"item":{"type":"collabAgentToolCall","id":"spawn-1","agentsStates":{"child-1":{"status":"running","message":null}},"receiverThreadIds":["child-1","child-1","child-2"],"senderThreadId":"native-thread-42","status":"` + status + `","tool":"` + tool + `","prompt":null,"model":null,"reasoningEffort":null,"future":null}}`
 }
 
-const boundsRelation = `{"thread":{"id":"child-1","parentThreadId":"native-thread-42"}}`
-const childQuestion = `{"threadId":"child-1","turnId":"child-turn","itemId":"question-item","isBlocking":false,"questions":[{"id":"q","header":"H","question":"Choose","isOther":false,"isSecret":false,"options":[]}],"autoResolutionMs":null,"future":null}`
+const (
+	boundsRelation = `{"thread":{"id":"child-1","parentThreadId":"native-thread-42"}}`
+	childQuestion  = `{"threadId":"child-1","turnId":"child-turn","itemId":"question-item","isBlocking":false,"questions":[{"id":"q","header":"H","question":"Choose","isOther":false,"isSecret":false,"options":[]}],"autoResolutionMs":null,"future":null}`
+)
 
 func handleTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage, string)) bool {
 	if handleLifecycleTreePeer(mode, m, send) || handleNestedTreePeer(mode, m, send) {
@@ -92,7 +96,7 @@ func handleNestedTreePeer(mode string, m fakeEnvelope, send func(json.RawMessage
 			spawn("child-1", "grand", "child-turn")            // confirms previously associated grandchild
 			relation("grand", "native-thread-42")              // retain original parent
 			relation("child-1", "grand")                       // cycle
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				emit("item/completed", `{"threadId":"grand","turnId":"g-turn","item":{"type":"futureItem","id":"unknown-occurrence","payload":null}}`)
 			}
 			emit("item/started", `{"threadId":"grand","turnId":"g-turn","item":{"type":"subAgentActivity","id":"activity","agentThreadId":"other","agentPath":"/guessed/child","kind":"future-kind"}}`)

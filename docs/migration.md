@@ -9,8 +9,9 @@ Replace imports of `github.com/zoumo/codex-sdk-go` with
 
 The native source roots moved under `codex/` and `claude/`. Package-local examples
 and scripts retain package-relative paths: run their documented commands from the
-corresponding package directory. The root `mise.toml` supplies the compiler to both.
-Root checks and CI run from the repository root. There is one `go.mod` and `go.sum`.
+corresponding package directory. The root `go.mod` declares the shared Go version;
+`mise.toml` is an optional developer convenience. Root checks and CI run from the
+repository root. There is one `go.mod` and `go.sum`.
 
 The migration merges these complete source histories as parents, preserving commit
 objects and original author information:

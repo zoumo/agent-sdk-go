@@ -39,13 +39,13 @@ func validateNativeEncoding(v reflect.Value) error {
 			return fmt.Errorf("%w: invalid UTF-8 string", ErrInvalidInput)
 		}
 	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			if err := validateNativeEncoding(v.Field(i)); err != nil {
+		for _, field := range v.Fields() {
+			if err := validateNativeEncoding(field); err != nil {
 				return err
 			}
 		}
 	case reflect.Slice, reflect.Array:
-		for i := 0; i < v.Len(); i++ {
+		for i := range v.Len() {
 			if err := validateNativeEncoding(v.Index(i)); err != nil {
 				return err
 			}

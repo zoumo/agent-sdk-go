@@ -5,16 +5,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
-	"testing"
 )
 
 type GoMockSuite struct{ suite.Suite }
@@ -30,6 +29,7 @@ type mockScenarioDefinition struct {
 func mockScenario(fs []recording.Frame) mockScenarioDefinition {
 	return mockScenarioDefinition{1, "synthetic", fs}
 }
+
 func mockFrames(wires ...string) []recording.Frame {
 	var fs []recording.Frame
 	for i, w := range wires {
@@ -37,6 +37,7 @@ func mockFrames(wires ...string) []recording.Frame {
 	}
 	return fs
 }
+
 func (s *GoMockSuite) TestRealSDKStdio() {
 	for _, tc := range []struct{ name, method, params, answer string }{
 		{"question", "item/tool/requestUserInput", `{"threadId":"child","turnId":"turn","itemId":"item","questions":[{"id":"q","header":"Choice","question":"Pick?","isOther":false,"isSecret":false,"options":[]}]}`, `{"answers":{"q":{"answers":["blue"]}}}`},
@@ -57,20 +58,20 @@ func (s *GoMockSuite) TestRealSDKStdio() {
 				`s2c {"id":103,"result":{}}`)
 			c, ctx := s.startSDK(mockScenario(fs))
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: c})
-			require.NoError(s.T(), err)
+			s.Require().NoError(err)
 			defer func() { _ = c.Close(); _ = session.Close() }()
-			require.NoError(s.T(), c.Call(ctx, "synthetic/begin", nil, nil))
+			s.Require().NoError(c.Call(ctx, "synthetic/begin", nil, nil))
 			received, err := session.Receive(ctx)
-			require.NoError(s.T(), err)
-			require.NotNil(s.T(), received.Request)
+			s.Require().NoError(err)
+			s.Require().NotNil(received.Request)
 			request := received.Request
-			assert.Equal(s.T(), tc.method, request.Method())
+			s.Equal(tc.method, request.Method())
 			var result map[string]any
-			require.NoError(s.T(), json.Unmarshal([]byte(tc.answer), &result))
-			require.NoError(s.T(), request.Handle().Answer(ctx, result))
+			s.Require().NoError(json.Unmarshal([]byte(tc.answer), &result))
+			s.Require().NoError(request.Handle().Answer(ctx, result))
 
-			require.NoError(s.T(), c.Call(ctx, "synthetic/done", nil, nil))
-			require.NoError(s.T(), c.Close())
+			s.Require().NoError(c.Call(ctx, "synthetic/done", nil, nil))
+			s.Require().NoError(c.Close())
 		})
 	}
 }
@@ -109,34 +110,34 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 			var err error
 			if fault == "late response" {
 				session, openErr := codex.Open(ctx, codex.SessionOptions{Client: c})
-				require.NoError(s.T(), openErr)
+				s.Require().NoError(openErr)
 				defer func() { _ = c.Close(); _ = session.Close() }()
 				callCtx, cancel := context.WithCancel(ctx)
 				defer cancel()
 				result := make(chan error, 1)
 				go func() { result <- c.Call(callCtx, "synthetic/fault", nil, nil) }()
 				received, receiveErr := session.Receive(ctx)
-				require.NoError(s.T(), receiveErr)
-				require.NotNil(s.T(), received.Event)
-				require.Equal(s.T(), "synthetic/dispatched", received.Event.Method)
+				s.Require().NoError(receiveErr)
+				s.Require().NotNil(received.Event)
+				s.Require().Equal("synthetic/dispatched", received.Event.Method)
 				cancel()
 				err = <-result
-				require.ErrorIs(s.T(), err, context.Canceled)
+				s.Require().ErrorIs(err, context.Canceled)
 				var callError *codex.CallError
-				require.ErrorAs(s.T(), err, &callError)
-				assert.Equal(s.T(), codex.OutcomeUnknown, callError.Dispatch)
+				s.Require().ErrorAs(err, &callError)
+				s.Equal(codex.OutcomeUnknown, callError.Dispatch)
 				// The peer cannot release the late response until cancellation
 				// returned. A second response proves the stale ID cannot settle
 				// a new request or resurrect the canceled call.
-				require.NoError(s.T(), c.Call(ctx, "synthetic/release", nil, nil))
+				s.Require().NoError(c.Call(ctx, "synthetic/release", nil, nil))
 			} else {
 				err = c.Call(ctx, "synthetic/fault", nil, nil)
-				require.Error(s.T(), err)
+				s.Require().Error(err)
 			}
 			if fault != "disconnect" {
-				require.NoError(s.T(), c.Call(ctx, "synthetic/done", nil, nil))
+				s.Require().NoError(c.Call(ctx, "synthetic/done", nil, nil))
 			}
-			require.NoError(s.T(), c.Close())
+			s.Require().NoError(c.Close())
 		})
 	}
 }
@@ -144,17 +145,17 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 func (s *GoMockSuite) startSDK(sc mockScenarioDefinition) (*codex.Client, context.Context) {
 	s.T().Helper()
 	b, err := json.Marshal(sc)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	path := filepath.Join(s.T().TempDir(), "synthetic.json")
-	require.NoError(s.T(), os.WriteFile(path, b, 0600))
+	s.Require().NoError(os.WriteFile(path, b, 0o600))
 	executable, err := mocktest.Executable()
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	s.T().Cleanup(cancel)
 	args, err := mocktest.Arguments(s.T().TempDir(), "codex", path, "")
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: []string{}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"}}})
-	require.NoError(s.T(), err)
-	s.T().Cleanup(func() { assert.NoError(s.T(), c.Close()) })
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { s.NoError(c.Close()) })
 	return c, ctx
 }

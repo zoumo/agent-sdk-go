@@ -12,7 +12,7 @@ import (
 func writeDelivery(t *testing.T, values []map[string]any) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stream.jsonl")
-	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), "report.json"), []byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["agent"]}}]}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), "report.json"), []byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["agent"]}}]}`), 0o600))
 	file, err := os.Create(path)
 	require.NoError(t, err)
 	defer file.Close()
@@ -43,7 +43,8 @@ func TestChildPolicyRetainsContextUnknownContentAndMixedFacts(t *testing.T) {
 		}
 		for _, kind := range []string{"tool", "unknown", "unconfirmed", "other-session", "extension", "root-result"} {
 			var changed map[string]any
-			encoded, _ := json.Marshal(wire)
+			encoded, err := json.Marshal(wire)
+			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(encoded, &changed))
 			switch kind {
 			case "tool":
@@ -55,7 +56,8 @@ func TestChildPolicyRetainsContextUnknownContentAndMixedFacts(t *testing.T) {
 			case "other-session":
 				changed["session_id"] = "other"
 			}
-			encoded, _ = json.Marshal(changed)
+			encoded, err = json.Marshal(changed)
+			require.NoError(t, err)
 			candidate := map[string]any{"kind": "event", "origin": "live", "source": detail["source"], "raw": string(encoded)}
 			before, after = []map[string]any{member, candidate, terminal}, []map[string]any{member, terminal}
 			if kind == "unconfirmed" {

@@ -25,9 +25,9 @@ func TestRemoteMissingProbeCancelsAndReapsOwnedPeer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	main := service.endpoint.Connections["main"]
-	conn, _, err := websocket.Dial(ctx, main.URL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + main.BearerToken}}})
+	conn, _, err := websocket.Dial(ctx, main.URL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + main.BearerToken}}}) //nolint:bodyclose // websocket.Dial owns the handshake body.
 	require.NoError(t, err)
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	require.Eventually(t, func() bool { _, e := os.Stat(pidPath); return e == nil }, time.Second, 5*time.Millisecond)
 	data, err := os.ReadFile(pidPath)
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestRemoteRoutesByDeclaredConnectionID(t *testing.T) {
 		endpoint := service.endpoint.Connections[id]
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		conn, _, err := websocket.Dial(ctx, endpoint.URL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + endpoint.BearerToken}}})
+		conn, _, err := websocket.Dial(ctx, endpoint.URL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + endpoint.BearerToken}}}) //nolint:bodyclose // websocket.Dial owns the handshake body.
 		require.NoError(t, err)
 		return conn
 	}

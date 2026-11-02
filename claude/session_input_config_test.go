@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
@@ -50,7 +51,7 @@ func runInputConfigFixture(reader *bufio.Reader) {
 			return
 		}
 		if _, err = f.Write(line); err != nil {
-			os.Exit(12)
+			os.Exit(12) //nolint:gocritic // Fixture exits immediately; deferred cleanup is irrelevant.
 		}
 		var wire map[string]any
 		if json.Unmarshal(line, &wire) != nil {
@@ -201,7 +202,7 @@ func TestSessionInputAndConfigLocalRejectionsRemainUsable(t *testing.T) {
 	var d *DispatchError
 	require.ErrorAs(t, err, &d)
 	assert.Equal(t, NotSent, d.State)
-	_, err = s.Submit(nil, Input{})
+	_, err = s.Submit(nil, Input{}) //nolint:staticcheck // verifies nil-context rejection.
 	require.Error(t, err)
 	require.NoError(t, s.Err())
 	submitFrame(t, s, "still usable")

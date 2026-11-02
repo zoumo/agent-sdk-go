@@ -45,10 +45,7 @@ func (r *serverFrameGuard) Read(p []byte) (int, error) {
 	}
 	for offset := 0; offset < n; {
 		if r.remaining > 0 {
-			take := uint64(n - offset)
-			if take > r.remaining {
-				take = r.remaining
-			}
+			take := min(uint64(n-offset), r.remaining)
 			offset += int(take)
 			r.remaining -= take
 			continue
@@ -57,10 +54,7 @@ func (r *serverFrameGuard) Read(p []byte) (int, error) {
 			safePrefix = offset
 			r.need = 2
 		}
-		take := r.need - r.used
-		if take > n-offset {
-			take = n - offset
-		}
+		take := min(r.need-r.used, n-offset)
 		copy(r.header[r.used:], p[offset:offset+take])
 		r.used += take
 		offset += take
@@ -82,12 +76,13 @@ func (r *serverFrameGuard) Read(p []byte) (int, error) {
 			}
 		}
 		size := uint64(code)
-		if r.need == 4 {
+		switch r.need {
+		case 4:
 			size = uint64(binary.BigEndian.Uint16(r.header[2:4]))
 			if size < 126 {
 				return reject()
 			}
-		} else if r.need == 10 {
+		case 10:
 			size = binary.BigEndian.Uint64(r.header[2:10])
 			if size < 65536 || size>>63 != 0 {
 				return reject()

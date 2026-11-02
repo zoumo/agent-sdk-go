@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	claude "github.com/zoumo/agent-sdk-go/claude"
-
 	"github.com/stretchr/testify/require"
+
+	claude "github.com/zoumo/agent-sdk-go/claude"
 )
 
 func TestMain(m *testing.M) {
@@ -35,7 +35,7 @@ func TestOfflineExample(t *testing.T) {
 	expected := strings.Split(strings.TrimSpace(frames), "\n")
 	members := make(map[string]bool)
 	nativeCount, rootResult, childAfter, unconfirmedParent, terminal := 0, false, false, false, false
-	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(output.String()), "\n") {
 		var header struct {
 			Type string `json:"type"`
 			claude.Observation
@@ -52,8 +52,8 @@ func TestOfflineExample(t *testing.T) {
 			}
 
 		default:
-			require.Falsef(t, nativeCount >= len(expected), "native changed: %s", line)
-			require.EqualValuesf(t, expected[nativeCount], line, "native changed: %s", line)
+			require.Lessf(t, nativeCount, len(expected), "native changed: %s", line)
+			require.Equalf(t, expected[nativeCount], line, "native changed: %s", line)
 			nativeCount++
 			e, err := claude.ParseEvent([]byte(line))
 			require.NoError(t, err)
@@ -73,8 +73,10 @@ func TestOfflineExample(t *testing.T) {
 		name     string
 		observed bool
 	}{
-		{"root result", rootResult}, {"child after root result", childAfter},
-		{"unconfirmed nested tool owner", unconfirmedParent}, {"terminal patch", terminal},
+		{"root result", rootResult},
+		{"child after root result", childAfter},
+		{"unconfirmed nested tool owner", unconfirmedParent},
+		{"terminal patch", terminal},
 	} {
 		t.Run(tc.name, func(t *testing.T) { require.True(t, tc.observed) })
 	}
@@ -89,7 +91,7 @@ func TestOfflineSuppressedExample(t *testing.T) {
 	// confirmed-child after root result (10). The earlier mixed tool frame stays.
 	expected = append(append(append([]string{}, expected[:4]...), expected[5:9]...), expected[10:]...)
 	var got []string
-	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(output.String()), "\n") {
 		var header struct {
 			Type string `json:"type"`
 		}

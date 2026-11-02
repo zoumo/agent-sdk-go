@@ -79,10 +79,10 @@ func (c *interaction) sendInput(ctx context.Context, input Input) error {
 		}
 		data, err := json.Marshal(user)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 		}
 		var envelope map[string]json.RawMessage
-		if err = json.Unmarshal(data, &envelope); err != nil {
+		if err := json.Unmarshal(data, &envelope); err != nil {
 			return nil, err
 		}
 		// These envelope values are stream ownership markers, not target selectors.
@@ -98,7 +98,7 @@ func (c *interaction) sendInput(ctx context.Context, input Input) error {
 		}
 		var message map[string]json.RawMessage
 		if err := json.Unmarshal(envelope["message"], &message); err != nil {
-			return nil, fmt.Errorf("%w: message must be an object: %v", ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: message must be an object: %w", ErrInvalidInput, err)
 		}
 		var role string
 		if err := json.Unmarshal(message["role"], &role); err != nil || role != "user" {

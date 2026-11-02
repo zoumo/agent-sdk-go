@@ -38,8 +38,8 @@ func QuerySavedRoot(ctx context.Context, c *codex.Client, scope, id string) (out
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	record := func(method string, params, result any, e error) {
-		p, _ := json.Marshal(params)
-		r, _ := json.Marshal(result)
+		p := mustJSON(params)
+		r := mustJSON(result)
 		call := QueryCall{Method: method, Params: p, Result: r}
 		if e != nil {
 			call.Error = e.Error()

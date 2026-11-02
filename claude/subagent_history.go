@@ -70,7 +70,7 @@ func ListSubagents(ctx context.Context, parentSessionID string, o ListSubagentsO
 			page.Records = []SubagentInfo{}
 		}
 	}()
-	q, err := newChildQuery(ctx, parentSessionID, "", o.Scope, o.Limits, o.Limit, o.Offset, o.MaxAgents, 100, &page.Coverage)
+	q, err := newChildQuery(ctx, parentSessionID, o.Scope, o.Limits, o.Limit, o.Offset, o.MaxAgents, 100, &page.Coverage)
 	if err != nil {
 		return page, err
 	}
@@ -89,7 +89,7 @@ func ListSubagents(ctx context.Context, parentSessionID string, o ListSubagentsO
 		}
 		page.Records = append(page.Records, info)
 	}
-	if err = q.verify(); err != nil {
+	if err := q.verify(); err != nil {
 		return page, err
 	}
 	start := min(q.c.Offset, len(page.Records))
@@ -114,7 +114,7 @@ func GetSubagentMessages(ctx context.Context, parentSessionID, agentID string, o
 	if !safeChildID(agentID) {
 		return page, queryError("invalid-input", "", "invalid native agentID", ErrInvalidInput)
 	}
-	q, err := newChildQuery(ctx, parentSessionID, agentID, o.Scope, o.Limits, o.Limit, o.Offset, o.MaxMessages, 1000, &page.Coverage)
+	q, err := newChildQuery(ctx, parentSessionID, o.Scope, o.Limits, o.Limit, o.Offset, o.MaxMessages, 1000, &page.Coverage)
 	if err != nil {
 		return page, err
 	}
@@ -145,7 +145,7 @@ func GetSubagentMessages(ctx context.Context, parentSessionID, agentID string, o
 	for _, r := range records[start:end] {
 		page.Messages = append(page.Messages, SubagentMessage{SessionMessage: r, AgentID: agentID, ParentAgentID: cloneChildString(page.Info.ParentAgentID), ParentToolUseID: cloneChildString(page.Info.ParentToolUseID)})
 	}
-	if err = q.verify(); err != nil {
+	if err := q.verify(); err != nil {
 		return page, err
 	}
 	q.c.Status = "complete"
@@ -158,14 +158,16 @@ func safeChildID(id string) bool {
 	}
 	return !strings.ContainsAny(id, "/\\:") && !strings.ContainsFunc(id, unicode.IsControl)
 }
+
 func cloneChildString(value *string) *string {
 	if value == nil {
 		return nil
 	}
-	copy := *value
-	return &copy
+	cloned := *value
+	return &cloned
 }
-func newChildQuery(ctx context.Context, session, agent string, scope SessionQueryScope, limits SubagentHistoryLimits, limit, offset, maxResults, defaultLimit int, c *SubagentHistoryCoverage) (*childQuery, error) {
+
+func newChildQuery(ctx context.Context, session string, scope SessionQueryScope, limits SubagentHistoryLimits, limit, offset, maxResults, defaultLimit int, c *SubagentHistoryCoverage) (*childQuery, error) {
 	if ctx == nil {
 		return nil, queryError("invalid-input", "", "nil context", ErrInvalidInput)
 	}

@@ -33,7 +33,7 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	if err != nil {
 		return err
 	}
-	b, err = os.ReadFile(filepath.Join(root, "raw/raw.jsonl"))
+	b, err = os.ReadFile(filepath.Join(root, "raw", "raw.jsonl"))
 	if err != nil {
 		return err
 	}
@@ -90,8 +90,10 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 			return errors.New("history input has no recorded result")
 		}
 	}
-	s, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject),
-		Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &initialize, ChildDetailPolicy: policy})
+	s, err := claude.Open(ctx, claude.SessionOptions{
+		CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject),
+		Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &initialize, ChildDetailPolicy: policy,
+	})
 	if err != nil {
 		return err
 	}
@@ -125,14 +127,14 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 				continue
 			}
 			if got.Event.Result.IsError || !sameJSON(got.Raw, terminals[i][terminal]) {
-				return errors.New("Go Session terminal differs from native recording")
+				return errors.New("go session terminal differs from native recording")
 			}
 			terminal++
 		}
 	}
 	id, known := s.SessionID()
 	if !known {
-		return errors.New("Go Session did not establish native identity")
+		return errors.New("go session did not establish native identity")
 	}
 	if err := s.Close(); err != nil {
 		return err
@@ -152,14 +154,14 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 		}
 	}
 	if !found {
-		return errors.New("Go history discovery omitted recorded session")
+		return errors.New("go history discovery omitted recorded session")
 	}
 	info, err := claude.GetSessionInfo(ctx, id, claude.SessionInfoOptions{Scope: scope})
 	if err != nil {
 		return err
 	}
 	if info.Info == nil || info.Info.SessionID != id {
-		return errors.New("Go metadata identity mismatch")
+		return errors.New("go metadata identity mismatch")
 	}
 	var report struct{ Receipts []map[string]json.RawMessage }
 	b, err = os.ReadFile(filepath.Join(root, "report.json"))
@@ -193,19 +195,19 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 				}
 			}
 			if listed.Coverage.Status != "complete" || !found {
-				return errors.New("Go saved child was not independently discovered")
+				return errors.New("go saved child was not independently discovered")
 			}
 			page, err := claude.GetSubagentMessages(ctx, id, saved.AgentID, claude.SubagentMessagesOptions{Scope: scope, Limit: 100})
 			if err != nil {
 				return err
 			}
 			if page.Coverage.Status != "complete" || len(page.Messages) != len(saved.Messages) {
-				return errors.New("Go saved child content coverage differs")
+				return errors.New("go saved child content coverage differs")
 			}
 			for i, message := range page.Messages {
 				want := saved.Messages[i]
 				if message.AgentID != saved.AgentID || message.UUID != want.UUID || message.SessionID != want.SessionID || message.Type != want.Type || !sameJSON(message.Message, want.Message) {
-					return errors.New("Go saved child content or ordered identity differs")
+					return errors.New("go saved child content or ordered identity differs")
 				}
 			}
 			checked++
@@ -234,12 +236,12 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 			return err
 		}
 		if actual.Coverage.Status != "complete" || len(actual.Messages) != len(expected) {
-			return errors.New("Go history coverage or slice size differs")
+			return errors.New("go history coverage or slice size differs")
 		}
 		for i, message := range actual.Messages {
 			want := expected[i]
 			if message.UUID != want.UUID || message.SessionID != want.SessionID || message.Type != want.Type || !sameJSON(message.Message, want.Message) {
-				return errors.New("Go history content or ordered identity differs")
+				return errors.New("go history content or ordered identity differs")
 			}
 		}
 		checked++

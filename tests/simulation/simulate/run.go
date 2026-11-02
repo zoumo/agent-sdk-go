@@ -44,7 +44,7 @@ func simulate(ctx context.Context, tool toolIdentity, o options, selection []str
 		result.MaterialError = err.Error()
 		return err
 	}
-	if err = writeJSON(filepath.Join(o.Output, "describe.json"), s); err != nil {
+	if err := writeJSON(filepath.Join(o.Output, "describe.json"), s); err != nil {
 		return err
 	}
 	if err = validateScene(s); err != nil {
@@ -57,7 +57,7 @@ func simulate(ctx context.Context, tool toolIdentity, o options, selection []str
 			Parameters struct{ ChildDetailPolicy string }
 		}
 	}
-	if err = json.Unmarshal(s.AssertionInputs.SourcePlan.Original, &plan); err != nil {
+	if err := json.Unmarshal(s.AssertionInputs.SourcePlan.Original, &plan); err != nil {
 		return err
 	}
 	policies := []string{"preserve"}
@@ -70,8 +70,8 @@ func simulate(ctx context.Context, tool toolIdentity, o options, selection []str
 		err = errors.Join(err, e)
 	}
 	if err == nil && len(policies) == 2 {
-		first := filepath.Join(o.Output, "preserve/sdk/deliveries.jsonl")
-		second := filepath.Join(o.Output, "suppress/sdk/deliveries.jsonl")
+		first := filepath.Join(o.Output, "preserve", "sdk", "deliveries.jsonl")
+		second := filepath.Join(o.Output, "suppress", "sdk", "deliveries.jsonl")
 		if s.Provider == "codex" {
 			err = codexsim.CompareDelivery(first, second)
 		} else {
@@ -113,7 +113,7 @@ func runHost(parent context.Context, tool toolIdentity, o options, s scene, sele
 		return r, err
 	}
 	hostRoot := filepath.Join(r.Output, "sdk")
-	if err = projectAssertions(hostRoot, s, d); err != nil {
+	if err := projectAssertions(hostRoot, s, d); err != nil {
 		return r, err
 	}
 	peer := struct {
@@ -161,7 +161,7 @@ func runHost(parent context.Context, tool toolIdentity, o options, s scene, sele
 	// Ask the SDK host to close sessions first. A bounded group kill handles a
 	// crashed/hung host without keeping supervisors/temporary locks alive.
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }
-	stderr, e := os.OpenFile(filepath.Join(hostRoot, "stderr.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	stderr, e := os.OpenFile(filepath.Join(hostRoot, "stderr.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if e != nil {
 		if remote != nil {
 			e = errors.Join(e, remote.close())
@@ -211,30 +211,30 @@ func hostEnvironment(overrides map[string]string) []string {
 // originals come only from describe assertionInputs; runtime paths live in their
 // own file. No recorded command/config path grants launch authority.
 func projectAssertions(root string, s scene, d descriptor) error {
-	if err := os.Mkdir(root, 0700); err != nil {
+	if err := os.Mkdir(root, 0o700); err != nil {
 		return err
 	}
 	a := s.AssertionInputs
-	if err := os.WriteFile(filepath.Join(root, "plan.json"), a.SourcePlan.Original, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "plan.json"), a.SourcePlan.Original, 0o600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(root, "case.json"), a.SourcePlan.Original, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "case.json"), a.SourcePlan.Original, 0o600); err != nil {
 		return err
 	}
 	if a.SourceReport != nil {
-		if err := os.WriteFile(filepath.Join(root, "report.json"), a.SourceReport.Original, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "report.json"), a.SourceReport.Original, 0o600); err != nil {
 			return err
 		}
 	}
 	for _, c := range a.Connections {
-		path := filepath.Join(root, "raw/raw.jsonl")
+		path := filepath.Join(root, "raw", "raw.jsonl")
 		if c.ID == "probe" {
-			path = filepath.Join(root, "remote-probe/raw/raw.jsonl")
+			path = filepath.Join(root, "remote-probe", "raw", "raw.jsonl")
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, c.Original, 0600); err != nil {
+		if err := os.WriteFile(path, c.Original, 0o600); err != nil {
 			return err
 		}
 	}

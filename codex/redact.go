@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -67,6 +68,8 @@ func (c *Client) redactJSON(raw json.RawMessage) json.RawMessage {
 		}
 		next := c.redact(text)
 		if next != text {
+			// encoding/json cannot fail for a string value.
+			//nolint:errchkjson
 			encoded, _ := json.Marshal(next)
 			out = append(out, raw[copied:start]...)
 			out = append(out, encoded...)
@@ -86,15 +89,21 @@ func (c *Client) safeError(err error) error {
 	if err == nil || c.remoteToken == "" {
 		return err
 	}
-	switch e := err.(type) {
-	case *RPCError:
-		return &RPCError{Code: e.Code, Message: c.redact(e.Message), Data: c.redactJSON(e.Data), Raw: c.redactJSON(e.Raw)}
-	case *CallError:
-		return &CallError{Method: c.redact(e.Method), ID: e.ID, Dispatch: e.Dispatch, Cause: c.safeError(e.Cause)}
-	case *AnswerError:
-		return &AnswerError{Method: c.redact(e.Method), ID: e.ID, Dispatch: e.Dispatch, Cause: c.safeError(e.Cause)}
-	case *DecodeError:
-		return &DecodeError{Method: c.redact(e.Method), Cause: c.safeError(e.Cause)}
+	{
+		var callErr *CallError
+		var answerErr *AnswerError
+		var decodeErr *DecodeError
+		var rpcErr *RPCError
+		switch {
+		case errors.As(err, &callErr):
+			return &CallError{Method: c.redact(callErr.Method), ID: callErr.ID, Dispatch: callErr.Dispatch, Cause: c.safeError(callErr.Cause)}
+		case errors.As(err, &answerErr):
+			return &AnswerError{Method: c.redact(answerErr.Method), ID: answerErr.ID, Dispatch: answerErr.Dispatch, Cause: c.safeError(answerErr.Cause)}
+		case errors.As(err, &decodeErr):
+			return &DecodeError{Method: c.redact(decodeErr.Method), Cause: c.safeError(decodeErr.Cause)}
+		case errors.As(err, &rpcErr):
+			return &RPCError{Code: rpcErr.Code, Message: c.redact(rpcErr.Message), Data: c.redactJSON(rpcErr.Data), Raw: c.redactJSON(rpcErr.Raw)}
+		}
 	}
 	text := err.Error()
 	redacted := c.redact(text)
@@ -119,10 +128,5 @@ type redactedCause struct {
 
 func (e *redactedCause) Error() string { return e.text }
 func (e *redactedCause) Is(target error) bool {
-	for _, marker := range e.markers {
-		if target == marker {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(e.markers, target)
 }

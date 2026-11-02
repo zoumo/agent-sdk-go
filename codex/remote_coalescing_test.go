@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 )
 
@@ -106,11 +107,9 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 				sub, err := codex.Open(context.Background(), codex.SessionOptions{Client: c})
 				require.NoError(t, err)
 				var result string
-				{
-					err = c.Call(context.Background(), "synthetic/settle-before-invalid", nil, &result)
-					require.NoError(t, err)
-					require.False(t, result != "settled", "valid response was lost before later framing failure: result=%q error=%v", result, err)
-				}
+				err = c.Call(context.Background(), "synthetic/settle-before-invalid", nil, &result)
+				require.NoError(t, err)
+				require.Equal(t, "settled", result, "valid response was lost before later framing failure: result=%q error=%v", result, err)
 				select {
 				case <-c.Done():
 				case <-time.After(time.Second):
@@ -123,10 +122,9 @@ func TestRemoteValidPrefixSurvivesMalformedFrame(t *testing.T) {
 				require.NotNil(t, event)
 				require.Equal(t, "synthetic/valid-prefix", event.Method)
 				require.True(t, json.Valid(event.Params))
-				require.Equal(t, `{"threadId":"native-thread-42","value":1}`, string(event.Params))
+				require.Equal(t, `{"threadId":"native-thread-42","value":1}`, string(event.Params)) //nolint:testifylint // preserves exact protocol bytes
 				_, err = sub.Receive(context.Background())
 				require.ErrorIs(t, err, codex.ErrProtocol)
-
 			})
 		}
 	}

@@ -42,6 +42,7 @@ func (s *NativeIntegrationSuite) TestSessionTargets() {
 		})
 	}
 }
+
 func (s *NativeIntegrationSuite) TestNativeAdapters() {
 	for _, scenario := range nativeScenarios {
 		s.Run(scenario, func() {
@@ -63,16 +64,19 @@ func (s *NativeIntegrationSuite) TestNativeAdapters() {
 		})
 	}
 }
+
 func deadline(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	t.Cleanup(cancel)
 	return ctx
 }
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	require.NoError(t, err)
 }
+
 func wait(t *testing.T, ctx context.Context, ch <-chan struct{}) {
 	t.Helper()
 	select {
@@ -131,14 +135,14 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		}
 		require.False(t, page.Coverage.Archived)
 		trace.Events = append(trace.Events, nativeObservation{Kind: "gap", Raw: "non-archived records only; live observation unconfirmed"})
-		return
+		return trace
 	}
 	_, trace.SendError = s.Submit(ctx, codex.Input{})
 	if scenario == "backpressure" {
 		must(t, trace.SendError) // reply follows the complete burst while Events is unread
 		readUntil("barrier")
 		trace.OverflowError = s.Err()
-		return
+		return trace
 	}
 	if scenario == "permission" || scenario == "question" || scenario == "canceled-answer" {
 		r := codexRequests(t, s, 1)[0]
@@ -149,7 +153,7 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 			trace.CloseError = s.Close()
 			trace.AnswerError = r.Handle().Answer(ctx, nil)
 			trace.RetryError = r.Handle().Answer(ctx, nil)
-			return
+			return trace
 		}
 		answer := json.RawMessage(`{"decision":"decline"}`)
 		if strings.HasSuffix(mode, "-allow") {
@@ -171,11 +175,10 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		trace.AnswerError = handle.Answer(ctx, answer)
 		trace.RetryError = handle.Answer(ctx, answer)
 		readUntil("snapshot")
-		return
+		return trace
 	}
 	readUntil("barrier")
 	if scenario == "child-authority" {
-
 		var forged codex.AnswerHandle
 		assert.Error(t, forged.Answer(ctx, nil), "zero handle answered")
 	}
@@ -190,8 +193,9 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		trace.CloseError = s.Close()
 		must(t, c.Call(ctx, "fixture/snapshot", nil, nil))
 	}
-	return
+	return trace
 }
+
 func codexFact(trace *nativeTrace, e ct.Event) {
 	add := func(kind, id, parent string) {
 		trace.Events = append(trace.Events, nativeObservation{Kind: kind, ID: id, Parent: parent, Raw: string(e.Raw)})
@@ -295,14 +299,14 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	}
 	if scenario == "history-observation" {
 		readUntil("snapshot")
-		return
+		return trace
 	}
 	_, trace.SendError = c.Submit(ctx, claude.Input{Text: "start"})
 	if scenario == "backpressure" {
 		must(t, c.Interrupt(ctx, claude.InterruptOptions{})) // control reply follows the complete unread burst
 		readUntil("barrier")
 		trace.OverflowError = c.Err()
-		return
+		return trace
 	}
 	if scenario == "permission" || scenario == "question" || scenario == "canceled-answer" {
 		incoming := claudeRequests(t, c, 1)[0]
@@ -313,7 +317,7 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 			trace.CloseError = c.Close()
 			trace.AnswerError = r.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny})
 			trace.RetryError = r.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny})
-			return
+			return trace
 		}
 		metadata, err := r.Metadata()
 		must(t, err)
@@ -339,11 +343,10 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		trace.AnswerError = r.Answer(ctx, answer)
 		trace.RetryError = r.Answer(ctx, answer)
 		readUntil("snapshot")
-		return
+		return trace
 	}
 	readUntil("barrier")
 	if scenario == "child-authority" {
-
 		var forged claude.PermissionRequest
 		assert.Error(t, forged.Answer(ctx, claude.PermissionAnswer{Behavior: claude.PermissionDeny}), "zero permission handle answered")
 	}
@@ -358,8 +361,9 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	if scenario == "interrupt-boundary" {
 		trace.CloseError = c.Close()
 	}
-	return
+	return trace
 }
+
 func claudeFact(trace *nativeTrace, v claude.Event) {
 	add := func(kind, id, parent, raw string) {
 		trace.Events = append(trace.Events, nativeObservation{Kind: kind, ID: id, Parent: parent, Raw: raw})

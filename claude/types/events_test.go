@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
 // This test package deliberately imports only types, never the runtime client.
@@ -24,14 +24,14 @@ func TestParseEventViewsAndRawOwnership(t *testing.T) {
 	require.NotNil(t, event.Assistant, "frame ownership or assistant view lost")
 	m := event.Assistant
 	b := m.Content.Blocks
-	require.EqualValuesf(t, 5, len(b), "content views = %#v", b)
-	require.EqualValuesf(t, "你好", b[0].Text.Text, "content views = %#v", b)
-	require.EqualValuesf(t, "s", b[1].Thinking.Signature, "content views = %#v", b)
-	require.EqualValuesf(t, "t1", b[2].ToolUse.ID, "content views = %#v", b)
+	require.Lenf(t, b, 5, "content views = %#v", b)
+	require.Equalf(t, "你好", b[0].Text.Text, "content views = %#v", b)
+	require.Equalf(t, "s", b[1].Thinking.Signature, "content views = %#v", b)
+	require.Equalf(t, "t1", b[2].ToolUse.ID, "content views = %#v", b)
 	require.Truef(t, b[3].ToolResult.IsError, "content views = %#v", b)
-	require.EqualValuesf(t, "future", b[4].Type, "content views = %#v", b)
-	require.EqualValues(t, `{"type":"future","extra":42}`, string(b[4].Raw), "unknown data lost")
-	require.EqualValues(t, `{"future_tokens":7}`, string(m.Usage), "unknown data lost")
+	require.Equalf(t, "future", b[4].Type, "content views = %#v", b)
+	require.Equal(t, `{"type":"future","extra":42}`, string(b[4].Raw), "unknown data lost") //nolint:testifylint // preserves exact protocol bytes
+	require.Equal(t, `{"future_tokens":7}`, string(m.Usage), "unknown data lost")
 	require.True(t, bytes.Contains(m.Raw, []byte(`"unknown":"kept"`)), "unknown data lost")
 	for _, raw := range []json.RawMessage{event.Raw, m.Raw, m.Content.Raw, b[0].Raw, b[4].Raw} {
 		t.Run(fmt.Sprintf("%T/%v", raw, raw), func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestParseOtherEventViews(t *testing.T) {
 			e, err := types.ParseEvent([]byte(tt.frame))
 			require.NoErrorf(t, err, "event = %#v, error = %v", e, err)
 			require.Truef(t, tt.check(e), "event = %#v, error = %v", e, err)
-			require.EqualValuesf(t, tt.frame, string(e.Raw), "event = %#v, error = %v", e, err)
+			require.Equalf(t, tt.frame, string(e.Raw), "event = %#v, error = %v", e, err)
 		})
 	}
 }
@@ -85,7 +85,7 @@ func TestParseEventRejectsMalformedExistingShapes(t *testing.T) {
 		`{"type":"control_request","request_id":"r","request":{}}`,
 		`{"type":"control_cancel_request"}`,
 	} {
-		t.Run(fmt.Sprintf("%v", frame), func(t *testing.T) {
+		t.Run(frame, func(t *testing.T) {
 			{
 				_, err := types.ParseEvent([]byte(frame))
 				require.Errorf(t, err, "accepted malformed frame %q", frame)
@@ -99,14 +99,14 @@ func TestContentCodecsAvailableWithoutRuntime(t *testing.T) {
 	{
 		err := json.Unmarshal([]byte(`[{"type":"text","text":"hello"}]`), &content)
 		require.NoErrorf(t, err, "content = %#v, error = %v", content, err)
-		require.EqualValuesf(t, 1, len(content.Blocks), "content = %#v, error = %v", content, err)
-		require.EqualValuesf(t, "hello", content.Blocks[0].Text.Text, "content = %#v, error = %v", content, err)
+		require.Lenf(t, content.Blocks, 1, "content = %#v, error = %v", content, err)
+		require.Equalf(t, "hello", content.Blocks[0].Text.Text, "content = %#v, error = %v", content, err)
 	}
 	var block types.ContentBlock
 	{
 		err := json.Unmarshal([]byte(`{"type":"tool_use","id":"t","name":"Read","input":{}}`), &block)
 		require.NoErrorf(t, err, "block = %#v, error = %v", block, err)
 		require.NotNilf(t, block.ToolUse, "block = %#v, error = %v", block, err)
-		require.EqualValuesf(t, "Read", block.ToolUse.Name, "block = %#v, error = %v", block, err)
+		require.Equalf(t, "Read", block.ToolUse.Name, "block = %#v, error = %v", block, err)
 	}
 }

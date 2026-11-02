@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -48,14 +49,14 @@ func TestHistoryReaderIntegrity(t *testing.T) {
 							return
 						}
 						methods = append(methods, q.Method)
-						result := ""
+						var result string
 						switch q.Method {
 						case "thread/read":
 							reads++
 							result = `{"thread":{"id":"thread","cwd":"/synthetic","sessionId":"native-session","cliVersion":"0.162.1","modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","turns":[],"createdAt":1,"updatedAt":2,"ephemeral":false,"status":{"type":"idle"}}}`
 							switch mode {
 							case "missing":
-								if err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"error":{"code":-32602,"message":"missing"}}`, q.ID))); err != nil {
+								if err := c.routeFrame(fmt.Appendf(nil, `{"id":%s,"error":{"code":-32602,"message":"missing"}}`, q.ID)); err != nil {
 									peerDone <- err
 									return
 								}
@@ -94,7 +95,7 @@ func TestHistoryReaderIntegrity(t *testing.T) {
 								result = `{"data":[{"id":"t2","status":"completed","items":[{"id":"i2","type":"agentMessage","text":"done"}],"error":null}],"nextCursor":null}`
 								switch mode {
 								case "late":
-									if err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"error":{"code":-32601,"message":"unsupported"}}`, q.ID))); err != nil {
+									if err := c.routeFrame(fmt.Appendf(nil, `{"id":%s,"error":{"code":-32601,"message":"unsupported"}}`, q.ID)); err != nil {
 										peerDone <- err
 										return
 									}
@@ -113,7 +114,7 @@ func TestHistoryReaderIntegrity(t *testing.T) {
 							peerDone <- fmt.Errorf("unexpected side-effect method %s", q.Method)
 							return
 						}
-						if err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":%s}`, q.ID, result))); err != nil {
+						if err := c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":%s}`, q.ID, result)); err != nil {
 							peerDone <- err
 							return
 						}
@@ -192,7 +193,7 @@ func TestHistoryProjectionRetainsNativeFacts(t *testing.T) {
 		assert.NotContains(t, params, "completedAtMs")
 		assert.Empty(t, e.Raw)
 	}
-	assert.Equal(t, `{"id":"future","type":"futureItem","opaque":{"retained":true}}`, string(events[2].History.Raw))
+	assert.JSONEq(t, `{"id":"future","type":"futureItem","opaque":{"retained":true}}`, string(events[2].History.Raw))
 	assert.Equal(t, types.TurnStatusInterrupted, events[3].Data.(*types.TurnCompletedNotification).Turn.Status)
 	events = nil
 	require.NoError(t, replayTurn("thread", json.RawMessage(`{"id":"turn","status":"futureStatus","items":[],"error":null,"opaque":true}`), func(e types.Event) error { events = append(events, e); return nil }))

@@ -84,10 +84,7 @@ func allowedExact(p ExactRequest) bool {
 	default:
 		return false
 	}
-	if !json.Valid(p.Result) {
-		return false
-	}
-	return true
+	return json.Valid(p.Result)
 }
 
 // ValidateR2Policy requires both native approval and the original two-question
@@ -133,8 +130,10 @@ type RootResult struct {
 	Untriggered       bool
 }
 
-const readyPrompt = "Reply with the word Ready."
-const donePrompt = "Reply with the word Done."
+const (
+	readyPrompt = "Reply with the word Ready."
+	donePrompt  = "Reply with the word Done."
+)
 
 func neutralTurn(text string) types.TurnStartParams {
 	return types.TurnStartParams{Input: []types.UserInput{{Text: &types.TextUserInput{Type: "text", Text: text}}}, Environments: types.Some([]types.TurnEnvironmentParams{})}

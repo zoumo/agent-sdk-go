@@ -50,7 +50,7 @@ func runOverloadFixture(mode string, reader *bufio.Reader) {
 		case "permission":
 			fixtureEmit(map[string]any{"type": "control_request", "request_id": "waiting", "request": map[string]any{"subtype": "can_use_tool", "tool_name": "Read", "input": map[string]any{}}})
 		case "fill":
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				fixtureEmit(map[string]any{"type": "sequence", "seq": i})
 			}
 		case "overflow":
@@ -101,7 +101,7 @@ func TestConfigurationRejectsIntegerOverflowBeforeSpawn(t *testing.T) {
 
 func (s *controlInteractionSuite) TestEventBacklogStillDispatchesControlResponses() {
 	t := s.T()
-	c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 3 })
+	c := s.openFixture(t, "overload_ack_full", func(o *Options) { o.Limits.EventBuffer = 3 }) //nolint:staticcheck // verifies the deprecated input is ignored
 	send(t, c, "fill")
 	send(t, c, "overflow")
 	// The reply is emitted after four events, proving stdout crossed the
@@ -115,12 +115,12 @@ func (s *controlInteractionSuite) TestEventBacklogStillDispatchesControlResponse
 		require.FailNowf(t, "unexpected test outcome", "event backlog closed: %v", c.Err())
 	default:
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		e := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(e.Raw, &v)
-		require.EqualValuesf(t, "sequence", eventKind(e), "order: %s", e.Raw)
-		require.EqualValuesf(t, i, v.Seq, "order: %s", e.Raw)
+		require.Equalf(t, "sequence", eventKind(e), "order: %s", e.Raw)
+		require.Equalf(t, i, v.Seq, "order: %s", e.Raw)
 	}
 	require.Equal(t, "rejected", eventKind(receive(t, c)))
 }
@@ -131,8 +131,7 @@ func (s *controlInteractionSuite) TestBacklogThenProtocolFailureWakesInterruptAn
 	release := make(chan struct{})
 	defer close(release)
 	c := s.openFixture(t, "overload_controls", func(o *Options) {
-		o.Limits.EventBuffer = 3
-
+		o.Limits.EventBuffer = 3 //nolint:staticcheck // verifies the deprecated input is ignored
 	})
 	send(t, c, "permission")
 	p := receivePermission(t, c).Permission
@@ -151,11 +150,9 @@ func (s *controlInteractionSuite) TestBacklogThenProtocolFailureWakesInterruptAn
 	var wg sync.WaitGroup
 	closeResults := make(chan error, 8)
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			closeResults <- c.Close()
-		}()
+		})
 	}
 	complete := make(chan struct{})
 	go func() { wg.Wait(); close(complete) }()
@@ -164,12 +161,12 @@ func (s *controlInteractionSuite) TestBacklogThenProtocolFailureWakesInterruptAn
 	for err := range closeResults {
 		assert.ErrorIs(t, err, ErrProtocol, "Close")
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		e := receive(t, c)
 		var v struct{ Seq int }
 		json.Unmarshal(e.Raw, &v)
-		require.EqualValuesf(t, "sequence", eventKind(e), "accepted order: %s", e.Raw)
-		require.EqualValuesf(t, i, v.Seq, "accepted order: %s", e.Raw)
+		require.Equalf(t, "sequence", eventKind(e), "accepted order: %s", e.Raw)
+		require.Equalf(t, i, v.Seq, "accepted order: %s", e.Raw)
 	}
 	require.Equal(t, "rejected", eventKind(receive(t, c)), "extra event beyond legacy capacity survived")
 	_, err := nextNative(c, context.Background())
@@ -181,11 +178,9 @@ func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
 	t := s.T()
 	for _, mode := range []string{"malformed", "oversize", "truncated", "eof", "exit"} {
 		t.Run(mode, func(t *testing.T) {
-
 			c := s.openFixture(t, "overload_controls", func(o *Options) {
 				o.Limits.FrameBytes = 2048
 				o.Limits.StderrBytes = 32
-
 			})
 			send(t, c, "permission")
 			p := receivePermission(t, c).Permission
@@ -205,7 +200,7 @@ func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
 				}
 			}
 			awaitSignal(t, p.Context().Done())
-			require.NotNil(t, context.Cause(p.Context()), "missing handle cancellation cause")
+			require.Error(t, context.Cause(p.Context()), "missing handle cancellation cause")
 			closed := c.Close()
 			want := ErrProtocol
 			if mode == "oversize" {
@@ -219,16 +214,16 @@ func (s *controlInteractionSuite) TestTransportFailuresWakeAllPendingWork() {
 				var detail *Error
 				require.ErrorAsf(t, closed, &detail, "exit diagnostics: %#v", detail)
 				require.NotNilf(t, detail.ExitCode, "exit diagnostics: %#v", detail)
-				require.EqualValuesf(t, 23, *detail.ExitCode, "exit diagnostics: %#v", detail)
-				require.Falsef(t, len(detail.Stderr) > 32, "exit diagnostics: %#v", detail)
+				require.Equalf(t, 23, *detail.ExitCode, "exit diagnostics: %#v", detail)
+				require.LessOrEqualf(t, len(detail.Stderr), 32, "exit diagnostics: %#v", detail)
 				require.Truef(t, strings.HasSuffix(detail.Stderr, "last-diagnostic"), "exit diagnostics: %#v", detail)
 			}
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				e := receive(t, c)
 				var v struct{ Seq int }
 				json.Unmarshal(e.Raw, &v)
-				require.EqualValuesf(t, "sequence", eventKind(e), "retained order: %s", e.Raw)
-				require.EqualValuesf(t, i, v.Seq, "retained order: %s", e.Raw)
+				require.Equalf(t, "sequence", eventKind(e), "retained order: %s", e.Raw)
+				require.Equalf(t, i, v.Seq, "retained order: %s", e.Raw)
 			}
 			{
 				_, err := nextNative(c, context.Background())
@@ -246,7 +241,6 @@ func (s *controlInteractionSuite) TestShutdownDoesNotWaitForRetainedCaller() {
 	returned := make(chan struct{})
 	defer close(release)
 	c := s.openFixture(t, "overload_controls", func(o *Options) {
-
 	})
 	send(t, c, "permission")
 	p := receivePermission(t, c).Permission
@@ -260,7 +254,7 @@ func (s *controlInteractionSuite) TestShutdownDoesNotWaitForRetainedCaller() {
 		err := c.Close()
 		require.NoError(t, err)
 	}
-	require.False(t, time.Since(start) > 3*time.Second, "Close waited for callback")
+	require.LessOrEqual(t, time.Since(start), 3*time.Second, "Close waited for callback")
 	require.ErrorIsf(t, context.Cause(p.Context()), ErrClosed, "callback context: %v", context.Cause(p.Context()))
 	select {
 	case <-returned:

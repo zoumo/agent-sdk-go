@@ -82,7 +82,10 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 	done := make(chan struct{})
 	var receiveErr error
 	encoder := json.NewEncoder(deliveries)
-	key := func(raw json.RawMessage) string { b, _ := json.Marshal(canonical(raw)); return string(b) }
+	key := func(raw json.RawMessage) (string, error) {
+		b, err := json.Marshal(canonical(raw))
+		return string(b), err
+	}
 	go func() {
 		defer close(done)
 		for {
@@ -107,7 +110,13 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 				return
 			}
 			if len(got.Raw) > 0 {
-				seen[key(got.Raw)]++
+				k, err := key(got.Raw)
+				if err != nil {
+					receiveErr = err
+					mu.Unlock()
+					return
+				}
+				seen[k]++
 			}
 			if got.Request != nil {
 				requests[got.Request.ID().String()] = got.Request
@@ -123,12 +132,16 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 	wait := func(raw json.RawMessage) error {
 		for {
 			mu.Lock()
-			k := key(raw)
+			k, e := key(raw)
+			if e != nil {
+				mu.Unlock()
+				return e
+			}
 			ok := seen[k] > consumed[k]
 			if ok {
 				consumed[k]++
 			}
-			e := receiveErr
+			e = receiveErr
 			mu.Unlock()
 			if ok {
 				return nil
@@ -139,7 +152,7 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 			select {
 			case <-changed:
 			case <-done:
-				return errors.New("Session ended before expected native fact")
+				return errors.New("session ended before expected native fact")
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -264,7 +277,7 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 		if expected.Error != nil {
 			var native *codex.RPCError
 			if callErr == nil || !errors.As(callErr, &native) || native.Code != expected.Error.Code {
-				return fmt.Errorf("%s did not reproduce native rejection: %v", m.Method, callErr)
+				return fmt.Errorf("%s did not reproduce native rejection: %w", m.Method, callErr)
 			}
 			continue
 		}
@@ -276,7 +289,7 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 			return e
 		}
 		if !equal(canonical(raw), canonical(expected.Result)) {
-			return fmt.Errorf("Go %s response differs from recording", m.Method)
+			return fmt.Errorf("go %s response differs from recording", m.Method)
 		}
 	}
 	if terminals == 0 {

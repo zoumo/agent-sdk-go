@@ -12,7 +12,7 @@ import (
 func writeDelivery(t *testing.T, values []map[string]any) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "stream.jsonl")
-	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(p), "report.json"), []byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["child"]}}]}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(p), "report.json"), []byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["child"]}}]}`), 0o600))
 	f, e := os.Create(p)
 	require.NoError(t, e)
 	defer f.Close()
@@ -21,6 +21,7 @@ func writeDelivery(t *testing.T, values []map[string]any) string {
 	}
 	return p
 }
+
 func codexDelivery() (before, after []map[string]any) {
 	member := map[string]any{"observation": map[string]any{"Reason": "member-confirmed", "ThreadID": "child"}}
 	detail := map[string]any{"kind": "event", "origin": "live", "source": map[string]any{"ThreadID": "child"}, "raw": `{"method":"item/agentMessage/delta","params":{"threadId":"child","turnId":"turn","itemId":"item","delta":"hello"}}`}
@@ -34,35 +35,35 @@ func TestChildPolicyKeepsProtectedFacts(t *testing.T) {
 	require.NoError(t, CompareDelivery(writeDelivery(t, before), writeDelivery(t, after)))
 	for _, kind := range []string{"no-difference", "lifecycle", "source", "reorder", "raw", "extension", "unconfirmed", "non-text", "root-terminal"} {
 		t.Run(kind, func(t *testing.T) {
-			before, after := codexDelivery()
+			beforeCase, afterCase := codexDelivery()
 			switch kind {
 			case "no-difference":
-				after = before
+				afterCase = beforeCase
 			case "lifecycle":
-				after = append(after[:1], after[2:]...)
+				afterCase = append(afterCase[:1], afterCase[2:]...)
 			case "source":
-				after[1] = map[string]any{"kind": "event", "origin": "live", "source": map[string]any{"ThreadID": "other"}, "raw": after[1]["raw"]}
+				afterCase[1] = map[string]any{"kind": "event", "origin": "live", "source": map[string]any{"ThreadID": "other"}, "raw": afterCase[1]["raw"]}
 			case "reorder":
-				after[0], after[1] = after[1], after[0]
+				afterCase[0], afterCase[1] = afterCase[1], afterCase[0]
 			case "raw":
-				after[1] = map[string]any{"kind": "event", "origin": "live", "source": after[1]["source"], "raw": after[1]["raw"].(string) + " "}
+				afterCase[1] = map[string]any{"kind": "event", "origin": "live", "source": afterCase[1]["source"], "raw": afterCase[1]["raw"].(string) + " "}
 			case "extension":
-				before[1]["raw"] = `{"method":"item/agentMessage/delta","extension":"protected","params":{"threadId":"child","turnId":"turn","itemId":"item","delta":"hello"}}`
+				beforeCase[1]["raw"] = `{"method":"item/agentMessage/delta","extension":"protected","params":{"threadId":"child","turnId":"turn","itemId":"item","delta":"hello"}}`
 			case "unconfirmed":
-				before = before[1:]
-				after = after[1:]
+				beforeCase = beforeCase[1:]
+				afterCase = afterCase[1:]
 			case "non-text":
-				before[1]["raw"] = `{"method":"item/agentMessage/delta","params":{"threadId":"child","turnId":"turn","itemId":"item","delta":false}}`
+				beforeCase[1]["raw"] = `{"method":"item/agentMessage/delta","params":{"threadId":"child","turnId":"turn","itemId":"item","delta":false}}`
 			case "root-terminal":
-				before = before[:3]
-				after = after[:2]
+				beforeCase = beforeCase[:3]
+				afterCase = afterCase[:2]
 			}
-			require.Error(t, CompareDelivery(writeDelivery(t, before), writeDelivery(t, after)))
+			require.Error(t, CompareDelivery(writeDelivery(t, beforeCase), writeDelivery(t, afterCase)))
 		})
 	}
 	before, after = codexDelivery()
 	source := writeDelivery(t, before)
-	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(source), "report.json"), []byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["other"]}}]}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(source), "report.json"), []byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["other"]}}]}`), 0o600))
 	require.Error(t, CompareDelivery(source, writeDelivery(t, after)))
 }
 
@@ -120,9 +121,9 @@ func TestChildDeliveryRequiresRelationsCompletionAndBackgroundOrder(t *testing.T
 			path := writeDelivery(t, values)
 			dir := filepath.Dir(path)
 			require.NoError(t, os.Rename(path, filepath.Join(dir, "deliveries.jsonl")))
-			require.NoError(t, os.Mkdir(filepath.Join(dir, "raw"), 0700))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "raw/raw.jsonl"), []byte(`{"direction":"s2c","wire":`+child["raw"].(string)+"}\n"), 0600))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "report.json"), []byte(`{"childEvidence":[{"childThreadId":"child","parentThreadId":"root"}]}`), 0600))
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "raw"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "raw", "raw.jsonl"), []byte(`{"direction":"s2c","wire":`+child["raw"].(string)+"}\n"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "report.json"), []byte(`{"childEvidence":[{"childThreadId":"child","parentThreadId":"root"}]}`), 0o600))
 			err := ValidateChildDelivery(dir, true)
 			if kind == "passed" {
 				require.NoError(t, err)

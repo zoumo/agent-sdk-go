@@ -7,6 +7,12 @@
 cancellation and authenticated loopback remote main/probe forwarding.
 The [external tool](https://github.com/zoumo/agent-sdk-testify) owns record/verify,
 official drivers, case/binding contracts, recordings, matching and preparation.
+Its current source layout groups the authoritative scenarios, admitted provider
+materials, fixed index and generated builtin snapshot under `data/`. That layout
+is internal to the tool: SDK code consumes only the versioned list/describe
+process contract and never resolves or reads these paths directly. The status
+file records the tool source revision and immutable builtin source revision
+separately, so source-layout changes do not rewrite material provenance.
 This branch does not build tool sources or read legacy recordings, scenarios,
 official-driver code or Python packaging as a fallback.
 
@@ -25,7 +31,7 @@ bash scripts/simulation.sh simulate --recording /absolute/external-capture --out
 bash scripts/simulation.sh gate --jobs 2
 ```
 
-Use mise.toml's Go 1.26.9. There is no published release pin; the single status
+Use Go 1.26 or newer. There is no published release pin; the single status
 file records the observed development artifact source/hash and is not a release
 pin. Build never creates the tool or a wheel. CI currently fails closed at the
 unavailable external-release requirement; local passing checks are not remote CI

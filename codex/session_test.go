@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -85,14 +87,13 @@ func TestSessionMembershipOrderDuplicatesAndIsolation(t *testing.T) {
 	var methods []string
 	for {
 		got, err := s.Receive(context.Background())
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
 		if got.Kind == codex.ReceivedEvent {
 			methods = append(methods, got.Event.Method)
 		}
-
 	}
 	require.Equal(t, []string{"item/completed", "future/child", "turn/completed", "thread/started", "item/completed", "item/completed"}, methods)
 	diagnostics := f.c.Unattributed()
@@ -165,7 +166,7 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 				fmt.Fprintln(os.Stdout, `{"method":"serverRequest/resolved","params":{"threadId":"main-1","requestId":"blocked-answer"}}`)
 			}
 			marker := os.Getenv("CODEX_SDK_PID")
-			if os.WriteFile(marker+".writing", []byte("started"), 0600) != nil {
+			if os.WriteFile(marker+".writing", []byte("started"), 0o600) != nil {
 				os.Exit(92)
 			}
 			until := time.Now().Add(5 * time.Second)
@@ -331,7 +332,7 @@ func TestSessionSlowConsumerAndConcurrentReceivers(t *testing.T) {
 		workers.Go(func() {
 			for {
 				got, err := s.Receive(context.Background())
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					return
 				}
 				if err != nil {
@@ -458,7 +459,7 @@ func TestSessionCommunicationDoesNotGrantMembershipOrParent(t *testing.T) {
 	var events []string
 	for {
 		got, err := x.Receive(context.Background())
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -503,7 +504,7 @@ func testSessionParentDepthBoundsKnowledgeNotMembership(t *testing.T, policy cod
 	var gap bool
 	for {
 		got, err := s.Receive(context.Background())
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -592,7 +593,7 @@ func TestSessionCloseDuringWriteKeepsSharedConnection(t *testing.T) {
 	require.NoError(t, err)
 	b, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0600); _ = a.Abort(); _ = b.Abort() })
+	t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0o600); _ = a.Abort(); _ = b.Abort() })
 	submit := make(chan error, 1)
 	go func() {
 		_, err := a.Submit(context.Background(), codex.Input{Input: []types.UserInput{{Text: &types.TextUserInput{Type: "text", Text: strings.Repeat("x", 256<<10)}}}})
@@ -614,7 +615,7 @@ func TestSessionCloseDuringWriteKeepsSharedConnection(t *testing.T) {
 		t.Fatal("closing A terminated B during a write")
 	default:
 	}
-	require.NoError(t, os.WriteFile(f.pid+".release", nil, 0600))
+	require.NoError(t, os.WriteFile(f.pid+".release", nil, 0o600))
 	require.NoError(t, <-closed)
 	_, err = b.Submit(context.Background(), codex.Input{Input: []types.UserInput{}})
 	require.NoError(t, err)
@@ -635,7 +636,7 @@ func TestSessionSiblingCommunicationKeepsConfirmedParents(t *testing.T) {
 	var methods []string
 	for {
 		got, err := s.Receive(context.Background())
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)

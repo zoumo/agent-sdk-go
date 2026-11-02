@@ -52,7 +52,7 @@ func startMockRemote(parent context.Context, peers map[string]command, root stri
 	if len(peers) != 2 || peers["main"].Command == "" || peers["probe"].Command == "" {
 		return nil, errors.New("remote bridge requires declared main and probe peers")
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(parent, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func startMockRemote(parent context.Context, peers map[string]command, root stri
 			service.mu.Unlock()
 			return
 		}
-		defer conn.CloseNow()
+		defer func() { _ = conn.CloseNow() }()
 		service.mu.Lock()
 		if service.closing || service.opened[id] {
 			service.err = errors.Join(service.err, fmt.Errorf("remote %s connection was repeated", id))
@@ -146,7 +146,7 @@ func (s *mockRemoteService) close() error {
 			s.cancel()
 			s.mu.Lock()
 			for conn := range s.active {
-				conn.CloseNow()
+				_ = conn.CloseNow()
 			}
 			s.mu.Unlock()
 		}
@@ -203,7 +203,7 @@ func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, peer command, 
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	defer syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	defer func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }()
 	// A descendant can retain stdout after the direct peer exits. Cancellation
 	// must unblock pipe readers before Wait can reap the direct peer; waiting
 	// for natural EOF here can otherwise strand a zombie until cleanup times out.
@@ -261,6 +261,6 @@ func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, peer command, 
 		_ = input.Close()
 	}
 	processErr := cmd.Wait()
-	logErr := os.WriteFile(stderrPath, stderr.Bytes(), 0600)
+	logErr := os.WriteFile(stderrPath, stderr.Bytes(), 0o600)
 	return errors.Join(inputErr, outputErr, processErr, logErr)
 }

@@ -46,7 +46,7 @@ func TestGapConfigurationBetweenCompletedExecutions(t *testing.T) {
 	s := openSessionFixture(t, func(o *SessionOptions) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
 	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
 	sessionNative(t, s)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if i == 1 {
 			model := "second-model"
 			r, err := s.SetModel(context.Background(), ModelChange{Model: &model})
@@ -69,7 +69,8 @@ func TestGapConfigurationBetweenCompletedExecutions(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &f))
 		var kind string
 		require.NoError(t, json.Unmarshal(f["type"], &kind))
-		if kind == "control_request" {
+		switch kind {
+		case "control_request":
 			var request struct {
 				Subtype string `json:"subtype"`
 			}
@@ -77,7 +78,7 @@ func TestGapConfigurationBetweenCompletedExecutions(t *testing.T) {
 			if request.Subtype == "set_model" {
 				order = append(order, "set_model")
 			}
-		} else if kind == "user" {
+		case "user":
 			order = append(order, "input")
 		}
 	}

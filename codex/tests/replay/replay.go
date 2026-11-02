@@ -36,6 +36,7 @@ func QuestionFrames() ([]Frame, error) {
 	}
 	return Decode(bytes.NewReader(b))
 }
+
 func Decode(r io.Reader) ([]Frame, error) {
 	b, err := io.ReadAll(io.LimitReader(r, ProtocolLimit+1))
 	if err != nil {
@@ -73,6 +74,7 @@ func Decode(r io.Reader) ([]Frame, error) {
 func Peer(in io.Reader, out io.Writer, frames []Frame) error {
 	return mockPeer(context.Background(), in, out, frames, "answer-and-assert")
 }
+
 func Params(frames []Frame) (types.InitializeParams, types.ThreadStartParams, types.TurnStartParams, error) {
 	var init types.InitializeParams
 	var thread types.ThreadStartParams

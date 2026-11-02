@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 )
 
@@ -19,7 +20,7 @@ func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {
 	sentinel := filepath.Join(dir, "live-started")
 	poison := filepath.Join(dir, "claude")
 	{
-		err := os.WriteFile(poison, []byte("#!/bin/sh\nprintf live > '"+sentinel+"'\nexit 99\n"), 0700)
+		err := os.WriteFile(poison, []byte("#!/bin/sh\nprintf live > '"+sentinel+"'\nexit 99\n"), 0o700)
 		require.NoError(t, err)
 	}
 	t.Setenv("PATH", dir)
@@ -33,10 +34,8 @@ func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {
 	require.NoError(t, err)
 	defer client.Abort()
 	prompt := transcript.TaskFailurePrompt
-	{
-		_, err = client.Submit(ctx, Input{Text: prompt})
-		require.NoError(t, err)
-	}
+	_, err = client.Submit(ctx, Input{Text: prompt})
+	require.NoError(t, err)
 	nativeCount := 0
 	resultSequence := uint64(0)
 	idleSequence := uint64(0)
@@ -44,9 +43,7 @@ func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {
 	for idleSequence == 0 {
 		record, err := client.Receive(ctx)
 		require.NoError(t, err)
-		{
-			require.True(t, record.Observation == nil || record.Observation.Reason != "created", "error fixture cannot prove creation")
-		}
+		require.True(t, record.Observation == nil || record.Observation.Reason != "created", "error fixture cannot prove creation")
 		native := record.Event
 		if native == nil {
 			continue

@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 )
 
 func hash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
@@ -25,30 +27,34 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 	timeout := 0
 	if bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) && json.Unmarshal(data, &envelope) == nil && envelope.Frames != nil {
 		if envelope.Version != 1 {
-			return "", fmt.Errorf("unsupported synthetic version")
+			return "", errors.New("unsupported synthetic version")
 		}
 		rows = envelope.Frames
 		timeout = envelope.TimeoutMS
 	} else {
-		for _, line := range bytes.Split(data, []byte("\n")) {
+		for line := range bytes.SplitSeq(data, []byte("\n")) {
 			if len(bytes.TrimSpace(line)) > 0 {
 				rows = append(rows, json.RawMessage(line))
 			}
 		}
 	}
 	if options.MaxFrames > 0 && len(rows) > options.MaxFrames {
-		return "", fmt.Errorf("frame count exceeds limit")
+		return "", errors.New("frame count exceeds limit")
 	}
 	if options.Handshakes != "" && (provider != "codex" || (options.Handshakes != "answer" && options.Handshakes != "answer-and-assert")) {
-		return "", fmt.Errorf("invalid fixture handshakes")
+		return "", errors.New("invalid fixture handshakes")
 	}
 	var expanded []json.RawMessage
-	barrier := func(method string) {
+	barrier := func(method string) error {
 		id := fmt.Sprintf("sdk-fixture-barrier-%d", len(expanded))
 		for _, entry := range []struct{ direction, wire string }{{"c2s", fmt.Sprintf(`{"id":%q,"method":%q}`, id, method)}, {"s2c", fmt.Sprintf(`{"id":%q,"result":{}}`, id)}} {
-			b, _ := json.Marshal(map[string]any{"direction": entry.direction, "channel": "protocol", "epoch": 1, "wire": json.RawMessage(entry.wire)})
+			b, err := json.Marshal(map[string]any{"direction": entry.direction, "channel": "protocol", "epoch": 1, "wire": json.RawMessage(entry.wire)})
+			if err != nil {
+				return err
+			}
 			expanded = append(expanded, b)
 		}
+		return nil
 	}
 	for _, row := range rows {
 		var f struct {
@@ -60,16 +66,20 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 		}
 		if options.RecordingVersion != "" {
 			if version, ok := f.Wire["claude_code_version"]; ok && string(version) != fmt.Sprintf("%q", options.RecordingVersion) {
-				return "", fmt.Errorf("native source version mismatch")
+				return "", errors.New("native source version mismatch")
 			}
 		}
 		expanded = append(expanded, row)
 		if options.Handshakes != "" && f.Direction == "c2s" && f.Wire["id"] != nil && f.Wire["method"] == nil {
-			barrier("replay/answer")
+			if err := barrier("replay/answer"); err != nil {
+				return "", err
+			}
 		}
 	}
 	if options.Handshakes == "answer-and-assert" {
-		barrier("replay/assert")
+		if err := barrier("replay/assert"); err != nil {
+			return "", err
+		}
 	}
 	// Only synthetic envelope ordinals are assigned; native wire RawMessages and
 	// numeric lexemes remain unchanged. Original source fixtures are never edited.
@@ -79,7 +89,7 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 		if err := json.Unmarshal(row, &f); err != nil {
 			return "", err
 		}
-		f["ordinal"] = json.RawMessage(fmt.Sprint(i + 1))
+		f["ordinal"] = json.RawMessage(strconv.Itoa(i + 1))
 		raw.WriteByte('{')
 		keys := make([]string, 0, len(f))
 		for k := range f {
@@ -90,7 +100,10 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 			if j > 0 {
 				raw.WriteByte(',')
 			}
-			key, _ := json.Marshal(k)
+			key, err := json.Marshal(k)
+			if err != nil {
+				return "", err
+			}
 			raw.Write(key)
 			raw.WriteByte(':')
 			raw.Write(f[k])
@@ -102,14 +115,17 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 	if err != nil {
 		return "", err
 	}
-	if err = os.Mkdir(filepath.Join(root, "raw"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(root, "raw"), 0o700); err != nil {
 		return "", err
 	}
-	plan, _ := json.Marshal(map[string]any{"provider": provider, "provenance": "synthetic"})
+	plan, err := json.Marshal(map[string]any{"provider": provider, "provenance": "synthetic"})
+	if err != nil {
+		return "", err
+	}
 	// A JSONL stream alone has no provenance header. Keep fault injection explicitly
 	// synthetic in the envelope rather than relying on manifest self-description.
 	var finalRows []json.RawMessage
-	for _, line := range bytes.Split(bytes.TrimSpace(raw.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(raw.Bytes()), []byte("\n")) {
 		finalRows = append(finalRows, json.RawMessage(line))
 	}
 	var frozen bytes.Buffer
@@ -122,9 +138,12 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 	}
 	frozen.WriteString("]}")
 	b := frozen.Bytes()
-	manifest, _ := json.Marshal(map[string]any{"provenance": "synthetic", "planSHA256": hash(plan), "files": map[string]string{"raw.jsonl": hash(b)}})
+	manifest, err := json.Marshal(map[string]any{"provenance": "synthetic", "planSHA256": hash(plan), "files": map[string]string{"raw.jsonl": hash(b)}})
+	if err != nil {
+		return "", err
+	}
 	for name, content := range map[string][]byte{"plan.json": plan, "manifest.json": manifest, "raw/raw.jsonl": b} {
-		if err = os.WriteFile(filepath.Join(root, name), content, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), content, 0o600); err != nil {
 			return "", err
 		}
 	}

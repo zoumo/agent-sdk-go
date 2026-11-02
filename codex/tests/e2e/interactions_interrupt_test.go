@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -39,7 +40,6 @@ func (s *StdioInteractionsInterruptSuite) SetupTest() {
 	s.executable = os.Getenv("CODEX_E2E_CLI")
 	require.True(t, filepath.IsAbs(s.executable),
 		"absolute CODEX_E2E_CLI path required")
-
 }
 
 func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
@@ -55,7 +55,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 	initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
 	c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-interactions", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
 	stop()
-	require.True(t, err == nil,
+	require.NoError(t, err,
 		"initialize failed: %T; payload withheld", err)
 
 	defer c.Close()
@@ -85,7 +85,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 			continue
 		}
 		session, e := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: types.ThreadStartParams{Cwd: types.Some(cwd), Sandbox: types.Some(types.SandboxModeReadOnly), Ephemeral: types.Some(true)}})
-		require.True(t, e == nil,
+		require.NoError(t, e,
 			"thread/start failed: %T", e)
 
 		th, ok := session.StartResponse()
@@ -102,7 +102,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 		}
 		t.Logf("scenario=%s native thread created read-only; inherited approval_policy=%s", sc.name, policy)
 
-		p := codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: sc.prompt})}}}
+		p := codex.Input{Input: []types.UserInput{{Text: new(types.TextUserInput{Text: sc.prompt})}}}
 		if sc.name == "user-input" {
 			p.CollaborationMode = types.Some(types.CollaborationMode{Mode: types.ModeKindPlan, Settings: types.Settings{Model: th.Model, DeveloperInstructions: types.Null[string](), ReasoningEffort: types.Null[types.ReasoningEffort]()}})
 		}
@@ -119,7 +119,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 		records := make(chan codex.Received)
 		receiveErrors := make(chan error, 1)
 		readerDone := make(chan struct{})
-		defer func() { stopReceive(); _ = session.Close(); <-readerDone }()
+		defer func() { stopReceive(); _ = session.Close(); <-readerDone }() //nolint:gocritic // Runs before the next scenario iteration.
 		go func() {
 			defer close(readerDone)
 			for {
@@ -245,7 +245,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 						itemID = v.Item.CommandExecution.ID
 						interruptSent = true
 						e := session.Interrupt(ctx, codex.InterruptOptions{TurnID: turn})
-						require.True(t, e == nil,
+						require.NoError(t, e,
 							"interrupt failed; no replay: %T", e)
 
 						ack = true
@@ -266,7 +266,8 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 						}
 					}
 				case *types.ServerRequestResolvedNotification:
-					raw, _ := json.Marshal(v.RequestID)
+					raw, err := json.Marshal(v.RequestID)
+					require.NoError(t, err)
 					rid, e := codex.ParseID(raw)
 					if e == nil && v.ThreadID == id && seen[rid] {
 						resolved++
@@ -303,9 +304,8 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 		}
 
 		t.Logf("scenario=%s target_requests=%d answers=%d resolutions=%d command_effect=%t blue_exact=%t interrupt_ack=%t interrupted_terminal=%t item_stopped=%t", sc.name, targets, answers, resolved, commandEffect, blue, ack, status == "interrupted", itemStopped)
-		require.False(t, status == "failed",
+		require.NotEqual(t, "failed", status,
 			"server turn failed; not untriggered")
-
 	}
 	closeStart := time.Now()
 	closed := make(chan error, 1)

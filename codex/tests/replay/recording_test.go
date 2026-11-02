@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,10 +14,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
+
+// ManagedRecordingSuite uses only this test binary as the protocol peer.
+// Every test gets its own executable lookup and keeps bounded lifecycle cleanup.
+type ManagedRecordingSuite struct {
+	suite.Suite
+	executable string
+}
 
 func frame(n int, d, w string) Frame {
 	return Frame{Ordinal: n, Direction: d, Epoch: 1, Channel: "protocol", Wire: json.RawMessage(w)}
@@ -36,23 +45,19 @@ func TestSyntheticFileBoundary(t *testing.T) {
 		require.NoError(t, err)
 	}
 	{
-
 		_, err := readSynthetic(root)
 		require.Error(t, err,
 			"read symlink")
 	}
 	{
-
 		err := os.Symlink(filepath.Join(t.TempDir(), "outside"), root+"/summary.txt")
 		require.NoError(t, err)
 	}
 	{
-
 		err := writeSynthetic(root, "sum=42\n")
 		require.Error(t, err,
 			"write symlink")
 	}
-
 }
 
 // The strict peer checks the complete native turn payload, then either disconnects
@@ -99,13 +104,14 @@ func TestRunSessionPreservesEarlyFailure(t *testing.T) {
 			require.Error(t, err)
 			require.False(t, result.Completed)
 			require.NotErrorIs(t, err, context.DeadlineExceeded)
-			if mode == "unsupported-extension" {
+			switch mode {
+			case "unsupported-extension":
 				require.ErrorIs(t, err, codex.ErrInvalidInput)
-			} else if mode == "submit-rejected" {
+			case "submit-rejected":
 				var rpc *codex.RPCError
 				require.ErrorAs(t, err, &rpc)
 				require.EqualValues(t, -32042, rpc.Code)
-			} else {
+			default:
 				require.ErrorIs(t, err, io.EOF)
 			}
 		})
@@ -129,7 +135,7 @@ func init() {
 			}
 		}
 		err = mockPeer(context.Background(), os.Stdin, os.Stdout, frames, "")
-		if err != nil && err != mocktest.ErrDisconnected {
+		if err != nil && !errors.Is(err, mocktest.ErrDisconnected) {
 			os.Exit(32)
 		}
 		os.Exit(0)
@@ -153,7 +159,7 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 	// The explicit synthetic peer must work even when PATH offers a poisoned CLI.
 	poison := t.TempDir()
 	sentinel := filepath.Join(poison, "started")
-	require.NoError(t, os.WriteFile(filepath.Join(poison, "codex"), []byte("#!/bin/sh\nprintf poison > '"+sentinel+"'\nexit 99\n"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(poison, "codex"), []byte("#!/bin/sh\nprintf poison > '"+sentinel+"'\nexit 99\n"), 0o700))
 	t.Setenv("PATH", poison)
 	t.Cleanup(func() {
 		_, err := os.Stat(sentinel)
@@ -176,10 +182,8 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 
 	defer c.Close()
 	root := t.TempDir()
-	{
-		err = os.WriteFile(root+"/numbers.txt", []byte("17\n25\n"), 0600)
-		require.NoError(t, err)
-	}
+	err = os.WriteFile(root+"/numbers.txt", []byte("17\n25\n"), 0o600)
+	require.NoError(t, err)
 
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
 	require.NoError(t, err)
@@ -188,25 +192,14 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 	require.NoError(t, err)
 	require.False(t, !result.Completed || result.Tools != 2,
 		"missing lifecycle/tools")
-	{
-
-		err = c.Call(ctx, "replay/assert", nil, nil)
-		require.NoError(t, err)
-	}
-
-}
-
-// ManagedRecordingSuite uses only this test binary as the protocol peer.
-// Every test gets its own executable lookup and keeps bounded lifecycle cleanup.
-type ManagedRecordingSuite struct {
-	suite.Suite
-	executable string
+	err = c.Call(ctx, "replay/assert", nil, nil)
+	require.NoError(t, err)
 }
 
 func TestManagedRecording(t *testing.T) { suite.Run(t, new(ManagedRecordingSuite)) }
 
 func (s *ManagedRecordingSuite) SetupTest() {
 	executable, err := os.Executable()
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	s.executable = executable
 }

@@ -68,9 +68,7 @@ func gate(ctx context.Context, tool toolIdentity, o options) error {
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for range o.Jobs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range jobs {
 				s := list.Cases[i]
 				row := coverageRow{Scene: s, SimulationStatus: "unverified"}
@@ -82,7 +80,7 @@ func gate(ctx context.Context, tool toolIdentity, o options) error {
 					if external != nil {
 						selection = []string{"--recording", o.Recording}
 					}
-					err := os.Mkdir(child.Output, 0700)
+					err := os.Mkdir(child.Output, 0o700)
 					if err == nil {
 						err = simulate(ctx, tool, child, selection)
 					}
@@ -100,7 +98,6 @@ func gate(ctx context.Context, tool toolIdentity, o options) error {
 							row.MaterialError = row.MaterialError || run.MaterialError != ""
 						}
 					}
-
 				} else {
 					row.Error = s.MissingReason
 					if external != nil {
@@ -109,7 +106,7 @@ func gate(ctx context.Context, tool toolIdentity, o options) error {
 				}
 				report.Cases[i] = row
 			}
-		}()
+		})
 	}
 	for i := range list.Cases {
 		jobs <- i

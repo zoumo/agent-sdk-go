@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,7 @@ func historyTranscript(t *testing.T, rows ...map[string]any) HistoryOptions {
 		return '-'
 	}, cwd)
 	dir := filepath.Join(home, "projects", key)
-	require.NoError(t, os.MkdirAll(dir, 0700))
+	require.NoError(t, os.MkdirAll(dir, 0o700))
 	var data []byte
 	for _, row := range rows {
 		row["sessionId"] = historySession
@@ -35,7 +36,7 @@ func historyTranscript(t *testing.T, rows ...map[string]any) HistoryOptions {
 		require.NoError(t, e)
 		data = append(data, append(b, '\n')...)
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(dir, historySession+".jsonl"), data, 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, historySession+".jsonl"), data, 0o600))
 	return HistoryOptions{SessionID: historySession, CWD: cwd, ConfigDir: home}
 }
 
@@ -103,9 +104,7 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			local := make([]map[string]any, len(rows))
 			for i, r := range rows {
 				local[i] = map[string]any{}
-				for k, v := range r {
-					local[i][k] = v
-				}
+				maps.Copy(local[i], r)
 			}
 			o := historyTranscript(t, local...)
 			path := historyPath(t, o)
@@ -115,21 +114,21 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			case "cwd", "session":
 				b, e := os.ReadFile(path)
 				require.NoError(t, e)
-				old, new := o.CWD, "/wrong"
+				oldValue, newValue := o.CWD, "/wrong"
 				if mode == "session" {
-					old, new = o.SessionID, "foreign"
+					oldValue, newValue = o.SessionID, "foreign"
 				}
-				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(b), old, new)), 0600))
+				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(b), oldValue, newValue)), 0o600))
 			case "malformed":
-				require.NoError(t, os.WriteFile(path, []byte("{bad}\n"), 0600))
+				require.NoError(t, os.WriteFile(path, []byte("{bad}\n"), 0o600))
 			case "duplicate JSON":
 				b, e := os.ReadFile(path)
 				require.NoError(t, e)
-				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(b), `"uuid":"u"`, `"uuid":"erased","uuid":"u"`)), 0600))
+				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(b), `"uuid":"u"`, `"uuid":"erased","uuid":"u"`)), 0o600))
 			case "incomplete tail":
 				b, e := os.ReadFile(path)
 				require.NoError(t, e)
-				require.NoError(t, os.WriteFile(path, b[:len(b)-1], 0600))
+				require.NoError(t, os.WriteFile(path, b[:len(b)-1], 0o600))
 			case "record limit":
 				o.MaxRecords = 1
 			case "line limit":
@@ -137,7 +136,7 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 			case "crlf":
 				b, e := os.ReadFile(path)
 				require.NoError(t, e)
-				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(b), "\n", "\r\n")), 0600))
+				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(b), "\n", "\r\n")), 0o600))
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -152,12 +151,13 @@ func TestHistoryCancellationMutationAndIdentity(t *testing.T) {
 				case <-time.After(time.Second):
 					t.Fatal("first record missing")
 				}
-				if mode == "cancel" {
+				switch mode {
+				case "cancel":
 					cancel()
-				} else if mode == "close" {
+				case "close":
 					require.NoError(t, h.Close())
-				} else {
-					f, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+				default:
+					f, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 					require.NoError(t, e)
 					_, e = f.WriteString("{}\n")
 					require.NoError(t, e)
@@ -191,7 +191,7 @@ func TestHistorySessionsAreIsolated(t *testing.T) {
 	require.NoError(t, e)
 	second := o
 	second.SessionID = "00000000-0000-4000-8000-000000000002"
-	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), second.SessionID+".jsonl"), []byte(strings.ReplaceAll(strings.ReplaceAll(string(b), o.SessionID, second.SessionID), "first session", "second session")), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), second.SessionID+".jsonl"), []byte(strings.ReplaceAll(strings.ReplaceAll(string(b), o.SessionID, second.SessionID), "first session", "second session")), 0o600))
 	slow, e := readTranscriptForTest(context.Background(), o, nil)
 	require.NoError(t, e)
 	defer slow.Close()
@@ -270,7 +270,7 @@ func TestHistoryResumeAppendIntegrity(t *testing.T) {
 				if e != nil {
 					return e
 				}
-				f, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+				f, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 				if e != nil {
 					return e
 				}
@@ -312,7 +312,7 @@ func TestHistoryMetadataIdentityCannotBypassValidation(t *testing.T) {
 			raw, err := json.Marshal(meta)
 			require.NoError(t, err)
 			lines[0] = string(raw)
-			require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0600))
+			require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600))
 			h, err := readTranscriptForTest(context.Background(), o, nil)
 			require.NoError(t, err)
 			defer h.Close()

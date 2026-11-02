@@ -102,7 +102,7 @@ func NewRemote(ctx context.Context, options RemoteOptions) (*Client, error) {
 	transport := &http.Transport{DialContext: dialContext, TLSClientConfig: config, TLSHandshakeTimeout: limits.CallTimeout, ResponseHeaderTimeout: limits.CallTimeout, MaxResponseHeaderBytes: 64 << 10}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: remoteRoundTripper{transport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	conn, response, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPClient: client, HTTPHeader: http.Header{"Authorization": {"Bearer " + options.BearerToken}}, CompressionMode: websocket.CompressionDisabled})
+	conn, response, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{HTTPClient: client, HTTPHeader: http.Header{"Authorization": {"Bearer " + options.BearerToken}}, CompressionMode: websocket.CompressionDisabled}) //nolint:bodyclose // websocket.Dial owns the handshake body.
 	stopWatchingDial()
 	if err == nil && ctx.Err() != nil {
 		_ = conn.CloseNow()
@@ -146,7 +146,7 @@ func validBearer(s string) bool {
 			padding = true
 			continue
 		}
-		if padding || !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("-._~+/", r)) {
+		if padding || (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && !strings.ContainsRune("-._~+/", r) {
 			return false
 		}
 	}

@@ -25,18 +25,17 @@ func permissionWireBarrier(t *testing.T) (*interaction, *os.File, string) {
 	dir := t.TempDir()
 	fifoPath, transcript := filepath.Join(dir, "gate"), filepath.Join(dir, "stdin.ndjson")
 	{
-		err := syscall.Mkfifo(fifoPath, 0600)
+		err := syscall.Mkfifo(fifoPath, 0o600)
 		require.NoError(t, err)
 	}
 	// Linux permits opening both ends at once. The fixture opens only its read
 	// end, and test writes are one byte, so neither endpoint can fill the FIFO.
-	gate, err := os.OpenFile(fifoPath, os.O_RDWR, 0600)
+	gate, err := os.OpenFile(fifoPath, os.O_RDWR, 0o600)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = gate.Close() })
 
 	c := openFixture(t, "permission_controls", func(opts *Options) {
 		opts.Env = append(opts.Env, "CLAUDE_GO_WRITE_BARRIER="+fifoPath, "CLAUDE_GO_TRANSCRIPT="+transcript)
-
 	})
 	return c, gate, transcript
 }
@@ -276,10 +275,10 @@ func (s *controlInteractionSuite) TestAutomaticResponseQueueOverflowUnblocksStar
 	fifo := filepath.Join(dir, "gate")
 	path := filepath.Join(dir, "stdin.ndjson")
 	{
-		err := syscall.Mkfifo(fifo, 0600)
+		err := syscall.Mkfifo(fifo, 0o600)
 		require.NoError(t, err)
 	}
-	gate, err := os.OpenFile(fifo, os.O_RDWR, 0600)
+	gate, err := os.OpenFile(fifo, os.O_RDWR, 0o600)
 	require.NoError(t, err)
 	defer gate.Close()
 	c := s.openFixture(t, "permission_controls", func(o *Options) {

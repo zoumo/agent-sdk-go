@@ -26,7 +26,7 @@ func ValidateChildDelivery(root string, background bool) error {
 	if e != nil {
 		return e
 	}
-	frames, e := deliveries(filepath.Join(root, "raw/raw.jsonl"))
+	frames, e := deliveries(filepath.Join(root, "raw", "raw.jsonl"))
 	if e != nil {
 		return e
 	}
@@ -52,9 +52,9 @@ func ValidateChildDelivery(root string, background bool) error {
 	relations := map[string]string{}
 	for _, v := range received {
 		o := mapping(v["observation"])
-		id, parent := text(o["ThreadID"]), text(o["ParentThreadID"])
+		parent := text(o["ParentThreadID"])
 
-		id = text(mapping(o["Source"])["task_id"])
+		id := text(mapping(o["Source"])["task_id"])
 		p := mapping(o["Parent"])
 		if p["session_id"] == rootID && text(p["task_id"]) == "" {
 			parent = rootID
@@ -69,7 +69,7 @@ func ValidateChildDelivery(root string, background bool) error {
 	}
 	for child, parent := range parents {
 		if child == "" || !members[child] || relations[child] != parent {
-			return errors.New("Go child membership or parent relationship differs from native evidence")
+			return errors.New("go child membership or parent relationship differs from native evidence")
 		}
 	}
 	type event struct {
@@ -82,7 +82,7 @@ func ValidateChildDelivery(root string, background bool) error {
 			continue
 		}
 		var w map[string]any
-		if e = json.Unmarshal([]byte(text(v["raw"])), &w); e != nil {
+		if e := json.Unmarshal([]byte(text(v["raw"])), &w); e != nil {
 			return e
 		}
 		events = append(events, event{i, w})
@@ -101,11 +101,8 @@ func ValidateChildDelivery(root string, background bool) error {
 			continue
 		}
 		w := mapping(f["wire"])
-		id := text(mapping(w["params"])["threadId"])
-		terminal := w["method"] == "turn/completed"
-
-		id = text(w["task_id"])
-		terminal = w["subtype"] == "task_notification"
+		id := text(w["task_id"])
+		terminal := w["subtype"] == "task_notification"
 
 		if _, ok := parents[id]; !ok || !terminal {
 			continue
@@ -120,14 +117,14 @@ func ValidateChildDelivery(root string, background bool) error {
 			}
 		}
 		if !found {
-			return errors.New("Go stream omitted or changed native child completion")
+			return errors.New("go stream omitted or changed native child completion")
 		}
 	}
 	if expected == 0 {
 		return errors.New("recording lacks native child completion")
 	}
 	if background && !afterRoot {
-		return errors.New("Go stream lacks native child completion after root completion")
+		return errors.New("go stream lacks native child completion after root completion")
 	}
 
 	evidence := mapping(original["childEvidence"])
@@ -140,7 +137,7 @@ func ValidateChildDelivery(root string, background bool) error {
 			}
 		}
 		if !found {
-			return errors.New("Go stream omitted recorded child output")
+			return errors.New("go stream omitted recorded child output")
 		}
 	}
 

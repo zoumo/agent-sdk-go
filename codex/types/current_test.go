@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -17,7 +18,6 @@ func TestCurrentOpenErrorInfo(t *testing.T) {
 			schemaRoundTrip(t, &value, raw)
 			require.False(t, raw[0] == '{' && len(value.Unknown) == 0,
 				"opaque native error was interpreted as a known branch")
-
 		})
 	}
 	for _, raw := range []string{`null`, `false`, `[]`, `17`} {
@@ -27,6 +27,5 @@ func TestCurrentOpenErrorInfo(t *testing.T) {
 			require.Error(t, err,
 				"wrong native error kind accepted: %s", raw)
 		}
-
 	}
 }

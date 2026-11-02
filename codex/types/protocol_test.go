@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -54,7 +55,6 @@ func TestOptionalOmittedNullAndZero(t *testing.T) {
 			}
 			require.False(t, round.ServiceTier.IsSet() != tt.value.ServiceTier.IsSet() || round.ServiceTier.IsNull() != tt.value.ServiceTier.IsNull(),
 				"optional state changed")
-
 		})
 	}
 	{
@@ -63,18 +63,15 @@ func TestOptionalOmittedNullAndZero(t *testing.T) {
 			"omitted value reported present")
 	}
 	{
-
 		got := omitted.ServiceTier.ValueOr("fallback")
 		require.Equal(t, "fallback", got,
 			got)
 	}
 	{
-
 		got, ok := types.Some(false).Get()
 		require.False(t, !ok || got,
 			"present false lost")
 	}
-
 }
 
 func TestCompleteExperimentalStartFields(t *testing.T) {
@@ -107,7 +104,6 @@ func TestCompleteExperimentalStartFields(t *testing.T) {
 			assert.True(t, found,
 				"missing native field %s", key)
 		}
-
 	}
 	schemaRoundTrip(t, new(types.ThreadStartParams), string(encoded))
 }
@@ -133,7 +129,6 @@ func TestKnownAndFutureUnionVariants(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), `"type":"agentMessage"`,
 		"constant discriminator not emitted")
-
 }
 
 func TestMalformedKnownDataRejected(t *testing.T) {
@@ -161,7 +156,6 @@ func TestMalformedKnownDataRejected(t *testing.T) {
 				require.Error(t, err,
 					"malformed known data accepted")
 			}
-
 		})
 	}
 }
@@ -195,7 +189,9 @@ func ExampleOptional() {
 		ServiceTier: types.Null[string](),
 		Ephemeral:   types.Some(false),
 	}
-	_, _ = json.Marshal(params)
+	if _, err := json.Marshal(params); err != nil {
+		panic(err)
+	}
 	// The model and false value are present, serviceTier is null, and every
 	// other optional field is omitted.
 }
@@ -216,7 +212,6 @@ func TestRejectLossyJSONDecoding(t *testing.T) {
 			assert.Error(t, err,
 				"lossy decoding accepted for %q", raw)
 		}
-
 	}
 	for _, raw := range []string{
 		`{"threadId":"\ud83d\ude00"}`,
@@ -235,13 +230,12 @@ func TestRejectLossyJSONEncoding(t *testing.T) {
 		types.ThreadStartParams{Config: types.Some(map[string]json.RawMessage{invalid: json.RawMessage(`null`)})},
 		types.ThreadStartParams{UnknownFields: map[string]json.RawMessage{"future": json.RawMessage(`{"a":1,"a":2}`)}},
 		types.ThreadItem{Unknown: json.RawMessage(`{"type":"future","id":"\ud800"}`)},
-		types.SessionSource{Value: types.Ptr(types.SessionSourceValue(invalid))},
+		types.SessionSource{Value: new(types.SessionSourceValue(invalid))},
 	} {
 		{
 			_, err := json.Marshal(value)
 			assert.Error(t, err,
 				"lossy JSON encoding accepted for %T", value)
 		}
-
 	}
 }

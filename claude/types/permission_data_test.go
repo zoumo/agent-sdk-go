@@ -9,10 +9,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
 func TestDetachedPermissionMetadata(t *testing.T) {
@@ -25,8 +25,8 @@ func TestDetachedPermissionMetadata(t *testing.T) {
 	frame[0] = '!'
 	event.Control.Request[0] = '!'
 	require.True(t, bytes.Equal(metadata.Raw, original), "metadata not detached")
-	require.EqualValues(t, "t", metadata.ToolUseID, "metadata not detached")
-	require.EqualValues(t, "a", metadata.AgentID, "metadata not detached")
+	require.Equal(t, "t", metadata.ToolUseID, "metadata not detached")
+	require.Equal(t, "a", metadata.AgentID, "metadata not detached")
 	metadata.Title = "Edited"
 	metadata.Fields = map[string]types.FieldState{"description": types.Absent, "display_name": types.Null}
 	m := marshalObject(t, metadata)
@@ -44,15 +44,16 @@ func TestDetachedPermissionMetadata(t *testing.T) {
 		err := json.Unmarshal([]byte(`{"subtype":"can_use_tool","tool_name":"Read","input":{}}`), &metadata)
 		require.NoError(t, err)
 	}
-	require.EqualValues(t, "", metadata.AgentID, "decode failed to reset")
+	require.Empty(t, metadata.AgentID, "decode failed to reset")
 	require.Nil(t, metadata.Fields, "decode failed to reset")
 	{
 		err := json.Unmarshal([]byte(`{"subtype":"interrupt"}`), &metadata)
 		require.Error(t, err, "invalid decode must reset")
 		require.Nil(t, metadata.Raw, "invalid decode must reset")
-		require.EqualValues(t, "", metadata.ToolName, "invalid decode must reset")
+		require.Empty(t, metadata.ToolName, "invalid decode must reset")
 	}
 }
+
 func TestPermissionResponseWire(t *testing.T) {
 	for _, frame := range []string{
 		`{"type":"control_response","extra":false,"response":{"subtype":"success","request_id":"r","response":{"behavior":"allow","updatedInput":{"unknown":{"n":9007199254740993}}},"future":null}}`,
@@ -60,13 +61,13 @@ func TestPermissionResponseWire(t *testing.T) {
 		`{"type":"control_response","response":{"subtype":"success","request_id":"r","response":null}}`,
 		`{"type":"control_response","response":{"subtype":"error","request_id":"r","error":"拒绝","future":[]}}`,
 	} {
-		t.Run(fmt.Sprintf("%v", frame), func(t *testing.T) {
+		t.Run(frame, func(t *testing.T) {
 			roundTrip(t, frame)
 		})
 	}
 	var result types.PermissionResult
 	for _, data := range []string{`{"behavior":"allow"}`, `{"behavior":"allow","updatedInput":{},"future":null}`, `{"behavior":"deny","message":"","future":{"n":9007199254740993}}`} {
-		t.Run(fmt.Sprintf("%v", data), func(t *testing.T) {
+		t.Run(data, func(t *testing.T) {
 			{
 				err := json.Unmarshal([]byte(data), &result)
 				require.NoError(t, err)
@@ -77,7 +78,7 @@ func TestPermissionResponseWire(t *testing.T) {
 		})
 	}
 	deny := marshalObject(t, types.PermissionResult{Behavior: types.PermissionDeny})
-	require.EqualValues(t, "", deny["message"], deny)
+	require.Empty(t, deny["message"], deny)
 	payload, err := json.Marshal(types.PermissionResult{Behavior: types.PermissionAllow, UpdatedInput: json.RawMessage(`{}`)})
 	require.NoError(t, err)
 	event := types.Event{Type: "control_response", Response: &types.ControlResponse{Type: "control_response", Response: types.ControlResponseData{Subtype: "success", RequestID: "exact/id", Response: payload}}}
@@ -147,6 +148,7 @@ func TestQuestionAnswersPreserveInput(t *testing.T) {
 		require.Nil(t, input.Questions, "failed decode must reset")
 	}
 }
+
 func TestPermissionAndQuestionInvalidShapes(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -162,7 +164,7 @@ func TestPermissionAndQuestionInvalidShapes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, data := range tt.inputs {
-				t.Run(fmt.Sprintf("%v", data), func(t *testing.T) {
+				t.Run(data, func(t *testing.T) {
 					{
 						err := json.Unmarshal([]byte(data), tt.value())
 						assert.Errorf(t, err, "accepted %s", data)
@@ -175,7 +177,8 @@ func TestPermissionAndQuestionInvalidShapes(t *testing.T) {
 		types.PermissionMetadata{Subtype: "can_use_tool", ToolName: "Read", Input: json.RawMessage(`{}`), Fields: map[string]types.FieldState{"tool_name": types.Absent}},
 		types.PermissionResult{Behavior: types.PermissionAllow, Fields: map[string]types.FieldState{"behavior": types.Null}},
 		types.ControlResponse{Type: "control_response", Response: types.ControlResponseData{Subtype: "success", RequestID: "r"}, Fields: map[string]types.FieldState{"response": types.Absent}},
-		types.QuestionAnswer{}, types.QuestionAnswer{Text: new(string), Labels: []string{}},
+		types.QuestionAnswer{},
+		types.QuestionAnswer{Text: new(string), Labels: []string{}},
 		types.Question{Question: "Q", Options: []types.QuestionOption{}, Fields: map[string]types.FieldState{"options": types.Null}},
 	} {
 		t.Run(fmt.Sprintf("%T/%v", v, v), func(t *testing.T) {
@@ -202,7 +205,7 @@ func TestPermissionAndQuestionInvalidShapes(t *testing.T) {
 		})
 	}
 	for _, data := range []string{`""`, `"Other 自定义"`, `[]`, `["Introduction","Conclusion"]`} {
-		t.Run(fmt.Sprintf("%v", data), func(t *testing.T) {
+		t.Run(data, func(t *testing.T) {
 			var answer types.QuestionAnswer
 			{
 				err := json.Unmarshal([]byte(data), &answer)
@@ -210,7 +213,7 @@ func TestPermissionAndQuestionInvalidShapes(t *testing.T) {
 			}
 			b, err := json.Marshal(answer)
 			require.NoErrorf(t, err, "answer roundtrip: %s %v", b, err)
-			require.EqualValuesf(t, data, string(b), "answer roundtrip: %s %v", b, err)
+			require.Equalf(t, data, string(b), "answer roundtrip: %s %v", b, err)
 		})
 	}
 }
@@ -259,7 +262,7 @@ func TestPermissionDataRepeatedDecodeAndPresence(t *testing.T) {
 	}
 	metadata.Fields = map[string]types.FieldState{"title": types.Present, "agent_id": types.Null, "description": types.Absent}
 	m := marshalObject(t, metadata)
-	require.EqualValues(t, "", m["title"], m)
+	require.Empty(t, m["title"], m)
 	require.Nil(t, m["agent_id"], m)
 	metadata.Fields["title"] = types.FieldState(255)
 	{

@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	"io"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 func mockPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, handshakes string) error {

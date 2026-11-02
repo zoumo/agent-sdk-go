@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const nativeChildSnapshot = ` {"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"},{"type":"thinking","thinking":"private","signature":"sig"}],"usage":{"output_tokens":7}},"future":null} `
-const nativeRootTool = `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`
+const (
+	nativeChildSnapshot = ` {"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"},{"type":"thinking","thinking":"private","signature":"sig"}],"usage":{"output_tokens":7}},"future":null} `
+	nativeRootTool      = `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`
+)
 
 func TestSessionToolProgressRetainsNativeRetryAndChildAttribution(t *testing.T) {
 	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
@@ -39,7 +41,8 @@ func TestSessionToolProgressRetainsNativeRetryAndChildAttribution(t *testing.T) 
 
 func TestSessionNativeUsageTerminalAndSnapshotsStaySeparate(t *testing.T) {
 	s := openSessionFixture(t)
-	frames := []string{creationInit, nativeRootTool, creationTask("a", "spawn", "false"),
+	frames := []string{
+		creationInit, nativeRootTool, creationTask("a", "spawn", "false"),
 		nativeChildSnapshot,
 		`{"type":"stream_event","session_id":"s","parent_tool_use_id":"spawn","event":{"type":"message_delta","usage":{"output_tokens":7},"delta":{"text":"child"}}}`,
 		nativeChildSnapshot,
@@ -69,7 +72,7 @@ func TestSessionNativeUsageTerminalAndSnapshotsStaySeparate(t *testing.T) {
 			require.Empty(t, r.Source.TaskID)
 			require.Equal(t, "parent only", r.Event.Result.Result)
 			require.NotNil(t, r.Event.Result.TotalCostUSD)
-			require.Equal(t, 0.25, *r.Event.Result.TotalCostUSD)
+			require.InDelta(t, 0.25, *r.Event.Result.TotalCostUSD, 0)
 		}
 	}
 	require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
@@ -159,17 +162,23 @@ func TestSessionQuarantineByteBoundsAndSnapshotCopies(t *testing.T) {
 	sessionNative(t, s)
 	snap := s.Unattributed()
 	require.Len(t, snap.Records, 1)
-	require.Equal(t, nativeChildSnapshot, string(snap.Records[0].Event.Raw))
+	require.Equal(t, nativeChildSnapshot, string(snap.Records[0].Event.Raw)) //nolint:testifylint // preserves exact protocol bytes
 	require.Eventually(t, func() bool { return s.Unattributed().Expired == 1 }, time.Second, time.Millisecond)
 	require.Empty(t, s.Unattributed().Records)
 }
 
 func TestSessionActiveObservationBoundsRejectBeforeSpawn(t *testing.T) {
 	for _, bounds := range []SubagentOptions{
-		{MaxNodes: -1}, {MaxNodes: 65537}, {MaxDepth: -1}, {MaxDepth: 257},
-		{MaxUnresolvedEvents: -1}, {MaxUnresolvedEvents: 65537},
-		{MaxUnresolvedBytes: -1}, {MaxUnresolvedBytes: 64<<20 + 1},
-		{MaxUnresolvedWait: -1}, {MaxUnresolvedWait: time.Minute + 1},
+		{MaxNodes: -1},
+		{MaxNodes: 65537},
+		{MaxDepth: -1},
+		{MaxDepth: 257},
+		{MaxUnresolvedEvents: -1},
+		{MaxUnresolvedEvents: 65537},
+		{MaxUnresolvedBytes: -1},
+		{MaxUnresolvedBytes: 64<<20 + 1},
+		{MaxUnresolvedWait: -1},
+		{MaxUnresolvedWait: time.Minute + 1},
 		{MaxNodes: 1, History: []SubagentHistory{{SessionID: "s", TaskID: "a"}, {SessionID: "s", TaskID: "b"}}},
 		{History: []SubagentHistory{{SessionID: "", TaskID: "a"}}},
 		{History: []SubagentHistory{{SessionID: "s", TaskID: ""}}},
@@ -306,14 +315,14 @@ func TestSessionConcurrentCloseWithUnreadFactsAndLongQuarantine(t *testing.T) {
 		}
 		if r.Event != nil {
 			natives++
-			require.Equal(t, creationInit, string(r.Raw))
+			require.Equal(t, creationInit, string(r.Raw)) //nolint:testifylint // preserves exact protocol bytes
 		}
 		require.Nil(t, r.Request)
 	}
 	require.Equal(t, 1, natives)
 	snap := s.Unattributed()
 	require.Len(t, snap.Records, 1)
-	require.Equal(t, nativeChildSnapshot, string(snap.Records[0].Event.Raw))
+	require.Equal(t, nativeChildSnapshot, string(snap.Records[0].Event.Raw)) //nolint:testifylint // preserves exact protocol bytes
 }
 
 func TestSessionForwardingBeforeInitializeAckAndFreshEpoch(t *testing.T) {
@@ -325,7 +334,7 @@ func TestSessionForwardingBeforeInitializeAckAndFreshEpoch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, ReceivedObservation, r.Kind)
 		require.Eventually(t, func() bool { return len(s.Unattributed().Records) == 1 }, 3*time.Second, time.Millisecond)
-		require.Equal(t, earlyTreeFrame, string(s.Unattributed().Records[0].Event.Raw))
+		require.Equal(t, earlyTreeFrame, string(s.Unattributed().Records[0].Event.Raw)) //nolint:testifylint // preserves exact protocol bytes
 		id, observed := s.SessionID()
 		require.Empty(t, id)
 		require.False(t, observed)

@@ -92,7 +92,7 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 				// A late response cannot resurrect the expired call or satisfy a
 				// fresh call. Exercise real routing and the same writer again.
 				{
-					err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":null}`, id)))
+					err := c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":null}`, id))
 					require.NoError(t, err)
 				}
 				go func() { result <- c.Call(context.Background(), "wait", nil, nil) }()
@@ -100,7 +100,7 @@ func TestDefaultCallTimeoutWithControlledTime(t *testing.T) {
 				synctest.Wait()
 				require.NotEqual(t, id, freshID, "expired call ID reused")
 				{
-					err := c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":null}`, freshID)))
+					err := c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":null}`, freshID))
 					require.NoError(t, err)
 				}
 				{
@@ -145,7 +145,7 @@ func TestSessionConfigurationTimeoutWithControlledTime(t *testing.T) {
 		}
 		respond := func(id ID, response string) {
 			t.Helper()
-			require.NoError(t, c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":%s}`, id, response))))
+			require.NoError(t, c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":%s}`, id, response)))
 		}
 		type opened struct {
 			session *Session

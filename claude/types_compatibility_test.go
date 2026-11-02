@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
@@ -77,7 +78,7 @@ func (s *clientProtocolSuite) TestOptionsAdapterRunsExistingSubprocessProtocol()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	send(t, c, "adapter")
-	var event types.Event = receive(t, c)
+	event := receive(t, c)
 	var echo struct {
 		Wire struct {
 			Type    string
@@ -100,15 +101,13 @@ func TestMessageCodecAliases(t *testing.T) {
 			require.NoError(t, err)
 			data, err := types.ParseEvent(frame)
 			require.NoError(t, err)
-			var same Event = data
+			same := data
 			same.Result.ModelUsage["fixture"] = ModelUsage{InputTokens: 3, Fields: map[string]FieldState{"inputTokens": Present}}
 			b, err := json.Marshal(same)
 			require.NoError(t, err)
 			var decoded types.Event
-			{
-				err = json.Unmarshal(b, &decoded)
-				require.NoError(t, err)
-			}
+			err = json.Unmarshal(b, &decoded)
+			require.NoError(t, err)
 			assert.True(t, root.Result.IsError, "root/type codecs differ")
 			assert.EqualValues(t, 3, decoded.Result.ModelUsage["fixture"].InputTokens, "root/type codecs differ")
 		})
@@ -116,7 +115,7 @@ func TestMessageCodecAliases(t *testing.T) {
 }
 
 func TestPermissionDataAliases(t *testing.T) {
-	var _ func() (types.PermissionMetadata, error) = (*PermissionRequest)(nil).Metadata
+	_ = (*PermissionRequest)(nil).Metadata
 	values := [][2]any{
 		{PermissionMetadata{}, types.PermissionMetadata{}},
 		{PermissionResult{}, types.PermissionResult{}},

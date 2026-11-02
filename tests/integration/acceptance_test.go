@@ -11,12 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude"
 	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 	clt "github.com/zoumo/agent-sdk-go/claude/types"
@@ -27,13 +29,15 @@ import (
 
 // nativeObservation is a detached test fact extracted by a native adapter. Raw keeps
 // the observed wire payload; it is never used to construct response authority.
-type nativeObservation struct{ Kind, ID, Parent, Raw string }
-type nativeTrace struct {
-	Events                                                                                       []nativeObservation
-	SendError, AnswerError, RetryError, CanceledError, OverflowError, InterruptError, CloseError error
-	AnswerID, AnswerText, AnswerDecision                                                         string
-	AnswerCount, InputCount                                                                      int
-}
+type (
+	nativeObservation struct{ Kind, ID, Parent, Raw string }
+	nativeTrace       struct {
+		Events                                                                                       []nativeObservation
+		SendError, AnswerError, RetryError, CanceledError, OverflowError, InterruptError, CloseError error
+		AnswerID, AnswerText, AnswerDecision                                                         string
+		AnswerCount, InputCount                                                                      int
+	}
+)
 
 var nativeScenarios = []string{"submission-barrier", "tool-boundary", "child-authority", "nested-parentage", "child-after-result", "permission", "question", "canceled-answer", "backpressure", "unknown-fields", "history-observation", "interrupt-boundary"}
 
@@ -78,7 +82,7 @@ func (s *NativeIntegrationSuite) checkScenario(scenario string, got nativeTrace)
 			check.True(found, "nested/parallel relation lost: "+pair[0])
 		}
 		check.GreaterOrEqual(find("gap", ""), 0, "unknown source must produce visible uncertainty")
-		check.Less(find("associated", "unknown"), 0, "unknown parent guessed")
+		check.Negative(find("associated", "unknown"), "unknown parent guessed")
 	case "child-after-result":
 		check.GreaterOrEqual(find("complete", "root"), 0, "root completion missing")
 		check.Greater(find("native", "child"), find("complete", "root"), "child observation ended at root completion")
@@ -126,7 +130,7 @@ func (s *NativeIntegrationSuite) checkScenario(scenario string, got nativeTrace)
 	case "history-observation":
 		check.GreaterOrEqual(find("gap", ""), 0, "history recovery gap lost")
 		check.GreaterOrEqual(find("associated", "child"), 0, "history association missing")
-		check.Less(find("created", "child"), 0, "history association invented creation")
+		check.Negative(find("created", "child"), "history association invented creation")
 		check.Zero(got.InputCount, "recovery replayed input")
 		check.Zero(got.AnswerCount, "recovery replayed answer")
 	case "interrupt-boundary":
@@ -146,6 +150,7 @@ func codexTargetOptions(t *testing.T, scenario string) (codex.StdioOptions, stri
 	path := filepath.Join(t.TempDir(), "wire.jsonl")
 	return codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "session-integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}}, path
 }
+
 func claudeTargetOptions(t *testing.T, scenario string) (claude.SessionOptions, string) {
 	t.Helper()
 	exe, e := os.Executable()
@@ -156,6 +161,7 @@ func claudeTargetOptions(t *testing.T, scenario string) (claude.SessionOptions, 
 	path := filepath.Join(dir, "wire.jsonl")
 	return claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "CLAUDE_CONFIG_DIR=" + filepath.Join(dir, "config"), "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}}, path
 }
+
 func codexUntil(t *testing.T, s *codex.Session, method string) []codex.Received {
 	t.Helper()
 	ctx := deadline(t)
@@ -172,6 +178,7 @@ func codexUntil(t *testing.T, s *codex.Session, method string) []codex.Received 
 		}
 	}
 }
+
 func claudeUntil(t *testing.T, s *claude.Session, subtype string) []claude.Received {
 	t.Helper()
 	ctx := deadline(t)
@@ -185,6 +192,7 @@ func claudeUntil(t *testing.T, s *claude.Session, subtype string) []claude.Recei
 		}
 	}
 }
+
 func codexSessionTarget(t *testing.T, scenario string) {
 	o, path := codexTargetOptions(t, scenario)
 	c, e := codex.NewStdio(deadline(t), o)
@@ -204,8 +212,8 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		_, e = codex.Open(ctx, codex.SessionOptions{Client: c})
 		require.ErrorIs(t, e, codex.ErrOwnershipConflict)
 		for range 2 {
-			v, e := s.Submit(ctx, codex.Input{})
-			require.NoError(t, e)
+			v, err := s.Submit(ctx, codex.Input{})
+			require.NoError(t, err)
 			require.Equal(t, "turn", v.Response.Turn.ID)
 			got := codexUntil(t, s, "turn/completed")
 			require.Equal(t, "live", got[len(got)-1].Origin)
@@ -323,19 +331,19 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		require.Zero(t, countFrames(t, path, "thread/resume"))
 		require.Zero(t, countFrames(t, path, "thread/read"))
 	case "session-subagent-query":
-		page, e := s.ListSubagents(ctx, codex.SubagentQuery{MaxPages: 1, Limit: ct.Some(uint32(1))})
-		require.ErrorIs(t, e, codex.ErrLimit)
+		page, err := s.ListSubagents(ctx, codex.SubagentQuery{MaxPages: 1, Limit: ct.Some(uint32(1))})
+		require.ErrorIs(t, err, codex.ErrLimit)
 		require.Len(t, page.Pages, 1)
 		assert.False(t, page.Coverage.EnumerationComplete)
 		assert.Equal(t, "p2", page.NextCursor.ValueOr(""))
-		full, e := s.ListSubagents(ctx, codex.SubagentQuery{Limit: ct.Some(uint32(1))})
-		require.NoError(t, e)
+		full, err := s.ListSubagents(ctx, codex.SubagentQuery{Limit: ct.Some(uint32(1))})
+		require.NoError(t, err)
 		require.Len(t, full.Pages, 2)
 		assert.True(t, full.Coverage.EnumerationComplete)
 		assert.Equal(t, "stored-a", full.Pages[0].Data[0].ID)
 		assert.False(t, full.Coverage.Archived)
-		archived, e := s.ListSubagents(ctx, codex.SubagentQuery{Archived: ct.Some(true)})
-		require.NoError(t, e)
+		archived, err := s.ListSubagents(ctx, codex.SubagentQuery{Archived: ct.Some(true)})
+		require.NoError(t, err)
 		assert.True(t, archived.Coverage.Archived)
 		require.NoError(t, s.Interrupt(ctx, codex.InterruptOptions{TurnID: "explicit"}))
 		all := codexUntil(t, s, "fixture/interrupt")
@@ -362,7 +370,8 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		require.NoError(t, s.Interrupt(ctx, codex.InterruptOptions{TurnID: "explicit"}))
 		codexUntil(t, s, "fixture/interrupt")
 		assert.Zero(t, countAnswers(t, path, "codex"), "unanswered request was automatically decided")
-		if scenario == "session-canceled-approval" {
+		switch scenario {
+		case "session-canceled-approval":
 			wait(t, ctx, requests[0].Context().Done())
 			require.Error(t, requests[0].Deny(ctx, codex.ApprovalOptions{}))
 			canceled, cancel := context.WithCancel(ctx)
@@ -370,7 +379,7 @@ func codexSessionTarget(t *testing.T, scenario string) {
 			require.ErrorIs(t, requests[1].Approve(canceled, codex.ApprovalOptions{}), context.Canceled)
 			require.NoError(t, requests[1].Approve(ctx, codex.ApprovalOptions{}))
 			require.Error(t, requests[1].Approve(ctx, codex.ApprovalOptions{}))
-		} else if scenario == "session-question" {
+		case "session-question":
 			for i, r := range requests {
 				answer := []string{"A"}
 				if i == 1 {
@@ -380,7 +389,7 @@ func codexSessionTarget(t *testing.T, scenario string) {
 				require.NoError(t, r.Answer(ctx, ct.ToolRequestUserInputResponse{Answers: map[string]ct.ToolRequestUserInputAnswer{"q": {Answers: answer}}}))
 				require.Error(t, r.Answer(ctx, ct.ToolRequestUserInputResponse{Answers: map[string]ct.ToolRequestUserInputAnswer{"q": {Answers: answer}}}))
 			}
-		} else {
+		default:
 			require.NoError(t, requests[0].Deny(ctx, codex.ApprovalOptions{}))
 			var ext ct.CommandExecutionRequestApprovalResponse
 			require.NoError(t, json.Unmarshal([]byte(`{"decision":{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["echo","fixture"]}}}`), &ext))
@@ -407,14 +416,14 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		_, e = s.Submit(ctx, codex.Input{})
 		require.NoError(t, e)
 		codexUntil(t, s, "fixture/submitted")
-		receipt, e := s.SetModel(ctx, "requested-model")
-		require.NoError(t, e)
+		receipt, err := s.SetModel(ctx, "requested-model")
+		require.NoError(t, err)
 		require.True(t, receipt.NativeAccepted)
 		assert.Equal(t, "requested-model", receipt.Requested.Model.ValueOr(""))
 		assert.Equal(t, "root", receipt.Requested.ThreadID)
 		effort := ct.ReasoningEffort("high")
-		thinking, e := s.SetThinking(ctx, codex.ThinkingChange{Effort: ct.Some(effort)})
-		require.NoError(t, e)
+		thinking, err := s.SetThinking(ctx, codex.ThinkingChange{Effort: ct.Some(effort)})
+		require.NoError(t, err)
 		assert.True(t, thinking.NativeAccepted)
 		assert.Equal(t, effort, thinking.Requested.Effort.ValueOr(""))
 		// Ack contains no observed settings; a later native fact intentionally differs.
@@ -467,9 +476,9 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		wait(t, ctx, s.Done())
 		var sequence []int
 		for {
-			r, e := s.Receive(ctx)
-			if e != nil {
-				require.ErrorIs(t, e, io.EOF)
+			r, err := s.Receive(ctx)
+			if err != nil {
+				require.ErrorIs(t, err, io.EOF)
 				break
 			}
 			if r.Event != nil && r.Event.Method == "fixture/burst" {
@@ -493,7 +502,7 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		waiting, stop := context.WithCancel(ctx)
 		defer stop()
 		result := make(chan error, 1)
-		go func() { _, e := s.Submit(waiting, codex.Input{}); result <- e }()
+		go func() { _, err := s.Submit(waiting, codex.Input{}); result <- err }()
 		codexUntil(t, s, "fixture/submitted")
 		stop()
 		e = <-result
@@ -511,8 +520,8 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		require.NoError(t, s.Interrupt(ctx, codex.InterruptOptions{TurnID: "explicit"}))
 		codexUntil(t, s, "fixture/interrupt")
 	case "session-resume":
-		other, e := codex.Open(ctx, codex.SessionOptions{Client: c})
-		require.NoError(t, e)
+		other, err := codex.Open(ctx, codex.SessionOptions{Client: c})
+		require.NoError(t, err)
 		defer other.Close()
 		require.NoError(t, s.Interrupt(ctx, codex.InterruptOptions{TurnID: "explicit-main-turn"}))
 		codexUntil(t, s, "fixture/interrupt")
@@ -557,9 +566,9 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		require.Error(t, requests[0].Approve(ctx, codex.ApprovalOptions{}))
 		drained := 0
 		for {
-			r, e := s.Receive(ctx)
-			if e != nil {
-				require.ErrorIs(t, e, cause)
+			r, err := s.Receive(ctx)
+			if err != nil {
+				require.ErrorIs(t, err, cause)
 				break
 			}
 			if r.Event != nil && r.Event.Method == "fixture/burst" {
@@ -590,6 +599,7 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		t.Fatalf("missing native acceptance for %s", scenario)
 	}
 }
+
 func claudeSessionTarget(t *testing.T, scenario string) {
 	o, path := claudeTargetOptions(t, scenario)
 	var barrier *net.TCPListener
@@ -611,8 +621,8 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 	switch scenario {
 	case "session-persistent-inputs":
 		for range 2 {
-			v, e := s.Submit(ctx, claude.Input{Text: "next"})
-			require.NoError(t, e)
+			v, err := s.Submit(ctx, claude.Input{Text: "next"})
+			require.NoError(t, err)
 			require.True(t, v.Written)
 			got := claudeUntil(t, s, "success")
 			require.Equal(t, "result", got[len(got)-1].Event.Type)
@@ -629,7 +639,7 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		require.NoError(t, e)
 		all := claudeUntil(t, s, "fixture_submitted")
 		wire := observedWire(t, all[len(all)-1].Raw)
-		assert.Equal(t, "", wire["session_id"])
+		assert.Empty(t, wire["session_id"])
 		assert.Nil(t, wire["parent_tool_use_id"])
 		assert.Equal(t, "later", wire["priority"])
 		assert.JSONEq(t, `{"role":"user","content":[{"type":"text","text":"exact"},{"type":"image","source":{"type":"url","url":"https://fixture.invalid/i"},"future":null},{"type":"document","source":{"type":"text","data":"doc","media_type":"text/plain"}},{"type":"tool_result","tool_use_id":"original","content":"native"}]}`, string(marshal(t, wire["message"])))
@@ -643,8 +653,8 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		// Native stream-json gives no submit acceptance RPC. Continue writing while
 		// the first execution has no result; a native failure remains a received fact.
 		for range 2 {
-			v, e := s.Submit(ctx, claude.Input{Text: "supplement"})
-			require.NoError(t, e)
+			v, err := s.Submit(ctx, claude.Input{Text: "supplement"})
+			require.NoError(t, err)
 			require.True(t, v.Written)
 			claudeUntil(t, s, "fixture_submitted")
 		}
@@ -743,18 +753,18 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		require.Equal(t, 1, countFrames(t, path, "user"))
 	case "session-subagent-query":
 		dir := prepareClaudeRecords(t, o)
-		page, e := s.ListSubagents(ctx, claude.SubagentQuery{MaxRecords: 1})
-		require.ErrorIs(t, e, claude.ErrDiscoveryCoverage)
+		page, err := s.ListSubagents(ctx, claude.SubagentQuery{MaxRecords: 1})
+		require.ErrorIs(t, err, claude.ErrDiscoveryCoverage)
 		require.Len(t, page.Records, 1)
 		assert.Equal(t, "partial", page.Coverage.Status)
-		full, e := s.ListSubagents(ctx, claude.SubagentQuery{})
-		require.NoError(t, e)
+		full, err := s.ListSubagents(ctx, claude.SubagentQuery{})
+		require.NoError(t, err)
 		require.Len(t, full.Records, 2)
 		assert.Equal(t, "complete", full.Coverage.Status)
 		assert.False(t, full.Coverage.Atomic)
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-new.jsonl"), []byte(`{"type":"assistant","message":{"content":"stored"}}`+"\n"), 0600))
-		fresh, e := s.ListSubagents(ctx, claude.SubagentQuery{})
-		require.NoError(t, e)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-new.jsonl"), []byte(`{"type":"assistant","message":{"content":"stored"}}`+"\n"), 0o600))
+		fresh, err := s.ListSubagents(ctx, claude.SubagentQuery{})
+		require.NoError(t, err)
 		require.Len(t, fresh.Records, 3)
 		for _, r := range fresh.Records {
 			assert.Equal(t, "unknown", r.Running)
@@ -772,7 +782,8 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		require.NoError(t, s.Interrupt(ctx, claude.InterruptOptions{}))
 		claudeUntil(t, s, "fixture_interrupt")
 		assert.Zero(t, countAnswers(t, path, "claude"))
-		if scenario == "session-canceled-approval" {
+		switch scenario {
+		case "session-canceled-approval":
 			wait(t, ctx, requests[0].Context().Done())
 			require.Error(t, requests[0].Deny(ctx, claude.DenialOptions{}))
 			canceled, cancel := context.WithCancel(ctx)
@@ -780,7 +791,7 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 			require.ErrorIs(t, requests[1].Approve(canceled, claude.ApprovalOptions{}), context.Canceled)
 			require.NoError(t, requests[1].Approve(ctx, claude.ApprovalOptions{}))
 			require.Error(t, requests[1].Approve(ctx, claude.ApprovalOptions{}))
-		} else if scenario == "session-question" {
+		case "session-question":
 			for i, r := range requests {
 				answer := "A"
 				if i == 1 {
@@ -789,7 +800,7 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 				require.NoError(t, r.Answer(ctx, claude.QuestionAnswers{Answers: map[string]string{"Choose?": answer}}))
 				require.Error(t, r.Answer(ctx, claude.QuestionAnswers{Answers: map[string]string{"Choose?": answer}}))
 			}
-		} else {
+		default:
 			stop := true
 			require.NoError(t, requests[0].Deny(ctx, claude.DenialOptions{Message: "user refused", Interrupt: &stop}))
 			require.NoError(t, requests[1].Approve(ctx, claude.ApprovalOptions{UpdatedInput: json.RawMessage(`{"command":"echo modified","future":42}`), UpdatedPermissions: []clt.PermissionUpdate{{Type: "setMode", Mode: "acceptEdits", Destination: "session"}}}))
@@ -816,24 +827,24 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		require.NoError(t, e)
 		claudeUntil(t, s, "fixture_submitted")
 		model := "requested-model"
-		receipt, e := s.SetModel(ctx, claude.ModelChange{Model: &model})
-		require.NoError(t, e)
+		receipt, err := s.SetModel(ctx, claude.ModelChange{Model: &model})
+		require.NoError(t, err)
 		require.True(t, receipt.Accepted)
 		assert.Nil(t, receipt.Observed)
 		assert.JSONEq(t, `{"subtype":"set_model","model":"requested-model"}`, string(receipt.Requested))
 		assert.Contains(t, string(receipt.Response), `"success"`)
 		zero := 0
 		display := "omitted"
-		thinking, e := s.SetThinking(ctx, claude.ThinkingChange{MaxThinkingTokens: &zero, ThinkingDisplay: &display})
-		require.NoError(t, e)
+		thinking, err := s.SetThinking(ctx, claude.ThinkingChange{MaxThinkingTokens: &zero, ThinkingDisplay: &display})
+		require.NoError(t, err)
 		assert.True(t, thinking.Accepted)
 		assert.Nil(t, thinking.Observed)
 		assert.JSONEq(t, `{"subtype":"set_max_thinking_tokens","max_thinking_tokens":0,"thinking_display":"omitted"}`, string(thinking.Requested))
-		cleared, e := s.SetThinking(ctx, claude.ThinkingChange{ClearDisplay: true})
-		require.NoError(t, e)
+		cleared, err := s.SetThinking(ctx, claude.ThinkingChange{ClearDisplay: true})
+		require.NoError(t, err)
 		assert.JSONEq(t, `{"subtype":"set_max_thinking_tokens","max_thinking_tokens":null,"thinking_display":null}`, string(cleared.Requested))
-		def, e := s.SetModel(ctx, claude.ModelChange{})
-		require.NoError(t, e)
+		def, err := s.SetModel(ctx, claude.ModelChange{})
+		require.NoError(t, err)
 		assert.JSONEq(t, `{"subtype":"set_model"}`, string(def.Requested))
 		require.NoError(t, s.Interrupt(ctx, claude.InterruptOptions{}))
 		all := claudeUntil(t, s, "init")
@@ -880,9 +891,9 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		wait(t, ctx, s.Done())
 		var sequence []int
 		for {
-			r, e := s.Receive(ctx)
-			if e != nil {
-				require.ErrorIs(t, e, io.EOF)
+			r, err := s.Receive(ctx)
+			if err != nil {
+				require.ErrorIs(t, err, io.EOF)
 				break
 			}
 			if r.Event != nil && fixtureKind(r.Raw) == "fixture_burst" {
@@ -913,7 +924,7 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		waiting, stop := context.WithCancel(ctx)
 		defer stop()
 		result := make(chan error, 1)
-		go func() { _, e := s.Submit(waiting, claude.Input{Text: strings.Repeat("x", 2<<20)}); result <- e }()
+		go func() { _, err := s.Submit(waiting, claude.Input{Text: strings.Repeat("x", 2<<20)}); result <- err }()
 		blocked := acceptFaultBarrier(t, barrier, '{')
 		stop()
 		e = <-result
@@ -956,9 +967,9 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		require.Error(t, requests[0].Approve(ctx, claude.ApprovalOptions{}))
 		drained := 0
 		for {
-			r, e := s.Receive(ctx)
-			if e != nil {
-				require.ErrorIs(t, e, cause)
+			r, err := s.Receive(ctx)
+			if err != nil {
+				require.ErrorIs(t, err, cause)
 				break
 			}
 			if r.Event != nil && fixtureKind(r.Raw) == "fixture_burst" {
@@ -981,9 +992,9 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		require.Error(t, cause)
 		drained := 0
 		for {
-			r, e := s.Receive(ctx)
-			if e != nil {
-				require.ErrorIs(t, e, cause)
+			r, err := s.Receive(ctx)
+			if err != nil {
+				require.ErrorIs(t, err, cause)
 				break
 			}
 			if r.Event != nil {
@@ -1000,12 +1011,14 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		t.Fatalf("missing native acceptance for %s", scenario)
 	}
 }
+
 func marshal(t *testing.T, v any) []byte {
 	t.Helper()
 	b, e := json.Marshal(v)
 	require.NoError(t, e)
 	return b
 }
+
 func observedWire(t *testing.T, b []byte) map[string]any {
 	t.Helper()
 	var envelope map[string]json.RawMessage
@@ -1022,6 +1035,7 @@ func observedWire(t *testing.T, b []byte) map[string]any {
 	require.NoError(t, d.Decode(&result))
 	return result
 }
+
 func countFrames(t *testing.T, path, method string) int {
 	t.Helper()
 	n := 0
@@ -1047,6 +1061,7 @@ func peerFrames(t *testing.T, path string) []json.RawMessage {
 	}
 	return frames
 }
+
 func splitLines(b []byte) [][]byte {
 	var result [][]byte
 	start := 0
@@ -1082,6 +1097,7 @@ func codexRequests(t *testing.T, s *codex.Session, n int) []*codex.IncomingReque
 	}
 	return all
 }
+
 func claudeRequests(t *testing.T, s *claude.Session, n int) []*claude.IncomingRequest {
 	t.Helper()
 	var all []*claude.IncomingRequest
@@ -1095,6 +1111,7 @@ func claudeRequests(t *testing.T, s *claude.Session, n int) []*claude.IncomingRe
 	}
 	return all
 }
+
 func countAnswers(t *testing.T, path, provider string) int {
 	t.Helper()
 	n := 0
@@ -1110,6 +1127,7 @@ func countAnswers(t *testing.T, path, provider string) int {
 	}
 	return n
 }
+
 func checkAnswerWires(t *testing.T, path, scenario, provider string) {
 	t.Helper()
 	var answers []string
@@ -1184,24 +1202,25 @@ func checkAnswerWires(t *testing.T, path, scenario, provider string) {
 		}
 	}
 }
+
 func prepareClaudeRecords(t *testing.T, o claude.SessionOptions) string {
 	t.Helper()
 	config := ""
 	for _, v := range o.Env {
-		if strings.HasPrefix(v, "CLAUDE_CONFIG_DIR=") {
-			config = strings.TrimPrefix(v, "CLAUDE_CONFIG_DIR=")
+		if after, ok := strings.CutPrefix(v, "CLAUDE_CONFIG_DIR="); ok {
+			config = after
 		}
 	}
 	key := regexp.MustCompile(`[^a-zA-Z0-9-]`).ReplaceAllString(o.WorkDir, "-")
 	base := filepath.Join(config, "projects", key)
 	sub := filepath.Join(base, claudeScenarioID, "subagents")
-	require.NoError(t, os.MkdirAll(filepath.Join(sub, "nested"), 0700))
+	require.NoError(t, os.MkdirAll(filepath.Join(sub, "nested"), 0o700))
 	main := fmt.Sprintf(`{"type":"user","uuid":"u","parentUuid":null,"sessionId":%q,"cwd":%q,"message":{"role":"user","content":"stored question is not live authority"}}`, claudeScenarioID, o.WorkDir)
-	require.NoError(t, os.WriteFile(filepath.Join(base, claudeScenarioID+".jsonl"), []byte(main+"\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(base, claudeScenarioID+".jsonl"), []byte(main+"\n"), 0o600))
 	for _, name := range []string{"agent-old.jsonl", "nested/agent-nested.jsonl"} {
-		require.NoError(t, os.WriteFile(filepath.Join(sub, name), []byte(`{"type":"assistant","message":{"content":"retained"}}`+"\n"), 0600))
+		require.NoError(t, os.WriteFile(filepath.Join(sub, name), []byte(`{"type":"assistant","message":{"content":"retained"}}`+"\n"), 0o600))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(sub, "nested/agent-nested.meta.json"), []byte(`{"parentAgentId":"old","toolUseId":"spawn-nested","future":null}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "nested", "agent-nested.meta.json"), []byte(`{"parentAgentId":"old","toolUseId":"spawn-nested","future":null}`), 0o600))
 	return sub
 }
 
@@ -1225,8 +1244,8 @@ func claudeQueryFixture(t *testing.T, source string) (claude.SessionQueryScope, 
 	t.Helper()
 	config := t.TempDir()
 	path := filepath.Join(config, "projects", "-synthetic", querySession+".jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
-	require.NoError(t, os.WriteFile(path, []byte(source), 0400))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(source), 0o400))
 	return claude.SessionQueryScope{ConfigDir: config}, path
 }
 
@@ -1258,7 +1277,7 @@ func checkClaudeIndependentMessages(s *NativeIntegrationSuite) {
 	require.Equal(t, sha256.Sum256(before), sha256.Sum256(after))
 	stat, err := os.Stat(path)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0400), stat.Mode().Perm())
+	require.Equal(t, os.FileMode(0o400), stat.Mode().Perm())
 }
 
 // These cases enter through the native adapter, with expected message order
@@ -1353,7 +1372,7 @@ func checkClaudeQueryScope(s *NativeIntegrationSuite) {
 	})
 	s.Run("missing", func() {
 		scope, path := claudeQueryFixture(s.T(), valid)
-		require.NoError(s.T(), os.Remove(path))
+		s.Require().NoError(os.Remove(path))
 		p, e := claude.GetSessionMessages(deadline(s.T()), querySession, claude.SessionMessagesOptions{Scope: scope})
 		requireQueryKind(s.T(), p, e, "missing")
 	})
@@ -1361,15 +1380,15 @@ func checkClaudeQueryScope(s *NativeIntegrationSuite) {
 		t := s.T()
 		scope, path := claudeQueryFixture(t, valid)
 		other := filepath.Join(scope.ConfigDir, "projects", "-other", filepath.Base(path))
-		require.NoError(t, os.MkdirAll(filepath.Dir(other), 0700))
-		require.NoError(t, os.WriteFile(other, []byte(valid), 0400))
+		require.NoError(t, os.MkdirAll(filepath.Dir(other), 0o700))
+		require.NoError(t, os.WriteFile(other, []byte(valid), 0o400))
 		p, e := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
 		requireQueryKind(t, p, e, "ambiguous")
 	})
 	s.Run("entry-limit", func() {
 		t := s.T()
 		scope, _ := claudeQueryFixture(t, valid)
-		require.NoError(t, os.Mkdir(filepath.Join(scope.ConfigDir, "projects", "-other"), 0700))
+		require.NoError(t, os.Mkdir(filepath.Join(scope.ConfigDir, "projects", "-other"), 0o700))
 		scope.MaxEntries = 1
 		p, e := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
 		requireQueryKind(t, p, e, "resource-limit")
@@ -1378,7 +1397,7 @@ func checkClaudeQueryScope(s *NativeIntegrationSuite) {
 		t := s.T()
 		scope, path := claudeQueryFixture(t, valid)
 		outside := filepath.Join(t.TempDir(), "private")
-		require.NoError(t, os.WriteFile(outside, []byte(valid), 0400))
+		require.NoError(t, os.WriteFile(outside, []byte(valid), 0o400))
 		require.NoError(t, os.Remove(path))
 		require.NoError(t, os.Symlink(outside, path))
 		p, e := claude.GetSessionMessages(deadline(t), querySession, claude.SessionMessagesOptions{Scope: scope})
@@ -1465,8 +1484,8 @@ func checkClaudeQueryDefaultReturnBound(s *NativeIntegrationSuite) {
 	t := s.T()
 	var source strings.Builder
 	parent := ""
-	for i := 0; i < 1001; i++ {
-		id := fmt.Sprint(i)
+	for i := range 1001 {
+		id := strconv.Itoa(i)
 		source.WriteString(queryLine(id, parent, "user", "", `{"content":"saved"}`))
 		parent = id
 	}
@@ -1598,7 +1617,7 @@ func checkClaudeSessionMetadata(s *NativeIntegrationSuite) {
 	require.Equal(t, sha256.Sum256(before), sha256.Sum256(after))
 	stat, err := os.Stat(path)
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0400), stat.Mode().Perm())
+	require.Equal(t, os.FileMode(0o400), stat.Mode().Perm())
 }
 
 func checkClaudeMetadataScopeAndPages(s *NativeIntegrationSuite) {
@@ -1606,7 +1625,7 @@ func checkClaudeMetadataScopeAndPages(s *NativeIntegrationSuite) {
 	scope, path := claudeQueryFixture(t, queryLine("u", "", "user", "", `{"content":"one"}`))
 	const other = "22222222-2222-4222-8222-222222222222"
 	p2 := filepath.Join(filepath.Dir(path), other+".jsonl")
-	require.NoError(t, os.WriteFile(p2, []byte(strings.ReplaceAll(queryLine("u", "", "user", "", `{"content":"two"}`), querySession, other)), 0400))
+	require.NoError(t, os.WriteFile(p2, []byte(strings.ReplaceAll(queryLine("u", "", "user", "", `{"content":"two"}`), querySession, other)), 0o400))
 	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	newer := older.Add(time.Hour)
 	require.NoError(t, os.Chtimes(path, older, older))
@@ -1634,8 +1653,8 @@ func checkClaudeMetadataScopeAndPages(s *NativeIntegrationSuite) {
 	require.NoError(t, e)
 	key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(canonical, "-")
 	dir := filepath.Join(scope.ConfigDir, "projects", key)
-	require.NoError(t, os.Mkdir(dir, 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, other+".jsonl"), []byte(""), 0400))
+	require.NoError(t, os.Mkdir(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, other+".jsonl"), []byte(""), 0o400))
 	scoped := scope
 	scoped.ProjectDir = project
 	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scoped})
@@ -1654,9 +1673,9 @@ func checkClaudeMetadataScopeAndPages(s *NativeIntegrationSuite) {
 	requireMetadataKind(t, e, "ambiguous")
 	// Known nested subagent layout is outside scope. A main file marked sidechain
 	// is excluded, but metadata-only or unknown native objects remain discoverable.
-	require.NoError(t, os.Mkdir(filepath.Join(dir, other), 0700))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, other), 0o700))
 	side := strings.ReplaceAll(queryLine("side", "", "user", `"isSidechain":true,`, `{"content":"hidden"}`), querySession, "33333333-3333-4333-8333-333333333333")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "33333333-3333-4333-8333-333333333333.jsonl"), []byte(side), 0400))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "33333333-3333-4333-8333-333333333333.jsonl"), []byte(side), 0o400))
 	page, e = claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: scoped})
 	require.NoError(t, e)
 	require.Len(t, page.Sessions, 1)
@@ -1749,8 +1768,10 @@ func checkClaudeMetadataFailures(s *NativeIntegrationSuite) {
 		})
 	}
 	for _, tc := range []struct{ name, source, kind string }{
-		{"invalid-json", "{bad}\n", "corrupt"}, {"incomplete", "{\"type\":\"future\"}", "corrupt"},
-		{"duplicate-key", "{\"x\":1,\"x\":2}\n", "corrupt"}, {"identity", "{\"sessionId\":\"other\"}\n", "corrupt"},
+		{"invalid-json", "{bad}\n", "corrupt"},
+		{"incomplete", "{\"type\":\"future\"}", "corrupt"},
+		{"duplicate-key", "{\"x\":1,\"x\":2}\n", "corrupt"},
+		{"identity", "{\"sessionId\":\"other\"}\n", "corrupt"},
 		{"title-type", "{\"customTitle\":5}\n", "corrupt"},
 	} {
 		s.Run(tc.name, func() {
@@ -1768,14 +1789,14 @@ func checkClaudeMetadataFailures(s *NativeIntegrationSuite) {
 	s.Run("access-cancel-isolation", func() {
 		t := s.T()
 		q, path := claudeQueryFixture(t, `{"future":null}`+"\n")
-		require.NoError(t, os.Chmod(path, 0000))
-		t.Cleanup(func() { _ = os.Chmod(path, 0400) })
+		require.NoError(t, os.Chmod(path, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(path, 0o400) })
 		p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
 		requireMetadataKind(t, e, "inaccessible")
 		require.ErrorIs(t, e, os.ErrPermission)
 		require.Equal(t, "partial", p.Coverage.Status)
 		require.Len(t, p.Sessions, 1)
-		require.NoError(t, os.Chmod(path, 0400))
+		require.NoError(t, os.Chmod(path, 0o400))
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		p, e = claude.ListSessions(ctx, claude.ListSessionsOptions{Scope: q})
@@ -1783,7 +1804,7 @@ func checkClaudeMetadataFailures(s *NativeIntegrationSuite) {
 		require.Equal(t, "unknown", p.Coverage.Status)
 		_, e = claude.GetSessionInfo(ctx, querySession, claude.SessionInfoOptions{Scope: q})
 		require.ErrorIs(t, e, context.Canceled)
-		_, e = claude.ListSessions(nil, claude.ListSessionsOptions{Scope: q})
+		_, e = claude.ListSessions(nil, claude.ListSessionsOptions{Scope: q}) //nolint:staticcheck // verifies nil-context rejection.
 		requireMetadataKind(t, e, "invalid-input")
 		_, e = claude.GetSessionInfo(deadline(t), "../escape", claude.SessionInfoOptions{Scope: q})
 		requireMetadataKind(t, e, "invalid-input")
@@ -1806,7 +1827,7 @@ func checkClaudeMetadataFailures(s *NativeIntegrationSuite) {
 		require.NoError(t, e)
 		require.NotNil(t, r.Info)
 		require.Equal(t, "complete", r.Coverage.Status)
-		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), "legacy.jsonl"), []byte("private must not read"), 0000))
+		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), "legacy.jsonl"), []byte("private must not read"), 0o000))
 		p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
 		requireMetadataKind(t, e, "unsupported")
 		require.Len(t, p.Sessions, 1)
@@ -1829,7 +1850,7 @@ func checkClaudeMetadataDefaultPage(s *NativeIntegrationSuite) {
 	q, path := claudeQueryFixture(t, "")
 	for i := 2; i <= 102; i++ {
 		id := fmt.Sprintf("%08x-1111-4111-8111-111111111111", i)
-		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), id+".jsonl"), nil, 0400))
+		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), id+".jsonl"), nil, 0o400))
 	}
 	p, e := claude.ListSessions(deadline(t), claude.ListSessionsOptions{Scope: q})
 	require.NoError(t, e)
@@ -2162,7 +2183,7 @@ func checkTaskFailureDrain(t *testing.T) {
 		}
 	}
 	var expected []json.RawMessage
-	for _, line := range bytes.Split(bytes.TrimSpace(transcript.TaskFailureWire), []byte{'\n'}) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(transcript.TaskFailureWire), []byte{'\n'}) {
 		var f transcript.Frame
 		require.NoError(t, json.Unmarshal(line, &f))
 		if f.Direction == "server" && f.Channel == "protocol" {
@@ -2394,7 +2415,7 @@ func checkReplayFinalResult(t *testing.T, provider string) {
 		input.WriteString("{\"id\":1001,\"method\":\"replay/assert\"}\n")
 		run = func(r io.Reader) error { return recording.Peer(r, io.Discard, frames) }
 	} else {
-		for _, line := range bytes.Split(bytes.TrimSpace(transcript.TaskFailureWire), []byte{'\n'}) {
+		for line := range bytes.SplitSeq(bytes.TrimSpace(transcript.TaskFailureWire), []byte{'\n'}) {
 			var f transcript.Frame
 			require.NoError(t, json.Unmarshal(line, &f))
 			if f.Direction == "client" {
@@ -2454,18 +2475,19 @@ func (s *NativeIntegrationSuite) checkCodexPureChildDetail() {
 			got := drainChildDetail(t, session)
 			var raws []string
 			for _, r := range got {
-				if r.Event != nil {
-					raws = append(raws, string(r.Raw))
-					assert.Equal(t, r.Raw, r.Event.Raw)
-					assert.Equal(t, r.Params, r.Event.Params)
-					assert.Equal(t, "live", r.Origin)
-					var source struct {
-						ThreadID string `json:"threadId"`
-					}
-					require.NoError(t, json.Unmarshal(r.Params, &source))
-					if source.ThreadID != "" {
-						assert.Equal(t, source.ThreadID, r.Source.ThreadID)
-					}
+				if r.Event == nil {
+					continue
+				}
+				raws = append(raws, string(r.Raw))
+				assert.Equal(t, r.Raw, r.Event.Raw)
+				assert.Equal(t, r.Params, r.Event.Params)
+				assert.Equal(t, "live", r.Origin)
+				var source struct {
+					ThreadID string `json:"threadId"`
+				}
+				require.NoError(t, json.Unmarshal(r.Params, &source))
+				if source.ThreadID != "" {
+					assert.Equal(t, source.ThreadID, r.Source.ThreadID)
 				}
 			}
 			want := frames
@@ -2659,7 +2681,7 @@ func (s *NativeIntegrationSuite) checkCodexChildDetailAuthority() {
 			wire, err := os.ReadFile(path)
 			require.NoError(t, err)
 			answers := 0
-			for _, line := range strings.Split(string(wire), "\n") {
+			for line := range strings.SplitSeq(string(wire), "\n") {
 				if strings.HasPrefix(line, "source:") {
 					continue
 				}
@@ -2744,9 +2766,11 @@ func (s *NativeIntegrationSuite) checkCodexChildDetailLifecycle() {
 	}
 }
 
-const claudeDetailInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`
-const claudeDetailTask = `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`
-const claudeDetailText = ` {"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"}]}} `
+const (
+	claudeDetailInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`
+	claudeDetailTask = `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`
+	claudeDetailText = ` {"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"}]}} `
+)
 
 func openClaudeDetail(s *NativeIntegrationSuite, policy claude.ChildDetailPolicy, resume string) (*claude.Session, string) {
 	t := s.T()
@@ -2762,6 +2786,7 @@ func openClaudeDetail(s *NativeIntegrationSuite, policy claude.ChildDetailPolicy
 	t.Cleanup(func() { _ = session.Abort() })
 	return session, trace
 }
+
 func sendClaudeDetail(s *NativeIntegrationSuite, session *claude.Session, frames ...string) {
 	t := s.T()
 	t.Helper()
@@ -2772,6 +2797,7 @@ func sendClaudeDetail(s *NativeIntegrationSuite, session *claude.Session, frames
 	}
 	require.NoError(t, session.Interrupt(deadline(t), claude.InterruptOptions{}))
 }
+
 func drainClaudeDetail(s *NativeIntegrationSuite, session *claude.Session) []claude.Received {
 	t := s.T()
 	t.Helper()
@@ -2790,6 +2816,7 @@ func drainClaudeDetail(s *NativeIntegrationSuite, session *claude.Session) []cla
 	}
 	return result
 }
+
 func checkClaudeChildDetailOptions(s *NativeIntegrationSuite) {
 	t := s.T()
 	for _, policy := range []claude.ChildDetailPolicy{"", "preserve", "suppress"} {
@@ -2801,9 +2828,9 @@ func checkClaudeChildDetailOptions(s *NativeIntegrationSuite) {
 			if policy == claude.ChildDetailSuppress {
 				expected = 2
 			}
-			require.Equal(t, expected, len(got))
+			require.Len(t, got, expected)
 			if expected == 3 {
-				require.Equal(t, claudeDetailText, string(got[2].Raw))
+				require.Equal(t, claudeDetailText, string(got[2].Raw)) //nolint:testifylint // preserves exact protocol bytes
 			}
 			raw, err := os.ReadFile(trace)
 			require.NoError(t, err)
@@ -2829,7 +2856,8 @@ func checkClaudeChildDetailOptions(s *NativeIntegrationSuite) {
 
 func checkClaudePureDetail(s *NativeIntegrationSuite) {
 	t := s.T()
-	details := []string{claudeDetailText,
+	details := []string{
+		claudeDetailText,
 		`{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"thinking","thinking":"reason","signature":"sig"},{"type":"redacted_thinking","data":"opaque"}],"usage":{"input_tokens":2,"output_tokens":7},"stop_reason":"end_turn"}}`,
 	}
 	for _, delta := range []string{`{"type":"text_delta","text":"next"}`, `{"type":"thinking_delta","thinking":"reason"}`, `{"type":"signature_delta","signature":"sig"}`, `{"type":"input_json_delta","partial_json":"{\"x\":"}`} {
@@ -2906,8 +2934,8 @@ func checkClaudeMixedDetail(s *NativeIntegrationSuite) {
 	// root tool owner still creates its protected relationship observation.
 	sendClaudeDetail(s, session, claudeDetailText, `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`)
 	got := drainClaudeDetail(s, session)
-	require.Equal(t, len(frames)+2, len(got))
-	require.Equal(t, claudeDetailInit, string(got[0].Raw))
+	require.Len(t, got, len(frames)+2)
+	require.Equal(t, claudeDetailInit, string(got[0].Raw)) //nolint:testifylint // preserves exact protocol bytes
 	for i, frame := range frames {
 		require.Equal(t, frame, string(got[i+1].Raw))
 	}
@@ -2921,7 +2949,7 @@ func checkClaudeMixedDetail(s *NativeIntegrationSuite) {
 	futureFrames := []string{strings.Replace(claudeDetailInit, "2.1.258", "future", 1), claudeDetailTask, claudeDetailText}
 	sendClaudeDetail(s, future, futureFrames...)
 	futureGot := drainClaudeDetail(s, future)
-	require.Equal(t, len(futureFrames), len(futureGot))
+	require.Len(t, futureGot, len(futureFrames))
 	require.Empty(t, futureGot[2].Source.AssociationID)
 }
 
@@ -2942,6 +2970,7 @@ func claudeDetailRequest(s *NativeIntegrationSuite, session *claude.Session, id,
 		}
 	}
 }
+
 func checkClaudeDetailAuthority(s *NativeIntegrationSuite) {
 	t := s.T()
 	session, trace := openClaudeDetail(s, claude.ChildDetailSuppress, "")
@@ -3001,7 +3030,8 @@ func checkClaudeDetailLifecycle(s *NativeIntegrationSuite) {
 	t := s.T()
 	for _, abort := range []bool{false, true} {
 		session, _ := openClaudeDetail(s, claude.ChildDetailSuppress, "")
-		frames := []string{claudeDetailInit,
+		frames := []string{
+			claudeDetailInit,
 			`{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`,
 			claudeDetailTask,
 			`{"type":"system","subtype":"task_started","session_id":"s","task_id":"b","task_type":"local_agent","tool_use_id":"sibling","is_backgrounded":true}`,
@@ -3033,7 +3063,7 @@ func checkClaudeDetailLifecycle(s *NativeIntegrationSuite) {
 			require.Empty(t, got)
 			continue
 		}
-		require.Equal(t, len(frames), len(got))
+		require.Len(t, got, len(frames))
 		for i, frame := range frames {
 			require.Equal(t, frame, string(got[i].Raw))
 		}

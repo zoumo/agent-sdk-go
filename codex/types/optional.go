@@ -23,7 +23,9 @@ func Some[T any](value T) Optional[T] { return Optional[T]{value: value, set: tr
 func Null[T any]() Optional[T] { return Optional[T]{set: true, null: true} }
 
 // Ptr returns a pointer to value, useful when selecting a typed union variant.
-func Ptr[T any](value T) *T { return &value }
+//
+//go:fix inline
+func Ptr[T any](value T) *T { return new(value) }
 
 // IsSet reports whether the field is present, including an explicit null.
 func (v Optional[T]) IsSet() bool { return v.set }

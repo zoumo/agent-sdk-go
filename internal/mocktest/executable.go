@@ -1,6 +1,7 @@
 package mocktest
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,13 +13,13 @@ import (
 func Executable() (string, error) {
 	path := os.Getenv("AGENT_SDK_TESTIFY_BIN")
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN must name an absolute separately built agent-sdk-testify executable")
+		return "", errors.New("AGENT_SDK_TESTIFY_BIN must name an absolute separately built agent-sdk-testify executable")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
 		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN is not an executable file: %s", path)
 	}
 	return path, nil
@@ -41,13 +42,15 @@ func Launcher(dir, provider, scenario, receipt string) (string, error) {
 	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 	command := "#!/bin/sh\nexec " + quote(executable)
+	var commandSb44 strings.Builder
 	for _, arg := range args {
-		command += " " + quote(arg)
+		commandSb44.WriteString(" " + quote(arg))
 	}
+	command += commandSb44.String()
 	command += " \"$@\"\n"
 
 	path := filepath.Join(dir, "agent-sdk-testify-"+provider)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o700)
 	if err != nil {
 		return "", err
 	}

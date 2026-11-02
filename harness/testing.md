@@ -105,7 +105,7 @@ Do not retain unused publication scanners or export helpers used only by tests.
 Moving an assertion does not change its evidence level: synthetic driver tests
 are not successful real-recording simulation evidence.
 
-Use mise's pinned compiler and retain offline, race, vet, generation, inventory,
+Use Go 1.26 or newer and retain offline, race, vet, generation, inventory,
 simulation source/hash validation, dependency-boundary and independent-consumer gates on
 Linux/macOS. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.

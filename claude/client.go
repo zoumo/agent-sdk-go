@@ -26,6 +26,8 @@ type Limits = types.Limits
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
 // child's entire environment; nil inherits os.Environ. WorkDir, Model and
 // ResumeID are passed literally, without a shell. Existing CLI settings apply.
+//
+//nolint:recvcheck // Canonical configuration API uses value and pointer receivers.
 type Options struct {
 	CLIPath string
 	WorkDir string
@@ -84,7 +86,7 @@ func (o *Options) defaults() error {
 		o.CLIPath = "claude"
 	}
 	if o.InitializeTimeout < 0 || o.ShutdownTimeout < 0 {
-		return fmt.Errorf("claude: timeouts must not be negative")
+		return errors.New("claude: timeouts must not be negative")
 	}
 	if o.InitializeTimeout == 0 {
 		o.InitializeTimeout = 60 * time.Second
@@ -98,9 +100,12 @@ func (o *Options) defaults() error {
 		def  int
 		max  int
 	}{
-		{"EventBuffer", &o.Limits.EventBuffer, 128, 65536}, {"FrameBytes", &o.Limits.FrameBytes, 4 << 20, 64 << 20},
-		{"PendingControls", &o.Limits.PendingControls, 32, 65536}, {"ControlBuffer", &o.Limits.ControlBuffer, 32, 65536},
-		{"StderrBytes", &o.Limits.StderrBytes, 8192, 16 << 20}, {"PendingPermissions", &o.Limits.PendingPermissions, 128, 65536},
+		{"EventBuffer", &o.Limits.EventBuffer, 128, 65536}, //nolint:staticcheck // deprecated input is still validated
+		{"FrameBytes", &o.Limits.FrameBytes, 4 << 20, 64 << 20},
+		{"PendingControls", &o.Limits.PendingControls, 32, 65536},
+		{"ControlBuffer", &o.Limits.ControlBuffer, 32, 65536},
+		{"StderrBytes", &o.Limits.StderrBytes, 8192, 16 << 20},
+		{"PendingPermissions", &o.Limits.PendingPermissions, 128, 65536},
 		{"PermissionHistory", &o.Limits.PermissionHistory, 4096, 1 << 20},
 	} {
 		if *pair.v < 0 || *pair.v > pair.max {
@@ -159,8 +164,11 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 	if err := options.defaults(); err != nil {
 		return nil, err
 	}
-	args := interactionArgs(options)
-	cmd := exec.Command(options.CLIPath, args...)
+	args, err := interactionArgs(options)
+	if err != nil {
+		return nil, &Error{Op: "arguments", Err: err}
+	}
+	cmd := exec.CommandContext(context.WithoutCancel(ctx), options.CLIPath, args...)
 	cmd.Dir, cmd.Env = options.WorkDir, options.Env
 	prepareProcess(cmd)
 	// Own all pipe ends ourselves: exec.Cmd.Wait must not close stdout before the
@@ -193,12 +201,14 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &interaction{session: session, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
+	c := &interaction{
+		session: session, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
 		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
 		epoch:       connectionEpoch.Add(1),
 		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
 		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
-		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl)}
+		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl),
+	}
 	if session != nil {
 		if session.bindClient(c) {
 			// A terminated owner cannot admit records from this process.
@@ -306,6 +316,7 @@ func (c *interaction) Err() error {
 	}
 	return e
 }
+
 func (c *interaction) operationError() error {
 	if err := c.Err(); err != nil {
 		return err
@@ -336,7 +347,7 @@ func (c *interaction) fail(err error) {
 
 func (c *interaction) failLocked(err error) {
 	if err != nil {
-		if c.terminal == nil || c.terminal == ErrUnexpectedEOF {
+		if c.terminal == nil || errors.Is(c.terminal, ErrUnexpectedEOF) {
 			c.terminal = err
 		} else if (errors.Is(err, ErrProtocol) && !errors.Is(c.terminal, ErrProtocol)) ||
 			(errors.Is(err, ErrResourceLimit) && !errors.Is(c.terminal, ErrResourceLimit)) ||
@@ -485,7 +496,7 @@ func (c *interaction) route(event Event) error {
 	if event.Type == "control_response" {
 		reply := event.Response.Response
 		if reply.RequestID == "" || (reply.Subtype != "success" && reply.Subtype != "error") {
-			return fmt.Errorf("invalid control response")
+			return errors.New("invalid control response")
 		}
 		c.mu.Lock()
 		waiter, found := c.pending[reply.RequestID]
@@ -519,8 +530,10 @@ func (c *interaction) route(event Event) error {
 			return err
 		}
 		if c.ownsSDKMCPRequest(event.Control) && c.opts.HandleSDKMCP != nil {
-			work := incomingControl{subtype: event.Control.Subtype, permission: permission,
-				request: &IncomingRequest{permission: permission, method: event.Control.Subtype, raw: bytes.Clone(event.Raw)}}
+			work := incomingControl{
+				subtype: event.Control.Subtype, permission: permission,
+				request: &IncomingRequest{permission: permission, method: event.Control.Subtype, raw: bytes.Clone(event.Raw)},
+			}
 			select {
 			case c.responses <- work:
 			default:
@@ -556,7 +569,7 @@ func (c *interaction) readStdout() {
 			return
 		}
 		frame = append(frame, fragment...)
-		if err == bufio.ErrBufferFull {
+		if errors.Is(err, bufio.ErrBufferFull) {
 			continue
 		}
 		if err != nil {
@@ -749,7 +762,7 @@ func (c *interaction) ownLifecycle() {
 	c.mu.Unlock()
 }
 
-func interactionArgs(options Options) []string {
+func interactionArgs(options Options) ([]string, error) {
 	args := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
 	args = append(args, thinkingArgs(options.Thinking)...)
 	if options.Model != "" {
@@ -760,7 +773,10 @@ func interactionArgs(options Options) []string {
 		for _, name := range options.SDKMCPServers {
 			servers[name] = map[string]string{"type": "sdk", "name": name}
 		}
-		config, _ := json.Marshal(map[string]any{"mcpServers": servers})
+		config, err := json.Marshal(map[string]any{"mcpServers": servers})
+		if err != nil {
+			return nil, err
+		}
 		args = append(args, "--mcp-config="+string(config))
 	}
 	if options.Effort != "" {
@@ -771,5 +787,5 @@ func interactionArgs(options Options) []string {
 		// prevents a dash-leading value from becoming a different CLI option.
 		args = append(args, "--resume="+options.ResumeID)
 	}
-	return args
+	return args, nil
 }

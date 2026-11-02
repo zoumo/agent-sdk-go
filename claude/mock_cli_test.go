@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
@@ -45,7 +46,7 @@ func mockCLIScenario(t *testing.T, wires ...string) string {
 	b, err := json.Marshal(map[string]any{"version": 1, "provenance": "synthetic", "frames": frames})
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "claude.json")
-	require.NoError(t, os.WriteFile(path, b, 0600))
+	require.NoError(t, os.WriteFile(path, b, 0o600))
 	return path
 }
 
@@ -62,16 +63,17 @@ func (s *mockCLISuite) TestInteractions() {
 			defer cancel()
 			frames := append([]string(nil), mockClaudeInit...)
 			frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`)
-			if mode == "permission-and-interrupt" {
+			switch mode {
+			case "permission-and-interrupt":
 				frames = append(frames,
 					`<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which format?","options":[{"label":"json"}]}]},"tool_use_id":"tool"}}`,
 					`>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{"questions":[{"question":"Which format?","options":[{"label":"json"}]}],"answers":{"Which format?":"json"}}}}}`,
 					`<{"type":"result","subtype":"success","session_id":"synthetic","is_error":false,"result":"answered"}`,
 					`>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`,
 					`<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`)
-			} else if mode == "disconnect" {
+			case "disconnect":
 				frames = append(frames, `!`)
-			} else {
+			default:
 				frames[len(frames)-1] = `>{"type":"user","message":{"role":"user","content":"different"},"parent_tool_use_id":null,"session_id":""}`
 			}
 			path := mockCLIScenario(t, frames...)
@@ -130,7 +132,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	defer cancel()
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`, `<{"type":"system","subtype":"init","session_id":"synthetic","claude_code_version":"2.1.258"}`, `<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		frames = append(frames, fmt.Sprintf(`<{"type":"assistant","session_id":"synthetic","message":{"content":[]},"index":%d}`, i))
 	}
 	frames = append(frames, `>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`, `<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`, `>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{"questions":[]}}}}`, `>{"type":"user","message":{"role":"user","content":"release"},"parent_tool_use_id":null,"session_id":""}`, `!`)

@@ -24,7 +24,7 @@ type Input struct {
 	OutputSchema               types.Optional[json.RawMessage]
 	ParentTurnID               types.Optional[string]
 	Permissions                types.Optional[string]
-	Personality                types.Optional[types.Personality]
+	Personality                types.Optional[types.Personality] //nolint:staticcheck // Mirrors the deprecated native field.
 	ResponsesapiClientMetadata types.Optional[map[string]string]
 	RootTurnID                 types.Optional[string]
 	RuntimeWorkspaceRoots      types.Optional[[]types.AbsolutePathBuf]
@@ -37,7 +37,8 @@ type Input struct {
 }
 
 func (input Input) native(threadID string) types.TurnStartParams {
-	return types.TurnStartParams{ThreadID: threadID,
+	return types.TurnStartParams{
+		ThreadID:                   threadID,
 		AdditionalContext:          input.AdditionalContext,
 		ApprovalPolicy:             input.ApprovalPolicy,
 		ApprovalsReviewer:          input.ApprovalsReviewer,

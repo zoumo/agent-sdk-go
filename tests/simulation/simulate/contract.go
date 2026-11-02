@@ -76,6 +76,7 @@ func discoverTool(ctx context.Context) (toolIdentity, error) {
 	}
 	return toolIdentity{path, strings.TrimSpace(string(out)), digest(b)}, nil
 }
+
 func toolJSON(ctx context.Context, path string, args []string, v any) error {
 	cmd := exec.CommandContext(ctx, path, append([]string{"mock"}, args...)...)
 	var stderr bytes.Buffer
@@ -94,6 +95,7 @@ func toolJSON(ctx context.Context, path string, args []string, v any) error {
 	}
 	return nil
 }
+
 func validateScene(s scene) error {
 	if s.SchemaVersion != 1 {
 		return errors.New("unsupported describe schemaVersion")
@@ -129,6 +131,7 @@ func validateScene(s scene) error {
 	}
 	return nil
 }
+
 func validateRun(d descriptor, s scene, tool toolIdentity) error {
 	if d.SchemaVersion != 1 {
 		return errors.New("unsupported run schemaVersion")
@@ -172,6 +175,7 @@ func validateRun(d descriptor, s scene, tool toolIdentity) error {
 	}
 	return nil
 }
+
 func finishRun(tool toolIdentity, path string, d descriptor) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -213,6 +217,7 @@ func (s *scene) UnmarshalJSON(b []byte) error {
 	s.original = append([]byte(nil), b...)
 	return nil
 }
+
 func (s scene) MarshalJSON() ([]byte, error) {
 	if s.original != nil {
 		return s.original, nil

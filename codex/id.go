@@ -10,6 +10,8 @@ import (
 
 // ID preserves the pinned protocol's distinct signed-integer and string IDs.
 // Its zero value is invalid. Numeric IDs never pass through floating point.
+//
+//nolint:recvcheck // Canonical JSON API mixes value marshal and pointer unmarshal.
 type ID struct {
 	kind   uint8
 	number int64
@@ -28,6 +30,7 @@ func (id ID) String() string {
 	}
 	return string(b)
 }
+
 func (id ID) MarshalJSON() ([]byte, error) {
 	switch id.kind {
 	case 1:
@@ -41,6 +44,7 @@ func (id ID) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("%w: invalid request ID", ErrProtocol)
 	}
 }
+
 func (id *ID) UnmarshalJSON(raw []byte) error {
 	v, err := ParseID(raw)
 	if err == nil {
@@ -48,6 +52,7 @@ func (id *ID) UnmarshalJSON(raw []byte) error {
 	}
 	return err
 }
+
 func ParseID(raw []byte) (ID, error) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || !utf8.Valid(raw) || !json.Valid(raw) {

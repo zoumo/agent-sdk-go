@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -38,8 +40,8 @@ func TestSessionRequestFIFOAndOriginalRaw(t *testing.T) {
 	require.Equal(t, "future/before", before.Event.Method)
 	r := sessionRequest(t, s)
 	require.Equal(t, raw, string(r.Raw()))
-	copy := r.Raw()
-	copy[0] = 'x'
+	rawCopy := r.Raw()
+	rawCopy[0] = 'x'
 	require.Equal(t, raw, string(r.Raw()))
 	require.NoError(t, r.Context().Err())
 	after, err := s.Receive(context.Background())
@@ -199,7 +201,7 @@ func TestSessionAmbiguousRequestScopeDoesNotGrantAuthority(t *testing.T) {
 		var requests []*codex.IncomingRequest
 		for {
 			got, err := s.Receive(context.Background())
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			require.NoError(t, err)
@@ -292,7 +294,7 @@ func testSessionCloseDuringAnswerWriteKeepsOtherSession(t *testing.T, policy cod
 			require.NoError(t, err)
 			b, err := codex.Open(context.Background(), codex.SessionOptions{ChildDetailPolicy: policy, Client: f.c})
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0600); _ = a.Abort(); _ = b.Abort() })
+			t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0o600); _ = a.Abort(); _ = b.Abort() })
 			_, err = a.Receive(context.Background())
 			require.NoError(t, err)
 			r := sessionRequest(t, a)
@@ -322,7 +324,7 @@ func testSessionCloseDuringAnswerWriteKeepsOtherSession(t *testing.T, policy cod
 				t.Fatal("Close terminated unrelated Session")
 			default:
 			}
-			require.NoError(t, os.WriteFile(f.pid+".release", nil, 0600))
+			require.NoError(t, os.WriteFile(f.pid+".release", nil, 0o600))
 			require.NoError(t, <-closed)
 			_, err = b.Submit(context.Background(), codex.Input{Input: []types.UserInput{}})
 			require.NoError(t, err)
@@ -444,8 +446,8 @@ func TestSessionRequestSnapshotReadableAfterAuthorityTermination(t *testing.T) {
 	require.True(t, present)
 	require.Len(t, command, 256<<10)
 	require.JSONEq(t, `null`, string(native.UnknownFields["future"]))
-	copy := r.Params()
-	copy[0] = 'x'
+	paramsCopy := r.Params()
+	paramsCopy[0] = 'x'
 	require.Equal(t, params, string(r.Params()))
 	require.ErrorIs(t, r.Context().Err(), context.Canceled)
 }

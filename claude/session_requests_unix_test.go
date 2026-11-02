@@ -25,8 +25,8 @@ func sessionWriteBarrier(t *testing.T, policies ...ChildDetailPolicy) (*Session,
 	dir := t.TempDir()
 	gatePath := filepath.Join(dir, "gate")
 	path := filepath.Join(dir, "wire.jsonl")
-	require.NoError(t, syscall.Mkfifo(gatePath, 0600))
-	gate, err := os.OpenFile(gatePath, os.O_RDWR, 0600)
+	require.NoError(t, syscall.Mkfifo(gatePath, 0o600))
+	gate, err := os.OpenFile(gatePath, os.O_RDWR, 0o600)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = gate.Close() })
 	s := openSessionFixture(t, func(o *SessionOptions) {
@@ -37,6 +37,7 @@ func sessionWriteBarrier(t *testing.T, policies ...ChildDetailPolicy) (*Session,
 	})
 	return s, gate, path
 }
+
 func sessionWireSignal(t *testing.T, s *Session, kind string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -48,6 +49,7 @@ func sessionWireSignal(t *testing.T, s *Session, kind string) {
 		return false
 	}, time.Second, time.Millisecond)
 }
+
 func sessionRelease(t *testing.T, gate *os.File, action byte) {
 	t.Helper()
 	_, err := gate.Write([]byte{action})
@@ -88,7 +90,6 @@ func TestSessionPermissionQueuedCallerCancelPreservesLiveAuthority(t *testing.T)
 			require.NoError(t, s.Interrupt(context.Background(), InterruptOptions{}))
 			require.NoError(t, s.Close())
 			require.Len(t, permissionResponses(t, permissionTranscript(t, path)), 1)
-
 		})
 	}
 }
@@ -119,7 +120,6 @@ func TestSessionPermissionStartedWriteOutcomeUnknownCannotRetry(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 1, bytes.Count(data, []byte(`{"response":`)))
 			require.Equal(t, raw, p.Raw())
-
 		})
 	}
 }

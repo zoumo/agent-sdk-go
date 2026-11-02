@@ -45,7 +45,7 @@ func testSessionDelayedRequestWithControlledTime(t *testing.T, policy ChildDetai
 			ID ID `json:"id"`
 		}
 		require.NoError(t, json.Unmarshal(scan.Bytes(), &request))
-		require.NoError(t, c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":{"thread":{"id":"thread","sessionId":"session","cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}}`, request.ID))))
+		require.NoError(t, c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":{"thread":{"id":"thread","sessionId":"session","cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}}`, request.ID)))
 		s := <-opened
 		require.NoError(t, <-errors)
 		require.NoError(t, c.routeFrame([]byte(`{"id":"approval","method":"item/commandExecution/requestApproval","params":{"threadId":"thread"}}`)))
@@ -96,7 +96,7 @@ func TestSessionReceiveContinuesAcrossSuccessfulTurns(t *testing.T) {
 			ID ID `json:"id"`
 		}
 		require.NoError(t, json.Unmarshal(scan.Bytes(), &request))
-		require.NoError(t, c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":{"thread":{"id":"thread","sessionId":"session","cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}}`, request.ID))))
+		require.NoError(t, c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":{"thread":{"id":"thread","sessionId":"session","cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"cwd":"/synthetic","ephemeral":true,"modelProvider":"mock","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"fake","modelProvider":"mock","sandbox":{"type":"readOnly"}}}`, request.ID)))
 		s := <-opened
 		require.NoError(t, <-errors)
 		type received struct {
@@ -141,10 +141,10 @@ func TestSessionReceiveContinuesAcrossSuccessfulTurns(t *testing.T) {
 			require.NoError(t, json.Unmarshal(scan.Bytes(), &input))
 			require.Equal(t, "turn/start", input.Method)
 			require.Equal(t, "thread", input.Params.ThreadID)
-			require.NoError(t, c.routeFrame([]byte(fmt.Sprintf(`{"id":%s,"result":{"turn":{"id":"turn-%d","status":"inProgress","items":[]}}}`, input.ID, n))))
+			require.NoError(t, c.routeFrame(fmt.Appendf(nil, `{"id":%s,"result":{"turn":{"id":"turn-%d","status":"inProgress","items":[]}}}`, input.ID, n)))
 			require.NoError(t, <-submit)
 			require.NoError(t, c.routeFrame([]byte(`{"method":"thread/status/changed","params":{"threadId":"thread","status":{"type":"idle"}}}`)))
-			require.NoError(t, c.routeFrame([]byte(fmt.Sprintf(`{"method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn-%d","status":"completed","items":[]}}}`, n))))
+			require.NoError(t, c.routeFrame(fmt.Appendf(nil, `{"method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn-%d","status":"completed","items":[]}}}`, n)))
 			idle, terminal := <-events, <-events
 			require.NoError(t, idle.err)
 			require.NoError(t, terminal.err)

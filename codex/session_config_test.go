@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -53,7 +54,7 @@ func TestSessionConfigurationClosePreservesSharedStartedWrite(t *testing.T) {
 			require.NoError(t, err)
 			b, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0600); _ = a.Abort(); _ = b.Abort() })
+			t.Cleanup(func() { _ = os.WriteFile(f.pid+".release", nil, 0o600); _ = a.Abort(); _ = b.Abort() })
 			result := make(chan error, 1)
 			go func() { _, err := b.SetModel(context.Background(), strings.Repeat("x", 256<<10)); result <- err }()
 			require.Eventually(t, func() bool { _, err := os.Stat(f.pid + ".writing"); return err == nil }, time.Second, time.Millisecond)
@@ -78,7 +79,7 @@ func TestSessionConfigurationClosePreservesSharedStartedWrite(t *testing.T) {
 					t.Fatal("configuration wait retained")
 				}
 			}
-			require.NoError(t, os.WriteFile(f.pid+".release", nil, 0600))
+			require.NoError(t, os.WriteFile(f.pid+".release", nil, 0o600))
 			require.NoError(t, <-closed)
 			if !closeOwner {
 				require.NoError(t, <-result)
@@ -167,7 +168,7 @@ func TestSessionConfigurationUnknownAfterCancelAndClose(t *testing.T) {
 				require.ErrorAs(t, err, &call)
 				require.Equal(t, codex.OutcomeUnknown, call.Dispatch)
 				require.Equal(t, "thread/settings/update", call.Method)
-				cause := error(context.Canceled)
+				cause := context.Canceled
 				if mode == "close" {
 					cause = codex.ErrClosed
 				}

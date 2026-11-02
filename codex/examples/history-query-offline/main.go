@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -45,20 +46,20 @@ func run() error {
 		return err
 	}
 	if len(page.Data) != 1 {
-		return fmt.Errorf("synthetic peer: expected one thread")
+		return errors.New("synthetic peer: expected one thread")
 	}
 	id := page.Data[0].ID
 	// Explicitly fetch only the next page; the SDK never fetches it automatically.
 	next, ok := page.NextCursor.Get()
 	if !ok {
-		return fmt.Errorf("synthetic peer: expected continuation cursor")
+		return errors.New("synthetic peer: expected continuation cursor")
 	}
 	tail, err := c.ListThreads(ctx, types.ThreadListParams{Cursor: types.Some(next), Limit: types.Some(uint32(1)), UseStateDbOnly: types.Some(true)})
 	if err != nil {
 		return err
 	}
 	if !tail.NextCursor.IsNull() {
-		return fmt.Errorf("synthetic peer: expected explicit page end")
+		return errors.New("synthetic peer: expected explicit page end")
 	}
 	fmt.Printf("threads: %s; next page: %d; end: true\n", id, len(tail.Data))
 	metadata, err := c.ReadThread(ctx, types.ThreadReadParams{ThreadID: id, IncludeTurns: types.Some(false)})
@@ -71,7 +72,7 @@ func run() error {
 		return err
 	}
 	if len(turns.Data) != 1 {
-		return fmt.Errorf("synthetic peer: expected one turn")
+		return errors.New("synthetic peer: expected one turn")
 	}
 	fmt.Printf("summary: %s; items: %d\n", turns.Data[0].ID, len(turns.Data[0].Items))
 	items, err := c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: id, TurnID: types.Some(turns.Data[0].ID), Limit: types.Some(uint32(25))})
@@ -79,7 +80,7 @@ func run() error {
 		return err
 	}
 	if len(items.Data) != 1 || items.Data[0].Item.AgentMessage == nil {
-		return fmt.Errorf("synthetic peer: expected saved message")
+		return errors.New("synthetic peer: expected saved message")
 	}
 	fmt.Printf("saved item: %s\n", items.Data[0].Item.AgentMessage.Text)
 	// These saved values are not original delta/approval/hook events. Applications

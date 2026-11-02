@@ -22,8 +22,9 @@
 - Runs SDK fixture adapters against the external `mock` process using versioned
   synthetic captures and strict matching. No protocol matcher or recording source
   tree remains in this repository.
-- Pins mise-managed Go 1.26.9 and checks Linux/macOS offline contracts, race,
-  vet, schemas/inventories, types boundaries, simulation tooling and examples.
+- Requires Go 1.26 or newer, uses the root Makefile for formatting and linting,
+  and checks Linux/macOS offline contracts, race, vet, schemas/inventories,
+  types boundaries, simulation tooling and examples.
   External consumers retrieve exact pushed commits into independent modules.
 
 This is release preparation. No tag or release has been published. Real agent

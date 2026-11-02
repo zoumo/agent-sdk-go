@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
@@ -28,7 +29,7 @@ func TestSubagentEnvelopeNullAbsentAndTypedEdits(t *testing.T) {
 		require.NoError(t, err)
 		var obj map[string]json.RawMessage
 		json.Unmarshal(encoded, &obj)
-		require.EqualValues(t, `"edited"`, string(obj["agent_id"]), string(encoded))
+		require.Equal(t, `"edited"`, string(obj["agent_id"]), string(encoded))
 	}
 }
 
@@ -89,7 +90,8 @@ func TestSessionStateAndBackgroundSnapshotCodec(t *testing.T) {
 	json.Unmarshal([]byte(`{"subtype":"session_state_changed","state":"idle","future":null}`), &e)
 	state := "running"
 	e.State = &state
-	encoded, _ := json.Marshal(e)
+	encoded, err := json.Marshal(e)
+	require.NoError(t, err)
 	var fields map[string]json.RawMessage
 	json.Unmarshal(encoded, &fields)
 	require.False(t, string(fields["state"]) != `"running"` || string(fields["future"]) != "null", string(encoded))

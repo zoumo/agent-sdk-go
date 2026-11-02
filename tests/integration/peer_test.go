@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -169,12 +170,12 @@ func peer(provider, scenario string) error {
 				emit("", fmt.Sprintf(`{"type":"control_request","session_id":"s","request_id":"original","request":{"subtype":"can_use_tool","tool_name":%q,"tool_use_id":"question","input":%s}}`, tool, input))
 			}
 		case "backpressure":
-			for i := 0; i < 32; i++ {
+			for range 32 {
 				marker("burst")
 			}
 			marker("barrier")
 		case "unknown-fields":
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				if provider == "codex" {
 					emit("fixture/unknown", `{"threadId":"root","future":{"big":9007199254740993,"nullable":null}}`)
 				} else {
@@ -231,7 +232,7 @@ func peer(provider, scenario string) error {
 			var r map[string]json.RawMessage
 			_ = json.Unmarshal(nativeScenarioThread("child"), &r)
 			r["parentThreadId"] = json.RawMessage(`"root"`)
-			raw, _ := json.Marshal(r)
+			raw := mustMarshalJSON(r)
 			reply(`{"data":[` + string(raw) + `],"nextCursor":null}`)
 			continue
 		}
@@ -279,14 +280,22 @@ func peer(provider, scenario string) error {
 func nativeParentFixture(child, parent string) string {
 	var t map[string]json.RawMessage
 	_ = json.Unmarshal(nativeScenarioThread(child), &t)
-	t["parentThreadId"], _ = json.Marshal(parent)
-	b, _ := json.Marshal(map[string]any{"thread": t})
+	t["parentThreadId"] = mustMarshalJSON(parent)
+	b := mustMarshalJSON(map[string]any{"thread": t})
 	return string(b)
+}
+
+func mustMarshalJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // This channel is application-driver metadata, never a native replay frame.
 func openFaultBarrier() (net.Conn, error) {
-	c, err := net.DialTimeout("tcp4", os.Getenv("SDK_INTEGRATION_BARRIER"), 5*time.Second)
+	c, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp4", os.Getenv("SDK_INTEGRATION_BARRIER"))
 	if err != nil {
 		return nil, err
 	}

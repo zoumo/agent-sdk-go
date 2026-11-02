@@ -78,6 +78,7 @@ func (e *SessionQueryError) Unwrap() error { return e.Cause }
 func queryError(kind, path, reason string, err error) error {
 	return &SessionQueryError{Kind: kind, Path: path, Reason: reason, Cause: err}
 }
+
 func queryAccess(path string, err error) error {
 	kind := "inaccessible"
 	if errors.Is(err, os.ErrNotExist) {
@@ -100,7 +101,7 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 	if ctx == nil {
 		return page, queryError("invalid-input", "", "nil context", ErrInvalidInput)
 	}
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return page, err
 	}
 	if !historyUUID.MatchString(sessionID) || !filepath.IsAbs(o.Scope.ConfigDir) || (o.Scope.ProjectDir != "" && !filepath.IsAbs(o.Scope.ProjectDir)) {
@@ -167,7 +168,7 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 	}
 	visible := 0
 	for _, r := range chain {
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return page, err
 		}
 		if !r.visible() {
@@ -179,7 +180,7 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 		visible++
 	}
 	// Verify the entire original prefix and file identity, not only returned rows.
-	if e = source.verify(); e != nil {
+	if e := source.verify(); e != nil {
 		return page, e
 	}
 	page.Coverage.Status = "complete"
@@ -207,6 +208,7 @@ func queryDirectory(root *os.Root, name string) (*os.Root, error) {
 	}
 	return next, nil
 }
+
 func locateQuerySource(ctx context.Context, projects *os.Root, key, name string, c *SessionMessagesCoverage, maxEntries int) (*os.Root, string, error) {
 	if key != "" {
 		r, e := queryDirectory(projects, key)
@@ -219,34 +221,34 @@ func locateQuerySource(ctx context.Context, projects *os.Root, key, name string,
 	defer dir.Close()
 	var found *os.Root
 	var path string
-	fail := func(err error) (*os.Root, string, error) {
+	fail := func(err error) error {
 		if found != nil {
 			found.Close()
 		}
-		return nil, "", err
+		return err
 	}
 	for {
 		if e = ctx.Err(); e != nil {
-			return fail(e)
+			return nil, "", fail(e)
 		}
 		entries, re := dir.ReadDir(1)
 		if len(entries) == 0 && re == io.EOF {
 			break
 		}
 		if re != nil && re != io.EOF {
-			return fail(queryAccess("projects", re))
+			return nil, "", fail(queryAccess("projects", re))
 		}
 		for _, entry := range entries {
 			if c.Entries >= maxEntries {
-				return fail(queryError("resource-limit", "projects", "discovery entries", nil))
+				return nil, "", fail(queryError("resource-limit", "projects", "discovery entries", nil))
 			}
 			c.Entries++
 			if !entry.IsDir() {
-				return fail(queryError("unsupported", entry.Name(), "non-directory project entry", ErrUnsupported))
+				return nil, "", fail(queryError("unsupported", entry.Name(), "non-directory project entry", ErrUnsupported))
 			}
 			r, e := queryDirectory(projects, entry.Name())
 			if e != nil {
-				return fail(e)
+				return nil, "", fail(e)
 			}
 			_, e = r.Lstat(name)
 			if errors.Is(e, os.ErrNotExist) {
@@ -255,18 +257,18 @@ func locateQuerySource(ctx context.Context, projects *os.Root, key, name string,
 			}
 			if e != nil {
 				r.Close()
-				return fail(queryAccess(entry.Name(), e))
+				return nil, "", fail(queryAccess(entry.Name(), e))
 			}
 			if found != nil {
 				r.Close()
-				return fail(queryError("ambiguous", name, "session found in multiple projects", nil))
+				return nil, "", fail(queryError("ambiguous", name, "session found in multiple projects", nil))
 			}
 			found = r
 			path = filepath.Join(entry.Name(), name)
 		}
 	}
 	if found == nil {
-		return fail(queryError("missing", name, "session not found in declared project scope", os.ErrNotExist))
+		return nil, "", fail(queryError("missing", name, "session not found in declared project scope", os.ErrNotExist))
 	}
 	return found, path, nil
 }

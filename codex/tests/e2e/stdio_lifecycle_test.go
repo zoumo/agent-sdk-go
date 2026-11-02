@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -39,7 +40,6 @@ func (s *StdioLifecycleHistorySuite) SetupTest() {
 	s.executable = os.Getenv("CODEX_E2E_CLI")
 	require.True(t, filepath.IsAbs(s.executable),
 		"CODEX_E2E_CLI must select an absolute executable path")
-
 }
 
 func (s *StdioLifecycleHistorySuite) TestLifecycle() {
@@ -55,9 +55,11 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 	open := func() *codex.Client {
 		initCtx, stop := context.WithTimeout(ctx, 60*time.Second)
 		defer stop()
-		c, err := codex.NewStdio(initCtx, codex.StdioOptions{Executable: executable, Args: []string{"app-server"}, Dir: cwd,
-			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-stdio", Version: "1"}}})
-		require.True(t, err == nil,
+		c, err := codex.NewStdio(initCtx, codex.StdioOptions{
+			Executable: executable, Args: []string{"app-server"}, Dir: cwd,
+			Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "sdk-e2e-stdio", Version: "1"}},
+		})
+		require.NoError(t, err,
 			"initialize failed (no raw error logged): %T", err)
 
 		t.Log("initialize response and initialized write succeeded; server user agent present:", c.ServerInfo().UserAgent != "")
@@ -89,7 +91,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 	}
 	history := func(c *codex.Client, id string, turnIDs []string) {
 		r, err := c.ReadThread(ctx, types.ThreadReadParams{ThreadID: id, IncludeTurns: types.Some(true)})
-		require.True(t, err == nil,
+		require.NoError(t, err,
 			"thread/read failed: %T", err)
 		require.False(t, r.Thread.ID != id || len(r.Thread.Turns) != len(turnIDs),
 			"history identity/count mismatch")
@@ -106,7 +108,6 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 			}
 			require.True(t, found,
 				"history missing synthetic agent marker")
-
 		}
 		t.Logf("thread/read same native thread and %d completed native turn IDs; synthetic agent marker present in each", len(turnIDs))
 	}
@@ -115,7 +116,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 		defer session.Close()
 
 		attempts.Add(1)
-		submission, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: prompt})}}})
+		submission, err := session.Submit(ctx, codex.Input{Input: []types.UserInput{{Text: new(types.TextUserInput{Text: prompt})}}})
 		if err != nil {
 			var ce *codex.CallError
 			if errors.As(err, &ce) {
@@ -123,7 +124,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 			}
 			require.FailNowf(t, "assertion failed", "turn/start failed; no replay: %T", err)
 		}
-		require.False(t, submission.Response.Turn.ID == "",
+		require.NotEmpty(t, submission.Response.Turn.ID,
 			"empty native turn ID")
 
 		t.Logf("turn/start responded; native turn T%d recorded in memory", attempts.Load())
@@ -180,9 +181,8 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 					require.False(t, v.Turn.Status != types.TurnStatusCompleted || !turnStarted || !agent || strings.TrimSpace(delta.String()) != "SDK_E2E_STDIO_OK" || unexpected.Load() != 0,
 						"completion/content/interaction assertion failed")
 					{
-
 						err := session.Close()
-						require.True(t, err == nil,
+						require.NoError(t, err,
 							"subscription Close failed")
 					}
 
@@ -191,7 +191,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 					default:
 						require.FailNow(t, "subscription Done open")
 					}
-					require.Equal(t, nil, session.Err(),
+					require.NoError(t, session.Err(),
 						"subscription loss/terminal error")
 
 					t.Log("matched turn/completed completed; delta and agent marker exact; subscription Close/Done/Err passed")
@@ -202,11 +202,11 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 	}
 	c := open()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: types.ThreadStartParams{Cwd: types.Some(cwd), Ephemeral: types.Some(false), Sandbox: types.Some(types.SandboxModeReadOnly)}})
-	require.True(t, err == nil,
+	require.NoError(t, err,
 		"thread/start failed; no replay: %T", err)
 
 	id := session.ThreadID()
-	require.False(t, id == "",
+	require.NotEmpty(t, id,
 		"empty thread ID")
 
 	t.Log("thread/start persistent native thread A created in empty temporary cwd; read-only sandbox")
@@ -223,7 +223,7 @@ func (s *StdioLifecycleHistorySuite) TestLifecycle() {
 	second := resumedTurn(t, ctx, c, id)
 	history(c, id, []string{first, second})
 	detached, err := c.UnsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
-	require.True(t, err == nil,
+	require.NoError(t, err,
 		"native unsubscribe failed: %T", err)
 	require.Contains(t, []types.ThreadUnsubscribeStatus{types.ThreadUnsubscribeStatusUnsubscribed}, detached.Status,
 		"native unsubscribe unexpected status")

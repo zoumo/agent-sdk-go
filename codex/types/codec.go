@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -17,7 +18,7 @@ type optionalState interface {
 var rawMessageType = reflect.TypeFor[json.RawMessage]()
 
 func fieldFlags(field reflect.StructField) (required, nullable bool, constant string) {
-	for _, flag := range strings.Split(field.Tag.Get("protocol"), ",") {
+	for flag := range strings.SplitSeq(field.Tag.Get("protocol"), ",") {
 		switch {
 		case flag == "required":
 			required = true
@@ -27,7 +28,7 @@ func fieldFlags(field reflect.StructField) (required, nullable bool, constant st
 			constant = strings.TrimPrefix(flag, "const=")
 		}
 	}
-	return
+	return required, nullable, constant
 }
 
 func marshalObject(value any, alternatives ...[]string) ([]byte, error) {
@@ -35,7 +36,7 @@ func marshalObject(value any, alternatives ...[]string) ([]byte, error) {
 	t := v.Type()
 	fields := make(map[string]json.RawMessage)
 	known := make(map[string]bool, t.NumField())
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		field := t.Field(i)
 		name := field.Tag.Get("json")
 		if name == "-" || name == "" {
@@ -115,7 +116,7 @@ func unmarshalObject(data []byte, target any, alternatives ...[]string) error {
 	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || data[0] != '{' {
-		return fmt.Errorf("protocol: expected JSON object")
+		return errors.New("protocol: expected JSON object")
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
@@ -127,7 +128,7 @@ func unmarshalObject(data []byte, target any, alternatives ...[]string) error {
 	dst := reflect.ValueOf(target).Elem()
 	out := reflect.New(dst.Type()).Elem()
 	t := out.Type()
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		field := t.Field(i)
 		name := field.Tag.Get("json")
 		if name == "-" || name == "" {
@@ -177,7 +178,7 @@ func validateAlternatives(fields map[string]json.RawMessage, alternatives [][]st
 			return nil
 		}
 	}
-	return fmt.Errorf("protocol: object does not match any required member alternative")
+	return errors.New("protocol: object does not match any required member alternative")
 }
 
 // validateJSONType closes encoding/json's null-to-zero loophole for scalar
@@ -189,7 +190,7 @@ func validateJSONType(data []byte, typ reflect.Type) error {
 	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
-		return fmt.Errorf("empty JSON value")
+		return errors.New("empty JSON value")
 	}
 	if typ.Kind() == reflect.Struct {
 		return nil // Optional or generated object's custom UnmarshalJSON validates it.
@@ -239,7 +240,7 @@ func marshalUnion(unknown json.RawMessage, variants ...any) ([]byte, error) {
 	}
 	if len(unknown) > 0 {
 		if validateJSONDocument(unknown) != nil || bytes.Equal(bytes.TrimSpace(unknown), []byte("null")) {
-			return nil, fmt.Errorf("protocol: unknown union variant must be valid non-null JSON")
+			return nil, errors.New("protocol: unknown union variant must be valid non-null JSON")
 		}
 		return append([]byte(nil), unknown...), nil
 	}
@@ -250,12 +251,12 @@ func marshalUnion(unknown json.RawMessage, variants ...any) ([]byte, error) {
 }
 
 func inspectUnion(data []byte, discriminator ...string) (kind, tag string, fields map[string]json.RawMessage, err error) {
-	if err = validateJSONDocument(data); err != nil {
-		return
+	if err := validateJSONDocument(data); err != nil {
+		return kind, tag, fields, err
 	}
 	data = bytes.TrimSpace(data)
 	if !json.Valid(data) || bytes.Equal(data, []byte("null")) {
-		return "", "", nil, fmt.Errorf("protocol: expected valid non-null union value")
+		return "", "", nil, errors.New("protocol: expected valid non-null union value")
 	}
 	switch data[0] {
 	case '"':
@@ -268,8 +269,8 @@ func inspectUnion(data []byte, discriminator ...string) (kind, tag string, field
 		kind = "number"
 	case '{':
 		kind = "object"
-		if err = json.Unmarshal(data, &fields); err != nil {
-			return
+		if err := json.Unmarshal(data, &fields); err != nil {
+			return kind, tag, fields, err
 		}
 		key := "type"
 		if len(discriminator) > 0 {
@@ -278,24 +279,24 @@ func inspectUnion(data []byte, discriminator ...string) (kind, tag string, field
 		if raw, found := fields[key]; found {
 			if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 				err = fmt.Errorf("protocol: null union %s discriminator", key)
-				return
+				return kind, tag, fields, err
 			}
 			err = json.Unmarshal(raw, &tag)
 		}
 	default:
 		kind = "other"
 	}
-	return
+	return kind, tag, fields, err
 }
 
 // validateJSONDocument rejects JSON that encoding/json would silently normalize
 // or collapse, including duplicate members and malformed Unicode identities.
 func validateJSONDocument(data []byte) error {
 	if !json.Valid(data) {
-		return fmt.Errorf("protocol: invalid JSON")
+		return errors.New("protocol: invalid JSON")
 	}
 	if !utf8.Valid(data) {
-		return fmt.Errorf("protocol: invalid UTF-8 in JSON")
+		return errors.New("protocol: invalid UTF-8 in JSON")
 	}
 	for i := 0; i < len(data); i++ {
 		if data[i] != '"' {
@@ -313,15 +314,15 @@ func validateJSONDocument(data []byte) error {
 			i += 4
 			if code >= 0xD800 && code <= 0xDBFF {
 				if i+6 >= len(data) || data[i+1] != '\\' || data[i+2] != 'u' {
-					return fmt.Errorf("protocol: unpaired Unicode surrogate in JSON")
+					return errors.New("protocol: unpaired Unicode surrogate in JSON")
 				}
 				low := hexQuad(data[i+3 : i+7])
 				if low < 0xDC00 || low > 0xDFFF {
-					return fmt.Errorf("protocol: unpaired Unicode surrogate in JSON")
+					return errors.New("protocol: unpaired Unicode surrogate in JSON")
 				}
 				i += 6
 			} else if code >= 0xDC00 && code <= 0xDFFF {
-				return fmt.Errorf("protocol: unpaired Unicode surrogate in JSON")
+				return errors.New("protocol: unpaired Unicode surrogate in JSON")
 			}
 		}
 	}
@@ -361,10 +362,10 @@ func validateUniqueMembers(decoder *json.Decoder) error {
 			}
 			name, ok := key.(string)
 			if !ok {
-				return fmt.Errorf("protocol: invalid object member")
+				return errors.New("protocol: invalid object member")
 			}
 			if seen[name] {
-				return fmt.Errorf("protocol: duplicate JSON object member")
+				return errors.New("protocol: duplicate JSON object member")
 			}
 			seen[name] = true
 			if err := validateUniqueMembers(decoder); err != nil {
@@ -398,14 +399,14 @@ func validateGoJSONValue(value reflect.Value) error {
 	switch value.Kind() {
 	case reflect.String:
 		if !utf8.ValidString(value.String()) {
-			return fmt.Errorf("invalid UTF-8 string")
+			return errors.New("invalid UTF-8 string")
 		}
 	case reflect.Pointer, reflect.Interface:
 		if !value.IsNil() {
 			return validateGoJSONValue(value.Elem())
 		}
 	case reflect.Slice, reflect.Array:
-		for i := 0; i < value.Len(); i++ {
+		for i := range value.Len() {
 			if err := validateGoJSONValue(value.Index(i)); err != nil {
 				return err
 			}

@@ -3,14 +3,16 @@ package transcript_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/suite"
-	"github.com/zoumo/agent-sdk-go/claude"
-	replay "github.com/zoumo/agent-sdk-go/claude/tests/replay"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
+
+	"github.com/zoumo/agent-sdk-go/claude"
+	replay "github.com/zoumo/agent-sdk-go/claude/tests/replay"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 type mockScenarioDefinition struct {
@@ -22,12 +24,14 @@ type mockScenarioDefinition struct {
 func mockFrame(direction, channel, data string) replay.Frame {
 	return replay.Frame{Direction: direction, Channel: channel, Data: json.RawMessage(data)}
 }
+
 func mockScenario(fs ...replay.Frame) mockScenarioDefinition {
 	for i := range fs {
 		fs[i].Ordinal = i + 1
 	}
 	return mockScenarioDefinition{1, "synthetic", fs}
 }
+
 func mockInitialization() []replay.Frame {
 	return []replay.Frame{
 		mockFrame("client", "control", `{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null,"forwardSubagentText":true}}`),
@@ -46,6 +50,7 @@ func TestGoMockSDK(t *testing.T) { suite.Run(t, new(mockSDKSuite)) }
 func (s *mockSDKSuite) SetupTest() {
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 5*time.Second)
 }
+
 func (s *mockSDKSuite) TearDownTest() {
 	if s.client != nil {
 		s.client.Abort()
@@ -53,17 +58,19 @@ func (s *mockSDKSuite) TearDownTest() {
 	}
 	s.cancel()
 }
+
 func (s *mockSDKSuite) open(script mockScenarioDefinition) {
 	dir := s.T().TempDir()
 	path := filepath.Join(dir, "synthetic.json")
 	data, err := json.Marshal(script)
 	s.Require().NoError(err)
-	s.Require().NoError(os.WriteFile(path, data, 0600))
+	s.Require().NoError(os.WriteFile(path, data, 0o600))
 	exe, err := mocktest.Launcher(dir, "claude", path, "")
 	s.Require().NoError(err)
 	s.client, err = claude.Open(s.ctx, claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"PATH=", "HOME=" + dir, "GORACE=atexit_sleep_ms=0"}, ShutdownTimeout: time.Second})
 	s.Require().NoError(err)
 }
+
 func (s *mockSDKSuite) nextNative(typ string) claude.Event {
 	for {
 		record, err := s.client.Receive(s.ctx)
@@ -73,6 +80,7 @@ func (s *mockSDKSuite) nextNative(typ string) claude.Event {
 		}
 	}
 }
+
 func (s *mockSDKSuite) TestPermissionChildAndInterrupt() {
 	frames := mockInitialization()
 	frames = append(frames,
@@ -100,6 +108,7 @@ func (s *mockSDKSuite) TestPermissionChildAndInterrupt() {
 	s.Require().NoError(s.client.Close())
 	s.client = nil
 }
+
 func (s *mockSDKSuite) TestReverseCancellationAndDisconnect() {
 	frames := mockInitialization()
 	frames = append(frames,
@@ -150,6 +159,7 @@ func submitText(session *claude.Session, ctx context.Context, text string) error
 	_, err := session.Submit(ctx, claude.Input{Text: text})
 	return err
 }
+
 func (s *mockSDKSuite) nextRequest() *claude.IncomingRequest {
 	for {
 		r, err := s.client.Receive(s.ctx)

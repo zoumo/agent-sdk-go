@@ -10,6 +10,7 @@ import (
 	"io"
 	"path/filepath"
 	"regexp"
+	"slices"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
@@ -47,8 +48,10 @@ type HistoryError struct {
 
 func (e *HistoryError) Error() string { return "claude history: " + e.Reason }
 
-var historyUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-var projectUnsafe = regexp.MustCompile(`[^a-zA-Z0-9]`)
+var (
+	historyUUID   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	projectUnsafe = regexp.MustCompile(`[^a-zA-Z0-9]`)
+)
 
 func prepareHistory(ctx context.Context, o HistoryOptions) (HistoryOptions, string, error) {
 	if ctx == nil {
@@ -292,11 +295,11 @@ func replayTranscript(ctx context.Context, o HistoryOptions, path string, send f
 	if err := before(ctx); err != nil {
 		return err
 	}
-	for i := len(chain) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(chain) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		l := links[chain[i]]
+		l := links[v]
 		raw := make([]byte, l.size)
 		if _, err := f.ReadAt(raw, l.offset); err != nil {
 			return err
@@ -338,7 +341,11 @@ func transcriptEvent(r historyRecord) (Event, error) {
 			return Event{}, &HistoryError{Reason: "conflicting native session identity", Raw: r.Raw}
 		}
 	}
-	fields["session_id"], _ = json.Marshal(r.SessionID)
+	sessionID, err := json.Marshal(r.SessionID)
+	if err != nil {
+		return Event{}, err
+	}
+	fields["session_id"] = sessionID
 	frame, err := json.Marshal(fields)
 	if err != nil {
 		return Event{}, err

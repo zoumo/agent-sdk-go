@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -36,7 +36,7 @@ func runRequest(path string) error {
 	if err != nil {
 		return err
 	}
-	if err = json.Unmarshal(b, &req); err != nil {
+	if err := json.Unmarshal(b, &req); err != nil {
 		return err
 	}
 	var plan struct {
@@ -51,23 +51,22 @@ func runRequest(path string) error {
 	if err != nil {
 		return err
 	}
-	if err = json.Unmarshal(b, &plan); err != nil {
+	if err := json.Unmarshal(b, &plan); err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var caseErr error
 	if req.Case != plan.CaseID {
-		caseErr = fmt.Errorf("case differs from supplied materials")
+		caseErr = errors.New("case differs from supplied materials")
 	} else {
 		if req.Policy != "preserve" && req.Policy != "suppress" {
-			return fmt.Errorf("explicit host policy must be preserve or suppress")
+			return errors.New("explicit host policy must be preserve or suppress")
 		}
-		caseErr = acceptRequest(ctx, plan.Provider, plan.DriverProfile, req.Output, req.Peer, req.Policy)
+		caseErr = acceptRequest(ctx, plan.Provider, req.Output, req.Peer, req.Policy)
 		if caseErr == nil && (plan.DriverProfile == "children" || plan.DriverProfile == "topology" || plan.DriverProfile == "background-children") {
 			caseErr = validateChildDelivery(plan.Provider, req.Output, plan.DriverProfile == "background-children")
 		}
-
 	}
 	result := map[string]string{"status": "passed"}
 	if caseErr != nil {
@@ -78,12 +77,12 @@ func runRequest(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(req.Output, "result.json"), append(b, '\n'), 0600)
+	return os.WriteFile(filepath.Join(req.Output, "result.json"), append(b, '\n'), 0o600)
 }
 
-func acceptRequest(ctx context.Context, provider, profile, root string, peer driverPeer, policy string) error {
+func acceptRequest(ctx context.Context, provider, root string, peer driverPeer, policy string) error {
 	if peer.Command == "" {
-		return fmt.Errorf("runner must provide a peer command")
+		return errors.New("runner must provide a peer command")
 	}
-	return accept(ctx, provider, root, filepath.Join(root, "raw/raw.jsonl"), peer, policy, filepath.Join(root, "deliveries.jsonl"))
+	return accept(ctx, provider, root, filepath.Join(root, "raw", "raw.jsonl"), peer, policy, filepath.Join(root, "deliveries.jsonl"))
 }

@@ -2,7 +2,9 @@ package integration_test
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,17 +17,17 @@ import (
 // The executable is this test binary, never a real CLI. The trace is peer input,
 // not a private SDK queue or graph. Each native protocol keeps its own envelopes.
 func sessionTargetPeer(provider, scenario string) error {
-	trace, err := os.OpenFile(os.Getenv("SDK_INTEGRATION_TRACE"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	trace, err := os.OpenFile(os.Getenv("SDK_INTEGRATION_TRACE"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer trace.Close()
-	launch, _ := json.Marshal(map[string]any{"type": "launch", "args": os.Args})
+	launch := mustMarshalJSON(map[string]any{"type": "launch", "args": os.Args})
 	_, _ = trace.Write(append(launch, '\n'))
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 4096), 16<<20)
 	emit := func(v any) {
-		b, _ := json.Marshal(v)
+		b := mustMarshalJSON(v)
 		if provider == "claude" {
 			b = completeClaudeFixture(b)
 		}
@@ -99,7 +101,7 @@ func sessionTargetPeer(provider, scenario string) error {
 			Request      struct{ Subtype string }
 			Message      struct{ Content json.RawMessage }
 		}
-		if err = json.Unmarshal(line, &f); err != nil {
+		if err := json.Unmarshal(line, &f); err != nil {
 			return err
 		}
 		reply := func(result string) {
@@ -159,7 +161,7 @@ func sessionTargetPeer(provider, scenario string) error {
 				_ = json.Unmarshal(line, &w)
 				source = w.Request
 			}
-			if err = json.Unmarshal(source, &q); err != nil {
+			if err := json.Unmarshal(source, &q); err != nil {
 				return err
 			}
 			if q.Model == "native-reject" {
@@ -177,7 +179,7 @@ func sessionTargetPeer(provider, scenario string) error {
 				Cursor   string
 				Archived bool
 			}
-			if err = json.Unmarshal(f.Params, &q); err != nil {
+			if err := json.Unmarshal(f.Params, &q); err != nil {
 				return err
 			}
 			id, cursor := "stored-a", `"p2"`
@@ -191,7 +193,7 @@ func sessionTargetPeer(provider, scenario string) error {
 			reply(fmt.Sprintf(`{"data":[{"id":%q,"sessionId":"stored","cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"cwd":"/synthetic","ephemeral":false,"modelProvider":"synthetic","preview":"stored","projectId":null,"source":{"subAgent":{"thread_spawn":{"parent_thread_id":"root","depth":1}}},"status":{"type":"idle"},"turns":[],"future":null}],"nextCursor":%s}`, id, cursor))
 		case f.Method == "fixture/emit":
 			var frames []json.RawMessage
-			if err = json.Unmarshal(f.Params, &frames); err != nil {
+			if err := json.Unmarshal(f.Params, &frames); err != nil {
 				return err
 			}
 			for _, b := range frames {
@@ -230,12 +232,12 @@ func sessionTargetPeer(provider, scenario string) error {
 				if _, err = io.ReadFull(os.Stdin, first[:]); err != nil {
 					return err
 				}
-				conn, err := net.DialTimeout("tcp4", os.Getenv("SDK_INTEGRATION_BARRIER"), 5*time.Second)
+				conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp4", os.Getenv("SDK_INTEGRATION_BARRIER"))
 				if err != nil {
 					return err
 				}
-				defer conn.Close()
-				if err = conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				defer conn.Close() //nolint:gocritic // Helper returns immediately after this scenario.
+				if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 					return err
 				}
 				if _, err = conn.Write(first[:]); err != nil {
@@ -246,7 +248,7 @@ func sessionTargetPeer(provider, scenario string) error {
 					return err
 				}
 				if release[0] != 'r' {
-					return fmt.Errorf("invalid fault release")
+					return errors.New("invalid fault release")
 				}
 				return nil
 			}
@@ -281,7 +283,7 @@ func sessionTargetPeer(provider, scenario string) error {
 					for _, pair := range [][2]string{{"child", "root"}, {"grand", "child"}, {"sibling", "root"}} {
 						var thread map[string]json.RawMessage
 						_ = json.Unmarshal(nativeScenarioThread(pair[0]), &thread)
-						thread["parentThreadId"], _ = json.Marshal(pair[1])
+						thread["parentThreadId"] = mustMarshalJSON(pair[1])
 						emit(map[string]any{"method": "thread/started", "params": map[string]any{"thread": thread}})
 					}
 					for _, id := range []string{"grand", "child", "sibling"} {
@@ -395,7 +397,7 @@ func completeClaudeFixture(raw json.RawMessage) json.RawMessage {
 				defaults["usage"] = `{"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}`
 				var text string
 				if json.Unmarshal(msg["content"], &text) == nil {
-					msg["content"], _ = json.Marshal([]any{map[string]any{"type": "text", "text": text}})
+					msg["content"] = mustMarshalJSON([]any{map[string]any{"type": "text", "text": text}})
 				}
 			}
 			for k, v := range defaults {
@@ -403,7 +405,7 @@ func completeClaudeFixture(raw json.RawMessage) json.RawMessage {
 					msg[k] = json.RawMessage(v)
 				}
 			}
-			f["message"], _ = json.Marshal(msg)
+			f["message"] = mustMarshalJSON(msg)
 		}
 	case "stream_event":
 		put("parent_tool_use_id", `null`)

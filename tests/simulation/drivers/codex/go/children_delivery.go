@@ -26,7 +26,7 @@ func ValidateChildDelivery(root string, background bool) error {
 	if e != nil {
 		return e
 	}
-	frames, e := deliveries(filepath.Join(root, "raw/raw.jsonl"))
+	frames, e := deliveries(filepath.Join(root, "raw", "raw.jsonl"))
 	if e != nil {
 		return e
 	}
@@ -77,7 +77,7 @@ func ValidateChildDelivery(root string, background bool) error {
 	}
 	for child, parent := range parents {
 		if child == "" || !members[child] || relations[child] != parent {
-			return errors.New("Go child membership or parent relationship differs from native evidence")
+			return errors.New("go child membership or parent relationship differs from native evidence")
 		}
 	}
 	type event struct {
@@ -90,7 +90,7 @@ func ValidateChildDelivery(root string, background bool) error {
 			continue
 		}
 		var w map[string]any
-		if e = json.Unmarshal([]byte(text(v["raw"])), &w); e != nil {
+		if e := json.Unmarshal([]byte(text(v["raw"])), &w); e != nil {
 			return e
 		}
 		events = append(events, event{i, w})
@@ -103,7 +103,6 @@ func ValidateChildDelivery(root string, background bool) error {
 			rootPosition = v.position
 			break
 		}
-
 	}
 	expected, afterRoot := 0, false
 	for _, f := range frames {
@@ -127,14 +126,14 @@ func ValidateChildDelivery(root string, background bool) error {
 			}
 		}
 		if !found {
-			return errors.New("Go stream omitted or changed native child completion")
+			return errors.New("go stream omitted or changed native child completion")
 		}
 	}
 	if expected == 0 {
 		return errors.New("recording lacks native child completion")
 	}
 	if background && !afterRoot {
-		return errors.New("Go stream lacks native child completion after root completion")
+		return errors.New("go stream lacks native child completion after root completion")
 	}
 
 	return nil

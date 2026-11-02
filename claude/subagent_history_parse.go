@@ -19,6 +19,7 @@ func (q *childQuery) identity(fields map[string]json.RawMessage, agent, path str
 	}
 	return nil
 }
+
 func (q *childQuery) parse(data []byte, path, agent string, chain bool) ([]SessionMessage, error) {
 	records := []SessionMessage{}
 	index := map[string]int{}
@@ -47,7 +48,8 @@ func (q *childQuery) parse(data []byte, path, agent string, chain bool) ([]Sessi
 			return nil, bad("corrupt", "object required")
 		}
 		if e := q.identity(fields, agent, path); e != nil {
-			if qe, ok := e.(*SessionQueryError); ok {
+			qe := &SessionQueryError{}
+			if errors.As(e, &qe) {
 				qe.Raw = bytes.Clone(raw)
 			}
 			return nil, e

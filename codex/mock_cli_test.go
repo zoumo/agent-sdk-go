@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
@@ -52,7 +53,7 @@ func mockCLIScenario(t *testing.T, wires ...string) string {
 	b, err := json.Marshal(map[string]any{"version": 1, "provenance": "synthetic", "frames": frames})
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "codex.json")
-	require.NoError(t, os.WriteFile(path, b, 0600))
+	require.NoError(t, os.WriteFile(path, b, 0o600))
 	return path
 }
 
@@ -61,6 +62,7 @@ var mockCodexInit = []string{
 	`<{"id":91,"result":{"userAgent":"synthetic","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}}`,
 	`>{"method":"initialized"}`,
 }
+
 var mockCodexOpen = []string{
 	`>{"id":100,"method":"thread/start","params":{}}`,
 	`<{"id":100,"result":{"thread":{"id":"root","sessionId":"synthetic","cliVersion":"0.162.1","createdAt":1,"updatedAt":1,"cwd":"/synthetic","ephemeral":true,"modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]},"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}}`,
@@ -73,7 +75,8 @@ func (s *mockCLISuite) TestInteractions() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			frames := append(append([]string(nil), mockCodexInit...), mockCodexOpen...)
-			if mode == "question-and-interrupt" {
+			switch mode {
+			case "question-and-interrupt":
 				frames = append(frames,
 					`>{"id":92,"method":"consumer/ask","params":{}}`,
 					`<{"id":"question","method":"item/tool/requestUserInput","params":{"threadId":"root","turnId":"turn","itemId":"item","questions":[{"id":"format","header":"Format","question":"Which format?","options":[{"label":"json","description":"JSON output"}],"isOther":false,"isSecret":false}]}}`,
@@ -81,9 +84,9 @@ func (s *mockCLISuite) TestInteractions() {
 					`<{"id":92,"result":{"answered":true}}`,
 					`>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`,
 					`<{"id":93,"result":{}}`)
-			} else if mode == "disconnect" {
+			case "disconnect":
 				frames = append(frames, `>{"id":92,"method":"consumer/fault","params":{}}`, `!`)
-			} else {
+			default:
 				frames = append(frames, `>{"id":92,"method":"consumer/expected","params":{}}`)
 			}
 			path := mockCLIScenario(t, frames...)
@@ -102,7 +105,7 @@ func (s *mockCLISuite) TestInteractions() {
 				require.NotErrorIs(t, err, context.DeadlineExceeded)
 				require.NoError(t, ctx.Err())
 				require.NoError(t, client.Close())
-				require.Greater(t, client.Diagnostics().StderrBytes, uint64(0))
+				require.Positive(t, client.Diagnostics().StderrBytes)
 				return
 			}
 			result := make(chan error, 1)
@@ -145,7 +148,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	defer cancel()
 	frames := append(append([]string(nil), mockCodexInit...), mockCodexOpen...)
 	frames = append(frames, `<{"id":"question","method":"item/tool/requestUserInput","params":{"threadId":"root","turnId":"turn","itemId":"item","questions":[]}}`)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		frames = append(frames, fmt.Sprintf(`<{"method":"fixture/burst","params":{"threadId":"root","index":%d}}`, i))
 	}
 	frames = append(frames, `>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`, `<{"id":93,"result":{}}`, `>{"id":"question","result":{"answers":{}}}`, `>{"id":94,"method":"consumer/release","params":{}}`, `!`)

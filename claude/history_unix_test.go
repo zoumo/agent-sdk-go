@@ -16,7 +16,7 @@ func TestHistoryRejectsFIFOWithoutBlockingClose(t *testing.T) {
 	o := historyTranscript(t, map[string]any{"type": "user", "uuid": "u", "parentUuid": nil, "message": map[string]any{"content": "x"}})
 	path := historyPath(t, o)
 	require.NoError(t, os.Remove(path))
-	require.NoError(t, syscall.Mkfifo(path, 0600))
+	require.NoError(t, syscall.Mkfifo(path, 0o600))
 	h, e := readTranscriptForTest(context.Background(), o, nil)
 	require.NoError(t, e)
 	done := make(chan error, 1)

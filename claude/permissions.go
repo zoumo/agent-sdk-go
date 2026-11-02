@@ -420,7 +420,7 @@ func (c *interaction) registerIncoming(request *ControlRequest) (*PermissionRequ
 			return nil, err
 		}
 		if wire.ToolName == "" || len(wire.Input) == 0 || wire.Input[0] != '{' {
-			return nil, fmt.Errorf("permission request requires tool_name and object input")
+			return nil, errors.New("permission request requires tool_name and object input")
 		}
 	}
 	c.mu.Lock()
@@ -438,8 +438,10 @@ func (c *interaction) registerIncoming(request *ControlRequest) (*PermissionRequ
 		return nil, &ResourceLimitError{Resource: "permission request history", Limit: c.opts.Limits.PermissionHistory}
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
-	s := &permissionState{subtype: request.Subtype, owner: c, id: request.RequestID, toolUseID: wire.ToolUseID, toolName: wire.ToolName,
-		input: bytes.Clone(wire.Input), raw: bytes.Clone(request.Request), epoch: c.epoch, ctx: ctx, cancel: cancel}
+	s := &permissionState{
+		subtype: request.Subtype, owner: c, id: request.RequestID, toolUseID: wire.ToolUseID, toolName: wire.ToolName,
+		input: bytes.Clone(wire.Input), raw: bytes.Clone(request.Request), epoch: c.epoch, ctx: ctx, cancel: cancel,
+	}
 	c.permissions[s.id], c.permissionIDs[s.id] = s, struct{}{}
 	return &PermissionRequest{state: s}, nil
 }

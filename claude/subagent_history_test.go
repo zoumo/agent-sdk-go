@@ -3,7 +3,6 @@ package claude
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,23 +20,26 @@ func childHistoryFixture(t *testing.T) (SessionQueryScope, string) {
 	project, err := filepath.EvalSymlinks(project)
 	require.NoError(t, err)
 	base := filepath.Join(config, "projects", projectUnsafe.ReplaceAllString(project, "-"))
-	require.NoError(t, os.MkdirAll(filepath.Join(base, savedChildParent, "subagents"), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(base, savedChildParent+".jsonl"), []byte(`{"type":"user","uuid":"main","sessionId":"`+savedChildParent+`","message":{"content":"main"}}`+"\n"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(base, savedChildParent, "subagents"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(base, savedChildParent+".jsonl"), []byte(`{"type":"user","uuid":"main","sessionId":"`+savedChildParent+`","message":{"content":"main"}}`+"\n"), 0o600))
 	return SessionQueryScope{ConfigDir: config, ProjectDir: project}, filepath.Join(base, savedChildParent, "subagents")
 }
+
 func writeChild(t *testing.T, root, id, body string) string {
 	t.Helper()
 	path := filepath.Join(root, "agent-"+id+".jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
-	require.NoError(t, os.WriteFile(path, []byte(body), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
 	return path
 }
+
 func childConversation() string {
 	return `{"type":"user","uuid":"u","parentUuid":null,"sessionId":"` + savedChildParent + `","agentId":"Alpha","isMeta":true,"message":{"content":"original"}}` + "\n" +
 		`{"type":"assistant","uuid":"stray","parentUuid":"u","sessionId":"` + savedChildParent + `","agentId":"Alpha","message":{"content":"unselected sibling"}}` + "\n" +
 		`{"type":"progress","uuid":"p","parentUuid":"u","sessionId":"` + savedChildParent + `","agentId":"Alpha"}` + "\n" +
 		`{"type":"assistant","uuid":"a","parentUuid":"p","sessionId":"` + savedChildParent + `","agentId":"Alpha","isSidechain":true,"teamName":"team","message":{"content":[{"type":"future","n":9007199254740993,"nullable":null}],"id":"same"}}` + "\n"
 }
+
 func childQueryKind(t *testing.T, err error, kind string) {
 	t.Helper()
 	var qe *SessionQueryError
@@ -49,7 +51,7 @@ func TestIndependentChildHistoryDiscoveryAndContent(t *testing.T) {
 	scope, root := childHistoryFixture(t)
 	nested := filepath.Join(root, "workflows", "synthetic")
 	writeChild(t, nested, "Alpha", childConversation())
-	require.NoError(t, os.WriteFile(filepath.Join(nested, "agent-Alpha.meta.json"), []byte(`{"agentId":"Alpha","parentAgentId":"unlisted-parent","toolUseId":"native-tool","future":{"n":9007199254740993,"x":null}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "agent-Alpha.meta.json"), []byte(`{"agentId":"Alpha","parentAgentId":"unlisted-parent","toolUseId":"native-tool","future":{"n":9007199254740993,"x":null}}`), 0o600))
 	writeChild(t, root, "Beta", "")
 	page, err := ListSubagents(context.Background(), savedChildParent, ListSubagentsOptions{Scope: scope})
 	require.NoError(t, err)
@@ -98,18 +100,18 @@ func TestIndependentChildHistoryLayoutAndIdentity(t *testing.T) {
 				require.NoError(t, os.Link(path, filepath.Join(root, "agent-Beta.jsonl")))
 				kind = "ambiguous"
 			case "orphan-sidecar":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-missing.meta.json"), []byte(`{}`), 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-missing.meta.json"), []byte(`{}`), 0o600))
 			case "unknown-layout":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "unknown.txt"), nil, 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "unknown.txt"), nil, 0o600))
 				kind = "unsupported"
 			case "bad-sidecar":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{"x":1,"x":2}`), 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{"x":1,"x":2}`), 0o600))
 			case "identity-conflict":
-				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(childConversation(), savedChildParent, "22222222-2222-4222-8222-222222222222")), 0600))
+				require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(childConversation(), savedChildParent, "22222222-2222-4222-8222-222222222222")), 0o600))
 			case "sidecar-self":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{"parentAgentId":"Alpha"}`), 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{"parentAgentId":"Alpha"}`), 0o600))
 			case "null-identity":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{"agentId":null}`), 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{"agentId":null}`), 0o600))
 			}
 			page, err := ListSubagents(context.Background(), savedChildParent, ListSubagentsOptions{Scope: scope})
 			childQueryKind(t, err, kind)
@@ -191,7 +193,7 @@ func TestIndependentChildHistoryObservedMutation(t *testing.T) {
 			scope, root := childHistoryFixture(t)
 			path := writeChild(t, root, "Alpha", childConversation())
 			coverage := SubagentHistoryCoverage{SessionID: savedChildParent, AgentID: "Alpha"}
-			q, err := newChildQuery(context.Background(), savedChildParent, "Alpha", scope, SubagentHistoryLimits{}, 0, 0, 0, 1000, &coverage)
+			q, err := newChildQuery(context.Background(), savedChildParent, scope, SubagentHistoryLimits{}, 0, 0, 0, 1000, &coverage)
 			require.NoError(t, err)
 			defer q.close()
 			candidates, err := q.inventory()
@@ -201,7 +203,7 @@ func TestIndependentChildHistoryObservedMutation(t *testing.T) {
 			require.NoError(t, err)
 			switch mode {
 			case "append":
-				f, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+				f, e := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 				require.NoError(t, e)
 				_, e = f.WriteString("\n")
 				require.NoError(t, e)
@@ -210,7 +212,7 @@ func TestIndependentChildHistoryObservedMutation(t *testing.T) {
 				data, e := os.ReadFile(path)
 				require.NoError(t, e)
 				data[0] = '['
-				require.NoError(t, os.WriteFile(path, data, 0600))
+				require.NoError(t, os.WriteFile(path, data, 0o600))
 				require.NoError(t, os.Chtimes(path, q.files[1].info.ModTime(), q.files[1].info.ModTime()))
 			case "replacement":
 				require.NoError(t, os.Rename(path, path+".old"))
@@ -218,10 +220,10 @@ func TestIndependentChildHistoryObservedMutation(t *testing.T) {
 			case "new-agent":
 				writeChild(t, root, "Beta", "")
 			case "sidecar-appearance":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{}`), 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "agent-Alpha.meta.json"), []byte(`{}`), 0o600))
 			case "directory-replacement":
 				require.NoError(t, os.Rename(root, root+".old"))
-				require.NoError(t, os.Mkdir(root, 0700))
+				require.NoError(t, os.Mkdir(root, 0o700))
 			}
 			childQueryKind(t, q.verify(), "changed")
 		})
@@ -235,7 +237,7 @@ func TestIndependentChildHistoryErrorsAndIsolation(t *testing.T) {
 	require.Empty(t, page.Records)
 	_, err = GetSubagentMessages(context.Background(), savedChildParent, "missing", SubagentMessagesOptions{Scope: scope})
 	childQueryKind(t, err, "missing")
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 	writeChild(t, root, "Alpha", childConversation())
 	s := openSessionFixture(t)
 	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+savedChildParent+`","claude_code_version":"2.1.258"}`)

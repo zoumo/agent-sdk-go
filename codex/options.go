@@ -2,7 +2,7 @@ package codex
 
 import (
 	"crypto/tls"
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -20,6 +20,7 @@ type Limits struct {
 	PendingCalls        int
 	Subscriptions       int
 	// EventQueue is ignored; event delivery grows with unread backlog.
+
 	// Deprecated: retained for source compatibility; negative values remain invalid.
 	EventQueue      int
 	DiagnosticBytes int
@@ -31,6 +32,7 @@ type Limits struct {
 	// RequestQueue bounds queued server requests, including terminal unread ones.
 	RequestQueue int
 	// RequestTimeout is ignored. Native pending requests have no SDK deadline.
+
 	// Deprecated: retained temporarily for source compatibility; negatives are invalid.
 	RequestTimeout  time.Duration
 	CallTimeout     time.Duration
@@ -48,6 +50,7 @@ func DefaultLimits() Limits {
 		ShutdownTimeout: 2 * time.Second,
 	}
 }
+
 func (l Limits) normalized() (Limits, error) {
 	d := DefaultLimits()
 	ints := []struct {
@@ -56,7 +59,7 @@ func (l Limits) normalized() (Limits, error) {
 	}{{&l.QuarantineRecords, d.QuarantineRecords}, {&l.QuarantineBytes, d.QuarantineBytes}, {&l.MaxFrameBytes, d.MaxFrameBytes}, {&l.OutboundQueue, d.OutboundQueue}, {&l.PendingCalls, d.PendingCalls}, {&l.Subscriptions, d.Subscriptions}, {&l.EventQueue, d.EventQueue}, {&l.DiagnosticBytes, d.DiagnosticBytes}, {&l.ActiveRequests, d.ActiveRequests}, {&l.RequestIdentities, d.RequestIdentities}, {&l.RequestQueue, d.RequestQueue}}
 	for _, x := range ints {
 		if *x.v < 0 {
-			return l, fmt.Errorf("codex: limits must be nonnegative")
+			return l, errors.New("codex: limits must be nonnegative")
 		}
 		if *x.v == 0 {
 			*x.v = x.def
@@ -68,7 +71,7 @@ func (l Limits) normalized() (Limits, error) {
 	}{{&l.QuarantineRetention, d.QuarantineRetention}, {&l.CallTimeout, d.CallTimeout}, {&l.WriteTimeout, d.WriteTimeout}, {&l.ShutdownTimeout, d.ShutdownTimeout}, {&l.RequestTimeout, d.RequestTimeout}}
 	for _, x := range ds {
 		if *x.v < 0 {
-			return l, fmt.Errorf("codex: timeouts must be nonnegative")
+			return l, errors.New("codex: timeouts must be nonnegative")
 		}
 		if *x.v == 0 {
 			*x.v = x.def

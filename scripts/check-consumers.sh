@@ -21,7 +21,7 @@ cd "$consumer_dir/consumer"
 cat > go.mod <<'MOD'
 module consumer.invalid/agent-sdk-check
 
-go 1.26.9
+go 1.26
 MOD
 GOPROXY=direct go mod download -json "github.com/zoumo/agent-sdk-go@$revision" > "$consumer_dir/module.json"
 module_dir=$(python3 - "$consumer_dir/module.json" "$revision" "$GOMODCACHE" <<'PY'

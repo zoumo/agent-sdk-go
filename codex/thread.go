@@ -44,7 +44,7 @@ func (r *resumeThreadResult) UnmarshalJSON(data []byte) error {
 func (c *Client) UnsubscribeThread(ctx context.Context, p types.ThreadUnsubscribeParams) (types.ThreadUnsubscribeResponse, error) {
 	var r types.ThreadUnsubscribeResponse
 	err := c.ownership.call(ctx, p.ThreadID, "thread/unsubscribe", p, &r)
-	if err == ErrOwnershipConflict {
+	if errors.Is(err, ErrOwnershipConflict) {
 		return r, &CallError{Method: "thread/unsubscribe", Dispatch: NotSent, Cause: err}
 	}
 	return r, err

@@ -2,8 +2,10 @@
 package claude
 
 import (
-	"github.com/stretchr/testify/suite"
+	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
 // controlInteractionSuite owns the clients involved in each permission, question,
@@ -29,8 +31,8 @@ func (s *controlInteractionSuite) openFixture(t *testing.T, mode string, configu
 func (s *controlInteractionSuite) TearDownTest() {
 	// Some scenarios deliberately terminate with a protocol/resource failure;
 	// their bodies assert the exact Close/Err cause. Cleanup only releases clients.
-	for i := len(s.clients) - 1; i >= 0; i-- {
-		_ = s.clients[i].Abort()
+	for _, v := range slices.Backward(s.clients) {
+		_ = v.Abort()
 	}
 	s.clients = nil
 }

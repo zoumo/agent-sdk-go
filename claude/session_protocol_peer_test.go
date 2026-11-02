@@ -26,7 +26,7 @@ func runTreeFixture(reader *bufio.Reader) {
 		}
 		if transcript != nil {
 			if _, err := transcript.Write(line); err != nil {
-				os.Exit(12)
+				os.Exit(12) //nolint:gocritic // Fixture exits immediately; deferred cleanup is irrelevant.
 			}
 		}
 		var w struct {
@@ -88,6 +88,7 @@ func creationTask(task, tool, background string) string {
 
 	return fmt.Sprintf(`{"type":"system","subtype":"task_started","session_id":"s","task_id":%q,"task_type":"local_agent","tool_use_id":%q%s}`, task, tool, extra)
 }
+
 func creationResult(tool, agent, status string) string {
 	output := fmt.Sprintf(`{"status":%q,"agentId":%q,"description":"inspect local source","prompt":"Inspect source","outputFile":"/synthetic/child.output"}`, status, agent)
 	if status == "completed" {

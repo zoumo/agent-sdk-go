@@ -29,7 +29,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	if err != nil {
 		return err
 	}
-	if err = json.Unmarshal(data, &plan); err != nil {
+	if err := json.Unmarshal(data, &plan); err != nil {
 		return err
 	}
 	f, err := os.Open(rawPath)
@@ -52,7 +52,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	var expectedEvents []json.RawMessage
 	for _, frame := range frames {
 		var r rpc
-		if err = json.Unmarshal(frame.Wire, &r); err != nil {
+		if err := json.Unmarshal(frame.Wire, &r); err != nil {
 			return err
 		}
 		if frame.Direction == "c2s" {
@@ -64,7 +64,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 				ThreadID string
 				Thread   struct{ ID string }
 			}
-			if err = json.Unmarshal(r.Params, &identity); err != nil {
+			if err := json.Unmarshal(r.Params, &identity); err != nil {
 				return err
 			}
 			if identity.ThreadID == plan.HistorySeed.SessionID || identity.Thread.ID == plan.HistorySeed.SessionID {
@@ -76,7 +76,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 		return errors.New("existing-child recording lacks resume/query/detach flow")
 	}
 	var init types.InitializeParams
-	if err = json.Unmarshal(requests[0].Params, &init); err != nil {
+	if err := json.Unmarshal(requests[0].Params, &init); err != nil {
 		return err
 	}
 	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: []string{}, Initialize: init})
@@ -85,7 +85,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	}
 	defer func() { err = errors.Join(err, c.Close()) }()
 	var resume types.ThreadResumeParams
-	if err = json.Unmarshal(requests[2].Params, &resume); err != nil {
+	if err := json.Unmarshal(requests[2].Params, &resume); err != nil {
 		return err
 	}
 	if resume.ThreadID != plan.HistorySeed.SessionID || resume.Model.ValueOr("") != plan.Model {
@@ -98,14 +98,14 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	defer func() { err = errors.Join(err, s.Close()) }()
 	native, ok := s.ResumeResponse()
 	if !ok || native.Model != plan.Model || native.Thread.ID != plan.HistorySeed.SessionID {
-		return errors.New("Go Session resume response differs")
+		return errors.New("go session resume response differs")
 	}
 	encoded, err := json.Marshal(native)
 	if err != nil {
 		return err
 	}
 	if !equal(canonical(encoded), canonical(responses[string(requests[2].ID)])) {
-		return errors.New("Go resume response loses native fields")
+		return errors.New("go resume response loses native fields")
 	}
 	if _, ok := s.StartResponse(); ok {
 		return errors.New("resume masquerades as a start")
@@ -115,7 +115,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 		return err
 	}
 	if !page.Coverage.EnumerationComplete || !page.Coverage.EndReached || len(page.Pages) != len(requests)-4 {
-		return errors.New("Go descendant coverage differs")
+		return errors.New("go descendant coverage differs")
 	}
 	var agents []string
 	for i, p := range page.Pages {
@@ -128,7 +128,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 			return err
 		}
 		if !equal(canonical(encoded), canonical(responses[string(r.ID)])) {
-			return errors.New("Go child list loses native fields or order")
+			return errors.New("go child list loses native fields or order")
 		}
 		for _, child := range p.Data {
 			if child.ParentThreadID.ValueOr("") != s.ThreadID() {
@@ -140,16 +140,16 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	slices.Sort(agents)
 	slices.Sort(plan.HistorySeed.AgentIDs)
 	if len(agents) == 0 || !slices.Equal(agents, plan.HistorySeed.AgentIDs) {
-		return errors.New("Go Session did not discover the frozen children")
+		return errors.New("go session did not discover the frozen children")
 	}
-	if err = s.Close(); err != nil {
+	if err := s.Close(); err != nil {
 		return err
 	}
 	observed := json.NewEncoder(deliveries)
 	count := 0
 	for {
 		got, e := s.Receive(ctx)
-		if e == io.EOF {
+		if errors.Is(e, io.EOF) {
 			break
 		}
 		if e != nil {
@@ -161,7 +161,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 		if count >= len(expectedEvents) || !equal(canonical(got.Raw), canonical(expectedEvents[count])) {
 			return fmt.Errorf("resume delivery %d differs from native live order", count)
 		}
-		if err = observed.Encode(struct {
+		if err := observed.Encode(struct {
 			Raw    string `json:"raw"`
 			Origin string `json:"origin"`
 		}{string(got.Raw), got.Origin}); err != nil {

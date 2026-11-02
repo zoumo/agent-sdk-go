@@ -3,10 +3,10 @@ package types_test
 import (
 	"encoding/json"
 	"math"
-
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -18,11 +18,10 @@ func TestServerRequestResolvedPreservesNativeIDKinds(t *testing.T) {
 			require.False(t, (resolved.RequestID.Value != nil) != (raw[0] == '"') ||
 				(resolved.RequestID.Integer != nil) != (raw[0] != '"') || len(resolved.RequestID.Unknown) != 0,
 				"wrong native ID variant: %#v", resolved.RequestID)
-
 		})
 	}
-	stringID := types.RequestID{Value: types.Ptr("42")}
-	integerID := types.RequestID{Integer: types.Ptr(int64(42))}
+	stringID := types.RequestID{Value: new("42")}
+	integerID := types.RequestID{Integer: new(int64(42))}
 	stringWire, err := json.Marshal(stringID)
 	require.NoError(t, err)
 
@@ -32,7 +31,7 @@ func TestServerRequestResolvedPreservesNativeIDKinds(t *testing.T) {
 		"equal-text string and integer IDs collapsed: %s / %s", stringWire, integerWire)
 
 	for _, n := range []int64{math.MinInt64, math.MaxInt64, 9007199254740993} {
-		wire, err := json.Marshal(types.RequestID{Integer: types.Ptr(n)})
+		wire, err := json.Marshal(types.RequestID{Integer: new(n)})
 		require.NoError(t, err)
 
 		var decoded types.RequestID
@@ -41,14 +40,13 @@ func TestServerRequestResolvedPreservesNativeIDKinds(t *testing.T) {
 			require.False(t, err != nil || decoded.Integer == nil || *decoded.Integer != n,
 				"integer precision changed for %d: %#v, %v", n, decoded, err)
 		}
-
 	}
 }
 
 func TestRequestIDRejectsInvalidNativeValues(t *testing.T) {
 	for _, raw := range []string{`null`, `true`, `false`, `[]`, `{}`, `1.0`, `1e0`, `1.5`, `9223372036854775808`, `-9223372036854775809`, `"\ud800"`, `"\udc00"`} {
 		t.Run(raw, func(t *testing.T) {
-			original := types.RequestID{Value: types.Ptr("unchanged")}
+			original := types.RequestID{Value: new("unchanged")}
 			decoded := original
 			{
 				err := json.Unmarshal([]byte(raw), &decoded)
@@ -58,25 +56,22 @@ func TestRequestIDRejectsInvalidNativeValues(t *testing.T) {
 			require.Equal(t, decoded, original,
 				"failed decode modified target")
 			{
-
 				_, err := json.Marshal(types.RequestID{Unknown: json.RawMessage(raw)})
 				require.Error(t, err,
 					"raw escape hatch accepted invalid native request ID %s", raw)
 			}
-
 		})
 	}
 	for _, id := range []types.RequestID{
 		{},
-		{Value: types.Ptr("42"), Integer: types.Ptr(int64(42))},
-		{Integer: types.Ptr(int64(42)), Unknown: json.RawMessage(`42`)},
+		{Value: new("42"), Integer: new(int64(42))},
+		{Integer: new(int64(42)), Unknown: json.RawMessage(`42`)},
 	} {
 		{
 			_, err := json.Marshal(id)
 			require.Error(t, err,
 				"accepted empty or ambiguous request ID: %#v", id)
 		}
-
 	}
 	for _, raw := range []string{`{"threadId":"t"}`, `{"requestId":42}`, `{"threadId":"t","requestId":null}`} {
 		var resolved types.ServerRequestResolvedNotification
@@ -85,7 +80,6 @@ func TestRequestIDRejectsInvalidNativeValues(t *testing.T) {
 			require.Error(t, err,
 				"accepted incomplete resolved notification %s", raw)
 		}
-
 	}
 }
 
@@ -155,6 +149,5 @@ func TestPermissionSpecialPathUsesKindDiscriminator(t *testing.T) {
 			require.Error(t, err,
 				"accepted invalid native kind-discriminated path %s", raw)
 		}
-
 	}
 }

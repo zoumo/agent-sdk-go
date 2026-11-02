@@ -5,12 +5,15 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 )
 
 // AskUserQuestionInput is tool input, not a stream envelope or answer authority.
 // Unknown top-level, question and option fields survive typed edits.
+//
+//nolint:recvcheck // Canonical JSON API mixes value marshal and pointer unmarshal.
 type AskUserQuestionInput struct {
 	Questions []Question                `json:"questions"`
 	Answers   map[string]QuestionAnswer `json:"answers,omitempty"`
@@ -49,7 +52,7 @@ func (v *QuestionAnswer) UnmarshalJSON(data []byte) error {
 	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
-		return fmt.Errorf("empty answer")
+		return errors.New("empty answer")
 	}
 	var next QuestionAnswer
 	switch data[0] {
@@ -68,54 +71,58 @@ func (v *QuestionAnswer) UnmarshalJSON(data []byte) error {
 		next.Labels = make([]string, len(labels))
 		for i, b := range labels {
 			if len(b) == 0 || b[0] != '"' {
-				return fmt.Errorf("answer labels must be strings")
+				return errors.New("answer labels must be strings")
 			}
 			if err := json.Unmarshal(b, &next.Labels[i]); err != nil {
 				return err
 			}
 		}
 	default:
-		return fmt.Errorf("answer must be string or string array")
+		return errors.New("answer must be string or string array")
 	}
 	*v = next
 	return nil
 }
+
 func (v QuestionAnswer) MarshalJSON() ([]byte, error) {
 	if v.Text != nil && v.Labels == nil {
 		if !utf8.ValidString(*v.Text) {
-			return nil, fmt.Errorf("invalid UTF-8 answer")
+			return nil, errors.New("invalid UTF-8 answer")
 		}
 		return json.Marshal(*v.Text)
 	}
 	if v.Text == nil && v.Labels != nil {
 		for _, label := range v.Labels {
 			if !utf8.ValidString(label) {
-				return nil, fmt.Errorf("invalid UTF-8 label")
+				return nil, errors.New("invalid UTF-8 label")
 			}
 		}
 		return json.Marshal(v.Labels)
 	}
-	return nil, fmt.Errorf("answer requires exactly one string or string array")
+	return nil, errors.New("answer requires exactly one string or string array")
 }
+
 func validateQuestion(m map[string]json.RawMessage) error {
 	if _, err := requiredString(m, "question"); err != nil {
 		return err
 	}
 	b, ok := m["options"]
 	if !ok || len(bytes.TrimSpace(b)) == 0 || bytes.TrimSpace(b)[0] != '[' {
-		return fmt.Errorf("question requires options array")
+		return errors.New("question requires options array")
 	}
 	var options []QuestionOption
 	return json.Unmarshal(b, &options)
 }
+
 func validateOption(m map[string]json.RawMessage) error {
 	_, err := requiredString(m, "label")
 	return err
 }
+
 func validateQuestions(m map[string]json.RawMessage) error {
 	b := bytes.TrimSpace(m["questions"])
 	if len(b) == 0 || b[0] != '[' {
-		return fmt.Errorf("questions must be an array")
+		return errors.New("questions must be an array")
 	}
 	var questions []Question
 	if err := json.Unmarshal(b, &questions); err != nil {
@@ -154,13 +161,14 @@ func validateQuestions(m map[string]json.RawMessage) error {
 // It returns detached JSON for PermissionAnswer.UpdatedInput and sends nothing.
 func (v AskUserQuestionInput) WithAnswers(answers map[string]QuestionAnswer) (json.RawMessage, error) {
 	if answers == nil {
-		return nil, fmt.Errorf("answers must be an object")
+		return nil, errors.New("answers must be an object")
 	}
 	v.Answers = answers
 	v.Fields = cloneStates(v.Fields)
 	v.Fields["answers"] = Present
 	return json.Marshal(v)
 }
+
 func (v *AskUserQuestionInput) UnmarshalJSON(data []byte) error {
 	*v = AskUserQuestionInput{}
 	if err := validObject(data, validateQuestions); err != nil {
@@ -175,6 +183,7 @@ func (v *AskUserQuestionInput) UnmarshalJSON(data []byte) error {
 	*v = AskUserQuestionInput(next)
 	return nil
 }
+
 func (v AskUserQuestionInput) MarshalJSON() ([]byte, error) {
 	type wire AskUserQuestionInput
 	b, err := objectJSON(wire(v), v.Raw, v.Fields)
@@ -183,6 +192,7 @@ func (v AskUserQuestionInput) MarshalJSON() ([]byte, error) {
 	}
 	return b, validObject(b, validateQuestions)
 }
+
 func (v *Question) UnmarshalJSON(data []byte) error {
 	*v = Question{}
 	if err := validObject(data, validateQuestion); err != nil {
@@ -197,6 +207,7 @@ func (v *Question) UnmarshalJSON(data []byte) error {
 	*v = Question(next)
 	return nil
 }
+
 func (v Question) MarshalJSON() ([]byte, error) {
 	type wire Question
 	b, err := objectJSON(wire(v), v.Raw, v.Fields)
@@ -205,6 +216,7 @@ func (v Question) MarshalJSON() ([]byte, error) {
 	}
 	return b, validObject(b, validateQuestion)
 }
+
 func (v *QuestionOption) UnmarshalJSON(data []byte) error {
 	*v = QuestionOption{}
 	if err := validObject(data, validateOption); err != nil {
@@ -219,6 +231,7 @@ func (v *QuestionOption) UnmarshalJSON(data []byte) error {
 	*v = QuestionOption(next)
 	return nil
 }
+
 func (v QuestionOption) MarshalJSON() ([]byte, error) {
 	type wire QuestionOption
 	b, err := objectJSON(wire(v), v.Raw, v.Fields)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -38,8 +39,10 @@ func queryContext(t *testing.T) context.Context {
 
 // Query responses deliberately contain non-chronological/repeated IDs. The SDK
 // must neither impose an ordering nor interpret them as completed live events.
-const queryTurn = `{"id":"z","status":"inProgress","items":[],"itemsView":"summary","error":null,"future":9007199254740993}`
-const queryThread = `{"id":"native-thread-42","sessionId":"native-session-7","cliVersion":"0.162.1","createdAt":3,"updatedAt":2,"cwd":"/server/only","ephemeral":false,"modelProvider":"mock","preview":"preview only","projectId":null,"source":{"type":"futureSource","x":1},"status":{"type":"futureStatus","x":null},"turns":[],"readState":{"unread":true},"future":{"large":9007199254740993}}`
+const (
+	queryTurn   = `{"id":"z","status":"inProgress","items":[],"itemsView":"summary","error":null,"future":9007199254740993}`
+	queryThread = `{"id":"native-thread-42","sessionId":"native-session-7","cliVersion":"0.162.1","createdAt":3,"updatedAt":2,"cwd":"/server/only","ephemeral":false,"modelProvider":"mock","preview":"preview only","projectId":null,"source":{"type":"futureSource","x":1},"status":{"type":"futureStatus","x":null},"turns":[],"readState":{"unread":true},"future":{"large":9007199254740993}}`
+)
 
 func testQueryDiscovery(t *testing.T) {
 	f := startFake(t, "query-pages", codex.Limits{})
@@ -62,7 +65,7 @@ func testQueryDiscovery(t *testing.T) {
 	params := types.ThreadListParams{
 		Archived: types.Some(true), Cursor: types.Null[string](), Limit: types.Some(uint32(0)),
 		ModelProviders: types.Some([]string{}), SourceKinds: types.Some([]types.ThreadSourceKind{types.ThreadSourceKindCLI}),
-		Cwd:       types.Some(types.ThreadListCwdFilter{Value: types.Ptr("/server/only")}),
+		Cwd:       types.Some(types.ThreadListCwdFilter{Value: new("/server/only")}),
 		ProjectID: types.Null[string](), SectionID: types.Some("section"), ParentThreadID: types.Some("parent"),
 		SearchTerm: types.Some("title"), SortKey: types.Some(types.ThreadSortKeyUpdatedAt), SortDirection: types.Some(types.SortDirectionAsc),
 		UseStateDbOnly: types.Some(true), UnknownFields: map[string]json.RawMessage{"futureFilter": json.RawMessage(`{"x":null}`)},
@@ -123,11 +126,11 @@ func testQueryPages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, items.Data, 1)
 	assert.JSONEq(t, `{"type":"futureItem","id":"old","opaque":9007199254740993}`, string(items.Data[0].Item.Unknown))
-	itemTail, err := f.c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: "native-thread-42", Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr(items.NextCursor.ValueOr(""))})})
+	itemTail, err := f.c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: "native-thread-42", Cursor: types.Some(types.ThreadItemsListCursor{Value: new(items.NextCursor.ValueOr(""))})})
 	require.NoError(t, err)
 	assert.Empty(t, itemTail.Data)
 	assert.True(t, itemTail.NextCursor.IsNull())
-	back, err := f.c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: "native-thread-42", SortDirection: types.Some(types.SortDirectionDesc), Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr(items.BackwardsCursor.ValueOr(""))})})
+	back, err := f.c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: "native-thread-42", SortDirection: types.Some(types.SortDirectionDesc), Cursor: types.Some(types.ThreadItemsListCursor{Value: new(items.BackwardsCursor.ValueOr(""))})})
 	require.NoError(t, err)
 	assert.True(t, back.NextCursor.IsNull())
 	anchor := types.Some(types.ThreadItemsListCursor{ItemThreadItemsListAnchor: &types.ItemThreadItemsListAnchor{Type: types.ItemThreadItemsListAnchorTypeItem, ItemID: "old"}})
@@ -144,7 +147,7 @@ func testQueryPages(t *testing.T) {
 		if method == "turns" {
 			_, err = f.c.ListThreadTurns(ctx, types.ThreadTurnsListParams{ThreadID: "native-thread-42", Cursor: types.Some("bad")})
 		} else {
-			_, err = f.c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: "native-thread-42", Cursor: types.Some(types.ThreadItemsListCursor{Value: types.Ptr("bad")})})
+			_, err = f.c.ListThreadItems(ctx, types.ThreadItemsListParams{ThreadID: "native-thread-42", Cursor: types.Some(types.ThreadItemsListCursor{Value: new("bad")})})
 		}
 		checkQueryRPCError(t, err, -32600, "invalid cursor")
 	}
@@ -206,7 +209,7 @@ func testQueryWithSession(t *testing.T) {
 		assert.Equal(t, "live-turn", native.TurnID)
 		assert.Equal(t, "live-item", native.ItemID)
 		require.Nil(t, received.Event.History)
-		require.Nil(t, received.Event.DecodeError)
+		require.NoError(t, received.Event.DecodeError)
 		require.Nil(t, received.Request)
 		require.Nil(t, received.Observation)
 	}

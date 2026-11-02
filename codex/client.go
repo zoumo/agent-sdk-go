@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -98,7 +99,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(options.Executable, options.Args...)
+	cmd := exec.CommandContext(context.WithoutCancel(ctx), options.Executable, options.Args...)
 	cmd.Env = options.Env
 	cmd.Dir = options.Dir
 	// Own our pipe endpoints explicitly: Cmd.Wait must not close stdout before the
@@ -141,10 +142,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 		close(c.reaped)
 		// Allow the reader to consume a final response, but do not depend on EOF:
 		// a descendant may retain inherited stdout after the owned child exits.
-		drain := 100 * time.Millisecond
-		if limits.ShutdownTimeout/2 < drain {
-			drain = limits.ShutdownTimeout / 2
-		}
+		drain := min(limits.ShutdownTimeout/2, 100*time.Millisecond)
 		timer := time.NewTimer(drain)
 		defer timer.Stop()
 		select {
@@ -206,6 +204,7 @@ func (c *Client) ServerInfo() types.InitializeResponse {
 	_ = json.Unmarshal(c.serverInfo, &v)
 	return v
 }
+
 func (c *Client) StartThread(ctx context.Context, p types.ThreadStartParams) (types.ThreadStartResponse, error) {
 	var r types.ThreadStartResponse
 	err := c.Call(ctx, "thread/start", p, &r)
@@ -247,18 +246,19 @@ func (c *Client) InterruptTurn(ctx context.Context, p types.TurnInterruptParams)
 // Call invokes a raw protocol extension with the same bounds and no-replay rules
 // as typed operations. nil params omits params; json.RawMessage("null") sends null.
 // A nil result discards the result. Raw calls do not certify method support.
-func (c *Client) Call(ctx context.Context, method string, params any, result any) error {
+func (c *Client) Call(ctx context.Context, method string, params, result any) error {
 	return c.call(ctx, method, params, result, false)
 }
-func (c *Client) call(ctx context.Context, method string, params any, result any, initializing bool) error {
+
+func (c *Client) call(ctx context.Context, method string, params, result any, initializing bool) error {
 	return c.callAccept(ctx, method, params, result, initializing, nil)
 }
 
-func (c *Client) callAccept(ctx context.Context, method string, params any, result any, initializing bool, accept func(json.RawMessage) error) error {
+func (c *Client) callAccept(ctx context.Context, method string, params, result any, initializing bool, accept func(json.RawMessage) error) error {
 	return c.callOwned(ctx, method, params, result, initializing, accept, nil)
 }
 
-func (c *Client) callOwned(ctx context.Context, method string, params any, result any, initializing bool, accept func(json.RawMessage) error, owner *Session) error {
+func (c *Client) callOwned(ctx context.Context, method string, params, result any, initializing bool, accept func(json.RawMessage) error, owner *Session) error {
 	fail := func(id ID, dispatch DispatchState, err error) error {
 		return c.safeError(&CallError{Method: method, ID: id, Dispatch: dispatch, Cause: err})
 	}
@@ -362,12 +362,16 @@ func (c *Client) callOwned(ctx context.Context, method string, params any, resul
 	}
 	return nil
 }
+
 func (c *Client) notify(ctx context.Context, method string) error {
 	ctx, cancel := context.WithTimeout(ctx, c.limits.CallTimeout)
 	defer cancel()
-	frame, _ := json.Marshal(struct {
+	frame, err := json.Marshal(struct {
 		Method string `json:"method"`
 	}{method})
+	if err != nil {
+		return err
+	}
 	written := make(chan error, 1)
 	select {
 	case <-c.done:
@@ -385,6 +389,7 @@ func (c *Client) notify(ctx context.Context, method string) error {
 		return ctx.Err()
 	}
 }
+
 func (c *Client) writeLoop() {
 	for {
 		select {
@@ -454,6 +459,7 @@ func (c *Client) writeLoop() {
 		}
 	}
 }
+
 func (c *Client) finishLocked(p *pendingCall, result json.RawMessage, err error) {
 	if p.finished {
 		return
@@ -464,6 +470,7 @@ func (c *Client) finishLocked(p *pendingCall, result json.RawMessage, err error)
 	p.finished = true
 	close(p.done)
 }
+
 func (c *Client) fail(cause error) {
 	cause = c.safeError(cause)
 	if cause == nil {
@@ -491,7 +498,7 @@ func (c *Client) fail(cause error) {
 	}
 	for s := range c.ownership.sessionsLocked() {
 		terminal := cause
-		if cause == ErrClosed {
+		if errors.Is(cause, ErrClosed) {
 			terminal = nil
 		}
 		s.finishLocked(terminal)
@@ -505,6 +512,7 @@ func (c *Client) fail(cause error) {
 		_ = c.stdin.Close()
 	}
 }
+
 func (c *Client) cleanup() {
 	<-c.done
 	if c.remote != nil {
@@ -531,6 +539,7 @@ func (c *Client) cleanup() {
 	_ = c.stderr.Close()
 	c.finishCleanup()
 }
+
 func (c *Client) finishCleanup() {
 	c.workers.Wait()
 	// Release queued frame payloads after the writer has exited.
@@ -564,6 +573,7 @@ func saturatingAdd(a, b uint64) uint64 {
 	}
 	return a + b
 }
+
 func (c *Client) drainStderr() {
 	buf := make([]byte, 4096)
 	for {

@@ -6,13 +6,14 @@ package main
 import (
 	"bufio"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
+
+	_ "embed"
 
 	claude "github.com/zoumo/agent-sdk-go/claude"
 )
@@ -64,7 +65,7 @@ func runWithPolicy(output io.Writer, policy claude.ChildDetailPolicy) error {
 	if err != nil {
 		return err
 	}
-	defer client.Abort()
+	defer func() { _ = client.Abort() }()
 	if _, err := client.Submit(ctx, claude.Input{Text: "emit synthetic children"}); err != nil {
 		return err
 	}
@@ -119,7 +120,7 @@ func peer() error {
 		return err
 	}
 	if init.Type != "control_request" || init.Request.Subtype != "initialize" || !init.Request.Forward {
-		return fmt.Errorf("expected initialize with forwardSubagentText=true")
+		return errors.New("expected initialize with forwardSubagentText=true")
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(map[string]any{
 		"type": "control_response", "response": map[string]any{
@@ -139,9 +140,9 @@ func peer() error {
 		return err
 	}
 	if turn.Type != "user" {
-		return fmt.Errorf("expected one user turn")
+		return errors.New("expected one user turn")
 	}
-	if _, err := io.WriteString(os.Stdout, frames); err != nil {
+	if _, err := os.Stdout.WriteString(frames); err != nil {
 		return err
 	}
 	_, err = io.Copy(io.Discard, reader) // remain alive after root result until Close

@@ -4,7 +4,6 @@ package claude
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,11 +37,11 @@ func discoveryFixture(t *testing.T, beforeObserve ...func(string, string)) (*Ses
 	sessionNative(t, s)
 	return s, base, cwd
 }
-func quoteDiscovery(s string) string { b, _ := json.Marshal(s); return string(b) }
+func quoteDiscovery(s string) string { return string(mustMarshalJSON(s)) }
 func discoveryWrite(t *testing.T, path, data string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700))
-	require.NoError(t, os.WriteFile(path, []byte(data), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
 }
 
 func TestSessionDiscoveryExistingNativeRecords(t *testing.T) {
@@ -214,7 +213,7 @@ func TestSessionDiscoverySymlinksNeverMixOtherRecords(t *testing.T) {
 
 func TestSessionDiscoveryFreshReadDoesNotChangeObservationOrWire(t *testing.T) {
 	s, base, cwd := discoveryFixture(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(base, "subagents"), 0700))
+	require.NoError(t, os.MkdirAll(filepath.Join(base, "subagents"), 0o700))
 	empty, err := s.ListSubagents(context.Background(), SubagentQuery{})
 	require.NoError(t, err)
 	assert.Empty(t, empty.Records)
@@ -258,7 +257,7 @@ func TestSessionDiscoveryCancellationCloseAndUnknownIdentity(t *testing.T) {
 	cancel()
 	_, err := s.ListSubagents(ctx, SubagentQuery{})
 	require.ErrorIs(t, err, context.Canceled)
-	_, err = s.ListSubagents(nil, SubagentQuery{})
+	_, err = s.ListSubagents(nil, SubagentQuery{}) //nolint:staticcheck // verifies nil-context rejection.
 	require.ErrorIs(t, err, ErrInvalidInput)
 	_, err = s.ListSubagents(context.Background(), SubagentQuery{MaxBytes: -1})
 	require.ErrorIs(t, err, ErrInvalidInput)
@@ -284,7 +283,7 @@ func TestSessionDiscoveryMetadataNeverGatesRecordDiscovery(t *testing.T) {
 			case "large-main":
 				discoveryWrite(t, base+".jsonl", `{"sessionId":"`+discoveryMain+`","cwd":`+quoteDiscovery(cwd)+`}`+"\n"+`{"message":"`+strings.Repeat("x", 2<<20)+`"}`+"\n")
 			case "incomplete-main-tail":
-				f, err := os.OpenFile(base+".jsonl", os.O_APPEND|os.O_WRONLY, 0600)
+				f, err := os.OpenFile(base+".jsonl", os.O_APPEND|os.O_WRONLY, 0o600)
 				require.NoError(t, err)
 				_, err = f.WriteString(`{"message":"not yet complete`)
 				require.NoError(t, err)
@@ -326,7 +325,7 @@ func TestSessionDiscoveryAccessFailuresKeepDiscoveredIdentity(t *testing.T) {
 				discoveryWrite(t, path, `{"parentAgentId":"p"}`)
 			}
 			require.NoError(t, os.Chmod(path, 0))
-			t.Cleanup(func() { _ = os.Chmod(path, 0700) })
+			t.Cleanup(func() { _ = os.Chmod(path, 0o700) })
 			p, err := s.ListSubagents(context.Background(), SubagentQuery{})
 			require.ErrorIs(t, err, os.ErrPermission)
 			require.ErrorIs(t, err, ErrDiscoveryCoverage)
@@ -411,7 +410,7 @@ func TestSessionDiscoveryExplicitRootAliasesAreResolvedAtOpen(t *testing.T) {
 
 func TestSessionDiscoveryCloseAndCancellationDoNotWaitForReceive(t *testing.T) {
 	s, base, _ := discoveryFixture(t)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		discoveryWrite(t, filepath.Join(base, "subagents", fmt.Sprintf("agent-%03d.jsonl", i)), "{}\n")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -482,5 +481,5 @@ func TestSessionDiscoveryWrongTypeMainIdentityIsExplicitMetadataGap(t *testing.T
 	require.Len(t, p.Records, 1)
 	assert.Equal(t, "partial", p.Coverage.Status)
 	require.Len(t, p.Coverage.MainMetadata, 1)
-	assert.Equal(t, `{"sessionId":123,"cwd":[]}`, string(p.Coverage.MainMetadata[0]))
+	assert.JSONEq(t, `{"sessionId":123,"cwd":[]}`, string(p.Coverage.MainMetadata[0]))
 }

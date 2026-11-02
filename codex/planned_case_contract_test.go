@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -81,7 +82,7 @@ func TestGapConfigurationBetweenCompletedExecutions(t *testing.T) {
 	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if i == 1 {
 			receipt, e := s.SetModel(context.Background(), "second-model")
 			require.NoError(t, e)

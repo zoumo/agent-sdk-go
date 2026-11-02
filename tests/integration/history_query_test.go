@@ -13,6 +13,7 @@ func (s *NativeIntegrationSuite) TestClaudeParallelStrays()       { checkClaudeP
 func (s *NativeIntegrationSuite) TestClaudeQueryDefaultReturnBound() {
 	checkClaudeQueryDefaultReturnBound(s)
 }
+
 func (s *NativeIntegrationSuite) TestClaudeQueryAlongsideSession() {
 	checkClaudeQueryAlongsideSession(s)
 }
@@ -32,6 +33,7 @@ func (s *NativeIntegrationSuite) TestClaudeMetadataSampleEdges() { checkClaudeMe
 func (s *NativeIntegrationSuite) TestClaudeMetadataIncompleteTail() {
 	checkClaudeMetadataIncompleteTail(s)
 }
+
 func (s *NativeIntegrationSuite) TestClaudeMetadataNestedSampleProvenance() {
 	checkClaudeMetadataNestedSampleProvenance(s)
 }

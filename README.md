@@ -23,12 +23,15 @@ module import paths have no compatibility forwarding packages.
 | Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
 | Check licensing | [Licenses and native attribution](NOTICE) |
 
-Go **1.26.9** is pinned in the root `mise.toml`:
+Go **1.26** or newer is required. The root `mise.toml` is optional for local
+tool management. Formatting and linting use the root Makefile:
 
 ```sh
-mise install
-mise exec -- go mod download
-mise exec -- bash scripts/check-offline.sh
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2
+go mod download
+make fmt
+make lint
+bash scripts/check-offline.sh
 ```
 
 Native contract validation runs offline; real agent/model tests remain disabled.

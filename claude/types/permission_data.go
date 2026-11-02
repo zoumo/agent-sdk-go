@@ -5,7 +5,9 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"unicode/utf8"
 )
 
@@ -65,7 +67,7 @@ type ControlResponseData struct {
 
 func validObject(data []byte, validate func(map[string]json.RawMessage) error) error {
 	if !utf8.Valid(data) {
-		return fmt.Errorf("invalid UTF-8")
+		return errors.New("invalid UTF-8")
 	}
 	if err := validateJSONDocument(data); err != nil {
 		return err
@@ -76,6 +78,7 @@ func validObject(data []byte, validate func(map[string]json.RawMessage) error) e
 	}
 	return validate(fields)
 }
+
 func requiredString(m map[string]json.RawMessage, key string) (string, error) {
 	var s string
 	if err := json.Unmarshal(m[key], &s); err != nil || s == "" {
@@ -83,13 +86,14 @@ func requiredString(m map[string]json.RawMessage, key string) (string, error) {
 	}
 	return s, nil
 }
+
 func validateMetadata(m map[string]json.RawMessage) error {
 	s, err := requiredString(m, "subtype")
 	if err != nil {
 		return err
 	}
 	if s != "can_use_tool" {
-		return fmt.Errorf("not a can_use_tool request")
+		return errors.New("not a can_use_tool request")
 	}
 	if _, err = requiredString(m, "tool_name"); err != nil {
 		return err
@@ -110,6 +114,7 @@ func validateMetadata(m map[string]json.RawMessage) error {
 	}
 	return nil
 }
+
 func validatePermissionResult(m map[string]json.RawMessage) error {
 	behavior, err := requiredString(m, "behavior")
 	if err != nil {
@@ -118,19 +123,19 @@ func validatePermissionResult(m map[string]json.RawMessage) error {
 	switch PermissionBehavior(behavior) {
 	case PermissionAllow:
 		if _, ok := m["message"]; ok {
-			return fmt.Errorf("allow cannot contain message")
+			return errors.New("allow cannot contain message")
 		}
 		if b, ok := m["updatedInput"]; ok {
 			return objectOnly(b)
 		}
 	case PermissionDeny:
 		if _, ok := m["updatedInput"]; ok {
-			return fmt.Errorf("deny cannot contain updatedInput")
+			return errors.New("deny cannot contain updatedInput")
 		}
 		var message string
 		b, ok := m["message"]
 		if !ok || bytes.Equal(bytes.TrimSpace(b), []byte("null")) {
-			return fmt.Errorf("deny requires string message")
+			return errors.New("deny requires string message")
 		}
 		return json.Unmarshal(b, &message)
 	default:
@@ -138,6 +143,7 @@ func validatePermissionResult(m map[string]json.RawMessage) error {
 	}
 	return nil
 }
+
 func validateResponseData(m map[string]json.RawMessage) error {
 	s, err := requiredString(m, "subtype")
 	if err != nil {
@@ -149,19 +155,19 @@ func validateResponseData(m map[string]json.RawMessage) error {
 	switch s {
 	case "success":
 		if _, ok := m["error"]; ok {
-			return fmt.Errorf("success cannot contain error")
+			return errors.New("success cannot contain error")
 		}
 		if b, ok := m["response"]; ok && !bytes.Equal(bytes.TrimSpace(b), []byte("null")) {
 			return objectOnly(b)
 		}
 	case "error":
 		if _, ok := m["response"]; ok {
-			return fmt.Errorf("error cannot contain response")
+			return errors.New("error cannot contain response")
 		}
 		var message string
 		b, ok := m["error"]
 		if !ok || bytes.Equal(bytes.TrimSpace(b), []byte("null")) {
-			return fmt.Errorf("error response requires string error")
+			return errors.New("error response requires string error")
 		}
 		return json.Unmarshal(b, &message)
 	default:
@@ -169,13 +175,14 @@ func validateResponseData(m map[string]json.RawMessage) error {
 	}
 	return nil
 }
+
 func validateResponse(m map[string]json.RawMessage) error {
 	s, err := requiredString(m, "type")
 	if err != nil {
 		return err
 	}
 	if s != "control_response" {
-		return fmt.Errorf("not a control_response")
+		return errors.New("not a control_response")
 	}
 	return validObject(m["response"], validateResponseData)
 }
@@ -194,6 +201,7 @@ func (v *PermissionMetadata) UnmarshalJSON(data []byte) error {
 	*v = PermissionMetadata(next)
 	return nil
 }
+
 func (v PermissionMetadata) MarshalJSON() ([]byte, error) {
 	type wire PermissionMetadata
 	b, err := objectJSON(wire(v), v.Raw, v.Fields)
@@ -202,6 +210,7 @@ func (v PermissionMetadata) MarshalJSON() ([]byte, error) {
 	}
 	return b, validObject(b, validateMetadata)
 }
+
 func (v *PermissionResult) UnmarshalJSON(data []byte) error {
 	*v = PermissionResult{}
 	if err := validObject(data, validatePermissionResult); err != nil {
@@ -216,6 +225,7 @@ func (v *PermissionResult) UnmarshalJSON(data []byte) error {
 	*v = PermissionResult(next)
 	return nil
 }
+
 func (v PermissionResult) MarshalJSON() ([]byte, error) {
 	type wire PermissionResult
 	states := v.Fields
@@ -230,13 +240,13 @@ func (v PermissionResult) MarshalJSON() ([]byte, error) {
 	}
 	return b, validObject(b, validatePermissionResult)
 }
+
 func cloneStates(v map[string]FieldState) map[string]FieldState {
 	next := make(map[string]FieldState, len(v)+1)
-	for k, s := range v {
-		next[k] = s
-	}
+	maps.Copy(next, v)
 	return next
 }
+
 func (v *ControlResponseData) UnmarshalJSON(data []byte) error {
 	*v = ControlResponseData{}
 	if err := validObject(data, validateResponseData); err != nil {
@@ -251,6 +261,7 @@ func (v *ControlResponseData) UnmarshalJSON(data []byte) error {
 	*v = ControlResponseData(next)
 	return nil
 }
+
 func (v ControlResponseData) MarshalJSON() ([]byte, error) {
 	type wire ControlResponseData
 	states := v.Fields
@@ -264,6 +275,7 @@ func (v ControlResponseData) MarshalJSON() ([]byte, error) {
 	}
 	return b, validObject(b, validateResponseData)
 }
+
 func (v *ControlResponse) UnmarshalJSON(data []byte) error {
 	*v = ControlResponse{}
 	if err := validObject(data, validateResponse); err != nil {
@@ -278,6 +290,7 @@ func (v *ControlResponse) UnmarshalJSON(data []byte) error {
 	*v = ControlResponse(next)
 	return nil
 }
+
 func (v ControlResponse) MarshalJSON() ([]byte, error) {
 	type wire ControlResponse
 	b, err := objectJSON(wire(v), v.Raw, v.Fields)

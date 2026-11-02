@@ -4,14 +4,13 @@ package types_test
 
 import (
 	"bytes"
-	"fmt"
-
 	"encoding/json"
+	"fmt"
 	"testing"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/zoumo/agent-sdk-go/claude/types"
 )
 
 func jsonValue(t *testing.T, b []byte) any {
@@ -23,6 +22,7 @@ func jsonValue(t *testing.T, b []byte) any {
 	}
 	return v
 }
+
 func roundTrip(t *testing.T, frame string) types.Event {
 	t.Helper()
 	e, err := types.ParseEvent([]byte(frame))
@@ -32,6 +32,7 @@ func roundTrip(t *testing.T, frame string) types.Event {
 	require.Equalf(t, jsonValue(t, b), jsonValue(t, []byte(frame)), "roundtrip:\n%s\n%s", frame, b)
 	return e
 }
+
 func marshalObject(t *testing.T, v any) map[string]any {
 	t.Helper()
 	b, err := json.Marshal(v)
@@ -61,9 +62,10 @@ func TestMessageWireRoundTrips(t *testing.T) {
 		t.Run(frame, func(t *testing.T) { roundTrip(t, frame) })
 	}
 }
+
 func TestResultBranchesAndCamelCase(t *testing.T) {
 	for _, subtype := range []string{"success", "error_during_execution", "error_max_turns", "error_max_budget_usd", "error_max_structured_output_retries", "future"} {
-		t.Run(fmt.Sprintf("%v", subtype), func(t *testing.T) {
+		t.Run(subtype, func(t *testing.T) {
 			frame := `{"type":"result","subtype":"` + subtype + `","is_error":true,"api_error_status":429,"stop_reason":null,"result":"error text","errors":[],"total_cost_usd":0,"duration_ms":0,"duration_api_ms":0,"num_turns":0,"usage":{"input_tokens":0},"modelUsage":{"fixture":{"inputTokens":0,"outputTokens":2,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0,"contextWindow":200000,"maxOutputTokens":8000,"provider":"firstParty","future":false}},"permission_denials":[{"tool_name":"Read","future":1}],"deferred_tool_use":{"id":"d","name":"Read","input":{}},"structured_output":null,"origin":{"kind":"human"},"terminal_reason":"completed","future":0}`
 			e := roundTrip(t, frame)
 			require.True(t, e.Result.IsError, "missing result views")
@@ -75,7 +77,7 @@ func TestResultBranchesAndCamelCase(t *testing.T) {
 			m := marshalObject(t, e)
 			models := m["modelUsage"].(map[string]any)
 			u := models["fixture"].(map[string]any)
-			require.EqualValues(t, float64(7), u["inputTokens"], m)
+			require.InDelta(t, 7, u["inputTokens"], 0, m)
 			require.EqualValues(t, false, u["future"], m)
 			{
 				_, bad := m["model_usage"]
@@ -84,6 +86,7 @@ func TestResultBranchesAndCamelCase(t *testing.T) {
 		})
 	}
 }
+
 func TestTypedEditsWinOverRaw(t *testing.T) {
 	e := roundTrip(t, `{"type":"assistant","parent_tool_use_id":null,"error":null,"future":true,"message":{"content":[{"type":"text","text":"before","future":0}],"usage":null,"extra":42}}`)
 	e.Assistant.Content.Blocks[0].Text.Text = "after"
@@ -95,8 +98,8 @@ func TestTypedEditsWinOverRaw(t *testing.T) {
 		_, ok := block["text"]
 		require.False(t, ok, "block raw restored omitted typed field")
 	}
-	require.EqualValues(t, float64(0), block["future"], m)
-	require.EqualValues(t, float64(42), inner["extra"], m)
+	require.InDelta(t, 0, block["future"], 0, m)
+	require.InDelta(t, 42, inner["extra"], 0, m)
 	require.EqualValues(t, true, m["future"], m)
 	e.Assistant.Content.Blocks[0].Text.Fields = nil
 	m = marshalObject(t, e)
@@ -113,27 +116,26 @@ func TestTypedEditsWinOverRaw(t *testing.T) {
 	i := 3
 	s.Stream.Delta.Index = &i
 	event := marshalObject(t, s)["event"].(map[string]any)
-	require.EqualValues(t, float64(3), event["index"], event)
+	require.InDelta(t, 3, event["index"], 0, event)
 	require.EqualValues(t, true, event["future"], event)
 	r := roundTrip(t, `{"type":"result","subtype":"success","session_id":"old"}`)
 	r.Result.Subtype = "error_max_turns"
 	r.Result.SessionID = "new"
-	{
-		m = marshalObject(t, r)
-		require.EqualValues(t, "error_max_turns", m["subtype"], m)
-		require.EqualValues(t, "new", m["session_id"], m)
-	}
+	m = marshalObject(t, r)
+	require.EqualValues(t, "error_max_turns", m["subtype"], m)
+	require.EqualValues(t, "new", m["session_id"], m)
 }
+
 func TestOptionalPresenceAndConstruction(t *testing.T) {
 	for _, frame := range []string{`{"type":"result","subtype":"success"}`, `{"type":"result","subtype":"success","is_error":null,"result":null,"total_cost_usd":null,"num_turns":null}`, `{"type":"result","subtype":"success","is_error":false,"result":"","total_cost_usd":0,"num_turns":0}`} {
-		t.Run(fmt.Sprintf("%v", frame), func(t *testing.T) {
+		t.Run(frame, func(t *testing.T) {
 			roundTrip(t, frame)
 		})
 	}
-	e := types.Event{Type: "user", User: &types.Message{Role: "user", Content: types.Content{Text: ptr("hello")}}, Fields: map[string]types.FieldState{"parent_tool_use_id": types.Null, "isSynthetic": types.Present}}
+	e := types.Event{Type: "user", User: &types.Message{Role: "user", Content: types.Content{Text: new("hello")}}, Fields: map[string]types.FieldState{"parent_tool_use_id": types.Null, "isSynthetic": types.Present}}
 	m := marshalObject(t, e)
 	require.Nil(t, m["isSynthetic"], m)
-	e.IsSynthetic = ptr(false)
+	e.IsSynthetic = new(false)
 	m = marshalObject(t, e)
 	require.EqualValues(t, false, m["isSynthetic"], m)
 	require.Nil(t, m["parent_tool_use_id"], m)
@@ -141,7 +143,7 @@ func TestOptionalPresenceAndConstruction(t *testing.T) {
 	r := types.ResultEvent{Subtype: "success", Fields: map[string]types.FieldState{"is_error": types.Present, "num_turns": types.Present, "result": types.Null, "errors": types.Absent}}
 	m = marshalObject(t, r)
 	require.EqualValues(t, false, m["is_error"], m)
-	require.EqualValues(t, float64(0), m["num_turns"], m)
+	require.InDelta(t, 0, m["num_turns"], 0, m)
 	require.Nil(t, m["result"], m)
 	{
 		_, exists := m["errors"]
@@ -151,7 +153,7 @@ func TestOptionalPresenceAndConstruction(t *testing.T) {
 	decoded := roundTrip(t, `{"type":"result","subtype":"success"}`)
 	decoded.Result.Fields = map[string]types.FieldState{"num_turns": types.Present, "is_error": types.Null}
 	m = marshalObject(t, decoded)
-	require.EqualValues(t, float64(0), m["num_turns"], m)
+	require.InDelta(t, 0, m["num_turns"], 0, m)
 	require.Nil(t, m["is_error"], m)
 	for _, block := range []types.ContentBlock{
 		{Type: "text", Text: &types.TextBlock{Text: ""}},
@@ -162,14 +164,12 @@ func TestOptionalPresenceAndConstruction(t *testing.T) {
 			b, err := json.Marshal(block)
 			require.NoError(t, err)
 			var again types.ContentBlock
-			{
-				err = json.Unmarshal(b, &again)
-				require.NoError(t, err)
-			}
+			err = json.Unmarshal(b, &again)
+			require.NoError(t, err)
 		})
 	}
 }
-func ptr[T any](v T) *T { return &v }
+
 func TestRepeatedDecodeResetsUnionState(t *testing.T) {
 	var c types.Content
 	for _, raw := range []string{`"text"`, `[]`, `[{"type":"text","text":"x"}]`, `"last"`} {
@@ -206,7 +206,7 @@ func TestRepeatedDecodeResetsUnionState(t *testing.T) {
 	{
 		err := json.Unmarshal([]byte(`{"type":"user","message":null}`), &e)
 		require.Error(t, err, "failed decode retained prior event")
-		require.EqualValues(t, "", e.Type, "failed decode retained prior event")
+		require.Empty(t, e.Type, "failed decode retained prior event")
 	}
 	var result types.ResultEvent
 	_ = json.Unmarshal([]byte(`{"is_error":true,"modelUsage":{"m":{"inputTokens":1}}}`), &result)
@@ -214,6 +214,7 @@ func TestRepeatedDecodeResetsUnionState(t *testing.T) {
 	require.False(t, result.IsError, "stale result fields")
 	require.Nil(t, result.ModelUsage, "stale result fields")
 }
+
 func TestInvalidUnions(t *testing.T) {
 	for _, raw := range []string{`null`, `true`, `{}`, `[null]`, `[{"type":"tool_use","input":[]}]`, `[{"type":"tool_result","content":{}}]`, `[{"type":"tool_result","content":[1]}]`} {
 		t.Run(fmt.Sprintf("%T/%v", raw, raw), func(t *testing.T) {
@@ -225,7 +226,7 @@ func TestInvalidUnions(t *testing.T) {
 		})
 	}
 	for _, v := range []any{
-		types.Content{Text: ptr("x"), Blocks: []types.ContentBlock{}},
+		types.Content{Text: new("x"), Blocks: []types.ContentBlock{}},
 		types.ContentBlock{Type: "text", Text: &types.TextBlock{}, Thinking: &types.ThinkingBlock{}},
 		types.ContentBlock{Type: "tool_use", Text: &types.TextBlock{}},
 		types.ContentBlock{Type: "text"},

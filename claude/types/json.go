@@ -5,7 +5,9 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 )
@@ -34,12 +36,12 @@ func objectJSON(v any, raw json.RawMessage, states map[string]FieldState) ([]byt
 			return nil, err
 		}
 		if out == nil {
-			return nil, fmt.Errorf("expected JSON object")
+			return nil, errors.New("expected JSON object")
 		}
 	}
 	rv := reflect.ValueOf(v)
 	rt := rv.Type()
-	for i := 0; i < rv.NumField(); i++ {
+	for i := range rv.NumField() {
 		tag := strings.Split(rt.Field(i).Tag.Get("json"), ",")[0]
 		if tag == "" || tag == "-" {
 			continue
@@ -75,10 +77,11 @@ func objectJSON(v any, raw json.RawMessage, states map[string]FieldState) ([]byt
 	}
 	return json.Marshal(out)
 }
+
 func objectOnly(data []byte) error {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || data[0] != '{' || !json.Valid(data) {
-		return fmt.Errorf("expected JSON object")
+		return errors.New("expected JSON object")
 	}
 	return nil
 }
@@ -101,16 +104,17 @@ func (c *Content) UnmarshalJSON(data []byte) error {
 			return err
 		}
 	} else {
-		return fmt.Errorf("message content must be a string or array")
+		return errors.New("message content must be a string or array")
 	}
 	next.Raw = bytes.Clone(data)
 	*c = next
 	return nil
 }
+
 func (c Content) MarshalJSON() ([]byte, error) {
 	if c.Text != nil {
 		if c.Blocks != nil {
-			return nil, fmt.Errorf("content has both text and blocks")
+			return nil, errors.New("content has both text and blocks")
 		}
 		return json.Marshal(*c.Text)
 	}
@@ -141,7 +145,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if head.Type == "" {
-		return fmt.Errorf("content block has no type")
+		return errors.New("content block has no type")
 	}
 	next := ContentBlock{Type: head.Type, Raw: bytes.Clone(data)}
 	var dst any
@@ -179,6 +183,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	*b = next
 	return nil
 }
+
 func (b ContentBlock) MarshalJSON() ([]byte, error) {
 	if err := validateBlock(b); err != nil {
 		return nil, err
@@ -201,10 +206,10 @@ func (b ContentBlock) MarshalJSON() ([]byte, error) {
 	choose(b.ServerToolUse != nil, b.ServerToolUse, "server_tool_use")
 	choose(b.ServerToolResult != nil, b.ServerToolResult, b.Type)
 	if count > 1 {
-		return nil, fmt.Errorf("content block has multiple branches")
+		return nil, errors.New("content block has multiple branches")
 	}
 	if b.Type == "" || count == 1 && b.Type != kind {
-		return nil, fmt.Errorf("content block discriminator disagrees with branch")
+		return nil, errors.New("content block discriminator disagrees with branch")
 	}
 	if count == 0 {
 		var parsed ContentBlock
@@ -212,15 +217,15 @@ func (b ContentBlock) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 		if parsed.Type != b.Type {
-			return nil, fmt.Errorf("raw content type mismatch")
+			return nil, errors.New("raw content type mismatch")
 		}
 		if parsed.Text != nil || parsed.Thinking != nil || parsed.ToolUse != nil || parsed.ToolResult != nil || parsed.ServerToolUse != nil || parsed.ServerToolResult != nil || parsed.RedactedThinking != nil {
-			return nil, fmt.Errorf("known block requires typed branch")
+			return nil, errors.New("known block requires typed branch")
 		}
 		return bytes.Clone(b.Raw), nil
 	}
 	if b.ServerToolResult != nil && !isServerResult(b.Type) {
-		return nil, fmt.Errorf("invalid server result type")
+		return nil, errors.New("invalid server result type")
 	}
 	data, err := json.Marshal(dst)
 	if err != nil {
@@ -239,22 +244,25 @@ func (b ContentBlock) MarshalJSON() ([]byte, error) {
 		m = map[string]json.RawMessage{}
 	}
 	var fields map[string]json.RawMessage
-	if err = json.Unmarshal(data, &fields); err != nil {
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return nil, err
 	}
 	rv := reflect.TypeOf(dst).Elem()
-	for i := 0; i < rv.NumField(); i++ {
-		key := strings.Split(rv.Field(i).Tag.Get("json"), ",")[0]
+	for field := range rv.Fields() {
+		key := strings.Split(field.Tag.Get("json"), ",")[0]
 		if key != "" && key != "-" {
 			delete(m, key)
 		}
 	}
-	for k, v := range fields {
-		m[k] = v
+	maps.Copy(m, fields)
+	encodedType, err := json.Marshal(b.Type)
+	if err != nil {
+		return nil, err
 	}
-	m["type"], _ = json.Marshal(b.Type)
+	m["type"] = encodedType
 	return json.Marshal(m)
 }
+
 func isServerResult(t string) bool {
 	switch t {
 	case "web_search_tool_result", "web_fetch_tool_result", "code_execution_tool_result", "bash_code_execution_tool_result", "text_editor_code_execution_tool_result", "tool_search_tool_result", "advisor_tool_result":
@@ -272,9 +280,10 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	*e = next
 	return nil
 }
+
 func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Type == "" {
-		return nil, fmt.Errorf("event has no type")
+		return nil, errors.New("event has no type")
 	}
 	var branch any
 	count := 0
@@ -297,12 +306,12 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	choose(e.RateLimit != nil, e.RateLimit, "rate_limit_event")
 	choose(e.Reset != nil, e.Reset, "conversation_reset")
 	if count > 1 || count == 1 && kind != e.Type {
-		return nil, fmt.Errorf("event discriminator disagrees with branch")
+		return nil, errors.New("event discriminator disagrees with branch")
 	}
 	if count == 0 {
 		switch e.Type {
 		case "assistant", "user", "system", "result", "stream_event", "control_request", "control_response", "control_cancel_request", "rate_limit_event", "conversation_reset":
-			return nil, fmt.Errorf("known event requires typed branch")
+			return nil, errors.New("known event requires typed branch")
 		}
 	}
 	type wire Event
@@ -321,7 +330,7 @@ func (e Event) MarshalJSON() ([]byte, error) {
 			out["message"] = b
 		} else {
 			var fields, baseline map[string]json.RawMessage
-			if err = json.Unmarshal(b, &fields); err != nil {
+			if err := json.Unmarshal(b, &fields); err != nil {
 				return nil, err
 			}
 			_ = json.Unmarshal(e.Raw, &baseline)
@@ -345,9 +354,14 @@ func (e Event) MarshalJSON() ([]byte, error) {
 			}
 		}
 	}
-	out["type"], _ = json.Marshal(e.Type)
+	encodedType, err := json.Marshal(e.Type)
+	if err != nil {
+		return nil, err
+	}
+	out["type"] = encodedType
 	return json.Marshal(out)
 }
+
 func jsonEqual(a, b []byte) bool {
 	var x, y any
 	da, db := json.NewDecoder(bytes.NewReader(a)), json.NewDecoder(bytes.NewReader(b))
@@ -373,6 +387,7 @@ func (v *SystemEvent) UnmarshalJSON(data []byte) error {
 	*v = SystemEvent(next)
 	return nil
 }
+
 func (v SystemEvent) MarshalJSON() ([]byte, error) {
 	type wire SystemEvent
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -392,6 +407,7 @@ func (v *Message) UnmarshalJSON(data []byte) error {
 	*v = Message(next)
 	return nil
 }
+
 func (v Message) MarshalJSON() ([]byte, error) {
 	type wire Message
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -411,6 +427,7 @@ func (v *ResultEvent) UnmarshalJSON(data []byte) error {
 	*v = ResultEvent(next)
 	return nil
 }
+
 func (v ResultEvent) MarshalJSON() ([]byte, error) {
 	type wire ResultEvent
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -430,6 +447,7 @@ func (v *TextBlock) UnmarshalJSON(data []byte) error {
 	*v = TextBlock(next)
 	return nil
 }
+
 func (v TextBlock) MarshalJSON() ([]byte, error) {
 	type wire TextBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -449,6 +467,7 @@ func (v *ThinkingBlock) UnmarshalJSON(data []byte) error {
 	*v = ThinkingBlock(next)
 	return nil
 }
+
 func (v ThinkingBlock) MarshalJSON() ([]byte, error) {
 	type wire ThinkingBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -468,6 +487,7 @@ func (v *ToolUseBlock) UnmarshalJSON(data []byte) error {
 	*v = ToolUseBlock(next)
 	return nil
 }
+
 func (v ToolUseBlock) MarshalJSON() ([]byte, error) {
 	type wire ToolUseBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -487,6 +507,7 @@ func (v *ToolResultBlock) UnmarshalJSON(data []byte) error {
 	*v = ToolResultBlock(next)
 	return nil
 }
+
 func (v ToolResultBlock) MarshalJSON() ([]byte, error) {
 	type wire ToolResultBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -506,6 +527,7 @@ func (v *ServerToolUseBlock) UnmarshalJSON(data []byte) error {
 	*v = ServerToolUseBlock(next)
 	return nil
 }
+
 func (v ServerToolUseBlock) MarshalJSON() ([]byte, error) {
 	type wire ServerToolUseBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -525,6 +547,7 @@ func (v *ServerToolResultBlock) UnmarshalJSON(data []byte) error {
 	*v = ServerToolResultBlock(next)
 	return nil
 }
+
 func (v ServerToolResultBlock) MarshalJSON() ([]byte, error) {
 	type wire ServerToolResultBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -544,6 +567,7 @@ func (v *RedactedThinkingBlock) UnmarshalJSON(data []byte) error {
 	*v = RedactedThinkingBlock(next)
 	return nil
 }
+
 func (v RedactedThinkingBlock) MarshalJSON() ([]byte, error) {
 	type wire RedactedThinkingBlock
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -563,6 +587,7 @@ func (v *ModelUsage) UnmarshalJSON(data []byte) error {
 	*v = ModelUsage(next)
 	return nil
 }
+
 func (v ModelUsage) MarshalJSON() ([]byte, error) {
 	type wire ModelUsage
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -582,6 +607,7 @@ func (v *MessageOrigin) UnmarshalJSON(data []byte) error {
 	*v = MessageOrigin(next)
 	return nil
 }
+
 func (v MessageOrigin) MarshalJSON() ([]byte, error) {
 	type wire MessageOrigin
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -601,6 +627,7 @@ func (v *RateLimitEvent) UnmarshalJSON(data []byte) error {
 	*v = RateLimitEvent(next)
 	return nil
 }
+
 func (v RateLimitEvent) MarshalJSON() ([]byte, error) {
 	type wire RateLimitEvent
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -620,6 +647,7 @@ func (v *RateLimitInfo) UnmarshalJSON(data []byte) error {
 	*v = RateLimitInfo(next)
 	return nil
 }
+
 func (v RateLimitInfo) MarshalJSON() ([]byte, error) {
 	type wire RateLimitInfo
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -639,6 +667,7 @@ func (v *ConversationResetEvent) UnmarshalJSON(data []byte) error {
 	*v = ConversationResetEvent(next)
 	return nil
 }
+
 func (v ConversationResetEvent) MarshalJSON() ([]byte, error) {
 	type wire ConversationResetEvent
 	return objectJSON(wire(v), v.Raw, v.Fields)
@@ -659,8 +688,8 @@ func validateBlock(b ContentBlock) error {
 	}
 	if b.ToolResult != nil && len(b.ToolResult.Content) > 0 {
 		c := bytes.TrimSpace(b.ToolResult.Content)
-		if !json.Valid(c) || !(bytes.Equal(c, []byte("null")) || c[0] == '"' || c[0] == '[') {
-			return fmt.Errorf("tool result content must be string, array or null")
+		if !json.Valid(c) || (!bytes.Equal(c, []byte("null")) && c[0] != '"' && c[0] != '[') {
+			return errors.New("tool result content must be string, array or null")
 		}
 		if c[0] == '[' {
 			var blocks []json.RawMessage
@@ -674,6 +703,7 @@ func validateBlock(b ContentBlock) error {
 	}
 	return nil
 }
+
 func (v *StreamEvent) UnmarshalJSON(data []byte) error {
 	*v = StreamEvent{}
 	if err := objectOnly(data); err != nil {
@@ -694,6 +724,7 @@ func (v *StreamEvent) UnmarshalJSON(data []byte) error {
 	*v = StreamEvent(next)
 	return nil
 }
+
 func (v StreamEvent) MarshalJSON() ([]byte, error) {
 	type wire StreamEvent
 	if v.Delta != nil {

@@ -44,12 +44,14 @@ func (r Request) ID() ID {
 	}
 	return r.state.id
 }
+
 func (r Request) Method() string {
 	if r.state == nil {
 		return ""
 	}
 	return r.state.method
 }
+
 func (r Request) Params() json.RawMessage {
 	if r.state == nil {
 		return nil
@@ -174,12 +176,13 @@ func (h AnswerHandle) Answer(ctx context.Context, result any) error {
 // Data define the outgoing error. A nil error is a safe pre-write failure.
 func (h AnswerHandle) Reject(ctx context.Context, rpcError *RPCError) error {
 	if rpcError == nil {
-		return h.answerError(NotSent, errors.New("codex: nil response error"))
+		return h.answerError(errors.New("codex: nil response error"))
 	}
 	return h.respond(ctx, nil, rpcError)
 }
-func (h AnswerHandle) answerError(dispatch DispatchState, cause error) error {
-	e := &AnswerError{Dispatch: dispatch, Cause: cause}
+
+func (h AnswerHandle) answerError(cause error) error {
+	e := &AnswerError{Dispatch: NotSent, Cause: cause}
 	if h.state != nil {
 		e.ID = h.state.id
 		e.Method = h.state.method
@@ -189,25 +192,26 @@ func (h AnswerHandle) answerError(dispatch DispatchState, cause error) error {
 	}
 	return e
 }
+
 func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCError) error {
 	if h.state == nil {
-		return h.answerError(NotSent, ErrInvalidAnswerHandle)
+		return h.answerError(ErrInvalidAnswerHandle)
 	}
 	if ctx == nil {
-		return h.answerError(NotSent, errors.New("codex: nil context"))
+		return h.answerError(errors.New("codex: nil context"))
 	}
 	r := h.state
 	c := r.client
 	ctx, cancel := context.WithTimeout(ctx, c.limits.CallTimeout)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
-		return h.answerError(NotSent, err)
+		return h.answerError(err)
 	}
 	c.mu.Lock()
 	stateErr := r.unavailableLocked()
 	c.mu.Unlock()
 	if stateErr != nil {
-		return h.answerError(NotSent, stateErr)
+		return h.answerError(stateErr)
 	}
 	// Caller marshalers run outside the connection lock and reader. Close never
 	// waits for caller code, and state is checked again after serialization.
@@ -225,10 +229,10 @@ func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCErro
 		}{r.id, result})
 	}
 	if err != nil {
-		return h.answerError(NotSent, err)
+		return h.answerError(err)
 	}
 	if len(frame) > c.limits.MaxFrameBytes {
-		return h.answerError(NotSent, ErrFrameTooLarge)
+		return h.answerError(ErrFrameTooLarge)
 	}
 	c.mu.Lock()
 	if err = r.unavailableLocked(); err == nil {
@@ -236,7 +240,7 @@ func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCErro
 	}
 	if err != nil {
 		c.mu.Unlock()
-		return h.answerError(NotSent, err)
+		return h.answerError(err)
 	}
 	a := &answerAttempt{request: r, done: make(chan struct{})}
 	select {
@@ -244,7 +248,7 @@ func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCErro
 		r.attempt = a
 	default:
 		c.mu.Unlock()
-		return h.answerError(NotSent, ErrLimit)
+		return h.answerError(ErrLimit)
 	}
 	c.mu.Unlock()
 	select {
@@ -262,6 +266,7 @@ func (h AnswerHandle) respond(ctx context.Context, result any, rpcError *RPCErro
 	}
 	return a.err
 }
+
 func (r *requestState) unavailableLocked() error {
 	if r.terminal != nil {
 		return r.terminal
@@ -274,12 +279,14 @@ func (r *requestState) unavailableLocked() error {
 	}
 	return nil
 }
+
 func (r *requestState) invalidateLocked(cause error) {
 	r.finishLocked(cause)
 	if r.attempt != nil {
 		r.attempt.finishLocked(cause)
 	}
 }
+
 func (r *requestState) finishLocked(cause error) {
 	if r.terminal != nil {
 		return
@@ -295,6 +302,7 @@ func (r *requestState) finishLocked(cause error) {
 	}
 	close(r.done)
 }
+
 func (a *answerAttempt) finishLocked(cause error) {
 	if a.finished {
 		return
@@ -328,7 +336,8 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	}
 	key := requestKey{id: id, method: method, params: sha256.Sum256(params)}
 	if r := c.requestHistory[key]; r != nil {
-		return c.deliverRequestLocked(r, params, raw)
+		c.deliverRequestLocked(r, params, raw)
+		return nil
 	}
 	if c.reverse[id] != nil {
 		return fmt.Errorf("%w: conflicting active server request ID", ErrProtocol)
@@ -356,7 +365,8 @@ func (c *Client) receiveRequest(id ID, method string, params json.RawMessage, ra
 	c.reverse[id] = r
 	c.requestHistory[key] = r
 	r.owner = c.requestOwnerLocked(r.threadID)
-	return c.deliverRequestLocked(r, params, raw)
+	c.deliverRequestLocked(r, params, raw)
+	return nil
 }
 
 // Direct ownership takes precedence over observation. A real reverse request
@@ -380,7 +390,8 @@ func (c *Client) requestOwnerLocked(thread string) *Session {
 	}
 	return owner
 }
-func (c *Client) deliverRequestLocked(r *requestState, params json.RawMessage, raw []byte) error {
+
+func (c *Client) deliverRequestLocked(r *requestState, params json.RawMessage, raw []byte) {
 	request := Request{state: r, raw: append(json.RawMessage(nil), raw...), params: append(json.RawMessage(nil), params...)}
 	// Ownership is assigned once at first reception. Late membership never
 	// retroactively grants a quarantined request to a Session.
@@ -394,7 +405,6 @@ func (c *Client) deliverRequestLocked(r *requestState, params json.RawMessage, r
 	} else {
 		c.quarantineLocked(raw)
 	}
-	return nil
 }
 
 // The pinned serverRequest/resolved notification uses requestId and threadId.

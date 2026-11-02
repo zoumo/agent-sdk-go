@@ -152,13 +152,6 @@ func (s *mockRemoteService) close() error {
 		}
 		s.mu.Lock()
 		count := len(s.opened)
-		for _, id := range []string{"main", "probe"} {
-			if !s.opened[id] {
-				runErr = errors.Join(runErr, fmt.Errorf("remote %s connection missing", id))
-			} else {
-				runErr = errors.Join(runErr, s.completions[id])
-			}
-		}
 		s.mu.Unlock()
 		if count != 2 {
 			runErr = errors.Join(runErr, fmt.Errorf("remote case opened %d/2 required connections", count))
@@ -175,6 +168,15 @@ func (s *mockRemoteService) close() error {
 				runErr = errors.Join(runErr, errors.New("remote peer cleanup did not complete"))
 			}
 		}
+		s.mu.Lock()
+		for _, id := range []string{"main", "probe"} {
+			if !s.opened[id] {
+				runErr = errors.Join(runErr, fmt.Errorf("remote %s connection missing", id))
+			} else {
+				runErr = errors.Join(runErr, s.completions[id])
+			}
+		}
+		s.mu.Unlock()
 		s.err = runErr
 	})
 	return s.err

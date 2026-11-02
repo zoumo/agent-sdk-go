@@ -51,7 +51,7 @@ func releasePermissionWire(t *testing.T, gate *os.File, action byte) {
 func expectPermissionWireEvent(t *testing.T, c *interaction, kind string) Event {
 	t.Helper()
 	event := receive(t, c)
-	require.EqualValuesf(t, kind, eventKind(event), "expected %s, got %s", kind, event.Raw)
+	require.Equalf(t, kind, eventKind(event), "expected %s, got %s", kind, event.Raw)
 	return event
 }
 
@@ -95,7 +95,7 @@ func (s *controlInteractionSuite) TestPermissionQueuedWriterCancellationPrevents
 	releasePermissionWire(t, gate, 'q')
 	{
 		event := expectPermissionWireEvent(t, c, "control_cancel_request")
-		require.EqualValues(t, p.RequestID(), event.Cancel.RequestID, "wrong cancellation ID")
+		require.Equal(t, p.RequestID(), event.Cancel.RequestID, "wrong cancellation ID")
 	}
 	err := awaitPermissionError(t, answers)
 	assertPermissionError(t, err, p.RequestID(), ErrPermissionCancelled)
@@ -109,7 +109,7 @@ func (s *controlInteractionSuite) TestPermissionQueuedWriterCancellationPrevents
 	assertPermissionError(t, p.Answer(context.Background(), PermissionAnswer{Behavior: PermissionAllow}), p.RequestID(), ErrPermissionCancelled)
 	{
 		got := permissionResponses(t, permissionSnapshot(t, c))
-		require.EqualValuesf(t, 0, len(got), "cancelled queued answer reached wire: %#v", got)
+		require.Emptyf(t, got, "canceled queued answer reached wire: %#v", got)
 	}
 	{
 		err := c.Close()
@@ -117,7 +117,7 @@ func (s *controlInteractionSuite) TestPermissionQueuedWriterCancellationPrevents
 	}
 	{
 		got := permissionResponses(t, permissionTranscript(t, path))
-		require.EqualValuesf(t, 0, len(got), "late response after snapshot: %#v", got)
+		require.Emptyf(t, got, "late response after snapshot: %#v", got)
 	}
 }
 
@@ -207,7 +207,8 @@ func (s *controlInteractionSuite) TestPermissionStartedWriteCancellationAndClose
 			require.NoError(t, err)
 			// A partial response was really emitted; no second envelope can be
 			// appended by retry or by the callback returning after shutdown.
-			require.EqualValuesf(t, 1, bytes.Count(data, []byte(`{"response":`)), "expected one partial response prefix, got %d", bytes.Count(data, []byte(`{"response":`)))
+			count := bytes.Count(data, []byte(`{"response":`))
+			require.Equalf(t, 1, count, "expected one partial response prefix, got %d", count)
 			last := data[bytes.LastIndexByte(data, '\n')+1:]
 			require.True(t, bytes.HasPrefix(last, []byte(`{"response":`)), "fixture did not preserve an interrupted response on stdin")
 			require.False(t, json.Valid(last), "fixture did not preserve an interrupted response on stdin")
@@ -235,7 +236,7 @@ func (s *controlInteractionSuite) TestPermissionStartedWriteCanFinishBeforeCance
 	}
 	{
 		got := permissionResponses(t, permissionTranscript(t, path))
-		require.EqualValuesf(t, 1, len(got), "completed answer was duplicated: %d", len(got))
+		require.Lenf(t, got, 1, "completed answer was duplicated: %d", len(got))
 	}
 }
 
@@ -283,7 +284,6 @@ func (s *controlInteractionSuite) TestAutomaticResponseQueueOverflowUnblocksStar
 	defer gate.Close()
 	c := s.openFixture(t, "permission_controls", func(o *Options) {
 		o.Limits.ControlBuffer = 2
-		o.Limits.EventBuffer = 32
 		o.Env = append(o.Env, "CLAUDE_GO_WRITE_BARRIER="+fifo, "CLAUDE_GO_TRANSCRIPT="+path)
 	})
 	started := startBlockedPermissionWriter(t, c, "unused", nil)
@@ -297,8 +297,8 @@ func (s *controlInteractionSuite) TestAutomaticResponseQueueOverflowUnblocksStar
 	{
 		err := c.Close()
 		require.ErrorAsf(t, err, &limit, "response queue bound: %v", err)
-		require.EqualValuesf(t, "incoming control queue", limit.Resource, "response queue bound: %v", err)
-		require.EqualValuesf(t, 2, limit.Limit, "response queue bound: %v", err)
+		require.Equalf(t, "incoming control queue", limit.Resource, "response queue bound: %v", err)
+		require.Equalf(t, 2, limit.Limit, "response queue bound: %v", err)
 	}
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)

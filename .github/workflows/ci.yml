@@ -76,8 +76,10 @@ jobs:
           git clone --quiet https://github.com/zoumo/agent-sdk-testify.git "$source_dir"
           git -C "$source_dir" checkout --quiet --detach "$AGENT_SDK_TESTIFY_SOURCE_REVISION"
           test "$(git -C "$source_dir" rev-parse HEAD)" = "$AGENT_SDK_TESTIFY_SOURCE_REVISION"
-          go -C "$source_dir" build -trimpath -o "$RUNNER_TEMP/agent-sdk-testify" .
-          echo "AGENT_SDK_TESTIFY_BIN=$RUNNER_TEMP/agent-sdk-testify" >> "$GITHUB_ENV"
+          tool="$RUNNER_TEMP/agent-sdk-testify"
+          go -C "$source_dir" build -trimpath -o "$tool" .
+          export AGENT_SDK_TESTIFY_BIN="$tool"
+          echo "AGENT_SDK_TESTIFY_BIN=$tool" >> "$GITHUB_ENV"
           bash scripts/with-agent-sdk-testify.sh true
       - name: Build SDK-owned runner and driver
         run: GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build

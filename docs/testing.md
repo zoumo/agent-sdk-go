@@ -11,35 +11,27 @@ Run from the repository root with the pinned compiler:
 ```sh
 mise install
 mise exec -- go mod download
+export AGENT_SDK_TESTIFY_BIN=/absolute/prebuilt/agent-sdk-testify
 mise exec -- bash scripts/check-offline.sh
 GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-sdk-testify.sh mise exec -- go test -race -p=1 -count=1 -timeout 300s ./...
 mise exec -- go vet ./...
 ```
 
-The offline script builds `tools/agent-sdk-testify` from this checkout unless an absolute
-`AGENT_SDK_TESTIFY_BIN` is supplied. Direct SDK tests need the same binary; use
-`scripts/with-agent-sdk-testify.sh` to build it temporarily. Select Python 3.11 or newer
-as `python3` on PATH before running the script.
-
-The offline script validates the current simulation catalog, case ownership,
-provider availability and local documentation links with `scripts/check-story-evidence.py`.
-It runs recording-tool tests and code integration tests independently. Synthetic
-protocol faults, resource boundaries, cancellation and races have no story registry.
-
-Go tool implementation and its own tests live in `tools/agent-sdk-testify/`.
-Go SDK targeted integration tests remain in `tests/integration/`; the separate
-simulation driver and shared case materials live in `tests/simulation/drivers/` and
-`tests/simulation/scenarios/`. Official SDK drivers, shared Python helpers and
-their offline tests share `tests/simulation/drivers/`, grouped by Agent in official/ and go/.
-The offline script discovers both its `tests/` and `tests/scenarios/` suites.
+Set absolute `AGENT_SDK_TESTIFY_BIN` to a separately built external binary before
+SDK tests. There is no published release pin; scripts fail explicitly when this
+override is absent. `scripts/simulation.sh build` builds only SDK runner/driver.
+The external tool owns official driver/package and material checks. Scenario,
+recording, official-driver and Python snapshots do not remain in this repository.
+SDK process tests use describe/prepare/finish and preserve all three
+migrated assertion groups in tests/simulation/simulate.
 
 The remaining gates check module and native dependency boundaries, standard-library-only
 types packages, native inventory, reproducible Codex generation, unit/subprocess tests
 and offline examples. `GOMAXPROCS=2`, package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
-The installed-wheel smoke check runs outside the checkout and verifies driver packaging
-and the request/result contract without installing an official SDK or launching an Agent.
+The external tool owns official driver/package checks. Remote CI cannot pass until
+an actually published external release is installed.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -87,7 +79,8 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) runs offline, race, vet and installed-wheel checks.
+The [workflow](../.github/workflows/ci.yml) runs offline, race and vet checks. Its
+external-tool step fails closed while no verified release artifact can be installed.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
@@ -107,8 +100,8 @@ lives in [Codex](../codex/mock_cli_test.go) and [Claude](../claude/mock_cli_test
 package tests: each SDK starts its Go mock executable as the CLI process and checks
 question/permission answers, interrupts, cancellation, disconnects and mismatches.
 Both tests also pause consumption during 2,048-event bursts, complete control and
-answer operations, then verify ordered drain after disconnection. The Go tool and Python-to-Go integration tests check
-mock command exit status and handshake completion. Shared FIFO tests cover
+answer operations, then verify ordered drain after disconnection. The external
+tool checks mock command exit status and handshake completion. Shared FIFO tests cover
 cancellation, atomic batches, concurrent producers, close/abort races and reference
 release. See the [event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
 
@@ -125,23 +118,20 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The catalog defines eight stories and 36 flows. No recorded simulation dataset
-is bundled. Required Go SDK simulation still needs reviewed real recordings,
+The catalog defines eight stories and 36 flows. Available material comes from the external tool builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
 Go SDK simulation flow implementations and their regression tests live in
 `tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`; the drivers root
 owns the process entry and delivery checks. Native `tests/replay` packages retain
-SDK integration tests and synthetic fixture/process adapters. Pure protocol
-matching tests live under `tools/agent-sdk-testify/protocol`.
-Recording and official-SDK replay use the [agent-sdk-testify guide](../tools/agent-sdk-testify/README.md).
+SDK integration tests and synthetic fixture/process adapters. Pure protocol matching and official verification belong to the [external tool](https://github.com/zoumo/agent-sdk-testify).
+See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the current process boundary.
 
 ## Focused checks
 
 Run these from the repository root; default live gates remain disabled:
 
 ```sh
-python3 scripts/check-story-evidence.py
 python3 codex/docs/protocol/verify_inventory.py
 mise exec -- bash -c 'cd codex && bash scripts/check_generated.sh'
 bash scripts/with-agent-sdk-testify.sh mise exec -- go test -count=1 ./tests/integration ./codex ./claude

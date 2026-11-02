@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -50,13 +49,16 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			launcher := filepath.Join(t.TempDir(), "peer")
-			require.NoError(t, os.WriteFile(launcher, []byte(fmt.Sprintf("#!/bin/sh\nexec %q protocol mock --provider codex --scenario %q --receipt %q\n", peer, source, receipt)), 0700))
+			args, err := mocktest.Arguments(t.TempDir(), "codex", source, receipt)
+			require.NoError(t, err)
 			if decision == "accept" {
-				require.NoError(t, AcceptFlow(ctx, peer, []string{"protocol", "mock", "--provider", "codex", "--scenario", source, "--receipt", receipt}, source, codex.ChildDetailPreserve, io.Discard))
+				require.NoError(t, AcceptFlow(ctx, peer, args, source, codex.ChildDetailPreserve, io.Discard))
 			} else {
+				launcher, err := mocktest.Launcher(t.TempDir(), "codex", source, receipt)
+				require.NoError(t, err)
 				require.NoError(t, AcceptFlow(ctx, launcher, nil, source, codex.ChildDetailPreserve, io.Discard))
 			}
+
 			b, err := os.ReadFile(receipt)
 			require.NoError(t, err)
 			var got struct{ FullConsumption, ClientEOF, NativeLaunched bool }

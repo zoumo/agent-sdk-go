@@ -9,10 +9,6 @@ export CODEX_E2E_STDIO=0 CODEX_E2E_INTERACTIONS=0 CODEX_E2E_WEBSOCKET=0
 export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
-python3 -m unittest discover -s scripts -p test_story_evidence.py -v
-PYTHONPATH=tests/simulation/drivers/common:tests/simulation/drivers/codex/official:tests/simulation/drivers/claude/official python3 -m unittest discover -s tests/simulation/drivers/tests -p 'test_*.py' -v
-python3 -m unittest discover -s tests/simulation/drivers/tests/scenarios -p 'test_*.py' -v
-python3 scripts/check-story-evidence.py
 bash scripts/check-boundaries.sh
 go mod verify
 python3 -m unittest discover -s codex/scripts -p 'test_ci_checks.py' -v
@@ -25,4 +21,4 @@ for example in codex/examples/history-query-offline codex/examples/observe-subag
 done
 # Required real-recording regression is independent of the synthetic tests above.
 # Missing trusted inputs fail closed; this command never records or uses accounts.
-AGENT_SDK_TESTIFY_BUILD_DIR="$(dirname "$AGENT_SDK_TESTIFY_BIN")" bash scripts/simulation.sh gate
+bash scripts/simulation.sh gate

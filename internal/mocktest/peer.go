@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -47,20 +46,12 @@ func Run(ctx context.Context, provider string, in io.Reader, out io.Writer, scen
 		return err
 	}
 	defer os.RemoveAll(dir)
-	path := filepath.Join(dir, "scenario.json")
-	if err = os.WriteFile(path, scenario, 0600); err != nil {
+	root, err := Capture(dir, provider, scenario, options)
+	if err != nil {
 		return err
 	}
-	args := []string{"protocol", "mock", "--provider", provider, "--scenario", path}
-	if options.Handshakes != "" {
-		args = append(args, "--sdk-test-handshakes", options.Handshakes)
-	}
-	if options.MaxFrames != 0 {
-		args = append(args, "--max-frames", strconv.Itoa(options.MaxFrames))
-	}
-	if options.RecordingVersion != "" {
-		args = append(args, "--recording-version", options.RecordingVersion)
-	}
+	args := []string{"mock", "--provider", provider, "--recording", root, "--report", filepath.Join(dir, "receipt.json")}
+
 	var progressR, progressW *os.File
 	if options.Complete != nil {
 		progressR, progressW, err = os.Pipe()
@@ -209,13 +200,13 @@ func Run(ctx context.Context, provider string, in io.Reader, out io.Writer, scen
 				return context.DeadlineExceeded
 			}
 		}
-		return fmt.Errorf("Go protocol mock: %w: %s", err, stderr.String())
+		return fmt.Errorf("external mock: %w: %s", err, stderr.String())
 	}
 	if outputErr != nil {
-		return fmt.Errorf("Go protocol mock output: %w", outputErr)
+		return fmt.Errorf("external mock output: %w", outputErr)
 	}
 	if inputErr != nil {
-		return fmt.Errorf("Go protocol mock input: %w", inputErr)
+		return fmt.Errorf("external mock input: %w", inputErr)
 	}
 	return nil
 }

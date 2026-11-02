@@ -64,19 +64,14 @@ jobs:
         run: |
           python3 codex/scripts/check_whitespace.py
           mise exec -- bash claude/scripts/check-changes.sh "$BASE_SHA" "$HEAD_SHA"
-      - name: Install Python build dependencies
-        run: python3 -m pip install 'setuptools>=68' wheel
-      - name: Build the tool and both driver artifacts from this checkout
-        run: |
-          AGENT_SDK_TESTIFY_BUILD_DIR="$RUNNER_TEMP/simulation" GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build
-          "$RUNNER_TEMP/simulation/agent-sdk-testify" version
-          echo "AGENT_SDK_TESTIFY_BIN=$RUNNER_TEMP/simulation/agent-sdk-testify" >> "$GITHUB_ENV"
+      - name: Require an actually available external tool
+        # No release is published. This intentionally fails closed until a real
+        # version in scripts/agent-sdk-testify-version.json can be installed.
+        run: bash scripts/with-agent-sdk-testify.sh true
+      - name: Build SDK-owned runner and driver
+        run: GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build
       - name: Native schemas, simulation tooling, integration tests and examples
         run: mise exec -- bash scripts/check-offline.sh
-      - name: Independently installed agent-sdk-testify Python driver
-        if: ${{ !cancelled() }}
-        run: |
-          python3 scripts/check-agent-sdk-testify-package.py "$RUNNER_TEMP"/simulation/agent_sdk_testify_driver-*.whl
       - name: Race tests (real-agent E2E tests visibly skip)
         if: ${{ !cancelled() }}
         env:

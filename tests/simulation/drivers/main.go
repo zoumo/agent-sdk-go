@@ -47,7 +47,12 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, po
 			if peer.Remote == nil {
 				return fmt.Errorf("remote endpoint is required")
 			}
-			err = codexsim.AcceptRemoteClose(ctx, root, peer.Remote.URL, peer.Remote.BearerToken)
+			main, mainOK := peer.Remote.Connections["main"]
+			probe, probeOK := peer.Remote.Connections["probe"]
+			if !mainOK || !probeOK {
+				return fmt.Errorf("remote main and probe endpoints are required")
+			}
+			err = codexsim.AcceptRemoteClose(ctx, root, main.URL, main.BearerToken, probe.URL, probe.BearerToken)
 		} else if plan.DriverProfile == "history" || plan.DriverProfile == "continuation" {
 			err = codexsim.AcceptSavedHistory(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
 		} else {

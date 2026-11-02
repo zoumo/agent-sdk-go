@@ -15,20 +15,20 @@
   including conflict/cycle rejection, ancestors, depth and resource bounds.
   Native event parsing, creation evidence, Claude aliases and
   transport ownership remain in their respective SDKs.
-- Unifies recording, replay and simulation in one `agent-sdk-testify` executable.
-  Its independent `protocol` module owns stdio capture, strict matching and transport
-  bridging; native SDK drivers own case operations and assertions. SDK fixture
-  adapters invoke protocol subcommands without requiring a case runner or official SDK.
-- Adds versioned offline scenario peers
-  for offline integration tests using the real SDKs, with strict bidirectional
-  matching, bounded faults and independent fetched-module consumer checks.
+- Moves recording, replay, material qualification and official SDK drivers into the
+  independent `agent-sdk-testify` tool. This repository retains the Go SDK drivers,
+  public-flow assertions, simulation orchestration and authenticated loopback bridge,
+  and consumes the external tool only through its versioned CLI/process contract.
+- Runs SDK fixture adapters against the external `mock` process using versioned
+  synthetic captures and strict matching. No protocol matcher or recording source
+  tree remains in this repository.
 - Pins mise-managed Go 1.26.9 and checks Linux/macOS offline contracts, race,
   vet, schemas/inventories, types boundaries, simulation tooling and examples.
   External consumers retrieve exact pushed commits into independent modules.
 
 This is release preparation. No tag or release has been published. Real agent
 tests are not run for this migration; successful current native subagent
-interoperability remains unverified. No recorded simulation dataset is bundled;
-catalog availability and synthetic tests do not establish real-flow coverage.
+interoperability remains unverified. No recording material is bundled here;
+external catalog availability and synthetic tests do not establish real-flow coverage.
 See [release checks](docs/testing.md#release-preparation),
 [migration](docs/migration.md) and [testing](docs/testing.md).

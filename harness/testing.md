@@ -86,12 +86,12 @@ Shared code integration scenarios run directly in `NativeIntegrationSuite`; priv
 and assertions live in `tests/integration/acceptance_test.go`. Checks using
 synthetic peers are targeted integration tests, not simulation evidence for user
 stories. Protocol peers remain in test files, and reusable recording/replay helpers follow the
-[tools layout](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
+[external process boundary](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
 
 The current driver tests use the single-request interface and supplied peers.
 Legacy Python preparation, proxy and batch execution paths are not alternate
 runners. Native business and provenance assertions remain on the current driver
-or the authoritative Go runner/protocol boundary. Child delivery comparisons use
+or the authoritative Go runner/external mock boundary. Child delivery comparisons use
 provider-owned assertions independent of production suppression code, and each
 preserve/suppress or remote main/probe run must have its own complete receipt.
 
@@ -100,7 +100,7 @@ Go SDK simulation implementations and their regression tests live under
 `tests/replay` packages retain synthetic adapters and SDK integration assertions,
 including original request handles, event delivery, cancellation and cleanup.
 Keep adapter-specific serialization/completion checks there; maintain pure ID
-matching, handshake, EOF and envelope-validation matrices in the protocol tool.
+matching, handshake, EOF and envelope-validation matrices in the external tool.
 Do not retain unused publication scanners or export helpers used only by tests.
 Moving an assertion does not change its evidence level: synthetic driver tests
 are not successful real-recording simulation evidence.
@@ -112,9 +112,9 @@ pushed revision outside the checkout, without `replace` or `go.work`.
 
 
 
-agent-sdk-testify 的专项测试通过与调用方相同的进程接口验证录制与回放，
+external agent-sdk-testify 的专项测试通过与调用方相同的进程接口验证录制与回放，
 并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-sdk-testify/design.md#测试与依赖)。
-录制与 mock 的正确性不得仅由 Go SDK 测试间接证明。
+录制与 mock 的正确性不得仅由本仓库的 Go SDK 测试间接证明。
 新样本入库前须完成官方 SDK 回放与来源／内容审核；已有材料的 Go 仿真独立执行，
 Go SDK 通过不是入库条件，入库后仿真失败须保留样本并阻断 SDK 门禁；
 流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。

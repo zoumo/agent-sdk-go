@@ -29,6 +29,10 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	if err := json.Unmarshal(b, &plan); err != nil {
 		return err
 	}
+	plan.FixtureProject, plan.Config, err = runtimePaths(root, plan.FixtureProject, plan.Config)
+	if err != nil {
+		return err
+	}
 	b, err = os.ReadFile(filepath.Join(root, "raw/raw.jsonl"))
 	if err != nil {
 		return err

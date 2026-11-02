@@ -12,7 +12,7 @@ import (
 func Executable() (string, error) {
 	path := os.Getenv("AGENT_SDK_TESTIFY_BIN")
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN must name an absolute Go agent-sdk-testify executable; build it with scripts/with-agent-sdk-testify.sh")
+		return "", fmt.Errorf("AGENT_SDK_TESTIFY_BIN must name an absolute separately built agent-sdk-testify executable")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -35,12 +35,17 @@ func Launcher(dir, provider, scenario, receipt string) (string, error) {
 	if provider != "codex" && provider != "claude" {
 		return "", fmt.Errorf("unsupported mock provider %q", provider)
 	}
+	args, err := Arguments(dir, provider, scenario, receipt)
+	if err != nil {
+		return "", err
+	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
-	command := "#!/bin/sh\nexec " + quote(executable) + " protocol mock --provider " + quote(provider) + " --scenario " + quote(scenario)
-	if receipt != "" {
-		command += " --receipt " + quote(receipt)
+	command := "#!/bin/sh\nexec " + quote(executable)
+	for _, arg := range args {
+		command += " " + quote(arg)
 	}
 	command += " \"$@\"\n"
+
 	path := filepath.Join(dir, "agent-sdk-testify-"+provider)
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 	if err != nil {

@@ -38,6 +38,10 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if err := json.Unmarshal(b, &plan); err != nil {
 		return err
 	}
+	plan.FixtureProject, plan.Config, err = runtimePaths(root, plan.FixtureProject, plan.Config)
+	if err != nil {
+		return err
+	}
 	seed := plan.HistorySeed
 	if seed.SessionID == "" || len(seed.AgentIDs) == 0 || len(seed.Files) == 0 {
 		return errors.New("verified existing-child seed required")
@@ -46,6 +50,41 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 		return errors.New("history scope differs from the frozen source project")
 	}
 	verify := func() error {
+		if _, e := os.Stat(filepath.Join(root, "runtime.json")); e == nil {
+			// Described history IDs are opaque. Verify frozen source bytes by the seed
+			// hashes, then let the public history API and mock finish check live copies.
+			var described struct {
+				SchemaVersion int
+				SavedHistory  []struct {
+					SHA256   string
+					Original []byte `json:"originalBase64"`
+				}
+			}
+			b, e := os.ReadFile(filepath.Join(root, "assertion-inputs.json"))
+			if e != nil {
+				return e
+			}
+			if e = json.Unmarshal(b, &described); e != nil {
+				return e
+			}
+			if described.SchemaVersion != 1 {
+				return errors.New("unsupported assertion history schema")
+			}
+			available := map[string]bool{}
+			for _, d := range described.SavedHistory {
+				sum := sha256.Sum256(d.Original)
+				if hex.EncodeToString(sum[:]) != d.SHA256 {
+					return errors.New("described frozen seed bytes changed")
+				}
+				available[d.SHA256] = true
+			}
+			for _, expected := range seed.Files {
+				if !available[expected.SHA256] {
+					return errors.New("frozen seed missing from assertion inputs")
+				}
+			}
+			return nil
+		}
 		for name, expected := range seed.Files {
 			clean := filepath.Clean(name)
 			if clean != name || (!strings.HasPrefix(clean, "config/projects/") && !strings.HasPrefix(clean, "history-seed/config/projects/")) || filepath.IsAbs(clean) {

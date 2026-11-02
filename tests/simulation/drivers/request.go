@@ -16,17 +16,21 @@ type peerCommand struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
 }
+type remoteConnection struct {
+	URL         string `json:"url"`
+	BearerToken string `json:"bearerToken"`
+}
 type driverPeer struct {
 	peerCommand
-	Probe    *peerCommand                       `json:"probe"`
-	Suppress *peerCommand                       `json:"suppress"`
-	Remote   *struct{ URL, BearerToken string } `json:"remote"`
+	Remote *struct {
+		Connections map[string]remoteConnection `json:"connections"`
+	} `json:"remote"`
 }
 
 func runRequest(path string) error {
 	var req struct {
-		Case, Materials, Workspace, Output string
-		Peer                               driverPeer
+		Case, Materials, Workspace, Output, Policy string
+		Peer                                       driverPeer
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -56,21 +60,14 @@ func runRequest(path string) error {
 	if req.Case != plan.CaseID {
 		caseErr = fmt.Errorf("case differs from supplied materials")
 	} else {
-		caseErr = acceptRequest(ctx, plan.Provider, plan.DriverProfile, req.Output, req.Peer, "preserve")
+		if req.Policy != "preserve" && req.Policy != "suppress" {
+			return fmt.Errorf("explicit host policy must be preserve or suppress")
+		}
+		caseErr = acceptRequest(ctx, plan.Provider, plan.DriverProfile, req.Output, req.Peer, req.Policy)
 		if caseErr == nil && (plan.DriverProfile == "children" || plan.DriverProfile == "topology" || plan.DriverProfile == "background-children") {
 			caseErr = validateChildDelivery(plan.Provider, req.Output, plan.DriverProfile == "background-children")
 		}
-		if caseErr == nil && plan.Scenario.Parameters.ChildDetailPolicy != "" {
-			second := filepath.Join(req.Output, "suppress")
-			if req.Peer.Suppress == nil {
-				caseErr = fmt.Errorf("suppress peer is required")
-			} else {
-				caseErr = acceptRequest(ctx, plan.Provider, plan.DriverProfile, second, driverPeer{peerCommand: *req.Peer.Suppress}, "suppress")
-			}
-			if caseErr == nil {
-				caseErr = compareDelivery(plan.Provider, filepath.Join(req.Output, "deliveries.jsonl"), filepath.Join(second, "deliveries.jsonl"))
-			}
-		}
+
 	}
 	result := map[string]string{"status": "passed"}
 	if caseErr != nil {

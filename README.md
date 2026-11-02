@@ -19,7 +19,7 @@ module import paths have no compatibility forwarding packages.
 |---|---|
 | Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
 | Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
-| Test, record or inspect evidence | [Offline validation](docs/testing.md), [agent-sdk-testify](tools/agent-sdk-testify/README.md) |
+| Test, record or inspect evidence | [Offline validation](docs/testing.md), [SDK simulation](tests/simulation/drivers/README.md), [external test tool](https://github.com/zoumo/agent-sdk-testify) |
 | Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
 | Check licensing | [Licenses and native attribution](NOTICE) |
 
@@ -37,7 +37,7 @@ pushed module and dependencies over the network, then compiles public imports,
 examples and documentation snippets without invoking a real CLI or model.
 Simulation catalog availability and source inspection do not establish successful
 real recordings. Code integration tests use explicitly synthetic input.
-The offline entry also requires the fixed reviewed corpus in
-`tests/simulation/recordings/index.json`; absent recordings fail the simulation
-gate. Adoption and coverage commands are documented in the
-[driver guide](tests/simulation/drivers/README.md#审核采用和日常门禁).
+The offline entry also requires an explicit separately built external tool and the
+fixed reviewed corpus in its embedded mock catalog; absent recordings fail the
+simulation gate. Material adoption and catalog maintenance belong to the
+[external tool](https://github.com/zoumo/agent-sdk-testify).

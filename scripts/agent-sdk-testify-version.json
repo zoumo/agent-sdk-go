@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "toolVersion": "agent-sdk-testify 0.1.0-dev",
+  "sourceRevision": "a09c7336598c384d6ebf309f1817b59946eff04f",
+  "artifactSha256": "20785b9a6a438783e641bafb7cccb093d1603f32b74dd12c9a3f332cf31124c1",
+  "builtinSourceRevision": "fc73d86c310ada28478a6735af69b07af1139ad9",
+  "builtinManifestSha256": "181fdac32cb4f4bacdad655d0639b9e45aae1e7b0fe588ff1ccd9da8c54f9ec3",
+  "release": null,
+  "reason": "Observed local artifact identity only. No published release or downloadable CI pin exists; local integration requires explicit AGENT_SDK_TESTIFY_BIN."
+}

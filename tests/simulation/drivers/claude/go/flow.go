@@ -50,6 +50,10 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 			Response  json.RawMessage
 		}
 	}
+	plan.FixtureProject, plan.Config, err = runtimePaths(root, plan.FixtureProject, plan.Config)
+	if err != nil {
+		return err
+	}
 	f, err := os.Open(filepath.Join(root, "raw/raw.jsonl"))
 	if err != nil {
 		return err

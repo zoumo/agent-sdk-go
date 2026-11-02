@@ -48,7 +48,7 @@ func remoteRequests(path string) ([]remoteRPC, map[string]json.RawMessage, error
 // AcceptRemoteClose runs NewRemote against the runner-owned offline WebSocket service.
 // The runner independently verifies both peer receipts and service cleanup. These are SDK simulation results, not native remote E2E.
 // The caller verifies the case provenance before invoking this adapter.
-func AcceptRemoteClose(ctx context.Context, root, endpoint, token string) (err error) {
+func AcceptRemoteClose(ctx context.Context, root, mainEndpoint, mainToken, probeEndpoint, probeToken string) (err error) {
 	paths := []string{filepath.Join(root, "raw/raw.jsonl"), filepath.Join(root, "remote-probe/raw/raw.jsonl")}
 	mainRequests, mainResponses, err := remoteRequests(paths[0])
 	if err != nil {
@@ -64,7 +64,7 @@ func AcceptRemoteClose(ctx context.Context, root, endpoint, token string) (err e
 	if len(probeRequests) != 3 || probeRequests[0].Method != "initialize" || probeRequests[1].Method != "initialized" || probeRequests[2].Method != "thread/read" {
 		return errors.New("remote probe must independently initialize and read")
 	}
-	open := func(rpc remoteRPC) (*codex.Client, error) {
+	open := func(rpc remoteRPC, endpoint, token string) (*codex.Client, error) {
 		var init types.InitializeParams
 		if err := json.Unmarshal(rpc.Params, &init); err != nil {
 			return nil, err
@@ -81,7 +81,7 @@ func AcceptRemoteClose(ctx context.Context, root, endpoint, token string) (err e
 		}
 		return nil
 	}
-	first, err := open(mainRequests[0])
+	first, err := open(mainRequests[0], mainEndpoint, mainToken)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func AcceptRemoteClose(ctx context.Context, root, endpoint, token string) (err e
 	if _, err := session.Submit(ctx, codex.Input{Input: turn.Input}); !errors.Is(err, codex.ErrClosed) {
 		return errors.New("closed remote Session did not reject input")
 	}
-	second, err := open(probeRequests[0])
+	second, err := open(probeRequests[0], probeEndpoint, probeToken)
 	if err != nil {
 		return err
 	}

@@ -75,23 +75,9 @@ while rows.strip():
         assert not dep.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dep)
 PY
 
-# Tool implementation and tests must remain independent of production SDKs.
-mock_dependencies=$(go list -deps -test -f '{{.ImportPath}}' ./tools/agent-sdk-testify/protocol/...)
-if [[ "$mock_dependencies" == *github.com/zoumo/agent-sdk-go/codex* || "$mock_dependencies" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
-  echo "agent-sdk-testify must not import production SDKs" >&2
-  exit 1
-fi
-
-# The process runner must not import SDKs or their fixture/assertion adapters.
-runner_dependencies=$(go list -deps -f '{{.ImportPath}}' ./tools/agent-sdk-testify)
-if [[ "$runner_dependencies" == *github.com/zoumo/agent-sdk-go/codex* || "$runner_dependencies" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
-  echo "agent-sdk-testify runner must remain independent of SDK business assertions" >&2
-  exit 1
-fi
-
-# Capture owns its non-CLI contract; command parsing must not enter its core.
-capture_dependencies=$(go list -deps -f '{{.ImportPath}}' ./tools/agent-sdk-testify/protocol/capture)
-if [[ "$capture_dependencies" == *github.com/zoumo/agent-sdk-go/tools/agent-sdk-testify/protocol/command* || "$capture_dependencies" == *github.com/spf13/* || "$capture_dependencies" == *github.com/inconshreveable/mousetrap* ]]; then
-  echo "protocol capture must not depend on command parsing" >&2
-  exit 1
+# SDK process adapters must target the external record/verify/mock interface,
+# never the removed protocol subcommands or scenario flag.
+if rg -n --glob '*.go' 'protocol mock|"protocol"[[:space:]]*,[[:space:]]*"mock"|--scenario|--sdk-test-handshakes' internal tests codex claude; then
+ echo "legacy mock CLI dependency in SDK process adapter" >&2
+ exit 1
 fi

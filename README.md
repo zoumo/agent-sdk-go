@@ -27,7 +27,7 @@ Go **1.26** or newer is required. The root `mise.toml` is optional for local
 tool management. Formatting and linting use the root Makefile:
 
 ```sh
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 go mod download
 make fmt
 make lint

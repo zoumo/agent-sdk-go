@@ -9,7 +9,7 @@ availability and synthetic checks do not prove real recordings; see
 Run from the repository root with Go 1.26 or newer:
 
 ```sh
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 go mod download
 make fmt-check
 make lint
@@ -32,8 +32,10 @@ types packages, native inventory, reproducible Codex generation, unit/subprocess
 and offline examples. `GOMAXPROCS=2`, package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
-The external tool owns official driver/package checks. Remote CI cannot pass until
-an actually published external release is installed.
+The external tool owns official driver/package checks. Hosted CI builds the
+public tool at the exact source revision recorded in
+[`scripts/agent-sdk-testify-version.json`](../scripts/agent-sdk-testify-version.json)
+before running SDK tests; it does not assume a release artifact exists.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -81,8 +83,8 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) runs offline, race and vet checks. Its
-external-tool step fails closed while no verified release artifact can be installed.
+The [workflow](../.github/workflows/ci.yml) runs offline, race and vet checks. It
+builds the external tool from the pinned source revision before running SDK tests.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the

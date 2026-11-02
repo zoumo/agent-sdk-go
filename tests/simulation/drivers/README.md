@@ -33,9 +33,9 @@ bash scripts/simulation.sh gate --jobs 2
 
 Use Go 1.26 or newer. There is no published release pin; the single status
 file records the observed development artifact source/hash and is not a release
-pin. Build never creates the tool or a wheel. CI currently fails closed at the
-unavailable external-release requirement; local passing checks are not remote CI
-evidence.
+pin. Build never creates the tool or a wheel. Hosted CI separately builds the
+public tool at the status file's source revision and exports its absolute path;
+local checks still require an explicit `AGENT_SDK_TESTIFY_BIN`.
 
 ### 审核采用和日常门禁
 

@@ -56,9 +56,9 @@ jobs:
           go mod download
           go mod verify
           git diff --exit-code -- go.mod go.sum
-      - name: Install golangci-lint 2.x
+      - name: Install pinned golangci-lint
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Check formatting and lint
         run: |
@@ -67,10 +67,18 @@ jobs:
       - name: Check committed whitespace
         run: |
           python3 codex/scripts/check_whitespace.py
-      - name: Require an actually available external tool
-        # No release is published. This intentionally fails closed until a real
-        # version in scripts/agent-sdk-testify-version.json can be installed.
-        run: bash scripts/with-agent-sdk-testify.sh true
+      - name: Build pinned external test tool
+        env:
+          AGENT_SDK_TESTIFY_SOURCE_REVISION: 69854c801b93ac82c31474e0b8bda27c51fa9054
+        run: |
+          test "$AGENT_SDK_TESTIFY_SOURCE_REVISION" = "$(python3 -c 'import json; print(json.load(open("scripts/agent-sdk-testify-version.json"))["sourceRevision"])')"
+          source_dir="$RUNNER_TEMP/agent-sdk-testify-source"
+          git clone --quiet https://github.com/zoumo/agent-sdk-testify.git "$source_dir"
+          git -C "$source_dir" checkout --quiet --detach "$AGENT_SDK_TESTIFY_SOURCE_REVISION"
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$AGENT_SDK_TESTIFY_SOURCE_REVISION"
+          go -C "$source_dir" build -trimpath -o "$RUNNER_TEMP/agent-sdk-testify" .
+          echo "AGENT_SDK_TESTIFY_BIN=$RUNNER_TEMP/agent-sdk-testify" >> "$GITHUB_ENV"
+          bash scripts/with-agent-sdk-testify.sh true
       - name: Build SDK-owned runner and driver
         run: GOPROXY=off GOSUMDB=off bash scripts/simulation.sh build
       - name: Native schemas, simulation tooling, integration tests and examples

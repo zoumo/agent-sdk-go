@@ -75,6 +75,7 @@ func TestSessionResumeFailuresReleaseReservationWithoutRetry(t *testing.T) {
 
 func TestSessionResumeValidationAndOwnershipBeforeDispatch(t *testing.T) {
 	f := startFake(t, "resume-normal", codex.Limits{})
+	waitTrace(t, f.trace, "initialized")
 	for _, options := range []codex.SessionOptions{
 		{Client: f.c, Resume: &types.ThreadResumeParams{}},
 		{Client: f.c, Thread: types.ThreadStartParams{Model: types.Some("conflict")}, Resume: &types.ThreadResumeParams{ThreadID: resumedNativeID}},

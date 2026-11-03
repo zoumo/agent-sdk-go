@@ -69,7 +69,7 @@ jobs:
           python3 codex/scripts/check_whitespace.py
       - name: Build pinned external test tool
         env:
-          AGENT_SDK_TESTIFY_SOURCE_REVISION: 69854c801b93ac82c31474e0b8bda27c51fa9054
+          AGENT_SDK_TESTIFY_SOURCE_REVISION: 5ff829fed32c36ec921ae62d0536b6f3be0d539b
         run: |
           test "$AGENT_SDK_TESTIFY_SOURCE_REVISION" = "$(python3 -c 'import json; print(json.load(open("scripts/agent-sdk-testify-version.json"))["sourceRevision"])')"
           source_dir="$RUNNER_TEMP/agent-sdk-testify-source"

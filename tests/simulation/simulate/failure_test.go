@@ -23,23 +23,35 @@ func TestMissingToolAndUnsupportedDescriptorFailExplicitly(t *testing.T) {
 			}
 		}
 		cmd.Env = env
-		b, e := cmd.CombinedOutput()
-		require.Error(t, e)
+		b, err := cmd.CombinedOutput()
+		require.Error(t, err)
 		require.Contains(t, string(b), "no published testify pin")
 	})
-	t.Run("unsupported describe schema", func(t *testing.T) {
-		tool := filepath.Join(t.TempDir(), "incompatible-tool")
-		require.NoError(t, os.WriteFile(tool, []byte("#!/bin/sh\nif [ \"$1\" = version ]; then echo incompatible; else echo '{\"schemaVersion\":2}'; fi\n"), 0o700))
+	t.Run("unsupported session schema", func(t *testing.T) {
+		tool := fakeTool(t, `if [ "$1" = "prepare" ]; then
+  last=""
+  for arg in "$@"; do last="$arg"; done
+  mkdir -p "$last"
+  printf '%s\n' '{"schemaVersion":99}' > "$last/session.json"
+  exit 0
+fi
+exit 0`)
 		cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", filepath.Join(t.TempDir(), "run"), "--driver", driverBinary)
 		cmd.Env = hostEnvironment(map[string]string{"AGENT_SDK_TESTIFY_BIN": tool})
-		b, e := cmd.CombinedOutput()
-		require.Error(t, e)
-		require.Contains(t, string(b), "unsupported describe schemaVersion")
+		b, err := cmd.CombinedOutput()
+		require.Error(t, err)
+		require.Contains(t, string(b), "unsupported session schemaVersion 99")
 	})
 	t.Run("unavailable builtin", func(t *testing.T) {
+		tool := fakeTool(t, `if [ "$1" = "prepare" ]; then
+  echo 'material unavailable' >&2
+  exit 1
+fi
+exit 0`)
 		cmd := exec.CommandContext(t.Context(), runnerBinary, "--provider", "codex", "--case", "SDK-CASE-012", "--output", filepath.Join(t.TempDir(), "run"), "--driver", driverBinary)
-		b, e := cmd.CombinedOutput()
-		require.Error(t, e)
+		cmd.Env = hostEnvironment(map[string]string{"AGENT_SDK_TESTIFY_BIN": tool})
+		b, err := cmd.CombinedOutput()
+		require.Error(t, err)
 		require.Contains(t, string(b), "material unavailable")
 	})
 	t.Run("corrupt source", func(t *testing.T) {
@@ -47,35 +59,55 @@ func TestMissingToolAndUnsupportedDescriptorFailExplicitly(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, "raw", "raw.jsonl"), []byte("{}\n"), 0o600))
 		output := filepath.Join(t.TempDir(), "run")
 		cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", root, "--output", output, "--driver", driverBinary)
-		b, e := cmd.CombinedOutput()
-		require.Error(t, e, string(b))
-		require.NoDirExists(t, filepath.Join(output, "preserve"))
+		b, err := cmd.CombinedOutput()
+		require.Error(t, err, string(b))
 		require.FileExists(t, filepath.Join(output, "summary.json"))
+		require.NoDirExists(t, filepath.Join(output, "preserve", "session"))
 	})
 }
 
-func TestCancellationAlwaysFinishesPreparedRun(t *testing.T) {
+func fakeTool(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-testify")
+	script := "#!/bin/sh\nif [ \"$1\" = version ]; then echo 'fake 1'; exit 0; fi\n" + body + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(script), 0o700))
+	return path
+}
+
+func TestCancellationAlwaysFinalizesPreparedSession(t *testing.T) {
 	source := controlledCapture(t)
 	output := filepath.Join(t.TempDir(), "run")
 	host := filepath.Join(t.TempDir(), "idle-host")
-	require.NoError(t, os.WriteFile(host, []byte("#!/bin/sh\nsleep 60\n"), 0o700))
+	hostReady := filepath.Join(t.TempDir(), "host-ready")
+	require.NoError(t, os.WriteFile(host, []byte("#!/bin/sh\nprintf ready > "+quote(hostReady)+"\nsleep 60\n"), 0o700))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, runnerBinary, "--recording", source, "--output", output, "--driver", host)
 	require.NoError(t, cmd.Start())
-	require.Eventually(t, func() bool { _, e := os.Stat(filepath.Join(output, "preserve", "run.json")); return e == nil }, 10*time.Second, 10*time.Millisecond)
+	sessionPath := filepath.Join(output, "preserve", "session")
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(hostReady)
+		return err == nil
+	}, 10*time.Second, 10*time.Millisecond)
+	prepared, err := readPreparedSession(sessionPath)
+	require.NoError(t, err)
 	require.NoError(t, cmd.Process.Signal(os.Interrupt))
 	require.Error(t, cmd.Wait())
 	require.NoError(t, ctx.Err())
-	var d descriptor
-	require.NoError(t, readJSON(filepath.Join(output, "preserve", "run.json"), &d))
-	require.NoDirExists(t, d.ResourceRoot)
-	var f struct {
-		Status          string
-		CleanupComplete bool
-	}
-	require.NoError(t, readJSON(filepath.Join(output, "preserve", "finish.json"), &f))
-	require.Equal(t, "failed", f.Status)
-	require.True(t, f.CleanupComplete)
+	require.NoDirExists(t, prepared.ResourceRoot)
+
+	require.Equal(t, "abandoned", readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json")).Status)
 	require.FileExists(t, filepath.Join(output, "summary.json"))
+}
+
+func TestPassedBusinessWithoutMockExecutionFails(t *testing.T) {
+	source := controlledCapture(t)
+	output := filepath.Join(t.TempDir(), "run")
+	host := filepath.Join(t.TempDir(), "lying-host")
+	script := "#!/bin/sh\nset -e\nout=$(awk -F'\"' '/\"output\"/ {print $4; exit}' \"$2\")\nprintf '{\"status\":\"passed\"}\\n' > \"$out/result.json\"\n"
+	require.NoError(t, os.WriteFile(host, []byte(script), 0o700))
+	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", host)
+	b, err := cmd.CombinedOutput()
+	require.Error(t, err, string(b))
+	require.Contains(t, string(b), "passed without a mock execution")
 }

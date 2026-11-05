@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"os"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
@@ -27,5 +30,26 @@ func mockPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, 
 	}
 	data := append([]byte(`{"version":1,"provenance":"synthetic","frames":[`), bytes.Join(rows, []byte(","))...)
 	data = append(data, ']', '}')
-	return mocktest.Run(ctx, "codex", in, out, data, mocktest.Options{Handshakes: handshakes})
+	dir, err := os.MkdirTemp("", "codex-synthetic-replay-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	session, err := mocktest.Prepare(dir, "codex", data, mocktest.Options{Handshakes: handshakes})
+	if err != nil {
+		return err
+	}
+	runErr := session.Run(ctx, in, out)
+	report, reportErr := session.Report()
+	closeErr := session.Close()
+	if runErr != nil {
+		return errors.Join(runErr, reportErr, closeErr)
+	}
+	if report == nil {
+		return errors.Join(reportErr, closeErr, errors.New("session report missing"))
+	}
+	if report.Status != "passed" {
+		return errors.Join(reportErr, closeErr, fmt.Errorf("session status %s", report.Status))
+	}
+	return errors.Join(reportErr, closeErr)
 }

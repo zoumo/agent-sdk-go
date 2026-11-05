@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,18 +19,11 @@ import (
 
 type mockCLISuite struct {
 	suite.Suite
-	executable string
 }
 
 func TestMockCLI(t *testing.T) { suite.Run(t, new(mockCLISuite)) }
 
-func (s *mockCLISuite) SetupTest() {
-	var err error
-	s.executable, err = mocktest.Executable()
-	s.Require().NoError(err)
-}
-
-func mockCLIScenario(t *testing.T, wires ...string) string {
+func mockCLIScenario(t *testing.T, wires ...string) []byte {
 	t.Helper()
 	frames := make([]map[string]any, 0, len(wires))
 	for i, wire := range wires {
@@ -52,9 +43,7 @@ func mockCLIScenario(t *testing.T, wires ...string) string {
 	}
 	b, err := json.Marshal(map[string]any{"version": 1, "provenance": "synthetic", "frames": frames})
 	require.NoError(t, err)
-	path := filepath.Join(t.TempDir(), "codex.json")
-	require.NoError(t, os.WriteFile(path, b, 0o600))
-	return path
+	return b
 }
 
 var mockCodexInit = []string{
@@ -89,10 +78,16 @@ func (s *mockCLISuite) TestInteractions() {
 			default:
 				frames = append(frames, `>{"id":92,"method":"consumer/expected","params":{}}`)
 			}
-			path := mockCLIScenario(t, frames...)
-			args, err := mocktest.Arguments(t.TempDir(), "codex", path, "")
+			peerSession, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
 			require.NoError(t, err)
-			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: s.executable, Args: args, Env: []string{"PATH="}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
+			wantStatus := "passed"
+			if mode != "question-and-interrupt" {
+				wantStatus = "failed"
+			}
+			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
+			executable, args, err := peerSession.Command("main")
+			require.NoError(t, err)
+			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: peerSession.Env, Dir: peerSession.Workspace, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
 			require.NoError(t, err)
 			defer client.Close()
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
@@ -152,10 +147,12 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		frames = append(frames, fmt.Sprintf(`<{"method":"fixture/burst","params":{"threadId":"root","index":%d}}`, i))
 	}
 	frames = append(frames, `>{"id":93,"method":"turn/interrupt","params":{"threadId":"root","turnId":"turn"}}`, `<{"id":93,"result":{}}`, `>{"id":"question","result":{"answers":{}}}`, `>{"id":94,"method":"consumer/release","params":{}}`, `!`)
-	path := mockCLIScenario(t, frames...)
-	args, err := mocktest.Arguments(t.TempDir(), "codex", path, "")
+	peerSession, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
-	client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: s.executable, Args: args, Env: []string{"PATH="}, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
+	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
+	executable, args, err := peerSession.Command("main")
+	require.NoError(t, err)
+	client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: peerSession.Env, Dir: peerSession.Workspace, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
 	require.NoError(t, err)
 	defer client.Close()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
@@ -188,4 +185,13 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
+}
+
+func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
+	t.Helper()
+	report, err := session.Report()
+	require.NotNil(t, report)
+	require.NoError(t, err)
+	require.Equal(t, want, report.Status)
+	require.NoError(t, session.Close())
 }

@@ -74,12 +74,12 @@ func execute(ctx context.Context, o options) error {
 	if o.Gate {
 		return gate(ctx, tool, o)
 	}
-	args := []string{"--provider", o.Provider, "--case", o.Case}
+	source := sourceSelection{Provider: o.Provider, Case: o.Case}
 	if o.Recording != "" {
 		if !filepath.IsAbs(o.Recording) {
 			return errors.New("--recording must be absolute")
 		}
-		args = []string{"--recording", o.Recording}
+		source = sourceSelection{Recording: o.Recording}
 	}
-	return simulate(ctx, tool, o, args)
+	return simulate(ctx, tool, o, source)
 }

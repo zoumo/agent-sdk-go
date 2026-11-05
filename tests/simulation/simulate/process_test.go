@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 var runnerBinary, driverBinary string
@@ -47,10 +48,13 @@ func writeJSONTest(t *testing.T, path string, v any) {
 
 func controlledCapture(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	b, err := fixturedata.Files.ReadFile("integration/lifecycle.jsonl")
+	lifecycle, err := fixturedata.Files.ReadFile("integration/lifecycle.jsonl")
 	require.NoError(t, err)
-	rows := bytes.Split(bytes.TrimSpace(b), []byte("\n"))[:5]
+	rows := bytes.Split(bytes.TrimSpace(lifecycle), []byte("\n"))[:5]
+	frames := make([]json.RawMessage, 0, len(rows)+3)
+	for _, row := range rows {
+		frames = append(frames, append([]byte(nil), row...))
+	}
 	for i, wire := range []string{
 		`{"id":103,"method":"turn/start","params":{"threadId":"thread-001","input":[{"type":"text","text":"synthetic task"}]}}`,
 		`{"id":103,"result":{"turn":{"id":"turn-001","items":[],"status":"inProgress"}}}`,
@@ -60,24 +64,39 @@ func controlledCapture(t *testing.T) string {
 		if i == 0 {
 			direction = "c2s"
 		}
-		row, err := json.Marshal(map[string]any{"ordinal": len(rows) + 1, "direction": direction, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": json.RawMessage(wire)})
+		row, err := json.Marshal(map[string]any{
+			"direction": direction,
+			"channel":   "protocol",
+			"epoch":     1,
+			"elapsedMs": 0,
+			"wire":      json.RawMessage(wire),
+		})
 		require.NoError(t, err)
-		rows = append(rows, row)
+		frames = append(frames, row)
 	}
-	require.NoError(t, os.Mkdir(filepath.Join(dir, "raw"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "raw", "raw.jsonl"), append(bytes.Join(rows, []byte("\n")), 10), 0o600))
-	writeJSONTest(t, filepath.Join(dir, "plan.json"), map[string]any{"provider": "codex", "caseId": "custom-structured", "project": "/fixture/project", "driverProfile": "structured-input", "scenario": map[string]any{"files": map[string]string{"numbers.txt": "7\n11\n"}}})
-	bindTest(t, dir)
-	return dir
+	envelope, err := json.Marshal(map[string]any{"version": 1, "frames": frames})
+	require.NoError(t, err)
+	capture, err := mocktest.Capture(t.TempDir(), "codex", envelope, mocktest.Options{})
+	require.NoError(t, err)
+
+	var plan map[string]any
+	require.NoError(t, readJSON(filepath.Join(capture, "plan.json"), &plan))
+	plan["caseId"] = "custom-structured"
+	plan["driverProfile"] = "structured-input"
+	plan["scenario"] = map[string]any{"files": map[string]string{"numbers.txt": "7\n11\n"}}
+	writeJSONTest(t, filepath.Join(capture, "plan.json"), plan)
+	refreshSyntheticBinding(t, capture)
+	return capture
 }
 
-func bindTest(t *testing.T, dir string) {
+func refreshSyntheticBinding(t *testing.T, capture string) {
 	t.Helper()
-	plan, e := os.ReadFile(filepath.Join(dir, "plan.json"))
-	require.NoError(t, e)
-	raw, e := os.ReadFile(filepath.Join(dir, "raw", "raw.jsonl"))
-	require.NoError(t, e)
-	writeJSONTest(t, filepath.Join(dir, "manifest.json"), map[string]any{"provenance": "synthetic", "planSHA256": digest(plan), "files": map[string]string{"raw.jsonl": digest(raw)}})
+	plan, err := os.ReadFile(filepath.Join(capture, "plan.json"))
+	require.NoError(t, err)
+	var manifest map[string]any
+	require.NoError(t, readJSON(filepath.Join(capture, "manifest.json"), &manifest))
+	manifest["planSHA256"] = digest(plan)
+	writeJSONTest(t, filepath.Join(capture, "manifest.json"), manifest)
 }
 
 func TestSDKRequestUsesRunnerPeers(t *testing.T) {
@@ -86,159 +105,225 @@ func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
-	var summary struct {
-		Status string
-		Runs   []struct {
-			RunID  string
-			Status string
-		}
-	}
-	data, err := os.ReadFile(filepath.Join(output, "summary.json"))
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, &summary))
-	require.Equal(t, "passed", summary.Status)
-	require.Len(t, summary.Runs, 1)
-	require.NotEmpty(t, summary.Runs[0].RunID)
+
+	var result summary
+	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
+	require.Equal(t, "passed", result.Status)
+	require.Len(t, result.Runs, 1)
+	require.NotEmpty(t, result.Runs[0].RunID)
+	require.NotEmpty(t, result.Runs[0].SessionID)
+	require.Equal(t, "codex", result.Runs[0].Provider)
+	require.Empty(t, result.Runs[0].ProtocolError)
+	require.Empty(t, result.Runs[0].CleanupError)
+	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "result-main.jsonl"))
+	require.Equal(t, "passed", readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json")).Status)
 }
 
-func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
-func TestSelectedRunsAndIndependentPolicies(t *testing.T) {
-	for _, tc := range []struct{ name, profile, mutation, want string }{
-		{"background-children", "background-children", "", ""},
-		{"remote-close", "remote-close", "", ""},
-		{"remote-driver-crash", "remote-close", "crash", "0/2 required connections"},
-		{"missing-probe", "remote-close", "probe", "probe"},
-		{"missing-suppress", "background-children", "suppress", "main"},
-		{"cross-run-suppress-receipt", "background-children", "cross-run", "main"},
-		{"missing-sdk-projection-invalid-receipt", "background-children", "raw", "main"},
-		{"remote-postprocessing", "remote-close", "postprocess", "is a directory"},
+func TestSourceSuppressPolicyStillRunsAndComparesBothPolicies(t *testing.T) {
+	source := controlledChildCapture(t)
+	output := filepath.Join(t.TempDir(), "run")
+	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
+	b, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(b))
+
+	var result summary
+	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
+	require.Equal(t, "passed", result.Status)
+	require.Len(t, result.Runs, 2)
+	require.Equal(t, "suppress", result.Runs[0].ChildDetailPolicy)
+	require.Equal(t, "preserve", result.Runs[0].Policy)
+	require.Equal(t, "suppress", result.Runs[1].Policy)
+	require.NotEqual(t, result.Runs[0].RunID, result.Runs[1].RunID)
+	require.NotEqual(t, result.Runs[0].SessionID, result.Runs[1].SessionID)
+	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "deliveries.jsonl"))
+	require.FileExists(t, filepath.Join(output, "suppress", "sdk", "deliveries.jsonl"))
+}
+
+func controlledChildCapture(t *testing.T) string {
+	t.Helper()
+	root := controlledCapture(t)
+	raw, err := os.ReadFile(filepath.Join(root, "raw", "raw.jsonl"))
+	require.NoError(t, err)
+	envelope, synthetic, err := decodeSyntheticEnvelope(raw)
+	require.NoError(t, err)
+	require.True(t, synthetic)
+	rows := envelope.Frames
+	require.GreaterOrEqual(t, len(rows), 8)
+	var rootFrame map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rows[4], &rootFrame))
+	var started struct {
+		Result struct{ Thread map[string]any }
+	}
+	require.NoError(t, json.Unmarshal(rootFrame["wire"], &started))
+	child := started.Result.Thread
+	child["id"] = "child"
+	child["parentThreadId"] = "thread-001"
+	terminal := rows[len(rows)-1]
+	rows = rows[:len(rows)-1]
+	for _, wire := range []any{
+		map[string]any{"method": "thread/started", "params": map[string]any{"thread": child}},
+		json.RawMessage(`{"method":"item/agentMessage/delta","params":{"threadId":"child","turnId":"child-turn","itemId":"detail","delta":"hello"}}`),
+		func() json.RawMessage {
+			var frame map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(terminal, &frame))
+			return frame["wire"]
+		}(),
+		json.RawMessage(`{"method":"turn/completed","params":{"threadId":"child","turn":{"id":"child-turn","items":[],"status":"completed"}}}`),
+	} {
+		row, err := json.Marshal(map[string]any{
+			"direction": "s2c",
+			"channel":   "protocol",
+			"epoch":     1,
+			"elapsedMs": 0,
+			"wire":      wire,
+			"ordinal":   len(rows) + 1,
+		})
+		require.NoError(t, err)
+		rows = append(rows, row)
+	}
+	envelope.Frames = rows
+	raw, err = json.Marshal(envelope)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "raw", "raw.jsonl"), raw, 0o600))
+	var plan map[string]any
+	require.NoError(t, readJSON(filepath.Join(root, "plan.json"), &plan))
+	plan["driverProfile"] = "background-children"
+	plan["scenario"] = map[string]any{"files": map[string]string{"numbers.txt": "7\n11\n"}, "parameters": map[string]string{"childDetailPolicy": "suppress"}}
+	writeJSONTest(t, filepath.Join(root, "plan.json"), plan)
+	writeJSONTest(t, filepath.Join(root, "report.json"), map[string]any{
+		"childEvidence": []any{map[string]any{"childThreadId": "child", "parentThreadId": "thread-001"}},
+		"receipts":      []any{map[string]any{"child-detail-selection": map[string]any{"rootId": "thread-001", "childIds": []string{"child"}}}},
+	})
+	refreshSyntheticBinding(t, root)
+	var manifest map[string]any
+	require.NoError(t, readJSON(filepath.Join(root, "manifest.json"), &manifest))
+	manifest["files"] = map[string]string{"raw.jsonl": digest(raw)}
+	writeJSONTest(t, filepath.Join(root, "manifest.json"), manifest)
+	return root
+}
+
+func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "run")
+	cmd := exec.CommandContext(t.Context(), runnerBinary, "--provider", "codex", "--case", "SDK-CASE-032", "--output", output, "--driver", driverBinary)
+	b, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(b))
+
+	var result summary
+	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
+	require.Equal(t, "passed", result.Status)
+	require.Len(t, result.Runs, 1)
+	require.Empty(t, result.Runs[0].BridgeError)
+	evidence := readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json"))
+	require.Equal(t, "passed", evidence.Status)
+	require.Len(t, evidence.Index.Executions, 1)
+	require.Len(t, evidence.Index.Executions[0].Connections, 2)
+	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "result-main.jsonl"))
+	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "result-probe.jsonl"))
+}
+
+func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		mutation         string
+		remote           bool
+		wantRuns         int
+		wantProtocol     string
+		wantBridge       string
+		wantCleanupError string
+		wantBusiness     bool
+		wantEvidence     string
+	}{
+		{name: "remote-driver-crash", mutation: "crash", remote: true, wantRuns: 1, wantBridge: "0/2 required connections", wantEvidence: "abandoned"},
+		{name: "missing-probe", mutation: "missing-probe", remote: true, wantRuns: 1, wantProtocol: "connection probe", wantBusiness: true, wantEvidence: "passed"},
+		{name: "missing-suppress", mutation: "missing-suppress", wantRuns: 2, wantProtocol: "connection main", wantBusiness: true, wantEvidence: "passed"},
+		{name: "cross-run-suppress-receipt", mutation: "cross-run", wantRuns: 2, wantProtocol: "identity/status differs", wantBusiness: true, wantEvidence: "passed"},
+		{name: "missing-sdk-projection-invalid-receipt", mutation: "invalid-receipt", wantRuns: 2, wantCleanupError: "replay receipt", wantBusiness: true, wantEvidence: "passed"},
+		{name: "remote-postprocessing", mutation: "postprocess", remote: true, wantRuns: 1, wantProtocol: "not a regular file", wantBusiness: true, wantEvidence: "passed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			source := controlledCapture(t)
-			var plan map[string]any
-			require.NoError(t, readJSON(filepath.Join(source, "plan.json"), &plan))
-			plan["driverProfile"] = tc.profile
-			raw, err := os.ReadFile(filepath.Join(source, "raw", "raw.jsonl"))
-			require.NoError(t, err)
-			rows := bytes.Split(bytes.TrimSpace(raw), []byte("\n"))
-			if tc.profile == "background-children" {
-				plan["scenario"] = map[string]any{"parameters": map[string]string{"childDetailPolicy": "suppress"}}
-				var root map[string]json.RawMessage
-				require.NoError(t, json.Unmarshal(rows[4], &root))
-				var msg struct {
-					Result struct{ Thread map[string]any }
-				}
-				require.NoError(t, json.Unmarshal(root["wire"], &msg))
-				child := msg.Result.Thread
-				child["id"] = "child"
-				child["parentThreadId"] = "thread-001"
-				terminal := rows[7]
-				rows = rows[:7]
-				for _, wire := range []any{
-					map[string]any{"method": "thread/started", "params": map[string]any{"thread": child}},
-					json.RawMessage(`{"method":"item/agentMessage/delta","params":{"threadId":"child","turnId":"child-turn","itemId":"detail","delta":"hello"}}`),
-					func() json.RawMessage {
-						var f map[string]json.RawMessage
-						require.NoError(t, json.Unmarshal(terminal, &f))
-						return f["wire"]
-					}(),
-					json.RawMessage(`{"method":"turn/completed","params":{"threadId":"child","turn":{"id":"child-turn","items":[],"status":"completed"}}}`),
-				} {
-					b, e := json.Marshal(map[string]any{"ordinal": len(rows) + 1, "direction": "s2c", "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": wire})
-					require.NoError(t, e)
-					rows = append(rows, b)
-				}
-				writeJSONTest(t, filepath.Join(source, "report.json"), map[string]any{"childEvidence": []any{map[string]any{"childThreadId": "child", "parentThreadId": "thread-001"}}, "receipts": []any{map[string]any{"child-detail-selection": map[string]any{"rootId": "thread-001", "childIds": []string{"child"}}}}})
-			}
-			writeJSONTest(t, filepath.Join(source, "plan.json"), plan)
-			require.NoError(t, os.WriteFile(filepath.Join(source, "raw", "raw.jsonl"), append(bytes.Join(rows, []byte("\n")), 10), 0o600))
-			bindTest(t, source)
-			if tc.profile == "remote-close" {
-				probe := append([][]byte{}, rows[:3]...)
-				for i, wire := range []string{
-					`{"id":104,"method":"thread/read","params":{"threadId":"thread-001","includeTurns":true}}`,
-					`{"id":104,"result":{"thread":{"id":"thread-001","cliVersion":"0.162.1","createdAt":1,"updatedAt":1,"cwd":"/fixture/project","ephemeral":true,"modelProvider":"synthetic","preview":"","source":"appServer","status":{"type":"idle"},"turns":[],"sessionId":"session-001","projectId":null}}}`,
-				} {
-					dir := "s2c"
-					if i == 0 {
-						dir = "c2s"
-					}
-					b, _ := json.Marshal(map[string]any{"ordinal": len(probe) + 1, "direction": dir, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": json.RawMessage(wire)})
-					probe = append(probe, b)
-				}
-				probeRoot := filepath.Join(source, "remote-probe")
-				require.NoError(t, os.MkdirAll(filepath.Join(probeRoot, "raw"), 0o700))
-				require.NoError(t, os.WriteFile(filepath.Join(probeRoot, "raw", "raw.jsonl"), append(bytes.Join(probe, []byte("\n")), 10), 0o600))
-				writeJSONTest(t, filepath.Join(probeRoot, "plan.json"), plan)
-				bindTest(t, probeRoot)
-				var manifest map[string]any
-				require.NoError(t, readJSON(filepath.Join(source, "manifest.json"), &manifest))
-				b, err := os.ReadFile(filepath.Join(probeRoot, "raw", "raw.jsonl"))
-				require.NoError(t, err)
-				manifest["remotePhaseFiles"] = map[string]string{"remote-probe/raw/raw.jsonl": digest(b)}
-				writeJSONTest(t, filepath.Join(source, "manifest.json"), manifest)
-			}
 			output := filepath.Join(t.TempDir(), "run")
+			args := []string{"--recording", controlledChildCapture(t)}
+			if tc.remote {
+				args = []string{"--provider", "codex", "--case", "SDK-CASE-032"}
+			}
 			driver := driverBinary
 			if tc.mutation != "" {
 				driver = filepath.Join(t.TempDir(), "driver")
-				script := "#!/bin/sh\nset -e\n"
-				if tc.mutation == "postprocess" {
-					script += "mkdir " + quote(filepath.Join(output, "preserve", "sdk", "phase-main-stderr.private")) + "\n"
-				}
-				if tc.mutation == "crash" {
-					script += "exit 9\n"
-				} else {
-					script += quote(driverBinary) + " \"$@\"\n"
-				}
-
-				switch tc.mutation {
-				case "probe":
-					script += "rm " + quote(filepath.Join(output, "preserve", "probe.receipt.json")) + "\n"
-				case "suppress":
-					script += "if [ -f " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + " ]; then rm " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + "; fi\n"
-				case "cross-run":
-					script += "if [ -f " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + " ]; then cp " + quote(filepath.Join(output, "preserve", "main.receipt.json")) + " " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + "; fi\n"
-				case "raw":
-					script += "if [ -f " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + " ]; then rm " + quote(filepath.Join(output, "suppress", "sdk", "raw", "raw.jsonl")) + "; echo '{}' > " + quote(filepath.Join(output, "suppress", "main.receipt.json")) + "; fi\n"
-				}
-				require.NoError(t, os.WriteFile(driver, []byte(script), 0o700))
+				require.NoError(t, os.WriteFile(driver, []byte(mutationDriver(tc.mutation, output)), 0o700))
 			}
-			cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driver)
+			args = append(args, "--output", output, "--driver", driver)
+			cmd := exec.CommandContext(t.Context(), runnerBinary, args...)
 			b, err := cmd.CombinedOutput()
-			if tc.want != "" {
-				require.Error(t, err, string(b))
-				require.Contains(t, string(b), tc.want)
-			} else {
-				require.NoError(t, err, string(b))
-			}
+			require.Error(t, err, string(b))
+
 			var result summary
 			require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
-			var first descriptor
-			require.NoError(t, readJSON(filepath.Join(output, "preserve", "run.json"), &first))
-			require.NoDirExists(t, first.ResourceRoot)
-			var immutable map[string]any
-			require.NoError(t, readJSON(first.Contract, &immutable))
-			for _, key := range []string{"_mock", "_peers", "_fixtureProject"} {
-				require.NotContains(t, immutable, key)
-			}
-			if tc.mutation == "crash" {
+			require.Equal(t, "failed", result.Status)
+			require.Len(t, result.Runs, tc.wantRuns)
+			if tc.wantBusiness {
+				require.JSONEq(t, `{"status":"passed"}`, string(result.Runs[0].Business))
+				if tc.wantRuns == 2 {
+					require.JSONEq(t, `{"status":"passed"}`, string(result.Runs[1].Business))
+				}
+			} else {
 				require.JSONEq(t, "null", string(result.Runs[0].Business))
 				require.Contains(t, string(b), "exit status 9")
-				return
 			}
-			require.JSONEq(t, `{"status":"passed"}`, string(result.Runs[0].Business))
-			if tc.profile == "background-children" {
-				require.Len(t, result.Runs, 2)
-				var second descriptor
-				require.NoError(t, readJSON(filepath.Join(output, "suppress", "run.json"), &second))
-				require.NotEqual(t, first.RunID, second.RunID)
-				require.NotEqual(t, first.Env["CODEX_HOME"], second.Env["CODEX_HOME"])
-				require.NoDirExists(t, second.ResourceRoot)
-				require.JSONEq(t, `{"status":"passed"}`, string(result.Runs[1].Business))
+			last := result.Runs[len(result.Runs)-1]
+			if tc.wantProtocol != "" {
+				require.Contains(t, last.ProtocolError, tc.wantProtocol)
+			}
+			if tc.wantBridge != "" {
+				require.Contains(t, result.Runs[0].BridgeError, tc.wantBridge)
+			}
+			if tc.wantCleanupError != "" {
+				require.Contains(t, last.CleanupError, tc.wantCleanupError)
+			}
+			if tc.wantRuns == 2 {
+				require.Equal(t, "passed", result.Runs[0].Status)
+			}
+			for _, policy := range []string{"preserve", "suppress"}[:tc.wantRuns] {
+				evidence := readSessionEvidence(t, filepath.Join(output, policy, "evidence.json"))
+				wantEvidence := tc.wantEvidence
+				if tc.wantRuns == 2 && policy == "preserve" {
+					wantEvidence = "passed"
+				}
+				require.Equal(t, wantEvidence, evidence.Status)
+				prepared, err := readPreparedSession(filepath.Join(output, policy, "session"))
+				require.Error(t, err)
+				require.Nil(t, prepared)
 			}
 		})
 	}
+}
+
+func mutationDriver(mutation, output string) string {
+	body := "#!/bin/sh\n"
+	switch mutation {
+	case "crash":
+		return body + "exit 9\n"
+	}
+	body += quote(driverBinary) + " \"$@\"\nstatus=$?\nif [ \"$status\" -eq 0 ]; then\n"
+	switch mutation {
+	case "missing-probe":
+		body += "rm -f " + quote(filepath.Join(output, "preserve", "sdk", "result-probe.jsonl")) + "\n"
+	case "missing-suppress":
+		body += "rm -f " + quote(filepath.Join(output, "suppress", "sdk", "result-main.jsonl")) + "\n"
+	case "cross-run":
+		body += "cp " + quote(filepath.Join(output, "preserve", "sdk", "result-main.jsonl")) + " " +
+			quote(filepath.Join(output, "suppress", "sdk", "result-main.jsonl")) + "\n"
+	case "invalid-receipt":
+		body += "rm -f " + quote(filepath.Join(output, "suppress", "sdk", "raw", "raw.jsonl")) + "\n"
+		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "executions")) +
+			"/*/mock/receipts/main.json; do\n" +
+			"  if [ -f \"$receipt\" ]; then printf '{}\\n' > \"$receipt\"; fi\n" +
+			"done\n"
+	case "postprocess":
+		path := filepath.Join(output, "preserve", "sdk", "result-probe.jsonl")
+		body += "rm -f " + quote(path) + "\nmkdir " + quote(path) + "\n"
+	}
+	body += "fi\nexit \"$status\"\n"
+	return body
 }
 
 // Restores the SDK-owned half of corpusSuite.TestAdoptedMaterialsRunCurrentSDKAndRetainFailures.
@@ -249,55 +334,58 @@ func TestAdoptedMaterialsRunCurrentSDKAndRetainFailures(t *testing.T) {
 	require.NoError(t, readJSON(filepath.Join(source, "plan.json"), &plan))
 	plan["caseId"] = "SDK-CASE-002"
 	writeJSONTest(t, filepath.Join(source, "plan.json"), plan)
-	bindTest(t, source)
+	refreshSyntheticBinding(t, source)
 	before := inventoryTest(t, source)
+
 	output := filepath.Join(t.TempDir(), "success")
 	wrapper := filepath.Join(t.TempDir(), "driver")
 	script := "#!/bin/sh\nset -e\ncp numbers.txt " + quote(filepath.Join(filepath.Dir(output), "initial-numbers.txt")) + "\nexec " + quote(driverBinary) + " \"$@\"\n"
 	require.NoError(t, os.WriteFile(wrapper, []byte(script), 0o700))
 	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", wrapper)
-	b, e := cmd.CombinedOutput()
-	require.NoError(t, e, string(b))
-	numbers, e := os.ReadFile(filepath.Join(filepath.Dir(output), "initial-numbers.txt"))
-	require.NoError(t, e)
+	b, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(b))
+	numbers, err := os.ReadFile(filepath.Join(filepath.Dir(output), "initial-numbers.txt"))
+	require.NoError(t, err)
 	require.Equal(t, "7\n11\n", string(numbers))
+
 	failed := filepath.Join(t.TempDir(), "failed")
 	cmd = exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", failed, "--driver", "/usr/bin/false")
-	b, e = cmd.CombinedOutput()
-	require.Error(t, e, string(b))
+	b, err = cmd.CombinedOutput()
+	require.Error(t, err, string(b))
 	require.FileExists(t, filepath.Join(failed, "summary.json"))
-	require.FileExists(t, filepath.Join(failed, "preserve", "finish.json"))
-	gateOut := filepath.Join(t.TempDir(), "gate")
-	cmd = exec.CommandContext(t.Context(), runnerBinary, "--gate", "--recording", source, "--output", gateOut, "--driver", driverBinary, "--jobs", "2")
-	b, e = cmd.CombinedOutput()
-	require.Error(t, e, string(b))
-	var c coverage
-	require.NoError(t, readJSON(filepath.Join(gateOut, "coverage.json"), &c))
-	require.Len(t, c.Cases, 72)
-	require.Equal(t, map[string]int{"passed": 1, "unverified": 71}, c.Counts)
+	require.Equal(t, "abandoned", readSessionEvidence(t, filepath.Join(failed, "preserve", "evidence.json")).Status)
 	require.Equal(t, before, inventoryTest(t, source))
+}
+
+func readSessionEvidence(t *testing.T, path string) sessionEvidence {
+	t.Helper()
+	var evidence sessionEvidence
+	require.NoError(t, readJSON(path, &evidence))
+	return evidence
 }
 
 func inventoryTest(t *testing.T, root string) map[string]string {
 	t.Helper()
 	result := map[string]string{}
-	require.NoError(t, filepath.WalkDir(root, func(p string, d os.DirEntry, e error) error {
-		if e != nil {
-			return e
+	require.NoError(t, filepath.WalkDir(root, func(p string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		if d.IsDir() {
+		if entry.IsDir() {
 			return nil
 		}
-		b, e := os.ReadFile(p)
-		if e != nil {
-			return e
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
 		}
-		name, e := filepath.Rel(root, p)
-		if e != nil {
-			return e
+		name, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
 		}
 		result[name] = digest(b)
 		return nil
 	}))
 	return result
 }
+
+func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }

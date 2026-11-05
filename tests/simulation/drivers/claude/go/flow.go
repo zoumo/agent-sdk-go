@@ -20,7 +20,7 @@ import (
 
 // AcceptFlow executes recorded operations with the public Go Session. Incoming
 // permissions retain their original handles, including held approvals.
-func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Project, Config, Model, DriverProfile string
 		FixtureProject                        string `json:"_fixtureProject"`
@@ -50,7 +50,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 			Response  json.RawMessage
 		}
 	}
-	plan.FixtureProject, plan.Config, err = runtimePaths(root, plan.FixtureProject, plan.Config)
+	host, err = resolveHost(root, plan.Project, plan.FixtureProject, plan.Config, host)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, policy claude.ChildD
 		}
 		return nil
 	}
-	options := claude.SessionOptions{ChildDetailPolicy: policy, CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject), Model: plan.Model, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &init, SDKMCPServers: servers}
+	options := claude.SessionOptions{ChildDetailPolicy: policy, CLIPath: launcher, WorkDir: host.Workspace, Model: plan.Model, Env: host.Env, Initialize: &init, SDKMCPServers: servers}
 	for i := 0; i < len(plan.Args); i++ {
 		name, value, inline := strings.Cut(plan.Args[i], "=")
 		if name != "--model" && name != "--effort" && name != "--max-thinking-tokens" {

@@ -18,9 +18,33 @@ import (
 )
 
 type runResult struct {
-	RunID, Policy, Status, Error, Output, MaterialError string
-	Business                                            json.RawMessage
+	RunID             string
+	SessionID         string
+	Policy            string
+	Provider          string
+	Status            string
+	Error             string
+	Output            string
+	Source            coverageSource
+	Material          coverageMaterial
+	MaterialStatus    string
+	MaterialError     string
+	ProtocolError     string
+	BridgeError       string
+	CleanupError      string
+	ChildDetailPolicy string
+	Business          json.RawMessage
+
+	materialReady bool
 }
+
+const (
+	materialStatusNotEvaluated = "not-evaluated"
+	materialStatusUnavailable  = "unavailable"
+	materialStatusAvailable    = "available"
+	materialStatusInvalid      = "invalid"
+)
+
 type summary struct {
 	SchemaVersion                int
 	Status, Error, MaterialError string
@@ -29,7 +53,7 @@ type summary struct {
 	Runs                         []runResult
 }
 
-func simulate(ctx context.Context, tool toolIdentity, o options, selection []string) (err error) {
+func simulate(ctx context.Context, tool toolIdentity, o options, source sourceSelection) (err error) {
 	result := summary{SchemaVersion: 1, Status: "failed", Tool: tool, SDK: sdkIdentity(o.Driver), Runs: []runResult{}}
 	defer func() {
 		if err == nil {
@@ -39,49 +63,39 @@ func simulate(ctx context.Context, tool toolIdentity, o options, selection []str
 		}
 		err = errors.Join(err, writeJSON(filepath.Join(o.Output, "summary.json"), result))
 	}()
-	var s scene
-	if err = toolJSON(ctx, tool.Command, append([]string{"--describe", "--json"}, selection...), &s); err != nil {
-		result.MaterialError = err.Error()
+
+	first, firstErr := runHost(ctx, tool, o, source, "preserve")
+	result.Runs = append(result.Runs, first)
+	if first.MaterialError != "" {
+		result.MaterialError = first.MaterialError
+	}
+	err = errors.Join(err, firstErr)
+	if !first.materialReady {
 		return err
 	}
-	if err := writeJSON(filepath.Join(o.Output, "describe.json"), s); err != nil {
+	if first.ChildDetailPolicy == "" {
 		return err
 	}
-	if err = validateScene(s); err != nil {
-		result.MaterialError = err.Error()
-		return err
+
+	second, secondErr := runHost(ctx, tool, o, source, "suppress")
+	result.Runs = append(result.Runs, second)
+	if second.MaterialError != "" && result.MaterialError == "" {
+		result.MaterialError = second.MaterialError
 	}
-	var plan struct {
-		DriverProfile string
-		Scenario      struct {
-			Parameters struct{ ChildDetailPolicy string }
-		}
-	}
-	if err := json.Unmarshal(s.AssertionInputs.SourcePlan.Original, &plan); err != nil {
-		return err
-	}
-	policies := []string{"preserve"}
-	if plan.Scenario.Parameters.ChildDetailPolicy != "" {
-		policies = append(policies, "suppress")
-	}
-	for _, policy := range policies {
-		r, e := runHost(ctx, tool, o, s, selection, policy)
-		result.Runs = append(result.Runs, r)
-		err = errors.Join(err, e)
-	}
-	if err == nil && len(policies) == 2 {
-		first := filepath.Join(o.Output, "preserve", "sdk", "deliveries.jsonl")
-		second := filepath.Join(o.Output, "suppress", "sdk", "deliveries.jsonl")
-		if s.Provider == "codex" {
-			err = codexsim.CompareDelivery(first, second)
+	err = errors.Join(err, secondErr)
+	if firstErr == nil && secondErr == nil {
+		firstDeliveries := filepath.Join(o.Output, "preserve", "sdk", "deliveries.jsonl")
+		secondDeliveries := filepath.Join(o.Output, "suppress", "sdk", "deliveries.jsonl")
+		if first.Provider == "codex" {
+			err = errors.Join(err, codexsim.CompareDelivery(firstDeliveries, secondDeliveries))
 		} else {
-			err = claudesim.CompareDelivery(first, second)
+			err = errors.Join(err, claudesim.CompareDelivery(firstDeliveries, secondDeliveries))
 		}
 	}
 	return err
 }
 
-func runHost(parent context.Context, tool toolIdentity, o options, s scene, selection []string, policy string) (r runResult, err error) {
+func runHost(parent context.Context, tool toolIdentity, o options, source sourceSelection, policy string) (r runResult, err error) {
 	r = runResult{Policy: policy, Status: "failed", Output: filepath.Join(o.Output, policy)}
 	defer func() {
 		if err == nil {
@@ -90,107 +104,245 @@ func runHost(parent context.Context, tool toolIdentity, o options, s scene, sele
 			r.Error = err.Error()
 		}
 	}()
+	if err := os.Mkdir(r.Output, 0o700); err != nil {
+		return r, err
+	}
 	ctx, cancel := context.WithTimeout(parent, o.Timeout)
 	defer cancel()
-	var d descriptor
-	err = toolJSON(ctx, tool.Command, append(append([]string{"--prepare"}, selection...), "--output", r.Output), &d)
+	sessionDir := filepath.Join(r.Output, "session")
+	session, err := prepareSession(ctx, tool, source, sessionDir, policy)
 	if err != nil {
-		// A canceled stdout read can race the tool publishing run.json. Recover
-		// only this allocated output so a completed prepare is still finished.
-		var prepared descriptor
-		if readJSON(filepath.Join(r.Output, "run.json"), &prepared) == nil && prepared.RunID != "" {
-			r.RunID = prepared.RunID
-			err = errors.Join(err, finishRun(tool, r.Output, prepared))
+		r.MaterialStatus = classifyPrepareError(err)
+		if r.MaterialStatus == materialStatusInvalid {
+			r.MaterialError = err.Error()
 		}
 		return r, err
 	}
-	r.RunID = d.RunID
-	// Registered immediately after prepare; independent cleanup context also runs
-	// after cancellation, driver failures, invalid contracts and bridge failures.
-	defer func() { err = errors.Join(err, finishRun(tool, r.Output, d)) }()
-	if err = validateRun(d, s, tool); err != nil {
+	r.SessionID = session.SessionID
+	r.Source = coverageSource{
+		Kind:          session.Source.Kind,
+		ID:            session.Source.ID,
+		SHA256:        session.Source.SHA256,
+		Provenance:    session.Source.Provenance,
+		DriverProfile: session.Source.DriverProfile,
+	}
+	var pkg *materialPackage
+	var resultLogs map[string]string
+	// Register immediately after prepare. Evidence is read before the
+	// caller-owned session is removed, including after cancellation or crashes.
+	defer func() {
+		finalized := finalizePreparedSession(parent, session, pkg, resultLogs, r.Output, businessPassed(r.Business))
+		if finalized.Evidence != nil {
+			if finalized.Evidence.SessionID != session.SessionID {
+				finalized.Error = errors.Join(finalized.Error, errors.New("evidence session changed"))
+			}
+			if len(finalized.Evidence.Index.Executions) > 0 {
+				r.RunID = finalized.Evidence.Index.Executions[0].ID
+			}
+		}
+		if finalized.Error != nil {
+			r.CleanupError = finalized.Error.Error()
+			err = errors.Join(err, fmt.Errorf("session evidence %s: %w", policy, finalized.Error))
+		}
+		if finalized.ProtocolError != nil {
+			r.ProtocolError = finalized.ProtocolError.Error()
+			err = errors.Join(err, fmt.Errorf("protocol evidence: %w", finalized.ProtocolError))
+		}
+	}()
+
+	exportDir := filepath.Join(r.Output, "material")
+	if err := exportPreparedSession(ctx, tool, session, exportDir); err != nil {
+		if isMaterialUnavailable(err) {
+			r.MaterialStatus = materialStatusUnavailable
+		} else {
+			r.MaterialStatus = materialStatusInvalid
+			r.MaterialError = err.Error()
+		}
+		return r, err
+	}
+	pkg, err = validateExport(exportDir, session)
+	if err != nil {
+		r.MaterialStatus = materialStatusInvalid
 		r.MaterialError = err.Error()
 		return r, err
 	}
+	r.MaterialStatus = materialStatusAvailable
+	r.Material = coverageMaterial{
+		ID:              pkg.Material.ID,
+		Kind:            pkg.Material.Kind,
+		Action:          pkg.Material.Action,
+		Provider:        pkg.Plan.Provider,
+		CaseID:          pkg.Plan.CaseID,
+		Provenance:      pkg.Material.Provenance,
+		PlanSHA256:      pkg.Material.PlanSHA256,
+		ManifestSHA256:  pkg.Material.ManifestSHA256,
+		RecordingSHA256: pkg.Material.RecordingSHA256,
+		Connections:     append([]string(nil), pkg.Material.Connections...),
+	}
+	if session.AgentType == "claude" && len(pkg.Material.Connections) > 1 {
+		return r, errors.New("claude simulation supports only the main mock connection")
+	}
+	r.ChildDetailPolicy = planPolicy(pkg)
+	r.Provider = pkg.Plan.Provider
+	r.materialReady = true
 	hostRoot := filepath.Join(r.Output, "sdk")
-	if err := projectAssertions(hostRoot, s, d); err != nil {
+	if err := projectAssertions(hostRoot, pkg, session, policy); err != nil {
 		return r, err
+	}
+
+	peers, logs, err := peerLaunchers(hostRoot, session)
+	if err != nil {
+		return r, err
+	}
+	resultLogs = logs
+	mainPeer, ok := peers["main"]
+	if !ok {
+		return r, errors.New("prepared main connection missing")
 	}
 	peer := struct {
 		command
 		Remote *remoteEndpoint `json:"remote,omitempty"`
 	}{}
-	for _, c := range d.Connections {
-		if c.ID == "main" {
-			peer.command = c.command
-			if s.Provider == "claude" {
-				peer.command = command{Command: c.Launcher}
-			}
-		}
-	}
-	if peer.Command == "" {
-		return r, errors.New("prepared main connection missing")
-	}
+	peer.command = mainPeer
+
 	var remote *mockRemoteService
-	if len(d.Connections) == 2 {
-		peers := make(map[string]command, 2)
-		for _, c := range d.Connections {
-			if c.ID == "main" || c.ID == "probe" {
-				peers[c.ID] = c.command
-			}
-		}
+	if len(peers) == 2 {
 		remote, err = startMockRemote(ctx, peers, hostRoot)
 		if err != nil {
+			r.BridgeError = err.Error()
 			return r, err
 		}
+		defer func() {
+			if remote == nil {
+				return
+			}
+			if bridgeErr := remote.close(); bridgeErr != nil {
+				r.BridgeError = bridgeErr.Error()
+				err = errors.Join(err, fmt.Errorf("remote bridge: %w", bridgeErr))
+			}
+		}()
 		peer.Remote = &remote.endpoint
 	}
-	req := map[string]any{"case": s.CaseID, "materials": hostRoot, "workspace": d.Workspace, "output": hostRoot, "peer": peer, "policy": policy}
+
 	request := filepath.Join(hostRoot, "request.json")
-	if err = writeJSON(request, req); err != nil {
-		if remote != nil {
-			err = errors.Join(err, remote.close())
-		}
+	req := map[string]any{
+		"case":      requestCase(session, pkg),
+		"materials": hostRoot,
+		"workspace": session.Mock.Workspace,
+		"output":    hostRoot,
+		"peer":      peer,
+		"policy":    policy,
+		"env":       session.HostEnv(),
+	}
+	if err := writeJSON(request, req); err != nil {
 		return r, err
 	}
 	cmd := exec.CommandContext(ctx, o.Driver, "--request", request)
-	cmd.Dir = d.Workspace
-	cmd.Env = hostEnvironment(d.Env)
+	cmd.Dir = session.Mock.Workspace
+	cmd.Env = session.HostEnv()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 3 * time.Second
-	// Ask the SDK host to close sessions first. A bounded group kill handles a
-	// crashed/hung host without keeping supervisors/temporary locks alive.
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }
-	stderr, e := os.OpenFile(filepath.Join(hostRoot, "stderr.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if e != nil {
-		if remote != nil {
-			e = errors.Join(e, remote.close())
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
 		}
-		return r, e
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	}
+	stderr, openErr := os.OpenFile(filepath.Join(hostRoot, "stderr.log"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if openErr != nil {
+		return r, openErr
 	}
 	cmd.Stderr = stderr
 	cmd.Stdout = stderr
-	err = cmd.Run()
-	err = errors.Join(err, stderr.Close())
+	runErr := cmd.Run()
+	runErr = errors.Join(runErr, stderr.Close())
 	if cmd.Process != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
+
 	if remote != nil {
-		err = errors.Join(err, remote.close())
+		if bridgeErr := remote.close(); bridgeErr != nil {
+			r.BridgeError = bridgeErr.Error()
+			err = errors.Join(err, fmt.Errorf("remote bridge: %w", bridgeErr))
+		}
+		remote = nil
 	}
-	b, e := os.ReadFile(filepath.Join(hostRoot, "result.json"))
-	if e != nil {
-		return r, errors.Join(err, e)
-	}
-	r.Business = b
-	var business struct{ Status, Message string }
-	if e = json.Unmarshal(b, &business); e != nil {
-		return r, errors.Join(err, e)
-	}
-	if business.Status != "passed" {
-		err = errors.Join(err, fmt.Errorf("SDK business %s: %s", business.Status, business.Message))
+	err = errors.Join(err, runErr)
+	businessBytes, readErr := os.ReadFile(filepath.Join(hostRoot, "result.json"))
+	if readErr != nil {
+		err = errors.Join(err, readErr)
+	} else {
+		r.Business = businessBytes
+		var business struct{ Status, Message string }
+		if decodeErr := json.Unmarshal(businessBytes, &business); decodeErr != nil {
+			err = errors.Join(err, decodeErr)
+		} else if business.Status != "passed" {
+			err = errors.Join(err, fmt.Errorf("SDK business %s: %s", business.Status, business.Message))
+		}
 	}
 	return r, errors.Join(err, ctx.Err())
+}
+
+func classifyPrepareError(err error) string {
+	if isMaterialUnavailable(err) {
+		return materialStatusUnavailable
+	}
+	return materialStatusInvalid
+}
+
+func isMaterialUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"session has no current recording",
+		"absent from shared materials",
+		"builtin unavailable ",
+		"material unavailable",
+	} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func businessPassed(raw json.RawMessage) bool {
+	var business struct{ Status string }
+	return len(raw) > 0 && json.Unmarshal(raw, &business) == nil && business.Status == "passed"
+}
+
+func peerLaunchers(root string, session *preparedSession) (map[string]command, map[string]string, error) {
+	peers := make(map[string]command, len(session.Mock.Connections))
+	logs := make(map[string]string, len(session.Mock.Connections))
+	for _, connection := range session.Mock.Connections {
+		logPath := filepath.Join(root, "result-"+connection.ID+".jsonl")
+		launcherPath := filepath.Join(root, "peer-"+connection.ID)
+		var script strings.Builder
+		script.WriteString("#!/bin/sh\nset -e\n")
+		script.WriteString("cd " + shellQuote(session.Mock.ProtocolCwd) + "\n")
+		script.WriteString("exec 3>" + shellQuote(logPath) + "\n")
+		script.WriteString("exec " + shellQuote(connection.Command))
+		for _, arg := range connection.Args {
+			script.WriteString(" " + shellQuote(arg))
+		}
+		script.WriteString(" --result-fd 3 -- \"$@\"\n")
+		if err := os.WriteFile(launcherPath, []byte(script.String()), 0o700); err != nil {
+			return nil, nil, err
+		}
+		peers[connection.ID] = command{
+			Command: launcherPath,
+			Env:     session.HostEnv(),
+			Dir:     session.Mock.ProtocolCwd,
+		}
+		logs[connection.ID] = logPath
+	}
+	return peers, logs, nil
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func hostEnvironment(overrides map[string]string) []string {
@@ -201,47 +353,10 @@ func hostEnvironment(overrides map[string]string) []string {
 			env = append(env, entry)
 		}
 	}
-	for k, v := range overrides {
-		env = append(env, k+"="+v)
+	for key, value := range overrides {
+		env = append(env, key+"="+value)
 	}
 	return env
-}
-
-// These are INTERNAL SDK fixture projections, never tool recording paths. The
-// originals come only from describe assertionInputs; runtime paths live in their
-// own file. No recorded command/config path grants launch authority.
-func projectAssertions(root string, s scene, d descriptor) error {
-	if err := os.Mkdir(root, 0o700); err != nil {
-		return err
-	}
-	a := s.AssertionInputs
-	if err := os.WriteFile(filepath.Join(root, "plan.json"), a.SourcePlan.Original, 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(root, "case.json"), a.SourcePlan.Original, 0o600); err != nil {
-		return err
-	}
-	if a.SourceReport != nil {
-		if err := os.WriteFile(filepath.Join(root, "report.json"), a.SourceReport.Original, 0o600); err != nil {
-			return err
-		}
-	}
-	for _, c := range a.Connections {
-		path := filepath.Join(root, "raw", "raw.jsonl")
-		if c.ID == "probe" {
-			path = filepath.Join(root, "remote-probe", "raw", "raw.jsonl")
-		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, c.Original, 0o600); err != nil {
-			return err
-		}
-	}
-	if err := writeJSON(filepath.Join(root, "assertion-inputs.json"), a); err != nil {
-		return err
-	}
-	return writeJSON(filepath.Join(root, "runtime.json"), map[string]any{"workspace": d.Workspace, "protocolCwd": d.ProtocolCwd, "config": d.Env["CLAUDE_CONFIG_DIR"]})
 }
 
 func sdkIdentity(driver string) any {
@@ -255,6 +370,5 @@ func sdkIdentity(driver string) any {
 	if info, e := buildinfo.ReadFile(driver); e == nil {
 		result["build"] = info
 	}
-
 	return result
 }

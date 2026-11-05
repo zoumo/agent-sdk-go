@@ -184,7 +184,11 @@ func (s *mockRemoteService) close() error {
 
 func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, peer command, stderrPath string) error {
 	cmd := exec.CommandContext(ctx, peer.Command, peer.Args...)
-	cmd.Env = []string{}
+	cmd.Env = peer.Env
+	if cmd.Env == nil {
+		cmd.Env = []string{}
+	}
+	cmd.Dir = peer.Dir
 	cmd.WaitDelay = 3 * time.Second
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	// Cancellation owns the entire peer tree, including the lifetime wrapper

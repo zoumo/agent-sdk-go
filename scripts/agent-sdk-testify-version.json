@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "toolVersion": "agent-sdk-testify 0.1.0-dev",
-  "sourceRevision": "5ff829fed32c36ec921ae62d0536b6f3be0d539b",
-  "artifactSha256": "89a153f45159674e5cfde3dcb37fc4c2625ca8089632c34002a175a0a9ace8b3",
-  "builtinSourceRevision": "77deb5e44a64b4cf09f6868d674f9d80dbd72ac7",
-  "builtinManifestSha256": "86e03cc1c3da0d36719e158ef89dc379628002cce8d5d344832252fc4fb285b2",
+  "sourceRevision": "1826ee79654cc01cf564f50ec856b02cb6ff74ba",
+  "artifactSha256": "b941b876b305a2439b47534c68baf2c075bd2fee5f59eb0934d937bdd31693c5",
+  "builtinSourceRevision": "5bad4dc42fe5e873f31408420324498adb1593e6",
+  "builtinManifestSha256": "3a9bc69a9d05c2bf3e6788f3ec6d5d4296d2dd973f85b7313f06b280a78f04d6",
   "release": null,
-  "reason": "Observed local artifact identity only. No published release or downloadable CI pin exists; local integration requires explicit AGENT_SDK_TESTIFY_BIN."
+  "reason": "Observed local darwin/arm64 clean development artifact identity only. No published release or downloadable CI pin exists; local integration requires explicit AGENT_SDK_TESTIFY_BIN."
 }

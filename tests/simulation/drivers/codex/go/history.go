@@ -59,7 +59,7 @@ func AcceptSavedHistory(ctx context.Context, executable string, args []string, r
 	c, err := codex.NewStdio(ctx, codex.StdioOptions{
 		Executable: executable,
 		Args:       args,
-		Env:        []string{}, Initialize: init,
+		Initialize: init,
 	})
 	if err != nil {
 		return err

@@ -24,8 +24,11 @@ SDK tests. There is no published release pin; scripts fail explicitly when this
 override is absent. `scripts/simulation.sh build` builds only SDK runner/driver.
 The external tool owns official driver/package and material checks. Scenario,
 recording, official-driver and Python snapshots do not remain in this repository.
-SDK process tests use describe/prepare/finish and preserve all three
-migrated assertion groups in tests/simulation/simulate.
+SDK process tests use `prepare` and `agent mock`; simulation obtains assertion
+inputs only from `export`. Callers read the execution index and result notices,
+then remove the caller-owned session after every SDK client and peer exits. The
+migrated synthetic, single-case and 72-slot gate checks remain in
+`tests/simulation/simulate`.
 
 The remaining gates check module and native dependency boundaries, standard-library-only
 types packages, native inventory, reproducible Codex generation, unit/subprocess tests

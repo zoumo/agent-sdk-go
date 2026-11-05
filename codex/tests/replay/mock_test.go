@@ -3,11 +3,10 @@ package recording_test
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
@@ -56,7 +55,7 @@ func (s *GoMockSuite) TestRealSDKStdio() {
 				`c2s {"id":"reverse","result":`+tc.answer+`}`,
 				`c2s {"id":103,"method":"synthetic/done"}`,
 				`s2c {"id":103,"result":{}}`)
-			c, ctx := s.startSDK(mockScenario(fs))
+			c, ctx := s.startSDK(mockScenario(fs), "passed")
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: c})
 			s.Require().NoError(err)
 			defer func() { _ = c.Close(); _ = session.Close() }()
@@ -106,7 +105,11 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 			for i := range fs {
 				fs[i].Ordinal = i + 1
 			}
-			c, ctx := s.startSDK(mockScenario(fs))
+			wantStatus := "passed"
+			if fault == "disconnect" {
+				wantStatus = "failed"
+			}
+			c, ctx := s.startSDK(mockScenario(fs), wantStatus)
 			var err error
 			if fault == "late response" {
 				session, openErr := codex.Open(ctx, codex.SessionOptions{Client: c})
@@ -142,20 +145,28 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 	}
 }
 
-func (s *GoMockSuite) startSDK(sc mockScenarioDefinition) (*codex.Client, context.Context) {
+func (s *GoMockSuite) startSDK(sc mockScenarioDefinition, wantStatus string) (*codex.Client, context.Context) {
 	s.T().Helper()
 	b, err := json.Marshal(sc)
 	s.Require().NoError(err)
-	path := filepath.Join(s.T().TempDir(), "synthetic.json")
-	s.Require().NoError(os.WriteFile(path, b, 0o600))
-	executable, err := mocktest.Executable()
+	session, err := mocktest.Prepare(s.T().TempDir(), "codex", b, mocktest.Options{})
 	s.Require().NoError(err)
+	s.T().Cleanup(func() { verifySDKSession(s.T(), session, wantStatus) })
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	s.T().Cleanup(cancel)
-	args, err := mocktest.Arguments(s.T().TempDir(), "codex", path, "")
+	executable, args, err := session.Command("main")
 	s.Require().NoError(err)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: []string{}, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"}}})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: session.Env, Dir: session.Workspace, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"}}})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.NoError(c.Close()) })
 	return c, ctx
+}
+
+func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {
+	t.Helper()
+	report, err := session.Report()
+	require.NotNil(t, report)
+	require.NoError(t, err)
+	require.Equal(t, want, report.Status)
+	require.NoError(t, session.Close())
 }

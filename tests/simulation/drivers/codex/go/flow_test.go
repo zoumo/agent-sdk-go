@@ -44,29 +44,24 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 				require.NoError(t, json.NewEncoder(&capture).Encode(row))
 			}
 			root := t.TempDir()
-			source, receipt := filepath.Join(root, "raw.jsonl"), filepath.Join(root, "peer.json")
+			source := filepath.Join(root, "raw.jsonl")
 			require.NoError(t, os.WriteFile(source, capture.Bytes(), 0o600))
-			peer, err := mocktest.Executable()
+			data, err := os.ReadFile(source)
 			require.NoError(t, err)
+			peerSession, err := mocktest.Prepare(t.TempDir(), "codex", data, mocktest.Options{})
+			require.NoError(t, err)
+			t.Cleanup(func() { verifySDKSession(t, peerSession, "passed") })
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			args, err := mocktest.Arguments(t.TempDir(), "codex", source, receipt)
+			executable, args, err := peerSession.Command("main")
 			require.NoError(t, err)
 			if decision == "accept" {
-				require.NoError(t, AcceptFlow(ctx, peer, args, source, codex.ChildDetailPreserve, io.Discard))
+				require.NoError(t, AcceptFlow(ctx, executable, args, source, codex.ChildDetailPreserve, io.Discard))
 			} else {
-				launcher, err := mocktest.Launcher(t.TempDir(), "codex", source, receipt)
+				launcher, err := peerSession.Launcher("main")
 				require.NoError(t, err)
 				require.NoError(t, AcceptFlow(ctx, launcher, nil, source, codex.ChildDetailPreserve, io.Discard))
 			}
-
-			b, err := os.ReadFile(receipt)
-			require.NoError(t, err)
-			var got struct{ FullConsumption, ClientEOF, NativeLaunched bool }
-			require.NoError(t, json.Unmarshal(b, &got))
-			require.True(t, got.FullConsumption)
-			require.True(t, got.ClientEOF)
-			require.False(t, got.NativeLaunched)
 		})
 	}
 }
@@ -86,3 +81,12 @@ func rootPrefix(t *testing.T) []recording.Frame {
 	return fs
 }
 func addRoot(fs *[]recording.Frame, d, w string) { *fs = append(*fs, frame(len(*fs)+1, d, w)) }
+
+func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {
+	t.Helper()
+	report, err := session.Report()
+	require.NotNil(t, report)
+	require.NoError(t, err)
+	require.Equal(t, want, report.Status)
+	require.NoError(t, session.Close())
+}

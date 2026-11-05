@@ -38,7 +38,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if err := json.Unmarshal(b, &plan); err != nil {
 		return err
 	}
-	plan.FixtureProject, plan.Config, err = runtimePaths(root, plan.FixtureProject, plan.Config)
+	plan.FixtureProject, plan.Config, _, err = runtimePaths(root, plan.FixtureProject, plan.Config)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	verify := func() error {
 		if _, e := os.Stat(filepath.Join(root, "runtime.json")); e == nil {
 			// Described history IDs are opaque. Verify frozen source bytes by the seed
-			// hashes, then let the public history API and mock finish check live copies.
+			// hashes, then let the public history API and mock evidence check live copies.
 			var described struct {
 				SchemaVersion int
 				SavedHistory  []struct {

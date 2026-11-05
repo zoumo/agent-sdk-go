@@ -68,9 +68,9 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, po
 		case "existing-children":
 			err = claudesim.AcceptExistingChildren(ctx, peer.Command, root)
 		case "history":
-			err = claudesim.AcceptSavedHistory(ctx, peer.Command, root, claude.ChildDetailPolicy(policy), out)
+			err = claudesim.AcceptSavedHistory(ctx, peer.Command, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		default:
-			err = claudesim.AcceptFlow(ctx, peer.Command, root, claude.ChildDetailPolicy(policy), out)
+			err = claudesim.AcceptFlow(ctx, peer.Command, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		}
 	default:
 		err = errors.New("unsupported provider")

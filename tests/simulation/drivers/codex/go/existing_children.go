@@ -79,7 +79,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	if err := json.Unmarshal(requests[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: []string{}, Initialize: init})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Initialize: init})
 	if err != nil {
 		return err
 	}

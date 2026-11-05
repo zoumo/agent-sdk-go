@@ -17,7 +17,7 @@ import (
 
 // AcceptSavedHistory uses a real captured mock process for Session execution,
 // then the public local-history API for the captured immutable saved files.
-func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptSavedHistory(ctx context.Context, launcher, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Project, Config, DriverProfile string
 		FixtureProject                 string `json:"_fixtureProject"`
@@ -29,7 +29,7 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	if err := json.Unmarshal(b, &plan); err != nil {
 		return err
 	}
-	plan.FixtureProject, plan.Config, err = runtimePaths(root, plan.FixtureProject, plan.Config)
+	host, err = resolveHost(root, plan.Project, plan.FixtureProject, plan.Config, host)
 	if err != nil {
 		return err
 	}
@@ -91,8 +91,8 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 		}
 	}
 	s, err := claude.Open(ctx, claude.SessionOptions{
-		CLIPath: launcher, WorkDir: executionProject(plan.Project, plan.FixtureProject),
-		Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config}, Initialize: &initialize, ChildDetailPolicy: policy,
+		CLIPath: launcher, WorkDir: host.Workspace,
+		Env: host.Env, Initialize: &initialize, ChildDetailPolicy: policy,
 	})
 	if err != nil {
 		return err
@@ -142,7 +142,11 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, policy claud
 	if plan.DriverProfile == "continuation" {
 		return nil
 	}
-	scope := claude.SessionQueryScope{ConfigDir: plan.Config, ProjectDir: executionProject(plan.Project, plan.FixtureProject)}
+	host, err = executionHost(root)
+	if err != nil {
+		return err
+	}
+	scope := claude.SessionQueryScope{ConfigDir: host.Config, ProjectDir: host.Workspace}
 	listed, err := claude.ListSessions(ctx, claude.ListSessionsOptions{Scope: scope})
 	if err != nil {
 		return err

@@ -45,32 +45,25 @@ func TestHistorySetupConsumesBackgroundResultsBeforeNextInput(t *testing.T) {
 			}
 			source := filepath.Join(root, "raw", "raw.jsonl")
 			require.NoError(t, os.WriteFile(source, []byte(capture.String()), 0o600))
-			receipt := filepath.Join(root, "peer.json")
-			launcher, err := mocktest.Launcher(root, "claude", source, receipt)
+			session, err := mocktest.Prepare(t.TempDir(), "claude", []byte(capture.String()), mocktest.Options{})
 			require.NoError(t, err)
-			launch, err := os.ReadFile(launcher)
+			wantStatus := "passed"
+			if changedResult {
+				wantStatus = "failed"
+			}
+			t.Cleanup(func() { verifyMockSession(t, session, wantStatus) })
+			launcher, err := session.Launcher("main")
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(string(launch), ` "$@"`, "")), 0o700))
 			if changedResult {
 				require.NoError(t, os.WriteFile(source, []byte(strings.Replace(capture.String(), `"result":"background"`, `"result":"wrong"`, 1)), 0o600))
-				// The peer reads its frozen source, while the driver checks a different expectation.
-				peerSource := filepath.Join(root, "peer-source.jsonl")
-				require.NoError(t, os.WriteFile(peerSource, []byte(capture.String()), 0o600))
-				require.NoError(t, os.WriteFile(launcher, []byte(strings.ReplaceAll(strings.ReplaceAll(string(launch), ` "$@"`, ""), source, peerSource)), 0o700))
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			err = AcceptSavedHistory(ctx, launcher, root, claude.ChildDetailPreserve, io.Discard)
+			err = AcceptSavedHistory(ctx, launcher, root, preparedHost(t, session), claude.ChildDetailPreserve, io.Discard)
 			if changedResult {
 				require.ErrorContains(t, err, "terminal differs")
 			} else {
 				require.NoError(t, err)
-				var got struct{ FullConsumption, ClientEOF bool }
-				b, err := os.ReadFile(receipt)
-				require.NoError(t, err)
-				require.NoError(t, json.Unmarshal(b, &got))
-				require.True(t, got.FullConsumption)
-				require.True(t, got.ClientEOF)
 			}
 		})
 	}

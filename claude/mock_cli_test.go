@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,18 +18,11 @@ import (
 
 type mockCLISuite struct {
 	suite.Suite
-	executable string
 }
 
 func TestMockCLI(t *testing.T) { suite.Run(t, new(mockCLISuite)) }
 
-func (s *mockCLISuite) SetupTest() {
-	var err error
-	s.executable, err = mocktest.Executable()
-	s.Require().NoError(err)
-}
-
-func mockCLIScenario(t *testing.T, wires ...string) string {
+func mockCLIScenario(t *testing.T, wires ...string) []byte {
 	t.Helper()
 	frames := make([]map[string]any, 0, len(wires))
 	for i, wire := range wires {
@@ -45,9 +36,7 @@ func mockCLIScenario(t *testing.T, wires ...string) string {
 	}
 	b, err := json.Marshal(map[string]any{"version": 1, "provenance": "synthetic", "frames": frames})
 	require.NoError(t, err)
-	path := filepath.Join(t.TempDir(), "claude.json")
-	require.NoError(t, os.WriteFile(path, b, 0o600))
-	return path
+	return b
 }
 
 var mockClaudeInit = []string{
@@ -76,10 +65,16 @@ func (s *mockCLISuite) TestInteractions() {
 			default:
 				frames[len(frames)-1] = `>{"type":"user","message":{"role":"user","content":"different"},"parent_tool_use_id":null,"session_id":""}`
 			}
-			path := mockCLIScenario(t, frames...)
-			launcher, err := mocktest.Launcher(t.TempDir(), "claude", path, "")
+			peerSession, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
 			require.NoError(t, err)
-			client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, Env: []string{"PATH="}})
+			wantStatus := "passed"
+			if mode != "permission-and-interrupt" {
+				wantStatus = "failed"
+			}
+			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
+			launcher, err := peerSession.Launcher("main")
+			require.NoError(t, err)
+			client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: peerSession.Workspace, Env: peerSession.Env})
 			require.NoError(t, err)
 			defer client.Abort()
 			require.NoError(t, submitMockCLIInput(ctx, client, "hello"))
@@ -93,11 +88,10 @@ func (s *mockCLISuite) TestInteractions() {
 						var nativeErr *claude.Error
 						require.ErrorAs(t, closeErr, &nativeErr)
 						require.NotNil(t, nativeErr.ExitCode)
-						wantCode := 1
+						assert.Equal(t, 1, *nativeErr.ExitCode)
 						if mode == "disconnect" {
-							wantCode = 4
+							assert.Contains(t, nativeErr.Stderr, "scripted disconnect")
 						}
-						assert.Equal(t, wantCode, *nativeErr.ExitCode)
 						break
 					}
 				}
@@ -136,10 +130,12 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		frames = append(frames, fmt.Sprintf(`<{"type":"assistant","session_id":"synthetic","message":{"content":[]},"index":%d}`, i))
 	}
 	frames = append(frames, `>{"type":"control_request","request_id":"interrupt","request":{"subtype":"interrupt"}}`, `<{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`, `>{"type":"control_response","response":{"subtype":"success","request_id":"permission","response":{"behavior":"allow","updatedInput":{"questions":[]}}}}`, `>{"type":"user","message":{"role":"user","content":"release"},"parent_tool_use_id":null,"session_id":""}`, `!`)
-	path := mockCLIScenario(t, frames...)
-	launcher, err := mocktest.Launcher(t.TempDir(), "claude", path, "")
+	peerSession, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
-	client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, Env: []string{"PATH="}})
+	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
+	launcher, err := peerSession.Launcher("main")
+	require.NoError(t, err)
+	client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: peerSession.Workspace, Env: peerSession.Env})
 	require.NoError(t, err)
 	defer client.Abort()
 	first, err := client.Receive(ctx)
@@ -182,7 +178,8 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	var terminal *claude.Error
 	require.ErrorAs(t, client.Close(), &terminal)
 	require.NotNil(t, terminal.ExitCode)
-	require.Equal(t, 4, *terminal.ExitCode)
+	require.Equal(t, 1, *terminal.ExitCode)
+	require.Contains(t, terminal.Stderr, "scripted disconnect")
 }
 
 func submitMockCLIInput(ctx context.Context, session *claude.Session, text string) error {
@@ -199,4 +196,13 @@ func receiveMockCLIRequest(t *testing.T, ctx context.Context, session *claude.Se
 			return record.Request
 		}
 	}
+}
+
+func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
+	t.Helper()
+	report, err := session.Report()
+	require.NotNil(t, report)
+	require.NoError(t, err)
+	require.Equal(t, want, report.Status)
+	require.NoError(t, session.Close())
 }

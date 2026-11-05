@@ -2,8 +2,6 @@ package mocktest
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,6 +18,23 @@ import (
 
 const noticeScenario = `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"wire":{"method":"notice","type":"notice"}}]}`
 
+func prepareSession(t *testing.T, provider, scenario string, options Options) *Session {
+	t.Helper()
+	session, err := Prepare(t.TempDir(), provider, []byte(scenario), options)
+	require.NoError(t, err)
+	return session
+}
+
+func closeSession(t *testing.T, session *Session) *SessionReport {
+	t.Helper()
+	report, err := session.Report()
+	require.NotNil(t, report)
+	require.NoError(t, err)
+	require.NoError(t, session.Close())
+	require.NoDirExists(t, session.Dir)
+	return report
+}
+
 func TestExplicitExecutableRequired(t *testing.T) {
 	for _, path := range []string{"", "agent-sdk-testify", filepath.Join(t.TempDir(), "missing")} {
 		t.Run(path, func(t *testing.T) {
@@ -28,6 +43,39 @@ func TestExplicitExecutableRequired(t *testing.T) {
 			require.ErrorContains(t, err, "AGENT_SDK_TESTIFY_BIN")
 		})
 	}
+}
+
+func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	var descriptor struct {
+		SchemaVersion int
+		ToolSHA256    string
+		Source        struct {
+			Kind, Path, Provenance string
+		}
+		Routes struct {
+			Mock struct {
+				Workspace string
+				Env       map[string]string
+			}
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(session.Dir, "session.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &descriptor))
+	require.Equal(t, 3, descriptor.SchemaVersion)
+	require.FileExists(t, filepath.Join(descriptor.Source.Path, "plan.json"))
+	require.Equal(t, "recording", descriptor.Source.Kind)
+	require.Equal(t, "external", descriptor.Source.Provenance)
+	require.Equal(t, session.Workspace, descriptor.Routes.Mock.Workspace)
+	require.Equal(t, session.Env, sortedEnvironment(descriptor.Routes.Mock.Env))
+	var manifest struct{ Provenance string }
+	data, err = os.ReadFile(filepath.Join(descriptor.Source.Path, "manifest.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &manifest))
+	require.Equal(t, "synthetic", manifest.Provenance)
+	report := closeSession(t, session)
+	require.Equal(t, "abandoned", report.Status)
 }
 
 func TestProgressBeforeEOFWithoutPython(t *testing.T) {
@@ -40,34 +88,39 @@ func TestProgressBeforeEOFWithoutPython(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			complete := false
-			err := Run(ctx, provider, input, io.Discard, []byte(noticeScenario), Options{Complete: func() error {
+			session := prepareSession(t, provider, noticeScenario, Options{Complete: func() error {
 				complete = true
 				return writer.Close()
 			}})
-			require.NoError(t, err)
+			require.NoError(t, session.Run(ctx, input, io.Discard))
 			require.True(t, complete, "progress must release the input before mock waits for final EOF")
+			require.Equal(t, "passed", closeSession(t, session).Status)
 		})
 	}
 }
 
 func TestBridgeFailureSemantics(t *testing.T) {
-	t.Run("disconnect code 4", func(t *testing.T) {
+	t.Run("scripted disconnect", func(t *testing.T) {
 		scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"disconnect":true}]}`
 		called := false
-		err := Run(context.Background(), "codex", strings.NewReader(""), io.Discard, []byte(scenario), Options{Complete: func() error { called = true; return nil }})
+		session := prepareSession(t, "codex", scenario, Options{Complete: func() error { called = true; return nil }})
+		err := session.Run(context.Background(), strings.NewReader(""), io.Discard)
 		require.ErrorIs(t, err, ErrDisconnected)
 		require.False(t, called)
+		require.Equal(t, "failed", closeSession(t, session).Status)
 	})
-	t.Run("deadline code 3", func(t *testing.T) {
+	t.Run("scripted deadline", func(t *testing.T) {
 		input, writer := io.Pipe()
 		defer input.Close()
 		defer writer.Close()
 		scenario := strings.Replace(noticeScenario, `"version":1`, `"version":1,"timeoutMs":100`, 1)
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		err := Run(ctx, "codex", input, io.Discard, []byte(scenario), Options{})
+		session := prepareSession(t, "codex", scenario, Options{})
+		err := session.Run(ctx, input, io.Discard)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
-		require.NoError(t, ctx.Err(), "mock exit 3 must return before the parent deadline")
+		require.NoError(t, ctx.Err(), "mock deadline must return before the parent deadline")
+		require.Equal(t, "failed", closeSession(t, session).Status)
 	})
 	t.Run("disconnect with idle file descriptor", func(t *testing.T) {
 		input, writer, err := os.Pipe()
@@ -77,9 +130,11 @@ func TestBridgeFailureSemantics(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"disconnect":true}]}`
-		err = Run(ctx, "codex", input, io.Discard, []byte(scenario), Options{})
+		session := prepareSession(t, "codex", scenario, Options{})
+		err = session.Run(ctx, input, io.Discard)
 		require.ErrorIs(t, err, ErrDisconnected)
 		require.NoError(t, ctx.Err(), "a child can disconnect while upstream stdin remains open")
+		require.Equal(t, "failed", closeSession(t, session).Status)
 	})
 	t.Run("cancel blocked input", func(t *testing.T) {
 		input, writer := io.Pipe()
@@ -87,59 +142,46 @@ func TestBridgeFailureSemantics(t *testing.T) {
 		defer writer.Close()
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		err := Run(ctx, "codex", input, io.Discard, []byte(noticeScenario), Options{Complete: func() error { cancel(); return nil }})
+		session := prepareSession(t, "codex", noticeScenario, Options{Complete: func() error { cancel(); return nil }})
+		err := session.Run(ctx, input, io.Discard)
 		require.ErrorIs(t, err, context.Canceled)
+		require.Equal(t, "passed", closeSession(t, session).Status)
 	})
 	t.Run("callback error", func(t *testing.T) {
 		want := errors.New("completion failed")
-		err := Run(context.Background(), "claude", strings.NewReader(""), io.Discard, []byte(noticeScenario), Options{Complete: func() error { return want }})
+		session := prepareSession(t, "claude", noticeScenario, Options{Complete: func() error { return want }})
+		err := session.Run(context.Background(), strings.NewReader(""), io.Discard)
 		require.ErrorIs(t, err, want)
+		require.Equal(t, "passed", closeSession(t, session).Status)
 	})
 }
 
-func TestLauncherWithoutPythonAndReceipt(t *testing.T) {
+func TestLauncherUsesPreparedSession(t *testing.T) {
 	for _, provider := range []string{"codex", "claude"} {
 		t.Run(provider, func(t *testing.T) {
-			dir := filepath.Join(t.TempDir(), "space and ' quote")
-			require.NoError(t, os.Mkdir(dir, 0o700))
-			scenario := filepath.Join(dir, "scenario.json")
-			receipt := filepath.Join(dir, "receipt.json")
-			require.NoError(t, os.WriteFile(scenario, []byte(noticeScenario), 0o600))
-			launcher, err := Launcher(dir, provider, scenario, receipt)
+			session := prepareSession(t, provider, noticeScenario, Options{})
+			launcher, err := session.Launcher("main")
 			require.NoError(t, err)
-			script, err := os.ReadFile(launcher)
-			require.NoError(t, err)
-			require.Contains(t, string(script), "'mock'")
-			require.Contains(t, string(script), "--recording")
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, launcher)
-			cmd.Env = []string{"PATH="}
-			out, err := cmd.CombinedOutput()
+			command, err := commandContext(ctx, launcher)
+			require.NoError(t, err)
+			command.Env = session.Env
+			command.Dir = session.Workspace
+			command.Stdin = strings.NewReader("")
+			out, err := command.CombinedOutput()
 			require.NoError(t, err, string(out))
-			data, err := os.ReadFile(receipt)
-			require.NoError(t, err)
-			var got struct {
-				Version                                    int
-				FullConsumption, NativeLaunched, ClientEOF bool
-				Peer, Provider, RecordingSHA256            string
-			}
-			require.NoError(t, json.Unmarshal(data, &got))
-			require.Equal(t, 1, got.Version)
-			require.True(t, got.FullConsumption)
-			require.True(t, got.ClientEOF)
-			require.False(t, got.NativeLaunched)
-			require.Equal(t, "Go native mock", got.Peer)
-			require.Equal(t, provider, got.Provider)
-			sources, err := filepath.Glob(filepath.Join(dir, "synthetic-capture-*", "raw", "raw.jsonl"))
-			require.NoError(t, err)
-			require.Len(t, sources, 1)
-			original, err := os.ReadFile(sources[0])
-			require.NoError(t, err)
-			sum := sha256.Sum256(original)
-			require.Equal(t, hex.EncodeToString(sum[:]), got.RecordingSHA256)
+			report := closeSession(t, session)
+			require.Equal(t, "passed", report.Status)
 		})
 	}
+}
+
+func commandContext(ctx context.Context, executable string) (*exec.Cmd, error) {
+	if executable == "" {
+		return nil, errors.New("empty executable")
+	}
+	return exec.CommandContext(ctx, executable), nil
 }
 
 // gateWriter releases a blocked Write as Close starts, but lets the test hold
@@ -168,8 +210,9 @@ func TestCancellationJoinsStreamCleanup(t *testing.T) {
 	output := newGateWriter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	session := prepareSession(t, "codex", noticeScenario, Options{})
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, "codex", strings.NewReader(""), output, []byte(noticeScenario), Options{}) }()
+	go func() { done <- session.Run(ctx, strings.NewReader(""), output) }()
 	select {
 	case <-output.written:
 	case <-time.After(3 * time.Second):
@@ -206,6 +249,7 @@ func TestCancellationJoinsStreamCleanup(t *testing.T) {
 	default:
 		t.Fatal("stream cleanup outlived Run")
 	}
+	require.Equal(t, "passed", closeSession(t, session).Status)
 }
 
 // A slow consumer must still receive the final protocol frame on disconnect.
@@ -216,8 +260,9 @@ func TestDisconnectDrainsOutputBeforeReturn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	scenario := strings.TrimSuffix(noticeScenario, "]}") + `,{"ordinal":2,"direction":"s2c","channel":"protocol","epoch":1,"disconnect":true}]}`
+	session := prepareSession(t, "codex", scenario, Options{})
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, "codex", strings.NewReader(""), output, []byte(scenario), Options{}) }()
+	go func() { done <- session.Run(ctx, strings.NewReader(""), output) }()
 	// Hold consumption while the peer writes and exits. Closing the output on
 	// process exit would truncate buffered frames before the consumer drains them.
 	var early error
@@ -241,11 +286,13 @@ func TestDisconnectDrainsOutputBeforeReturn(t *testing.T) {
 	require.Equal(t, "{\"method\":\"notice\",\"type\":\"notice\"}\n", string(data)) //nolint:testifylint // preserves framing bytes and trailing newline
 	require.ErrorIs(t, early, ErrDisconnected)
 	require.NoError(t, ctx.Err())
+	require.Equal(t, "failed", closeSession(t, session).Status)
 }
 
 type failingWriter struct{ err error }
 
 func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
+
 func TestOutputFailureCancelsIdlePeer(t *testing.T) {
 	input, writer := io.Pipe()
 	defer input.Close()
@@ -253,7 +300,9 @@ func TestOutputFailureCancelsIdlePeer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	want := errors.New("caller output failed")
-	err := Run(ctx, "codex", input, failingWriter{want}, []byte(noticeScenario), Options{})
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	err := session.Run(ctx, input, failingWriter{want})
 	require.ErrorIs(t, err, want)
 	require.NoError(t, ctx.Err(), "output failure must cancel the peer without waiting for the parent deadline")
+	require.Equal(t, "passed", closeSession(t, session).Status)
 }

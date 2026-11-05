@@ -63,21 +63,28 @@ Both native SDKs use the same separation of responsibilities:
 | Each native `*_test.go` | Public API checks and SDK integration against mock CLI processes |
 | `tests/integration` | Shared code integration suite, native test adapters and synthetic protocol peers |
 
-SDK integration tests use the external `agent-sdk-testify mock` process interface.
+SDK integration tests use the external `agent-sdk-testify prepare`, `agent mock`
+and `export` process interface. Sessions are caller-owned: tests read the
+execution index and result notices, then remove the session directory after all
+clients and peers exit.
 `internal/mocktest` authors manifest-bound synthetic captures from SDK-owned fixtures;
-it contains no protocol matcher. Simulation reads only list/describe, prepared run
-descriptors and receipts. It never traverses tool recording directories.
-SDK assertion projections are INTERNAL SDK data derived from describe; immutable
-source plan/native bytes and live runtime paths remain separate. The external
-binary never imports or launches the SDK driver. Tool sources, official drivers,
-recordings and scenarios are not copied into this repository: the independently
-built binary is the only execution dependency, with no source or real-Agent fallback.
+it contains no protocol matcher. Simulation validates the prepared session
+descriptor, launches only its declared mock route, exports the complete material
+outside the session and validates the exported inventory, plans, native streams,
+reports and history bindings. It never traverses tool recording directories or
+calls runtime list/describe.
+SDK assertion projections are INTERNAL SDK data derived from the public export;
+immutable source bytes, projected agent-mock frames and live runtime paths remain
+separate. The external binary never imports or launches the SDK driver. Tool
+sources, official drivers, recordings and scenarios are not copied into this
+repository: the independently built binary is the only execution dependency,
+with no source or real-Agent fallback.
 
 The SDK runner always requires an explicit absolute prebuilt `AGENT_SDK_TESTIFY_BIN`;
 it never builds the tool, searches `PATH`, or falls back to an Agent. The external
 tool owns protocol matching, native preparation, history materialization and
-receipts. Its list/describe output is a versioned process contract, not a library
-or filesystem layout contract.
+receipts. Session and export schemas are versioned process contracts, not a library
+or permission to traverse the tool's private storage layout.
 Do not add `cmd`, `pkg` or forwarding layers. Module responsibilities and dependency
 gates follow the module boundaries above.
 
@@ -102,7 +109,7 @@ retain direct asset references and evidence limits, and link back to these layou
 
 Simulation outputs are persistent SDK-owned evidence outside immutable recordings.
 The external tool owns reviewed material/index maintenance and publishes the full
-catalog through mock list/describe. This repository retains no recording, scenario
+material set through prepare/export. This repository retains no recording, scenario
 or official-driver snapshot and never reads a tool material directory directly.
 Source identity, observed versions, raw hashes, sanitization and publication
 review follow the [recording data contract](modules/agent-sdk-testify/design.md#story-数据格式与存储).

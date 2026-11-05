@@ -11,7 +11,9 @@ parallelism, cancellation, coverage and its authenticated loopback bridge.
 The independent agent-sdk-testify owns case/binding contracts, official drivers,
 record/verify, material qualification, strict protocol matching, history
 materialization, environment preparation and receipts. It exposes record,
-verify and mock. The SDK consumes processes, never a cross-repository Go library.
+verify, official orchestration and the consumer lifecycle implemented by prepare,
+agent mock and export. The SDK consumes processes, never a cross-repository Go
+library.
 
 <a id="story-官方-sdk-仿真测试"></a>
 <a id="story-录制生命周期"></a>
@@ -21,17 +23,28 @@ verify and mock. The SDK consumes processes, never a cross-repository Go library
 
 ## Process seam
 
-Read mock list/describe schemaVersion 1, preserve full catalog metadata and reject
-unsupported descriptor/assertion versions. Use describe assertionInputs for
-ordered native operations, original handles, expected facts, reports and frozen
-history. Do not read the tool recording layout or replay captured client frames
-as a substitute for public SDK operations.
+Prepare one session per policy, using `--agent/--case` or `--recording` and a new
+absolute session directory. Read schemaVersion 3, then validate the tool path,
+version and hash, source identity, route and connection commands before launching
+anything. The session has no finish command and its runtime must be
+`<session>/runtime`. Unknown versions fail. Do not use runtime
+list/describe, read the tool recording layout or replay captured client frames as
+a substitute for public SDK operations.
 
-Prepare separately for preserve and suppress. Before starting each SDK host,
-apply returned env and workspace. Select declared connection commands or Claude's
-no-argument launcher. The immutable source contract and originalBase64 values
-remain unchanged. Any transitional fixture files are INTERNAL SDK projections
-from describe, not tool paths. Store runtime paths independently.
+Before starting each SDK host, apply the mock route's env, workspace and protocol
+cwd. Start only its declared connection commands, or Claude's declared launcher,
+through `agent mock --session-dir ... --connection ...`; consume result notices
+from the declared result descriptor rather than inferring an execution. For Claude
+history, resolve the materialized config and workspace from the launched
+execution descriptor in the start notice, not from the pre-launch session template.
+
+Export to a new directory outside the prepared session. Validate the complete file
+inventory, plan and source-plan relation, native-stream hashes, manifest-bound
+saved history and remote phases, report, official origin and connection set.
+Preserve source bytes and project only INTERNAL SDK assertion files from that
+export. The projection may decode a synthetic envelope or copy an already
+agent-mock-jsonl source, but it must retain both source and projected hashes. Store
+runtime paths independently from exported paths.
 
 The driver performs typed public Session/Client/history operations and retains
 native answer handles. It emits result and deliveries. Each policy uses its own
@@ -44,14 +57,17 @@ extra connections, closes/drains and waits for all owned children.
 
 ## Completion
 
-Close SDK Sessions/Clients and services, wait for owned peers, and always finish
-every successful prepare, including business failure and cancellation. Cleanup
-uses a separate bounded context. A business completion event is not EOF. Retain
-business passed when later receipt/bridge/cleanup validation fails, and fail the
-overall run. Every declared connection must have matching run/source identities,
-strict full consumption, client EOF, no native launch, normal process exit and
-successful owned-resource cleanup. Never loosen matching or change production
-SDK behavior to make a fixture pass.
+Close SDK Sessions/Clients and services, wait for owned peers, read the execution
+index and result notices, and always remove every successful prepared session,
+including after export/projection failure, business failure and cancellation.
+Cleanup uses a separate bounded context. A business completion event is not EOF.
+Retain business passed when later receipt/bridge/cleanup validation fails, and
+fail the overall run. Every declared connection must have matching
+session/execution/source identities, strict full consumption, client EOF, no
+native launch, normal process exit and successful owned-resource cleanup. SDK
+evidence validation must bind exactly the one execution that used the exported
+material. Never loosen matching or change production SDK behavior to make a
+fixture pass.
 
 <a id="story-数据格式与存储"></a>
 <a id="story-结果与错误"></a>
@@ -62,10 +78,11 @@ SDK behavior to make a fixture pass.
 
 ## Evidence and coverage
 
-Persist tool version/hash, SDK source/build identity, immutable describe/plan
-identities, all prepared descriptors and source hashes, SDK results/deliveries,
-materialization, finish and cleanup reports outside recordings. Preserve unknown
-native fields, number lexemes, IDs and original source bytes.
+Persist tool version/hash, SDK source/build identity, prepared session descriptors,
+export inventories and hashes, source/runtime separation, raw and report
+projection evidence, SDK results/deliveries, materialization and cleanup evidence
+outside recordings. Preserve unknown native fields, number lexemes, IDs and
+original source bytes.
 
 Complete coverage has 36 cases across both providers. Source verification,
 required/optional policy and current SDK simulation status remain separate.

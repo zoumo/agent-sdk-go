@@ -3,11 +3,10 @@ package transcript_test
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/zoumo/agent-sdk-go/claude"
@@ -48,7 +47,7 @@ type mockSDKSuite struct {
 
 func TestGoMockSDK(t *testing.T) { suite.Run(t, new(mockSDKSuite)) }
 func (s *mockSDKSuite) SetupTest() {
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second)
 }
 
 func (s *mockSDKSuite) TearDownTest() {
@@ -59,16 +58,27 @@ func (s *mockSDKSuite) TearDownTest() {
 	s.cancel()
 }
 
-func (s *mockSDKSuite) open(script mockScenarioDefinition) {
+func (s *mockSDKSuite) open(script mockScenarioDefinition, wantStatus string) {
 	dir := s.T().TempDir()
-	path := filepath.Join(dir, "synthetic.json")
 	data, err := json.Marshal(script)
 	s.Require().NoError(err)
-	s.Require().NoError(os.WriteFile(path, data, 0o600))
-	exe, err := mocktest.Launcher(dir, "claude", path, "")
+	session, err := mocktest.Prepare(dir, "claude", data, mocktest.Options{})
 	s.Require().NoError(err)
-	s.client, err = claude.Open(s.ctx, claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"PATH=", "HOME=" + dir, "GORACE=atexit_sleep_ms=0"}, ShutdownTimeout: time.Second})
+	s.T().Cleanup(func() { verifySDKSession(s.T(), session, wantStatus) })
+	exe, err := session.Launcher("main")
 	s.Require().NoError(err)
+	env := append(append([]string(nil), session.Env...), "GORACE=atexit_sleep_ms=0")
+	s.client, err = claude.Open(s.ctx, claude.SessionOptions{CLIPath: exe, WorkDir: session.Workspace, Env: env, ShutdownTimeout: time.Second})
+	s.Require().NoError(err)
+}
+
+func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {
+	t.Helper()
+	report, err := session.Report()
+	require.NotNil(t, report)
+	require.NoError(t, err)
+	require.Equal(t, want, report.Status)
+	require.NoError(t, session.Close())
 }
 
 func (s *mockSDKSuite) nextNative(typ string) claude.Event {
@@ -94,7 +104,7 @@ func (s *mockSDKSuite) TestPermissionChildAndInterrupt() {
 		mockFrame("server", "control", `{"type":"control_response","response":{"subtype":"success","request_id":"interrupt","response":{}}}`),
 		mockFrame("server", "protocol", `{"type":"result","subtype":"success","session_id":"root","result":"synthetic complete"}`),
 	)
-	s.open(mockScenario(frames...))
+	s.open(mockScenario(frames...), "passed")
 	s.Require().NoError(submitText(s.client, s.ctx, "synthetic task"))
 	p := s.nextRequest().Handle()
 	s.Require().Equal("permission", p.RequestID())
@@ -116,7 +126,7 @@ func (s *mockSDKSuite) TestReverseCancellationAndDisconnect() {
 		replay.Frame{Direction: "server", Channel: "control", Data: json.RawMessage(`{"type":"control_cancel_request","request_id":"permission"}`), DelayMillis: 50},
 		replay.Frame{Direction: "disconnect", Channel: "protocol", DelayMillis: 50},
 	)
-	s.open(mockScenario(frames...))
+	s.open(mockScenario(frames...), "failed")
 	p := s.nextRequest().Handle()
 	select {
 	case <-p.Context().Done():
@@ -140,7 +150,7 @@ func (s *mockSDKSuite) TestNativeUserQuestion() {
 		mockFrame("client", "control", `{"type":"control_response","response":{"subtype":"success","request_id":"question","response":{"behavior":"allow","updatedInput":{"questions":[{"question":"Which?","header":"Choice","options":[{"label":"A"}]}],"answers":{"Which?":"A"}}}}}`),
 		mockFrame("server", "protocol", `{"type":"result","subtype":"success","session_id":"synthetic","result":"synthetic answer accepted"}`),
 	)
-	s.open(mockScenario(frames...))
+	s.open(mockScenario(frames...), "passed")
 	p := s.nextRequest().Handle()
 	s.Equal("AskUserQuestion", p.ToolName())
 	var input claude.AskUserQuestionInput

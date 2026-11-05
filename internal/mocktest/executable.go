@@ -1,11 +1,12 @@
 package mocktest
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // Executable returns the explicit, prebuilt agent-sdk-testify binary.
@@ -25,39 +26,11 @@ func Executable() (string, error) {
 	return path, nil
 }
 
-// Launcher binds explicit mock arguments for SDK process interfaces that only
-// expose an executable path (Claude). The caller owns dir and its cleanup.
-// The shell immediately execs the binary, preserving signals and exit status.
-func Launcher(dir, provider, scenario, receipt string) (string, error) {
-	executable, err := Executable()
+func fileHash(path string) (string, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	if provider != "codex" && provider != "claude" {
-		return "", fmt.Errorf("unsupported mock provider %q", provider)
-	}
-	args, err := Arguments(dir, provider, scenario, receipt)
-	if err != nil {
-		return "", err
-	}
-	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
-	command := "#!/bin/sh\nexec " + quote(executable)
-	var commandSb44 strings.Builder
-	for _, arg := range args {
-		commandSb44.WriteString(" " + quote(arg))
-	}
-	command += commandSb44.String()
-	command += " \"$@\"\n"
-
-	path := filepath.Join(dir, "agent-sdk-testify-"+provider)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o700)
-	if err != nil {
-		return "", err
-	}
-	_, writeErr := f.WriteString(command)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return "", writeErr
-	}
-	return path, closeErr
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }

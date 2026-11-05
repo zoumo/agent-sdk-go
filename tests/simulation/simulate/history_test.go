@@ -16,9 +16,11 @@ import (
 
 type object = map[string]any
 
-func TestClaudeMovedHistoryIsRejectedBeforeExecution(t *testing.T) {
+func TestClaudeMovedHistoryRetainsMaterialBinding(t *testing.T) {
 	const sessionID = "11111111-1111-4111-8111-111111111111"
-	originalCWD := filepath.Join(t.TempDir(), "no-longer-present")
+	originalCWD, err := os.MkdirTemp("/tmp", "sdk-history-")
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(originalCWD))
 	key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(originalCWD, "-")
 	name := filepath.Join("config", "projects", key, sessionID+".jsonl")
 	var saved bytes.Buffer
@@ -79,30 +81,61 @@ func TestClaudeMovedHistoryIsRejectedBeforeExecution(t *testing.T) {
 	moved := filepath.Join(t.TempDir(), "adopted-copy")
 	require.NoError(t, os.Rename(source, moved))
 	source = moved
-	output := filepath.Join(t.TempDir(), "simulation")
+	simulationRoot, err := os.MkdirTemp("/tmp", "sdk-simulation-")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(simulationRoot)) })
+	output := filepath.Join(simulationRoot, "run")
 	driver := filepath.Join(t.TempDir(), "history-driver")
 	require.NoError(t, os.WriteFile(driver, []byte("#!/bin/sh\n"+quote(driverBinary)+" \"$@\"\n"), 0o700))
 	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driver)
 	log, err := cmd.CombinedOutput()
-	require.Error(t, err, string(log))
+	require.NoError(t, err, string(log))
 
 	var result summary
 	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
-	require.Equal(t, "failed", result.Status)
+	require.Equal(t, "passed", result.Status)
 	require.Len(t, result.Runs, 1)
-	require.Equal(t, "failed", result.Runs[0].Status)
+	require.Equal(t, "passed", result.Runs[0].Status)
 	var business struct{ Status, Message string }
 	require.NoError(t, json.Unmarshal(result.Runs[0].Business, &business))
-	require.Equal(t, "failed", business.Status)
-	require.NotEmpty(t, business.Message)
+	require.Equal(t, "passed", business.Status)
+	require.Empty(t, business.Message)
 	require.Empty(t, result.Runs[0].ProtocolError)
-	require.Contains(t, result.Runs[0].CleanupError, "execution history bindings differ from selected material")
+	require.Empty(t, result.Runs[0].CleanupError)
 	original, err := os.ReadFile(filepath.Join(source, name))
 	require.NoError(t, err)
 	require.Equal(t, saved.Bytes(), original)
 	require.NoDirExists(t, originalCWD)
 	evidence := readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json"))
 	require.Equal(t, "passed", evidence.Status)
-	require.Contains(t, evidence.ValidationError, "execution history bindings differ from selected material")
+	require.Empty(t, evidence.ValidationError)
 	require.NoDirExists(t, filepath.Join(output, "preserve", "session"))
+}
+
+func TestValidateExecutionHistoryRequiresMaterialDigestCoverage(t *testing.T) {
+	const (
+		originalPath = "config/projects/original/session.jsonl"
+		runtimePath  = "config/projects/-tmp-runtime-workspace/session.jsonl"
+		digest       = "sha256:recorded"
+		runtimeBytes = "sha256:runtime-rewrite"
+	)
+	pkg := &materialPackage{
+		Material: materialDescriptor{
+			Files: map[string]string{originalPath: digest},
+		},
+		Manifest: materialManifest{
+			SavedFiles: map[string]string{originalPath: digest},
+		},
+	}
+	execution := executionDescriptor{Workspace: "/tmp/runtime/workspace", HistoryFiles: map[string]string{
+		originalPath: digest,
+		runtimePath:  runtimeBytes,
+	}}
+	require.NoError(t, validateExecutionHistory(execution, pkg))
+
+	execution.HistoryFiles["config/projects/-tmp-other-workspace/session.jsonl"] = runtimeBytes
+	require.ErrorContains(t, validateExecutionHistory(execution, pkg), "history bindings differ")
+
+	execution.HistoryFiles = map[string]string{runtimePath: digest}
+	require.ErrorContains(t, validateExecutionHistory(execution, pkg), "history bindings differ")
 }

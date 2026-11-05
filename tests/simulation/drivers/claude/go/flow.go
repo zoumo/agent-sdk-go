@@ -198,6 +198,11 @@ func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy cl
 			}
 			return r.ReplyMCP(ctx, answer.MCPResponse)
 		}
+		launcher, err = mcpFilterLauncher(root, launcher)
+		if err != nil {
+			return err
+		}
+		options.CLIPath = launcher
 	}
 	s, err := claude.Open(ctx, options)
 	if err != nil {

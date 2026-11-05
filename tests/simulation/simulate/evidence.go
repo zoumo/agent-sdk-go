@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 type evidenceStatus struct {
@@ -340,11 +341,6 @@ func validateDurableConnectionReceipt(entry executionEntry, executionID string, 
 }
 
 func validateExecutionHistory(execution executionDescriptor, pkg *materialPackage) error {
-	for name, digest := range execution.HistoryFiles {
-		if pkg.Material.Files[name] != digest {
-			return errors.New("execution history bindings differ from selected material")
-		}
-	}
 	expected := map[string]string{}
 	maps.Copy(expected, pkg.Manifest.SavedFiles)
 	var plan map[string]any
@@ -362,12 +358,47 @@ func validateExecutionHistory(execution executionDescriptor, pkg *materialPackag
 			}
 		}
 	}
+	runtimeKey := historyProjectKey(execution.Workspace)
+	allowedRuntime := make(map[string]bool, len(expected))
 	for name, digest := range expected {
-		if execution.HistoryFiles[name] != digest {
+		if got, ok := execution.HistoryFiles[name]; !ok || got != digest {
 			return errors.New("execution history bindings differ from selected material")
 		}
+		tail, ok := historyProjectTail(name)
+		if ok {
+			allowedRuntime[filepath.Join("config", "projects", runtimeKey, tail)] = true
+		}
+	}
+	for name, digest := range execution.HistoryFiles {
+		if !safeRelative(name) {
+			return errors.New("execution history bindings differ from selected material")
+		}
+		if expected[name] == digest || allowedRuntime[name] {
+			continue
+		}
+		return errors.New("execution history bindings differ from selected material")
 	}
 	return nil
+}
+
+func historyProjectTail(path string) (string, bool) {
+	const marker = "config/projects/"
+	path = filepath.ToSlash(filepath.Clean(path))
+	index := strings.Index(path, marker)
+	if index < 0 {
+		return "", false
+	}
+	project, tail, ok := strings.Cut(path[index+len(marker):], "/")
+	return tail, ok && project != "" && tail != ""
+}
+
+func historyProjectKey(path string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '-'
+	}, filepath.Clean(path))
 }
 
 func validateResultNotices(logs map[string]string, session *preparedSession, pkg *materialPackage, evidence *sessionEvidence) error {

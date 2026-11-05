@@ -17,6 +17,11 @@ import (
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
+type existingChildSeedFile struct {
+	Source string
+	SHA256 string
+}
+
 // AcceptExistingChildren establishes a fresh native observer from a recorded
 // resume hook before querying the copied, verified pre-existing child storage.
 // It sends no input and never promotes stored messages into Session events.
@@ -28,7 +33,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 			SessionID     string
 			SourceProject string
 			AgentIDs      []string
-			Files         map[string]struct{ Source, SHA256 string }
+			Files         map[string]existingChildSeedFile
 		}
 	}
 	b, err := os.ReadFile(filepath.Join(root, "plan.json"))
@@ -51,39 +56,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	}
 	verify := func() error {
 		if _, e := os.Stat(filepath.Join(root, "runtime.json")); e == nil {
-			// Described history IDs are opaque. Verify frozen source bytes by the seed
-			// hashes, then let the public history API and mock evidence check live copies.
-			var described struct {
-				SchemaVersion int
-				SavedHistory  []struct {
-					SHA256   string
-					Original []byte `json:"originalBase64"`
-				}
-			}
-			raw, e := os.ReadFile(filepath.Join(root, "assertion-inputs.json"))
-			if e != nil {
-				return e
-			}
-			if e := json.Unmarshal(raw, &described); e != nil {
-				return e
-			}
-			if described.SchemaVersion != 1 {
-				return errors.New("unsupported assertion history schema")
-			}
-			available := map[string]bool{}
-			for _, d := range described.SavedHistory {
-				sum := sha256.Sum256(d.Original)
-				if hex.EncodeToString(sum[:]) != d.SHA256 {
-					return errors.New("described frozen seed bytes changed")
-				}
-				available[d.SHA256] = true
-			}
-			for _, expected := range seed.Files {
-				if !available[expected.SHA256] {
-					return errors.New("frozen seed missing from assertion inputs")
-				}
-			}
-			return nil
+			return verifyDescribedSeed(root, seed.Files)
 		}
 		for name, expected := range seed.Files {
 			clean := filepath.Clean(name)
@@ -152,7 +125,12 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, s.Close()) }()
+	closed := false
+	defer func() {
+		if !closed {
+			err = errors.Join(err, s.Close())
+		}
+	}()
 	for {
 		got, err := s.Receive(ctx)
 		if err != nil {
@@ -173,7 +151,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 		if err := json.Unmarshal(got.Raw, &native); err != nil {
 			return err
 		}
-		if native.Type == "system" && (native.Subtype == "hook_started" || native.Subtype == "hook_response") && native.HookName == "SessionStart:resume" && native.UUID != "" && native.SessionID == seed.SessionID {
+		if native.Type == "system" && native.Subtype == "hook_response" && native.HookName == "SessionStart:resume" && native.UUID != "" && native.SessionID == seed.SessionID {
 			break
 		}
 	}
@@ -181,11 +159,23 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if !known || id != seed.SessionID {
 		return errors.New("resume did not establish the native observed parent")
 	}
-	page, err := s.ListSubagents(ctx, claude.SubagentQuery{})
+	if err := s.Close(); err != nil {
+		return err
+	}
+	closed = true
+	execution, err := executionHost(root)
 	if err != nil {
 		return err
 	}
-	if page.Coverage.Status != "complete" || page.Coverage.ScopeEvidence != "observed-main-uuid+exact-project-path" {
+	page, err := claude.ListSubagents(ctx, seed.SessionID, claude.ListSubagentsOptions{
+		Scope: claude.SessionQueryScope{ConfigDir: execution.Config, ProjectDir: execution.Workspace},
+	})
+	if err != nil {
+		return err
+	}
+	if page.Coverage.Status != "complete" ||
+		page.Coverage.SessionID != seed.SessionID ||
+		page.Coverage.ProjectDir != execution.Workspace {
 		return errors.New("existing child discovery coverage is not complete")
 	}
 	var ids []string
@@ -202,4 +192,42 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 		return errors.New("go session omitted or invented pre-existing children")
 	}
 	return verify()
+}
+
+func verifyDescribedSeed(root string, files map[string]existingChildSeedFile) error {
+	// Described history IDs are opaque. Compare the seed's material paths and
+	// hashes with the SDK projection; execution evidence binds the live copies.
+	var described struct {
+		SchemaVersion int
+		SavedHistory  []struct {
+			Path   string
+			SHA256 string
+		} `json:"savedHistory"`
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "assertion-inputs.json"))
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, &described); err != nil {
+		return err
+	}
+	if described.SchemaVersion != 1 {
+		return errors.New("unsupported assertion history schema")
+	}
+	available := make(map[string]string, len(described.SavedHistory))
+	for _, item := range described.SavedHistory {
+		if item.Path == "" || item.SHA256 == "" {
+			return errors.New("assertion history identity is incomplete")
+		}
+		if previous, exists := available[item.Path]; exists && previous != item.SHA256 {
+			return errors.New("assertion history repeats a path with different bytes")
+		}
+		available[item.Path] = item.SHA256
+	}
+	for path, expected := range files {
+		if available[path] != expected.SHA256 {
+			return errors.New("described frozen seed bytes changed")
+		}
+	}
+	return nil
 }

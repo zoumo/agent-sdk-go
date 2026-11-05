@@ -16,6 +16,13 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "--filter-mcp" {
+		if err := claudesim.RunMCPFilter(os.Args[2], os.Args[3:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) != 3 || os.Args[1] != "--request" {
 		fmt.Fprintln(os.Stderr, "use --request /path/to/request.json")
 		os.Exit(2)

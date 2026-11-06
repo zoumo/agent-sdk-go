@@ -32,7 +32,7 @@ func TestOfflineRemoteExecutionProfile(t *testing.T) {
 	require.Equal(t, "methods=initialize,initialized,thread/start,thread/unsubscribe", lines[0])
 	require.Equal(t, []string{
 		"boundary=apply_patch may remain and local zero execution is not guaranteed",
-		"isolation=use an isolated CODEX_HOME and external sandbox/permission policy for stronger isolation",
+		"isolation=ambient MCP config may merge without an isolated CODEX_HOME or outer sandbox; use external sandbox/permission policy for stronger isolation",
 		"evidence=synthetic app-server params only; no Codex model or remote MCP was contacted",
 	}, lines[2:])
 	params, ok := strings.CutPrefix(lines[1], "thread_start_params=")

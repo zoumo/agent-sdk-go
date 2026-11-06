@@ -111,7 +111,7 @@ func run(output io.Writer) error {
 	if _, err := fmt.Fprintln(output, "boundary=apply_patch may remain and local zero execution is not guaranteed"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(output, "isolation=use an isolated CODEX_HOME and external sandbox/permission policy for stronger isolation"); err != nil {
+	if _, err := fmt.Fprintln(output, "isolation=ambient MCP config may merge without an isolated CODEX_HOME or outer sandbox; use external sandbox/permission policy for stronger isolation"); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintln(output, "evidence=synthetic app-server params only; no Codex model or remote MCP was contacted")

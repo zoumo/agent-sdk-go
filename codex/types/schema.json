@@ -20,6 +20,10 @@
     "v2/ThreadResumeResponse",
     "v2/ThreadUnsubscribeParams",
     "v2/ThreadUnsubscribeResponse",
+    "v2/ThreadArchiveParams",
+    "v2/ThreadArchiveResponse",
+    "v2/ThreadUnarchiveParams",
+    "v2/ThreadUnarchiveResponse",
     "v2/TurnStartParams",
     "v2/TurnStartResponse",
     "v2/TurnInterruptParams",
@@ -4682,6 +4686,24 @@
       ],
       "type": "string"
     },
+    "v2/ThreadArchiveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "title": "ThreadArchiveParams",
+      "type": "object"
+    },
+    "v2/ThreadArchiveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ThreadArchiveResponse",
+      "type": "object"
+    },
     "v2/ThreadEnvironment": {
       "description": "An environment selected by a loaded thread, independent of connection status.",
       "properties": {
@@ -7108,6 +7130,32 @@
         "data"
       ],
       "title": "ThreadTurnsListResponse",
+      "type": "object"
+    },
+    "v2/ThreadUnarchiveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "title": "ThreadUnarchiveParams",
+      "type": "object"
+    },
+    "v2/ThreadUnarchiveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "thread": {
+          "$ref": "#/definitions/v2/Thread"
+        }
+      },
+      "required": [
+        "thread"
+      ],
+      "title": "ThreadUnarchiveResponse",
       "type": "object"
     },
     "v2/ThreadUnsubscribeParams": {

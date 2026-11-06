@@ -321,8 +321,8 @@
     {
       "kind": "client_request",
       "method": "thread/archive",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "Session.Archive sends the fixed main thread ID and preserves the native empty response's unknown fields. Success is RPC acceptance, not observed archive state or transcript deletion; the native server may shut down loaded execution, archive spawned descendants and emit separate thread/archived notifications. No arbitrary thread ID, Client wrapper, descendant workflow or archive-state cache is added.",
       "source_variant": "ThreadArchive",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 570,
@@ -330,9 +330,15 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "session09-archive-model"
+        ],
+        "mock": [
+          "session09-archive-peer"
+        ],
+        "race": [
+          "session09-archive-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadArchiveParams",
@@ -1031,8 +1037,8 @@
     {
       "kind": "client_request",
       "method": "thread/unarchive",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "Session.Unarchive sends the fixed main thread ID, preserves the native restored Thread response and unknown fields, and rejects a different returned thread ID as a protocol failure. Success is RPC acceptance; it does not resume or attach execution. thread/unarchived remains a raw notification. No arbitrary thread ID, Client wrapper or archive-state cache is added.",
       "source_variant": "ThreadUnarchive",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 729,
@@ -1040,9 +1046,15 @@
       "field_experimental_gates": false,
       "in_stable_schema": true,
       "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
+        "unit": [
+          "session09-archive-model"
+        ],
+        "mock": [
+          "session09-archive-peer"
+        ],
+        "race": [
+          "session09-archive-race"
+        ],
         "live": []
       },
       "params_rust_type": "v2::ThreadUnarchiveParams",

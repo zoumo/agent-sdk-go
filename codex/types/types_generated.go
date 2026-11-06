@@ -2921,6 +2921,23 @@ const (
 	ThreadActiveFlagWaitingOnUserInput ThreadActiveFlag = "waitingOnUserInput"
 )
 
+type ThreadArchiveParams struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadArchiveParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadArchiveParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadArchiveResponse struct {
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadArchiveResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadArchiveResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 // An environment selected by a loaded thread, independent of connection status.
 type ThreadEnvironment struct {
 	Cwd                   LegacyAppPathString   `json:"cwd" protocol:"required"`
@@ -3834,6 +3851,24 @@ type ThreadTurnsListResponse struct {
 
 func (v ThreadTurnsListResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ThreadTurnsListResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadUnarchiveParams struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadUnarchiveParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadUnarchiveParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadUnarchiveResponse struct {
+	Thread Thread `json:"thread" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadUnarchiveResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadUnarchiveResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
 type ThreadUnsubscribeParams struct {
 	ThreadID string `json:"threadId" protocol:"required"`

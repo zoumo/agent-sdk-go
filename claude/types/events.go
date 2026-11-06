@@ -65,7 +65,7 @@ type SystemEvent struct {
 	Agents            []string        `json:"agents,omitempty"`
 	APIKeySource      string          `json:"apiKeySource,omitempty"`
 	ClaudeCodeVersion string          `json:"claude_code_version,omitempty"`
-	PermissionMode    string          `json:"permissionMode,omitempty"`
+	PermissionMode    PermissionMode  `json:"permissionMode,omitempty"`
 	MCPServers        json.RawMessage `json:"mcp_servers,omitempty"`
 	SlashCommands     []string        `json:"slash_commands,omitempty"`
 	OutputStyle       string          `json:"output_style,omitempty"`

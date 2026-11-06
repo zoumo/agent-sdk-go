@@ -800,7 +800,7 @@ const (
 
 // AskForApproval contains exactly one typed variant or Unknown.
 type AskForApproval struct {
-	Value    *AskForApprovalValue
+	Value    *ApprovalPolicy
 	Granular *GranularAskForApproval
 	// Unknown preserves an unrecognized future variant as raw JSON.
 	Unknown json.RawMessage
@@ -829,7 +829,7 @@ func (v *AskForApproval) UnmarshalJSON(data []byte) error {
 		}
 	}
 	if kind == "string" {
-		var value AskForApprovalValue
+		var value ApprovalPolicy
 		if err := json.Unmarshal(data, &value); err != nil {
 			return err
 		}
@@ -4417,12 +4417,12 @@ func (v *EncryptedContentAgentMessageInputContent) UnmarshalJSON(data []byte) er
 	return unmarshalObject(data, v)
 }
 
-type AskForApprovalValue string
+type ApprovalPolicy string
 
 const (
-	AskForApprovalValueUntrusted AskForApprovalValue = "untrusted"
-	AskForApprovalValueOnRequest AskForApprovalValue = "on-request"
-	AskForApprovalValueNever     AskForApprovalValue = "never"
+	ApprovalPolicyUntrusted ApprovalPolicy = "untrusted"
+	ApprovalPolicyOnRequest ApprovalPolicy = "on-request"
+	ApprovalPolicyNever     ApprovalPolicy = "never"
 )
 
 type GranularAskForApproval struct {

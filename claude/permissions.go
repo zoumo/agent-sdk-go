@@ -17,6 +17,18 @@ import (
 // PermissionBehavior is native decision data in types.
 type PermissionBehavior = types.PermissionBehavior
 
+// PermissionMode is the native Claude permission mode.
+type PermissionMode = types.PermissionMode
+
+const (
+	PermissionModeDefault           = types.PermissionModeDefault
+	PermissionModeAcceptEdits       = types.PermissionModeAcceptEdits
+	PermissionModeBypassPermissions = types.PermissionModeBypassPermissions
+	PermissionModePlan              = types.PermissionModePlan
+	PermissionModeDontAsk           = types.PermissionModeDontAsk
+	PermissionModeAuto              = types.PermissionModeAuto
+)
+
 // PermissionAnswer is a runtime command. A nil UpdatedInput uses the original
 // input; it is distinct from the detached native PermissionResult value.
 type PermissionAnswer struct {
@@ -337,9 +349,7 @@ func validatePermissionUpdates(updates []types.PermissionUpdate) error {
 			if u.Rules != nil || u.Directories != nil || u.Behavior != "" {
 				return ErrInvalidPermissionAnswer
 			}
-			switch u.Mode {
-			case "default", "acceptEdits", "bypassPermissions", "plan", "dontAsk", "auto":
-			default:
+			if !u.Mode.Valid() {
 				return ErrUnsupported
 			}
 		case "addDirectories", "removeDirectories":

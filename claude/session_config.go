@@ -39,9 +39,9 @@ type ConfigurationReceipt struct {
 
 // SetPermissionMode requests the native mode and retains its acknowledgement.
 // It does not answer or release any pending permission request.
-func (s *Session) SetPermissionMode(ctx context.Context, mode string) (ConfigurationReceipt, error) {
-	if mode == "" {
-		return ConfigurationReceipt{}, dispatchFailure("set_permission_mode", ErrInvalidInput)
+func (s *Session) SetPermissionMode(ctx context.Context, mode PermissionMode) (ConfigurationReceipt, error) {
+	if !mode.Valid() {
+		return ConfigurationReceipt{}, dispatchFailure("set_permission_mode", fmt.Errorf("%w: unsupported permission mode %q", ErrInvalidInput, mode))
 	}
 	return s.configure(ctx, "set_permission_mode", map[string]any{"subtype": "set_permission_mode", "mode": mode})
 }

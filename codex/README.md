@@ -227,6 +227,12 @@ Unknown fields retain their JSON without float64 conversion. Representability
 is not permission to submit an unsupported workflow. The server still validates
 native constraints. See [generation provenance](docs/protocol/README.md).
 
+`ApprovalPolicy` and the corresponding `ApprovalPolicy*` constants enumerate
+`untrusted`, `on-request` and `never`. The scalar `AskForApproval.Value` uses this
+type, while the native union still preserves `Granular` and unrecognized string
+values. The former `AskForApprovalValue` names remain as deprecated aliases for
+source compatibility.
+
 An explicit `Client` remains useful for a shared native I/O resource, handshake
 metadata and `Call` extensions. Supply it in `SessionOptions.Client`. Closing one
 Session leaves other owners on that connection usable. A main identity has one owner. Overlapping child/ancestor observation

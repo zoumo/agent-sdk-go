@@ -50,6 +50,19 @@ Observation. Answer through the original IncomingRequest and distribute UI/log
 output in the application. Native parameters and result semantics are in the
 [Codex](../codex/README.md) and [Claude](../claude/README.md) guides.
 
+### Permission modes and approval policies
+
+Claude `SetPermissionMode` now takes `PermissionMode`; use the
+`PermissionModeDefault`, `PermissionModeAcceptEdits`,
+`PermissionModeBypassPermissions`, `PermissionModePlan`, `PermissionModeDontAsk`
+or `PermissionModeAuto` constant. `PermissionUpdate.Mode` and
+`SystemEvent.PermissionMode` use the same type.
+
+Codex `AskForApproval.Value` now uses `*types.ApprovalPolicy`; use
+`ApprovalPolicyUntrusted`, `ApprovalPolicyOnRequest` or `ApprovalPolicyNever`.
+The former `AskForApprovalValue` names remain deprecated aliases. Native
+`granular` and unrecognized string approval values still round-trip.
+
 ### Native resume and independent history
 
 Load, LoadOptions, LoadState and ReceivedLoad have been removed. Codex retains

@@ -96,6 +96,12 @@ empty non-nil strings are invalid. Thinking budget nil clears with null; zero st
 zero. Display omission, summarized/omitted and explicit clear remain distinct.
 A configuration acknowledgment does not prove the active model or children changed.
 
+`PermissionMode` and the corresponding `PermissionMode*` constants enumerate
+`default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk` and `auto`.
+`SetPermissionMode` rejects empty or unknown values before writing, and
+`PermissionUpdate.Mode` uses the same type. `SystemEvent.PermissionMode` is typed
+but still round-trips future native string values.
+
 Open with ResumeID requests native continuation in a fresh process; SessionID
 reports observed identity separately. Initialization does not prove recovery.
 Use [saved-history queries](#saved-history) for independent content reads.

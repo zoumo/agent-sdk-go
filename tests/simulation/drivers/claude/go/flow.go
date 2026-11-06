@@ -312,7 +312,8 @@ func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy cl
 			submitted++
 		case "control_request":
 			var request struct {
-				Subtype, Mode     string
+				Subtype           string
+				Mode              claude.PermissionMode
 				Model             *string
 				MaxThinkingTokens *int    `json:"max_thinking_tokens"`
 				ThinkingDisplay   *string `json:"thinking_display"`

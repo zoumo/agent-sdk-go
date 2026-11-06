@@ -95,7 +95,7 @@ func (s *StdioInteractionsInterruptSuite) TestLifecycle() {
 			"identity/read-only sandbox assertion failed")
 
 		policy := "other"
-		for _, v := range []types.AskForApprovalValue{types.AskForApprovalValueNever, types.AskForApprovalValueOnRequest, types.AskForApprovalValueUntrusted} {
+		for _, v := range []types.ApprovalPolicy{types.ApprovalPolicyNever, types.ApprovalPolicyOnRequest, types.ApprovalPolicyUntrusted} {
 			if th.ApprovalPolicy.Value != nil && *th.ApprovalPolicy.Value == v {
 				policy = string(v)
 			}

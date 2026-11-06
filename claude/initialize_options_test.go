@@ -48,7 +48,7 @@ func TestOfficialDefaultInputAliasPreservesOwnedStream(t *testing.T) {
 	sub, err := s.Submit(context.Background(), Input{User: &user})
 	require.NoError(t, err)
 	require.True(t, sub.Written)
-	receipt, err := s.SetPermissionMode(context.Background(), "plan")
+	receipt, err := s.SetPermissionMode(context.Background(), PermissionModePlan)
 	require.NoError(t, err)
 	require.True(t, receipt.Accepted)
 	require.NoError(t, s.Close())

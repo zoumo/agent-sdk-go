@@ -445,7 +445,7 @@ func TestGeneratedSchemaRoundTrips(t *testing.T) {
 		{"InputTextAgentMessageInputContent/1", func() any { return new(types.InputTextAgentMessageInputContent) }, "{\"text\":\"synthetic-value\",\"type\":\"input_text\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
 		{"EncryptedContentAgentMessageInputContent/0", func() any { return new(types.EncryptedContentAgentMessageInputContent) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\"}"},
 		{"EncryptedContentAgentMessageInputContent/1", func() any { return new(types.EncryptedContentAgentMessageInputContent) }, "{\"encrypted_content\":\"synthetic-value\",\"type\":\"encrypted_content\",\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
-		{"AskForApprovalValue/0", func() any { return new(types.AskForApprovalValue) }, "\"untrusted\""},
+		{"ApprovalPolicy/0", func() any { return new(types.ApprovalPolicy) }, "\"untrusted\""},
 		{"GranularAskForApproval/0", func() any { return new(types.GranularAskForApproval) }, "{\"granular\":{\"mcp_elicitations\":false,\"rules\":false,\"sandbox_approval\":false}}"},
 		{"GranularAskForApproval/1", func() any { return new(types.GranularAskForApproval) }, "{\"granular\":{\"mcp_elicitations\":false,\"request_permissions\":false,\"rules\":false,\"sandbox_approval\":false,\"skill_approval\":false,\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}},\"futureMember\":{\"big\":9007199254740993,\"nullable\":null}}"},
 		{"EnvironmentCapabilityRootLocation/0", func() any { return new(types.EnvironmentCapabilityRootLocation) }, "{\"environmentId\":\"synthetic-value\",\"path\":\"synthetic-value\",\"type\":\"environment\"}"},

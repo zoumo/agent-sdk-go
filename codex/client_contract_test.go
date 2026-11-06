@@ -132,6 +132,18 @@ func TestFakeChild(t *testing.T) {
 			send(m.ID, resumeResponseJSON(params.ThreadID))
 		case "thread/unsubscribe":
 			send(m.ID, `{"status":"unsubscribed"}`)
+		case "thread/archive":
+			if mode == "archive-reject" {
+				fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32010,\"message\":\"archive refused\",\"data\":{\"reason\":\"synthetic\"}}}\n", m.ID)
+				continue
+			}
+			send(m.ID, `{"future":{"archive":true}}`)
+		case "thread/unarchive":
+			if mode == "unarchive-mismatch" {
+				send(m.ID, strings.Replace(threadJSON, `"native-thread-42"`, `"native-thread-other"`, 1))
+				continue
+			}
+			send(m.ID, `{"thread":`+threadJSON+`,"future":{"unarchive":true}}`)
 		case "echo":
 			send(m.ID, string(m.Params))
 		case "rpc-error":

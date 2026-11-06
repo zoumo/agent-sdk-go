@@ -55,6 +55,9 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// Tools is passed as a comma-separated native --tools allowlist. Nil or
+	// empty omits the option; one empty string disables ordinary built-in tools.
+	Tools []string
 	// DisallowedTools is passed as a comma-separated native --disallowedTools
 	// option. Nil or empty omits the option.
 	DisallowedTools   []string

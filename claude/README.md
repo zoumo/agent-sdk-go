@@ -100,9 +100,23 @@ Open with ResumeID requests native continuation in a fresh process; SessionID
 reports observed identity separately. Initialization does not prove recovery.
 Use [saved-history queries](#saved-history) for independent content reads.
 
+Tools maps to the native built-in `--tools` allowlist. A nil or zero-length
+slice omits the option. A single empty string emits `--tools=`, while ordinary
+entries are passed as one comma-separated value. Mixing an empty string with
+tool names fails at Open with ErrInvalidInput. The SDK passes names literally
+and does not enumerate or validate them.
+
 DisallowedTools passes a nonempty list as the native comma-separated
-`--disallowedTools` value; nil or empty omits the option. This changes native
-tool availability only and does not grant or answer pending requests.
+`--disallowedTools` value; nil or empty omits the option. Allow and deny rules
+can be combined; the native CLI decides their effective intersection. Both
+options change native tool availability only and do not grant or answer pending
+requests.
+
+`--tools` controls built-in tools, not MCP server tools. A normal allowlist does
+not remove the native EndConversation tool; `--tools=` removes it only when the
+session has no MCP tools. Use `--disallowedTools` patterns such as `mcp__*` when
+MCP tools must also be denied. Disabling built-in tools therefore does not by
+itself disable MCP or prove that local execution is unavailable.
 
 ## Cancellation, shutdown and resources
 

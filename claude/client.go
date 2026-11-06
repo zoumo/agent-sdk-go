@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,8 +27,8 @@ type Limits = types.Limits
 
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
 // child's entire environment; nil inherits os.Environ. WorkDir, Model, Effort,
-// DisallowedTools and ResumeID are passed literally, without a shell. Existing
-// CLI settings apply.
+// Tools, DisallowedTools and ResumeID are passed literally, without a shell.
+// Existing CLI settings apply.
 //
 //nolint:recvcheck // Canonical configuration API uses value and pointer receivers.
 type Options struct {
@@ -46,6 +47,9 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// Tools is passed as a comma-separated native --tools allowlist. Nil or
+	// empty omits the option; one empty string disables ordinary built-in tools.
+	Tools []string
 	// DisallowedTools is passed as a comma-separated native --disallowedTools
 	// option. Nil or empty omits the option.
 	DisallowedTools []string
@@ -66,7 +70,13 @@ func (o *Options) defaults() error {
 	default:
 		return fmt.Errorf("claude: child detail policy %q: %w", o.ChildDetailPolicy, ErrInvalidInput)
 	}
-	if err := validateInputEncoding(struct{ Model, Effort string }{o.Model, o.Effort}); err != nil {
+	if err := validateInputEncoding(struct {
+		Model, Effort string
+		Tools         []string
+	}{o.Model, o.Effort, o.Tools}); err != nil {
+		return dispatchFailure("open", err)
+	}
+	if err := validateBuiltinTools(o.Tools); err != nil {
 		return dispatchFailure("open", err)
 	}
 	if err := validateThinkingConfig(o.Thinking); err != nil {
@@ -87,6 +97,7 @@ func (o *Options) defaults() error {
 		o.Initialize = &frozen
 	}
 	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
+	o.Tools = slices.Clone(o.Tools)
 	if o.CLIPath == "" {
 		o.CLIPath = "claude"
 	}
@@ -118,6 +129,15 @@ func (o *Options) defaults() error {
 		}
 		if *pair.v == 0 {
 			*pair.v = pair.def
+		}
+	}
+	return nil
+}
+
+func validateBuiltinTools(tools []string) error {
+	for _, tool := range tools {
+		if tool == "" && len(tools) != 1 {
+			return fmt.Errorf("%w: tools must contain tool names or a single empty string", ErrInvalidInput)
 		}
 	}
 	return nil
@@ -786,6 +806,9 @@ func interactionArgs(options Options) ([]string, error) {
 	}
 	if options.Effort != "" {
 		args = append(args, "--effort="+options.Effort)
+	}
+	if len(options.Tools) > 0 {
+		args = append(args, "--tools="+strings.Join(options.Tools, ","))
 	}
 	if len(options.DisallowedTools) > 0 {
 		args = append(args, "--disallowedTools="+strings.Join(options.DisallowedTools, ","))

@@ -32,7 +32,7 @@ var (
 	_ types.PermissionBehavior = PermissionAllow
 	_ PermissionBehavior       = types.PermissionDeny
 	_ Options                  = Options{
-		CLIPath: "fixture", WorkDir: ".", Model: "m", ResumeID: "s", DisallowedTools: []string{"AskUserQuestion"}, Env: []string{},
+		CLIPath: "fixture", WorkDir: ".", Model: "m", ResumeID: "s", Tools: []string{"Read"}, DisallowedTools: []string{"AskUserQuestion"}, Env: []string{},
 		InitializeTimeout: time.Second, ShutdownTimeout: time.Second,
 		Limits: Limits{
 			EventBuffer: 1, FrameBytes: 1024, PendingControls: 1, ControlBuffer: 1,
@@ -43,7 +43,7 @@ var (
 
 func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 	config := types.Options{
-		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
+		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", Tools: []string{"Bash", "Read"}, DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
 		Env: []string{"FIXTURE=1"}, InitializeTimeout: 13 * time.Second, ShutdownTimeout: 7 * time.Second,
 		Limits: types.Limits{EventBuffer: 2, FrameBytes: 1000, PendingControls: 3, ControlBuffer: 4, StderrBytes: 5, PendingPermissions: 6, PermissionHistory: 8},
 	}

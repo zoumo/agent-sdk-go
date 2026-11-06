@@ -204,6 +204,124 @@ func TestSessionExternalMCPRejectsInvalidConfiguration(t *testing.T) {
 	assertMethods(t, f, "initialize", "initialized")
 }
 
+func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
+	const secret = "MCP-UTF8-SECRET-MUST-NOT-LEAK"
+	bad := secret + "\xff"
+	f := startFake(t, "resume-normal", codex.Limits{})
+	cases := []struct {
+		name       string
+		server     codex.MCPServer
+		wantFields []string
+	}{
+		{
+			name:       "command",
+			server:     codex.MCPServer{Command: bad},
+			wantFields: []string{"command"},
+		},
+		{
+			name: "argument",
+			server: codex.MCPServer{
+				Command: "fixture-mcp",
+				Args:    []string{"--stdio", bad},
+			},
+			wantFields: []string{"args[1]"},
+		},
+		{
+			name: "environment key",
+			server: codex.MCPServer{
+				Command: "fixture-mcp",
+				Env:     map[string]string{bad: "VALUE"},
+			},
+			wantFields: []string{"env key"},
+		},
+		{
+			name: "environment value",
+			server: codex.MCPServer{
+				Command: "fixture-mcp",
+				Env:     map[string]string{"TOKEN": bad},
+			},
+			wantFields: []string{"env value"},
+		},
+		{
+			name:       "working directory",
+			server:     codex.MCPServer{Command: "fixture-mcp", Cwd: bad},
+			wantFields: []string{"cwd"},
+		},
+		{
+			name:       "URL",
+			server:     codex.MCPServer{URL: bad},
+			wantFields: []string{"url"},
+		},
+		{
+			name: "header key",
+			server: codex.MCPServer{
+				URL:     "https://example.invalid/mcp",
+				Headers: map[string]string{bad: "VALUE"},
+			},
+			wantFields: []string{"headers key"},
+		},
+		{
+			name: "header value",
+			server: codex.MCPServer{
+				URL:     "https://example.invalid/mcp",
+				Headers: map[string]string{"Authorization": bad},
+			},
+			wantFields: []string{"headers value"},
+		},
+		{
+			name: "environment header key",
+			server: codex.MCPServer{
+				URL:        "https://example.invalid/mcp",
+				EnvHeaders: map[string]string{bad: "VALUE"},
+			},
+			wantFields: []string{"env_headers key"},
+		},
+		{
+			name: "environment header value",
+			server: codex.MCPServer{
+				URL:        "https://example.invalid/mcp",
+				EnvHeaders: map[string]string{"X-API-Key": bad},
+			},
+			wantFields: []string{"env_headers value"},
+		},
+		{
+			name: "bearer token environment variable",
+			server: codex.MCPServer{
+				URL:               "https://example.invalid/mcp",
+				BearerTokenEnvVar: bad,
+			},
+			wantFields: []string{"bearer_token_env_var"},
+		},
+	}
+	for _, resume := range []bool{false, true} {
+		mode := "start"
+		if resume {
+			mode = "resume"
+		}
+		for _, tc := range cases {
+			t.Run(mode+"/"+tc.name, func(t *testing.T) {
+				server := tc.server
+				server.Name = "server"
+				options := codex.SessionOptions{Client: f.c, MCPServers: []codex.MCPServer{server}}
+				if resume {
+					options.Resume = &types.ThreadResumeParams{ThreadID: resumedNativeID}
+				}
+
+				s, err := codex.Open(context.Background(), options)
+				require.Nil(t, s)
+				require.ErrorIs(t, err, codex.ErrInvalidInput)
+				for _, field := range tc.wantFields {
+					assert.Contains(t, err.Error(), field)
+				}
+				assert.NotContains(t, err.Error(), secret)
+				assert.NotContains(t, err.Error(), "\xff")
+				assert.NotContains(t, err.Error(), "\uFFFD")
+			})
+		}
+	}
+	assertMethods(t, f, "initialize", "initialized")
+}
+
 func TestSessionExternalMCPRejectsRawConfigConflicts(t *testing.T) {
 	const (
 		rawSecret    = "RAW-CONFIG-SECRET-MUST-NOT-LEAK"

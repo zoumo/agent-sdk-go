@@ -12,9 +12,9 @@ are separate baselines; exact hashes and licenses remain in
 [type sources](docs/type-sources.md). Synthetic tests do not certify live behavior.
 
 This implements a local stdio client with narrow input, permission/question,
-model/thinking, application-owned SDK MCP and local-history APIs. It does not
+model/thinking, external/application-owned MCP and local-history APIs. It does not
 provide full official configuration/control parity, hook callbacks, agent-definition
-registration, remote transports, administration, user-dialog/elicitation APIs or
+registration, remote CLI transports, administration, user-dialog/elicitation APIs or
 durable recovery. Unknown frame preservation does not implement those operations.
 There is no public generic raw-write escape hatch. Inherited CLI configuration may
 still affect execution. See [offline checks](../docs/testing.md).
@@ -269,6 +269,40 @@ func answerQuestions(request *claude.IncomingRequest,answers map[string]string)e
     if err:=json.Unmarshal(request.Handle().Input(),&input);err!=nil{return err}
     fmt.Println("questions",len(input.Questions))
     return request.Answer(request.Context(),claude.QuestionAnswers{Answers:answers})
+}
+```
+
+## External MCP servers
+
+Set `SessionOptions.MCPServers` to declare native stdio, HTTP or SSE servers for
+one Session. `Transport` is required: `MCPTransportStdio` accepts `Command`,
+`Args` and `Env`; `MCPTransportHTTP` and `MCPTransportSSE` accept `URL` and
+`Headers`. Fields from the other transport shape are rejected at Open. Names must
+be nonempty, valid UTF-8 and unique across both `MCPServers` and
+`SDKMCPServers`. The SDK copies the nested slices and maps at Open, so later
+caller mutation does not change the launched configuration.
+
+External and application SDK server declarations are merged into one native
+`--mcp-config` value. `StrictMCPConfig` adds `--strict-mcp-config` to ignore MCP
+servers from user, project and local settings. The SDK does not connect to the
+external server, check its health, discover its tools or perform OAuth.
+
+`--mcp-config` is embedded directly in process argv, so literal environment and
+header values are visible to other processes that can inspect argv. Put secrets
+in `Env` or `Headers` through native environment references such as
+`${REMOTE_TOKEN}` or `${REMOTE_TOKEN:-default}` rather than literal values. The
+SDK forwards these references unchanged and does not redact the resulting argv.
+
+```go
+claude.SessionOptions{
+    Tools: []string{""},
+    MCPServers: []claude.MCPServer{{
+        Name:      "remote",
+        Transport: claude.MCPTransportHTTP,
+        URL:       "https://example.invalid/mcp",
+        Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+    }},
+    StrictMCPConfig: true,
 }
 ```
 

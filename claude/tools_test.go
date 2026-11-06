@@ -21,13 +21,12 @@ var baseInteractionArgs = []string{
 	"--include-partial-messages",
 }
 
-func captureToolArgs(t *testing.T, tools, disallowedTools []string) []string {
+func captureArgs(t *testing.T, configure func(*Options)) []string {
 	t.Helper()
 	opts := fixtureOptions(t, "echo")
 	capture := filepath.Join(opts.WorkDir, "capture.json")
 	opts.Env = append(opts.Env, "CLAUDE_GO_CAPTURE="+capture)
-	opts.Tools = tools
-	opts.DisallowedTools = disallowedTools
+	configure(&opts)
 	c, err := openTestInteraction(context.Background(), opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
@@ -61,7 +60,11 @@ func TestToolsControlledLauncherArguments(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			want := append(append([]string(nil), baseInteractionArgs...), tc.wantExtra...)
-			require.Equal(t, want, captureToolArgs(t, tc.tools, tc.disallowedTools))
+			argv := captureArgs(t, func(options *Options) {
+				options.Tools = tc.tools
+				options.DisallowedTools = tc.disallowedTools
+			})
+			require.Equal(t, want, argv)
 		})
 	}
 }
@@ -101,9 +104,10 @@ func TestToolsFreezeCallerSlice(t *testing.T) {
 
 func TestToolsIsolatedAcrossRepeatedOpen(t *testing.T) {
 	tools := []string{"Bash"}
-	first := captureToolArgs(t, tools, nil)
+	captureTools := func(options *Options) { options.Tools = tools }
+	first := captureArgs(t, captureTools)
 	tools[0] = "Read"
-	second := captureToolArgs(t, tools, nil)
+	second := captureArgs(t, captureTools)
 
 	firstWant := append(append([]string(nil), baseInteractionArgs...), "--tools=Bash")
 	secondWant := append(append([]string(nil), baseInteractionArgs...), "--tools=Read")

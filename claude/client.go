@@ -39,6 +39,12 @@ type Options struct {
 	Effort string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
+	// MCPServers declares external stdio, HTTP or SSE MCP servers. The SDK
+	// copies these values when opening the Session.
+	MCPServers []MCPServer
+	// StrictMCPConfig adds --strict-mcp-config, asking the CLI to ignore MCP
+	// servers from other settings, only when true.
+	StrictMCPConfig bool
 	// HandleSDKMCP answers application-hosted MCP requests, including requests
 	// received before initialization completes. Nil delivers them through Receive.
 	HandleSDKMCP func(context.Context, IncomingRequest) error
@@ -73,7 +79,8 @@ func (o *Options) defaults() error {
 	if err := validateInputEncoding(struct {
 		Model, Effort string
 		Tools         []string
-	}{o.Model, o.Effort, o.Tools}); err != nil {
+		MCPServers    []MCPServer
+	}{o.Model, o.Effort, o.Tools, o.MCPServers}); err != nil {
 		return dispatchFailure("open", err)
 	}
 	if err := validateBuiltinTools(o.Tools); err != nil {
@@ -83,6 +90,9 @@ func (o *Options) defaults() error {
 		return dispatchFailure("open", err)
 	}
 	if err := validateSDKMCPServers(o.SDKMCPServers); err != nil {
+		return dispatchFailure("open", err)
+	}
+	if err := validateMCPServers(o.MCPServers, o.SDKMCPServers); err != nil {
 		return dispatchFailure("open", err)
 	}
 	if o.Initialize != nil {
@@ -98,6 +108,7 @@ func (o *Options) defaults() error {
 	}
 	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
 	o.Tools = slices.Clone(o.Tools)
+	o.MCPServers = cloneMCPServers(o.MCPServers)
 	if o.CLIPath == "" {
 		o.CLIPath = "claude"
 	}
@@ -793,16 +804,22 @@ func interactionArgs(options Options) ([]string, error) {
 	if options.Model != "" {
 		args = append(args, "--model="+options.Model)
 	}
-	if len(options.SDKMCPServers) > 0 {
+	if len(options.SDKMCPServers) > 0 || len(options.MCPServers) > 0 {
 		servers := map[string]any{}
 		for _, name := range options.SDKMCPServers {
 			servers[name] = map[string]string{"type": "sdk", "name": name}
+		}
+		for _, server := range options.MCPServers {
+			servers[server.Name] = nativeMCPServerConfig(server)
 		}
 		config, err := json.Marshal(map[string]any{"mcpServers": servers})
 		if err != nil {
 			return nil, err
 		}
 		args = append(args, "--mcp-config="+string(config))
+	}
+	if options.StrictMCPConfig {
+		args = append(args, "--strict-mcp-config")
 	}
 	if options.Effort != "" {
 		args = append(args, "--effort="+options.Effort)

@@ -69,7 +69,7 @@ Every map entry emits its exact `true` or `false` value. Omitted keys do not
 override the native configuration, and unknown feature/tool strings pass through
 for the native config layer to accept, ignore or reject:
 
-```go
+```text
 session, err := codex.Open(ctx, codex.SessionOptions{
     Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
     Features: map[codex.Feature]bool{
@@ -127,7 +127,7 @@ and permits `Headers`, `EnvHeaders` and `BearerTokenEnvVar`. `EnvHeaders` maps
 header names to environment-variable names. `BearerTokenEnvVar` is also an
 environment-variable name, not the secret itself.
 
-```go
+```text
 session, err := codex.Open(ctx, codex.SessionOptions{
     Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
     Features: map[codex.Feature]bool{

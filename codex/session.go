@@ -29,6 +29,8 @@ type SessionOptions struct {
 	// Absent map keys do not override existing configuration.
 	Features map[Feature]bool
 	Tools    map[Tool]bool
+	// MCPServers adds external MCP servers to this Session's native thread config.
+	MCPServers []MCPServer
 	// ChildDetailPolicy fixes optional confirmed-child progress delivery for this Session.
 	ChildDetailPolicy ChildDetailPolicy
 	// MaxMembers bounds observation identities independently of parent knowledge.

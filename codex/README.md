@@ -19,9 +19,9 @@ remain unverified. Exact scopes stay in [evidence.json](docs/protocol/evidence.j
 Use [capabilities.json](docs/protocol/capabilities.json) for the method inventory
 and [protocol provenance](docs/protocol/README.md) for source hashes and licensing.
 Raw Call/types support is not workflow support. Dedicated steering/work queues,
-thread administration, hooks/plugins, MCP administration, realtime, credential
-management and durable recovery are not provided. Child observation does not
-provide a spawn controller, complete forwarding or combined completion.
+thread administration, hooks/plugins, MCP server management/discovery, realtime,
+credential management and durable recovery are not provided. Child observation
+does not provide a spawn controller, complete forwarding or combined completion.
 
 ## Session model and reasoning settings
 
@@ -99,6 +99,67 @@ the native feature layer. It does not guarantee local zero execution:
 configured capabilities may remain. Use an external sandbox and permission policy
 when hard isolation is required. Synthetic tests verify the emitted app-server
 parameters; they do not prove that a real Codex process removed a tool.
+
+## Thread MCP servers
+
+`SessionOptions.MCPServers` adds external MCP servers to this Session's
+`thread/start.config` or `thread/resume.config`. It does not write the user
+`config.toml`, and low-level `Client.StartThread` / `Client.ResumeThread` remain
+native-only. The fixed merge and limitation contract is in the
+[native Session design](../harness/modules/native-session/design.md#interface-codex-会话配置).
+
+| SDK field | Native field |
+|---|---|
+| `Name` | `mcp_servers.<name>` key |
+| `Command` | `command` |
+| `Args` | `args` |
+| `Env` | `env` |
+| `Cwd` | `cwd` |
+| `URL` | `url` |
+| `Headers` | `http_headers` |
+| `EnvHeaders` | `env_http_headers` |
+| `BearerTokenEnvVar` | `bearer_token_env_var` |
+
+Exactly one of `Command` or `URL` selects the transport. A command selects a
+stdio server and permits `Args`, `Env` and `Cwd`. A URL selects streamable HTTP
+and permits `Headers`, `EnvHeaders` and `BearerTokenEnvVar`. `EnvHeaders` maps
+header names to environment-variable names. `BearerTokenEnvVar` is also an
+environment-variable name, not the secret itself.
+
+```go
+session, err := codex.Open(ctx, codex.SessionOptions{
+    Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
+    MCPServers: []codex.MCPServer{{
+        Name:       "remote",
+        URL:        "https://example.invalid/mcp",
+        EnvHeaders: map[string]string{"X-API-Key": "REMOTE_API_KEY"},
+    }},
+})
+```
+
+Server names must be nonempty valid UTF-8, must not contain `.`, and must be
+unique. Invalid combinations, including a raw `Config` key at the same path or
+an ancestor/descendant of `mcp_servers.<name>`, return `ErrInvalidInput` before
+the thread RPC. Errors name paths and fields but do not include configuration
+values. The SDK copies the server slices/maps and raw `Config` map; callers can
+reuse or modify their inputs after `Open` returns.
+
+Prefer `EnvHeaders` or `BearerTokenEnvVar` for credentials. Literal `Headers` and
+`Env` values become part of the native configuration and may be visible to
+process inspection or protocol diagnostics; validation errors omit those values.
+
+Codex has no equivalent of Claude's `--strict-mcp-config`. This wrapper adds or
+replaces only the servers named in `MCPServers`; it cannot remove MCP servers
+loaded from user, project or managed configuration. To use only the servers
+declared by the application, start Codex with an isolated `CODEX_HOME` whose
+configuration contains no additional `mcp_servers`. An isolated home also needs
+separately arranged authentication and any required native configuration.
+
+MCP tool filters, OAuth interaction, timeouts, approval policy and server health
+checks are not wrapped here. Synthetic app-server tests verify the emitted
+configuration only; they do not prove that a real Codex process connected to an
+external server, authenticated successfully, discovered its tools or executed
+them.
 
 ## Optional child detail delivery
 

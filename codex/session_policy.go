@@ -29,11 +29,15 @@ const (
 )
 
 func applySessionPolicyConfig(options *SessionOptions) error {
-	if len(options.Features) == 0 && len(options.Tools) == 0 {
+	if len(options.Features) == 0 && len(options.Tools) == 0 && len(options.MCPServers) == 0 {
 		return nil
 	}
+	generated, err := generatedSessionConfig(options)
+	if err != nil {
+		return err
+	}
 	if options.Resume != nil {
-		config, err := mergePolicyConfig(options.Resume.Config, options.Features, options.Tools)
+		config, err := mergeGeneratedConfig(options.Resume.Config, generated)
 		if err != nil {
 			return err
 		}
@@ -42,7 +46,7 @@ func applySessionPolicyConfig(options *SessionOptions) error {
 		options.Resume = &resume
 		return nil
 	}
-	config, err := mergePolicyConfig(options.Thread.Config, options.Features, options.Tools)
+	config, err := mergeGeneratedConfig(options.Thread.Config, generated)
 	if err != nil {
 		return err
 	}
@@ -50,31 +54,37 @@ func applySessionPolicyConfig(options *SessionOptions) error {
 	return nil
 }
 
-func mergePolicyConfig(config types.Optional[map[string]json.RawMessage], features map[Feature]bool, tools map[Tool]bool) (types.Optional[map[string]json.RawMessage], error) {
-	policy := make(map[string]json.RawMessage, len(features)+len(tools))
-	for feature, enabled := range features {
-		policy["features."+string(feature)] = json.RawMessage(strconv.FormatBool(enabled))
+func generatedSessionConfig(options *SessionOptions) (map[string]json.RawMessage, error) {
+	generated := make(map[string]json.RawMessage, len(options.Features)+len(options.Tools)+len(options.MCPServers))
+	for feature, enabled := range options.Features {
+		generated["features."+string(feature)] = json.RawMessage(strconv.FormatBool(enabled))
 	}
-	for tool, enabled := range tools {
-		policy["tools."+string(tool)+".enabled"] = json.RawMessage(strconv.FormatBool(enabled))
+	for tool, enabled := range options.Tools {
+		generated["tools."+string(tool)+".enabled"] = json.RawMessage(strconv.FormatBool(enabled))
 	}
+	if err := addMCPServerConfig(generated, options.MCPServers); err != nil {
+		return nil, err
+	}
+	return generated, nil
+}
 
+func mergeGeneratedConfig(config types.Optional[map[string]json.RawMessage], generated map[string]json.RawMessage) (types.Optional[map[string]json.RawMessage], error) {
 	raw, ok := config.Get()
 	if ok {
 		raw = maps.Clone(raw)
 	}
 	if raw == nil {
-		raw = make(map[string]json.RawMessage, len(policy))
+		raw = make(map[string]json.RawMessage, len(generated))
 	}
-	policyPaths := slices.Sorted(maps.Keys(policy))
+	generatedPaths := slices.Sorted(maps.Keys(generated))
 	for _, rawPath := range slices.Sorted(maps.Keys(raw)) {
-		for _, policyPath := range policyPaths {
-			if dottedPathsConflict(rawPath, policyPath) {
-				return config, fmt.Errorf("%w: raw config path %q conflicts with generated path %q", ErrInvalidInput, rawPath, policyPath)
+		for _, generatedPath := range generatedPaths {
+			if dottedPathsConflict(rawPath, generatedPath) {
+				return config, fmt.Errorf("%w: raw config path %q conflicts with generated path %q", ErrInvalidInput, rawPath, generatedPath)
 			}
 		}
 	}
-	maps.Copy(raw, policy)
+	maps.Copy(raw, generated)
 	return types.Some(raw), nil
 }
 

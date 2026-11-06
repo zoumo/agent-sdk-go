@@ -20,9 +20,9 @@ Use [capabilities.json](docs/protocol/capabilities.json) for the method inventor
 and [protocol provenance](docs/protocol/README.md) for source hashes and licensing.
 Raw Call/types support is not workflow support. Dedicated steering/work queues,
 thread deletion/rename/compact and other administration, hooks/plugins, MCP
-administration, realtime, credential management and durable recovery are not
-provided. Child observation does not
-provide a spawn controller, complete forwarding or combined completion.
+server management/discovery, realtime, credential management and durable
+recovery are not provided. Child observation does not provide a spawn
+controller, complete forwarding or combined completion.
 
 ## Session model and reasoning settings
 
@@ -49,6 +49,135 @@ Native refusal remains a `CallError` wrapping `RPCError`; possible dispatch
 followed by cancellation, timeout or Close remains `OutcomeUnknown` and is never
 retried automatically. Validation is synthetic/offline; no real configuration
 effect, active-turn switch, or child inheritance is certified.
+
+## Thread feature and tool policy
+
+`SessionOptions.Features` and `SessionOptions.Tools` add explicit native dotted
+configuration to `thread/start` or `thread/resume`. They are fixed when `Open`
+creates the Session; low-level `Client.StartThread` and `Client.ResumeThread`
+keep their native-only signatures.
+
+| SDK value | Native config path |
+|---|---|
+| `codex.FeatureShellTool` | `features.shell_tool` |
+| `codex.FeatureViewImage` | `features.view_image` |
+| `codex.FeatureImageGeneration` | `features.image_generation` |
+| `codex.ToolUpdatePlan` | `tools.update_plan.enabled` |
+| `codex.ToolRequestUserInput` | `tools.experimental_request_user_input.enabled` |
+
+Every map entry emits its exact `true` or `false` value. Omitted keys do not
+override the native configuration, and unknown feature/tool strings pass through
+for the native config layer to accept, ignore or reject:
+
+```text
+session, err := codex.Open(ctx, codex.SessionOptions{
+    Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
+    Features: map[codex.Feature]bool{
+        codex.FeatureShellTool:       false,
+        codex.FeatureViewImage:       false,
+        codex.FeatureImageGeneration: false,
+    },
+    Tools: map[codex.Tool]bool{
+        codex.ToolUpdatePlan: false,
+    },
+})
+```
+
+The SDK copies the caller maps and raw `Config` map instead of mutating them. If
+the raw config already contains a generated path, or an ancestor or descendant
+of that path, `Open` returns `ErrInvalidInput` before the thread RPC. The error
+names the conflicting paths but omits configuration values.
+
+`Tools` is not a general built-in deny list. It only covers native switches with
+an `.enabled` path. Codex has no SDK mapping here for names such as `Read`,
+`Write`, `Glob` or `apply_patch`, and the SDK does not expose
+`features.unified_exec=false` because that value is not a reliable execution
+switch.
+
+`FeatureShellTool: false` disables command-execution tools across environments at
+the native feature layer. It does not guarantee local zero execution:
+`apply_patch` may still be exposed by the model catalog, and other native or
+configured capabilities may remain. Use an external sandbox and permission policy
+when hard isolation is required. Synthetic tests verify the emitted app-server
+parameters; they do not prove that a real Codex process removed a tool.
+
+## Thread MCP servers
+
+`SessionOptions.MCPServers` adds external MCP servers to this Session's
+`thread/start.config` or `thread/resume.config`. It does not write the user
+`config.toml`, and low-level `Client.StartThread` / `Client.ResumeThread` remain
+native-only. The fixed merge and limitation contract is in the
+[native Session design](../harness/modules/native-session/design.md#interface-codex-会话配置).
+
+| SDK field | Native field |
+|---|---|
+| `Name` | `mcp_servers.<name>` key |
+| `Command` | `command` |
+| `Args` | `args` |
+| `Env` | `env` |
+| `Cwd` | `cwd` |
+| `URL` | `url` |
+| `Headers` | `http_headers` |
+| `EnvHeaders` | `env_http_headers` |
+| `BearerTokenEnvVar` | `bearer_token_env_var` |
+
+Exactly one of `Command` or `URL` selects the transport. A command selects a
+stdio server and permits `Args`, `Env` and `Cwd`. A URL selects streamable HTTP
+and permits `Headers`, `EnvHeaders` and `BearerTokenEnvVar`. `EnvHeaders` maps
+header names to environment-variable names. `BearerTokenEnvVar` is also an
+environment-variable name, not the secret itself.
+
+```text
+session, err := codex.Open(ctx, codex.SessionOptions{
+    Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
+    Features: map[codex.Feature]bool{
+        codex.FeatureShellTool:       false,
+        codex.FeatureViewImage:       false,
+        codex.FeatureImageGeneration: false,
+    },
+    MCPServers: []codex.MCPServer{{
+        Name:       "remote",
+        URL:        "https://example.invalid/mcp",
+        EnvHeaders: map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
+    }},
+})
+```
+
+This combination is the best-effort remote execution profile. The feature and
+ambient-configuration limits above and below still apply.
+
+Server names must be nonempty valid UTF-8, must not contain `.`, and must be
+unique. Invalid combinations, including a raw `Config` key at the same path or
+an ancestor/descendant of `mcp_servers.<name>`, return `ErrInvalidInput` before
+the thread RPC. Errors name paths and fields but do not include configuration
+values. The SDK copies the server slices/maps and raw `Config` map; callers can
+reuse or modify their inputs after `Open` returns.
+
+Prefer `EnvHeaders` or `BearerTokenEnvVar` for credentials. Literal `Headers` and
+`Env` values become part of the native configuration and may be visible to
+process inspection or protocol diagnostics; validation errors omit those values.
+
+Codex has no equivalent of Claude's `--strict-mcp-config`. This wrapper adds or
+replaces only the servers named in `MCPServers`; it cannot remove MCP servers
+loaded from user, project or managed configuration. To use only the servers
+declared by the application, start Codex with an isolated `CODEX_HOME` whose
+configuration contains no additional `mcp_servers`. An isolated home also needs
+separately arranged authentication and any required native configuration.
+
+MCP tool filters, OAuth interaction, timeouts, approval policy and server health
+checks are not wrapped here. MCP connectivity, TLS/proxy behavior,
+authentication, discovered tool names, remote permissions and the actual
+operations belong to Codex and the service. Synthetic app-server tests verify
+the emitted configuration only; they do not prove that a successful thread RPC
+connected to an external server or exposed a particular tool.
+
+The offline example uses a synthetic app-server and `example.invalid`; it
+asserts the complete final `thread/start` params without contacting the URL or
+running Codex:
+
+```sh
+go run ./codex/examples/remote-execution-offline
+```
 
 ## Optional child detail delivery
 

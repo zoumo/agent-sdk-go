@@ -12,9 +12,9 @@ are separate baselines; exact hashes and licenses remain in
 [type sources](docs/type-sources.md). Synthetic tests do not certify live behavior.
 
 This implements a local stdio client with narrow input, permission/question,
-model/thinking, application-owned SDK MCP and local-history APIs. It does not
+model/thinking, external/application-owned MCP and local-history APIs. It does not
 provide full official configuration/control parity, hook callbacks, agent-definition
-registration, remote transports, administration, user-dialog/elicitation APIs or
+registration, remote CLI transports, administration, user-dialog/elicitation APIs or
 durable recovery. Unknown frame preservation does not implement those operations.
 There is no public generic raw-write escape hatch. Inherited CLI configuration may
 still affect execution. See [offline checks](../docs/testing.md).
@@ -106,9 +106,23 @@ Open with ResumeID requests native continuation in a fresh process; SessionID
 reports observed identity separately. Initialization does not prove recovery.
 Use [saved-history queries](#saved-history) for independent content reads.
 
+Tools maps to the native built-in `--tools` allowlist. A nil or zero-length
+slice omits the option. A single empty string emits `--tools=`, while ordinary
+entries are passed as one comma-separated value. Mixing an empty string with
+tool names fails at Open with ErrInvalidInput. The SDK passes names literally
+and does not enumerate or validate them.
+
 DisallowedTools passes a nonempty list as the native comma-separated
-`--disallowedTools` value; nil or empty omits the option. This changes native
-tool availability only and does not grant or answer pending requests.
+`--disallowedTools` value; nil or empty omits the option. Allow and deny rules
+can be combined; the native CLI decides their effective intersection. Both
+options change native tool availability only and do not grant or answer pending
+requests.
+
+`--tools` controls built-in tools, not MCP server tools. A normal allowlist does
+not remove the native EndConversation tool; `--tools=` removes it only when the
+session has no MCP tools. Use `--disallowedTools` patterns such as `mcp__*` when
+MCP tools must also be denied. Disabling built-in tools therefore does not by
+itself disable MCP or prove that local execution is unavailable.
 
 ## Cancellation, shutdown and resources
 
@@ -262,6 +276,61 @@ func answerQuestions(request *claude.IncomingRequest,answers map[string]string)e
     fmt.Println("questions",len(input.Questions))
     return request.Answer(request.Context(),claude.QuestionAnswers{Answers:answers})
 }
+```
+
+## External MCP servers
+
+Set `SessionOptions.MCPServers` to declare native stdio, HTTP or SSE servers for
+one Session. `Transport` is required: `MCPTransportStdio` accepts `Command`,
+`Args` and `Env`; `MCPTransportHTTP` and `MCPTransportSSE` accept `URL` and
+`Headers`. Fields from the other transport shape are rejected at Open. Names must
+be nonempty, valid UTF-8 and unique across both `MCPServers` and
+`SDKMCPServers`. The SDK copies the nested slices and maps at Open, so later
+caller mutation does not change the launched configuration.
+
+External and application SDK server declarations are merged into one native
+`--mcp-config` value. `StrictMCPConfig` adds `--strict-mcp-config` to ignore MCP
+servers from user, project and local settings. The SDK does not connect to the
+external server, check its health, discover tools, validate tool names or
+perform OAuth. MCP connectivity, TLS/proxy behavior, authentication, remote
+permission checks and the actual operations belong to Claude CLI and the
+service. A successful `Open` does not prove that a server connected,
+authenticated, exposed a particular tool or executed it.
+
+`--mcp-config` is embedded directly in process argv, so literal environment and
+header values are visible to other processes that can inspect argv. Put secrets
+in `Env` or `Headers` through native environment references such as
+`${REMOTE_TOKEN}` or `${REMOTE_TOKEN:-default}` rather than literal values. The
+SDK forwards these references unchanged and does not redact the resulting argv.
+
+```go
+claude.SessionOptions{
+    Tools: []string{""},
+    MCPServers: []claude.MCPServer{{
+        Name:      "remote",
+        Transport: claude.MCPTransportHTTP,
+        URL:       "https://example.invalid/mcp",
+        Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+    }},
+    StrictMCPConfig: true,
+}
+```
+
+### Remote execution profile
+
+The configuration above is the supported remote execution profile: the external
+MCP tools remain available while ordinary built-ins are suppressed. The
+`EndConversation` behavior is described under
+[Configuration and stored records](#configuration-and-stored-records). This
+profile is not an execution sandbox; for stronger isolation, combine it with an
+OS/container sandbox, filesystem and network restrictions, and the native
+permission policy.
+
+The offline example uses a synthetic launcher and `example.invalid`; it asserts
+the final argv without contacting the URL or running Claude:
+
+```sh
+go run ./claude/examples/remote-execution-offline
 ```
 
 ## Application SDK MCP servers

@@ -31,8 +31,12 @@ var (
 	}
 	_ types.PermissionBehavior = PermissionAllow
 	_ PermissionBehavior       = types.PermissionDeny
+	_ types.MCPTransport       = MCPTransportStdio
+	_ MCPTransport             = types.MCPTransportSSE
+	_ types.MCPServer          = MCPServer{}
 	_ Options                  = Options{
-		CLIPath: "fixture", WorkDir: ".", Model: "m", ResumeID: "s", DisallowedTools: []string{"AskUserQuestion"}, Env: []string{},
+		CLIPath: "fixture", WorkDir: ".", Model: "m", ResumeID: "s", Tools: []string{"Read"}, DisallowedTools: []string{"AskUserQuestion"},
+		MCPServers: []MCPServer{{Name: "fixture", Transport: MCPTransportStdio, Command: "fixture-mcp"}}, StrictMCPConfig: true, Env: []string{},
 		InitializeTimeout: time.Second, ShutdownTimeout: time.Second,
 		Limits: Limits{
 			EventBuffer: 1, FrameBytes: 1024, PendingControls: 1, ControlBuffer: 1,
@@ -43,8 +47,13 @@ var (
 
 func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 	config := types.Options{
-		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
-		Env: []string{"FIXTURE=1"}, InitializeTimeout: 13 * time.Second, ShutdownTimeout: 7 * time.Second,
+		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", Tools: []string{"Bash", "Read"}, DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
+		MCPServers: []types.MCPServer{{
+			Name: "remote", Transport: types.MCPTransportHTTP, URL: "https://example.invalid/mcp",
+			Headers: map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+		}},
+		StrictMCPConfig: true,
+		Env:             []string{"FIXTURE=1"}, InitializeTimeout: 13 * time.Second, ShutdownTimeout: 7 * time.Second,
 		Limits: types.Limits{EventBuffer: 2, FrameBytes: 1000, PendingControls: 3, ControlBuffer: 4, StderrBytes: 5, PendingPermissions: 6, PermissionHistory: 8},
 	}
 	for _, tc := range []struct {

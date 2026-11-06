@@ -112,6 +112,24 @@ Submit 使用原生 start 语义，不依据本地 Busy 推断 start/steer。若
 
 SetModel 与 SetThinking 只改变主会话原生支持范围，不排队等待空闲、不中断、不重建、不递归修改子 Agent。Codex 的 model/effort 影响后续 turns；Claude 原生 ack 不建立跨执行的生效屏障。所有成功返回都不把 requested 写成 observed。原生拒绝保留原错误及关联，已知不支持在发送前明确拒绝。
 
+<a id="interface-codex-会话配置"></a>
+
+### Codex 会话配置
+
+Codex `SessionOptions.Features`、`Tools` 和 `MCPServers` 只在 `Open` 固定，
+分别生成 `features.*`、`tools.*.enabled` 和 `mcp_servers.<name>` native config，
+并合并到本次 thread/start 或 thread/resume。未声明的 Feature/Tool key 不覆盖
+原配置；MCP server 必须具有非空、UTF-8 合法、无点号且唯一的 name，并严格
+选择 command（stdio）或 URL（streamable HTTP）之一。stdio 与 HTTP 只接受各自
+字段组，不接受未声明的 tool filter、OAuth、timeout 或 approval 字段。
+
+合并不得修改调用方配置。生成的 raw path 与调用方 `Config` 的精确、祖先或后代
+路径冲突时，必须在 thread RPC 前返回 invalid-input；错误可包含字段和路径名，
+不得包含 header、token、env 或其他配置值。低层 `StartThread`/`ResumeThread`
+不隐式应用这些便利字段，也不写用户 config。Codex 没有 Claude 等价的 strict
+MCP 选项：本次声明只能新增或替换同名 server，不能移除 ambient 配置；
+需要独占 server 集合时，调用方必须使用隔离的 `CODEX_HOME` 或外层执行环境。
+
 <a id="interface-真实-incomingrequest"></a>
 
 ### 真实 IncomingRequest

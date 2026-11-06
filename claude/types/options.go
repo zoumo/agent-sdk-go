@@ -38,9 +38,31 @@ type Limits struct {
 	PermissionHistory int
 }
 
+// MCPTransport selects one native Claude MCP transport. The zero value is
+// invalid; callers must choose a transport explicitly.
+type MCPTransport string
+
+const (
+	MCPTransportStdio MCPTransport = "stdio"
+	MCPTransportHTTP  MCPTransport = "http"
+	MCPTransportSSE   MCPTransport = "sse"
+)
+
+// MCPServer declares one external MCP server for a Session. Name is the unique
+// native configuration key and is not sent as an external server field.
+type MCPServer struct {
+	Name      string
+	Transport MCPTransport
+	Command   string
+	Args      []string
+	Env       map[string]string
+	URL       string
+	Headers   map[string]string
+}
+
 // Options is the callback-free configuration for a local CLI process.
-// Use claude.OptionsFromTypes to adapt it to runtime options. Env slices retain
-// normal Go sharing.
+// Use claude.OptionsFromTypes to adapt it to runtime options. Env and MCP server
+// slices/maps retain normal Go sharing.
 // Zero values select the client defaults; validation occurs at Open.
 type Options struct {
 	CLIPath string
@@ -50,11 +72,20 @@ type Options struct {
 	Effort string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
-	Thinking      *ThinkingConfig
-	Initialize    *InitializeOptions
+	// MCPServers declares external stdio, HTTP or SSE MCP servers. The SDK
+	// copies these values when opening the Session.
+	MCPServers []MCPServer
+	// StrictMCPConfig adds --strict-mcp-config, asking the CLI to ignore MCP
+	// servers from other settings, only when true.
+	StrictMCPConfig bool
+	Thinking        *ThinkingConfig
+	Initialize      *InitializeOptions
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// Tools is passed as a comma-separated native --tools allowlist. Nil or
+	// empty omits the option; one empty string disables ordinary built-in tools.
+	Tools []string
 	// DisallowedTools is passed as a comma-separated native --disallowedTools
 	// option. Nil or empty omits the option.
 	DisallowedTools   []string

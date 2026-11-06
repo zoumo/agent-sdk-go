@@ -49,6 +49,57 @@ followed by cancellation, timeout or Close remains `OutcomeUnknown` and is never
 retried automatically. Validation is synthetic/offline; no real configuration
 effect, active-turn switch, or child inheritance is certified.
 
+## Thread feature and tool policy
+
+`SessionOptions.Features` and `SessionOptions.Tools` add explicit native dotted
+configuration to `thread/start` or `thread/resume`. They are fixed when `Open`
+creates the Session; low-level `Client.StartThread` and `Client.ResumeThread`
+keep their native-only signatures.
+
+| SDK value | Native config path |
+|---|---|
+| `codex.FeatureShellTool` | `features.shell_tool` |
+| `codex.FeatureViewImage` | `features.view_image` |
+| `codex.FeatureImageGeneration` | `features.image_generation` |
+| `codex.ToolUpdatePlan` | `tools.update_plan.enabled` |
+| `codex.ToolRequestUserInput` | `tools.experimental_request_user_input.enabled` |
+
+Every map entry emits its exact `true` or `false` value. Omitted keys do not
+override the native configuration, and unknown feature/tool strings pass through
+for the native config layer to accept, ignore or reject:
+
+```go
+session, err := codex.Open(ctx, codex.SessionOptions{
+    Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
+    Features: map[codex.Feature]bool{
+        codex.FeatureShellTool:       false,
+        codex.FeatureViewImage:       false,
+        codex.FeatureImageGeneration: false,
+    },
+    Tools: map[codex.Tool]bool{
+        codex.ToolUpdatePlan: false,
+    },
+})
+```
+
+The SDK copies the caller maps and raw `Config` map instead of mutating them. If
+the raw config already contains a generated path, or an ancestor or descendant
+of that path, `Open` returns `ErrInvalidInput` before the thread RPC. The error
+names the conflicting paths but omits configuration values.
+
+`Tools` is not a general built-in deny list. It only covers native switches with
+an `.enabled` path. Codex has no SDK mapping here for names such as `Read`,
+`Write`, `Glob` or `apply_patch`, and the SDK does not expose
+`features.unified_exec=false` because that value is not a reliable execution
+switch.
+
+`FeatureShellTool: false` disables command-execution tools across environments at
+the native feature layer. It does not guarantee local zero execution:
+`apply_patch` may still be exposed by the model catalog, and other native or
+configured capabilities may remain. Use an external sandbox and permission policy
+when hard isolation is required. Synthetic tests verify the emitted app-server
+parameters; they do not prove that a real Codex process removed a tool.
+
 ## Optional child detail delivery
 
 To omit reviewed pure child text, reasoning and tool progress from `Receive`, set

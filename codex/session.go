@@ -25,6 +25,10 @@ type SessionOptions struct {
 	Stdio  *StdioOptions
 	Thread types.ThreadStartParams
 	Resume *types.ThreadResumeParams
+	// Features and Tools add explicit native thread configuration switches.
+	// Absent map keys do not override existing configuration.
+	Features map[Feature]bool
+	Tools    map[Tool]bool
 	// ChildDetailPolicy fixes optional confirmed-child progress delivery for this Session.
 	ChildDetailPolicy ChildDetailPolicy
 	// MaxMembers bounds observation identities independently of parent knowledge.
@@ -110,6 +114,9 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	}
 	if options.MaxParentDepth == 0 {
 		options.MaxParentDepth = 4096
+	}
+	if err := applySessionPolicyConfig(&options); err != nil {
+		return nil, err
 	}
 	graph, err := lineage.New[string](lineage.Limits{MaxNodes: options.MaxMembers, MaxRelations: options.MaxMembers, MaxDepth: options.MaxParentDepth})
 	if err != nil {

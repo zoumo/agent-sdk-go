@@ -47,7 +47,8 @@ Codex `SessionOptions.Resume *types.ThreadResumeParams` 显式选择已有 threa
 
 `Session.ResumeResponse()` 独立返回原生恢复应答及其中的保存内容；新建时无恢复应答，恢复时无 StartResponse。保存的 turns 不转换为实时 Receive 事件，不建立子成员或旧审批权限。恢复后的 Submit、Receive、ListSubagents 使用同一个主身份；ListSubagents 仅发现保存关联。恢复是显式原生操作，保留其附着与执行副作用，不承诺纯订阅、自动重连或补齐断线期间事件。
 
-两个 `*Session` 都有以下方法；同名配套类型位于各自运行时包：
+两个 `*Session` 提供以下公开方法；同名配套类型位于各自运行时包。Codex Session
+另有 `Archive`/`Unarchive`，Claude Session 不提供这两个方法。
 
 ```go
 Receive(ctx context.Context) (Received, error)
@@ -57,11 +58,26 @@ SetModel(ctx context.Context, change ModelChange) (ConfigurationReceipt, error) 
 SetThinking(ctx context.Context, change ThinkingChange) (ConfigurationReceipt, error)
 ListSubagents(ctx context.Context, query SubagentQuery) (SubagentPage, error)
 Interrupt(ctx context.Context, options InterruptOptions) error
+Archive(ctx context.Context) (types.ThreadArchiveResponse, error) // Codex
+Unarchive(ctx context.Context) (types.ThreadUnarchiveResponse, error) // Codex
 Close() error
 Abort() error
 Done() <-chan struct{}
 Err() error
 ```
+
+### 归档与恢复
+
+Codex `Session.Archive`/`Unarchive` 以固定主身份调用原生
+`thread/archive`/`thread/unarchive`，不接受调用者另选 thread ID。成功仅表示原生
+RPC 接受；`thread/archived`/`thread/unarchived` 是经 `Receive` 交付的独立原生
+事实。SDK 不删除 transcript、不关闭 Session；原生服务可能级联归档该主身份派生的
+子线程。原生归档也可能先关闭已加载的主/子线程，因此不保证正在进行的执行继续。
+`Unarchive` 保留原生 `Thread` 响应与未知字段，并拒绝返回其他 thread ID 的响应；
+该操作只恢复保存状态，不 resume、不建立附着，也不启动执行。
+
+Claude 当前没有对应的原生归档契约，因此 Claude Session 不声明这两个方法，也不以
+移动本地 transcript 文件模拟归档。
 
 `Received` 是有判别字段的值，只携带一个事实类别：原生 Event、真实 IncomingRequest、SDK 关系/覆盖证据。它保留原生顶层 Raw、Params、未知 envelope 字段与来源身份。其 Event 复用原生类型；不是把两种协议收敛为一个事件模型。
 

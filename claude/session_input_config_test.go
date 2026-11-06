@@ -112,6 +112,39 @@ func TestSessionNativeConfigurationWireAndEvidence(t *testing.T) {
 	}
 }
 
+func TestSessionPermissionModesUseTypedWireValues(t *testing.T) {
+	s, path := openInputConfigSession(t)
+	modes := []PermissionMode{
+		PermissionModeDefault,
+		PermissionModeAcceptEdits,
+		PermissionModeBypassPermissions,
+		PermissionModePlan,
+		PermissionModeDontAsk,
+		PermissionModeAuto,
+	}
+	for _, mode := range modes {
+		receipt, err := s.SetPermissionMode(context.Background(), mode)
+		require.NoError(t, err)
+		require.True(t, receipt.Accepted)
+		require.JSONEq(t, `{"subtype":"set_permission_mode","mode":"`+string(mode)+`"}`, string(receipt.Requested))
+	}
+	for _, mode := range []PermissionMode{"", "manual", "future"} {
+		_, err := s.SetPermissionMode(context.Background(), mode)
+		var dispatch *DispatchError
+		require.ErrorAs(t, err, &dispatch)
+		require.Equal(t, NotSent, dispatch.State)
+		require.ErrorIs(t, err, ErrInvalidInput)
+	}
+	require.NoError(t, s.Close())
+	frames := permissionTranscript(t, path)
+	require.Len(t, frames, len(modes))
+	for i, mode := range modes {
+		var frame struct{ Request json.RawMessage }
+		require.NoError(t, json.Unmarshal(frames[i], &frame))
+		require.JSONEq(t, `{"subtype":"set_permission_mode","mode":"`+string(mode)+`"}`, string(frame.Request))
+	}
+}
+
 func TestSessionCreationThinkingIsSeparateFromDynamicControl(t *testing.T) {
 	zero := 0
 	display := "summarized"

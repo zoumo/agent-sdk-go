@@ -35,7 +35,7 @@ func run() error {
 	}
 	defer client.Close()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: client, Thread: types.ThreadStartParams{
-		Ephemeral: types.Some(true), Sandbox: types.Some(types.SandboxModeReadOnly), ApprovalPolicy: types.Some(types.AskForApproval{Value: types.Ptr(types.AskForApprovalValueNever)}),
+		Ephemeral: types.Some(true), Sandbox: types.Some(types.SandboxModeReadOnly), ApprovalPolicy: types.Some(types.AskForApproval{Value: types.Ptr(types.ApprovalPolicyNever)}),
 	}})
 	if err != nil {
 		return err

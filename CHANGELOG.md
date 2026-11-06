@@ -8,6 +8,8 @@
 - Exposes `codex`, `codex/types`, `claude` and `claude/types` with one version.
   Native SDKs remain independent; both types packages use only the standard
   library. Previous module import paths require explicit migration.
+- Adds typed Claude permission modes and Codex approval policies while retaining
+  Codex compatibility aliases and native unknown-variant round trips.
 - Defines eight user stories and 36 complete simulation flows with separate
   native capability/evidence records. Synthetic faults remain code integration
   tests. Question/approval handling retains the original native request authority.

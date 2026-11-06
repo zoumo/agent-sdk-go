@@ -35,10 +35,17 @@ membership flag is not an SDK support or server-runtime availability guarantee.
 
 [types/schema.json](../../types/schema.json) contains the definition closure selected by
 [generate_protocol.py](../../scripts/generate_protocol.py), including thread list/read,
-turn/item history, settings, approvals and Session lifecycle roots. The generator
+start/resume/archive/unarchive lifecycle, turn/item history, settings, approvals
+and Session lifecycle roots. The generator
 verifies the official experimental archive's Git blob and extracts its
 `json_schema["codex_app_server_protocol.schemas.json"]` member before generating
 Go bindings and synthetic round-trip cases. The generator owns the exact root set.
+
+The archive request/result roots preserve the native split: `thread/archive`
+returns an empty object while `thread/unarchive` returns the restored `Thread`.
+The corresponding `thread/archived` and `thread/unarchived` notifications remain
+separate server facts. The generated binding does not turn either notification
+into an archive-state cache or transcript deletion.
 
 These adaptations preserve optional values, raw unknown fields/variants and number
 literals; they are not a strict JSON Schema validator or an official OpenAI Go SDK.

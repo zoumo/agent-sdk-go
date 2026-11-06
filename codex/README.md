@@ -19,9 +19,10 @@ remain unverified. Exact scopes stay in [evidence.json](docs/protocol/evidence.j
 Use [capabilities.json](docs/protocol/capabilities.json) for the method inventory
 and [protocol provenance](docs/protocol/README.md) for source hashes and licensing.
 Raw Call/types support is not workflow support. Dedicated steering/work queues,
-thread administration, hooks/plugins, MCP server management/discovery, realtime,
-credential management and durable recovery are not provided. Child observation
-does not provide a spawn controller, complete forwarding or combined completion.
+thread deletion/rename/compact and other administration, hooks/plugins, MCP
+server management/discovery, realtime, credential management and durable
+recovery are not provided. Child observation does not provide a spawn
+controller, complete forwarding or combined completion.
 
 ## Session model and reasoning settings
 
@@ -284,6 +285,33 @@ invalidates owned handles and cleans up without waiting for consumers. `Done`
 reports interaction termination independently of unread events. Drain to EOF or
 the stable terminal error, or explicitly `Abort` to discard abandoned backlog.
 
+## Archive and unarchive
+
+`Session.Archive(ctx)` and `Session.Unarchive(ctx)` send native
+`thread/archive` and `thread/unarchive` for the Session's fixed main thread. The
+methods do not accept an arbitrary thread ID. `Archive` returns the native empty
+acknowledgement with unknown fields; `Unarchive` returns the restored native
+`types.Thread` and unknown fields. `Unarchive` rejects a response whose restored
+Thread ID differs from the fixed main thread as `ErrProtocol`.
+
+```go
+if _, err := session.Archive(ctx); err != nil { return err }
+
+restored, err := session.Unarchive(ctx)
+if err != nil { return err }
+fmt.Println(restored.Thread.ID)
+```
+
+Success is native RPC acceptance, not proof that the archive state has already
+changed. Observe the native `thread/archived` or `thread/unarchived` notification
+through `Session.Receive`. Archiving is not deletion: the SDK does not remove the
+transcript or close the Session. The native server may shut down a loaded thread
+before archiving it and may also archive spawned descendant threads. Unarchive
+restores stored thread state; it does not resume, attach or start execution. The
+Claude package does not offer these methods because Claude Code's terminal
+protocol has no native archive contract; moving local transcript files is not a
+supported substitute.
+
 ## Connect to an existing remote app-server
 
 Use the same client methods with an explicitly selected WS/WSS endpoint and a
@@ -355,6 +383,12 @@ Native `types` production code uses only the standard library. Generated
 Unknown fields retain their JSON without float64 conversion. Representability
 is not permission to submit an unsupported workflow. The server still validates
 native constraints. See [generation provenance](docs/protocol/README.md).
+
+`ApprovalPolicy` and the corresponding `ApprovalPolicy*` constants enumerate
+`untrusted`, `on-request` and `never`. The scalar `AskForApproval.Value` uses this
+type, while the native union still preserves `Granular` and unrecognized string
+values. The former `AskForApprovalValue` names remain as deprecated aliases for
+source compatibility.
 
 An explicit `Client` remains useful for a shared native I/O resource, handshake
 metadata and `Call` extensions. Supply it in `SessionOptions.Client`. Closing one

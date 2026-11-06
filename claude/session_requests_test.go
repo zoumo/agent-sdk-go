@@ -39,7 +39,7 @@ func TestSessionPermissionExtensionsAndQuestions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "wire.jsonl")
 	s := openSessionFixture(t, func(o *SessionOptions) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
 	p := sessionPermission(t, s, "extended", "Read", `{}`)
-	require.NoError(t, p.Approve(context.Background(), ApprovalOptions{UpdatedPermissions: []types.PermissionUpdate{{Type: "setMode", Mode: "acceptEdits", Destination: "session"}}}))
+	require.NoError(t, p.Approve(context.Background(), ApprovalOptions{UpdatedPermissions: []types.PermissionUpdate{{Type: "setMode", Mode: types.PermissionModeAcceptEdits, Destination: "session"}}}))
 	d := sessionPermission(t, s, "deny", "Read", `{}`)
 	interrupt := true
 	require.NoError(t, d.Deny(context.Background(), DenialOptions{Message: "declined", Interrupt: &interrupt}))

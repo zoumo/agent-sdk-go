@@ -1,7 +1,7 @@
 {
   "protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
   "tested_sdk_commit": "1f11440e157cf7b31ab89cdde85d540542950ada",
-  "sdk_revision_note": "Current source/test files were validated in the pre-commit working tree on c0d7201 and committed unchanged at 1f11440e157cf7b31ab89cdde85d540542950ada; hashes and exact commands are in subagent05-current-* records. The active schema target is installed CLI 0.162.1. Historical Mac/source evidence retains its original SDK and schema revisions and does not validate this refresh or managed subagents. The final evidence-only delivery is checked by CI at its own exact SHA and reported in handoff; no new live workflow was run.",
+  "sdk_revision_note": "Current source/test files were validated in the pre-commit working tree on c0d7201 and committed unchanged at 1f11440e157cf7b31ab89cdde85d540542950ada; hashes and exact commands are in subagent05-current-* records. The session09-archive-* records describe a later pre-commit working tree; their delivery SHA is reported separately. The active schema target is installed CLI 0.162.1. Historical Mac/source evidence retains its original SDK and schema revisions and does not validate this refresh or managed subagents. The final evidence-only delivery is checked by CI at its own exact SHA and reported in handoff; no new live workflow was run.",
   "toolchain": {
     "go": "1.26.9",
     "manager": "mise",
@@ -1332,6 +1332,92 @@
       ],
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
       "command": "mise exec -- go test ./codex -run ^TestIndependentHistoryQueries$ -count=1"
+    },
+    {
+      "id": "session09-archive-model",
+      "kind": "unit",
+      "status": "passed",
+      "evidence_level": "E2",
+      "coverage": "Generated ThreadArchiveParams/Response and ThreadUnarchiveParams/Response round-trip through the public types API, including required threadId, empty archive response, restored Thread and unknown fields. The current generator reports 421 public types and 791 schema-derived round-trip cases. Synthetic only; no native execution.",
+      "test_files": [
+        "types/schema_generated_test.go"
+      ],
+      "test_names": [
+        "TestGeneratedSchemaRoundTrips"
+      ],
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "protocol_version": "0.162.1",
+      "command": "go test ./codex/types -count=1",
+      "tested_sdk_base": "c7158ade55ddd8f9c3d17289dbbbd226d0dad787",
+      "tested_at_utc": "2026-11-06T14:53:53Z",
+      "tested_source_sha256": {
+        "scripts/generate_protocol.py": "dbb6df48087d65d5b4f940d3c81d3b851851a0e0f81d5e24f0a2560bb7476680",
+        "types/schema.json": "c4727a86d5682756f3e450558794d18f9dc486bad119500faf102c2967c31088",
+        "types/types_generated.go": "948412f56e0ca878b1312f635d285d628ccc0e9d7ab912ba21589722df9438f4",
+        "types/schema_generated_test.go": "115fee8c6621a0585e75fa302cdd31b6403cbbb076e5015c544d4ad80335507c"
+      }
+    },
+    {
+      "id": "session09-archive-peer",
+      "kind": "mock",
+      "status": "passed",
+      "evidence_level": "E2",
+      "coverage": "Public Session.Archive/Unarchive against a synthetic stdio peer: fixed started and resumed main-thread IDs, exact thread/archive and thread/unarchive params, native empty archive response with unknown fields, restored Thread response with unknown fields, mismatch rejection with Responded/ErrProtocol, native RPC refusal preserving code/message/data, nil context, closed Session for both methods, and continued usability after a native refusal. Not real Codex execution or archive-state validation.",
+      "test_files": [
+        "session_archive_test.go",
+        "client_contract_test.go"
+      ],
+      "test_names": [
+        "TestSessionArchiveAndUnarchive",
+        "TestSessionArchiveNativeErrorAndClosedSession",
+        "TestSessionUnarchiveRejectsDifferentNativeThread",
+        "TestSessionArchiveUsesResumedMainThread",
+        "TestPublicAPIConfiguration"
+      ],
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "protocol_version": "0.162.1",
+      "command": "go test ./codex -run 'TestSessionArchive|TestSessionUnarchive|TestPublicAPI' -count=1",
+      "tested_sdk_base": "c7158ade55ddd8f9c3d17289dbbbd226d0dad787",
+      "tested_at_utc": "2026-11-06T14:53:53Z",
+      "tested_source_sha256": {
+        "session_archive.go": "377862af79ed7f0c21aad43169a42744af4a41c8c81198bcaabd5d8db3104f29",
+        "session_archive_test.go": "51728178bae468008484a9b99f7892e823c6297ef3172a4675c29357478b2b54",
+        "client_contract_test.go": "92c4dedb7908c5ad9589a08a4a7bc55c5bdea479401c481c7fc29f51363c2680",
+        "public_api_test.go": "63cedf5acaf308ea60a10bb72180b7f257e911560da50754e1f1c5dcfebc3292"
+      }
+    },
+    {
+      "id": "session09-archive-race",
+      "kind": "race",
+      "status": "passed",
+      "evidence_level": "E2",
+      "coverage": "Archive/Unarchive public request/response paths, strict unarchive identity, resumed main identity, refusal/close behavior and generated archive models under the race detector against a synthetic peer. No live CLI/model or native archive-state validation.",
+      "test_files": [
+        "session_archive_test.go",
+        "client_contract_test.go",
+        "types/schema_generated_test.go"
+      ],
+      "test_names": [
+        "TestSessionArchiveAndUnarchive",
+        "TestSessionArchiveNativeErrorAndClosedSession",
+        "TestSessionUnarchiveRejectsDifferentNativeThread",
+        "TestSessionArchiveUsesResumedMainThread",
+        "TestGeneratedSchemaRoundTrips"
+      ],
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "protocol_version": "0.162.1",
+      "command": "env GORACE=atexit_sleep_ms=0 GOMAXPROCS=2 go test -race ./codex ./codex/types -run 'TestSessionArchive|TestSessionUnarchive|TestGenerated' -count=1",
+      "tested_sdk_base": "c7158ade55ddd8f9c3d17289dbbbd226d0dad787",
+      "tested_at_utc": "2026-11-06T14:53:53Z",
+      "tested_source_sha256": {
+        "session_archive.go": "377862af79ed7f0c21aad43169a42744af4a41c8c81198bcaabd5d8db3104f29",
+        "session_archive_test.go": "51728178bae468008484a9b99f7892e823c6297ef3172a4675c29357478b2b54",
+        "client_contract_test.go": "92c4dedb7908c5ad9589a08a4a7bc55c5bdea479401c481c7fc29f51363c2680",
+        "scripts/generate_protocol.py": "dbb6df48087d65d5b4f940d3c81d3b851851a0e0f81d5e24f0a2560bb7476680",
+        "types/schema.json": "c4727a86d5682756f3e450558794d18f9dc486bad119500faf102c2967c31088",
+        "types/types_generated.go": "948412f56e0ca878b1312f635d285d628ccc0e9d7ab912ba21589722df9438f4",
+        "types/schema_generated_test.go": "115fee8c6621a0585e75fa302cdd31b6403cbbb076e5015c544d4ad80335507c"
+      }
     }
   ],
   "verification_commands": [

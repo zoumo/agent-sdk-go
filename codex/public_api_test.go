@@ -23,6 +23,8 @@ func TestPublicAPIConfiguration(t *testing.T) {
 	_ = codex.SessionOptions{ChildDetailPolicy: codex.ChildDetailPreserve}
 	_ = (*codex.Session).Submit
 	_ = (*codex.Session).Receive
+	_ = (*codex.Session).Archive
+	_ = (*codex.Session).Unarchive
 	_ = codex.IncomingRequest.Answer
 
 	_ = (*codex.Client).ListThreads

@@ -800,7 +800,7 @@ const (
 
 // AskForApproval contains exactly one typed variant or Unknown.
 type AskForApproval struct {
-	Value    *AskForApprovalValue
+	Value    *ApprovalPolicy
 	Granular *GranularAskForApproval
 	// Unknown preserves an unrecognized future variant as raw JSON.
 	Unknown json.RawMessage
@@ -829,7 +829,7 @@ func (v *AskForApproval) UnmarshalJSON(data []byte) error {
 		}
 	}
 	if kind == "string" {
-		var value AskForApprovalValue
+		var value ApprovalPolicy
 		if err := json.Unmarshal(data, &value); err != nil {
 			return err
 		}
@@ -2921,6 +2921,23 @@ const (
 	ThreadActiveFlagWaitingOnUserInput ThreadActiveFlag = "waitingOnUserInput"
 )
 
+type ThreadArchiveParams struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadArchiveParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadArchiveParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadArchiveResponse struct {
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadArchiveResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadArchiveResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 // An environment selected by a loaded thread, independent of connection status.
 type ThreadEnvironment struct {
 	Cwd                   LegacyAppPathString   `json:"cwd" protocol:"required"`
@@ -3835,6 +3852,24 @@ type ThreadTurnsListResponse struct {
 func (v ThreadTurnsListResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
 func (v *ThreadTurnsListResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
 
+type ThreadUnarchiveParams struct {
+	ThreadID string `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadUnarchiveParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadUnarchiveParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadUnarchiveResponse struct {
+	Thread Thread `json:"thread" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadUnarchiveResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadUnarchiveResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 type ThreadUnsubscribeParams struct {
 	ThreadID string `json:"threadId" protocol:"required"`
 	// UnknownFields preserves unrecognized members for forward-compatible round trips.
@@ -4417,12 +4452,12 @@ func (v *EncryptedContentAgentMessageInputContent) UnmarshalJSON(data []byte) er
 	return unmarshalObject(data, v)
 }
 
-type AskForApprovalValue string
+type ApprovalPolicy string
 
 const (
-	AskForApprovalValueUntrusted AskForApprovalValue = "untrusted"
-	AskForApprovalValueOnRequest AskForApprovalValue = "on-request"
-	AskForApprovalValueNever     AskForApprovalValue = "never"
+	ApprovalPolicyUntrusted ApprovalPolicy = "untrusted"
+	ApprovalPolicyOnRequest ApprovalPolicy = "on-request"
+	ApprovalPolicyNever     ApprovalPolicy = "never"
 )
 
 type GranularAskForApproval struct {

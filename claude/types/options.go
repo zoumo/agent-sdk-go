@@ -54,7 +54,10 @@ type Options struct {
 	Initialize    *InitializeOptions
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
-	ResumeID          string
+	ResumeID string
+	// DisallowedTools is passed as a comma-separated native --disallowedTools
+	// option. Nil or empty omits the option.
+	DisallowedTools   []string
 	Env               []string
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration

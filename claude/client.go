@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,8 +25,9 @@ import (
 type Limits = types.Limits
 
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
-// child's entire environment; nil inherits os.Environ. WorkDir, Model and
-// ResumeID are passed literally, without a shell. Existing CLI settings apply.
+// child's entire environment; nil inherits os.Environ. WorkDir, Model, Effort,
+// DisallowedTools and ResumeID are passed literally, without a shell. Existing
+// CLI settings apply.
 //
 //nolint:recvcheck // Canonical configuration API uses value and pointer receivers.
 type Options struct {
@@ -44,6 +46,9 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// DisallowedTools is passed as a comma-separated native --disallowedTools
+	// option. Nil or empty omits the option.
+	DisallowedTools []string
 	// ChildDetailPolicy fixes optional Receive filtering for this Session.
 	// Empty and preserve retain all current delivery. It does not change source output.
 	ChildDetailPolicy ChildDetailPolicy
@@ -781,6 +786,9 @@ func interactionArgs(options Options) ([]string, error) {
 	}
 	if options.Effort != "" {
 		args = append(args, "--effort="+options.Effort)
+	}
+	if len(options.DisallowedTools) > 0 {
+		args = append(args, "--disallowedTools="+strings.Join(options.DisallowedTools, ","))
 	}
 	if options.ResumeID != "" {
 		// The CLI takes an optional resume value. Binding it to the flag also

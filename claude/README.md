@@ -100,6 +100,10 @@ Open with ResumeID requests native continuation in a fresh process; SessionID
 reports observed identity separately. Initialization does not prove recovery.
 Use [saved-history queries](#saved-history) for independent content reads.
 
+DisallowedTools passes a nonempty list as the native comma-separated
+`--disallowedTools` value; nil or empty omits the option. This changes native
+tool availability only and does not grant or answer pending requests.
+
 ## Cancellation, shutdown and resources
 
 Canceling Receive cancels only that wait. Interrupt waits for a matched native

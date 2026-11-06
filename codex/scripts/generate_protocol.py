@@ -217,7 +217,8 @@ def union_type(name, node):
             if string_seen:
                 continue
             string_seen = True
-            bname = name + 'Value'
+            # ApprovalPolicy is the public name for AskForApproval's scalar branch.
+            bname = 'ApprovalPolicy' if name == 'AskForApproval' else name + 'Value'
             if all('enum' in variant for variant in string_variants):
                 register(bname, branch if len(string_variants) == 1 else
                          {'type': 'string', 'enum': list(dict.fromkeys(

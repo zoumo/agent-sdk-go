@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -463,12 +462,6 @@ func (s *Session) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 		extraFiles = append(extraFiles, progressW)
 	}
 	cmd := exec.CommandContext(ctx, executable, args...)
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return cmd.Process.Signal(syscall.SIGTERM)
-	}
 	cmd.WaitDelay = 3 * time.Second
 	cmd.Env = append([]string(nil), s.Env...)
 	cmd.Dir = s.Workspace
@@ -518,6 +511,11 @@ func (s *Session) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 		closeInput()
 		closeOutput()
 	})
+	cmd.Cancel = func() error {
+		closeInput()
+		closeOutput()
+		return nil
+	}
 	defer func() {
 		if !stop() {
 			<-cleanupDone

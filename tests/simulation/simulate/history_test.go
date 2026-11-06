@@ -18,8 +18,7 @@ type object = map[string]any
 
 func TestClaudeMovedHistoryRetainsMaterialBinding(t *testing.T) {
 	const sessionID = "11111111-1111-4111-8111-111111111111"
-	originalCWD, err := os.MkdirTemp("/tmp", "sdk-history-")
-	require.NoError(t, err)
+	originalCWD := t.TempDir()
 	require.NoError(t, os.Remove(originalCWD))
 	key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(originalCWD, "-")
 	name := filepath.Join("config", "projects", key, sessionID+".jsonl")
@@ -81,9 +80,7 @@ func TestClaudeMovedHistoryRetainsMaterialBinding(t *testing.T) {
 	moved := filepath.Join(t.TempDir(), "adopted-copy")
 	require.NoError(t, os.Rename(source, moved))
 	source = moved
-	simulationRoot, err := os.MkdirTemp("/tmp", "sdk-simulation-")
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, os.RemoveAll(simulationRoot)) })
+	simulationRoot := t.TempDir()
 	output := filepath.Join(simulationRoot, "run")
 	driver := filepath.Join(t.TempDir(), "history-driver")
 	require.NoError(t, os.WriteFile(driver, []byte("#!/bin/sh\n"+quote(driverBinary)+" \"$@\"\n"), 0o700))

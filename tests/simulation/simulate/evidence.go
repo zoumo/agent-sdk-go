@@ -384,11 +384,11 @@ func validateExecutionHistory(execution executionDescriptor, pkg *materialPackag
 func historyProjectTail(path string) (string, bool) {
 	const marker = "config/projects/"
 	path = filepath.ToSlash(filepath.Clean(path))
-	index := strings.Index(path, marker)
-	if index < 0 {
+	_, rest, found := strings.Cut(path, marker)
+	if !found {
 		return "", false
 	}
-	project, tail, ok := strings.Cut(path[index+len(marker):], "/")
+	project, tail, ok := strings.Cut(rest, "/")
 	return tail, ok && project != "" && tail != ""
 }
 

@@ -285,7 +285,11 @@ caller mutation does not change the launched configuration.
 External and application SDK server declarations are merged into one native
 `--mcp-config` value. `StrictMCPConfig` adds `--strict-mcp-config` to ignore MCP
 servers from user, project and local settings. The SDK does not connect to the
-external server, check its health, discover its tools or perform OAuth.
+external server, check its health, discover tools, validate tool names or
+perform OAuth. MCP connectivity, TLS/proxy behavior, authentication, remote
+permission checks and the actual operations belong to Claude CLI and the
+service. A successful `Open` does not prove that a server connected,
+authenticated, exposed a particular tool or executed it.
 
 `--mcp-config` is embedded directly in process argv, so literal environment and
 header values are visible to other processes that can inspect argv. Put secrets
@@ -304,6 +308,23 @@ claude.SessionOptions{
     }},
     StrictMCPConfig: true,
 }
+```
+
+### Remote execution profile
+
+The configuration above is the supported remote execution profile: the external
+MCP tools remain available while ordinary built-ins are suppressed. The
+`EndConversation` behavior is described under
+[Configuration and stored records](#configuration-and-stored-records). This
+profile is not an execution sandbox; for stronger isolation, combine it with an
+OS/container sandbox, filesystem and network restrictions, and the native
+permission policy.
+
+The offline example uses a synthetic launcher and `example.invalid`; it asserts
+the final argv without contacting the URL or running Claude:
+
+```sh
+go run ./claude/examples/remote-execution-offline
 ```
 
 ## Application SDK MCP servers

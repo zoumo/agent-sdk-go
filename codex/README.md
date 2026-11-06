@@ -129,13 +129,21 @@ environment-variable name, not the secret itself.
 ```go
 session, err := codex.Open(ctx, codex.SessionOptions{
     Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
+    Features: map[codex.Feature]bool{
+        codex.FeatureShellTool:       false,
+        codex.FeatureViewImage:       false,
+        codex.FeatureImageGeneration: false,
+    },
     MCPServers: []codex.MCPServer{{
         Name:       "remote",
         URL:        "https://example.invalid/mcp",
-        EnvHeaders: map[string]string{"X-API-Key": "REMOTE_API_KEY"},
+        EnvHeaders: map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
     }},
 })
 ```
+
+This combination is the best-effort remote execution profile. The feature and
+ambient-configuration limits above and below still apply.
 
 Server names must be nonempty valid UTF-8, must not contain `.`, and must be
 unique. Invalid combinations, including a raw `Config` key at the same path or
@@ -156,10 +164,19 @@ configuration contains no additional `mcp_servers`. An isolated home also needs
 separately arranged authentication and any required native configuration.
 
 MCP tool filters, OAuth interaction, timeouts, approval policy and server health
-checks are not wrapped here. Synthetic app-server tests verify the emitted
-configuration only; they do not prove that a real Codex process connected to an
-external server, authenticated successfully, discovered its tools or executed
-them.
+checks are not wrapped here. MCP connectivity, TLS/proxy behavior,
+authentication, discovered tool names, remote permissions and the actual
+operations belong to Codex and the service. Synthetic app-server tests verify
+the emitted configuration only; they do not prove that a successful thread RPC
+connected to an external server or exposed a particular tool.
+
+The offline example uses a synthetic app-server and `example.invalid`; it
+asserts the complete final `thread/start` params without contacting the URL or
+running Codex:
+
+```sh
+go run ./codex/examples/remote-execution-offline
+```
 
 ## Optional child detail delivery
 

@@ -14,6 +14,7 @@ okf_version: "0.2"
 | 共同能力与设计取舍 | [SDK 架构](sdk/architecture.md) |
 | 用户目标与 36 条验收流程 | [共同验收](sdk/validation-cases.md) |
 | Session 接口、权限、事件、关系与子详细交付 | [Session 合同](modules/native-session/design.md) |
+| 官方 SDK 之上的统一 Provider、Session 与事件流（草案） | [统一 Agent 设计](modules/unified-agent/design.md) |
 | 独立发现、metadata、主／子历史 | [历史查询合同](contracts/history-query.md) |
 | 测试编排、协议录制／回放与原生 SDK 驱动 | [测试工具设计](modules/agent-sdk-testify/design.md) |
 | 术语 | [GLOSSARY](../GLOSSARY.md) |

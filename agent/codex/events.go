@@ -1,15 +1,13 @@
 package agentcodex
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 func (s *session) convertReceived(received codex.Received) ([]agent.Event, error) {
@@ -832,7 +830,7 @@ func (s *session) newEvent(
 	eventTime time.Time,
 	extras map[string]any,
 ) (agent.Event, error) {
-	eventID, err := newEventID()
+	eventID, err := uuidv4.New()
 	if err != nil {
 		return agent.Event{}, adapterError(
 			agent.ErrorUnavailable,
@@ -924,25 +922,6 @@ func invalidNativeEvent(method string) error {
 		"invalid native Codex event: "+method,
 		nil,
 	)
-}
-
-func newEventID() (string, error) {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err != nil {
-		return "", err
-	}
-	value[6] = value[6]&0x0f | 0x40
-	value[8] = value[8]&0x3f | 0x80
-	encoded := make([]byte, 32)
-	hex.Encode(encoded, value[:])
-	return fmt.Sprintf(
-		"%s-%s-%s-%s-%s",
-		encoded[0:8],
-		encoded[8:12],
-		encoded[12:16],
-		encoded[16:20],
-		encoded[20:32],
-	), nil
 }
 
 func cloneState(value *agent.SessionState) *agent.SessionState {

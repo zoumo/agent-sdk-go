@@ -12,6 +12,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 type interactionPhase uint8
@@ -1219,7 +1220,7 @@ func denyWithCommandDecision(
 }
 
 func newInteractionRef() (agent.InteractionRef, error) {
-	value, err := newEventID()
+	value, err := uuidv4.New()
 	if err != nil {
 		return "", err
 	}

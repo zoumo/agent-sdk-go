@@ -18,7 +18,7 @@ import (
 )
 
 var mockCodexInit = []string{
-	`>{"id":91,"method":"initialize","params":{"clientInfo":{"name":"agent-codex-test","version":"1"}}}`,
+	`>{"id":91,"method":"initialize","params":{"capabilities":{"experimentalApi":true},"clientInfo":{"name":"agent-codex-test","version":"1"}}}`,
 	`<{"id":91,"result":{"userAgent":"synthetic","codexHome":"/synthetic","platformFamily":"unix","platformOs":"linux"}}`,
 	`>{"method":"initialized"}`,
 }
@@ -41,6 +41,8 @@ func TestProviderStartOwnsOneConnectionAndStopIsTerminal(t *testing.T) {
 	capabilities, err := provider.Start(ctx)
 	require.NoError(t, err)
 	assert.True(t, capabilities.Supports(agent.CapabilityTextInput))
+	assert.True(t, capabilities.Supports(agent.CapabilityPermission))
+	assert.True(t, capabilities.Supports(agent.CapabilityForm))
 
 	repeated, err := provider.Start(ctx)
 	require.NoError(t, err)
@@ -84,6 +86,9 @@ func TestProviderOpenHasOneEventStreamAndCloseKeepsProviderHealthy(t *testing.T)
 	closeSessionOnCleanup(t, session)
 	assert.Equal(t, "root-a", session.ID())
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityTextInput))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityPermission))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
+	assert.Equal(t, agent.EffectiveFeatures{AgentQuestions: true}, session.EffectiveFeatures())
 
 	stream, err := session.Events()
 	require.NoError(t, err)
@@ -178,6 +183,15 @@ func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Pr
 
 func prepareCodexPeer(t *testing.T, frames ...string) *mocktest.Session {
 	t.Helper()
+	return prepareCodexPeerWithStatus(t, "passed", frames...)
+}
+
+func prepareCodexPeerWithStatus(
+	t *testing.T,
+	wantStatus string,
+	frames ...string,
+) *mocktest.Session {
+	t.Helper()
 	scenario := make([]map[string]any, 0, len(frames))
 	for index, frame := range frames {
 		direction, data := frame[:1], frame[1:]
@@ -209,7 +223,7 @@ func prepareCodexPeer(t *testing.T, frames ...string) *mocktest.Session {
 		report, reportErr := peerSession.Report()
 		require.NoError(t, reportErr)
 		require.NotNil(t, report)
-		assert.Equal(t, "passed", report.Status)
+		assert.Equal(t, wantStatus, report.Status)
 		require.NoError(t, peerSession.Close())
 	})
 	return peerSession

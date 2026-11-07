@@ -35,6 +35,31 @@ func cloneStdioOptions(value codex.StdioOptions) codex.StdioOptions {
 	return cloned
 }
 
+func withDefaultCapabilities(params types.InitializeParams) types.InitializeParams {
+	capabilities, present := params.Capabilities.Get()
+	if !present {
+		params.Capabilities = types.Some(types.InitializeCapabilities{
+			ExperimentalAPI: types.Some(true),
+		})
+		return params
+	}
+	if capabilities.ExperimentalAPI.IsSet() {
+		return params
+	}
+	capabilities.ExperimentalAPI = types.Some(true)
+	params.Capabilities = types.Some(capabilities)
+	return params
+}
+
+func supportsAgentQuestions(params types.InitializeParams) bool {
+	capabilities, present := params.Capabilities.Get()
+	if !present {
+		return true
+	}
+	enabled, set := capabilities.ExperimentalAPI.Get()
+	return !set || enabled
+}
+
 func cloneOptionalRawMessages(
 	value types.Optional[map[string]json.RawMessage],
 ) types.Optional[map[string]json.RawMessage] {

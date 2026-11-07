@@ -2,6 +2,7 @@ package agentcodex
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/zoumo/agent-sdk-go/agent"
@@ -21,19 +22,25 @@ const (
 
 // Provider owns one Codex app-server connection shared by all of its sessions.
 type Provider struct {
-	mu       sync.Mutex
-	config   codex.StdioOptions
-	state    providerState
-	client   *codex.Client
-	stopErr  error
-	opening  int
-	sessions map[*session]struct{}
+	mu             sync.Mutex
+	config         codex.StdioOptions
+	formsSupported bool
+	state          providerState
+	client         *codex.Client
+	stopErr        error
+	opening        int
+	sessions       map[*session]struct{}
 }
 
 // New constructs a Codex provider. No process or connection is created until
 // Start succeeds.
 func New(config Config) *Provider {
-	return &Provider{config: cloneStdioOptions(config.Stdio)}
+	stdio := cloneStdioOptions(config.Stdio)
+	stdio.Initialize = withDefaultCapabilities(stdio.Initialize)
+	return &Provider{
+		config:         stdio,
+		formsSupported: supportsAgentQuestions(stdio.Initialize),
+	}
 }
 
 // Start acquires the single native connection owned by this provider.
@@ -42,7 +49,7 @@ func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
 	defer p.mu.Unlock()
 	switch p.state {
 	case providerStarted:
-		return providerCapabilities(), nil
+		return providerCapabilities(p.formsSupported), nil
 	case providerStopped:
 		return nil, adapterError(
 			agent.ErrorClosed,
@@ -62,7 +69,7 @@ func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
 	}
 	p.client = client
 	p.state = providerStarted
-	return providerCapabilities(), nil
+	return providerCapabilities(p.formsSupported), nil
 }
 
 // Stop releases the provider-owned connection. It is terminal and succeeds
@@ -88,6 +95,9 @@ func (p *Provider) Stop(ctx context.Context) error {
 	p.state = providerStopped
 	p.stopErr = p.client.Close()
 	p.client = nil
+	if p.stopErr != nil {
+		p.stopErr = nativeOperationError("stop_provider", p.stopErr)
+	}
 	return p.stopErr
 }
 
@@ -103,13 +113,15 @@ func (p *Provider) Open(
 	if err != nil {
 		return nil, err
 	}
+	features := effectiveFeatures(options.Features, p.formsSupported)
 	native, err := codex.Open(ctx, codex.SessionOptions{
 		Client: client,
 		Thread: codextypes.ThreadStartParams{
-			Cwd: codextypes.Some(options.Cwd),
+			Config: threadConfig(features),
+			Cwd:    codextypes.Some(options.Cwd),
 		},
 	})
-	return p.completeOpen(native, err, "open")
+	return p.completeOpen(native, err, "open", features)
 }
 
 // Resume restores an existing native main session. Saved turns in the native
@@ -128,15 +140,17 @@ func (p *Provider) Resume(
 	if err != nil {
 		return nil, err
 	}
+	features := effectiveFeatures(options.Features, p.formsSupported)
 	native, err := codex.Open(ctx, codex.SessionOptions{
 		Client: client,
 		Resume: &codextypes.ThreadResumeParams{
+			Config:       threadConfig(features),
 			Cwd:          codextypes.Some(options.Cwd),
 			ExcludeTurns: codextypes.Some(true),
 			ThreadID:     options.SessionID,
 		},
 	})
-	return p.completeOpen(native, err, "resume")
+	return p.completeOpen(native, err, "resume", features)
 }
 
 // NativeClient returns the provider-owned native connection while the provider
@@ -166,8 +180,49 @@ func (p *Provider) NativeClient() (*codex.Client, error) {
 	return p.client, nil
 }
 
-func providerCapabilities() agent.Capabilities {
-	return agent.Capabilities{agent.CapabilityTextInput: true}
+func providerCapabilities(formsSupported bool) agent.Capabilities {
+	capabilities := agent.Capabilities{
+		agent.CapabilityTextInput:  true,
+		agent.CapabilityPermission: true,
+	}
+	if formsSupported {
+		capabilities[agent.CapabilityForm] = true
+	}
+	return capabilities
+}
+
+func sessionCapabilities(
+	base agent.Capabilities,
+	features agent.EffectiveFeatures,
+) agent.Capabilities {
+	capabilities := make(agent.Capabilities, len(base))
+	for capability, supported := range base {
+		capabilities[capability] = supported
+	}
+	if !features.AgentQuestions {
+		delete(capabilities, agent.CapabilityForm)
+	}
+	return capabilities
+}
+
+func effectiveFeatures(
+	features agent.Features,
+	formsSupported bool,
+) agent.EffectiveFeatures {
+	return agent.EffectiveFeatures{
+		AgentQuestions: features.AgentQuestionsEnabled() && formsSupported,
+	}
+}
+
+func threadConfig(
+	features agent.EffectiveFeatures,
+) codextypes.Optional[map[string]json.RawMessage] {
+	if features.AgentQuestions {
+		return codextypes.Optional[map[string]json.RawMessage]{}
+	}
+	return codextypes.Some(map[string]json.RawMessage{
+		"tools.experimental_request_user_input.enabled": json.RawMessage("false"),
+	})
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
@@ -221,6 +276,7 @@ func (p *Provider) completeOpen(
 	native *codex.Session,
 	openErr error,
 	operation string,
+	features agent.EffectiveFeatures,
 ) (agent.Session, error) {
 	p.mu.Lock()
 	p.opening--
@@ -228,7 +284,7 @@ func (p *Provider) completeOpen(
 		p.mu.Unlock()
 		return nil, nativeOperationError(operation, openErr)
 	}
-	created := newSession(p, native)
+	created := newSession(p, native, features)
 	if p.sessions == nil {
 		p.sessions = make(map[*session]struct{})
 	}

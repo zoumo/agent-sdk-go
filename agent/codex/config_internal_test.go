@@ -70,3 +70,67 @@ func TestNewCopiesNestedStdioConfiguration(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []string{"thread/started"}, frozenOptOut)
 }
+
+func TestInitializeCapabilitiesDefaultExperimentalAPI(t *testing.T) {
+	explicitFalse := false
+	tests := []struct {
+		name         string
+		capabilities codextypes.Optional[codextypes.InitializeCapabilities]
+		want         bool
+	}{
+		{
+			name: "omitted",
+			want: true,
+		},
+		{
+			name:         "null",
+			capabilities: codextypes.Null[codextypes.InitializeCapabilities](),
+			want:         true,
+		},
+		{
+			name:         "empty object",
+			capabilities: codextypes.Some(codextypes.InitializeCapabilities{}),
+			want:         true,
+		},
+		{
+			name: "explicit true",
+			capabilities: codextypes.Some(codextypes.InitializeCapabilities{
+				ExperimentalAPI: codextypes.Some(true),
+			}),
+			want: true,
+		},
+		{
+			name: "explicit false",
+			capabilities: codextypes.Some(codextypes.InitializeCapabilities{
+				ExperimentalAPI: codextypes.Some(explicitFalse),
+			}),
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			params := withDefaultCapabilities(codextypes.InitializeParams{
+				Capabilities: test.capabilities,
+			})
+			capabilities, ok := params.Capabilities.Get()
+			require.True(t, ok)
+			got, ok := capabilities.ExperimentalAPI.Get()
+			require.True(t, ok)
+			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestSupportsAgentQuestionsHonorsExperimentalAPIFalse(t *testing.T) {
+	disabled := false
+	assert.True(t, supportsAgentQuestions(codextypes.InitializeParams{}))
+	assert.True(t, supportsAgentQuestions(codextypes.InitializeParams{
+		Capabilities: codextypes.Some(codextypes.InitializeCapabilities{}),
+	}))
+	assert.False(t, supportsAgentQuestions(codextypes.InitializeParams{
+		Capabilities: codextypes.Some(codextypes.InitializeCapabilities{
+			ExperimentalAPI: codextypes.Some(disabled),
+		}),
+	}))
+}

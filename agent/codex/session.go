@@ -5,57 +5,80 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 var (
-	_ agent.Session     = (*session)(nil)
-	_ agent.EventStream = (*eventStream)(nil)
+	_ agent.Session         = (*session)(nil)
+	_ agent.Archiver        = (*session)(nil)
+	_ agent.ModelController = (*session)(nil)
+	_ agent.EventStream     = (*eventStream)(nil)
 )
 
 type session struct {
 	provider *Provider
 	native   *codex.Session
+	features agent.EffectiveFeatures
+	events   queue.Queue[agent.Event]
 
 	mu            sync.Mutex
 	eventsClaimed bool
 	closed        bool
+	explicitClose bool
 	submitting    bool
 	activeTurn    string
+	startedTurn   string
+	idleTurn      string
 	lastFinished  string
 	state         *agent.SessionState
-	eventFailure  error
+	interactions  map[agent.InteractionRef]*pendingInteraction
+	requestRefs   map[string]agent.InteractionRef
 	done          chan struct{}
 	err           error
 
-	closeOnce sync.Once
-	closeErr  error
+	parentMu sync.RWMutex
+	parents  map[string]string
+
+	observationDone chan struct{}
+	closeOnce       sync.Once
+	closeErr        error
 }
 
-func newSession(provider *Provider, native *codex.Session) *session {
+func newSession(
+	provider *Provider,
+	native *codex.Session,
+	features agent.EffectiveFeatures,
+) *session {
 	created := &session{
-		provider: provider,
-		native:   native,
-		done:     make(chan struct{}),
+		provider:        provider,
+		native:          native,
+		features:        features,
+		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
+		requestRefs:     make(map[string]agent.InteractionRef),
+		parents:         make(map[string]string),
+		done:            make(chan struct{}),
+		observationDone: make(chan struct{}),
 	}
-	go func() {
-		<-native.Done()
-		created.terminate(native.Err())
-	}()
+	go created.observe()
 	return created
 }
 
 func (s *session) ID() string { return s.native.ThreadID() }
 
 func (s *session) Capabilities() agent.Capabilities {
-	return agent.Capabilities{agent.CapabilityTextInput: true}
+	return sessionCapabilities(
+		providerCapabilities(s.provider.formsSupported),
+		s.features,
+	)
 }
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
-	return agent.EffectiveFeatures{AgentQuestions: false}
+	return s.features
 }
 
 func (s *session) Events() (agent.EventStream, error) {
@@ -121,7 +144,16 @@ func (s *session) Submit(
 		return agent.InputReceipt{}, nativeOperationError("submit", submitErr)
 	}
 	turnID := submission.Response.Turn.ID
-	if s.lastFinished != turnID {
+	if turnID == "" {
+		s.mu.Unlock()
+		return agent.InputReceipt{}, adapterError(
+			agent.ErrorOutcomeUnknown,
+			"submit_identity_missing",
+			"Codex accepted the input without returning a turn identity",
+			nil,
+		)
+	}
+	if s.activeTurn == "" && s.lastFinished != turnID {
 		s.activeTurn = turnID
 	}
 	s.mu.Unlock()
@@ -141,36 +173,112 @@ func (s *session) Answer(
 	interaction agent.InteractionRef,
 	answer agent.Answer,
 ) (agent.InteractionReceipt, error) {
-	return agent.InteractionReceipt{}, adapterError(
-		agent.ErrorUnsupported,
-		"answer_unsupported",
-		"answering interactions is not available",
-		nil,
-	)
+	return s.answerInteraction(ctx, interaction, answer)
 }
 
 func (s *session) Interrupt(
 	ctx context.Context,
-	options agent.InterruptOptions,
+	_ agent.InterruptOptions,
 ) (agent.InterruptReceipt, error) {
-	return agent.InterruptReceipt{}, adapterError(
-		agent.ErrorUnsupported,
-		"interrupt_unsupported",
-		"interrupting work is not available",
-		nil,
-	)
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return agent.InterruptReceipt{}, adapterError(
+			agent.ErrorClosed,
+			"session_closed",
+			"session is closed",
+			nil,
+		)
+	}
+	target := s.activeTurn
+	s.mu.Unlock()
+	if target == "" {
+		return agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, nil
+	}
+	if err := s.native.Interrupt(ctx, codex.InterruptOptions{TurnID: target}); err != nil {
+		return agent.InterruptReceipt{}, nativeOperationError("interrupt", err)
+	}
+	return agent.InterruptReceipt{
+		Target: target,
+		Result: agent.InterruptAcknowledged,
+	}, nil
 }
 
-func (s *session) Close(ctx context.Context) error {
+func (s *session) Archive(ctx context.Context) (agent.ActionReceipt, error) {
+	if err := s.requireOpen(); err != nil {
+		return agent.ActionReceipt{}, err
+	}
+	if _, err := s.native.Archive(ctx); err != nil {
+		return agent.ActionReceipt{}, nativeOperationError("archive", err)
+	}
+	sent, accepted := true, true
+	return agent.ActionReceipt{Acceptance: agent.Acceptance{
+		Sent:           &sent,
+		NativeAccepted: &accepted,
+	}}, nil
+}
+
+func (s *session) Unarchive(ctx context.Context) (agent.ActionReceipt, error) {
+	if err := s.requireOpen(); err != nil {
+		return agent.ActionReceipt{}, err
+	}
+	if _, err := s.native.Unarchive(ctx); err != nil {
+		return agent.ActionReceipt{}, nativeOperationError("unarchive", err)
+	}
+	sent, accepted := true, true
+	return agent.ActionReceipt{Acceptance: agent.Acceptance{
+		Sent:           &sent,
+		NativeAccepted: &accepted,
+	}}, nil
+}
+
+func (s *session) SetModel(
+	ctx context.Context,
+	model string,
+) (agent.ConfigurationReceipt, error) {
+	if model == "" {
+		return agent.ConfigurationReceipt{}, adapterError(
+			agent.ErrorInvalidArgument,
+			"missing_model",
+			"model must be nonempty",
+			nil,
+		)
+	}
+	if err := s.requireOpen(); err != nil {
+		return agent.ConfigurationReceipt{}, err
+	}
+	result, err := s.native.SetModel(ctx, model)
+	if err != nil {
+		return agent.ConfigurationReceipt{}, nativeOperationError("set_model", err)
+	}
+	sent := true
+	accepted := result.NativeAccepted
+	return agent.ConfigurationReceipt{
+		Model: model,
+		Acceptance: agent.Acceptance{
+			Sent:           &sent,
+			NativeAccepted: &accepted,
+		},
+	}, nil
+}
+
+func (s *session) Close(context.Context) error {
 	s.closeOnce.Do(func() {
-		s.mu.Lock()
-		s.closed = true
-		s.mu.Unlock()
+		invalidated := s.closeForOperations(true)
 		s.closeErr = s.native.Close()
 		if s.closeErr != nil {
 			s.closeErr = nativeOperationError("close", s.closeErr)
 		}
+		<-s.observationDone
+		events := s.closedInteractionEvents(
+			invalidated,
+			agent.InteractionCancelled,
+			"session_closed",
+			time.Now().UTC(),
+		)
+		_ = s.pushEvents(events)
 		s.terminate(s.native.Err())
+		_ = s.events.Close(sessionTerminationError(s.native.Err()))
 		s.provider.sessionClosed(s)
 	})
 	return s.closeErr
@@ -184,10 +292,110 @@ func (s *session) Err() error {
 	return s.err
 }
 
+func (s *session) requireOpen() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return adapterError(
+			agent.ErrorClosed,
+			"session_closed",
+			"session is closed",
+			nil,
+		)
+	}
+	return nil
+}
+
+func (s *session) observe() {
+	defer close(s.observationDone)
+	for {
+		received, err := s.native.Receive(context.Background())
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				s.finishObservation(nil)
+				return
+			}
+			s.failObservation(sessionTerminationError(err))
+			return
+		}
+		events, convertErr := s.convertReceived(received)
+		if convertErr != nil {
+			s.failObservation(convertErr)
+			return
+		}
+		if err := s.pushEvents(events); err != nil {
+			s.failObservation(adapterError(
+				agent.ErrorUnavailable,
+				"event_delivery_failed",
+				"deliver unified Codex event",
+				err,
+			))
+			return
+		}
+	}
+}
+
+func (s *session) pushEvents(events []agent.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	items := make([]queue.Item[agent.Event], 0, len(events))
+	for _, event := range events {
+		items = append(items, queue.Item[agent.Event]{Value: event, Bytes: 1})
+	}
+	return s.events.PushBatch(items)
+}
+
+func (s *session) closeForOperations(explicit bool) []*pendingInteraction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	if explicit {
+		s.explicitClose = true
+	}
+	return s.clearInteractionsLocked()
+}
+
+func (s *session) finishObservation(cause error) {
+	reason := "session_ended"
+	if cause != nil {
+		cause = sessionTerminationError(cause)
+		reason = "session_failed"
+	}
+	s.endObservation(cause, reason)
+}
+
+func (s *session) failObservation(cause error) {
+	s.endObservation(sessionTerminationError(cause), "session_failed")
+}
+
+func (s *session) endObservation(cause error, reason string) {
+	invalidated := s.closeForOperations(false)
+	events := s.closedInteractionEvents(
+		invalidated,
+		agent.InteractionCancelled,
+		reason,
+		time.Now().UTC(),
+	)
+	_ = s.pushEvents(events)
+	s.terminate(cause)
+	s.closeObservedQueue(cause)
+}
+
+func (s *session) closeObservedQueue(cause error) {
+	s.mu.Lock()
+	explicit := s.explicitClose
+	s.mu.Unlock()
+	if !explicit {
+		_ = s.events.Close(cause)
+	}
+}
+
 func (s *session) terminate(cause error) {
 	cause = sessionTerminationError(cause)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.closed = true
 	if s.err == nil && cause != nil {
 		s.err = cause
 	}
@@ -204,60 +412,7 @@ type eventStream struct {
 }
 
 func (s *eventStream) Next(ctx context.Context) (agent.Event, error) {
-	for {
-		if err := s.session.eventStreamError(); err != nil {
-			return agent.Event{}, err
-		}
-		received, err := s.session.native.Receive(ctx)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return agent.Event{}, io.EOF
-			}
-			if errors.Is(err, context.Canceled) ||
-				errors.Is(err, context.DeadlineExceeded) {
-				return agent.Event{}, err
-			}
-			return agent.Event{}, s.session.failEventStream(err)
-		}
-		switch received.Kind {
-		case codex.ReceivedEvent:
-			event, supported, convertErr := s.session.convertEvent(received)
-			if convertErr != nil {
-				return agent.Event{}, s.session.failEventStream(convertErr)
-			}
-			if supported {
-				return event, nil
-			}
-		case codex.ReceivedRequest:
-			return agent.Event{}, s.session.failEventStream(adapterError(
-				agent.ErrorUnsupported,
-				"native_request_unsupported",
-				"Codex native requests are not supported by this adapter version",
-				nil,
-			))
-		}
-	}
-}
-
-func (s *session) eventStreamError() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.eventFailure
-}
-
-func (s *session) failEventStream(cause error) error {
-	cause = sessionTerminationError(cause)
-	s.mu.Lock()
-	if s.err != nil {
-		cause = s.err
-	}
-	if s.eventFailure == nil {
-		s.eventFailure = cause
-	}
-	cause = s.eventFailure
-	s.mu.Unlock()
-	s.terminate(cause)
-	return cause
+	return s.session.events.Pop(ctx)
 }
 
 func textInput(input agent.Input) (codex.Input, error) {
@@ -312,15 +467,55 @@ func sessionTerminationError(cause error) error {
 }
 
 func nativeOperationError(operation string, err error) error {
-	var callErr *codex.CallError
-	if errors.As(err, &callErr) && callErr.Dispatch == codex.OutcomeUnknown {
-		return adapterError(
-			agent.ErrorOutcomeUnknown,
-			operation+"_outcome_unknown",
-			operation+" result is unknown; do not retry",
-			err,
-		)
+	if err == nil {
+		return nil
 	}
+	if agent.CodeOf(err) != "" {
+		return err
+	}
+
+	var answerErr *codex.AnswerError
+	if errors.As(err, &answerErr) {
+		switch answerErr.Dispatch {
+		case codex.OutcomeUnknown:
+			return adapterError(
+				agent.ErrorOutcomeUnknown,
+				operation+"_outcome_unknown",
+				operation+" result is unknown; do not retry",
+				err,
+			)
+		default:
+			if code := nativeCauseCode(answerErr.Cause); code != "" {
+				return adapterError(
+					code,
+					operation+"_"+string(code),
+					operation+" failed",
+					err,
+				)
+			}
+		}
+	}
+
+	var callErr *codex.CallError
+	if errors.As(err, &callErr) {
+		if callErr.Dispatch == codex.OutcomeUnknown {
+			return adapterError(
+				agent.ErrorOutcomeUnknown,
+				operation+"_outcome_unknown",
+				operation+" result is unknown; do not retry",
+				err,
+			)
+		}
+		if code := nativeCauseCode(callErr.Cause); code != "" {
+			return adapterError(
+				code,
+				operation+"_"+string(code),
+				operation+" failed",
+				err,
+			)
+		}
+	}
+
 	var rpcErr *codex.RPCError
 	if errors.As(err, &rpcErr) {
 		return adapterError(
@@ -330,8 +525,8 @@ func nativeOperationError(operation string, err error) error {
 			err,
 		)
 	}
-	if errors.Is(err, codex.ErrClosed) {
-		return adapterError(agent.ErrorClosed, operation+"_closed", operation+" on closed session", err)
+	if code := nativeCauseCode(err); code != "" {
+		return adapterError(code, operation+"_"+string(code), operation+" failed", err)
 	}
 	return adapterError(
 		agent.ErrorUnavailable,
@@ -339,4 +534,25 @@ func nativeOperationError(operation string, err error) error {
 		operation+" failed",
 		err,
 	)
+}
+
+func nativeCauseCode(err error) agent.ErrorCode {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, codex.ErrInvalidInput):
+		return agent.ErrorInvalidArgument
+	case errors.Is(err, codex.ErrUnsupportedConfiguration):
+		return agent.ErrorUnsupported
+	case errors.Is(err, codex.ErrRequestAnswered),
+		errors.Is(err, codex.ErrRequestResolved),
+		errors.Is(err, codex.ErrRequestCanceled),
+		errors.Is(err, codex.ErrRequestExpired),
+		errors.Is(err, codex.ErrInvalidAnswerHandle):
+		return agent.ErrorFailedPrecondition
+	case errors.Is(err, codex.ErrClosed):
+		return agent.ErrorClosed
+	default:
+		return ""
+	}
 }

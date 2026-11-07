@@ -21,6 +21,53 @@ done
 # either native package, MASS, or a third-party production dependency.
 agent_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent | sed '/^$/d')
 test "$agent_deps" = "github.com/zoumo/agent-sdk-go/agent"
+# Each adapter may use standard library packages, its own native SDK, the
+# provider-neutral core, and reviewed SDK-internal mechanics. It must not reach
+# the other adapter or the other native SDK.
+for adapter in codex claude; do
+  adapter_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "./agent/$adapter")
+  while IFS= read -r dependency; do
+    case "$dependency" in
+      *.*)
+        case "$dependency" in
+          github.com/zoumo/agent-sdk-go/agent|\
+          github.com/zoumo/agent-sdk-go/agent/"$adapter"|\
+          github.com/zoumo/agent-sdk-go/"$adapter"|\
+          github.com/zoumo/agent-sdk-go/"$adapter"/types|\
+          github.com/zoumo/agent-sdk-go/internal/queue|\
+          github.com/zoumo/agent-sdk-go/internal/uuidv4) ;;
+          *)
+            echo "unexpected agent/$adapter dependency: $dependency" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+    esac
+  done <<< "$adapter_imports"
+done
+if rg -n --glob '*.go' 'github.com/zoumo/agent-sdk-go/agent/claude' agent/codex; then
+  echo "agent/codex must not import agent/claude" >&2
+  exit 1
+fi
+if rg -n --glob '*.go' 'github.com/zoumo/agent-sdk-go/agent/codex' agent/claude; then
+  echo "agent/claude must not import agent/codex" >&2
+  exit 1
+fi
+# Native production code stays below the optional unified layer.
+if rg -n --glob '*.go' --glob '!**/*_test.go' 'github.com/zoumo/agent-sdk-go/agent' codex claude; then
+  echo "native SDK production code must not import the agent layer" >&2
+  exit 1
+fi
+# The SDK never imports MASS implementation code or reads MASS environment
+# conventions. MASS owns configuration, identity, persistence, and aggregation.
+if rg -n --glob '*.go' --glob '!**/*_test.go' 'github\.com/[^"]*/(mass|mass-go)(/|")' agent codex claude; then
+  echo "SDK production code must not import MASS" >&2
+  exit 1
+fi
+if rg -n --glob '*.go' --glob '!**/*_test.go' 'MASS_[A-Z0-9_]+' agent codex claude; then
+  echo "SDK production code must not depend on MASS environment conventions" >&2
+  exit 1
+fi
 # The generic FIFO must directly reuse the reviewed ChannX package.
 queue_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' ./internal/queue)
 if ! [[ "$queue_imports" == *github.com/zoumo/golib/channx* ]]; then
@@ -36,14 +83,14 @@ while IFS= read -r dependency; do
   esac
 done <<< "$queue_dependencies"
 # Test libraries must not leak into any native SDK's production dependency tree.
-production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/...)
+production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/... ./agent/...)
 if [[ "$production_deps" == *github.com/stretchr/* ]]; then
   echo "testify dependencies must remain test-only" >&2
   exit 1
 fi
 # Recording/replay utilities and embedded fixtures are tooling, never SDK
 # runtime dependencies. Inspect only the four supported SDK/data entry points.
-sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' ./codex ./codex/types ./claude ./claude/types)
+sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' ./agent ./agent/codex ./agent/claude ./codex ./codex/types ./claude ./claude/types)
 while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/golib/*)

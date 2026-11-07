@@ -10,7 +10,7 @@ status: stable
 
 查询不能 Open、start、resume、subscribe、submit 或回答审批，不运行模型、不将保存的内容投影为历史完成事件、不注入 Receive、不建立成员关系或回答权限。已有同身份 Session 时，查询不套用 idle/stable 门禁；其真实 live 通知仍正常交付。查询 metadata 或 turns 可能包含已有 live 状态。结果保持原生顺序、重复、unknown 数据及调用方所有权，不补造缺失事实。
 
-两个原生包独立实现，没有根统一 Client、统一历史 wire 协议、通用 Turn 或第二套 Session 流。共同验收见 [SDK-CASE-033、SDK-CASE-036 查询流程](../sdk/validation-cases.md#流程语义)；接口及具体后端的支持状态由外部实施证据记录，不从本合同推定已完成共同能力。
+两个原生包独立实现，没有根统一 Client、统一历史 wire 协议、通用 Turn 或第二套 Session 流。可选的 `agent` 实时层不增加历史抽象；查询继续使用下列原生接口。共同验收见 [SDK-CASE-033、SDK-CASE-036 查询流程](../sdk/validation-cases.md#流程语义)；接口及具体后端的支持状态由外部实施证据记录，不从本合同推定已完成共同能力。
 
 ## Codex 原生接口
 

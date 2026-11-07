@@ -4,7 +4,7 @@ title: 统一 Agent Provider、Session 与事件流
 description: >-
   在原生 Codex 和 Claude SDK 之上定义可选的统一会话与事件层，
   SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
-status: draft
+status: stable
 ---
 
 # 统一 Agent Provider、Session 与事件流
@@ -25,7 +25,8 @@ MASS 是统一层的首个消费者，不是统一层的定义者。MASS 的 `Ad
 编排继续由 MASS 拥有。MASS 的设计依据是 `mass/harness/modules/runtime/` 下的
 Runtime、SessionEvent 和交互合同，以及 `mass-go/pkg/runtime` 的现有接口。
 
-本页描述目标合同，不表示已经实现或验证。现有原生 Session 的语义以
+本页描述稳定的目标合同，不把目标等同于验证结果；当前使用面与离线示例由
+README 和包文档说明。现有原生 Session 的语义以
 [Session 合同](../native-session/design.md)为准，仓库当前依赖边界见
 [开发规范](../../architecture.md)，共同能力目标见
 [SDK 架构](../../sdk/architecture.md)，原生历史查询边界见
@@ -65,8 +66,8 @@ Runtime、SessionEvent 和交互合同，以及 `mass-go/pkg/runtime` 的现有�
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
 | `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、错误值 | provider 无关的单 Session 实时合同 |
-| `agent/codex` | `New(Config)` 返回 `agent.Provider`；具体类型额外提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
-| `agent/claude` | `New(Config)` 返回 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
+| `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
+| `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包 | 原生协议、查询、原始数据和 provider 语义 |
 | MASS Runtime | `RuntimeDriver`、`DriverSession`、`SessionEvent`、`LoadSession` | 资源身份、多 Session 汇聚、恢复、历史导入、持久化和发布 |
 | MASS Service | Session、History、EventStore、Broadcast、SSE、HTTP/CLI | 面向 MASS 使用方的业务合同 |
@@ -128,7 +129,9 @@ codex/types <-- codex          claude/types <-- claude
 - `agent` 的生产依赖保持标准库；事件 JSON 编解码可以使用标准库。
 - `agent/codex` 可以导入 `codex`、`codex/types` 和 `agent`。
 - `agent/claude` 可以导入 `claude`、`claude/types` 和 `agent`。
-- 两个 adapter 不得互相导入，也不得要求原生包反向依赖统一层。
+- 两个 adapter 还可以复用不绑定 provider 的 SDK 内部机械包
+  `internal/queue`、`internal/uuidv4`；不得导入对方 native SDK 或对方 adapter，
+  也不得要求原生包反向依赖统一层。
 - 只有 MASS 的 Runtime adapter 可以导入统一层。MASS Service、Store 和
   transport 只依赖 MASS 自己的 `SessionEvent`，不直接依赖 `agent`。
 - SDK adapter 不读取 MASS 配置文件、恢复目录、资源身份或 `MASS_*` 环境约定；
@@ -147,7 +150,7 @@ MASS Runtime 中有两层复杂度，不应一起搬进通用 SDK。
 | MASS 逻辑 | 目标归属 | 原因 |
 |---|---|---|
 | 原生协议、未知字段、原生身份 | 原生 SDK | 已由各协议拥有，不能再复制一层解析 |
-| Provider 共享连接或进程 | 统一 SDK | 与具体 Agent 相关，但与 MASS 无关 |
+| Provider 启停与共享连接所有权 | 统一 SDK | 与具体 Agent 相关，但与 MASS 无关；Claude 的每 Session 进程随 Session 释放 |
 | 单 Session 打开、恢复、提交、回答、中断、关闭 | 统一 SDK | 两个 provider 可以共享操作概念 |
 | Turn/响应/block 的工作归属 | provider adapter | 必须依赖各自原生证据，不能放入通用协商层 |
 | 原生事件到统一事件 | provider adapter | 这是本次要迁移的主要重复代码 |
@@ -171,8 +174,8 @@ MASS Runtime 中有两层复杂度，不应一起搬进通用 SDK。
 配置，避免共享接口携带 `any` 或伪造共同字段：
 
 ```text
-agent/codex.New(Config)   -> agent.Provider
-agent/claude.New(Config)  -> agent.Provider
+agent/codex.New(Config)   -> *agentcodex.Provider, implements agent.Provider
+agent/claude.New(Config)  -> *agentclaude.Provider, implements agent.Provider
 ```
 
 `Config` 由具体 adapter 定义，可承载可执行文件、环境、初始化参数和原生连接
@@ -185,7 +188,7 @@ agent/claude.New(Config)  -> agent.Provider
 package agent
 
 type Provider interface {
-    // Start 取得本 Provider 拥有的共享运行资源。
+    // Start 取得本 Provider 拥有的运行资源并进入 started 状态。
     // 重复调用返回同一能力集合，不创建第二个资源所有者。
     Start(ctx context.Context) (Capabilities, error)
 
@@ -200,6 +203,9 @@ type Provider interface {
     Stop(ctx context.Context) error
 }
 ```
+
+Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
+（Claude）；后者由每个 Session 拥有并在 `Close` 中释放自己的原生进程。
 
 `Open` 与 `Resume` 的公共选项只包含两个 provider 都能解释的字段：
 
@@ -1402,8 +1408,8 @@ provider-specific 查询职责：
 错误值。该包只依赖标准库，不导入原生 SDK 或 MASS，不启动 Agent。
 
 同时修订当前仓库中“没有 root generic client / 没有共享公共协议”的表述，明确
-新增的是独立、可选的上层统一层；原生协议仍保持独立。修订只在实现进入该阶段
-时发生，草案本身不改变 README 的可用性声明。
+新增的是独立、可选的上层统一层；原生协议仍保持独立。README 和开发规范只声明
+已实现的公开面，不把 MASS 接入或真实 Agent 验证包含在 SDK 层完成条件中。
 
 退出条件：接口编译测试、类型校验、JSON 往返和依赖门禁通过；原生包无改动；
 尚未宣称任何 provider 已接入。
@@ -1538,10 +1544,9 @@ block/message linkage 和无法归属的交互行为保持不变。
 
 - 原生 `Received` 仍不是统一事件模型；统一转换只发生在 `agent/codex` 和
   `agent/claude`。
-- 仓库当前的“没有共享公共协议”和“没有 root generic client”表述在本设计
-  实现时必须修订为：原生协议层保持独立，统一层是独立、可选的上层，不替代
-  原生包。
+- 原生协议层保持独立；统一层是独立、可选的上层，不替代原生包，也不是新的
+  root generic client 或共享历史协议。
 - MASS 的公开 `RuntimeDriver` 和 `SessionEvent` 仍是其 Service 边界；SDK
   统一层不成为第二个 MASS 公开协议。
-- README 或使用文档只有在实现和验证完成后才声明统一层可用。本页是草案，
-  不构成实现或验证状态。
+- README 和包文档说明统一层的使用边界与离线示例；MASS 接入、发布和真实
+  Agent 验证须分别记录，不从该合同推定完成。

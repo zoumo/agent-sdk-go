@@ -2,8 +2,8 @@ package agent
 
 import "context"
 
-// Session owns one native main session attachment and its interaction
-// authority. It does not own the provider's shared connection or process.
+// Session owns one native main-session attachment, its interaction authority,
+// and native resources whose lifetime ends with the session.
 type Session interface {
 	// ID is a confirmed native main-session identity and is nonempty.
 	ID() string
@@ -35,10 +35,10 @@ type Session interface {
 		options InterruptOptions,
 	) (InterruptReceipt, error)
 
-	// Close releases this session attachment without stopping the provider and
-	// without recursively stopping all child agents. It rejects new operations,
-	// invalidates unsettled interactions, does not wait for external consumers,
-	// and returns the same cleanup result when repeated.
+	// Close releases this session attachment and its session-owned resources
+	// without stopping the provider or recursively stopping all child agents. It
+	// rejects new operations, invalidates unsettled interactions, does not wait
+	// for external consumers, and returns the same cleanup result when repeated.
 	Close(ctx context.Context) error
 
 	// Done closes when session interaction terminates. Err retains the first

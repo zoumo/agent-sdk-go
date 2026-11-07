@@ -134,7 +134,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	require.NotNil(t, result.ExitCode)
 	assert.Equal(t, int32(0), *result.ExitCode)
 	require.NotNil(t, result.DurationMs)
-	assert.Equal(t, float64(12), *result.DurationMs)
+	assert.InDelta(t, float64(12), *result.DurationMs, 0)
 	require.NotNil(t, result.Output)
 	assert.Equal(t, "provided", result.Output.Availability)
 	assert.Equal(t, "retained", result.Output.Completeness)
@@ -167,7 +167,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	assert.Equal(t, 2, planMeta["planEntryCount"])
 	assert.Equal(t, "working", planMeta["explanation"])
 	assert.Contains(t, rawCodexEvent(t, events[15]), `"step":"inspect"`)
-	assert.Equal(t, agent.InfoUpdatePayload{Title: stringPointer("Synthetic title")}, events[16].Payload)
+	assert.Equal(t, agent.InfoUpdatePayload{Title: new("Synthetic title")}, events[16].Payload)
 	assert.Equal(t, agent.UsageUpdatePayload{Used: 15, Size: 0}, events[17].Payload)
 
 	assert.Equal(t, "reasoning_part_boundary_unsupported", sessionErrorReason(t, events[5]))
@@ -181,7 +181,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 
 	idle := agent.StateIdle
 	assert.Equal(t, agent.StateUpdatePayload{
-		PreviousState: statePointer(agent.StateRunning),
+		PreviousState: new(agent.StateRunning),
 		State:         &idle,
 		StopReason:    "completed",
 	}, events[23].Payload)
@@ -227,7 +227,7 @@ func TestThreadStatusChangeExpiresInteractions(t *testing.T) {
 	require.Equal(t, agent.EventSessionStateUpdate, active.Type())
 	requiresAction := agent.StateRequiresAction
 	assert.Equal(t, agent.StateUpdatePayload{
-		PreviousState: statePointer(agent.StateRunning),
+		PreviousState: new(agent.StateRunning),
 		State:         &requiresAction,
 	}, active.Payload)
 	idle := nextEvent(t, ctx, stream)
@@ -498,7 +498,3 @@ func eventCodexMeta(t *testing.T, event agent.Event) map[string]any {
 	require.True(t, ok)
 	return meta
 }
-
-func stringPointer(value string) *string { return &value }
-
-func statePointer(value agent.SessionState) *agent.SessionState { return &value }

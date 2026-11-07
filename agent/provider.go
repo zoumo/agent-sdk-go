@@ -2,11 +2,12 @@ package agent
 
 import "context"
 
-// Provider owns the shared connection or process used by its sessions.
+// Provider owns provider-scoped lifecycle resources. An adapter may share one
+// native connection across sessions or create native resources per session.
 type Provider interface {
-	// Start acquires the provider-owned shared runtime resources. Repeated calls
-	// return the same capabilities without creating another owner. After a
-	// successful Stop, Start cannot be called again.
+	// Start acquires provider-scoped resources and enters the started state.
+	// Repeated calls return the same capabilities without creating another
+	// owner. After a successful Stop, Start cannot be called again.
 	Start(ctx context.Context) (Capabilities, error)
 
 	// Open creates a new native main session after its real identity is known.

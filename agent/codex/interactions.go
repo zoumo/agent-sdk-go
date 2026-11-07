@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"sort"
 	"strconv"
 	"time"
@@ -860,9 +861,7 @@ func (s *session) interactionClosedEvent(
 	extras map[string]any,
 ) (agent.Event, error) {
 	meta := interactionCloseMeta(interaction)
-	for key, value := range extras {
-		meta[key] = value
-	}
+	maps.Copy(meta, extras)
 	return s.newEvent(
 		received,
 		interaction.method,
@@ -938,7 +937,7 @@ func (s *session) settlement(
 
 func interactionCloseMeta(interaction *pendingInteraction) map[string]any {
 	meta := map[string]any{
-		"request": json.RawMessage(interaction.request.Raw()),
+		"request": interaction.request.Raw(),
 	}
 	if encoded, err := json.Marshal(interaction.request.ID()); err == nil {
 		meta["requestId"] = json.RawMessage(encoded)
@@ -974,13 +973,13 @@ func (s *session) blockingInteractionsLocked() int {
 }
 
 func (s *session) nextInteractionSequenceLocked() uint64 {
-	var max uint64
+	var largestSequence uint64
 	for _, interaction := range s.interactions {
-		if interaction.sequence > max {
-			max = interaction.sequence
+		if interaction.sequence > largestSequence {
+			largestSequence = interaction.sequence
 		}
 	}
-	return max + 1
+	return largestSequence + 1
 }
 
 func (s *session) removeInteractionLocked(interaction *pendingInteraction) {
@@ -1289,7 +1288,7 @@ func terminalInteractionOutcome(err error) (agent.InteractionOutcome, string) {
 	case errors.Is(err, codex.ErrRequestExpired):
 		return agent.InteractionExpired, "native_request_expired"
 	case errors.Is(err, codex.ErrRequestCanceled):
-		return agent.InteractionCancelled, "native_request_cancelled"
+		return agent.InteractionCancelled, "native_request_canceled"
 	case errors.Is(err, codex.ErrRequestResolved):
 		return agent.InteractionCancelled, "native_resolved"
 	case errors.Is(err, codex.ErrRequestAnswered):

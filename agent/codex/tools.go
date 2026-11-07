@@ -153,7 +153,7 @@ func commandTool(item *codextypes.CommandExecutionThreadItem) unifiedToolItem {
 		output:     unavailableToolOutput(),
 	}
 	if value, present := item.AggregatedOutput.Get(); present {
-		tool.rawOutput = anyPointer(value)
+		tool.rawOutput = anyValuePointer(value)
 		tool.content = []agent.ContentBlock{agent.TextBlock{Text: value}}
 		tool.output = providedToolOutput()
 	}
@@ -179,7 +179,7 @@ func functionTool(item *codextypes.FunctionCallOutputThreadItem) unifiedToolItem
 		name:         qualifiedToolName(item.Namespace, item.Name),
 		callStatus:   "in_progress",
 		resultStatus: "completed",
-		rawOutput:    anyPointer(item.Output),
+		rawOutput:    anyValuePointer(item.Output),
 		output:       providedToolOutput(),
 	}
 }
@@ -197,10 +197,10 @@ func mcpTool(item *codextypes.MCPToolCallThreadItem) unifiedToolItem {
 		output:       unavailableToolOutput(),
 	}
 	if result, present := item.Result.Get(); present {
-		tool.rawOutput = anyPointer(result)
+		tool.rawOutput = anyValuePointer(result)
 		tool.output = providedToolOutput()
 	} else if itemError, present := item.Error.Get(); present {
-		tool.rawOutput = anyPointer(itemError)
+		tool.rawOutput = anyValuePointer(itemError)
 		tool.output = providedToolOutput()
 	}
 	return tool
@@ -219,7 +219,7 @@ func dynamicTool(item *codextypes.DynamicToolCallThreadItem) unifiedToolItem {
 		output:       unavailableToolOutput(),
 	}
 	if content, present := item.ContentItems.Get(); present {
-		tool.rawOutput = anyPointer(content)
+		tool.rawOutput = anyValuePointer(content)
 		tool.output = providedToolOutput()
 	}
 	return tool
@@ -248,7 +248,7 @@ func collabTool(item *codextypes.CollabAgentToolCallThreadItem) unifiedToolItem 
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
 		rawInput:     rawInput,
-		rawOutput:    anyPointer(item.AgentsStates),
+		rawOutput:    anyValuePointer(item.AgentsStates),
 		output:       providedToolOutput(),
 		meta: map[string]any{
 			"agentReceiverThreadIds": append([]string(nil), item.ReceiverThreadIDs...),
@@ -275,7 +275,7 @@ func webSearchTool(item *codextypes.WebSearchThreadItem) unifiedToolItem {
 		output:       unavailableToolOutput(),
 	}
 	if results, present := item.Results.Get(); present {
-		tool.rawOutput = anyPointer(results)
+		tool.rawOutput = anyValuePointer(results)
 		tool.output = providedToolOutput()
 	}
 	return tool
@@ -286,7 +286,7 @@ func imageViewTool(item *codextypes.ImageViewThreadItem) unifiedToolItem {
 		id:           item.ID,
 		kind:         "read",
 		name:         "image_view",
-		title:        string(item.Path),
+		title:        item.Path,
 		callStatus:   "in_progress",
 		resultStatus: "completed",
 		rawInput:     map[string]any{"path": item.Path},
@@ -328,10 +328,10 @@ func imageGenerationTool(item *codextypes.ImageGenerationThreadItem) unifiedTool
 		output:       unavailableToolOutput(),
 	}
 	if failure, present := item.Failure.Get(); present {
-		tool.rawOutput = anyPointer(failure)
+		tool.rawOutput = anyValuePointer(failure)
 		tool.output = providedToolOutput()
 	} else if item.Result != "" {
-		tool.rawOutput = anyPointer(item.Result)
+		tool.rawOutput = anyValuePointer(item.Result)
 		tool.output = providedToolOutput()
 	}
 	return tool
@@ -368,8 +368,8 @@ func optionalInt32(value codextypes.Optional[int32]) *int32 {
 	return &result
 }
 
-func anyPointer(value any) *any {
-	return &value
+func anyValuePointer(value any) *any {
+	return new(value)
 }
 
 func providedToolOutput() *agent.ToolOutput {

@@ -6,6 +6,10 @@ A native Go client for the Codex app-server protocol.
 
 Connections and execution live in the native `codex` package. Events, native models,
 and optional values live in `github.com/zoumo/agent-sdk-go/codex/types`.
+The optional [unified Codex adapter](../agent/codex/doc.go) layers the same
+`agent.Provider`/`agent.Session` contract over this SDK for applications that also
+use Claude. It does not replace the native protocol or history queries; use
+`agentcodex.Provider.NativeClient()` only for same-connection read-only queries.
 
 ## Compatibility
 

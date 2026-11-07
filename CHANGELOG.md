@@ -8,10 +8,12 @@
 - Exposes `codex`, `codex/types`, `claude` and `claude/types` with one version.
   Native SDKs remain independent; both types packages use only the standard
   library. Previous module import paths require explicit migration.
-- Adds the optional provider-neutral `agent` core contract for live Provider and
-  Session operations, events, input, interactions and classified errors. The core
-  uses only the standard library, adds no history abstraction or root client, and
-  does not change the native protocols.
+- Adds the optional provider-neutral `agent` core and `agent/codex`/`agent/claude`
+  adapters for live Provider and Session operations, events, input, interactions
+  and classified errors. The core uses only the standard library; adapters stay
+  provider-specific, and the layer adds no history abstraction or root client.
+- Removes the unpublished SDK history replay projection while retaining native
+  history queries, native replay protocol fields and simulation replay.
 - Adds typed Claude permission modes and Codex approval policies while retaining
   Codex compatibility aliases and native unknown-variant round trips.
 - Defines eight user stories and 36 complete simulation flows with separate

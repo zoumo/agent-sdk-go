@@ -3,6 +3,7 @@ package agentcodex
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"sync"
 
 	"github.com/zoumo/agent-sdk-go/agent"
@@ -196,9 +197,7 @@ func sessionCapabilities(
 	features agent.EffectiveFeatures,
 ) agent.Capabilities {
 	capabilities := make(agent.Capabilities, len(base))
-	for capability, supported := range base {
-		capabilities[capability] = supported
-	}
+	maps.Copy(capabilities, base)
 	if !features.AgentQuestions {
 		delete(capabilities, agent.CapabilityForm)
 	}

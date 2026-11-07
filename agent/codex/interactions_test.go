@@ -702,16 +702,14 @@ func TestConcurrentAnswersAdmitOneReceiver(t *testing.T) {
 	results := make(chan error, 2)
 	var workers sync.WaitGroup
 	for range 2 {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
+		workers.Go(func() {
 			<-start
 			_, err := session.Answer(ctx, requested.Interaction, agent.PermissionAnswer{
 				Outcome:  agent.PermissionSelected,
 				OptionID: "allow-once",
 			})
 			results <- err
-		}()
+		})
 	}
 	close(start)
 	workers.Wait()

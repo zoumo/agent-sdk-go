@@ -4,6 +4,7 @@ Native Go SDKs for Codex and Claude in one module and one release stream.
 
 ```go
 import (
+    "github.com/zoumo/agent-sdk-go/agent"
     codex "github.com/zoumo/agent-sdk-go/codex"
     codextypes "github.com/zoumo/agent-sdk-go/codex/types"
     claude "github.com/zoumo/agent-sdk-go/claude"
@@ -11,13 +12,17 @@ import (
 )
 ```
 
-Choose the native package for your agent. There is no root client or shared public
-protocol. Both `types` packages depend only on the Go standard library. The old
-module import paths have no compatibility forwarding packages.
+Choose the native package for your agent. The optional `agent` package defines the
+provider-neutral live Session contract above those native SDKs; it is not a root
+client and does not replace their protocols or histories. Both native `types`
+packages and the `agent` core depend only on the Go standard library. Provider
+adapters are separate packages. The old module import paths have no compatibility
+forwarding packages.
 
 | Start here | Documentation |
 |---|---|
 | Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
+| Understand the common contract | [Unified agent core](agent/doc.go) |
 | Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
 | Test, record or inspect evidence | [Offline validation](docs/testing.md), [SDK simulation](tests/simulation/drivers/README.md), [external test tool](https://github.com/zoumo/agent-sdk-testify) |
 | Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |

@@ -15,10 +15,15 @@ and dependency boundaries.
 - Use one module, `github.com/zoumo/agent-sdk-go`, and one version. Keep a single
   root `go.mod`/`go.sum`; do not introduce nested modules or `go.work`.
 - Keep the supported native SDK imports `codex`, `codex/types`, `claude` and
-  `claude/types` independent. Do not add a root generic client, old-path forwarding
-  packages or a shared native answer state machine. Common approval operations
-  follow the [SDK behavior contract](sdk/architecture.md), preserving original
-  native answer handles and provider-specific options.
+  `claude/types` independent. The optional `agent` package is a provider-neutral
+  upper-layer contract, not a root client or a replacement for the native APIs.
+  Do not add old-path forwarding packages or a shared native answer state machine.
+  Common approval operations follow the [SDK behavior contract](sdk/architecture.md),
+  preserving original native answer handles and provider-specific options.
+- The `agent` core production code must use only the standard library. It must not
+  import either native SDK, MASS or recording/replay code. Provider adapters may
+  import the corresponding native SDK and `agent`, but adapters must not import
+  each other and native packages must not import `agent`.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**
@@ -52,6 +57,7 @@ Both native SDKs use the same separation of responsibilities:
 | Location | Responsibility |
 |---|---|
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
+| `agent/` | Provider-neutral live Session contract, values, validation and event encoding |
 | `tests/simulation/simulate/` | SDK-owned simulate, coverage, independent policy hosts, cancellation and authenticated loopback bridge |
 | `tests/simulation/drivers/` | Go simulation process entry and driver documentation |
 | `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |
@@ -61,6 +67,7 @@ Both native SDKs use the same separation of responsibilities:
 | `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
 | Each native `examples` | Genuine SDK usage and offline usage demonstrations |
 | Each native `*_test.go` | Public API checks and SDK integration against mock CLI processes |
+| `agent/*_test.go` | Public contract compile, validation, JSON and dependency checks |
 | `tests/integration` | Shared code integration suite, native test adapters and synthetic protocol peers |
 
 SDK integration tests use the external `agent-sdk-testify prepare`, `agent mock`

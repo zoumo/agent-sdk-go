@@ -17,6 +17,10 @@ for native in codex claude; do
   deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$native/types" | sed '/^$/d')
   test "$deps" = "github.com/zoumo/agent-sdk-go/$native/types"
 done
+# The optional unified contract is above both native SDKs and must not acquire
+# either native package, MASS, or a third-party production dependency.
+agent_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent | sed '/^$/d')
+test "$agent_deps" = "github.com/zoumo/agent-sdk-go/agent"
 # The generic FIFO must directly reuse the reviewed ChannX package.
 queue_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' ./internal/queue)
 if ! [[ "$queue_imports" == *github.com/zoumo/golib/channx* ]]; then

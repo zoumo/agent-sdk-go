@@ -30,9 +30,10 @@ then remove the caller-owned session after every SDK client and peer exits. The
 migrated synthetic, single-case and 72-slot gate checks remain in
 `tests/simulation/simulate`.
 
-The remaining gates check module and native dependency boundaries, standard-library-only
-types packages, native inventory, reproducible Codex generation, unit/subprocess tests
-and offline examples. `GOMAXPROCS=2`, package scheduling `-p=1` and
+The remaining gates check module and native dependency boundaries, the
+standard-library-only native types and `agent` core, native inventory, reproducible
+Codex generation, unit/subprocess tests and offline examples. `GOMAXPROCS=2`,
+package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
 The external tool owns official driver/package checks. Hosted CI builds the

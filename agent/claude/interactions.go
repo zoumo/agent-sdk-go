@@ -74,14 +74,6 @@ func (s *session) convertRequest(received claude.Received) ([]agent.Event, error
 			map[string]any{"requestId": request.ID()},
 		)
 	}
-	if err := request.Context().Err(); err != nil {
-		return s.gap(
-			received,
-			"native_request_ended",
-			"Claude permission request ended before it could be exposed",
-			map[string]any{"requestId": request.ID()},
-		)
-	}
 	metadata, err := handle.Metadata()
 	if err != nil {
 		return s.rejectUnsupportedRequest(

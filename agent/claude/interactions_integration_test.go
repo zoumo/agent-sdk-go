@@ -690,8 +690,14 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 			})
 			require.NoError(t, err)
-			require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
-			require.Equal(t, agent.StateRequiresAction, nextStateValue(t, ctx, stream))
+			running := nextClaudeStateUpdate(t, ctx, stream)
+			require.NotNil(t, running.State)
+			assert.Equal(t, agent.StateRunning, *running.State)
+			requiresAction := nextClaudeStateUpdate(t, ctx, stream)
+			require.NotNil(t, requiresAction.PreviousState)
+			require.NotNil(t, requiresAction.State)
+			assert.Equal(t, agent.StateRunning, *requiresAction.PreviousState)
+			assert.Equal(t, agent.StateRequiresAction, *requiresAction.State)
 			requested := nextClaudeInteractionRequested(t, ctx, stream)
 
 			if test.closeFirst {
@@ -927,10 +933,26 @@ func nextStateValue(
 	stream agent.EventStream,
 ) agent.SessionState {
 	t.Helper()
-	event := nextEvent(t, ctx, stream)
-	require.Equal(t, agent.EventSessionStateUpdate, event.Type())
-	payload, ok := event.Payload.(agent.StateUpdatePayload)
-	require.True(t, ok)
+	payload := nextClaudeStateUpdate(t, ctx, stream)
 	require.NotNil(t, payload.State)
 	return *payload.State
+}
+
+func nextClaudeStateUpdate(
+	t *testing.T,
+	ctx context.Context,
+	stream agent.EventStream,
+) agent.StateUpdatePayload {
+	t.Helper()
+	event := nextEvent(t, ctx, stream)
+	require.Equalf(
+		t,
+		agent.EventSessionStateUpdate,
+		event.Type(),
+		"unexpected event: %#v",
+		event,
+	)
+	payload, ok := event.Payload.(agent.StateUpdatePayload)
+	require.True(t, ok)
+	return payload
 }

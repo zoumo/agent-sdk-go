@@ -1,6 +1,9 @@
 package agent
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"math"
+)
 
 func validatePayload(payload Payload) error {
 	switch value := payload.(type) {
@@ -19,6 +22,7 @@ func validatePayload(payload Payload) error {
 			return invalidArgument("invalid_tool_call", "tool call requires ID and kind")
 		}
 		if err := validateToolDetails(
+			value.Status,
 			value.RawInput,
 			value.RawOutput,
 			value.Content,
@@ -38,6 +42,7 @@ func validatePayload(payload Payload) error {
 			return invalidArgument("invalid_tool_input", "tool result input is not JSON encodable")
 		}
 		if err := validateToolDetails(
+			value.Status,
 			nil,
 			value.RawOutput,
 			value.Content,
@@ -94,6 +99,14 @@ func validatePayload(payload Payload) error {
 	case InfoUpdatePayload:
 		if value.Title == nil && value.UpdatedAt == nil {
 			return invalidArgument("empty_info_update", "info update requires a changed field")
+		}
+		if value.UpdatedAt != nil {
+			if err := validateJSONValue(*value.UpdatedAt); err != nil {
+				return invalidArgument(
+					"invalid_info_update",
+					"info update timestamp is not JSON encodable",
+				)
+			}
 		}
 	case ConfigOptionUpdatePayload:
 		if value.ConfigOptions == nil {
@@ -156,12 +169,16 @@ func validateMessagePayload(payload MessagePayload) error {
 }
 
 func validateToolDetails(
+	status string,
 	rawInput any,
 	rawOutput *any,
 	content []ContentBlock,
 	durationMs *float64,
 	output *ToolOutput,
 ) error {
+	if status != "" && !validToolStatus(status) {
+		return invalidArgument("invalid_tool_status", "tool status is not supported")
+	}
 	if err := validateJSONValue(rawInput); err != nil {
 		return invalidArgument("invalid_tool_input", "tool input is not JSON encodable")
 	}
@@ -173,8 +190,15 @@ func validateToolDetails(
 	if err := validateOptionalContent(content); err != nil {
 		return err
 	}
-	if durationMs != nil && *durationMs < 0 {
-		return invalidArgument("invalid_tool_duration", "tool duration must not be negative")
+	if durationMs != nil {
+		if *durationMs < 0 ||
+			math.IsNaN(*durationMs) ||
+			math.IsInf(*durationMs, 0) {
+			return invalidArgument(
+				"invalid_tool_duration",
+				"tool duration must be finite and nonnegative",
+			)
+		}
 	}
 	return validateToolOutput(output)
 }
@@ -280,6 +304,15 @@ func validPlanPriority(priority string) bool {
 func validPlanStatus(status string) bool {
 	switch status {
 	case "pending", "in_progress", "completed":
+		return true
+	default:
+		return false
+	}
+}
+
+func validToolStatus(status string) bool {
+	switch status {
+	case "pending", "in_progress", "completed", "failed", "declined", "unknown":
 		return true
 	default:
 		return false

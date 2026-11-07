@@ -12,22 +12,33 @@ type Session interface {
 	EffectiveFeatures() EffectiveFeatures
 
 	// Events returns the session's only event stream. Only the first successful
-	// call may return a stream; later calls must fail.
+	// call may return a stream; later calls must fail. A stream has one
+	// consumer and retains accepted events for draining after Close.
 	Events() (EventStream, error)
 
+	// Submit validates and copies input before writing to the native protocol.
+	// It fails with failed_precondition while prior work remains unsettled.
 	Submit(ctx context.Context, input Input) (InputReceipt, error)
+
+	// Answer rechecks the live session, current work, request identity, and
+	// answer kind before sending. An interaction is answerable at most once.
 	Answer(
 		ctx context.Context,
 		interaction InteractionRef,
 		answer Answer,
 	) (InteractionReceipt, error)
+
+	// Interrupt targets work already confirmed for this session. It returns
+	// no_active_work without a native interrupt when no work is active.
 	Interrupt(
 		ctx context.Context,
 		options InterruptOptions,
 	) (InterruptReceipt, error)
 
 	// Close releases this session attachment without stopping the provider and
-	// without recursively stopping all child agents.
+	// without recursively stopping all child agents. It rejects new operations,
+	// invalidates unsettled interactions, does not wait for external consumers,
+	// and returns the same cleanup result when repeated.
 	Close(ctx context.Context) error
 
 	// Done closes when session interaction terminates. Err retains the first

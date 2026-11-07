@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -191,6 +192,9 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 		MessageID: "message-1",
 		Content:   textContent("hello"),
 	}
+	nanDuration := math.NaN()
+	infDuration := math.Inf(1)
+	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	invalidMessage := validMessage
 	invalidMessage.Content = []agent.ContentBlock{agent.ImageBlock{
 		Data:     "not-base64",
@@ -218,6 +222,12 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			name: "zero time",
 			event: withEvent(validEvent("item-1", validMessage), func(event *agent.Event) {
 				event.Time = time.Time{}
+			}),
+		},
+		{
+			name: "event time cannot encode",
+			event: withEvent(validEvent("item-1", validMessage), func(event *agent.Event) {
+				event.Time = invalidTime
 			}),
 		},
 		{
@@ -254,6 +264,33 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			}),
 		},
 		{
+			name: "tool call with unsupported status",
+			event: validEvent("tool-1", agent.ToolCallPayload{
+				ID:       "tool-1",
+				Kind:     "command",
+				RawInput: map[string]any{},
+				Status:   "running",
+			}),
+		},
+		{
+			name: "tool call with NaN duration",
+			event: validEvent("tool-1", agent.ToolCallPayload{
+				ID:         "tool-1",
+				Kind:       "command",
+				RawInput:   map[string]any{},
+				DurationMs: &nanDuration,
+			}),
+		},
+		{
+			name: "tool call with infinite duration",
+			event: validEvent("tool-1", agent.ToolCallPayload{
+				ID:         "tool-1",
+				Kind:       "command",
+				RawInput:   map[string]any{},
+				DurationMs: &infDuration,
+			}),
+		},
+		{
 			name: "invalid observed state",
 			event: validEvent("", agent.StateUpdatePayload{
 				State: &invalidState,
@@ -266,6 +303,10 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 		{
 			name:  "empty info update",
 			event: validEvent("", agent.InfoUpdatePayload{}),
+		},
+		{
+			name:  "info update time cannot encode",
+			event: validEvent("", agent.InfoUpdatePayload{UpdatedAt: &invalidTime}),
 		},
 		{
 			name: "empty plan",
@@ -380,6 +421,174 @@ func TestEventJSONRejectsUnknownOrMismatchedPayloadType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var event agent.Event
 			require.Error(t, json.Unmarshal([]byte(tt.raw), &event))
+		})
+	}
+}
+
+func TestEventJSONRejectsMissingOrNullRequiredPayloadFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType agent.EventType
+		itemID    string
+		payload   string
+	}{
+		{
+			name:      "null payload",
+			eventType: agent.EventSessionStateUpdate,
+			payload:   `null`,
+		},
+		{
+			name:      "state update missing state",
+			eventType: agent.EventSessionStateUpdate,
+			payload:   `{"previousState":"idle"}`,
+		},
+		{
+			name:      "state update missing previous state",
+			eventType: agent.EventSessionStateUpdate,
+			payload:   `{"state":"running"}`,
+		},
+		{
+			name:      "usage update missing used",
+			eventType: agent.EventSessionUsageUpdate,
+			payload:   `{"size":100}`,
+		},
+		{
+			name:      "usage update null used",
+			eventType: agent.EventSessionUsageUpdate,
+			payload:   `{"used":null,"size":100}`,
+		},
+		{
+			name:      "usage update missing size",
+			eventType: agent.EventSessionUsageUpdate,
+			payload:   `{"used":10}`,
+		},
+		{
+			name:      "tool call missing raw input",
+			eventType: agent.EventAgentToolCall,
+			itemID:    "tool-1",
+			payload:   `{"id":"tool-1","kind":"command"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var event agent.Event
+
+			err := json.Unmarshal(eventJSONForPayload(t, tt.eventType, tt.itemID, tt.payload), &event)
+
+			require.Error(t, err)
+			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+		})
+	}
+}
+
+func TestEventJSONAllowsExplicitNullRequiredDynamicMembers(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType agent.EventType
+		itemID    string
+		payload   string
+		check     func(*testing.T, agent.Payload)
+	}{
+		{
+			name:      "state update unknown values",
+			eventType: agent.EventSessionStateUpdate,
+			payload:   `{"state":null,"previousState":null}`,
+			check: func(t *testing.T, payload agent.Payload) {
+				state := payload.(agent.StateUpdatePayload)
+				assert.Nil(t, state.State)
+				assert.Nil(t, state.PreviousState)
+			},
+		},
+		{
+			name:      "tool call null raw input",
+			eventType: agent.EventAgentToolCall,
+			itemID:    "tool-1",
+			payload:   `{"id":"tool-1","kind":"command","rawInput":null}`,
+			check: func(t *testing.T, payload agent.Payload) {
+				call := payload.(agent.ToolCallPayload)
+				assert.Nil(t, call.RawInput)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := eventJSONForPayload(t, tt.eventType, tt.itemID, tt.payload)
+			var event agent.Event
+
+			require.NoError(t, json.Unmarshal(encoded, &event))
+			tt.check(t, event.Payload)
+		})
+	}
+}
+
+func TestToolPayloadJSONPreservesExplicitNullAndEmptyContent(t *testing.T) {
+	var null any
+	explicitEmpty := []agent.ContentBlock{}
+
+	tests := []struct {
+		name    string
+		payload agent.Payload
+		check   func(*testing.T, agent.Payload)
+	}{
+		{
+			name: "tool call",
+			payload: agent.ToolCallPayload{
+				ID:        "tool-1",
+				Kind:      "command",
+				RawInput:  nil,
+				RawOutput: &null,
+				Content:   explicitEmpty,
+			},
+			check: func(t *testing.T, payload agent.Payload) {
+				call := payload.(agent.ToolCallPayload)
+				require.NotNil(t, call.RawOutput)
+				assert.Nil(t, *call.RawOutput)
+				require.NotNil(t, call.Content)
+				assert.Empty(t, call.Content)
+			},
+		},
+		{
+			name: "tool result",
+			payload: agent.ToolResultPayload{
+				ID:        "tool-1",
+				Kind:      "command",
+				Status:    "completed",
+				RawInput:  &null,
+				RawOutput: &null,
+				Content:   explicitEmpty,
+			},
+			check: func(t *testing.T, payload agent.Payload) {
+				result := payload.(agent.ToolResultPayload)
+				require.NotNil(t, result.RawInput)
+				assert.Nil(t, *result.RawInput)
+				require.NotNil(t, result.RawOutput)
+				assert.Nil(t, *result.RawOutput)
+				require.NotNil(t, result.Content)
+				assert.Empty(t, result.Content)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := validEvent("tool-1", tt.payload)
+			encoded, err := json.Marshal(original)
+			require.NoError(t, err)
+
+			var envelope struct {
+				Payload map[string]json.RawMessage `json:"payload"`
+			}
+			require.NoError(t, json.Unmarshal(encoded, &envelope))
+			assert.Contains(t, envelope.Payload, "rawOutput")
+			assert.JSONEq(t, `null`, string(envelope.Payload["rawOutput"]))
+			assert.Contains(t, envelope.Payload, "content")
+			assert.JSONEq(t, `[]`, string(envelope.Payload["content"]))
+
+			var decoded agent.Event
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			tt.check(t, decoded.Payload)
 		})
 	}
 }
@@ -553,6 +762,25 @@ func validEvent(itemID string, payload agent.Payload) agent.Event {
 func withEvent(event agent.Event, mutate func(*agent.Event)) agent.Event {
 	mutate(&event)
 	return event
+}
+
+func eventJSONForPayload(
+	t *testing.T,
+	eventType agent.EventType,
+	itemID string,
+	payload string,
+) []byte {
+	t.Helper()
+	data, err := json.Marshal(map[string]any{
+		"eventId":   validEventID,
+		"sessionId": "session-1",
+		"time":      "2026-11-07T09:00:00Z",
+		"itemId":    itemID,
+		"type":      eventType,
+		"payload":   json.RawMessage(payload),
+	})
+	require.NoError(t, err)
+	return data
 }
 
 func ptr[T any](value T) *T {

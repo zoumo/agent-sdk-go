@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -15,6 +16,9 @@ func TestInputValidationRejectsEmptyAndInvalidContent(t *testing.T) {
 	emptyText := ""
 	negativeSize := int64(-1)
 	invalidPriority := 1.1
+	nanPriority := math.NaN()
+	infPriority := math.Inf(1)
+	invalidLastModified := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	blob := "aGVsbG8="
 	text := "hello"
 
@@ -65,6 +69,33 @@ func TestInputValidationRejectsEmptyAndInvalidContent(t *testing.T) {
 				agent.TextBlock{
 					Text:        "hello",
 					Annotations: &agent.Annotations{Priority: &invalidPriority},
+				},
+			}},
+		},
+		{
+			name: "annotation priority is NaN",
+			input: agent.Input{Content: []agent.ContentBlock{
+				agent.TextBlock{
+					Text:        "hello",
+					Annotations: &agent.Annotations{Priority: &nanPriority},
+				},
+			}},
+		},
+		{
+			name: "annotation priority is infinite",
+			input: agent.Input{Content: []agent.ContentBlock{
+				agent.TextBlock{
+					Text:        "hello",
+					Annotations: &agent.Annotations{Priority: &infPriority},
+				},
+			}},
+		},
+		{
+			name: "annotation last modified cannot encode",
+			input: agent.Input{Content: []agent.ContentBlock{
+				agent.TextBlock{
+					Text:        "hello",
+					Annotations: &agent.Annotations{LastModified: &invalidLastModified},
 				},
 			}},
 		},
@@ -191,4 +222,47 @@ func TestInputJSONRejectsUnknownContentKind(t *testing.T) {
 	err := json.Unmarshal([]byte(`{"content":[{"type":"video","data":"aGVsbG8="}]}`), &input)
 
 	require.Error(t, err)
+}
+
+func TestInputJSONRejectsMissingOrNullRequiredContentFields(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "missing text",
+			raw:  `{"content":[{"type":"text"}]}`,
+		},
+		{
+			name: "null text",
+			raw:  `{"content":[{"type":"text","text":null}]}`,
+		},
+		{
+			name: "missing image data",
+			raw:  `{"content":[{"type":"image","mimeType":"image/png"}]}`,
+		},
+		{
+			name: "null image data",
+			raw:  `{"content":[{"type":"image","data":null,"mimeType":"image/png"}]}`,
+		},
+		{
+			name: "missing audio data",
+			raw:  `{"content":[{"type":"audio","mimeType":"audio/wav"}]}`,
+		},
+		{
+			name: "null audio data",
+			raw:  `{"content":[{"type":"audio","data":null,"mimeType":"audio/wav"}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var input agent.Input
+
+			err := json.Unmarshal([]byte(tt.raw), &input)
+
+			require.Error(t, err)
+			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+		})
+	}
 }

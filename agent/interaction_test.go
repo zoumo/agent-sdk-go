@@ -145,10 +145,43 @@ func TestValidateAnswerChecksKindAndOutcome(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "typed nil permission",
+			kind:    agent.InteractionPermission,
+			answer:  (*agent.PermissionAnswer)(nil),
+			wantErr: true,
+		},
+		{
+			name:    "typed nil form",
+			kind:    agent.InteractionForm,
+			answer:  (*agent.FormAnswer)(nil),
+			wantErr: true,
+		},
+		{
+			name:    "typed nil URL",
+			kind:    agent.InteractionURL,
+			answer:  (*agent.URLAnswer)(nil),
+			wantErr: true,
+		},
+		{
 			name:    "wrong kind",
 			kind:    agent.InteractionPermission,
 			answer:  agent.FormAnswer{Outcome: agent.FormAccept, Content: map[string]any{}},
 			wantErr: true,
+		},
+		{
+			name:   "pointer permission",
+			kind:   agent.InteractionPermission,
+			answer: &agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow"},
+		},
+		{
+			name:   "pointer form",
+			kind:   agent.InteractionForm,
+			answer: &agent.FormAnswer{Outcome: agent.FormAccept, Content: map[string]any{"choice": "a"}},
+		},
+		{
+			name:   "pointer URL",
+			kind:   agent.InteractionURL,
+			answer: &agent.URLAnswer{Outcome: agent.URLAccept},
 		},
 		{
 			name:   "selected permission",

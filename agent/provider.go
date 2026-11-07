@@ -5,17 +5,23 @@ import "context"
 // Provider owns the shared connection or process used by its sessions.
 type Provider interface {
 	// Start acquires the provider-owned shared runtime resources. Repeated calls
-	// return the same capabilities without creating another owner.
+	// return the same capabilities without creating another owner. After a
+	// successful Stop, Start cannot be called again.
 	Start(ctx context.Context) (Capabilities, error)
 
 	// Open creates a new native main session after its real identity is known.
+	// The provider must have been started successfully.
 	Open(ctx context.Context, options OpenOptions) (Session, error)
 
 	// Resume restores an existing native main session instead of creating one.
+	// The provider must have been started successfully. Saved native history may
+	// support recovery but must not be emitted as live events.
 	Resume(ctx context.Context, options ResumeOptions) (Session, error)
 
-	// Stop releases only resources owned by this provider. It must reject the
-	// call while any session remains open.
+	// Stop releases only resources owned by this provider. It rejects the call
+	// while any session remains open. A successful stop is terminal: Start,
+	// Open, and Resume cannot run afterward. Repeating Stop after all sessions
+	// are closed returns the same successful result.
 	Stop(ctx context.Context) error
 }
 

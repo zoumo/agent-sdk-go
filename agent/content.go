@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -328,14 +329,17 @@ func unmarshalContentBlock(data []byte) (ContentBlock, error) {
 		if err := decodeStrictJSON(data, &wire); err != nil {
 			return nil, err
 		}
-		if !hasJSONMember(data, "text") {
-			return nil, errors.New("missing text")
+		if err := requireJSONMembers(data, "text"); err != nil {
+			return nil, err
 		}
 		block := TextBlock{Text: wire.Text, Annotations: annotationsFromJSON(wire.Annotations)}
 		return block, block.Validate()
 	case contentTypeImage:
 		var wire imageBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
+			return nil, err
+		}
+		if err := requireJSONMembers(data, "data", "mimeType"); err != nil {
 			return nil, err
 		}
 		block := ImageBlock{
@@ -348,6 +352,9 @@ func unmarshalContentBlock(data []byte) (ContentBlock, error) {
 	case contentTypeAudio:
 		var wire audioBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
+			return nil, err
+		}
+		if err := requireJSONMembers(data, "data", "mimeType"); err != nil {
 			return nil, err
 		}
 		block := AudioBlock{
@@ -404,6 +411,18 @@ func validateAnnotations(annotations *Annotations) error {
 		(*annotations.Priority < 0 || *annotations.Priority > 1) {
 		return invalidArgument("invalid_priority", "annotation priority must be between 0 and 1")
 	}
+	if annotations.Priority != nil &&
+		(math.IsNaN(*annotations.Priority) || math.IsInf(*annotations.Priority, 0)) {
+		return invalidArgument("invalid_priority", "annotation priority must be finite")
+	}
+	if annotations.LastModified != nil {
+		if err := validateJSONValue(*annotations.LastModified); err != nil {
+			return invalidArgument(
+				"invalid_last_modified",
+				"annotation lastModified is not JSON encodable",
+			)
+		}
+	}
 	return nil
 }
 
@@ -449,11 +468,47 @@ func decodeStrictJSON(data []byte, target any) error {
 	return nil
 }
 
-func hasJSONMember(data []byte, name string) bool {
+func requireJSONMemberPresence(data []byte, names ...string) error {
+	members, err := jsonMembers(data)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		if _, ok := members[name]; !ok {
+			return errors.New("missing JSON member " + name)
+		}
+	}
+	return nil
+}
+
+func requireJSONMembers(data []byte, names ...string) error {
+	members, err := jsonMembers(data)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		value, ok := members[name]
+		if !ok {
+			return errors.New("missing JSON member " + name)
+		}
+		if isJSONNull(value) {
+			return errors.New("null JSON member " + name)
+		}
+	}
+	return nil
+}
+
+func jsonMembers(data []byte) (map[string]json.RawMessage, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(data, &members); err != nil {
-		return false
+		return nil, err
 	}
-	_, ok := members[name]
-	return ok
+	if members == nil {
+		return nil, errors.New("JSON object is required")
+	}
+	return members, nil
+}
+
+func isJSONNull(data []byte) bool {
+	return bytes.Equal(bytes.TrimSpace(data), []byte("null"))
 }

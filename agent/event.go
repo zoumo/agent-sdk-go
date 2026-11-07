@@ -69,6 +69,9 @@ func (e Event) Validate() error {
 	if e.Time.IsZero() {
 		return invalidArgument("missing_event_time", "event time is required")
 	}
+	if err := validateJSONValue(e.Time); err != nil {
+		return invalidArgument("invalid_event_time", "event time is not JSON encodable")
+	}
 	payload, err := concretePayload(e.Payload)
 	if err != nil {
 		return err

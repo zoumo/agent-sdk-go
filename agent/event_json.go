@@ -88,7 +88,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err := decodeStrictJSON(data, &wire); err != nil {
 		return invalidArgument("invalid_event_json", "decode event: "+err.Error())
 	}
-	if len(wire.Payload) == 0 {
+	if len(wire.Payload) == 0 || isJSONNull(wire.Payload) {
 		return invalidArgument("missing_payload", "event payload is required")
 	}
 	payload, err := unmarshalPayload(wire.Type, wire.Payload)
@@ -157,6 +157,9 @@ func unmarshalPayload(eventType EventType, data []byte) (Payload, error) {
 		}
 		return payload, nil
 	case EventSessionStateUpdate:
+		if err := requireJSONMemberPresence(data, "state", "previousState"); err != nil {
+			return nil, err
+		}
 		var payload StateUpdatePayload
 		if err := decodeStrictJSON(data, &payload); err != nil {
 			return nil, err
@@ -187,6 +190,9 @@ func unmarshalPayload(eventType EventType, data []byte) (Payload, error) {
 		}
 		return payload, nil
 	case EventSessionUsageUpdate:
+		if err := requireJSONMembers(data, "used", "size"); err != nil {
+			return nil, err
+		}
 		var payload UsageUpdatePayload
 		if err := decodeStrictJSON(data, &payload); err != nil {
 			return nil, err
@@ -226,11 +232,18 @@ func unmarshalMessagePayload(data []byte) (MessagePayload, error) {
 }
 
 func unmarshalToolCallPayload(data []byte) (Payload, error) {
+	if err := requireJSONMemberPresence(data, "rawInput"); err != nil {
+		return nil, err
+	}
 	var wire toolCallPayloadWire
 	if err := decodeStrictJSON(data, &wire); err != nil {
 		return nil, err
 	}
 	content, err := unmarshalContentBlocks(wire.Content)
+	if err != nil {
+		return nil, err
+	}
+	rawOutput, err := optionalDynamicJSONMember(data, "rawOutput")
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +255,7 @@ func unmarshalToolCallPayload(data []byte) (Payload, error) {
 		Phase:               wire.Phase,
 		InputRepresentation: wire.InputRepresentation,
 		RawInput:            wire.RawInput,
-		RawOutput:           wire.RawOutput,
+		RawOutput:           rawOutput,
 		Content:             content,
 		ExitCode:            wire.ExitCode,
 		DurationMs:          wire.DurationMs,
@@ -260,6 +273,14 @@ func unmarshalToolResultPayload(data []byte) (Payload, error) {
 	if err != nil {
 		return nil, err
 	}
+	rawInput, err := optionalDynamicJSONMember(data, "rawInput")
+	if err != nil {
+		return nil, err
+	}
+	rawOutput, err := optionalDynamicJSONMember(data, "rawOutput")
+	if err != nil {
+		return nil, err
+	}
 	return ToolResultPayload{
 		ID:                  wire.ID,
 		Kind:                wire.Kind,
@@ -267,8 +288,8 @@ func unmarshalToolResultPayload(data []byte) (Payload, error) {
 		Title:               wire.Title,
 		Phase:               wire.Phase,
 		InputRepresentation: wire.InputRepresentation,
-		RawInput:            wire.RawInput,
-		RawOutput:           wire.RawOutput,
+		RawInput:            rawInput,
+		RawOutput:           rawOutput,
 		Content:             content,
 		ExitCode:            wire.ExitCode,
 		DurationMs:          wire.DurationMs,
@@ -290,4 +311,20 @@ func unmarshalContentBlocks(raw []json.RawMessage) ([]ContentBlock, error) {
 		content[index] = decoded
 	}
 	return content, nil
+}
+
+func optionalDynamicJSONMember(data []byte, name string) (*any, error) {
+	members, err := jsonMembers(data)
+	if err != nil {
+		return nil, err
+	}
+	raw, ok := members[name]
+	if !ok {
+		return nil, nil
+	}
+	var value any
+	if err := decodeStrictJSON(raw, &value); err != nil {
+		return nil, err
+	}
+	return &value, nil
 }

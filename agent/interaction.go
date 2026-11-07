@@ -1,5 +1,7 @@
 package agent
 
+import "reflect"
+
 // InteractionRef is an opaque reference to one live native request. It grants
 // no authority outside the adapter and session that created it.
 type InteractionRef string
@@ -160,14 +162,15 @@ func (URLAnswer) answerKind() InteractionKind { return InteractionURL }
 // ValidateAnswer checks that answer matches the live request kind and that its
 // outcome has the fields required by that branch.
 func ValidateAnswer(kind InteractionKind, answer Answer) error {
-	if answer == nil {
-		return invalidArgument("missing_answer", "answer is required")
+	concrete, err := concreteAnswer(answer)
+	if err != nil {
+		return err
 	}
-	if answer.answerKind() != kind {
+	if concrete.answerKind() != kind {
 		return invalidArgument("answer_kind_mismatch", "answer does not match interaction kind")
 	}
 
-	switch value := answer.(type) {
+	switch value := concrete.(type) {
 	case PermissionAnswer:
 		switch value.Outcome {
 		case PermissionSelected:
@@ -222,6 +225,24 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 		return invalidArgument("unsupported_answer", "answer kind is not supported")
 	}
 	return nil
+}
+
+func concreteAnswer(answer Answer) (Answer, error) {
+	if answer == nil {
+		return nil, invalidArgument("missing_answer", "answer is required")
+	}
+	value := reflect.ValueOf(answer)
+	if value.Kind() != reflect.Pointer {
+		return answer, nil
+	}
+	if value.IsNil() {
+		return nil, invalidArgument("missing_answer", "answer is required")
+	}
+	concrete, ok := value.Elem().Interface().(Answer)
+	if !ok {
+		return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
+	}
+	return concrete, nil
 }
 
 type InteractionOutcome string

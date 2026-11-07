@@ -60,6 +60,11 @@ type ToolCallPayload struct {
 
 func (ToolCallPayload) eventType() EventType { return EventAgentToolCall }
 
+func (p ToolCallPayload) MarshalJSON() ([]byte, error) {
+	type payload ToolCallPayload
+	return marshalToolContent(payload(p), p.Content)
+}
+
 type ToolResultPayload struct {
 	ID                  string         `json:"id"`
 	Kind                string         `json:"kind"`
@@ -77,6 +82,11 @@ type ToolResultPayload struct {
 }
 
 func (ToolResultPayload) eventType() EventType { return EventAgentToolResult }
+
+func (p ToolResultPayload) MarshalJSON() ([]byte, error) {
+	type payload ToolResultPayload
+	return marshalToolContent(payload(p), p.Content)
+}
 
 type ToolChunkPayload struct {
 	ID      string         `json:"id"`
@@ -208,4 +218,20 @@ type InteractionClosedPayload struct {
 
 func (InteractionClosedPayload) eventType() EventType {
 	return EventInteractionClosed
+}
+
+func marshalToolContent(value any, content []ContentBlock) ([]byte, error) {
+	data, err := json.Marshal(value)
+	if err != nil || content == nil {
+		return data, err
+	}
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(data, &members); err != nil {
+		return nil, err
+	}
+	members["content"], err = json.Marshal(content)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(members)
 }

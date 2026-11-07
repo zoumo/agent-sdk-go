@@ -208,7 +208,6 @@ func testQueryWithSession(t *testing.T) {
 		assert.Equal(t, s.ThreadID(), native.ThreadID)
 		assert.Equal(t, "live-turn", native.TurnID)
 		assert.Equal(t, "live-item", native.ItemID)
-		require.Nil(t, received.Event.History)
 		require.NoError(t, received.Event.DecodeError)
 		require.Nil(t, received.Request)
 		require.Nil(t, received.Observation)

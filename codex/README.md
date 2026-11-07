@@ -359,8 +359,9 @@ or uncertain dispatch performs bounded detachment; failed cleanup preserves an
 ownership fence. Shared clients remain open; owned processes are reaped.
 
 `Client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})` explicitly
-resumes a native thread. It does not create a Session or replay history through
-Session.Receive. `Client.UnsubscribeThread` releases that native attachment.
+resumes a native thread. It does not create a Session or project saved history
+into Session.Receive events. `Client.UnsubscribeThread` releases that native
+attachment.
 
 `Client.ListThreads`, `Client.ReadThread`, `Client.ListThreadTurns` and
 `Client.ListThreadItems` query native metadata and saved content without Open or

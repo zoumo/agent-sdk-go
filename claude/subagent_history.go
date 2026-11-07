@@ -61,7 +61,8 @@ type SubagentMessagesPage struct {
 }
 
 // ListSubagents discovers saved children without a Session, environment lookup,
-// process, history replay or live membership/answer authority. Any error clears Records.
+// process, saved-history event projection or live membership/answer authority.
+// Any error clears Records.
 func ListSubagents(ctx context.Context, parentSessionID string, o ListSubagentsOptions) (page SubagentsPage, err error) {
 	page.Records = []SubagentInfo{}
 	page.Coverage = SubagentHistoryCoverage{Status: "unknown", ConfigDir: o.Scope.ConfigDir, ProjectDir: o.Scope.ProjectDir, SessionID: parentSessionID, SidecarStatus: "per-record"}

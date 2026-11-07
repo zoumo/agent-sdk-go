@@ -22,7 +22,7 @@ func TestSubmitMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 		`<{"type":"system","subtype":"init","session_id":"native-loop","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"hello"}}`,
-		`<{"type":"assistant","session_id":"native-loop","uuid":"assistant-event","timestamp":"2026-11-07T12:34:56.789Z","message":{"id":"message-1","role":"assistant","model":"synthetic","content":[{"type":"text","text":"hello from Claude"}],"future_message":null},"future":{"precise":9007199254740993},"future_message":null}`,
+		`<{"type":"assistant","session_id":"native-loop","uuid":"assistant-event","timestamp":"2026-11-07T12:34:56.789Z","message":{"id":"message-1","role":"assistant","model":"synthetic","content":[{"type":"text","text":"hello from Claude","apiBlockIndex":0}],"future_message":null},"future":{"precise":9007199254740993},"future_message":null}`,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-loop","state":"running","timestamp":"2026-11-07T12:34:57Z"}`,
 		`<{"type":"result","subtype":"success","session_id":"native-loop","is_error":false,"result":"done","timestamp":"2026-11-07T12:34:58Z"}`,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-loop","state":"idle","timestamp":"2026-11-07T12:34:59Z"}`,
@@ -60,10 +60,10 @@ func TestSubmitMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, message.Type())
 	assert.Equal(t, "native-loop", message.SessionID)
-	assert.Equal(t, "message-1", message.ItemID)
+	assert.Equal(t, "message-1:0", message.ItemID)
 	assert.Equal(t, time.Date(2026, 11, 7, 12, 34, 56, 789_000_000, time.UTC), message.Time)
 	assert.Equal(t, agent.AgentMessage{
-		MessageID: "message-1",
+		MessageID: "message-1:0",
 		Content:   []agent.ContentBlock{agent.TextBlock{Text: "hello from Claude"}},
 	}, message.Payload)
 	require.NoError(t, message.Validate())
@@ -143,7 +143,7 @@ func TestEnvelopeErrorBecomesSessionError(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-envelope-error","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-		`<{"type":"assistant","session_id":"native-envelope-error","error":"envelope failed","message":{"id":"partial-message","content":[{"type":"text","text":"partial"}]},"future":true}`,
+		`<{"type":"assistant","session_id":"native-envelope-error","error":"envelope failed","message":{"id":"partial-message","content":[{"type":"text","text":"partial","apiBlockIndex":0}]},"future":true}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -175,7 +175,7 @@ func TestEventWaitCancellationDoesNotConsumeOrClose(t *testing.T) {
 	cwd := t.TempDir()
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
-		`<{"type":"assistant","session_id":"native-early","message":{"id":"early-message","content":[{"type":"text","text":"early"}]}}`,
+		`<{"type":"assistant","session_id":"native-early","message":{"id":"early-message","content":[{"type":"text","text":"early","apiBlockIndex":0}]}}`,
 		`<{"type":"system","subtype":"init","session_id":"native-early","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 	)
@@ -204,7 +204,7 @@ func TestEventWaitCancellationDoesNotConsumeOrClose(t *testing.T) {
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, event.Type())
-	assert.Equal(t, "early-message", event.ItemID)
+	assert.Equal(t, "early-message:0", event.ItemID)
 }
 
 func TestCloseDrainsAcceptedEarlyEventThenReturnsEOF(t *testing.T) {
@@ -213,7 +213,7 @@ func TestCloseDrainsAcceptedEarlyEventThenReturnsEOF(t *testing.T) {
 	cwd := t.TempDir()
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
-		`<{"type":"assistant","session_id":"native-drain","message":{"id":"drained-message","content":[{"type":"text","text":"drained"}]}}`,
+		`<{"type":"assistant","session_id":"native-drain","message":{"id":"drained-message","content":[{"type":"text","text":"drained","apiBlockIndex":0}]}}`,
 		`<{"type":"system","subtype":"init","session_id":"native-drain","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 	)
@@ -233,7 +233,7 @@ func TestCloseDrainsAcceptedEarlyEventThenReturnsEOF(t *testing.T) {
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, event.Type())
-	assert.Equal(t, "drained-message", event.ItemID)
+	assert.Equal(t, "drained-message:0", event.ItemID)
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 	require.NoError(t, session.Err())
@@ -272,7 +272,7 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
 }
 
-func TestAnswerAndInterruptExplicitlyUnsupported(t *testing.T) {
+func TestAnswerRejectsUnknownRefAndInterruptHasNoActiveWork(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
@@ -296,9 +296,11 @@ func TestAnswerAndInterruptExplicitlyUnsupported(t *testing.T) {
 		agent.InteractionRef("missing"),
 		agent.PermissionAnswer{},
 	)
-	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
-	_, err = session.Interrupt(ctx, agent.InterruptOptions{})
-	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+	receipt, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptNoActiveWork, receipt.Result)
+	assert.Empty(t, receipt.Target)
 }
 
 func requireClaudeMeta(t *testing.T, event agent.Event) map[string]any {

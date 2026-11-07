@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
+	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
@@ -24,16 +27,27 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	mu            sync.Mutex
-	eventsClaimed bool
-	closed        bool
-	submitting    bool
-	workActive    bool
-	state         *agent.SessionState
-	stateVersion  uint64
-	done          chan struct{}
-	doneClosed    bool
-	err           error
+	mu                  sync.Mutex
+	eventsClaimed       bool
+	closed              bool
+	explicitClose       bool
+	submitting          bool
+	workActive          bool
+	activeSubmit        string
+	state               *agent.SessionState
+	stateVersion        uint64
+	interactions        map[agent.InteractionRef]*pendingInteraction
+	interactionRefs     map[string]agent.InteractionRef
+	interactionSequence uint64
+	done                chan struct{}
+	doneClosed          bool
+	err                 error
+
+	lanes         map[string]*claudeLane
+	blocks        map[claudeBlockKey]*claudeBlock
+	seenAssistant map[string]struct{}
+	calls         map[string]claudeCall
+	usage         claudeUsageState
 
 	observationDone chan struct{}
 	closeOnce       sync.Once
@@ -43,6 +57,7 @@ type session struct {
 func newSession(
 	provider *Provider,
 	native *claude.Session,
+	init *claudetypes.Event,
 	sessionID string,
 	features agent.Features,
 	buffered []claude.Received,
@@ -52,6 +67,8 @@ func newSession(
 		native:          native,
 		id:              sessionID,
 		features:        effectiveFeatures(features),
+		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
+		interactionRefs: make(map[string]agent.InteractionRef),
 		done:            make(chan struct{}),
 		observationDone: make(chan struct{}),
 	}
@@ -69,6 +86,20 @@ func newSession(
 			)
 		}
 	}
+	if init != nil && init.System != nil && len(init.System.SlashCommands) != 0 {
+		events, err := created.initialCommandsEvent(*init)
+		if err != nil {
+			return nil, err
+		}
+		if err := created.pushEvents(events); err != nil {
+			return nil, adapterError(
+				agent.ErrorUnavailable,
+				"event_delivery_failed",
+				"deliver initial Claude commands",
+				err,
+			)
+		}
+	}
 	return created, nil
 }
 
@@ -79,7 +110,7 @@ func (s *session) start() {
 func (s *session) ID() string { return s.id }
 
 func (s *session) Capabilities() agent.Capabilities {
-	return providerCapabilities()
+	return sessionCapabilities(providerCapabilities(), s.features)
 }
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
@@ -170,8 +201,9 @@ func (s *session) Submit(
 
 	s.mu.Lock()
 	s.submitting = false
-	if s.stateVersion == stateVersion {
+	if s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle {
 		s.workActive = true
+		s.activeSubmit = submissionID
 	}
 	s.mu.Unlock()
 
@@ -191,46 +223,48 @@ func (s *session) finishSubmit(outcomeUnknown bool, stateVersion uint64) {
 	}
 }
 
-func (s *session) Answer(
-	context.Context,
-	agent.InteractionRef,
-	agent.Answer,
-) (agent.InteractionReceipt, error) {
-	if err := s.requireOpen(); err != nil {
-		return agent.InteractionReceipt{}, err
-	}
-	return agent.InteractionReceipt{}, adapterError(
-		agent.ErrorUnsupported,
-		"answer_unsupported",
-		"Claude interactions are not supported by this adapter",
-		nil,
-	)
-}
-
 func (s *session) Interrupt(
-	context.Context,
-	agent.InterruptOptions,
+	ctx context.Context,
+	_ agent.InterruptOptions,
 ) (agent.InterruptReceipt, error) {
-	if err := s.requireOpen(); err != nil {
-		return agent.InterruptReceipt{}, err
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return agent.InterruptReceipt{}, adapterError(
+			agent.ErrorClosed,
+			"session_closed",
+			"session is closed",
+			nil,
+		)
 	}
-	return agent.InterruptReceipt{}, adapterError(
-		agent.ErrorUnsupported,
-		"interrupt_unsupported",
-		"Claude interrupts are not supported by this adapter",
-		nil,
-	)
+	target := s.activeSubmit
+	s.mu.Unlock()
+	if target == "" {
+		return agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, nil
+	}
+	if err := s.native.Interrupt(ctx, claude.InterruptOptions{}); err != nil {
+		return agent.InterruptReceipt{}, nativeOperationError("interrupt", err)
+	}
+	return agent.InterruptReceipt{
+		Target: target,
+		Result: agent.InterruptAcknowledged,
+	}, nil
 }
 
 func (s *session) Close(context.Context) error {
 	s.closeOnce.Do(func() {
-		s.closeForOperations()
+		invalidated := s.closeForOperations(true)
 		s.closeErr = s.native.Close()
 		if s.closeErr != nil {
 			s.closeErr = nativeOperationError("close", s.closeErr)
 		}
 		<-s.observationDone
-		s.complete(s.native.Err())
+		events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
+		_ = s.pushEvents(events)
+		cause := sessionTerminationError(s.native.Err())
+		s.terminate(cause)
+		_ = s.events.Close(cause)
+		s.provider.sessionClosed(s)
 	})
 	return s.closeErr
 }
@@ -243,33 +277,42 @@ func (s *session) Err() error {
 	return s.err
 }
 
-func (s *session) requireOpen() error {
+func (s *session) closeForOperations(explicit bool) []*pendingInteraction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed {
-		return adapterError(
-			agent.ErrorClosed,
-			"session_closed",
-			"session is closed",
-			nil,
-		)
-	}
-	return nil
-}
-
-func (s *session) closeForOperations() {
-	s.mu.Lock()
 	s.closed = true
-	s.mu.Unlock()
+	if explicit {
+		s.explicitClose = true
+	}
+	interactions := make([]*pendingInteraction, 0, len(s.interactions))
+	for _, interaction := range s.interactions {
+		interactions = append(interactions, interaction)
+	}
+	s.interactions = make(map[agent.InteractionRef]*pendingInteraction)
+	s.interactionRefs = make(map[string]agent.InteractionRef)
+	sort.Slice(interactions, func(left, right int) bool {
+		return interactions[left].sequence < interactions[right].sequence
+	})
+	return interactions
 }
 
 func (s *session) observe() {
 	defer close(s.observationDone)
 	cause := s.receiveUntilTerminal()
+	invalidated := s.closeForOperations(false)
+	events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
+	_ = s.pushEvents(events)
 	if cause != nil {
 		_ = s.native.Close()
 	}
-	s.complete(cause)
+	s.terminate(cause)
+	s.mu.Lock()
+	explicit := s.explicitClose
+	s.mu.Unlock()
+	if !explicit {
+		_ = s.events.Close(sessionTerminationError(cause))
+		s.provider.sessionClosed(s)
+	}
 }
 
 func (s *session) receiveUntilTerminal() error {
@@ -299,9 +342,10 @@ func (s *session) receiveUntilTerminal() error {
 	}
 }
 
-func (s *session) complete(cause error) {
+func (s *session) terminate(cause error) {
 	cause = sessionTerminationError(cause)
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.closed = true
 	if s.err == nil && cause != nil {
 		s.err = cause
@@ -310,9 +354,6 @@ func (s *session) complete(cause error) {
 		s.doneClosed = true
 		close(s.done)
 	}
-	s.mu.Unlock()
-	_ = s.events.Close(cause)
-	s.provider.sessionClosed(s)
 }
 
 func (s *session) pushEvents(events []agent.Event) error {
@@ -333,6 +374,9 @@ func (s *session) updateState(state agent.SessionState) *agent.SessionState {
 	next := state
 	s.state = &next
 	s.workActive = next != agent.StateIdle
+	if next == agent.StateIdle {
+		s.activeSubmit = ""
+	}
 	s.stateVersion++
 	return previous
 }
@@ -392,6 +436,8 @@ func textInput(input agent.Input) (string, error) {
 	return block.Text, nil
 }
 
-func effectiveFeatures(agent.Features) agent.EffectiveFeatures {
-	return agent.EffectiveFeatures{AgentQuestions: false}
+func effectiveFeatures(features agent.Features) agent.EffectiveFeatures {
+	return agent.EffectiveFeatures{
+		AgentQuestions: features.AgentQuestionsEnabled(),
+	}
 }

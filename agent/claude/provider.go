@@ -3,6 +3,7 @@ package agentclaude
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"sync"
 	"time"
@@ -123,7 +124,7 @@ func (p *Provider) open(
 	if err := p.reserveOpen(); err != nil {
 		return nil, err
 	}
-	nativeOptions := p.nativeOptions(options.Cwd, resumeID)
+	nativeOptions := p.nativeOptions(options.Cwd, resumeID, options.Features)
 	native, err := claude.Open(ctx, claude.SessionOptions(nativeOptions))
 	if err != nil {
 		p.finishOpen()
@@ -157,6 +158,7 @@ func (p *Provider) open(
 	created, err := newSession(
 		p,
 		native,
+		init,
 		init.SessionID,
 		options.Features,
 		buffered,
@@ -217,12 +219,32 @@ func (p *Provider) sessionClosed(closed *session) {
 }
 
 func providerCapabilities() agent.Capabilities {
-	return agent.Capabilities{agent.CapabilityTextInput: true}
+	return agent.Capabilities{
+		agent.CapabilityTextInput:  true,
+		agent.CapabilityPermission: true,
+		agent.CapabilityForm:       true,
+	}
 }
 
-func (p *Provider) nativeOptions(workDir, resumeID string) claude.Options {
+func sessionCapabilities(
+	base agent.Capabilities,
+	features agent.EffectiveFeatures,
+) agent.Capabilities {
+	capabilities := make(agent.Capabilities, len(base))
+	maps.Copy(capabilities, base)
+	if !features.AgentQuestions {
+		delete(capabilities, agent.CapabilityForm)
+	}
+	return capabilities
+}
+
+func (p *Provider) nativeOptions(
+	workDir string,
+	resumeID string,
+	features agent.Features,
+) claude.Options {
 	config := p.config
-	return claude.Options{
+	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
 		Initialize:        config.Initialize,
@@ -234,6 +256,10 @@ func (p *Provider) nativeOptions(workDir, resumeID string) claude.Options {
 		ShutdownTimeout:   config.ShutdownTimeout,
 		Limits:            config.Limits,
 	}
+	if !features.AgentQuestionsEnabled() {
+		options.DisallowedTools = []string{"AskUserQuestion"}
+	}
+	return options
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {

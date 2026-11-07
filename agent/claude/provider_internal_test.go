@@ -2,6 +2,7 @@ package agentclaude
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,7 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 	assert.JSONEq(t, `{"agent":"fixed"}`, string(provider.config.Initialize.Agents))
 	assert.Equal(t, "task", provider.config.Subagents.History[0].TaskID)
 
-	options := provider.nativeOptions("/workspace", "resume-id")
+	options := provider.nativeOptions("/workspace", "resume-id", agent.Features{})
 	assert.Equal(t, "claude-fixture", options.CLIPath)
 	assert.Equal(t, "/workspace", options.WorkDir)
 	assert.Equal(t, "resume-id", options.ResumeID)
@@ -55,6 +56,91 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 func TestNilEnvironmentStaysNil(t *testing.T) {
 	provider := New(Config{})
 	assert.Nil(t, provider.config.Env)
+}
+
+func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
+	provider := New(Config{})
+	enabled := true
+	disabled := false
+
+	assert.Empty(t,
+		provider.nativeOptions("/workspace", "", agent.Features{
+			AgentQuestions: &enabled,
+		}).DisallowedTools,
+	)
+	assert.Equal(t,
+		[]string{"AskUserQuestion"},
+		provider.nativeOptions("/workspace", "", agent.Features{
+			AgentQuestions: &disabled,
+		}).DisallowedTools,
+	)
+}
+
+func TestFormAnswersRejectsUnknownAndMultiSelectShapes(t *testing.T) {
+	questions := map[string]struct{}{"Which format?": {}}
+	tests := []struct {
+		name    string
+		content map[string]any
+		code    agent.ErrorCode
+		reason  string
+	}{
+		{
+			name:    "missing answers",
+			content: map[string]any{},
+			code:    agent.ErrorInvalidArgument,
+			reason:  "invalid_form_answer",
+		},
+		{
+			name: "unknown question",
+			content: map[string]any{"answers": map[string]any{
+				"Other?": "json",
+			}},
+			code:   agent.ErrorInvalidArgument,
+			reason: "unknown_form_question",
+		},
+		{
+			name: "multi select labels",
+			content: map[string]any{"answers": map[string]any{
+				"Which format?": []any{"json", "yaml"},
+			}},
+			code:   agent.ErrorUnsupported,
+			reason: "multi_select_form_answers_unsupported",
+		},
+		{
+			name: "non string answer",
+			content: map[string]any{"answers": map[string]any{
+				"Which format?": json.Number("1"),
+			}},
+			code:   agent.ErrorInvalidArgument,
+			reason: "invalid_form_answer",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := formAnswers(test.content, questions)
+			require.Error(t, err)
+			assert.Equal(t, test.code, agent.CodeOf(err))
+			var classified *agent.Error
+			require.ErrorAs(t, err, &classified)
+			assert.Equal(t, test.reason, classified.Reason)
+		})
+	}
+
+	answers, err := formAnswers(map[string]any{
+		"answers": map[string]any{"Which format?": "json"},
+	}, questions)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"Which format?": "json"}, answers)
+}
+
+func TestAnswerTerminalOutcomePreservesUnknownWrite(t *testing.T) {
+	interaction := &pendingInteraction{}
+	outcome, reason := answerTerminalOutcome(
+		interaction,
+		errors.Join(claude.ErrPermissionCancelled, claude.ErrUnknownOutcome),
+	)
+	assert.Equal(t, agent.InteractionFailed, outcome)
+	assert.Equal(t, "answer_outcome_unknown", reason)
 }
 
 func TestInitBufferRejectsExcessEventsAndBytes(t *testing.T) {

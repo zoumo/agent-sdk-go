@@ -45,8 +45,9 @@ func TestOpenConfirmsInitAndCloseKeepsProviderHealthy(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	assert.Equal(t, "native-open", session.ID())
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityTextInput))
-	assert.False(t, session.Capabilities().Supports(agent.CapabilityPermission))
-	assert.Equal(t, agent.EffectiveFeatures{AgentQuestions: false}, session.EffectiveFeatures())
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityPermission))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
+	assert.Equal(t, agent.EffectiveFeatures{AgentQuestions: true}, session.EffectiveFeatures())
 
 	stream, err := session.Events()
 	require.NoError(t, err)
@@ -83,13 +84,13 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 	firstFrames = append(firstFrames,
 		`<{"type":"system","subtype":"init","session_id":"native-first","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-		`<{"type":"assistant","session_id":"native-first","message":{"id":"first-message","content":[{"type":"text","text":"first"}]}}`,
+		`<{"type":"assistant","session_id":"native-first","message":{"id":"first-message","content":[{"type":"text","text":"first","apiBlockIndex":0}]}}`,
 	)
 	secondFrames := append([]string(nil), mockClaudeInit...)
 	secondFrames = append(secondFrames,
 		`<{"type":"system","subtype":"init","session_id":"native-second","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-		`<{"type":"assistant","session_id":"native-second","message":{"id":"second-message","content":[{"type":"text","text":"second"}]}}`,
+		`<{"type":"assistant","session_id":"native-second","message":{"id":"second-message","content":[{"type":"text","text":"second","apiBlockIndex":0}]}}`,
 	)
 	firstPeer := prepareClaudePeer(t, "passed", firstFrames...)
 	secondPeer := prepareClaudePeer(t, "passed", secondFrames...)
@@ -120,7 +121,7 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, event.Type())
-	assert.Equal(t, "second-message", event.ItemID)
+	assert.Equal(t, "second-message:0", event.ItemID)
 
 	stopErr := provider.Stop(ctx)
 	require.Error(t, stopErr)
@@ -136,9 +137,12 @@ func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
 	launcher, err := peerSession.Launcher("main")
 	require.NoError(t, err)
 	provider := agentclaude.New(agentclaude.Config{
-		CLIPath:           launcher,
-		Env:               peerSession.Env,
-		InitializeTimeout: time.Second,
+		CLIPath: launcher,
+		Env:     peerSession.Env,
+		// This budget also bounds the native initialize control handshake.
+		// Keep it above process-startup variance so the test exercises the
+		// adapter's wait for the separate system/init frame.
+		InitializeTimeout: 3 * time.Second,
 	})
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 

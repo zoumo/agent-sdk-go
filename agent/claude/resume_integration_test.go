@@ -20,7 +20,7 @@ func TestResumeConfirmsNativeIdentityAndDropsReplayContent(t *testing.T) {
 		`<{"type":"system","subtype":"init","session_id":"resume-target","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 		`<{"type":"assistant","session_id":"resume-target","isReplay":true,"message":{"id":"saved-message","content":[{"type":"text","text":"saved"}]}}`,
-		`<{"type":"assistant","session_id":"resume-target","message":{"id":"live-message","content":[{"type":"text","text":"live"}]}}`,
+		`<{"type":"assistant","session_id":"resume-target","message":{"id":"live-message","content":[{"type":"text","text":"live","apiBlockIndex":0}]}}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -41,7 +41,7 @@ func TestResumeConfirmsNativeIdentityAndDropsReplayContent(t *testing.T) {
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, event.Type())
-	assert.Equal(t, "live-message", event.ItemID)
+	assert.Equal(t, "live-message:0", event.ItemID)
 }
 
 func TestResumeRejectsMismatchedInitIdentityAndCWD(t *testing.T) {

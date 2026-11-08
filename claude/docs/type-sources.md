@@ -34,6 +34,14 @@ than proof that any installed CLI accepts this Go implementation. The
 fixtures are original synthetic data and do not invoke a model. The TypeScript
 package remains **non-MIT**; its contents are not redistributed.
 
+For `AskUserQuestion`, the reviewed user-input documentation permits a string
+array or a comma-separated string for multi-select answers. The TypeScript
+0.3.302 `sdk-tools.d.ts` declarations inspected separately declare answer values
+as strings and describe multi-select output as comma-separated. This repository
+therefore uses the comma-joined string for native writes and does not claim live
+validation of native array answers. The inspected `sdk-tools.d.ts` SHA256 is
+`25fa8caa18dacde752ebede11d55dccfc5f8c6ff011478cf92da49420e2690dc`.
+
 Additional inspected type-organization file bytes (same pinned commits):
 
 | File | SHA256 |

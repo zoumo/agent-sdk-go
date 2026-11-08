@@ -6,6 +6,10 @@ A native Go client for the Codex app-server protocol.
 
 Connections and execution live in the native `codex` package. Events, native models,
 and optional values live in `github.com/zoumo/agent-sdk-go/codex/types`.
+The optional [unified Codex adapter](../agent/codex/doc.go) layers the same
+`agent.Provider`/`agent.Session` contract over this SDK for applications that also
+use Claude. It does not replace the native protocol or history queries; use
+`agentcodex.Provider.NativeClient()` only for same-connection read-only queries.
 
 ## Compatibility
 
@@ -488,8 +492,9 @@ or uncertain dispatch performs bounded detachment; failed cleanup preserves an
 ownership fence. Shared clients remain open; owned processes are reaped.
 
 `Client.ResumeThread(ctx, types.ThreadResumeParams{ThreadID: id})` explicitly
-resumes a native thread. It does not create a Session or replay history through
-Session.Receive. `Client.UnsubscribeThread` releases that native attachment.
+resumes a native thread. It does not create a Session or project saved history
+into Session.Receive events. `Client.UnsubscribeThread` releases that native
+attachment.
 
 `Client.ListThreads`, `Client.ReadThread`, `Client.ListThreadTurns` and
 `Client.ListThreadItems` query native metadata and saved content without Open or

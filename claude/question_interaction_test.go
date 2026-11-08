@@ -55,15 +55,23 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		require.NoError(t, err)
 	}
 	custom := "自由文本 / custom format"
-	updated, err := questions.WithAnswers(map[string]QuestionAnswer{
+	arrayUpdated, err := questions.WithAnswers(map[string]QuestionAnswer{
 		questions.Questions[0].Question: {Text: &custom},
 		questions.Questions[1].Question: {Labels: []string{"Intro", "End"}},
 	})
 	require.NoError(t, err)
-	require.ErrorIs(t, p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated}), ErrUnsupported)
-	require.NoError(t, p.Context().Err())
-	selected := "Intro, End"
-	updated, err = questions.WithAnswers(map[string]QuestionAnswer{questions.Questions[0].Question: {Text: &custom}, questions.Questions[1].Question: {Text: &selected}})
+	{
+		err := p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: arrayUpdated})
+		var dispatch *DispatchError
+		require.ErrorAs(t, err, &dispatch)
+		require.Equal(t, NotSent, dispatch.State)
+		require.ErrorIs(t, err, ErrUnsupported)
+	}
+	joined := "Intro, End"
+	updated, err := questions.WithAnswers(map[string]QuestionAnswer{
+		questions.Questions[0].Question: {Text: &custom},
+		questions.Questions[1].Question: {Text: &joined},
+	})
 	require.NoError(t, err)
 	{
 		err := p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated})
@@ -93,6 +101,7 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 	}
 	require.Equal(t, types.PermissionAllow, decision.Behavior, "questions or answers changed")
 	require.Equal(t, custom, *answered.Answers[questions.Questions[0].Question].Text, "questions or answers changed")
+	require.Equal(t, joined, *answered.Answers[questions.Questions[1].Question].Text, "multi-select answers changed")
 	require.Equal(t, answered.Questions, questions.Questions, "questions or answers changed")
 	var got, want any
 	{

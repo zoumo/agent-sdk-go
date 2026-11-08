@@ -65,10 +65,14 @@ The former `AskForApprovalValue` names remain deprecated aliases. Native
 
 ### Native resume and independent history
 
-Load, LoadOptions, LoadState and ReceivedLoad have been removed. Codex retains
-Client.ResumeThread and native thread/turn/item query RPCs. Claude retains Open's
-ResumeID and exposes independent package-level saved-history queries. Resume does not promise
-SDK history replay. Historical data cannot create answer authority.
+Load, LoadOptions, LoadState and ReceivedLoad have been removed. The undocumented
+SDK history replay projection, its `HistoryOptions` / `HistoryError` types, and
+`Event.History` / `HistorySource` are also gone. Use native query parameter types
+and Claude `SessionQueryError` instead. Codex retains `Client.ResumeThread`,
+`ThreadResumeParams.History`, and native thread/turn/item query RPCs. Claude
+retains `Open`'s `ResumeID`, `Event.IsReplay`, and independent package-level
+saved-history queries. Resume does not import or project saved content as live
+events. Historical data cannot create answer authority.
 
 ### Resources and close
 
@@ -77,10 +81,10 @@ drainable. Abort explicitly discards unread records. Done reports termination,
 Err retains its first cause, and Close reports cleanup errors separately.
 
 Each Session owns one dynamically growing FIFO, limited by available memory.
-History producers are bounded independently; this does not cap total unread
-backlog or guarantee crash/OOM delivery. Configure frame, pending call/control,
-request identity, membership, parent knowledge, quarantine and history read/index
-bounds separately. Removed Claude resource options are PermissionWorkers,
+Saved-history readers have their own read/index bounds and never feed the Session
+FIFO. This does not cap total unread backlog or guarantee crash/OOM delivery.
+Configure frame, pending call/control, request identity, membership, parent
+knowledge, quarantine and saved-history query bounds separately. Removed Claude resource options are PermissionWorkers,
 MaxDedupEntries, MaxRuns, MaxCreationEntries and MaxPendingRecords; they no longer
 back hidden runtimes. Codex Limits.Subscriptions now bounds concurrent main
 Session owners; deprecated EventQueue/RequestQueue/RequestTimeout do not allocate

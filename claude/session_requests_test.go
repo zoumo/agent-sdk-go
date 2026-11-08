@@ -286,15 +286,28 @@ func TestSessionPermissionNotSentKeepsOriginalHandle(t *testing.T) {
 func TestSessionQuestionRejectsUnverifiedAnswersWithoutConsumingHandle(t *testing.T) {
 	s := openSessionFixture(t)
 	p := sessionPermission(t, s, "question", "AskUserQuestion", `{"questions":[{"question":"Full text?","options":[{"label":"A"}],"multiSelect":true}]}`)
-	for _, input := range []string{
-		`{"questions":[{"question":"Full text?","options":[],"multiSelect":true}],"answers":{"Full text?":["A"]}}`,
-		`{"questions":[{"question":"Full text?","options":[]}],"response":"output-only"}`,
+	for _, input := range []struct {
+		data string
+		want error
+	}{
+		{
+			data: `{"questions":[{"question":"Full text?","options":[],"multiSelect":false}],"answers":{"Full text?":["A"]}}`,
+			want: ErrInvalidPermissionAnswer,
+		},
+		{
+			data: `{"questions":[{"question":"Full text?","options":[],"multiSelect":true}],"answers":{"Full text?":["A"]}}`,
+			want: ErrUnsupported,
+		},
+		{
+			data: `{"questions":[{"question":"Full text?","options":[]}],"response":"output-only"}`,
+			want: ErrUnsupported,
+		},
 	} {
-		err := p.Approve(context.Background(), ApprovalOptions{UpdatedInput: json.RawMessage(input)})
+		err := p.Approve(context.Background(), ApprovalOptions{UpdatedInput: json.RawMessage(input.data)})
 		var dispatch *DispatchError
 		require.ErrorAs(t, err, &dispatch)
 		require.Equal(t, NotSent, dispatch.State)
-		require.ErrorIs(t, err, ErrUnsupported)
+		require.ErrorIs(t, err, input.want)
 	}
 	err := p.Answer(context.Background(), QuestionAnswers{Answers: map[string]string{"header": "A"}})
 	require.ErrorIs(t, err, ErrInvalidPermissionAnswer)

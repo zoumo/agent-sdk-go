@@ -37,7 +37,6 @@ func TestSessionResumePreservesIdentityLiveOrderAndSeparateResponse(t *testing.T
 		require.NoError(t, err)
 		require.Equal(t, method, got.Event.Method)
 		require.Equal(t, "live", got.Origin)
-		require.Nil(t, got.Event.History)
 		require.Nil(t, got.Request)
 	}
 	_, err = s.Receive(context.Background())

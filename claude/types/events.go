@@ -13,8 +13,8 @@ import (
 // Event retains the complete JSON frame (excluding its newline) alongside typed
 // views. Unknown message kinds, fields and content blocks remain in Raw.
 // Origin is the native MessageOrigin object. SDK-derived records are defined in
-// the root package. SDK-only History evidence is excluded from native JSON.
-// Raw values belong to the caller and are never reused by the reader.
+// the root package. Raw values belong to the caller and are never reused by the
+// reader.
 type Event struct {
 	// AgentID is the native envelope identity, not a session or tool-use ID.
 	AgentID         *string                 `json:"agent_id,omitempty"`
@@ -43,20 +43,6 @@ type Event struct {
 	Cancel          *ControlCancelRequest   `json:"-"`
 	RateLimit       *RateLimitEvent         `json:"-"`
 	Reset           *ConversationResetEvent `json:"-"`
-	// History is SDK-only evidence for a retained transcript entry projected by
-	// transcript projection. It is nil for live frames and is never encoded into native JSON.
-	History *HistorySource `json:"-"`
-}
-
-// HistorySource retains the exact transcript bytes and its chain identity.
-// Event.Raw is the projected native-shaped frame, not this original transcript.
-type HistorySource struct {
-	UUID       string
-	ParentUUID string
-	SessionID  string
-	CWD        string
-	Timestamp  string
-	Raw        json.RawMessage
 }
 
 // SystemEvent includes session initialization and other system notifications.

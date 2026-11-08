@@ -529,9 +529,9 @@ func (d *discoveryReader) agent(path, name string) {
 	d.page.Records = append(d.page.Records, r)
 }
 
-// Reuse the history module's pure duplicate-key/syntax validator, never its
-// main-chain, terminal, replay or source-stability gates. encoding/json alone
-// replaces invalid UTF-8 and unpaired UTF-16 escapes, so check those first.
+// Reuse the saved-history duplicate-key/syntax validator, not its main-chain or
+// source-stability gates. encoding/json alone replaces invalid UTF-8 and
+// unpaired UTF-16 escapes, so check those first.
 func validateDiscoveryJSON(raw []byte) error {
 	if !utf8.Valid(raw) {
 		return errors.New("invalid UTF-8 metadata")

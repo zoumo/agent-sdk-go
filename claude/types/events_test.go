@@ -6,12 +6,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
 )
+
+func TestEventDoesNotExposeHistoryProjection(t *testing.T) {
+	_, found := reflect.TypeFor[types.Event]().FieldByName("History")
+	require.False(t, found, "Event.History must not expose a saved-history event projection")
+}
 
 // This test package deliberately imports only types, never the runtime client.
 func TestParseEventViewsAndRawOwnership(t *testing.T) {

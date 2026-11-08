@@ -287,7 +287,6 @@ func codexSessionTarget(t *testing.T, scenario string) {
 		for _, r := range all {
 			if r.Event != nil && r.Event.Method == "future/repeated" {
 				require.Equal(t, "live", r.Origin)
-				require.Nil(t, r.Event.History)
 				require.Contains(t, string(r.Raw), `"n":9007199254740993`)
 				raw = append(raw, string(r.Raw))
 			}
@@ -1535,7 +1534,6 @@ func checkClaudeQueryAlongsideSession(s *NativeIntegrationSuite) {
 	live := claudeUntil(t, session, "fixture_interrupt")
 	for _, r := range live {
 		if r.Event != nil {
-			require.Nil(t, r.Event.History)
 			require.NotContains(t, string(r.Raw), `"uuid":"saved"`)
 		}
 	}

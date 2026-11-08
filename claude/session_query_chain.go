@@ -12,7 +12,14 @@ import (
 )
 
 type queryRecord struct {
-	historyRecord
+	Type       string
+	UUID       string
+	ParentUUID string
+	SessionID  string
+	Timestamp  string
+	Message    json.RawMessage
+	Raw        json.RawMessage
+
 	parent, timestamp   *string
 	side, meta          bool
 	team, agent, source string
@@ -67,7 +74,6 @@ func parseQueryTranscript(ctx context.Context, data []byte, session string, o Se
 		case "user", "assistant", "system", "progress", "attachment":
 		case "api-request-shape", "api-request-blob", "api-request", "cost-state":
 			// Native request/cost bookkeeping is not a conversation-chain entry.
-			// Keep this query-only: replay's frozen-tail allowlist is independent.
 			continue
 		default:
 			if transcriptMetadata(*kind) {

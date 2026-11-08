@@ -30,9 +30,11 @@ then remove the caller-owned session after every SDK client and peer exits. The
 migrated synthetic, single-case and 72-slot gate checks remain in
 `tests/simulation/simulate`.
 
-The remaining gates check module and native dependency boundaries, standard-library-only
-types packages, native inventory, reproducible Codex generation, unit/subprocess tests
-and offline examples. `GOMAXPROCS=2`, package scheduling `-p=1` and
+The remaining gates check module and native dependency boundaries, the
+standard-library-only native types and `agent` core, provider-specific adapter
+imports, the absence of reverse native/adapter/MASS imports, native inventory,
+reproducible Codex generation, unit/subprocess tests and offline examples. `GOMAXPROCS=2`,
+package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
 The external tool owns official driver/package checks. Hosted CI builds the
@@ -116,6 +118,15 @@ release. See the [event delivery contract](../harness/modules/native-session/des
 interfaces through synthetic protocol peers. It retains original-handle authority,
 unknown fields, cancellation, ordering, drain, backpressure and error classification.
 Testify suites run sequentially; worker outcomes return to the owning test goroutine.
+
+The optional unified layer has separate public-contract, lifecycle, event, interaction
+and dependency tests under `agent/`, `agent/codex/` and `agent/claude/`. Adapter
+integration tests launch only synthetic protocol peers. `ExampleProvider` runs the
+provider-neutral open/resume/submit/stream/answer/close flow twice without a CLI:
+
+```sh
+go test -run '^ExampleProvider$' ./agent
+```
 
 `NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
 app-server trace and Claude temporary saved storage. Native focused tests retain

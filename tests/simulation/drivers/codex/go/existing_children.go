@@ -155,7 +155,7 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 		if e != nil {
 			return e
 		}
-		if got.Event == nil || got.Request != nil || got.Observation != nil || got.Origin != "live" || got.Event.History != nil || got.Event.DecodeError != nil {
+		if got.Event == nil || got.Request != nil || got.Observation != nil || got.Origin != "live" || got.Event.DecodeError != nil {
 			return errors.New("history discovery generated live authority or synthetic events")
 		}
 		if count >= len(expectedEvents) || !equal(canonical(got.Raw), canonical(expectedEvents[count])) {

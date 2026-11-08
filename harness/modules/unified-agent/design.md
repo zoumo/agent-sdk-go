@@ -798,6 +798,7 @@ type UsageCost struct {
 
 type UsageUpdatePayload struct {
     Used int64
+    // Size 为 0 表示 provider 未报告 context-window 大小，不表示测得窗口为零。
     Size int64
     Cost *UsageCost
 }

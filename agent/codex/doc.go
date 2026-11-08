@@ -22,6 +22,8 @@
 // support accepted answers; decline and cancel are rejected because their native
 // settlement is not proven. Interaction references are opaque, session-scoped,
 // one-shot, and remain pending until a native lifecycle fact closes them.
+// A submit with unknown native outcome remains unsettled until native turn
+// evidence arrives, so another Submit is rejected rather than risking a retry.
 //
 // The provider declares text input and permission capabilities. It declares form
 // support only when the native experimental API is enabled, and a session removes

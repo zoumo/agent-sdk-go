@@ -62,7 +62,7 @@ func (s *session) convertReceived(received claude.Received) ([]agent.Event, erro
 	case claude.ReceivedRequest:
 		return s.convertRequest(received)
 	case claude.ReceivedObservation:
-		return nil, nil
+		return s.observationGap(received)
 	default:
 		return nil, nil
 	}
@@ -95,7 +95,7 @@ func (s *session) convertEvent(received claude.Received) ([]agent.Event, error) 
 		events, err = s.resultEvent(received)
 	case event.Cancel != nil:
 		events, err = s.cancelInteraction(received)
-	case ignorableClaudeEvent(event):
+	case protocolControlEvent(event):
 		return nil, nil
 	default:
 		events, err = s.gap(
@@ -119,20 +119,8 @@ func (s *session) convertEvent(received claude.Received) ([]agent.Event, error) 
 	return events, nil
 }
 
-func ignorableClaudeEvent(event *claude.Event) bool {
-	if event.Response != nil {
-		return true
-	}
-	if event.Type != "system" {
-		return false
-	}
-	switch event.Subtype {
-	case "status", "thinking_tokens", "hook_started", "hook_progress", "hook_response",
-		"api_retry", "compact_boundary":
-		return true
-	default:
-		return false
-	}
+func protocolControlEvent(event *claude.Event) bool {
+	return event.Response != nil
 }
 
 func (s *session) streamEvent(received claude.Received) ([]agent.Event, error) {
@@ -373,19 +361,22 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 		)
 	}
 	parent := claudeParent(received)
-	duplicate, err := s.markAssistantFrame(parent, received.Event.UUID)
-	if err != nil {
-		return nil, err
-	}
-	if duplicate {
-		return nil, nil
-	}
-	if assistantAborted(received.Event.Raw) {
-		return nil, nil
-	}
 	response := message.ID
 	if response == "" {
 		response = s.response(parent)
+	}
+	if response != "" {
+		if err := s.beginResponse(parent, response); err != nil {
+			return nil, err
+		}
+	}
+	if assistantAborted(received.Event.Raw) {
+		return s.gap(
+			received,
+			"assistant_aborted",
+			"Claude assistant frame was aborted and is not a complete message",
+			map[string]any{"uuid": received.Event.UUID},
+		)
 	}
 	if response == "" {
 		return s.gap(
@@ -458,8 +449,24 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 				events = append(events, gapEvents...)
 				continue
 			}
-			if state.completed || text == "" {
+			if state.completed {
+				if state.completedText != text {
+					gapEvents, gapErr := s.gap(
+						received,
+						"assistant_block_reopened",
+						"Claude assistant block changed after its complete content was delivered",
+						map[string]any{"blockType": kind},
+					)
+					if gapErr != nil {
+						return nil, gapErr
+					}
+					events = append(events, gapEvents...)
+				}
+				continue
+			}
+			if text == "" {
 				state.completed = true
+				state.completedText = text
 				continue
 			}
 			var payload agent.Payload = agent.AgentMessage{
@@ -483,6 +490,7 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 				return nil, eventErr
 			}
 			state.completed = true
+			state.completedText = text
 			events = append(events, event)
 			continue
 		}
@@ -621,20 +629,208 @@ func (s *session) assistantToolUse(
 func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 	message := received.Event.User
 	if message == nil {
-		return nil, nil
+		return s.gap(
+			received,
+			"invalid_user_event",
+			"Claude user event has no message",
+			nil,
+		)
 	}
-	var events []agent.Event
-	for _, block := range message.Content.Blocks {
-		if block.Type != "tool_result" || block.ToolResult == nil {
-			continue
+	if message.Content.Text != nil {
+		if len(message.Content.Blocks) != 0 {
+			return s.gap(
+				received,
+				"user_message_content_ambiguous",
+				"Claude user message contains both text and block content",
+				nil,
+			)
 		}
-		resultEvents, err := s.toolResultEvent(received, block.ToolResult)
+		return s.userMessageEvent(
+			received,
+			message,
+			[]agent.ContentBlock{agent.TextBlock{Text: *message.Content.Text}},
+		)
+	}
+	if len(message.Content.Blocks) == 0 {
+		return s.gap(
+			received,
+			"user_message_content_missing",
+			"Claude user message has no content",
+			nil,
+		)
+	}
+
+	var events []agent.Event
+	var textContent []agent.ContentBlock
+	appendGap := func(reason, messageText string, extras map[string]any) error {
+		gapEvents, gapErr := s.gap(received, reason, messageText, extras)
+		if gapErr != nil {
+			return gapErr
+		}
+		events = append(events, gapEvents...)
+		return nil
+	}
+
+	for index, block := range message.Content.Blocks {
+		switch block.Type {
+		case "text":
+			if block.Text == nil {
+				if err := appendGap(
+					"user_text_block_missing",
+					"Claude user text block cannot be decoded",
+					map[string]any{"blockIndex": index},
+				); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			textContent = append(
+				textContent,
+				agent.TextBlock{Text: block.Text.Text},
+			)
+		case "tool_result":
+			if block.ToolResult == nil {
+				if err := appendGap(
+					"tool_result_block_missing",
+					"Claude tool_result block cannot be decoded",
+					map[string]any{"blockIndex": index},
+				); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			resultEvents, err := s.toolResultEvent(received, block.ToolResult)
+			if err != nil {
+				return nil, err
+			}
+			events = append(events, resultEvents...)
+		default:
+			if err := appendGap(
+				"user_message_content_unsupported",
+				"Claude user message content block is not supported by this adapter",
+				map[string]any{"blockType": block.Type, "blockIndex": index},
+			); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if len(textContent) != 0 {
+		messageEvents, err := s.userMessageEvent(received, message, textContent)
 		if err != nil {
 			return nil, err
 		}
-		events = append(events, resultEvents...)
+		events = append(messageEvents, events...)
+	}
+	if len(events) == 0 {
+		return s.gap(
+			received,
+			"user_message_content_missing",
+			"Claude user message has no representable content",
+			nil,
+		)
 	}
 	return events, nil
+}
+
+func (s *session) userMessageEvent(
+	received claude.Received,
+	message *claude.Message,
+	content []agent.ContentBlock,
+) ([]agent.Event, error) {
+	messageID := claudeUserMessageID(received.Event, message)
+	if messageID == "" {
+		return s.gap(
+			received,
+			"user_message_identity_missing",
+			"Claude user message has no stable native identity",
+			nil,
+		)
+	}
+	event, err := s.newEvent(
+		received,
+		messageID,
+		agent.UserMessage{
+			MessageID: messageID,
+			Content:   content,
+		},
+		nativeEventTime(received.Raw),
+		map[string]any{"blockCount": len(content)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return []agent.Event{event}, nil
+}
+
+func claudeUserMessageID(event *claude.Event, message *claude.Message) string {
+	if message != nil && message.ID != "" {
+		return message.ID
+	}
+	if event == nil {
+		return ""
+	}
+	if event.UserMessageUUID != nil && *event.UserMessageUUID != "" {
+		return *event.UserMessageUUID
+	}
+	return event.UUID
+}
+
+func (s *session) observationGap(
+	received claude.Received,
+) ([]agent.Event, error) {
+	observation := received.Observation
+	if observation == nil {
+		return s.gap(
+			received,
+			"native_observation_missing",
+			"Claude relationship observation has no evidence",
+			nil,
+		)
+	}
+	if confirmedRelationship(observation.Reason) {
+		return nil, nil
+	}
+	extras := map[string]any{
+		"observationReason": observation.Reason,
+		"evidence":          observation.Evidence,
+		"source":            subagentIdentityMeta(observation.Source),
+	}
+	if observation.Parent != nil {
+		extras["parent"] = subagentIdentityMeta(*observation.Parent)
+	}
+	return s.gap(
+		received,
+		"native_relationship_gap",
+		"Claude relationship evidence cannot be represented as a unified normal event",
+		extras,
+	)
+}
+
+func confirmedRelationship(reason string) bool {
+	return reason == "member-confirmed" || reason == "parent-confirmed"
+}
+
+func subagentIdentityMeta(identity claude.SubagentIdentity) map[string]any {
+	meta := map[string]any{}
+	if identity.AssociationID != "" {
+		meta["associationId"] = identity.AssociationID
+	}
+	if identity.RunID != "" {
+		meta["runId"] = identity.RunID
+	}
+	if identity.SessionID != "" {
+		meta["sessionId"] = identity.SessionID
+	}
+	if identity.AgentID != "" {
+		meta["agentId"] = identity.AgentID
+	}
+	if identity.TaskID != "" {
+		meta["taskId"] = identity.TaskID
+	}
+	if identity.ToolUseID != "" {
+		meta["toolUseId"] = identity.ToolUseID
+	}
+	return meta
 }
 
 func (s *session) toolResultEvent(
@@ -936,11 +1132,11 @@ func (s *session) usageEvents(received claude.Received) ([]agent.Event, error) {
 		}
 		key, usage = s.usage.model, value
 	}
-	if usage.ContextWindow <= 0 {
+	if usage.ContextWindow < 0 {
 		return s.gap(
 			received,
-			"usage_window_missing",
-			"Claude result does not prove a context-window size",
+			"usage_values_invalid",
+			"Claude result contains a negative context-window size",
 			map[string]any{"model": key},
 		)
 	}
@@ -973,7 +1169,10 @@ func (s *session) usageEvents(received claude.Received) ([]agent.Event, error) {
 		"",
 		payload,
 		nativeEventTime(received.Raw),
-		map[string]any{"model": key},
+		map[string]any{
+			"model":               key,
+			"contextWindowAbsent": usage.ContextWindow == 0,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -1141,11 +1340,22 @@ func (s *session) newEvent(
 		if received.Event.UUID != "" {
 			claudeMeta["uuid"] = received.Event.UUID
 		}
+		if received.Event.UserMessageUUID != nil {
+			claudeMeta["userMessageUuid"] = *received.Event.UserMessageUUID
+		}
 		if received.Event.AgentID != nil {
 			claudeMeta["agentId"] = *received.Event.AgentID
 		}
 		if received.Event.ParentToolUseID != nil {
 			claudeMeta["parentToolUseId"] = *received.Event.ParentToolUseID
+		}
+	}
+	if source := subagentIdentityMeta(received.Source); len(source) != 0 {
+		claudeMeta["source"] = source
+	}
+	if received.Parent != nil {
+		if parent := subagentIdentityMeta(*received.Parent); len(parent) != 0 {
+			claudeMeta["parent"] = parent
 		}
 	}
 	for key, value := range extras {

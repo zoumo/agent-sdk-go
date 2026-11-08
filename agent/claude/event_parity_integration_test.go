@@ -198,19 +198,18 @@ func TestClaudeAssistantBlockIdentityGapsWithoutGuessing(t *testing.T) {
 	assertGap(t, orphan, "tool_result_without_call")
 }
 
-func TestClaudeAssistantFrameDeduplicationRequiresUUID(t *testing.T) {
+func TestClaudeUserTextPreservesNativeMessageIdentity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	frame := `<{"type":"assistant","session_id":"native-dedupe","uuid":"same-frame","timestamp":"2026-11-07T13:10:00Z","message":{"id":"response-dedupe","content":[{"type":"text","text":"once"}]}}`
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
-		`<{"type":"system","subtype":"init","session_id":"native-dedupe","cwd":`+
+		`<{"type":"system","subtype":"init","session_id":"native-user","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-dedupe"}}}`,
-		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
-		frame,
-		frame,
+		`<{"type":"user","session_id":"native-user","uuid":"event-uuid",`+
+			`"user_message_uuid":"user-message-uuid",`+
+			`"timestamp":"2026-11-07T13:09:00Z",`+
+			`"message":{"id":"user-message","role":"user","content":"child prompt"}}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -225,8 +224,54 @@ func TestClaudeAssistantFrameDeduplicationRequiresUUID(t *testing.T) {
 	require.NoError(t, err)
 
 	message := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.EventAgentMessage, message.Type())
-	assert.Equal(t, "response-dedupe:0", message.ItemID)
+	assert.Equal(t, agent.EventUserMessage, message.Type())
+	assert.Equal(t, "user-message", message.ItemID)
+	assert.Equal(t, time.Date(2026, 11, 7, 13, 9, 0, 0, time.UTC), message.Time)
+	assert.Equal(t, agent.UserMessage{
+		MessageID: "user-message",
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "child prompt"}},
+	}, message.Payload)
+	meta := requireClaudeMeta(t, message)
+	assert.Equal(t, "event-uuid", meta["uuid"])
+	assert.Equal(t, "user-message-uuid", meta["userMessageUuid"])
+}
+
+func TestClaudeAssistantFrameDeduplicationIsResponseScoped(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frame := `<{"type":"assistant","session_id":"native-dedupe","uuid":"same-frame","timestamp":"2026-11-07T13:10:00Z","message":{"id":"response-dedupe","content":[{"type":"text","text":"once"}]}}`
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-dedupe","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-dedupe"}}}`,
+		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
+		frame,
+		frame,
+		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"late"}}}`,
+		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-new"}}}`,
+		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
+		`<{"type":"assistant","session_id":"native-dedupe","uuid":"same-frame","timestamp":"2026-11-07T13:10:01Z","message":{"id":"response-new","content":[{"type":"text","text":"next"}]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	first := nextEvent(t, ctx, stream)
+	second := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentMessage, first.Type())
+	assert.Equal(t, agent.EventAgentMessage, second.Type())
+	assert.Equal(t, "response-dedupe:0", first.ItemID)
+	assert.Equal(t, "response-new:0", second.ItemID)
 }
 
 func TestClaudeAssistantFrameReusesStreamedResponseIdentity(t *testing.T) {

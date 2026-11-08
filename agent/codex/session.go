@@ -31,15 +31,19 @@ type session struct {
 	closed        bool
 	explicitClose bool
 	submitting    bool
-	activeTurn    string
-	startedTurn   string
-	idleTurn      string
-	lastFinished  string
-	state         *agent.SessionState
-	interactions  map[agent.InteractionRef]*pendingInteraction
-	requestRefs   map[string]agent.InteractionRef
-	done          chan struct{}
-	err           error
+	submitUnknown bool
+	// workEpoch prevents a late submit failure from rearming unknown state after
+	// the observer has already accepted native turn evidence.
+	workEpoch    uint64
+	activeTurn   string
+	startedTurn  string
+	idleTurn     string
+	lastFinished string
+	state        *agent.SessionState
+	interactions map[agent.InteractionRef]*pendingInteraction
+	requestRefs  map[string]agent.InteractionRef
+	done         chan struct{}
+	err          error
 
 	parentMu sync.RWMutex
 	parents  map[string]string
@@ -123,7 +127,7 @@ func (s *session) Submit(
 			nil,
 		)
 	}
-	if s.submitting || s.activeTurn != "" {
+	if s.hasUnsettledWorkLocked() {
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorFailedPrecondition,
@@ -133,6 +137,7 @@ func (s *session) Submit(
 		)
 	}
 	s.submitting = true
+	submitEpoch := s.workEpoch
 	s.mu.Unlock()
 
 	submission, submitErr := s.native.Submit(ctx, nativeInput)
@@ -140,11 +145,16 @@ func (s *session) Submit(
 	s.mu.Lock()
 	s.submitting = false
 	if submitErr != nil {
+		convertedErr := nativeOperationError("submit", submitErr)
+		s.recordSubmitErrorLocked(submitErr, submitEpoch)
 		s.mu.Unlock()
-		return agent.InputReceipt{}, nativeOperationError("submit", submitErr)
+		return agent.InputReceipt{}, convertedErr
 	}
 	turnID := submission.Response.Turn.ID
 	if turnID == "" {
+		if s.workEpoch == submitEpoch {
+			s.submitUnknown = true
+		}
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
@@ -166,6 +176,32 @@ func (s *session) Submit(
 			NativeAccepted: &accepted,
 		},
 	}, nil
+}
+
+func (s *session) hasUnsettledWorkLocked() bool {
+	return s.submitting || s.submitUnknown || s.activeTurn != ""
+}
+
+func (s *session) recordSubmitErrorLocked(err error, epoch uint64) {
+	if submitOutcomeUnknown(err) && s.workEpoch == epoch {
+		s.submitUnknown = true
+	}
+}
+
+func (s *session) noteWorkEvidenceLocked() {
+	s.workEpoch++
+	s.submitUnknown = false
+}
+
+func submitOutcomeUnknown(err error) bool {
+	if err == nil || errors.Is(err, codex.ErrInvalidInput) {
+		return false
+	}
+	var callErr *codex.CallError
+	if errors.As(err, &callErr) {
+		return callErr.Dispatch == codex.OutcomeUnknown
+	}
+	return true
 }
 
 func (s *session) Answer(

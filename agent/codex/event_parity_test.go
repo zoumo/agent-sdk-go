@@ -37,7 +37,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100700,"item":{"type":"agentMessage","id":"agent","text":"answer complete","phase":"final_answer","future":{"big":9007199254740993}}}}`,
 		`<{"method":"turn/plan/updated","params":{"threadId":"root-a","turnId":"turn-a","explanation":"working","plan":[{"step":"inspect","status":"completed"},{"step":"change","status":"inProgress"}]}}`,
 		`<{"method":"thread/name/updated","params":{"threadId":"root-a","threadName":"Synthetic title"}}`,
-		`<{"method":"thread/tokenUsage/updated","params":{"threadId":"root-a","turnId":"turn-a","tokenUsage":{"total":{"totalTokens":99},"last":{"totalTokens":15}}}}`,
+		`<{"method":"thread/tokenUsage/updated","params":{"threadId":"root-a","turnId":"turn-a","tokenUsage":{"total":{"totalTokens":99},"last":{"totalTokens":15},"modelContextWindow":0}}}`,
 		`<{"method":"thread/settings/updated","params":{"threadId":"root-a","threadSettings":{"cwd":"/synthetic","approvalPolicy":"on-request","approvalsReviewer":"user","sandboxPolicy":{"type":"readOnly"},"model":"synthetic-model","modelProvider":"mock","collaborationMode":{"mode":"default","settings":{"model":"synthetic-model"}}}}}`,
 		`<{"method":"thread/archived","params":{"threadId":"root-a"}}`,
 		`<{"method":"item/started","params":{"threadId":"root-a","turnId":"turn-a","startedAtMs":1700000100800,"item":{"type":"futureTool","id":"future","payload":7}}}`,

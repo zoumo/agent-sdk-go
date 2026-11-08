@@ -193,7 +193,8 @@ type UsageCost struct {
 }
 
 type UsageUpdatePayload struct {
-	Used int64      `json:"used"`
+	Used int64 `json:"used"`
+	// Size is zero when the provider did not report a context-window size.
 	Size int64      `json:"size"`
 	Cost *UsageCost `json:"cost,omitempty"`
 }

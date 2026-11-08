@@ -380,7 +380,8 @@ func (s *session) registerInteraction(
 	}
 	if interaction.threadID == s.ID() {
 		if s.activeTurn == "" {
-			if !s.submitting || s.lastFinished == interaction.turnID {
+			if (!s.submitting && !s.submitUnknown) ||
+				s.lastFinished == interaction.turnID {
 				s.mu.Unlock()
 				return s.unsupportedRequest(
 					interaction.received,
@@ -389,6 +390,7 @@ func (s *session) registerInteraction(
 				)
 			}
 			s.activeTurn = interaction.turnID
+			s.noteWorkEvidenceLocked()
 		}
 		if s.activeTurn != interaction.turnID || s.lastFinished == interaction.turnID {
 			s.mu.Unlock()

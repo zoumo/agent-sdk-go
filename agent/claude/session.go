@@ -43,11 +43,10 @@ type session struct {
 	doneClosed          bool
 	err                 error
 
-	lanes         map[string]*claudeLane
-	blocks        map[claudeBlockKey]*claudeBlock
-	seenAssistant map[string]struct{}
-	calls         map[string]claudeCall
-	usage         claudeUsageState
+	lanes  map[string]*claudeLane
+	blocks map[claudeBlockKey]*claudeBlock
+	calls  map[string]claudeCall
+	usage  claudeUsageState
 
 	observationDone chan struct{}
 	closeOnce       sync.Once

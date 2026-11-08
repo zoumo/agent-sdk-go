@@ -209,7 +209,7 @@ func (s *session) ownsMainTurn(turnID string) bool {
 	return s.activeTurn == turnID ||
 		s.idleTurn == turnID ||
 		(s.activeTurn == "" &&
-			s.submitting &&
+			(s.submitting || s.submitUnknown) &&
 			s.lastFinished != turnID) ||
 		(s.activeTurn == "" &&
 			s.idleTurn == "" &&
@@ -229,7 +229,7 @@ func (s *session) turnStarted(received codex.Received) ([]agent.Event, error) {
 	}
 	owned := s.activeTurn == data.Turn.ID ||
 		(s.activeTurn == "" &&
-			s.submitting &&
+			(s.submitting || s.submitUnknown) &&
 			s.lastFinished != data.Turn.ID) ||
 		(s.activeTurn == "" &&
 			s.idleTurn == "" &&
@@ -249,6 +249,7 @@ func (s *session) turnStarted(received codex.Received) ([]agent.Event, error) {
 	s.activeTurn = data.Turn.ID
 	s.startedTurn = data.Turn.ID
 	s.idleTurn = ""
+	s.noteWorkEvidenceLocked()
 	running := agent.StateRunning
 	if s.blockingInteractionsLocked() != 0 {
 		running = agent.StateRequiresAction
@@ -284,7 +285,9 @@ func (s *session) turnCompleted(received codex.Received) ([]agent.Event, error) 
 	s.mu.Lock()
 	owned := s.activeTurn == data.Turn.ID ||
 		s.idleTurn == data.Turn.ID ||
-		(s.activeTurn == "" && s.submitting && s.lastFinished != data.Turn.ID)
+		(s.activeTurn == "" &&
+			(s.submitting || s.submitUnknown) &&
+			s.lastFinished != data.Turn.ID)
 	stale := !owned
 	previous := cloneState(s.state)
 	var interactions []*pendingInteraction
@@ -299,6 +302,7 @@ func (s *session) turnCompleted(received codex.Received) ([]agent.Event, error) 
 		if s.idleTurn == data.Turn.ID {
 			s.idleTurn = ""
 		}
+		s.noteWorkEvidenceLocked()
 		s.lastFinished = data.Turn.ID
 		interactions = s.takeTurnInteractionsLocked(data.Turn.ID)
 		nextState = agent.StateIdle
@@ -396,6 +400,9 @@ func (s *session) threadStatusChanged(received codex.Received) ([]agent.Event, e
 		}
 		s.activeTurn = ""
 		s.startedTurn = ""
+		if !s.submitting {
+			s.noteWorkEvidenceLocked()
+		}
 		interactions = s.takeThreadInteractionsLocked(rootThreadID)
 		if s.blockingInteractionsLocked() != 0 {
 			requiresAction := agent.StateRequiresAction
@@ -716,14 +723,12 @@ func (s *session) tokenUsageUpdated(received codex.Received) ([]agent.Event, err
 		return nil, invalidNativeEvent(received.Event.Method)
 	}
 	size := int64(0)
-	windowAvailable := false
 	if data.TokenUsage.ModelContextWindow != nil {
 		size = *data.TokenUsage.ModelContextWindow
-		windowAvailable = true
 	}
 	extras := map[string]any{
 		"totalTokens":              data.TokenUsage.Total.TotalTokens,
-		"modelContextWindowAbsent": !windowAvailable,
+		"modelContextWindowAbsent": size == 0,
 	}
 	event, err := s.newEvent(
 		received,

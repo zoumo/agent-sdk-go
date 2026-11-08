@@ -21,11 +21,12 @@ type claudeBlockKey struct {
 }
 
 type claudeBlock struct {
-	kind      string
-	stopped   bool
-	completed bool
-	toolUseID string
-	toolName  string
+	kind          string
+	stopped       bool
+	completed     bool
+	completedText string
+	toolUseID     string
+	toolName      string
 }
 
 type claudeCall struct {
@@ -60,8 +61,19 @@ func (s *session) beginResponse(parent, response string) error {
 	if err != nil {
 		return err
 	}
+	if lane.responseID != "" && lane.responseID != response {
+		s.forgetResponseBlocks(parent, lane.responseID)
+	}
 	lane.responseID = response
 	return nil
+}
+
+func (s *session) forgetResponseBlocks(parent, response string) {
+	for key := range s.blocks {
+		if key.parent == parent && key.response == response {
+			delete(s.blocks, key)
+		}
+	}
 }
 
 func (s *session) trackedBlock(key claudeBlockKey, kind string) (*claudeBlock, error) {
@@ -137,12 +149,15 @@ func (s *session) deltaBlock(
 func (s *session) uniqueBlock(parent, response, kind string) (int, bool) {
 	active := make([]int, 0, 1)
 	stopped := make([]int, 0, 1)
+	completed := make([]int, 0, 1)
 	for key, block := range s.blocks {
 		if key.parent != parent || key.response != response ||
-			block.kind != kind || block.completed {
+			block.kind != kind {
 			continue
 		}
-		if block.stopped {
+		if block.completed {
+			completed = append(completed, key.index)
+		} else if block.stopped {
 			stopped = append(stopped, key.index)
 		} else {
 			active = append(active, key.index)
@@ -152,27 +167,12 @@ func (s *session) uniqueBlock(parent, response, kind string) (int, bool) {
 		return active[0], true
 	}
 	if len(active) != 0 || len(stopped) != 1 {
+		if len(active) == 0 && len(stopped) == 0 && len(completed) == 1 {
+			return completed[0], true
+		}
 		return 0, false
 	}
 	return stopped[0], true
-}
-
-func (s *session) markAssistantFrame(parent, uuid string) (bool, error) {
-	if uuid == "" {
-		return false, nil
-	}
-	if s.seenAssistant == nil {
-		s.seenAssistant = make(map[string]struct{})
-	}
-	key := parent + "\x00" + uuid
-	if _, seen := s.seenAssistant[key]; seen {
-		return true, nil
-	}
-	if len(s.seenAssistant) >= maxClaudeLiveState {
-		return false, liveStateExhausted("assistant_frame_capacity")
-	}
-	s.seenAssistant[key] = struct{}{}
-	return false, nil
 }
 
 func (s *session) observeToolCall(id, name string) error {

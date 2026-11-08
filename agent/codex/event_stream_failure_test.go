@@ -31,6 +31,11 @@ func TestEventStreamFailureIsStableAndTerminatesSession(t *testing.T) {
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
+	select {
+	case <-session.Done():
+	case <-ctx.Done():
+		require.NoError(t, ctx.Err())
+	}
 	stream, err := session.Events()
 	require.NoError(t, err)
 

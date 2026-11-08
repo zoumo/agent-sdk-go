@@ -259,8 +259,6 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.NoError(t, err)
-	stream, err := session.Events()
-	require.NoError(t, err)
 
 	select {
 	case <-session.Done():
@@ -268,6 +266,8 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 		require.NoError(t, ctx.Err())
 	}
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(session.Err()))
+	stream, err := session.Events()
+	require.NoError(t, err)
 	_, err = stream.Next(ctx)
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
 }

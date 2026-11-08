@@ -88,7 +88,9 @@ func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 func (s *session) Events() (agent.EventStream, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed {
+	// Observation may end before the consumer claims the stream. Keep the
+	// accepted events and terminal cause claimable unless Close was explicit.
+	if s.closed && s.explicitClose {
 		return nil, adapterError(
 			agent.ErrorClosed,
 			"session_closed",

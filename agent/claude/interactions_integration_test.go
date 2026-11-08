@@ -706,6 +706,15 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			if test.cancel != "" {
 				frames = append(frames, test.cancel)
 			}
+			if test.closeFirst {
+				// Keep the peer waiting on the client answer. Close ends stdin,
+				// so the peer cannot fail before the explicit close begins.
+				frames = append(frames,
+					`>{"type":"control_response","response":{"subtype":"success",`+
+						`"request_id":"permission-pending","response":{"behavior":"allow",`+
+						`"updatedInput":{"file_path":"a.txt"}}}}`,
+				)
+			}
 			session, stream := openClaudeInteractionSession(
 				t,
 				ctx,

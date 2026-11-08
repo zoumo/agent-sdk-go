@@ -130,19 +130,26 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 }
 
 func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	peerSession := prepareClaudePeer(t, "passed", mockClaudeInit...)
+	peerSession := prepareClaudePeerWithReplayTimeout(
+		t,
+		"passed",
+		// The peer must stay open long enough to observe Close's stdin EOF
+		// after the provider's separate startup budget expires.
+		30*time.Second,
+		mockClaudeInit...,
+	)
 	launcher, err := peerSession.Launcher("main")
 	require.NoError(t, err)
 	provider := agentclaude.New(agentclaude.Config{
 		CLIPath: launcher,
 		Env:     peerSession.Env,
 		// This budget also bounds the native initialize control handshake.
-		// Keep it above process-startup variance so the test exercises the
-		// adapter's wait for the separate system/init frame.
-		InitializeTimeout: 3 * time.Second,
+		// Keep it well above mock process-startup variance under race so the
+		// timeout proves that the separate system/init frame never arrived.
+		InitializeTimeout: 10 * time.Second,
 	})
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
@@ -150,7 +157,7 @@ func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
 	require.NoError(t, err)
 	_, err = provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.Error(t, err)
-	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+	assert.Equalf(t, agent.ErrorUnavailable, agent.CodeOf(err), "Open error: %v", err)
 }
 
 func newTestClaudeProvider(
@@ -221,6 +228,15 @@ func prepareClaudePeer(
 	wantStatus string,
 	frames ...string,
 ) *mocktest.Session {
+	return prepareClaudePeerWithReplayTimeout(t, wantStatus, 0, frames...)
+}
+
+func prepareClaudePeerWithReplayTimeout(
+	t *testing.T,
+	wantStatus string,
+	timeout time.Duration,
+	frames ...string,
+) *mocktest.Session {
 	t.Helper()
 	scenario := make([]map[string]any, 0, len(frames))
 	for index, frame := range frames {
@@ -236,11 +252,15 @@ func prepareClaudePeer(
 		}
 		scenario = append(scenario, item)
 	}
-	data, err := json.Marshal(map[string]any{
+	envelope := map[string]any{
 		"version":    1,
 		"provenance": "synthetic",
 		"frames":     scenario,
-	})
+	}
+	if timeout > 0 {
+		envelope["timeoutMs"] = timeout.Milliseconds()
+	}
+	data, err := json.Marshal(envelope)
 	require.NoError(t, err)
 	peerSession, err := mocktest.Prepare(t.TempDir(), "claude", data, mocktest.Options{})
 	require.NoError(t, err)
@@ -248,7 +268,7 @@ func prepareClaudePeer(
 		report, reportErr := peerSession.Report()
 		require.NoError(t, reportErr)
 		require.NotNil(t, report)
-		assert.Equal(t, wantStatus, report.Status)
+		assert.Equalf(t, wantStatus, report.Status, "mock report: %+v", report)
 		require.NoError(t, peerSession.Close())
 	})
 	return peerSession

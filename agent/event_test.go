@@ -96,18 +96,6 @@ func TestEventTypeIsDerivedFromEveryPayloadBranch(t *testing.T) {
 			want: agent.EventAgentToolCallChunk,
 		},
 		{
-			name:   "plan",
-			itemID: "plan-1",
-			payload: agent.PlanPayload{
-				PlanID:      "plan-1",
-				Explanation: "working",
-				Entries: []agent.PlanEntry{
-					{Content: "Inspect", Status: "in_progress"},
-				},
-			},
-			want: agent.EventAgentPlan,
-		},
-		{
 			name: "state update",
 			payload: agent.StateUpdatePayload{
 				PreviousState: &initialState,
@@ -292,21 +280,6 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			}),
 		},
 		{
-			name: "plan without text or entries",
-			event: validEvent("", agent.PlanPayload{
-				PlanID: "turn-1",
-			}),
-		},
-		{
-			name: "plan entry without status",
-			event: validEvent("", agent.PlanPayload{
-				PlanID: "turn-1",
-				Entries: []agent.PlanEntry{
-					{Content: "Inspect"},
-				},
-			}),
-		},
-		{
 			name: "invalid observed state",
 			event: validEvent("", agent.StateUpdatePayload{
 				State: &invalidState,
@@ -359,18 +332,6 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 		})
 	}
-}
-
-func TestPlanEventAllowsNativeTurnScopeWithoutItemID(t *testing.T) {
-	event := validEvent("", agent.PlanPayload{
-		PlanID: "turn-1",
-		Entries: []agent.PlanEntry{
-			{Content: "Inspect", Status: "completed"},
-		},
-	})
-
-	require.NoError(t, event.Validate())
-	assert.Equal(t, agent.EventAgentPlan, event.Type())
 }
 
 func TestEventRoundTripsJSONWithPayloadTypeAndMeta(t *testing.T) {
@@ -676,17 +637,6 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 			name:   "tool chunk",
 			itemID: "tool-2",
 			value:  agent.ToolChunkPayload{ID: "tool-2", Content: textContent("chunk")},
-		},
-		{
-			name:   "plan",
-			itemID: "plan-1",
-			value: agent.PlanPayload{
-				PlanID: "plan-1",
-				Text:   "authoritative plan text",
-				Entries: []agent.PlanEntry{
-					{Content: "Inspect", Status: "in_progress"},
-				},
-			},
 		},
 		{
 			name:  "state update",

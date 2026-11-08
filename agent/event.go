@@ -18,7 +18,6 @@ const (
 	EventAgentMessageChunk         EventType = "agent.message_chunk"
 	EventAgentThinkingChunk        EventType = "agent.thinking_chunk"
 	EventAgentToolCallChunk        EventType = "agent.tool_call_chunk"
-	EventAgentPlan                 EventType = "agent.plan"
 	EventSessionStateUpdate        EventType = "session.state_update"
 	EventSessionError              EventType = "session.error"
 	EventSessionInfoUpdate         EventType = "session.info_update"

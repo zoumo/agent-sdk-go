@@ -25,13 +25,12 @@
 //
 // Input is one plain text block without annotations. System prompts, additional
 // directories, URL interactions, multi-block input, and native frames or answer
-// extensions without an exact mapping are not advertised. TodoWrite tool calls
-// also emit a plan event using the tool-use ID and native content/status entries;
-// TaskCreate and TaskUpdate are explicit task_plan_snapshot_unavailable gaps
-// because they do not provide a complete plan snapshot. AskUserQuestion accepts
-// string answers and, for multi-select questions, string arrays. Multi-select
-// arrays are joined with ", " before the native write; native array answers are
-// not supported.
+// extensions without an exact mapping are not advertised. TodoWrite, TaskCreate,
+// and TaskUpdate remain ordinary tool calls with their native input; they do not
+// also produce a provider-neutral plan event. AskUserQuestion accepts string
+// answers and, for multi-select questions, string arrays. Multi-select arrays are
+// joined with ", " before the native write; native array answers are not
+// supported.
 // Initialization, internal control responses, and positive member or parent
 // relationship confirmations are lifecycle plumbing and produce no unified
 // event. Confirmed source and parent identities remain in the Meta of subsequent

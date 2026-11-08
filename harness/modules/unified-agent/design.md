@@ -599,7 +599,7 @@ func (e Event) Validate() error
 - `Time` 优先使用原生事件时间；缺失时由 adapter 生成 UTC 时间。MASS 接收后
   不得替换。
 - `SessionID` 是已确认的原生主身份。适配器不能返回无法与事件核对身份的 Session。
-- `ItemID` 用于消息、思考、工具和计划等条目事件；会话级通知不虚构 itemId。
+- `ItemID` 用于消息、思考和工具等条目事件；会话级通知不虚构 itemId。
 - `Payload` 的类型唯一决定 `Event.Type()`，不能任意组合 type 与 payload。
 - `Meta` 是可 JSON 编码的 `map[string]any`，保留 adapter 来源、原生 raw、父子
   身份和诊断扩展；不得放凭据、恢复材料或不可编码值。
@@ -623,7 +623,6 @@ const (
     EventAgentMessageChunk          EventType = "agent.message_chunk"
     EventAgentThinkingChunk         EventType = "agent.thinking_chunk"
     EventAgentToolCallChunk         EventType = "agent.tool_call_chunk"
-    EventAgentPlan                  EventType = "agent.plan"
     EventSessionStateUpdate         EventType = "session.state_update"
     EventSessionError               EventType = "session.error"
     EventSessionInfoUpdate          EventType = "session.info_update"
@@ -701,18 +700,6 @@ type ToolResultPayload struct {
 type ToolChunkPayload struct {
     ID      string
     Content []ContentBlock
-}
-
-type PlanEntry struct {
-    Content string
-    Status  string
-}
-
-type PlanPayload struct {
-    PlanID      string
-    Text        string
-    Explanation string
-    Entries     []PlanEntry
 }
 
 type SessionState string
@@ -814,13 +801,12 @@ MASS 是否持久化。
 补造完整消息。工具调用和结果共享 `itemId`，但事件身份不同。完整消息与 chunk
 使用相同的 item/message 身份。
 
-`agent.plan` 的 `PlanID` 必填，且 `Text` 或非空 `Entries` 至少有一个。`Text`
-表示有原生文本快照的计划，`Entries` 表示有原生结构化状态快照的计划；
-`Explanation` 只在原生提供时保留。entry status 只允许 `pending`、
-`in_progress`、`completed`，不虚构 priority。计划事件可以没有 `ItemID`：
-Codex 的 completed plan item 使用 item ID 和文本；`turn/plan/updated` 使用
-turn ID 和结构化 entries；Claude `TodoWrite` 使用 tool-use ID 和原生 entries。
-原生 `TaskCreate`/`TaskUpdate` 不提供完整快照，保留为明确缺口。
+统一层暂不定义 Provider 无关的计划语义。Claude 的 `TodoWrite`、
+`TaskCreate` 和 `TaskUpdate` 原本就是工具调用，只保留带原生输入的
+tool call，不额外生成计划事件或计划缺口。Codex 的独立 plan item、
+`item/plan/delta` 和 `turn/plan/updated` 暂不转换为统一事件，也不作为
+映射缺口输出。两类原生 Plan 类型和通知继续由各自原生 SDK 保留。依据与后果见
+[ADR 0002](../../adr/0002-no-provider-neutral-plan.md)。
 
 会话状态只报告 `idle`、`running`、`requires_action` 或未知（nil pointer），
 不报告 MASS Service 的 opening、closing、archived。只有原生工作开始/结束证据
@@ -1289,7 +1275,7 @@ provider-specific 查询职责：
 
 - provider 共享连接与 Session 打开/恢复；
 - turn/item 身份和工作归属；
-- 消息、思考、工具、计划、状态、错误和 usage 等事件；
+- 消息、思考、工具、状态、错误和 usage 等事件；
 - command/file change 权限和 Codex user-input form；
 - Codex 能证明的接受证据、归档和显式模型设置。
 

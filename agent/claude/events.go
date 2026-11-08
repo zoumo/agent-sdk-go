@@ -633,98 +633,6 @@ func (s *session) assistantToolUse(
 	if observeErr := s.observeToolCall(toolID, toolName); observeErr != nil {
 		return nil, observeErr
 	}
-	events := []agent.Event{event}
-	switch toolName {
-	case "TodoWrite":
-		planEvents, planErr := s.todoWritePlan(received, toolID, input)
-		if planErr != nil {
-			return nil, planErr
-		}
-		events = append(events, planEvents...)
-	case "TaskCreate", "TaskUpdate":
-		gapEvents, gapErr := s.gap(
-			received,
-			"task_plan_snapshot_unavailable",
-			"Claude task tool data is not a complete plan snapshot and is not normalized",
-			map[string]any{"toolUseId": toolID, "toolName": toolName},
-		)
-		if gapErr != nil {
-			return nil, gapErr
-		}
-		events = append(events, gapEvents...)
-	}
-	return events, nil
-}
-
-func (s *session) todoWritePlan(
-	received claude.Received,
-	toolID string,
-	input any,
-) ([]agent.Event, error) {
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return s.gap(
-			received,
-			"plan_shape_unsupported",
-			"Claude TodoWrite input cannot be represented as a unified plan",
-			map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
-		)
-	}
-	var data struct {
-		Todos *[]struct {
-			Content string `json:"content"`
-			Status  string `json:"status"`
-		} `json:"todos"`
-	}
-	if err := json.Unmarshal(encoded, &data); err != nil || data.Todos == nil {
-		return s.gap(
-			received,
-			"plan_shape_unsupported",
-			"Claude TodoWrite input has no todos snapshot",
-			map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
-		)
-	}
-	if len(*data.Todos) == 0 {
-		return s.gap(
-			received,
-			"plan_shape_unsupported",
-			"Claude TodoWrite input has an empty plan snapshot",
-			map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
-		)
-	}
-	entries := make([]agent.PlanEntry, 0, len(*data.Todos))
-	for _, todo := range *data.Todos {
-		status := unifiedClaudePlanStatus(todo.Status)
-		if todo.Content == "" || status == "" {
-			return s.gap(
-				received,
-				"plan_shape_unsupported",
-				"Claude TodoWrite input contains an unsupported entry",
-				map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
-			)
-		}
-		entries = append(entries, agent.PlanEntry{
-			Content: todo.Content,
-			Status:  status,
-		})
-	}
-	event, err := s.newEvent(
-		received,
-		toolID,
-		agent.PlanPayload{
-			PlanID:  toolID,
-			Entries: entries,
-		},
-		nativeEventTime(received.Raw),
-		map[string]any{
-			"toolUseId":   toolID,
-			"toolName":    "TodoWrite",
-			"planEntries": len(entries),
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
 	return []agent.Event{event}, nil
 }
 
@@ -868,19 +776,6 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 		)
 	}
 	return events, nil
-}
-
-func unifiedClaudePlanStatus(value string) string {
-	switch value {
-	case "pending":
-		return "pending"
-	case "in_progress":
-		return "in_progress"
-	case "completed":
-		return "completed"
-	default:
-		return ""
-	}
 }
 
 func (s *session) userMessageEvent(

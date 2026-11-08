@@ -58,18 +58,6 @@ func validatePayload(payload Payload) error {
 		if err := validateOptionalContent(value.Content); err != nil {
 			return err
 		}
-	case PlanPayload:
-		if value.PlanID == "" || value.Text == "" && len(value.Entries) == 0 {
-			return invalidArgument(
-				"invalid_plan",
-				"plan requires an ID and authoritative text or entries",
-			)
-		}
-		for _, entry := range value.Entries {
-			if entry.Content == "" || !validPlanStatus(entry.Status) {
-				return invalidArgument("invalid_plan_entry", "plan entry is invalid")
-			}
-		}
 	case StateUpdatePayload:
 		for _, state := range []*SessionState{value.PreviousState, value.State} {
 			if state != nil && !validSessionState(*state) {
@@ -288,15 +276,6 @@ func validInteractionOutcome(outcome InteractionOutcome) bool {
 		InteractionCancelled,
 		InteractionExpired,
 		InteractionFailed:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPlanStatus(status string) bool {
-	switch status {
-	case "pending", "in_progress", "completed":
 		return true
 	default:
 		return false

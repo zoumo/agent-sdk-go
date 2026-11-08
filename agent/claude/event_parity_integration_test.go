@@ -447,7 +447,7 @@ func TestClaudeWrongAssistantBlockTypeBecomesDecodeGapBeforeNativeTermination(t 
 	assert.ErrorIs(t, closeErr, claude.ErrProtocol)
 }
 
-func TestClaudeTodoWritePlanAndTaskSnapshotGaps(t *testing.T) {
+func TestClaudePlanLikeToolsRemainNativeToolCalls(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
@@ -479,33 +479,32 @@ func TestClaudeTodoWritePlanAndTaskSnapshotGaps(t *testing.T) {
 	todoCall := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventAgentToolCall, todoCall.Type())
 	assert.Equal(t, "todo-1", todoCall.ItemID)
-
-	plan := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.EventAgentPlan, plan.Type())
-	assert.Equal(t, "todo-1", plan.ItemID)
-	assert.Equal(t, agent.PlanPayload{
-		PlanID: "todo-1",
-		Entries: []agent.PlanEntry{
-			{Content: "inspect", Status: "completed"},
-			{Content: "change", Status: "in_progress"},
-			{Content: "verify", Status: "pending"},
-		},
-	}, plan.Payload)
-	planMeta := requireClaudeMeta(t, plan)
-	assert.Equal(t, "TodoWrite", planMeta["toolName"])
-	assert.Equal(t, 3, planMeta["planEntries"])
+	todo, ok := todoCall.Payload.(agent.ToolCallPayload)
+	require.True(t, ok)
+	assert.Equal(t, "TodoWrite", todo.Name)
+	encodedInput, err := json.Marshal(todo.RawInput)
+	require.NoError(t, err)
+	assert.JSONEq(t,
+		`{"todos":[`+
+			`{"content":"inspect","status":"completed"},`+
+			`{"content":"change","status":"in_progress"},`+
+			`{"content":"verify","status":"pending"}]}`,
+		string(encodedInput),
+	)
 
 	taskCreate := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventAgentToolCall, taskCreate.Type())
 	assert.Equal(t, "task-create", taskCreate.ItemID)
-	createGap := nextEvent(t, ctx, stream)
-	assertGap(t, createGap, "task_plan_snapshot_unavailable")
+	create, ok := taskCreate.Payload.(agent.ToolCallPayload)
+	require.True(t, ok)
+	assert.Equal(t, "TaskCreate", create.Name)
 
 	taskUpdate := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventAgentToolCall, taskUpdate.Type())
 	assert.Equal(t, "task-update", taskUpdate.ItemID)
-	updateGap := nextEvent(t, ctx, stream)
-	assertGap(t, updateGap, "task_plan_snapshot_unavailable")
+	update, ok := taskUpdate.Payload.(agent.ToolCallPayload)
+	require.True(t, ok)
+	assert.Equal(t, "TaskUpdate", update.Name)
 }
 
 func TestClaudeInitialAndChangedCommandsPreserveOrder(t *testing.T) {

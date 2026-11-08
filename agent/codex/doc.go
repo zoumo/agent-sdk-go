@@ -34,10 +34,10 @@
 // Several native facts intentionally have no unified representation. Codex does
 // not provide a selectable settings-option catalog or available-command catalog
 // through this adapter. Archive and unarchive actions are supported, but their
-// notifications have no unified payload. Plan text deltas and reasoning part
-// boundaries are not represented. Completed plan items carry their text and
-// item identity; turn plan updates carry their structured entries, explanation,
-// and native turn ID without inventing an item ID.
+// notifications have no unified payload. Native plan items, plan text deltas,
+// and turn plan updates are intentionally not emitted, while their original
+// types and notifications remain available in the native Codex package.
+// Reasoning part boundaries are also not represented.
 //
 // Permission-profile approvals are unsupported, as are native item and
 // notification variants without a proven mapping. Successful lineage

@@ -70,7 +70,6 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		agent.EventAgentThinkingChunk,
 		agent.EventAgentThinkingChunk,
 		agent.EventSessionError,
-		agent.EventSessionError,
 		agent.EventAgentToolCallChunk,
 		agent.EventAgentToolCallChunk,
 		agent.EventAgentToolCall,
@@ -79,7 +78,6 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		agent.EventAgentToolResult,
 		agent.EventAgentThinking,
 		agent.EventAgentMessage,
-		agent.EventAgentPlan,
 		agent.EventSessionInfoUpdate,
 		agent.EventSessionUsageUpdate,
 		agent.EventSessionError,
@@ -114,13 +112,13 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	assert.Equal(t, agent.ToolChunkPayload{
 		ID:      "cmd",
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "out"}},
-	}, events[7].Payload)
+	}, events[6].Payload)
 	assert.Equal(t, agent.ToolChunkPayload{
 		ID:      "file",
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "patch"}},
-	}, events[8].Payload)
+	}, events[7].Payload)
 
-	call := payloadOf[agent.ToolCallPayload](t, events[9])
+	call := payloadOf[agent.ToolCallPayload](t, events[8])
 	assert.Equal(t, "cmd", call.ID)
 	assert.Equal(t, "execute", call.Kind)
 	assert.Equal(t, "echo hello", call.Title)
@@ -129,7 +127,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "echo hello", rawInput["command"])
 
-	result := payloadOf[agent.ToolResultPayload](t, events[10])
+	result := payloadOf[agent.ToolResultPayload](t, events[9])
 	assert.Equal(t, "completed", result.Status)
 	require.NotNil(t, result.ExitCode)
 	assert.Equal(t, int32(0), *result.ExitCode)
@@ -142,7 +140,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	require.NotNil(t, result.RawOutput)
 	assert.Equal(t, "hello\n", *result.RawOutput)
 
-	fileResult := payloadOf[agent.ToolResultPayload](t, events[12])
+	fileResult := payloadOf[agent.ToolResultPayload](t, events[11])
 	assert.Equal(t, "edit", fileResult.Kind)
 	assert.Equal(t, "file_change", fileResult.Name)
 	assert.Equal(t, "completed", fileResult.Status)
@@ -153,48 +151,32 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 			agent.TextBlock{Text: "think-1"},
 			agent.TextBlock{Text: "think-2"},
 		},
-	}, events[13].Payload)
+	}, events[12].Payload)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "agent",
 		Content:   []agent.ContentBlock{agent.TextBlock{Text: "answer complete"}},
 		Phase:     "final_answer",
-	}, events[14].Payload)
-	assert.Equal(t, agent.PlanPayload{
-		PlanID: "turn-a",
-		Entries: []agent.PlanEntry{
-			{Content: "inspect", Status: "completed"},
-			{Content: "change", Status: "in_progress"},
-		},
-		Explanation: "working",
-	}, events[15].Payload)
-	assert.Empty(t, events[15].ItemID)
-	planMeta := eventCodexMeta(t, events[15])
-	assert.Equal(t, "turn-a", planMeta["planId"])
-	assert.Equal(t, true, planMeta["nativeItemIdAbsent"])
-	assert.Equal(t, 2, planMeta["planEntryCount"])
-	assert.Equal(t, "working", planMeta["explanation"])
-	assert.Contains(t, rawCodexEvent(t, events[15]), `"step":"inspect"`)
-	assert.Equal(t, agent.InfoUpdatePayload{Title: new("Synthetic title")}, events[16].Payload)
-	assert.Equal(t, agent.UsageUpdatePayload{Used: 15, Size: 0}, events[17].Payload)
+	}, events[13].Payload)
+	assert.Equal(t, agent.InfoUpdatePayload{Title: new("Synthetic title")}, events[14].Payload)
+	assert.Equal(t, agent.UsageUpdatePayload{Used: 15, Size: 0}, events[15].Payload)
 
 	assert.Equal(t, "reasoning_part_boundary_unsupported", sessionErrorReason(t, events[5]))
-	assert.Equal(t, "plan_delta_unsupported", sessionErrorReason(t, events[6]))
-	assert.Equal(t, "config_options_unsupported", sessionErrorReason(t, events[18]))
-	assert.Equal(t, "archive_state_unsupported", sessionErrorReason(t, events[19]))
-	assert.Equal(t, "unsupported_native_item", sessionErrorReason(t, events[20]))
-	assert.Equal(t, "future", events[20].ItemID)
-	assert.Equal(t, "unsupported_native_notification", sessionErrorReason(t, events[21]))
-	assert.Equal(t, "native_error", sessionErrorReason(t, events[22]))
+	assert.Equal(t, "config_options_unsupported", sessionErrorReason(t, events[16]))
+	assert.Equal(t, "archive_state_unsupported", sessionErrorReason(t, events[17]))
+	assert.Equal(t, "unsupported_native_item", sessionErrorReason(t, events[18]))
+	assert.Equal(t, "future", events[18].ItemID)
+	assert.Equal(t, "unsupported_native_notification", sessionErrorReason(t, events[19]))
+	assert.Equal(t, "native_error", sessionErrorReason(t, events[20]))
 
 	idle := agent.StateIdle
 	assert.Equal(t, agent.StateUpdatePayload{
 		PreviousState: new(agent.StateRunning),
 		State:         &idle,
 		StopReason:    "completed",
-	}, events[23].Payload)
-	assert.Contains(t, rawCodexEvent(t, events[23]), `"rootTurnId":"root-turn"`)
-	assert.Contains(t, rawCodexEvent(t, events[14]), `"big":9007199254740993`)
-	assert.Equal(t, true, eventCodexMeta(t, events[17])["modelContextWindowAbsent"])
+	}, events[21].Payload)
+	assert.Contains(t, rawCodexEvent(t, events[21]), `"rootTurnId":"root-turn"`)
+	assert.Contains(t, rawCodexEvent(t, events[13]), `"big":9007199254740993`)
+	assert.Equal(t, true, eventCodexMeta(t, events[15])["modelContextWindowAbsent"])
 }
 
 func TestThreadStatusChangeExpiresInteractions(t *testing.T) {
@@ -336,11 +318,12 @@ func TestSessionRejectsUnrelatedTurnAfterIdleObservation(t *testing.T) {
 	assert.Equal(t, "completed", completed.StopReason)
 }
 
-func TestSessionMapsBothCodexPlanShapesWithoutInventedIdentity(t *testing.T) {
+func TestSessionIgnoresCodexPlanNotifications(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	frames := interactionSessionFrames(
 		`<{"method":"item/started","params":{"threadId":"root-a","turnId":"turn-a","startedAtMs":1700000300100,"item":{"type":"plan","id":"plan-item","text":"not authoritative yet"}}}`,
+		`<{"method":"item/plan/delta","params":{"threadId":"root-a","turnId":"turn-a","itemId":"plan-item","delta":"draft"}}`,
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000300200,"item":{"type":"plan","id":"plan-item","text":"authoritative plan text"}}}`,
 		`<{"method":"turn/plan/updated","params":{"threadId":"root-a","turnId":"turn-a","explanation":"working","plan":[{"step":"inspect","status":"completed"},{"step":"change","status":"inProgress"}]}}`,
 		`<{"method":"turn/completed","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"completed","startedAt":1700000300,"completedAt":1700000302}}}`,
@@ -350,27 +333,6 @@ func TestSessionMapsBothCodexPlanShapesWithoutInventedIdentity(t *testing.T) {
 
 	submitInteractionTurn(t, ctx, session)
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
-
-	itemPlan := nextEvent(t, ctx, stream)
-	require.Equal(t, agent.EventAgentPlan, itemPlan.Type())
-	assert.Equal(t, "plan-item", itemPlan.ItemID)
-	assert.Equal(t, agent.PlanPayload{
-		PlanID: "plan-item",
-		Text:   "authoritative plan text",
-	}, itemPlan.Payload)
-
-	turnPlan := nextEvent(t, ctx, stream)
-	require.Equal(t, agent.EventAgentPlan, turnPlan.Type())
-	assert.Empty(t, turnPlan.ItemID)
-	assert.Equal(t, agent.PlanPayload{
-		PlanID: "turn-a",
-		Entries: []agent.PlanEntry{
-			{Content: "inspect", Status: "completed"},
-			{Content: "change", Status: "in_progress"},
-		},
-		Explanation: "working",
-	}, turnPlan.Payload)
-
 	require.Equal(t, agent.StateIdle, nextState(t, ctx, stream))
 }
 
@@ -410,7 +372,7 @@ func TestSessionRejectsStaleMainTurnEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
-	for index := range 6 {
+	for index := range 5 {
 		gap := nextEvent(t, ctx, stream)
 		require.Equalf(t, agent.EventSessionError, gap.Type(), "stale event %d", index)
 		assert.Equal(t, "stale_native_turn", sessionErrorReason(t, gap))

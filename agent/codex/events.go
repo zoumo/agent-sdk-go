@@ -36,6 +36,10 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 			event.DecodeError,
 		)
 	}
+	switch event.Method {
+	case "item/plan/delta", "turn/plan/updated":
+		return nil, nil
+	}
 
 	if received.Source.ThreadID != "" && received.Source.ThreadID != s.ID() {
 		switch event.Method {
@@ -49,8 +53,6 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 			return s.itemStarted(received)
 		case "item/completed":
 			return s.itemCompleted(received)
-		case "turn/plan/updated":
-			return s.planUpdated(received)
 		case "error":
 			return s.nativeError(received)
 		case "serverRequest/resolved":
@@ -89,20 +91,12 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 			"reasoning_part_boundary_unsupported",
 			"Codex reasoning part boundaries have no unified payload",
 		)
-	case "item/plan/delta":
-		return s.notificationGap(
-			received,
-			"plan_delta_unsupported",
-			"Codex plan text deltas have no unified payload",
-		)
 	case "item/commandExecution/outputDelta", "item/fileChange/outputDelta":
 		return s.toolOutputDelta(received)
 	case "item/started":
 		return s.itemStarted(received)
 	case "item/completed":
 		return s.itemCompleted(received)
-	case "turn/plan/updated":
-		return s.planUpdated(received)
 	case "thread/name/updated":
 		return s.threadNameUpdated(received)
 	case "thread/tokenUsage/updated":
@@ -138,12 +132,10 @@ func mainTurnScopedNotification(method string) bool {
 		"item/reasoning/summaryTextDelta",
 		"item/reasoning/textDelta",
 		"item/reasoning/summaryPartAdded",
-		"item/plan/delta",
 		"item/commandExecution/outputDelta",
 		"item/fileChange/outputDelta",
 		"item/started",
-		"item/completed",
-		"turn/plan/updated":
+		"item/completed":
 		return true
 	default:
 		return false
@@ -546,7 +538,7 @@ func (s *session) itemCompleted(received codex.Received) ([]agent.Event, error) 
 	case item.Reasoning != nil:
 		return s.reasoningMessage(received, data.CompletedAtMs, item.Reasoning)
 	case item.Plan != nil:
-		return s.planMessage(received, data.CompletedAtMs, item.Plan)
+		return nil, nil
 	default:
 		return s.toolResult(received, data.CompletedAtMs, data.Item)
 	}
@@ -637,91 +629,6 @@ func (s *session) reasoningMessage(
 		agent.AgentThinking{MessageID: item.ID, Content: content},
 		unixMilliOrNow(completedAtMs),
 		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return []agent.Event{event}, nil
-}
-
-func (s *session) planMessage(
-	received codex.Received,
-	completedAtMs int64,
-	item *codextypes.PlanThreadItem,
-) ([]agent.Event, error) {
-	if item.ID == "" {
-		return nil, invalidNativeEvent(received.Event.Method)
-	}
-	if item.Text == "" {
-		return s.notificationGap(
-			received,
-			"plan_shape_unsupported",
-			"Codex plan item has no authoritative text",
-		)
-	}
-	event, err := s.newEvent(
-		received,
-		received.Event.Method,
-		item.ID,
-		agent.PlanPayload{
-			PlanID: item.ID,
-			Text:   item.Text,
-		},
-		unixMilliOrNow(completedAtMs),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return []agent.Event{event}, nil
-}
-
-func (s *session) planUpdated(received codex.Received) ([]agent.Event, error) {
-	var data planUpdatedNotification
-	if err := json.Unmarshal(received.Event.Params, &data); err != nil {
-		return nil, invalidNativeEvent(received.Event.Method)
-	}
-	if data.TurnID == "" || len(data.Plan) == 0 {
-		return s.notificationGap(
-			received,
-			"plan_shape_unsupported",
-			"Codex plan update cannot be represented as unified plan entries",
-		)
-	}
-	entries := make([]agent.PlanEntry, 0, len(data.Plan))
-	for _, step := range data.Plan {
-		status := unifiedPlanStatus(step.Status)
-		if step.Step == "" || status == "" {
-			return s.notificationGap(
-				received,
-				"plan_shape_unsupported",
-				"Codex plan update contains an unsupported entry",
-			)
-		}
-		entries = append(entries, agent.PlanEntry{
-			Content: step.Step,
-			Status:  status,
-		})
-	}
-	extras := map[string]any{
-		"nativeItemIdAbsent": true,
-		"planId":             data.TurnID,
-		"planEntryCount":     len(data.Plan),
-	}
-	if data.Explanation != "" {
-		extras["explanation"] = data.Explanation
-	}
-	event, err := s.newEvent(
-		received,
-		received.Event.Method,
-		"",
-		agent.PlanPayload{
-			PlanID:      data.TurnID,
-			Entries:     entries,
-			Explanation: data.Explanation,
-		},
-		time.Now().UTC(),
-		extras,
 	)
 	if err != nil {
 		return nil, err
@@ -999,19 +906,6 @@ func toolStatus(value string) string {
 	}
 }
 
-func unifiedPlanStatus(value string) string {
-	switch value {
-	case "pending":
-		return "pending"
-	case "inProgress":
-		return "in_progress"
-	case "completed":
-		return "completed"
-	default:
-		return ""
-	}
-}
-
 func threadItemIdentity(item codextypes.ThreadItem) (string, string) {
 	switch {
 	case item.UserMessage != nil:
@@ -1069,16 +963,6 @@ type itemDeltaNotification struct {
 	TurnID   string `json:"turnId"`
 	ItemID   string `json:"itemId"`
 	Delta    string `json:"delta"`
-}
-
-type planUpdatedNotification struct {
-	ThreadID    string `json:"threadId"`
-	TurnID      string `json:"turnId"`
-	Explanation string `json:"explanation"`
-	Plan        []struct {
-		Step   string `json:"step"`
-		Status string `json:"status"`
-	} `json:"plan"`
 }
 
 type threadNameNotification struct {

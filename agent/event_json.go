@@ -150,12 +150,6 @@ func unmarshalPayload(eventType EventType, data []byte) (Payload, error) {
 			return nil, err
 		}
 		return ToolChunkPayload{ID: wire.ID, Content: content}, nil
-	case EventAgentPlan:
-		var payload PlanPayload
-		if err := decodeStrictJSON(data, &payload); err != nil {
-			return nil, err
-		}
-		return payload, nil
 	case EventSessionStateUpdate:
 		if err := requireJSONMemberPresence(data, "state", "previousState"); err != nil {
 			return nil, err

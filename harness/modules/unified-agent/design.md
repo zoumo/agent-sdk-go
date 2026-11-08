@@ -1309,7 +1309,13 @@ provider-specific 查询职责：
 - Claude 能证明的本地写入与原生观察边界。
 
 Claude block 粒度继续满足现有 MASS 身份规则；无法证明归属和身份的 frame 仍
-失败，不使用猜测身份。旧 `mass-go/pkg/runtime/claude` 保留为基线。
+失败，不使用猜测身份。Claude 的原生 user content 类型允许 text 与
+`tool_result` 同帧，但 adapter 不支持这种 mixed frame：整帧生成一个
+`user_message_mixed_content_unsupported` 缺口，不输出部分消息或工具结果，也不
+构造 segment 身份。纯 text 数组作为一个 `UserMessage.Content` 数组输出，
+tool-result-only 数组按工具结果输出。依据与后果见
+[ADR 0001](../../adr/0001-claude-mixed-user-content.md)。旧
+`mass-go/pkg/runtime/claude` 保留为基线。
 
 退出条件：实时转换的合成结果等价；无法证明身份的样本仍失败；原生 Claude
 测试不因统一层变化。

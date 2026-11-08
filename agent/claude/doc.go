@@ -9,12 +9,16 @@
 //
 // The adapter maps Claude user and assistant text and thinking, message and
 // content-block deltas, tool calls and results, session state, usage, available
-// commands, native errors, permission requests, and AskUserQuestion forms. Mixed
-// user blocks preserve their text and tool results; unsupported blocks are
-// reported as gaps. Assistant frame UUIDs are deduplicated only within their
-// active response; response-scoped block and UUID state is released when the next
-// response starts. An aborted assistant frame is reported rather than presented as
-// complete content.
+// commands, native errors, permission requests, and AskUserQuestion forms. A
+// text-only user content array becomes one UserMessage content array, and a
+// tool-result-only array emits tool results. Although the native message type
+// permits text and tool_result in one user content array, observed Claude output
+// does not produce that mixed shape. The adapter rejects it with a
+// user_message_mixed_content_unsupported gap and emits no partial events.
+// Unsupported blocks otherwise are reported as gaps. Assistant frame UUIDs are
+// deduplicated only within their active response; response-scoped block and UUID
+// state is released when the next response starts. An aborted assistant frame is
+// reported rather than presented as complete content.
 // Message, response, block, and tool identities remain in event item IDs and
 // Meta. The provider declares text input, permission, and form capabilities;
 // disabling AgentQuestions removes form support and disables the native tool.

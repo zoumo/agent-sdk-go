@@ -66,7 +66,7 @@ func TestRelationshipObservationBecomesDiagnosticGap(t *testing.T) {
 	}
 }
 
-func TestUserMessageBlocksPreserveTextContent(t *testing.T) {
+func TestUserMessageTextBlocksRemainOneContentArray(t *testing.T) {
 	session := &session{id: "native-session"}
 	events, err := session.userEvent(claude.Received{
 		Source: claude.SubagentIdentity{
@@ -84,10 +84,16 @@ func TestUserMessageBlocksPreserveTextContent(t *testing.T) {
 			UUID: "event-uuid",
 			User: &claude.Message{
 				ID: "user-message",
-				Content: claude.Content{Blocks: []claude.ContentBlock{{
-					Type: "text",
-					Text: &claude.TextBlock{Text: "child prompt"},
-				}}},
+				Content: claude.Content{Blocks: []claude.ContentBlock{
+					{
+						Type: "text",
+						Text: &claude.TextBlock{Text: "child prompt"},
+					},
+					{
+						Type: "text",
+						Text: &claude.TextBlock{Text: "additional context"},
+					},
+				}},
 			},
 		},
 	})
@@ -97,112 +103,86 @@ func TestUserMessageBlocksPreserveTextContent(t *testing.T) {
 	assert.Equal(t, "user-message", events[0].ItemID)
 	assert.Equal(t, agent.UserMessage{
 		MessageID: "user-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "child prompt"}},
+		Content: []agent.ContentBlock{
+			agent.TextBlock{Text: "child prompt"},
+			agent.TextBlock{Text: "additional context"},
+		},
 	}, events[0].Payload)
 	meta := requireClaudeEventMeta(t, events[0])
+	assert.Equal(t, 2, meta["blockCount"])
 	assert.Equal(t, "task-1", meta["source"].(map[string]any)["taskId"])
 	assert.Equal(t, "parent-task", meta["parent"].(map[string]any)["taskId"])
 }
 
-func TestMixedUserContentPreservesTextAndToolResults(t *testing.T) {
-	session := &session{
-		id:    "native-session",
-		calls: map[string]claudeCall{"tool-1": {name: "Read"}},
-	}
-	events, err := session.userEvent(claude.Received{
-		Event: &claude.Event{
-			Type: "user",
-			UUID: "event-uuid",
-			User: &claude.Message{
-				ID: "mixed-message",
-				Content: claude.Content{Blocks: []claude.ContentBlock{
-					{
-						Type: "text",
-						Text: &claude.TextBlock{Text: "inspect the file"},
+func TestMixedUserContentIsUnsupported(t *testing.T) {
+	tests := []struct {
+		name   string
+		blocks []claude.ContentBlock
+	}{
+		{
+			name: "text tool result text",
+			blocks: []claude.ContentBlock{
+				{
+					Type: "text",
+					Text: &claude.TextBlock{Text: "inspect the file"},
+				},
+				{
+					Type: "tool_result",
+					ToolResult: &claude.ToolResultBlock{
+						ToolUseID: "tool-1",
+						Content:   json.RawMessage(`"file contents"`),
 					},
-					{
-						Type: "tool_result",
-						ToolResult: &claude.ToolResultBlock{
-							ToolUseID: "tool-1",
-							Content:   json.RawMessage(`"file contents"`),
-						},
-					},
-					{
-						Type: "text",
-						Text: &claude.TextBlock{Text: "then summarize it"},
-					},
-				}},
+				},
+				{
+					Type: "text",
+					Text: &claude.TextBlock{Text: "then summarize it"},
+				},
 			},
 		},
-	})
-	require.NoError(t, err)
-	require.Len(t, events, 3)
-	assert.Equal(t, agent.EventUserMessage, events[0].Type())
-	assert.Equal(t, agent.UserMessage{
-		MessageID: "mixed-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "inspect the file"}},
-	}, events[0].Payload)
-	assert.Equal(t, "mixed-message", events[0].ItemID)
-	firstMeta := requireClaudeEventMeta(t, events[0])
-	assert.Equal(t, []int{0}, firstMeta["blockIndexes"])
-	assert.Equal(t, 0, firstMeta["segmentIndex"])
-
-	assert.Equal(t, agent.EventAgentToolResult, events[1].Type())
-	payload, ok := events[1].Payload.(agent.ToolResultPayload)
-	require.True(t, ok)
-	assert.Equal(t, "tool-1", payload.ID)
-	assert.Equal(t, "Read", payload.Kind)
-	assert.Equal(t, []agent.ContentBlock{agent.TextBlock{Text: "file contents"}}, payload.Content)
-
-	assert.Equal(t, agent.EventUserMessage, events[2].Type())
-	assert.Equal(t, "mixed-message", events[2].ItemID)
-	assert.Equal(t, agent.UserMessage{
-		MessageID: "mixed-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "then summarize it"}},
-	}, events[2].Payload)
-	secondMeta := requireClaudeEventMeta(t, events[2])
-	assert.Equal(t, []int{2}, secondMeta["blockIndexes"])
-	assert.Equal(t, 1, secondMeta["segmentIndex"])
-}
-
-func TestToolResultBeforeUserTextPreservesNativeOrder(t *testing.T) {
-	session := &session{
-		id:    "native-session",
-		calls: map[string]claudeCall{"tool-1": {name: "Read"}},
-	}
-	events, err := session.userEvent(claude.Received{
-		Event: &claude.Event{
-			Type: "user",
-			UUID: "event-uuid",
-			User: &claude.Message{
-				ID: "mixed-message",
-				Content: claude.Content{Blocks: []claude.ContentBlock{
-					{
-						Type: "tool_result",
-						ToolResult: &claude.ToolResultBlock{
-							ToolUseID: "tool-1",
-							Content:   json.RawMessage(`"file contents"`),
-						},
+		{
+			name: "tool result before text",
+			blocks: []claude.ContentBlock{
+				{
+					Type: "tool_result",
+					ToolResult: &claude.ToolResultBlock{
+						ToolUseID: "tool-1",
+						Content:   json.RawMessage(`"file contents"`),
 					},
-					{
-						Type: "text",
-						Text: &claude.TextBlock{Text: "summarize it"},
-					},
-				}},
+				},
+				{
+					Type: "text",
+					Text: &claude.TextBlock{Text: "summarize it"},
+				},
 			},
 		},
-	})
-	require.NoError(t, err)
-	require.Len(t, events, 2)
-	assert.Equal(t, agent.EventAgentToolResult, events[0].Type())
-	assert.Equal(t, agent.EventUserMessage, events[1].Type())
-	assert.Equal(t, agent.UserMessage{
-		MessageID: "mixed-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "summarize it"}},
-	}, events[1].Payload)
-	meta := requireClaudeEventMeta(t, events[1])
-	assert.Equal(t, []int{1}, meta["blockIndexes"])
-	assert.Equal(t, 0, meta["segmentIndex"])
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			session := &session{
+				id:    "native-session",
+				calls: map[string]claudeCall{"tool-1": {name: "Read"}},
+			}
+			events, err := session.userEvent(claude.Received{
+				Event: &claude.Event{
+					Type: "user",
+					UUID: "event-uuid",
+					User: &claude.Message{
+						ID:      "mixed-message",
+						Content: claude.Content{Blocks: tt.blocks},
+					},
+				},
+			})
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			assert.Equal(t, agent.EventSessionError, events[0].Type())
+			assert.Empty(t, events[0].ItemID)
+			payload, ok := events[0].Payload.(agent.SessionErrorPayload)
+			require.True(t, ok)
+			assert.Equal(t, "user_message_mixed_content_unsupported", payload.Reason)
+			meta := requireClaudeEventMeta(t, events[0])
+			assert.Equal(t, len(tt.blocks), meta["blockCount"])
+		})
+	}
 }
 
 func TestMixedUserContentReportsUnsupportedBlockWithoutDroppingText(t *testing.T) {

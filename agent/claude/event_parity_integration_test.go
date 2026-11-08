@@ -237,7 +237,7 @@ func TestClaudeUserTextPreservesNativeMessageIdentity(t *testing.T) {
 	assert.Equal(t, "user-message-uuid", meta["userMessageUuid"])
 }
 
-func TestClaudeMixedUserBlocksPreserveTextAndToolResultOrder(t *testing.T) {
+func TestClaudeMixedUserContentIsUnsupported(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
@@ -254,10 +254,6 @@ func TestClaudeMixedUserBlocksPreserveTextAndToolResultOrder(t *testing.T) {
 			`{"type":"text","text":"before"},`+
 			`{"type":"tool_result","tool_use_id":"tool-1","content":"a"},`+
 			`{"type":"text","text":"between"}]}}`,
-		`<{"type":"user","session_id":"native-user-order","uuid":"result-first-frame",`+
-			`"message":{"id":"result-first-message","role":"user","content":[`+
-			`{"type":"tool_result","tool_use_id":"tool-2","content":"b"},`+
-			`{"type":"text","text":"after"}]}}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -278,37 +274,20 @@ func TestClaudeMixedUserBlocksPreserveTextAndToolResultOrder(t *testing.T) {
 	assert.Equal(t, agent.EventAgentToolCall, toolTwo.Type())
 	assert.Equal(t, "tool-2", toolTwo.ItemID)
 
-	before := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.UserMessage{
-		MessageID: "mixed-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "before"}},
-	}, before.Payload)
-	assert.Equal(t, "mixed-message", before.ItemID)
-	assert.Equal(t, []int{0}, requireClaudeMeta(t, before)["blockIndexes"])
+	gap := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventSessionError, gap.Type())
+	assert.Empty(t, gap.ItemID)
+	assert.Equal(t, agent.SessionErrorPayload{
+		Message: "Claude user message mixes text and tool_result blocks",
+		Reason:  "user_message_mixed_content_unsupported",
+	}, gap.Payload)
+	meta := requireClaudeMeta(t, gap)
+	assert.Equal(t, "mixed-frame", meta["uuid"])
+	assert.Equal(t, 3, meta["blockCount"])
 
-	resultOne := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.EventAgentToolResult, resultOne.Type())
-	assert.Equal(t, "tool-1", resultOne.ItemID)
-
-	between := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.UserMessage{
-		MessageID: "mixed-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "between"}},
-	}, between.Payload)
-	assert.Equal(t, []int{2}, requireClaudeMeta(t, between)["blockIndexes"])
-	assert.Equal(t, 1, requireClaudeMeta(t, between)["segmentIndex"])
-
-	resultTwo := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.EventAgentToolResult, resultTwo.Type())
-	assert.Equal(t, "tool-2", resultTwo.ItemID)
-
-	after := nextEvent(t, ctx, stream)
-	assert.Equal(t, agent.UserMessage{
-		MessageID: "result-first-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "after"}},
-	}, after.Payload)
-	assert.Equal(t, "result-first-message", after.ItemID)
-	assert.Equal(t, []int{1}, requireClaudeMeta(t, after)["blockIndexes"])
+	require.NoError(t, session.Close(ctx))
+	_, err = stream.Next(ctx)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestClaudeAssistantFrameDeduplicationIsResponseScoped(t *testing.T) {

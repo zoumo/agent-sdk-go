@@ -751,7 +751,6 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			received,
 			message,
 			[]agent.ContentBlock{agent.TextBlock{Text: *message.Content.Text}},
-			nil,
 		)
 	}
 	if len(message.Content.Blocks) == 0 {
@@ -762,11 +761,27 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			nil,
 		)
 	}
+	hasText := false
+	hasToolResult := false
+	for _, block := range message.Content.Blocks {
+		switch block.Type {
+		case "text":
+			hasText = true
+		case "tool_result":
+			hasToolResult = true
+		}
+	}
+	if hasText && hasToolResult {
+		return s.gap(
+			received,
+			"user_message_mixed_content_unsupported",
+			"Claude user message mixes text and tool_result blocks",
+			map[string]any{"blockCount": len(message.Content.Blocks)},
+		)
+	}
 
 	var events []agent.Event
 	var textContent []agent.ContentBlock
-	var textBlockIndexes []int
-	segmentIndex := 0
 	flushText := func() error {
 		if len(textContent) == 0 {
 			return nil
@@ -775,18 +790,12 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			received,
 			message,
 			textContent,
-			map[string]any{
-				"blockIndexes": append([]int(nil), textBlockIndexes...),
-				"segmentIndex": segmentIndex,
-			},
 		)
 		if err != nil {
 			return err
 		}
 		events = append(events, messageEvents...)
 		textContent = nil
-		textBlockIndexes = nil
-		segmentIndex++
 		return nil
 	}
 	appendGap := func(reason, messageText string, extras map[string]any) error {
@@ -818,7 +827,6 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 				textContent,
 				agent.TextBlock{Text: block.Text.Text},
 			)
-			textBlockIndexes = append(textBlockIndexes, index)
 		case "tool_result":
 			if err := flushText(); err != nil {
 				return nil, err
@@ -879,7 +887,6 @@ func (s *session) userMessageEvent(
 	received claude.Received,
 	message *claude.Message,
 	content []agent.ContentBlock,
-	extras map[string]any,
 ) ([]agent.Event, error) {
 	messageID := claudeUserMessageID(received.Event, message)
 	if messageID == "" {
@@ -898,15 +905,7 @@ func (s *session) userMessageEvent(
 			Content:   content,
 		},
 		nativeEventTime(received.Raw),
-		func() map[string]any {
-			meta := map[string]any{"blockCount": len(content)}
-			for key, value := range extras {
-				if _, reserved := meta[key]; !reserved {
-					meta[key] = value
-				}
-			}
-			return meta
-		}(),
+		map[string]any{"blockCount": len(content)},
 	)
 	if err != nil {
 		return nil, err

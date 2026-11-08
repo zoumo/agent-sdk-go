@@ -3,6 +3,7 @@ package agentclaude
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -408,8 +409,30 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 
 	var events []agent.Event
 	for _, block := range blocks {
-		kind, text, ok := visibleBlockText(block)
-		if ok {
+		kind, text, valid := visibleBlockText(block)
+		if kind != "" {
+			if !valid {
+				extras := map[string]any{"blockType": kind}
+				switch index, coordinate := blockCoordinate(block); coordinate {
+				case coordinateValid:
+					extras["blockIndex"] = index
+				case coordinateMissing:
+					extras["blockIndexAbsent"] = true
+				case coordinateInvalid:
+					extras["blockIndexInvalid"] = true
+				}
+				gapEvents, gapErr := s.gap(
+					received,
+					"assistant_block_content_invalid",
+					"Claude assistant block content is missing or has the wrong type",
+					extras,
+				)
+				if gapErr != nil {
+					return nil, gapErr
+				}
+				events = append(events, gapEvents...)
+				continue
+			}
 			key, coordinateErr := s.assistantBlockKey(
 				parent,
 				response,
@@ -611,11 +634,18 @@ func (s *session) assistantToolUse(
 		return nil, observeErr
 	}
 	events := []agent.Event{event}
-	if toolName == "TodoWrite" || toolName == "TaskCreate" || toolName == "TaskUpdate" {
+	switch toolName {
+	case "TodoWrite":
+		planEvents, planErr := s.todoWritePlan(received, toolID, input)
+		if planErr != nil {
+			return nil, planErr
+		}
+		events = append(events, planEvents...)
+	case "TaskCreate", "TaskUpdate":
 		gapEvents, gapErr := s.gap(
 			received,
-			"plan_unsupported",
-			"Claude task or todo data cannot be represented as a unified plan without proven priority",
+			"task_plan_snapshot_unavailable",
+			"Claude task tool data is not a complete plan snapshot and is not normalized",
 			map[string]any{"toolUseId": toolID, "toolName": toolName},
 		)
 		if gapErr != nil {
@@ -624,6 +654,78 @@ func (s *session) assistantToolUse(
 		events = append(events, gapEvents...)
 	}
 	return events, nil
+}
+
+func (s *session) todoWritePlan(
+	received claude.Received,
+	toolID string,
+	input any,
+) ([]agent.Event, error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return s.gap(
+			received,
+			"plan_shape_unsupported",
+			"Claude TodoWrite input cannot be represented as a unified plan",
+			map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
+		)
+	}
+	var data struct {
+		Todos *[]struct {
+			Content string `json:"content"`
+			Status  string `json:"status"`
+		} `json:"todos"`
+	}
+	if err := json.Unmarshal(encoded, &data); err != nil || data.Todos == nil {
+		return s.gap(
+			received,
+			"plan_shape_unsupported",
+			"Claude TodoWrite input has no todos snapshot",
+			map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
+		)
+	}
+	if len(*data.Todos) == 0 {
+		return s.gap(
+			received,
+			"plan_shape_unsupported",
+			"Claude TodoWrite input has an empty plan snapshot",
+			map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
+		)
+	}
+	entries := make([]agent.PlanEntry, 0, len(*data.Todos))
+	for _, todo := range *data.Todos {
+		status := unifiedClaudePlanStatus(todo.Status)
+		if todo.Content == "" || status == "" {
+			return s.gap(
+				received,
+				"plan_shape_unsupported",
+				"Claude TodoWrite input contains an unsupported entry",
+				map[string]any{"toolUseId": toolID, "toolName": "TodoWrite"},
+			)
+		}
+		entries = append(entries, agent.PlanEntry{
+			Content: todo.Content,
+			Status:  status,
+		})
+	}
+	event, err := s.newEvent(
+		received,
+		toolID,
+		agent.PlanPayload{
+			PlanID:  toolID,
+			Entries: entries,
+		},
+		nativeEventTime(received.Raw),
+		map[string]any{
+			"toolUseId":   toolID,
+			"toolName":    "TodoWrite",
+			"planEntries": len(entries),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return []agent.Event{event}, nil
 }
 
 func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
@@ -649,6 +751,7 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			received,
 			message,
 			[]agent.ContentBlock{agent.TextBlock{Text: *message.Content.Text}},
+			nil,
 		)
 	}
 	if len(message.Content.Blocks) == 0 {
@@ -662,7 +765,34 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 
 	var events []agent.Event
 	var textContent []agent.ContentBlock
+	var textBlockIndexes []int
+	segmentIndex := 0
+	flushText := func() error {
+		if len(textContent) == 0 {
+			return nil
+		}
+		messageEvents, err := s.userMessageEvent(
+			received,
+			message,
+			textContent,
+			map[string]any{
+				"blockIndexes": append([]int(nil), textBlockIndexes...),
+				"segmentIndex": segmentIndex,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		events = append(events, messageEvents...)
+		textContent = nil
+		textBlockIndexes = nil
+		segmentIndex++
+		return nil
+	}
 	appendGap := func(reason, messageText string, extras map[string]any) error {
+		if err := flushText(); err != nil {
+			return err
+		}
 		gapEvents, gapErr := s.gap(received, reason, messageText, extras)
 		if gapErr != nil {
 			return gapErr
@@ -688,7 +818,11 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 				textContent,
 				agent.TextBlock{Text: block.Text.Text},
 			)
+			textBlockIndexes = append(textBlockIndexes, index)
 		case "tool_result":
+			if err := flushText(); err != nil {
+				return nil, err
+			}
 			if block.ToolResult == nil {
 				if err := appendGap(
 					"tool_result_block_missing",
@@ -714,12 +848,8 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			}
 		}
 	}
-	if len(textContent) != 0 {
-		messageEvents, err := s.userMessageEvent(received, message, textContent)
-		if err != nil {
-			return nil, err
-		}
-		events = append(messageEvents, events...)
+	if err := flushText(); err != nil {
+		return nil, err
 	}
 	if len(events) == 0 {
 		return s.gap(
@@ -732,10 +862,24 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 	return events, nil
 }
 
+func unifiedClaudePlanStatus(value string) string {
+	switch value {
+	case "pending":
+		return "pending"
+	case "in_progress":
+		return "in_progress"
+	case "completed":
+		return "completed"
+	default:
+		return ""
+	}
+}
+
 func (s *session) userMessageEvent(
 	received claude.Received,
 	message *claude.Message,
 	content []agent.ContentBlock,
+	extras map[string]any,
 ) ([]agent.Event, error) {
 	messageID := claudeUserMessageID(received.Event, message)
 	if messageID == "" {
@@ -754,7 +898,15 @@ func (s *session) userMessageEvent(
 			Content:   content,
 		},
 		nativeEventTime(received.Raw),
-		map[string]any{"blockCount": len(content)},
+		func() map[string]any {
+			meta := map[string]any{"blockCount": len(content)}
+			for key, value := range extras {
+				if _, reserved := meta[key]; !reserved {
+					meta[key] = value
+				}
+			}
+			return meta
+		}(),
 	)
 	if err != nil {
 		return nil, err
@@ -1436,23 +1588,111 @@ func assistantBlocks(content claude.Content) ([]map[string]json.RawMessage, erro
 	return blocks, nil
 }
 
+func claudeDecodeError(err error) *claude.Error {
+	var nativeErr *claude.Error
+	if !errors.As(err, &nativeErr) ||
+		nativeErr.Op != "decode" ||
+		len(nativeErr.Raw) == 0 {
+		return nil
+	}
+	return nativeErr
+}
+
+func assistantDecodeFailure(
+	raw json.RawMessage,
+) (string, []map[string]json.RawMessage, bool) {
+	var frame struct {
+		Type    string `json:"type"`
+		Message struct {
+			ID      string          `json:"id"`
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(raw, &frame) != nil ||
+		frame.Type != "assistant" ||
+		len(frame.Message.Content) == 0 {
+		return "", nil, false
+	}
+	var blocks []map[string]json.RawMessage
+	if json.Unmarshal(frame.Message.Content, &blocks) != nil {
+		return "", nil, false
+	}
+	return frame.Message.ID, blocks, true
+}
+
+func (s *session) assistantDecodeGap(
+	nativeErr *claude.Error,
+) ([]agent.Event, error) {
+	responseID, blocks, ok := assistantDecodeFailure(nativeErr.Raw)
+	if !ok {
+		return []agent.Event{}, nil
+	}
+	for contentIndex, block := range blocks {
+		kind, _, valid := visibleBlockText(block)
+		if kind == "" || valid {
+			continue
+		}
+		extras := map[string]any{
+			"blockType":     kind,
+			"contentIndex":  contentIndex,
+			"decodeFailure": true,
+			"responseId":    responseID,
+		}
+		switch index, coordinate := blockCoordinate(block); coordinate {
+		case coordinateValid:
+			extras["blockIndex"] = index
+		case coordinateMissing:
+			extras["blockIndexAbsent"] = true
+		case coordinateInvalid:
+			extras["blockIndexInvalid"] = true
+		}
+		event, eventErr := s.newEvent(
+			claude.Received{Raw: nativeErr.Raw},
+			"",
+			agent.SessionErrorPayload{
+				Message: "Claude assistant block content cannot be decoded",
+				Reason:  "assistant_block_content_invalid",
+			},
+			nativeEventTime(nativeErr.Raw),
+			extras,
+		)
+		if eventErr != nil {
+			return nil, eventErr
+		}
+		return []agent.Event{event}, nil
+	}
+	return []agent.Event{}, nil
+}
+
 func visibleBlockText(block map[string]json.RawMessage) (string, string, bool) {
 	switch rawString(block, "type") {
 	case "text":
-		var text *string
-		if json.Unmarshal(block["text"], &text) != nil || text == nil {
-			return "text", "", true
+		text, ok := visibleString(block["text"])
+		if !ok {
+			return "text", "", false
 		}
-		return "text", *text, true
+		return "text", text, true
 	case "thinking":
-		var text *string
-		if json.Unmarshal(block["thinking"], &text) != nil || text == nil {
-			return "thinking", "", true
+		text, ok := visibleString(block["thinking"])
+		if !ok {
+			return "thinking", "", false
 		}
-		return "thinking", *text, true
+		return "thinking", text, true
 	default:
 		return "", "", false
 	}
+}
+
+func visibleString(raw json.RawMessage) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return "", false
+	}
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return "", false
+	}
+	return value, true
 }
 
 func rawString(block map[string]json.RawMessage, name string) string {

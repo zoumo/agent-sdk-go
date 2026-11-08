@@ -57,23 +57,32 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
     }); err != nil {
         return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
     }
-    for {
+    idle := false
+    for !idle {
         event, err := events.Next(ctx)
         if errors.Is(err, io.EOF) {
-            break
+            return errors.Join(
+                errors.New("event stream ended before idle"),
+                session.Close(ctx),
+                provider.Stop(ctx),
+            )
         }
         if err != nil {
             return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
         }
-        if request, ok := event.Payload.(agent.InteractionRequestedPayload); ok &&
-            request.Request.Kind == agent.InteractionPermission {
-            _, err := session.Answer(ctx, request.Interaction, agent.PermissionAnswer{
-                Outcome:  agent.PermissionSelected,
-                OptionID: request.Request.Options[0].OptionID,
-            })
-            if err != nil {
-                return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+        switch payload := event.Payload.(type) {
+        case agent.InteractionRequestedPayload:
+            if payload.Request.Kind == agent.InteractionPermission {
+                _, err := session.Answer(ctx, payload.Interaction, agent.PermissionAnswer{
+                    Outcome:  agent.PermissionSelected,
+                    OptionID: payload.Request.Options[0].OptionID,
+                })
+                if err != nil {
+                    return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+                }
             }
+        case agent.StateUpdatePayload:
+            idle = payload.State != nil && *payload.State == agent.StateIdle
         }
     }
     if err := session.Close(ctx); err != nil {
@@ -96,8 +105,10 @@ identity, history import, persistence, and multi-session aggregation also remain
 outside this module.
 
 `go test ./agent -run '^ExampleProvider$'` runs the provider-neutral flow twice
-with synthetic Codex and Claude sessions. It consumes a message, answers an
-interaction, closes, resumes, and stops without launching a real CLI.
+with in-memory synthetic fake providers. It consumes a message, answers an
+interaction, waits for idle, closes, resumes, and stops without launching a real
+CLI. This example validates the shared interface only; adapter behavior is
+covered by the `agent/codex` and `agent/claude` integration tests.
 
 Go **1.26** or newer is required. The root `mise.toml` is optional for local
 tool management. Formatting and linting use the root Makefile:

@@ -14,8 +14,8 @@ import (
 )
 
 // ExampleProvider shows one application flow over two synthetic providers.
-// The real constructors are agentcodex.New and agentclaude.New. This example
-// keeps both providers offline so it never launches a native CLI.
+// The production adapter constructors are agentcodex.New and agentclaude.New.
+// This example keeps both providers offline so it never launches a native CLI.
 func ExampleProvider() {
 	ctx := context.Background()
 	for _, providerName := range []string{"codex", "claude"} {
@@ -37,10 +37,11 @@ func ExampleProvider() {
 		mustExample(err)
 		fmt.Printf("%s submit=%s\n", providerName, receipt.Submission)
 
-		for {
+		idle := false
+		for !idle {
 			event, nextErr := stream.Next(ctx)
 			if errors.Is(nextErr, io.EOF) {
-				break
+				panic("event stream ended before idle")
 			}
 			mustExample(nextErr)
 			switch payload := event.Payload.(type) {
@@ -66,6 +67,8 @@ func ExampleProvider() {
 			case agent.AgentMessage:
 				fmt.Printf("%s event=%s text=%q\n",
 					providerName, event.Type(), exampleMessageText(payload.Content))
+			case agent.StateUpdatePayload:
+				idle = payload.State != nil && *payload.State == agent.StateIdle
 			}
 		}
 		mustExample(session.Close(ctx))
@@ -190,6 +193,7 @@ type exampleSession struct {
 
 func newExampleSession(provider, id string) *exampleSession {
 	interaction := agent.InteractionRef(provider + "/interaction-1")
+	idle := agent.StateIdle
 	request := agent.InteractionRequest{
 		Kind:       agent.InteractionPermission,
 		ToolCallID: provider + "-tool",
@@ -225,6 +229,7 @@ func newExampleSession(provider, id string) *exampleSession {
 					agent.TextBlock{Text: "Offline reply for " + provider},
 				},
 			}),
+			exampleEvent(id, 5, "", agent.StateUpdatePayload{State: &idle}),
 		},
 	}
 }

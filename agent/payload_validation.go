@@ -59,12 +59,14 @@ func validatePayload(payload Payload) error {
 			return err
 		}
 	case PlanPayload:
-		if value.PlanID == "" || len(value.Entries) == 0 {
-			return invalidArgument("invalid_plan", "plan requires ID and entries")
+		if value.PlanID == "" || value.Text == "" && len(value.Entries) == 0 {
+			return invalidArgument(
+				"invalid_plan",
+				"plan requires an ID and authoritative text or entries",
+			)
 		}
 		for _, entry := range value.Entries {
-			if entry.Content == "" || !validPlanPriority(entry.Priority) ||
-				!validPlanStatus(entry.Status) {
+			if entry.Content == "" || !validPlanStatus(entry.Status) {
 				return invalidArgument("invalid_plan_entry", "plan entry is invalid")
 			}
 		}
@@ -286,15 +288,6 @@ func validInteractionOutcome(outcome InteractionOutcome) bool {
 		InteractionCancelled,
 		InteractionExpired,
 		InteractionFailed:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPlanPriority(priority string) bool {
-	switch priority {
-	case "low", "medium", "high":
 		return true
 	default:
 		return false

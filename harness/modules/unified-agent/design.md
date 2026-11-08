@@ -123,25 +123,11 @@ codex/types <-- codex          claude/types <-- claude
           MASS Service / EventStore / Broadcast / transport
 ```
 
-依赖规则：
-
-- `agent` 只包含统一值、接口、纯校验和事件值，不导入原生 SDK 或 MASS。
-- `agent` 的生产依赖保持标准库；事件 JSON 编解码可以使用标准库。
-- `agent/codex` 可以导入 `codex`、`codex/types` 和 `agent`。
-- `agent/claude` 可以导入 `claude`、`claude/types` 和 `agent`。
-- 两个 adapter 还可以复用不绑定 provider 的 SDK 内部机械包
-  `internal/queue`、`internal/uuidv4`；不得导入对方 native SDK 或对方 adapter，
-  也不得要求原生包反向依赖统一层。
-- 只有 MASS 的 Runtime adapter 可以导入统一层。MASS Service、Store 和
-  transport 只依赖 MASS 自己的 `SessionEvent`，不直接依赖 `agent`。
-- SDK adapter 不读取 MASS 配置文件、恢复目录、资源身份或 `MASS_*` 环境约定；
-  MASS 在构造 Provider 前完成这些解释。
-- MASS 的 provider-specific Runtime 可以同时依赖统一层和对应原生 SDK：
-  Codex 的 live 路径走 `agent/codex`，历史查询使用同一 Provider 暴露的
-  `NativeClient()`；Claude 的 live 路径走 `agent/claude`，历史查询直接调用
-  `claude` package-level API。
-- 统一 `agent` 包不得导入原生 SDK 或 MASS，也不得定义跨 provider 的历史
-  查询、历史事件或 replay 合同。
+目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图只
+说明本设计的调用方向：统一 `agent` 是上层实时合同，原生 SDK 不反向依赖它；
+两个 adapter 只适配各自 provider；MASS Runtime adapter 可以消费统一层，而
+MASS Service、Store 和 transport 仍只依赖 MASS 自己的合同。MASS 的配置、
+资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
 
 ## 为什么不整体搬迁 MASS Runtime
 
@@ -716,14 +702,15 @@ type ToolChunkPayload struct {
 }
 
 type PlanEntry struct {
-    Content  string
-    Priority string
-    Status   string
+    Content string
+    Status  string
 }
 
 type PlanPayload struct {
-    PlanID  string
-    Entries []PlanEntry
+    PlanID      string
+    Text        string
+    Explanation string
+    Entries     []PlanEntry
 }
 
 type SessionState string
@@ -824,6 +811,14 @@ MASS 是否持久化。
 `*_chunk` 只追加，不是累计快照。adapter 不跨事件拼接完整历史，也不用结束后
 补造完整消息。工具调用和结果共享 `itemId`，但事件身份不同。完整消息与 chunk
 使用相同的 item/message 身份。
+
+`agent.plan` 的 `PlanID` 必填，且 `Text` 或非空 `Entries` 至少有一个。`Text`
+表示有原生文本快照的计划，`Entries` 表示有原生结构化状态快照的计划；
+`Explanation` 只在原生提供时保留。entry status 只允许 `pending`、
+`in_progress`、`completed`，不虚构 priority。计划事件可以没有 `ItemID`：
+Codex 的 completed plan item 使用 item ID 和文本；`turn/plan/updated` 使用
+turn ID 和结构化 entries；Claude `TodoWrite` 使用 tool-use ID 和原生 entries。
+原生 `TaskCreate`/`TaskUpdate` 不提供完整快照，保留为明确缺口。
 
 会话状态只报告 `idle`、`running`、`requires_action` 或未知（nil pointer），
 不报告 MASS Service 的 opening、closing、archived。只有原生工作开始/结束证据
@@ -952,148 +947,19 @@ Claude 没有对应 client，MASS 直接调用 package-level
   查询错误类型暴露到 MASS Service、HTTP 或 SSE。
 - 返回值和错误的持有、取消、raw 数据及覆盖边界仍由原生查询合同定义。
 
-## MASS 最终接口
+## MASS 权威 Runtime 合同
 
-MASS 对 Service 的公开 Runtime 合同保持不变：
+MASS 的 `Driver`、`DriverSession`、`Address`、回执、事件和恢复合同不在本
+仓库复制；实现与验收以 MASS 仓库为准：
 
-```go
-package runtime
+- [Runtime 设计](https://github.com/zoumo/mass/blob/main/harness/modules/runtime/design.md)
+- [Runtime driver 合同](https://github.com/zoumo/mass/blob/main/harness/modules/runtime/runtime-driver.tsp)
+- [Runtime events](https://github.com/zoumo/mass/blob/main/harness/modules/runtime/events.md)
 
-type Driver interface {
-    Events() (events.Stream, error)
-
-    Start(ctx context.Context) (Capabilities, error)
-    Stop(ctx context.Context) error
-
-    OpenSession(
-        ctx context.Context,
-        address Address,
-        spec SessionSpec,
-    ) (DriverSession, error)
-    ResumeSession(
-        ctx context.Context,
-        sessionID string,
-        address Address,
-        spec SessionSpec,
-    ) (DriverSession, error)
-
-    LoadSession(
-        ctx context.Context,
-        sessionID string,
-        address Address,
-        cwd string,
-        loadID string,
-    ) error
-    CancelHistoryLoad(
-        ctx context.Context,
-        sessionID string,
-        loadID string,
-    ) error
-
-    SendPrompt(
-        ctx context.Context,
-        sessionID string,
-        input Input,
-    ) (InputReceipt, error)
-    AnswerInteraction(
-        ctx context.Context,
-        sessionID string,
-        interaction string,
-        answer any,
-    ) (Acceptance, error)
-    Cancel(
-        ctx context.Context,
-        sessionID string,
-    ) (CancelReceipt, error)
-    CloseSession(ctx context.Context, sessionID string) error
-}
-```
-
-可选的显式初始输入合同同样保留：
-
-```go
-type CreationDriver interface {
-    ValidateInitialInput(input Input) error
-    OpenSessionWithInput(
-        ctx context.Context,
-        address Address,
-        spec SessionSpec,
-        input Input,
-    ) (DriverSession, error)
-}
-
-type ResumptionDriver interface {
-    ValidateInitialInput(input Input) error
-    ResumeSessionWithInput(
-        ctx context.Context,
-        sessionID string,
-        address Address,
-        spec SessionSpec,
-        input Input,
-    ) (DriverSession, error)
-}
-```
-
-`DriverSession` 继续返回 MASS 侧身份与来源：
-
-```go
-type DriverSession struct {
-    SessionID           string
-    Capabilities        Capabilities
-    EffectiveFeatures   SessionFeatures
-    Source              events.Source
-    InitialInputReceipt *InputReceipt
-}
-```
-
-对应的 MASS 值仍为：
-
-```go
-type Address struct {
-    Namespace   string
-    SessionName string
-}
-
-type SessionFeatures struct {
-    AgentQuestions *bool
-}
-
-type SessionSpec struct {
-    Cwd            string
-    SystemPrompt   string
-    AdditionalDirs []string
-    Features       *SessionFeatures
-}
-
-type Input struct {
-    Content []events.ContentBlock
-}
-
-type InputReceipt struct {
-    Submission string
-    Acceptance Acceptance
-}
-
-type InteractionReceipt struct {
-    Interaction string
-    Evidence    Acceptance
-}
-
-type CancelReceipt struct {
-    Target string
-    Result string
-}
-```
-
-`CapabilitySet` 仍是 MASS 的开放布尔 map。`Address`、`SessionSpec`、
-`SessionInput`、这些回执、运行恢复材料和 RuntimeConfig 解析仍由 MASS 拥有。
-统一层不提供 MASS `Address`、`Source` 或恢复文件类型。
-SDK 与 MASS 的 receipt/acceptance 是不同包中的可替换值，adapter 逐字段映射；
-不能依赖类型别名把这些边界耦合在一起。
-
-`RuntimeRegistry`、`Factory`、类型到 Provider 配置的映射和未启动 Driver 的
-构造仍由 MASS 拥有。Registry 只构造 MASS Driver，不了解 `agent.Provider` 的
-原生配置字段。
+本设计只定义 MASS Runtime adapter 如何消费 `agent.Provider` 和
+`agent.Session`。`RuntimeDriver`、多 Session 汇聚、`Address`、运行来源、
+恢复、显式历史 load、持久化分类和 Service 边界仍由 MASS 拥有。统一层不提供
+MASS `Address`、`Source`、回执或恢复文件类型，也不通过类型别名耦合两边。
 
 ### MASS 事件模型不变
 
@@ -1504,8 +1370,8 @@ block/message linkage 和无法归属的交互行为保持不变。
 
 ### 10. 删除 MASS 重复的实时转换
 
-仅在两个 provider 都通过 parity 检查且回退窗口结束后，删除 MASS 中重复的纯
-实时事件转换、block 身份、状态投影和交互句柄 registry。历史记录到
+仅在两个 provider 都通过各自记录的离线门禁且回退窗口结束后，删除 MASS 中
+重复的纯实时事件转换、block 身份、状态投影和交互句柄 registry。历史记录到
 `SessionEvent` 的 provider-specific 转换不删除，也不迁移到 SDK。
 
 以下代码不删除：

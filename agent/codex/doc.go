@@ -35,10 +35,9 @@
 // not provide a selectable settings-option catalog or available-command catalog
 // through this adapter. Archive and unarchive actions are supported, but their
 // notifications have no unified payload. Plan text deltas and reasoning part
-// boundaries are not represented. Turn plan updates are non-fatal
-// plan_identity_unavailable errors because their native turn scope has no item
-// ID required by the unified plan event; the raw plan, turn ID, explanation and
-// entry count remain in Meta.
+// boundaries are not represented. Completed plan items carry their text and
+// item identity; turn plan updates carry their structured entries, explanation,
+// and native turn ID without inventing an item ID.
 //
 // Permission-profile approvals are unsupported, as are native item and
 // notification variants without a proven mapping. Successful lineage

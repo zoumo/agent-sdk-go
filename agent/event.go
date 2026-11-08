@@ -128,8 +128,7 @@ func payloadRequiresItem(payload Payload) bool {
 		ToolResultPayload,
 		MessageChunk,
 		ThinkingChunk,
-		ToolChunkPayload,
-		PlanPayload:
+		ToolChunkPayload:
 		return true
 	default:
 		return false

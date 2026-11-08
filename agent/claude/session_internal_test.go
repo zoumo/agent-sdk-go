@@ -136,21 +136,73 @@ func TestMixedUserContentPreservesTextAndToolResults(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Len(t, events, 2)
+	require.Len(t, events, 3)
 	assert.Equal(t, agent.EventUserMessage, events[0].Type())
 	assert.Equal(t, agent.UserMessage{
 		MessageID: "mixed-message",
-		Content: []agent.ContentBlock{
-			agent.TextBlock{Text: "inspect the file"},
-			agent.TextBlock{Text: "then summarize it"},
-		},
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "inspect the file"}},
 	}, events[0].Payload)
+	assert.Equal(t, "mixed-message", events[0].ItemID)
+	firstMeta := requireClaudeEventMeta(t, events[0])
+	assert.Equal(t, []int{0}, firstMeta["blockIndexes"])
+	assert.Equal(t, 0, firstMeta["segmentIndex"])
+
 	assert.Equal(t, agent.EventAgentToolResult, events[1].Type())
 	payload, ok := events[1].Payload.(agent.ToolResultPayload)
 	require.True(t, ok)
 	assert.Equal(t, "tool-1", payload.ID)
 	assert.Equal(t, "Read", payload.Kind)
 	assert.Equal(t, []agent.ContentBlock{agent.TextBlock{Text: "file contents"}}, payload.Content)
+
+	assert.Equal(t, agent.EventUserMessage, events[2].Type())
+	assert.Equal(t, "mixed-message", events[2].ItemID)
+	assert.Equal(t, agent.UserMessage{
+		MessageID: "mixed-message",
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "then summarize it"}},
+	}, events[2].Payload)
+	secondMeta := requireClaudeEventMeta(t, events[2])
+	assert.Equal(t, []int{2}, secondMeta["blockIndexes"])
+	assert.Equal(t, 1, secondMeta["segmentIndex"])
+}
+
+func TestToolResultBeforeUserTextPreservesNativeOrder(t *testing.T) {
+	session := &session{
+		id:    "native-session",
+		calls: map[string]claudeCall{"tool-1": {name: "Read"}},
+	}
+	events, err := session.userEvent(claude.Received{
+		Event: &claude.Event{
+			Type: "user",
+			UUID: "event-uuid",
+			User: &claude.Message{
+				ID: "mixed-message",
+				Content: claude.Content{Blocks: []claude.ContentBlock{
+					{
+						Type: "tool_result",
+						ToolResult: &claude.ToolResultBlock{
+							ToolUseID: "tool-1",
+							Content:   json.RawMessage(`"file contents"`),
+						},
+					},
+					{
+						Type: "text",
+						Text: &claude.TextBlock{Text: "summarize it"},
+					},
+				}},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, agent.EventAgentToolResult, events[0].Type())
+	assert.Equal(t, agent.EventUserMessage, events[1].Type())
+	assert.Equal(t, agent.UserMessage{
+		MessageID: "mixed-message",
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "summarize it"}},
+	}, events[1].Payload)
+	meta := requireClaudeEventMeta(t, events[1])
+	assert.Equal(t, []int{1}, meta["blockIndexes"])
+	assert.Equal(t, 0, meta["segmentIndex"])
 }
 
 func TestMixedUserContentReportsUnsupportedBlockWithoutDroppingText(t *testing.T) {
@@ -227,6 +279,117 @@ func TestAbortedAssistantFrameBecomesGap(t *testing.T) {
 	payload, ok := events[0].Payload.(agent.SessionErrorPayload)
 	require.True(t, ok)
 	assert.Equal(t, "assistant_aborted", payload.Reason)
+}
+
+func TestVisibleBlockTextDistinguishesLegalEmptyFromMalformed(t *testing.T) {
+	tests := []struct {
+		name  string
+		block string
+		kind  string
+		text  string
+		valid bool
+	}{
+		{
+			name:  "legal empty text",
+			block: `{"type":"text","text":""}`,
+			kind:  "text",
+			valid: true,
+		},
+		{
+			name:  "missing text",
+			block: `{"type":"text"}`,
+			kind:  "text",
+		},
+		{
+			name:  "null text",
+			block: `{"type":"text","text":null}`,
+			kind:  "text",
+		},
+		{
+			name:  "wrong text type",
+			block: `{"type":"text","text":1}`,
+			kind:  "text",
+		},
+		{
+			name:  "legal empty thinking",
+			block: `{"type":"thinking","thinking":""}`,
+			kind:  "thinking",
+			valid: true,
+		},
+		{
+			name:  "null thinking",
+			block: `{"type":"thinking","thinking":null}`,
+			kind:  "thinking",
+		},
+		{
+			name:  "other block",
+			block: `{"type":"tool_use","id":"tool-1"}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var block map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal([]byte(test.block), &block))
+			kind, text, valid := visibleBlockText(block)
+			assert.Equal(t, test.kind, kind)
+			assert.Equal(t, test.text, text)
+			assert.Equal(t, test.valid, valid)
+		})
+	}
+}
+
+func TestMalformedAssistantBlockBecomesGap(t *testing.T) {
+	session := &session{id: "native-session"}
+	events, err := session.assistantEvent(claude.Received{
+		Event: &claude.Event{
+			Type: "assistant",
+			UUID: "malformed-frame",
+			Assistant: &claude.Message{
+				ID: "response-malformed",
+				Content: claude.Content{
+					Raw: json.RawMessage(`[{"type":"text","text":null,"apiBlockIndex":0}]`),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	payload, ok := events[0].Payload.(agent.SessionErrorPayload)
+	require.True(t, ok)
+	assert.Equal(t, "assistant_block_content_invalid", payload.Reason)
+	meta := requireClaudeEventMeta(t, events[0])
+	assert.Equal(t, "text", meta["blockType"])
+	assert.Equal(t, 0, meta["blockIndex"])
+	state := session.blocks[claudeBlockKey{
+		response: "response-malformed",
+		index:    0,
+	}]
+	assert.Nil(t, state)
+}
+
+func TestEmptyAssistantBlockCompletesWithoutEvent(t *testing.T) {
+	session := &session{id: "native-session"}
+	events, err := session.assistantEvent(claude.Received{
+		Event: &claude.Event{
+			Type: "assistant",
+			UUID: "empty-frame",
+			Assistant: &claude.Message{
+				ID: "response-empty",
+				Content: claude.Content{
+					Raw: json.RawMessage(`[{"type":"text","text":"","apiBlockIndex":0}]`),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, events)
+	state := session.blocks[claudeBlockKey{
+		response: "response-empty",
+		index:    0,
+	}]
+	require.NotNil(t, state)
+	assert.True(t, state.completed)
+	assert.Empty(t, state.completedText)
 }
 
 func TestNewResponseReleasesPreviousBlockState(t *testing.T) {

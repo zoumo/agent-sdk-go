@@ -197,7 +197,7 @@ func TestEventWaitCancellationDoesNotConsumeOrClose(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	select {
 	case <-session.Done():
-		t.Fatal("canceling Next terminated the session")
+		require.Fail(t, "canceling Next terminated the session")
 	default:
 	}
 
@@ -265,7 +265,7 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.NoError(t, ctx.Err())
 	}
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(session.Err()))
 	_, err = stream.Next(ctx)

@@ -76,8 +76,11 @@ func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
 	)
 }
 
-func TestFormAnswersRejectsUnknownAndMultiSelectShapes(t *testing.T) {
-	questions := map[string]struct{}{"Which format?": {}}
+func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
+	questions := map[string]claude.Question{
+		"Which format?":   {},
+		"Which sections?": {MultiSelect: true},
+	}
 	tests := []struct {
 		name    string
 		content map[string]any
@@ -99,12 +102,20 @@ func TestFormAnswersRejectsUnknownAndMultiSelectShapes(t *testing.T) {
 			reason: "unknown_form_question",
 		},
 		{
-			name: "multi select labels",
+			name: "array for single select",
 			content: map[string]any{"answers": map[string]any{
 				"Which format?": []any{"json", "yaml"},
 			}},
-			code:   agent.ErrorUnsupported,
-			reason: "multi_select_form_answers_unsupported",
+			code:   agent.ErrorInvalidArgument,
+			reason: "invalid_form_answer",
+		},
+		{
+			name: "non-string multi select label",
+			content: map[string]any{"answers": map[string]any{
+				"Which sections?": []any{"intro", json.Number("1")},
+			}},
+			code:   agent.ErrorInvalidArgument,
+			reason: "invalid_form_answer",
 		},
 		{
 			name: "non string answer",
@@ -127,10 +138,17 @@ func TestFormAnswersRejectsUnknownAndMultiSelectShapes(t *testing.T) {
 	}
 
 	answers, err := formAnswers(map[string]any{
-		"answers": map[string]any{"Which format?": "json"},
+		"answers": map[string]any{
+			"Which format?":   "json",
+			"Which sections?": []any{"intro", "end"},
+		},
 	}, questions)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"Which format?": "json"}, answers)
+	format := "json"
+	assert.Equal(t, map[string]claude.QuestionAnswer{
+		"Which format?":   {Text: &format},
+		"Which sections?": {Labels: []string{"intro", "end"}},
+	}, answers)
 }
 
 func TestAnswerTerminalOutcomePreservesUnknownWrite(t *testing.T) {

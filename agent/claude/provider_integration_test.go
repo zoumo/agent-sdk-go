@@ -63,7 +63,7 @@ func TestOpenConfirmsInitAndCloseKeepsProviderHealthy(t *testing.T) {
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.NoError(t, ctx.Err())
 	}
 	assert.NoError(t, session.Err())
 	_, err = stream.Next(ctx)
@@ -114,7 +114,7 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 	require.NoError(t, first.Close(ctx))
 	select {
 	case <-second.Done():
-		t.Fatal("closing one session terminated another")
+		require.Fail(t, "closing one session terminated another")
 	default:
 	}
 

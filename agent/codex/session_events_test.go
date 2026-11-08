@@ -46,7 +46,7 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	select {
 	case <-session.Done():
-		t.Fatal("canceling one event wait terminated the session")
+		require.Fail(t, "canceling one event wait terminated the session")
 	default:
 	}
 

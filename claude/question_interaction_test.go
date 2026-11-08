@@ -60,11 +60,6 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 		questions.Questions[1].Question: {Labels: []string{"Intro", "End"}},
 	})
 	require.NoError(t, err)
-	require.ErrorIs(t, p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated}), ErrUnsupported)
-	require.NoError(t, p.Context().Err())
-	selected := "Intro, End"
-	updated, err = questions.WithAnswers(map[string]QuestionAnswer{questions.Questions[0].Question: {Text: &custom}, questions.Questions[1].Question: {Text: &selected}})
-	require.NoError(t, err)
 	{
 		err := p.Answer(context.Background(), PermissionAnswer{Behavior: types.PermissionAllow, UpdatedInput: updated})
 		require.NoError(t, err)
@@ -93,6 +88,7 @@ func (s *controlInteractionSuite) TestQuestionContractThroughOriginalPermissionH
 	}
 	require.Equal(t, types.PermissionAllow, decision.Behavior, "questions or answers changed")
 	require.Equal(t, custom, *answered.Answers[questions.Questions[0].Question].Text, "questions or answers changed")
+	require.Equal(t, []string{"Intro", "End"}, answered.Answers[questions.Questions[1].Question].Labels, "multi-select answers changed")
 	require.Equal(t, answered.Questions, questions.Questions, "questions or answers changed")
 	var got, want any
 	{

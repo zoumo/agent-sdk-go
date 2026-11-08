@@ -322,6 +322,20 @@ func (s *session) receiveUntilTerminal() error {
 				return nil
 			}
 			if nativeErr := s.native.Err(); nativeErr != nil {
+				if decodeErr := claudeDecodeError(nativeErr); decodeErr != nil {
+					events, gapErr := s.assistantDecodeGap(decodeErr)
+					if gapErr != nil {
+						return gapErr
+					}
+					if pushErr := s.pushEvents(events); pushErr != nil {
+						return adapterError(
+							agent.ErrorUnavailable,
+							"event_delivery_failed",
+							"deliver Claude decode diagnostic",
+							pushErr,
+						)
+					}
+				}
 				return nativeErr
 			}
 			return err

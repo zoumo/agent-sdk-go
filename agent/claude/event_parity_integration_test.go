@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/claude"
 )
 
 func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
@@ -236,6 +237,80 @@ func TestClaudeUserTextPreservesNativeMessageIdentity(t *testing.T) {
 	assert.Equal(t, "user-message-uuid", meta["userMessageUuid"])
 }
 
+func TestClaudeMixedUserBlocksPreserveTextAndToolResultOrder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-user-order","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"assistant","session_id":"native-user-order","uuid":"tool-frame",`+
+			`"message":{"id":"response-tools","content":[`+
+			`{"type":"tool_use","id":"tool-1","name":"Read","input":{"path":"a.txt"}},`+
+			`{"type":"tool_use","id":"tool-2","name":"Read","input":{"path":"b.txt"}}]}}`,
+		`<{"type":"user","session_id":"native-user-order","uuid":"mixed-frame",`+
+			`"message":{"id":"mixed-message","role":"user","content":[`+
+			`{"type":"text","text":"before"},`+
+			`{"type":"tool_result","tool_use_id":"tool-1","content":"a"},`+
+			`{"type":"text","text":"between"}]}}`,
+		`<{"type":"user","session_id":"native-user-order","uuid":"result-first-frame",`+
+			`"message":{"id":"result-first-message","role":"user","content":[`+
+			`{"type":"tool_result","tool_use_id":"tool-2","content":"b"},`+
+			`{"type":"text","text":"after"}]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	toolOne := nextEvent(t, ctx, stream)
+	toolTwo := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentToolCall, toolOne.Type())
+	assert.Equal(t, "tool-1", toolOne.ItemID)
+	assert.Equal(t, agent.EventAgentToolCall, toolTwo.Type())
+	assert.Equal(t, "tool-2", toolTwo.ItemID)
+
+	before := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.UserMessage{
+		MessageID: "mixed-message",
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "before"}},
+	}, before.Payload)
+	assert.Equal(t, "mixed-message", before.ItemID)
+	assert.Equal(t, []int{0}, requireClaudeMeta(t, before)["blockIndexes"])
+
+	resultOne := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentToolResult, resultOne.Type())
+	assert.Equal(t, "tool-1", resultOne.ItemID)
+
+	between := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.UserMessage{
+		MessageID: "mixed-message",
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "between"}},
+	}, between.Payload)
+	assert.Equal(t, []int{2}, requireClaudeMeta(t, between)["blockIndexes"])
+	assert.Equal(t, 1, requireClaudeMeta(t, between)["segmentIndex"])
+
+	resultTwo := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentToolResult, resultTwo.Type())
+	assert.Equal(t, "tool-2", resultTwo.ItemID)
+
+	after := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.UserMessage{
+		MessageID: "result-first-message",
+		Content:   []agent.ContentBlock{agent.TextBlock{Text: "after"}},
+	}, after.Payload)
+	assert.Equal(t, "result-first-message", after.ItemID)
+	assert.Equal(t, []int{1}, requireClaudeMeta(t, after)["blockIndexes"])
+}
+
 func TestClaudeAssistantFrameDeduplicationIsResponseScoped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -306,6 +381,152 @@ func TestClaudeAssistantFrameReusesStreamedResponseIdentity(t *testing.T) {
 		Content:   []agent.ContentBlock{agent.TextBlock{Text: "fallback"}},
 	}, message.Payload)
 	assertBlockMeta(t, message, "response-fallback", 0)
+}
+
+func TestClaudeMalformedAssistantTextAndThinkingBecomeStableGaps(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-malformed","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"assistant","session_id":"native-malformed","uuid":"malformed-frame",`+
+			`"message":{"id":"response-malformed","content":[`+
+			`{"type":"text","text":null,"apiBlockIndex":0},`+
+			`{"type":"thinking","apiBlockIndex":1}]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	textGap := nextEvent(t, ctx, stream)
+	assertGap(t, textGap, "assistant_block_content_invalid")
+	textMeta := requireClaudeMeta(t, textGap)
+	assert.Equal(t, "text", textMeta["blockType"])
+	assert.Equal(t, 0, textMeta["blockIndex"])
+
+	thinkingGap := nextEvent(t, ctx, stream)
+	assertGap(t, thinkingGap, "assistant_block_content_invalid")
+	thinkingMeta := requireClaudeMeta(t, thinkingGap)
+	assert.Equal(t, "thinking", thinkingMeta["blockType"])
+	assert.Equal(t, 1, thinkingMeta["blockIndex"])
+}
+
+func TestClaudeWrongAssistantBlockTypeBecomesDecodeGapBeforeNativeTermination(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-decode-gap","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		// Keep the malformed frame behind a client frame so Open cannot race it.
+		`>{"type":"user","session_id":"","parent_tool_use_id":null,`+
+			`"message":{"role":"user","content":"trigger malformed decode"}}`,
+		`<{"type":"assistant","session_id":"native-decode-gap","uuid":"wrong-type-frame",`+
+			`"message":{"id":"response-wrong-type","content":[`+
+			`{"type":"text","text":42,"apiBlockIndex":0}]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close(context.Background()) })
+	stream, err := session.Events()
+	require.NoError(t, err)
+	_, err = session.Submit(ctx, agent.Input{
+		Content: []agent.ContentBlock{agent.TextBlock{Text: "trigger malformed decode"}},
+	})
+	require.NoError(t, err)
+
+	gap := nextEvent(t, ctx, stream)
+	assertGap(t, gap, "assistant_block_content_invalid")
+	meta := requireClaudeMeta(t, gap)
+	assert.Equal(t, "text", meta["blockType"])
+	assert.Equal(t, 0, meta["blockIndex"])
+	assert.Equal(t, "response-wrong-type", meta["responseId"])
+	assert.Equal(t, true, meta["decodeFailure"])
+
+	_, terminalErr := stream.Next(ctx)
+	require.Error(t, terminalErr)
+	assert.ErrorIs(t, terminalErr, claude.ErrProtocol)
+	closeErr := session.Close(ctx)
+	require.Error(t, closeErr)
+	assert.ErrorIs(t, closeErr, claude.ErrProtocol)
+}
+
+func TestClaudeTodoWritePlanAndTaskSnapshotGaps(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-plan","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"assistant","session_id":"native-plan","uuid":"plan-frame",`+
+			`"message":{"id":"response-plan","content":[`+
+			`{"type":"tool_use","id":"todo-1","name":"TodoWrite","input":{"todos":[`+
+			`{"content":"inspect","status":"completed"},`+
+			`{"content":"change","status":"in_progress"},`+
+			`{"content":"verify","status":"pending"}]}},`+
+			`{"type":"tool_use","id":"task-create","name":"TaskCreate","input":{"subject":"change"}},`+
+			`{"type":"tool_use","id":"task-update","name":"TaskUpdate","input":{"taskId":"1","status":"completed"}}]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	todoCall := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentToolCall, todoCall.Type())
+	assert.Equal(t, "todo-1", todoCall.ItemID)
+
+	plan := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentPlan, plan.Type())
+	assert.Equal(t, "todo-1", plan.ItemID)
+	assert.Equal(t, agent.PlanPayload{
+		PlanID: "todo-1",
+		Entries: []agent.PlanEntry{
+			{Content: "inspect", Status: "completed"},
+			{Content: "change", Status: "in_progress"},
+			{Content: "verify", Status: "pending"},
+		},
+	}, plan.Payload)
+	planMeta := requireClaudeMeta(t, plan)
+	assert.Equal(t, "TodoWrite", planMeta["toolName"])
+	assert.Equal(t, 3, planMeta["planEntries"])
+
+	taskCreate := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentToolCall, taskCreate.Type())
+	assert.Equal(t, "task-create", taskCreate.ItemID)
+	createGap := nextEvent(t, ctx, stream)
+	assertGap(t, createGap, "task_plan_snapshot_unavailable")
+
+	taskUpdate := nextEvent(t, ctx, stream)
+	assert.Equal(t, agent.EventAgentToolCall, taskUpdate.Type())
+	assert.Equal(t, "task-update", taskUpdate.ItemID)
+	updateGap := nextEvent(t, ctx, stream)
+	assertGap(t, updateGap, "task_plan_snapshot_unavailable")
 }
 
 func TestClaudeInitialAndChangedCommandsPreserveOrder(t *testing.T) {

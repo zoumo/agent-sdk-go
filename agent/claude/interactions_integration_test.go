@@ -373,7 +373,8 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 func TestClaudeFormAnswerOutcomes(t *testing.T) {
 	const input = `{"questions":[{"question":"Which format?",` +
 		`"header":"Format","options":[{"label":"json","description":"JSON"}],` +
-		`"multiSelect":false}]}`
+		`"multiSelect":false},{"question":"Which sections?",` +
+		`"options":[{"label":"intro"},{"label":"end"}],"multiSelect":true}]}`
 	tests := []struct {
 		name        string
 		response    string
@@ -386,12 +387,15 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 				`"request_id":"question","response":{"behavior":"allow","updatedInput":` +
 				`{"questions":[{"question":"Which format?","header":"Format",` +
 				`"options":[{"label":"json","description":"JSON"}],` +
-				`"multiSelect":false}],` +
-				`"answers":{"Which format?":"json"}}}}}`,
+				`"multiSelect":false},{"question":"Which sections?",` +
+				`"options":[{"label":"intro"},{"label":"end"}],"multiSelect":true}],` +
+				`"answers":{"Which format?":"json",` +
+				`"Which sections?":["intro","end"]}}}}}`,
 			answer: agent.FormAnswer{
 				Outcome: agent.FormAccept,
 				Content: map[string]any{"answers": map[string]any{
-					"Which format?": "json",
+					"Which format?":   "json",
+					"Which sections?": []any{"intro", "end"},
 				}},
 			},
 			wantOutcome: agent.InteractionAnswered,
@@ -449,9 +453,19 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 			requested := nextClaudeInteractionRequested(t, ctx, stream)
 			assert.Equal(t, agent.InteractionForm, requested.Request.Kind)
 			assert.Equal(t, "Answer native Claude questions", requested.Request.Message)
-			questions, ok := requested.Request.RequestedSchema["questions"].([]any)
+			requestedProperties, ok := requested.Request.RequestedSchema["properties"].(map[string]any)
 			require.True(t, ok)
-			require.Len(t, questions, 1)
+			answers, ok := requestedProperties["answers"].(map[string]any)
+			require.True(t, ok)
+			answerProperties, ok := answers["properties"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, map[string]any{"type": "string"}, answerProperties["Which format?"])
+			multiSelectSchema, ok := answerProperties["Which sections?"].(map[string]any)
+			require.True(t, ok)
+			alternatives, ok := multiSelectSchema["anyOf"].([]any)
+			require.True(t, ok)
+			assert.Len(t, alternatives, 2)
+			assert.Len(t, requested.Request.RequestedSchema["x-claude-questions"], 2)
 
 			receipt, err := session.Answer(ctx, requested.Interaction, test.answer)
 			require.NoError(t, err)
@@ -472,11 +486,12 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 	}
 }
 
-func TestClaudeFormRejectsMalformedAndMultiSelectAnswersBeforeWrite(t *testing.T) {
+func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	const input = `{"questions":[{"question":"Which formats?",` +
+	const input = `{"questions":[{"question":"Which format?",` +
+		`"options":[{"label":"json"},{"label":"yaml"}]},{"question":"Which formats?",` +
 		`"options":[{"label":"json"},{"label":"yaml"}],"multiSelect":true}]}`
 	frames := []string{
 		claudeSessionInitFrame(t, "native-form-invalid", cwd),
@@ -490,9 +505,11 @@ func TestClaudeFormRejectsMalformedAndMultiSelectAnswersBeforeWrite(t *testing.T
 		),
 		`>{"type":"control_response","response":{"subtype":"success",` +
 			`"request_id":"question-invalid","response":{"behavior":"allow",` +
-			`"updatedInput":{"questions":[{"question":"Which formats?",` +
+			`"updatedInput":{"questions":[{"question":"Which format?",` +
+			`"options":[{"label":"json"},{"label":"yaml"}]},{"question":"Which formats?",` +
 			`"options":[{"label":"json"},{"label":"yaml"}],"multiSelect":true}],` +
-			`"answers":{"Which formats?":"json"}}}}}`,
+			`"answers":{"Which format?":"json",` +
+			`"Which formats?":["json","yaml"]}}}}}`,
 		claudeStateFrame("native-form-invalid", "running", "2026-11-07T14:30:03Z"),
 	}
 	session, stream := openClaudeInteractionSession(
@@ -543,15 +560,26 @@ func TestClaudeFormRejectsMalformedAndMultiSelectAnswersBeforeWrite(t *testing.T
 			reason: "unknown_form_question",
 		},
 		{
-			name: "multi select labels",
+			name: "array for single select",
 			answer: agent.FormAnswer{
 				Outcome: agent.FormAccept,
 				Content: map[string]any{"answers": map[string]any{
-					"Which formats?": []any{"json", "yaml"},
+					"Which format?": []any{"json", "yaml"},
 				}},
 			},
-			code:   agent.ErrorUnsupported,
-			reason: "multi_select_form_answers_unsupported",
+			code:   agent.ErrorInvalidArgument,
+			reason: "invalid_form_answer",
+		},
+		{
+			name: "non-string multi select label",
+			answer: agent.FormAnswer{
+				Outcome: agent.FormAccept,
+				Content: map[string]any{"answers": map[string]any{
+					"Which formats?": []any{"json", 1},
+				}},
+			},
+			code:   agent.ErrorInvalidArgument,
+			reason: "invalid_form_answer",
 		},
 	}
 	for _, test := range tests {
@@ -570,7 +598,8 @@ func TestClaudeFormRejectsMalformedAndMultiSelectAnswersBeforeWrite(t *testing.T
 	receipt, err := session.Answer(ctx, requested.Interaction, agent.FormAnswer{
 		Outcome: agent.FormAccept,
 		Content: map[string]any{"answers": map[string]any{
-			"Which formats?": "json",
+			"Which format?":  "json",
+			"Which formats?": []any{"json", "yaml"},
 		}},
 	})
 	require.NoError(t, err)
@@ -801,7 +830,7 @@ func TestClaudeInterruptAfterWriteReportsUnknownOutcome(t *testing.T) {
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.NoError(t, ctx.Err())
 	}
 }
 

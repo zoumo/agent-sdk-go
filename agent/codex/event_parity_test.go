@@ -79,7 +79,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		agent.EventAgentToolResult,
 		agent.EventAgentThinking,
 		agent.EventAgentMessage,
-		agent.EventSessionError,
+		agent.EventAgentPlan,
 		agent.EventSessionInfoUpdate,
 		agent.EventSessionUsageUpdate,
 		agent.EventSessionError,
@@ -159,7 +159,14 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		Content:   []agent.ContentBlock{agent.TextBlock{Text: "answer complete"}},
 		Phase:     "final_answer",
 	}, events[14].Payload)
-	assert.Equal(t, "plan_identity_unavailable", sessionErrorReason(t, events[15]))
+	assert.Equal(t, agent.PlanPayload{
+		PlanID: "turn-a",
+		Entries: []agent.PlanEntry{
+			{Content: "inspect", Status: "completed"},
+			{Content: "change", Status: "in_progress"},
+		},
+		Explanation: "working",
+	}, events[15].Payload)
 	assert.Empty(t, events[15].ItemID)
 	planMeta := eventCodexMeta(t, events[15])
 	assert.Equal(t, "turn-a", planMeta["planId"])
@@ -327,6 +334,44 @@ func TestSessionRejectsUnrelatedTurnAfterIdleObservation(t *testing.T) {
 	require.NotNil(t, completed.State)
 	assert.Equal(t, agent.StateIdle, *completed.State)
 	assert.Equal(t, "completed", completed.StopReason)
+}
+
+func TestSessionMapsBothCodexPlanShapesWithoutInventedIdentity(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frames := interactionSessionFrames(
+		`<{"method":"item/started","params":{"threadId":"root-a","turnId":"turn-a","startedAtMs":1700000300100,"item":{"type":"plan","id":"plan-item","text":"not authoritative yet"}}}`,
+		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000300200,"item":{"type":"plan","id":"plan-item","text":"authoritative plan text"}}}`,
+		`<{"method":"turn/plan/updated","params":{"threadId":"root-a","turnId":"turn-a","explanation":"working","plan":[{"step":"inspect","status":"completed"},{"step":"change","status":"inProgress"}]}}`,
+		`<{"method":"turn/completed","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"completed","startedAt":1700000300,"completedAt":1700000302}}}`,
+	)
+	frames = append(frames, codexCloseFrames(94, "root-a")...)
+	session, stream := openInteractionSession(t, ctx, frames, agent.Features{})
+
+	submitInteractionTurn(t, ctx, session)
+	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+
+	itemPlan := nextEvent(t, ctx, stream)
+	require.Equal(t, agent.EventAgentPlan, itemPlan.Type())
+	assert.Equal(t, "plan-item", itemPlan.ItemID)
+	assert.Equal(t, agent.PlanPayload{
+		PlanID: "plan-item",
+		Text:   "authoritative plan text",
+	}, itemPlan.Payload)
+
+	turnPlan := nextEvent(t, ctx, stream)
+	require.Equal(t, agent.EventAgentPlan, turnPlan.Type())
+	assert.Empty(t, turnPlan.ItemID)
+	assert.Equal(t, agent.PlanPayload{
+		PlanID: "turn-a",
+		Entries: []agent.PlanEntry{
+			{Content: "inspect", Status: "completed"},
+			{Content: "change", Status: "in_progress"},
+		},
+		Explanation: "working",
+	}, turnPlan.Payload)
+
+	require.Equal(t, agent.StateIdle, nextState(t, ctx, stream))
 }
 
 func TestSessionRejectsStaleMainTurnEvents(t *testing.T) {

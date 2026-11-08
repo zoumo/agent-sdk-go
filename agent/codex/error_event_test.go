@@ -60,7 +60,7 @@ func TestSessionReportsNativeErrorAndFailedTurnWithoutTerminating(t *testing.T) 
 	}, event.Payload)
 	select {
 	case <-session.Done():
-		t.Fatal("a failed turn terminated the whole session")
+		require.Fail(t, "a failed turn terminated the whole session")
 	default:
 	}
 	require.NoError(t, session.Close(ctx))

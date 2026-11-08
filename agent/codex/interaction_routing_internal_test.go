@@ -1,6 +1,10 @@
 package agentcodex
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestConfirmedInteractionThreadRequiresSessionTree(t *testing.T) {
 	parents := map[string]string{
@@ -32,9 +36,7 @@ func TestConfirmedInteractionThreadRequiresSessionTree(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := confirmedInteractionThread("root", test.threadID, parentThread)
-			if got != test.want {
-				t.Fatalf("confirmedInteractionThread() = %q, want %q", got, test.want)
-			}
+			assert.Equal(t, test.want, got)
 		})
 	}
 }

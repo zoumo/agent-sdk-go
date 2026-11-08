@@ -96,14 +96,15 @@ type ToolChunkPayload struct {
 func (ToolChunkPayload) eventType() EventType { return EventAgentToolCallChunk }
 
 type PlanEntry struct {
-	Content  string `json:"content"`
-	Priority string `json:"priority"`
-	Status   string `json:"status"`
+	Content string `json:"content"`
+	Status  string `json:"status"`
 }
 
 type PlanPayload struct {
-	PlanID  string      `json:"planId"`
-	Entries []PlanEntry `json:"entries"`
+	PlanID      string      `json:"planId"`
+	Text        string      `json:"text,omitempty"`
+	Entries     []PlanEntry `json:"entries,omitempty"`
+	Explanation string      `json:"explanation,omitempty"`
 }
 
 func (PlanPayload) eventType() EventType { return EventAgentPlan }

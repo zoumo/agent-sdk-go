@@ -99,9 +99,10 @@ func TestEventTypeIsDerivedFromEveryPayloadBranch(t *testing.T) {
 			name:   "plan",
 			itemID: "plan-1",
 			payload: agent.PlanPayload{
-				PlanID: "plan-1",
+				PlanID:      "plan-1",
+				Explanation: "working",
 				Entries: []agent.PlanEntry{
-					{Content: "Inspect", Priority: "high", Status: "in_progress"},
+					{Content: "Inspect", Status: "in_progress"},
 				},
 			},
 			want: agent.EventAgentPlan,
@@ -291,6 +292,21 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			}),
 		},
 		{
+			name: "plan without text or entries",
+			event: validEvent("", agent.PlanPayload{
+				PlanID: "turn-1",
+			}),
+		},
+		{
+			name: "plan entry without status",
+			event: validEvent("", agent.PlanPayload{
+				PlanID: "turn-1",
+				Entries: []agent.PlanEntry{
+					{Content: "Inspect"},
+				},
+			}),
+		},
+		{
 			name: "invalid observed state",
 			event: validEvent("", agent.StateUpdatePayload{
 				State: &invalidState,
@@ -307,12 +323,6 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 		{
 			name:  "info update time cannot encode",
 			event: validEvent("", agent.InfoUpdatePayload{UpdatedAt: &invalidTime}),
-		},
-		{
-			name: "empty plan",
-			event: validEvent("plan-1", agent.PlanPayload{
-				PlanID: "plan-1",
-			}),
 		},
 		{
 			name: "invalid interaction ref",
@@ -349,6 +359,18 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 		})
 	}
+}
+
+func TestPlanEventAllowsNativeTurnScopeWithoutItemID(t *testing.T) {
+	event := validEvent("", agent.PlanPayload{
+		PlanID: "turn-1",
+		Entries: []agent.PlanEntry{
+			{Content: "Inspect", Status: "completed"},
+		},
+	})
+
+	require.NoError(t, event.Validate())
+	assert.Equal(t, agent.EventAgentPlan, event.Type())
 }
 
 func TestEventRoundTripsJSONWithPayloadTypeAndMeta(t *testing.T) {
@@ -660,8 +682,9 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 			itemID: "plan-1",
 			value: agent.PlanPayload{
 				PlanID: "plan-1",
+				Text:   "authoritative plan text",
 				Entries: []agent.PlanEntry{
-					{Content: "Inspect", Priority: "high", Status: "in_progress"},
+					{Content: "Inspect", Status: "in_progress"},
 				},
 			},
 		},

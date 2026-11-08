@@ -522,7 +522,10 @@ func (s *session) itemStarted(received codex.Received) ([]agent.Event, error) {
 	}
 	item := data.Item
 	switch {
-	case item.UserMessage != nil, item.AgentMessage != nil, item.Reasoning != nil:
+	case item.UserMessage != nil,
+		item.AgentMessage != nil,
+		item.Reasoning != nil,
+		item.Plan != nil:
 		return nil, nil
 	default:
 		return s.toolCall(received, data.StartedAtMs, data.Item)
@@ -542,6 +545,8 @@ func (s *session) itemCompleted(received codex.Received) ([]agent.Event, error) 
 		return s.agentMessage(received, data.CompletedAtMs, item.AgentMessage)
 	case item.Reasoning != nil:
 		return s.reasoningMessage(received, data.CompletedAtMs, item.Reasoning)
+	case item.Plan != nil:
+		return s.planMessage(received, data.CompletedAtMs, item.Plan)
 	default:
 		return s.toolResult(received, data.CompletedAtMs, data.Item)
 	}
@@ -639,6 +644,38 @@ func (s *session) reasoningMessage(
 	return []agent.Event{event}, nil
 }
 
+func (s *session) planMessage(
+	received codex.Received,
+	completedAtMs int64,
+	item *codextypes.PlanThreadItem,
+) ([]agent.Event, error) {
+	if item.ID == "" {
+		return nil, invalidNativeEvent(received.Event.Method)
+	}
+	if item.Text == "" {
+		return s.notificationGap(
+			received,
+			"plan_shape_unsupported",
+			"Codex plan item has no authoritative text",
+		)
+	}
+	event, err := s.newEvent(
+		received,
+		received.Event.Method,
+		item.ID,
+		agent.PlanPayload{
+			PlanID: item.ID,
+			Text:   item.Text,
+		},
+		unixMilliOrNow(completedAtMs),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return []agent.Event{event}, nil
+}
+
 func (s *session) planUpdated(received codex.Received) ([]agent.Event, error) {
 	var data planUpdatedNotification
 	if err := json.Unmarshal(received.Event.Params, &data); err != nil {
@@ -651,6 +688,7 @@ func (s *session) planUpdated(received codex.Received) ([]agent.Event, error) {
 			"Codex plan update cannot be represented as unified plan entries",
 		)
 	}
+	entries := make([]agent.PlanEntry, 0, len(data.Plan))
 	for _, step := range data.Plan {
 		status := unifiedPlanStatus(step.Status)
 		if step.Step == "" || status == "" {
@@ -660,6 +698,10 @@ func (s *session) planUpdated(received codex.Received) ([]agent.Event, error) {
 				"Codex plan update contains an unsupported entry",
 			)
 		}
+		entries = append(entries, agent.PlanEntry{
+			Content: step.Step,
+			Status:  status,
+		})
 	}
 	extras := map[string]any{
 		"nativeItemIdAbsent": true,
@@ -669,14 +711,16 @@ func (s *session) planUpdated(received codex.Received) ([]agent.Event, error) {
 	if data.Explanation != "" {
 		extras["explanation"] = data.Explanation
 	}
-	// A unified plan event needs both a plan identity and an item identity, but
-	// turn/plan/updated is turn-scoped and carries no item ID. Keep the native
-	// fact and explanation in a non-fatal gap instead of inventing an item.
-	event, err := s.sessionErrorEvent(
+	event, err := s.newEvent(
 		received,
 		received.Event.Method,
-		"plan_identity_unavailable",
-		"Codex turn plan has no native item ID for a unified plan event",
+		"",
+		agent.PlanPayload{
+			PlanID:      data.TurnID,
+			Entries:     entries,
+			Explanation: data.Explanation,
+		},
+		time.Now().UTC(),
 		extras,
 	)
 	if err != nil {

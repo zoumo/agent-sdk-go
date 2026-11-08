@@ -42,7 +42,7 @@ func TestEventStreamFailureIsStableAndTerminatesSession(t *testing.T) {
 	select {
 	case <-session.Done():
 	default:
-		t.Fatal("event conversion failure did not terminate the session")
+		require.Fail(t, "event conversion failure did not terminate the session")
 	}
 
 	_, secondErr := stream.Next(ctx)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
 	"reflect"
 	"sort"
 	"time"
@@ -33,7 +32,8 @@ type pendingInteraction struct {
 	requestID       string
 	request         claude.IncomingRequest
 	received        claude.Received
-	questions       map[string]struct{}
+	questions       map[string]claude.Question
+	questionInput   claude.AskUserQuestionInput
 	phase           interactionPhase
 	answerOutcome   agent.InteractionOutcome
 	answerAccepted  bool
@@ -173,43 +173,58 @@ func (s *session) questionInteraction(
 			"Invalid AskUserQuestion input",
 		)
 	}
-	schema, err := decodeJSON(metadata.Input)
-	if err != nil {
-		return s.rejectUnsupportedRequest(
-			received,
-			"questions_input_invalid",
-			"Claude AskUserQuestion input cannot be decoded",
-			"Invalid AskUserQuestion input",
-		)
-	}
-	object, ok := schema.(map[string]any)
-	if !ok {
-		return s.rejectUnsupportedRequest(
-			received,
-			"questions_input_invalid",
-			"Claude AskUserQuestion input is not an object",
-			"Invalid AskUserQuestion input",
-		)
-	}
-	questions := make(map[string]struct{}, len(input.Questions))
+	questions := make(map[string]claude.Question, len(input.Questions))
 	for _, question := range input.Questions {
-		questions[question.Question] = struct{}{}
+		questions[question.Question] = question
 	}
 	interaction := &pendingInteraction{
-		kind:      agent.InteractionForm,
-		requestID: request.ID(),
-		request:   request,
-		received:  received,
-		questions: questions,
-		phase:     interactionPending,
-		startedAt: nativeEventTime(request.Raw()),
+		kind:          agent.InteractionForm,
+		requestID:     request.ID(),
+		request:       request,
+		received:      received,
+		questions:     questions,
+		questionInput: input,
+		phase:         interactionPending,
+		startedAt:     nativeEventTime(request.Raw()),
 	}
 	unified := agent.InteractionRequest{
 		Kind:            agent.InteractionForm,
 		Message:         "Answer native Claude questions",
-		RequestedSchema: object,
+		RequestedSchema: claudeFormRequestedSchema(input),
 	}
 	return s.registerInteraction(interaction, unified)
+}
+
+func claudeFormRequestedSchema(input claude.AskUserQuestionInput) map[string]any {
+	questions := make(map[string]any, len(input.Questions))
+	for _, question := range input.Questions {
+		answer := any(map[string]any{"type": "string"})
+		if question.MultiSelect {
+			answer = map[string]any{
+				"anyOf": []any{
+					map[string]any{"type": "string"},
+					map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+				},
+			}
+		}
+		questions[question.Question] = answer
+	}
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answers": map[string]any{
+				"type":                 "object",
+				"properties":           questions,
+				"additionalProperties": false,
+			},
+		},
+		"required":             []any{"answers"},
+		"additionalProperties": false,
+		"x-claude-questions":   input.Questions,
+	}
 }
 
 func (s *session) rejectUnsupportedRequest(
@@ -563,10 +578,19 @@ func interactionReply(
 			if answerErr != nil {
 				return nil, "", answerErr
 			}
+			updated, updateErr := interaction.questionInput.WithAnswers(answers)
+			if updateErr != nil {
+				return nil, "", adapterError(
+					agent.ErrorInvalidArgument,
+					"invalid_form_answer",
+					"form answer does not match the native question input",
+					updateErr,
+				)
+			}
 			return func(ctx context.Context) error {
-				return interaction.request.Answer(
+				return interaction.request.Approve(
 					ctx,
-					claude.QuestionAnswers{Answers: answers},
+					claude.ApprovalOptions{UpdatedInput: updated},
 				)
 			}, agent.InteractionAnswered, nil
 		case agent.FormDecline:
@@ -601,8 +625,8 @@ func interactionReply(
 
 func formAnswers(
 	content map[string]any,
-	questions map[string]struct{},
-) (map[string]string, error) {
+	questions map[string]claude.Question,
+) (map[string]claude.QuestionAnswer, error) {
 	raw, present := content["answers"]
 	if len(content) != 1 || !present {
 		return nil, adapterError(
@@ -612,29 +636,26 @@ func formAnswers(
 			nil,
 		)
 	}
-	answers := make(map[string]string)
+	answers := make(map[string]claude.QuestionAnswer)
 	switch value := raw.(type) {
 	case map[string]string:
-		maps.Copy(answers, value)
+		for key, answer := range value {
+			answers[key] = claude.QuestionAnswer{Text: &answer}
+		}
 	case map[string]any:
 		for key, item := range value {
-			answer, ok := item.(string)
-			if !ok {
-				switch item.(type) {
-				case []any, []string:
-					return nil, adapterError(
-						agent.ErrorUnsupported,
-						"multi_select_form_answers_unsupported",
-						"Claude multi-select question answers are not supported",
-						nil,
-					)
-				}
+			question, known := questions[key]
+			if !known {
 				return nil, adapterError(
 					agent.ErrorInvalidArgument,
-					"invalid_form_answer",
-					"form answers must be strings",
+					"unknown_form_question",
+					"form answer uses a question not present in the native request",
 					nil,
 				)
+			}
+			answer, answerErr := claudeQuestionAnswer(item, question.MultiSelect)
+			if answerErr != nil {
+				return nil, answerErr
 			}
 			answers[key] = answer
 		}
@@ -657,6 +678,55 @@ func formAnswers(
 		}
 	}
 	return answers, nil
+}
+
+func claudeQuestionAnswer(
+	value any,
+	multiSelect bool,
+) (claude.QuestionAnswer, error) {
+	switch answer := value.(type) {
+	case string:
+		return claude.QuestionAnswer{Text: &answer}, nil
+	case []string:
+		if !multiSelect {
+			return claude.QuestionAnswer{}, singleSelectArrayError()
+		}
+		return claude.QuestionAnswer{Labels: append([]string(nil), answer...)}, nil
+	case []any:
+		if !multiSelect {
+			return claude.QuestionAnswer{}, singleSelectArrayError()
+		}
+		labels := make([]string, len(answer))
+		for index, item := range answer {
+			label, ok := item.(string)
+			if !ok {
+				return claude.QuestionAnswer{}, adapterError(
+					agent.ErrorInvalidArgument,
+					"invalid_form_answer",
+					"multi-select form answers must contain only strings",
+					nil,
+				)
+			}
+			labels[index] = label
+		}
+		return claude.QuestionAnswer{Labels: labels}, nil
+	default:
+		return claude.QuestionAnswer{}, adapterError(
+			agent.ErrorInvalidArgument,
+			"invalid_form_answer",
+			"form answers must be strings or string arrays",
+			nil,
+		)
+	}
+}
+
+func singleSelectArrayError() error {
+	return adapterError(
+		agent.ErrorInvalidArgument,
+		"invalid_form_answer",
+		"array form answers require a multi-select question",
+		nil,
+	)
 }
 
 func concreteAnswer(answer agent.Answer) (agent.Answer, error) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
@@ -691,7 +692,7 @@ func claudeQuestionAnswer(
 		if !multiSelect {
 			return claude.QuestionAnswer{}, singleSelectArrayError()
 		}
-		return claude.QuestionAnswer{Labels: append([]string(nil), answer...)}, nil
+		return joinedQuestionAnswer(answer), nil
 	case []any:
 		if !multiSelect {
 			return claude.QuestionAnswer{}, singleSelectArrayError()
@@ -709,7 +710,7 @@ func claudeQuestionAnswer(
 			}
 			labels[index] = label
 		}
-		return claude.QuestionAnswer{Labels: labels}, nil
+		return joinedQuestionAnswer(labels), nil
 	default:
 		return claude.QuestionAnswer{}, adapterError(
 			agent.ErrorInvalidArgument,
@@ -718,6 +719,11 @@ func claudeQuestionAnswer(
 			nil,
 		)
 	}
+}
+
+func joinedQuestionAnswer(labels []string) claude.QuestionAnswer {
+	joined := strings.Join(labels, ", ")
+	return claude.QuestionAnswer{Text: &joined}
 }
 
 func singleSelectArrayError() error {

@@ -145,10 +145,21 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 	}, questions)
 	require.NoError(t, err)
 	format := "json"
+	sections := "intro, end"
 	assert.Equal(t, map[string]claude.QuestionAnswer{
 		"Which format?":   {Text: &format},
-		"Which sections?": {Labels: []string{"intro", "end"}},
+		"Which sections?": {Text: &sections},
 	}, answers)
+
+	for _, labels := range []any{[]any{"intro", "end"}, []string{"intro", "end"}} {
+		answers, err := formAnswers(map[string]any{
+			"answers": map[string]any{"Which sections?": labels},
+		}, questions)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]claude.QuestionAnswer{
+			"Which sections?": {Text: &sections},
+		}, answers)
+	}
 }
 
 func TestAnswerTerminalOutcomePreservesUnknownWrite(t *testing.T) {

@@ -541,7 +541,9 @@ const (
 - `permission` 必须有 `ToolCallID` 和至少一个原生命令选项；只接受原始请求中
   实际提供的 `optionId`，不能凭 kind 推断授权。
 - `form` 必须有 `Message` 和 `RequestedSchema`；adapter 只校验自己确能表达的
-  schema 子集，不宣称实现任意 JSON Schema。
+  schema 子集，不宣称实现任意 JSON Schema。多选问题可接受字符串或字符串数组；
+  adapter 将字符串数组以 `", "` 连接成字符串后再写回原生。原生数组答案仍拒绝，
+  不能把统一层的兼容编码当成原生数组支持。
 - `url` 只表达外部流程入口；URL 的完成仍由原生事实结算。
 
 原生 `IncomingRequest`、`AnswerHandle` 和 permission handle 只存在于 adapter

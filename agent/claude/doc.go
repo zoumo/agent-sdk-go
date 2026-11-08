@@ -25,7 +25,9 @@
 // also emit a plan event using the tool-use ID and native content/status entries;
 // TaskCreate and TaskUpdate are explicit task_plan_snapshot_unavailable gaps
 // because they do not provide a complete plan snapshot. AskUserQuestion accepts
-// string answers and, for multi-select questions, string arrays.
+// string answers and, for multi-select questions, string arrays. Multi-select
+// arrays are joined with ", " before the native write; native array answers are
+// not supported.
 // Initialization, internal control responses, and positive member or parent
 // relationship confirmations are lifecycle plumbing and produce no unified
 // event. Confirmed source and parent identities remain in the Meta of subsequent

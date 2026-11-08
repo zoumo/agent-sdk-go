@@ -192,7 +192,7 @@ model_reasoning_effort，属于 effort 证据，不能作为独立模式通过�
 | Codex 连接与资源 | 007 | stdio 只终止自有进程；WS/WSS Close 不停止远端服务。保留 TLS、Origin、认证及错误隐私边界，不自动重连或恢复旧句柄。慢消费、失联、排空与清理分别可观察，公开 WSS 的部署验证须单独提供证据。 |
 | Codex 子详细交付 | 005 | SessionOptions.ChildDetailPolicy 默认 preserve，suppress 仅封闭方法白名单；低层 ResumeThread 不接受该策略。保留 Raw、父工具结果、审批原权限、关系及 terminal，unknown/mixed 整帧保留。 |
 | Claude 输入与回执 | 001、002 | stream-json 完整本地写入不表示模型接受/执行；priority/shouldQuery 保留原生含义，不添加 scheduler、steer 或通用 Turn。control_response 按原 request_id 关联；取消写入的 NotSent/OutcomeUnknown 不互换或重发。 |
-| Claude 权限与问答 | 003、004 | 仅实际 can_use_tool 创建权限；AskUserQuestion 使用完整题文键，通过 UpdatedInput 保留 questions 和 unknown；普通 tool_use、tool_result、输入与历史均不授予回答权。自动批准路径不保证发请求，延迟时可继续 Receive，撤销/终止/已答后不再授予权限。 |
+| Claude 权限与问答 | 003、004 | 仅实际 can_use_tool 创建权限；AskUserQuestion 使用完整题文键，通过 UpdatedInput 保留 questions 和 unknown；普通 tool_use、tool_result、输入与历史均不授予回答权。多选统一 form 可接受字符串数组，adapter 写回原生前以 `", "` 连接为字符串；原生数组答案未验证并在本地拒绝。自动批准路径不保证发请求，延迟时可继续 Receive，撤销/终止/已答后不再授予权限。 |
 | Claude 结果与后台状态 | 002、005 | 检查 result.is_error 和原生错误字段，不能只看 subtype:success；后续 idle、initialize 接受和请求转发选项均不证明模型或工具成功；root result 不证明子任务已停止。 |
 | Claude 思考配置 | 006 | 创建 thinking enabled/adaptive/disabled 与动态 max_thinking_tokens/display 分开；省略、null-clear 和 0 分开。effort 不映射成 budget，ack 不作 observed 或子继承证明，原生 deprecated budget 不保证硬 token 上限。 |
 | Claude 主历史与发现 | 008 | 独立查询要求 ConfigDir，不隐式读取 HOME；metadata 的 head/tail 采样与完整可见消息链分开，保留压缩及并行 tool-result 恢复规则与 unknown。offset/limit 是内容切片，不伪造 cursor、total、原子快照或 running；Session.ListSubagents 的本地子记录发现不等于独立子历史。 |

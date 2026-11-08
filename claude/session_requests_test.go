@@ -295,6 +295,10 @@ func TestSessionQuestionRejectsUnverifiedAnswersWithoutConsumingHandle(t *testin
 			want: ErrInvalidPermissionAnswer,
 		},
 		{
+			data: `{"questions":[{"question":"Full text?","options":[],"multiSelect":true}],"answers":{"Full text?":["A"]}}`,
+			want: ErrUnsupported,
+		},
+		{
 			data: `{"questions":[{"question":"Full text?","options":[]}],"response":"output-only"}`,
 			want: ErrUnsupported,
 		},

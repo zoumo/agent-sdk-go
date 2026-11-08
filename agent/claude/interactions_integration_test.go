@@ -390,7 +390,7 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 				`"multiSelect":false},{"question":"Which sections?",` +
 				`"options":[{"label":"intro"},{"label":"end"}],"multiSelect":true}],` +
 				`"answers":{"Which format?":"json",` +
-				`"Which sections?":["intro","end"]}}}}}`,
+				`"Which sections?":"intro, end"}}}}}`,
 			answer: agent.FormAnswer{
 				Outcome: agent.FormAccept,
 				Content: map[string]any{"answers": map[string]any{
@@ -509,7 +509,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 			`"options":[{"label":"json"},{"label":"yaml"}]},{"question":"Which formats?",` +
 			`"options":[{"label":"json"},{"label":"yaml"}],"multiSelect":true}],` +
 			`"answers":{"Which format?":"json",` +
-			`"Which formats?":["json","yaml"]}}}}}`,
+			`"Which formats?":"json, yaml"}}}}}`,
 		claudeStateFrame("native-form-invalid", "running", "2026-11-07T14:30:03Z"),
 	}
 	session, stream := openClaudeInteractionSession(

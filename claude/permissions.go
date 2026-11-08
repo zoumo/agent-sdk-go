@@ -294,6 +294,11 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 			if question.Fields["response"] != types.Default || question.Response != nil {
 				return nil, ErrUnsupported
 			}
+			for _, questionAnswer := range question.Answers {
+				if questionAnswer.Labels != nil {
+					return nil, ErrUnsupported
+				}
+			}
 		}
 		data := map[string]any{"behavior": "allow", "updatedInput": json.RawMessage(bytes.Clone(input))}
 		if answer.UpdatedPermissions != nil {

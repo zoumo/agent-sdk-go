@@ -227,8 +227,12 @@ Raw retains unknown JSON. Typed edits override supported fields; Fields specifie
 Default/Present/Null/Absent where a zero Go value cannot express wire presence.
 Use the native codecs rather than rebuilding JSON through map[string]any/float64.
 Detached permission/question codecs are data only and do not grant answer authority;
-runtime answers accept native string-valued answers, not output-only fields or
-unverified array extensions. See the [codec implementation](types/messages.go).
+the codec can decode arrays for display and history, but the native
+`QuestionAnswers`/`PermissionRequest` write path accepts string-valued answers.
+Native array answers return `ErrUnsupported` before a response is sent. The
+`agent/claude` form adapter accepts string arrays for multi-select questions and
+joins them with `", "` before the native write; that compatibility encoding does
+not prove native array support. See the [codec implementation](types/messages.go).
 
 ## Go: configuration, session, input, streaming and approvals
 

@@ -3,6 +3,7 @@ package agentclaude_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,7 +168,7 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 					configDir,
 					"project",
 					claudeResumePeerSessionID,
-					resumeMetadataLine(claudeResumePeerSessionID, cwd)+"{bad}\n",
+					resumeMetadataLine(t, claudeResumePeerSessionID, cwd)+"{bad}\n",
 				)
 			},
 		},
@@ -179,7 +180,7 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 					configDir,
 					"project",
 					claudeResumePeerSessionID,
-					resumeMetadataLine("22222222-2222-4222-8222-222222222222", cwd),
+					resumeMetadataLine(t, "22222222-2222-4222-8222-222222222222", cwd),
 				)
 			},
 		},
@@ -628,7 +629,7 @@ func TestProviderResumeRejectsPostIdentityTranscriptReplacement(t *testing.T) {
 		CWD:            cwd,
 		TranscriptPath: transcript,
 		Mutation:       "replace",
-		Replacement:    resumeMetadataLine(claudeResumePeerSessionID, cwd),
+		Replacement:    resumeMetadataLine(t, claudeResumePeerSessionID, cwd),
 		Frames: []string{
 			resumeInitFrame(t, claudeResumePeerSessionID, cwd),
 		},
@@ -721,7 +722,7 @@ func TestProviderResumeLateEvidenceTerminatesReturnedSession(t *testing.T) {
 		},
 		{
 			name: "duplicate callback identity",
-			frames: func(t *testing.T, _ string, _ string) ([]string, []int) {
+			frames: func(t *testing.T, _, _ string) ([]string, []int) {
 				return []string{
 					resumeCallbackFrame(t, "identity-callback", nil),
 					resumeCallbackFrame(t, "duplicate-identity", nil),
@@ -919,7 +920,7 @@ func writeResumeTranscript(
 		configDir,
 		project,
 		id,
-		resumeMetadataLine(id, cwd),
+		resumeMetadataLine(t, id, cwd),
 	)
 }
 
@@ -938,8 +939,9 @@ func writeResumeSource(
 	return path
 }
 
-func resumeMetadataLine(id, cwd string) string {
-	data, _ := json.Marshal(map[string]any{
+func resumeMetadataLine(t *testing.T, id, cwd string) string {
+	t.Helper()
+	data, err := json.Marshal(map[string]any{
 		"type":      "user",
 		"sessionId": id,
 		"cwd":       cwd,
@@ -948,6 +950,7 @@ func resumeMetadataLine(id, cwd string) string {
 			"content": "saved",
 		},
 	})
+	require.NoError(t, err)
 	return string(data) + "\n"
 }
 
@@ -975,9 +978,7 @@ func resumeCallbackFrame(
 		"cwd":             claudeResumePeerCwdID,
 		"transcript_path": claudeResumePeerTranscriptID,
 	}
-	for key, value := range overrides {
-		input[key] = value
-	}
+	maps.Copy(input, overrides)
 	return resumeFrame(t, map[string]any{
 		"type":       "control_request",
 		"request_id": requestID,

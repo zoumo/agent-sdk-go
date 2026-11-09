@@ -3,7 +3,7 @@ package agentclaude
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +23,7 @@ const (
 	claudeVersionOutputLimit  = 4 << 10
 )
 
-var claudeVersionPattern = regexp.MustCompile(`(?i)v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?`)
+var claudeVersionPattern = regexp.MustCompile(`(?i)v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?`)
 
 type resumeAttempt struct {
 	target *resumeTarget
@@ -53,6 +53,11 @@ type resumeCallbackInput struct {
 	SessionID      string `json:"session_id"`
 	CWD            string `json:"cwd"`
 	TranscriptPath string `json:"transcript_path"`
+}
+
+type resumeCallbackRequest struct {
+	CallbackID json.RawMessage `json:"callback_id"`
+	Input      json.RawMessage `json:"input"`
 }
 
 func (p *Provider) prepareResume(
@@ -321,26 +326,26 @@ func resumePostcheckError(reason, message string, cause error) error {
 
 func regularTranscriptInfo(configDir, path string) (os.FileInfo, string, error) {
 	if !filepath.IsAbs(configDir) || !filepath.IsAbs(path) {
-		return nil, "", fmt.Errorf("absolute config and transcript paths required")
+		return nil, "", errors.New("absolute config and transcript paths required")
 	}
 	lexicalRoot := filepath.Clean(configDir)
 	lexicalPath := filepath.Clean(path)
 	if !pathWithin(lexicalRoot, lexicalPath) {
-		return nil, "", fmt.Errorf("transcript is outside the configured directory")
+		return nil, "", errors.New("transcript is outside the configured directory")
 	}
 	entry, err := os.Lstat(lexicalPath)
 	if err != nil {
 		return nil, "", err
 	}
 	if !entry.Mode().IsRegular() || entry.Mode()&os.ModeSymlink != 0 {
-		return nil, "", fmt.Errorf("transcript is not a regular non-symlink file")
+		return nil, "", errors.New("transcript is not a regular non-symlink file")
 	}
 	opened, err := os.Stat(lexicalPath)
 	if err != nil {
 		return nil, "", err
 	}
 	if !opened.Mode().IsRegular() || !os.SameFile(entry, opened) {
-		return nil, "", fmt.Errorf("transcript identity changed while opening")
+		return nil, "", errors.New("transcript identity changed while opening")
 	}
 	canonicalRoot, err := canonicalPath(lexicalRoot)
 	if err != nil {
@@ -351,14 +356,14 @@ func regularTranscriptInfo(configDir, path string) (os.FileInfo, string, error) 
 		return nil, "", err
 	}
 	if !pathWithin(canonicalRoot, canonicalFile) {
-		return nil, "", fmt.Errorf("transcript resolves outside the configured directory")
+		return nil, "", errors.New("transcript resolves outside the configured directory")
 	}
 	return opened, canonicalFile, nil
 }
 
 func canonicalPath(path string) (string, error) {
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("absolute path required")
+		return "", errors.New("absolute path required")
 	}
 	return filepath.EvalSymlinks(filepath.Clean(path))
 }
@@ -468,16 +473,12 @@ func (t *resumeTarget) verifyCallback(
 		event.Control.Subtype != "hook_callback" {
 		return false, nil
 	}
-	var request struct {
-		CallbackID json.RawMessage `json:"callback_id"`
-		Input      json.RawMessage `json:"input"`
-	}
-	if json.Unmarshal(event.Control.Request, &request) != nil {
+	request, ok := decodeResumeCallbackRequest(event.Control.Request)
+	if !ok {
 		return false, nil
 	}
-	var actualID string
-	if json.Unmarshal(request.CallbackID, &actualID) != nil ||
-		actualID != callbackID {
+	actualID, ok := decodeJSONString(request.CallbackID)
+	if !ok || actualID != callbackID {
 		return false, nil
 	}
 
@@ -497,6 +498,22 @@ func (t *resumeTarget) verifyCallback(
 		)
 	}
 	return true, nil
+}
+
+func decodeResumeCallbackRequest(raw json.RawMessage) (resumeCallbackRequest, bool) {
+	var request resumeCallbackRequest
+	if json.Unmarshal(raw, &request) != nil {
+		return resumeCallbackRequest{}, false
+	}
+	return request, true
+}
+
+func decodeJSONString(raw json.RawMessage) (string, bool) {
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return "", false
+	}
+	return value, true
 }
 
 func (t *resumeTarget) transcriptMatches(path string) bool {

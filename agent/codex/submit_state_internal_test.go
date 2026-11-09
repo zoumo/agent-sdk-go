@@ -10,17 +10,16 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex"
 )
 
-func TestUnknownSubmitKeepsWorkUnsettled(t *testing.T) {
+func TestUnknownWriteKeepsWorkUnsettled(t *testing.T) {
 	session := &session{}
 	session.mu.Lock()
 	defer session.mu.Unlock()
 
 	session.recordSubmitErrorLocked(errors.New("transport failed"), session.workEpoch)
 	assert.True(t, session.submitUnknown)
-	assert.True(t, session.hasUnsettledWorkLocked())
 }
 
-func TestSubmitFailureDoesNotRearmAfterTurnEvidence(t *testing.T) {
+func TestWriteFailureDoesNotRearmAfterTurnEvidence(t *testing.T) {
 	session := &session{}
 	epoch := session.workEpoch
 
@@ -28,19 +27,17 @@ func TestSubmitFailureDoesNotRearmAfterTurnEvidence(t *testing.T) {
 	session.recordSubmitErrorLocked(errors.New("transport failed"), epoch)
 
 	assert.False(t, session.submitUnknown)
-	assert.False(t, session.hasUnsettledWorkLocked())
 }
 
-func TestNativeEvidenceClearsUnknownSubmit(t *testing.T) {
+func TestNativeEvidenceClearsUnknownWrite(t *testing.T) {
 	session := &session{submitUnknown: true}
 
 	session.noteWorkEvidenceLocked()
 
 	assert.False(t, session.submitUnknown)
-	assert.False(t, session.hasUnsettledWorkLocked())
 }
 
-func TestSubmitOutcomeUnknownClassification(t *testing.T) {
+func TestWriteOutcomeUnknownClassification(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error

@@ -24,12 +24,6 @@ type Session interface {
 	// leaves Submission empty and leaves the input with the caller.
 	StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
 
-	// Submit is the transitional strict input operation. It validates and copies
-	// input before writing to the native protocol and fails with
-	// failed_precondition while prior work remains unsettled. Callers should
-	// migrate to StartOrSteer.
-	Submit(ctx context.Context, input Input) (InputReceipt, error)
-
 	// Answer rechecks the live session, current work, request identity, and
 	// answer kind before sending. An interaction is answerable at most once.
 	Answer(
@@ -84,8 +78,8 @@ const (
 	InputNotApplied InputResult = "not_applied"
 )
 
-// InputReceipt identifies a submission and the acceptance stages observed for
-// it. Result is empty for the transitional Submit. Submission identifies the
+// InputReceipt identifies a submission, describes the observed result, and
+// records the acceptance stages observed for it. Submission identifies the
 // applied input; it is empty for InputNotApplied and does not prove execution
 // started or completed.
 type InputReceipt struct {

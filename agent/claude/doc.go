@@ -27,8 +27,8 @@
 // priority="next" and shouldQuery=true and reports only best-effort local write
 // success. Internally it retains the submission as a possible interaction and
 // interrupt target until native idle; that candidate does not claim the input
-// was scheduled. Native state observations establish active work. The strict
-// Submit remains transitional. System prompts, additional directories, URL
+// was scheduled. Native state observations establish active work. System
+// prompts, additional directories, URL
 // interactions, multi-block input, and native frames or answer extensions
 // without an exact mapping are not advertised. TodoWrite, TaskCreate, and
 // TaskUpdate remain ordinary tool calls with their native input; they do not

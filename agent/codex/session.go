@@ -112,76 +112,6 @@ func (s *session) Events() (agent.EventStream, error) {
 	return &eventStream{session: s}, nil
 }
 
-func (s *session) Submit(
-	ctx context.Context,
-	input agent.Input,
-) (agent.InputReceipt, error) {
-	nativeInput, err := textInput(input)
-	if err != nil {
-		return agent.InputReceipt{}, err
-	}
-
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return agent.InputReceipt{}, adapterError(
-			agent.ErrorClosed,
-			"session_closed",
-			"session is closed",
-			nil,
-		)
-	}
-	if s.hasUnsettledWorkLocked() {
-		s.mu.Unlock()
-		return agent.InputReceipt{}, adapterError(
-			agent.ErrorFailedPrecondition,
-			"work_in_progress",
-			"the session already has unsettled work",
-			nil,
-		)
-	}
-	s.submitting = true
-	submitEpoch := s.workEpoch
-	s.mu.Unlock()
-
-	submission, submitErr := s.native.Submit(ctx, nativeInput)
-
-	s.mu.Lock()
-	s.submitting = false
-	if submitErr != nil {
-		convertedErr := nativeOperationError("submit", submitErr)
-		s.recordSubmitErrorLocked(submitErr, submitEpoch)
-		s.mu.Unlock()
-		return agent.InputReceipt{}, convertedErr
-	}
-	turnID := submission.Response.Turn.ID
-	if turnID == "" {
-		if s.workEpoch == submitEpoch {
-			s.submitUnknown = true
-		}
-		s.mu.Unlock()
-		return agent.InputReceipt{}, adapterError(
-			agent.ErrorOutcomeUnknown,
-			"submit_identity_missing",
-			"Codex accepted the input without returning a turn identity",
-			nil,
-		)
-	}
-	if s.activeTurn == "" && s.lastFinished != turnID {
-		s.activeTurn = turnID
-	}
-	s.mu.Unlock()
-
-	sent, accepted := true, true
-	return agent.InputReceipt{
-		Submission: turnID,
-		Acceptance: agent.Acceptance{
-			Sent:           &sent,
-			NativeAccepted: &accepted,
-		},
-	}, nil
-}
-
 func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
@@ -308,10 +238,6 @@ func codexTurnInputNotApplied(err error) bool {
 		}
 	}
 	return false
-}
-
-func (s *session) hasUnsettledWorkLocked() bool {
-	return s.submitting || s.submitUnknown || s.activeTurn != ""
 }
 
 func (s *session) recordSubmitErrorLocked(err error, epoch uint64) {

@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -63,10 +64,6 @@ func (contractSession) EffectiveFeatures() agent.EffectiveFeatures {
 
 func (contractSession) Events() (agent.EventStream, error) {
 	return contractStream{}, nil
-}
-
-func (contractSession) Submit(context.Context, agent.Input) (agent.InputReceipt, error) {
-	return agent.InputReceipt{}, nil
 }
 
 func (contractSession) StartOrSteer(context.Context, agent.Input) (agent.InputReceipt, error) {
@@ -135,4 +132,16 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)
 	require.NotNil(t, modelController)
+}
+
+func TestUnifiedSessionHasOneInputOperation(t *testing.T) {
+	sessionType := reflect.TypeOf((*agent.Session)(nil)).Elem()
+
+	_, hasStartOrSteer := sessionType.MethodByName("StartOrSteer")
+	_, hasSubmit := sessionType.MethodByName("Submit")
+	_, hasSteer := sessionType.MethodByName("Steer")
+
+	require.True(t, hasStartOrSteer)
+	require.False(t, hasSubmit)
+	require.False(t, hasSteer)
 }

@@ -3,7 +3,12 @@ package agent
 import "context"
 
 // ExecutionOptions contains provider-native execution values for a main
-// session. An empty field is omitted; nonempty values are passed literally.
+// session. An empty field is omitted and is not a request to clear or restore a
+// default. Nonempty values are passed literally without trimming, aliasing or
+// cross-provider conversion. They apply to the main session and are intended
+// for provider-determined later work. An update does not wait for idle or
+// interrupt work already executing, whose native observation of the change is
+// not guaranteed.
 type ExecutionOptions struct {
 	Model           string
 	ReasoningEffort string
@@ -17,7 +22,9 @@ type ExecutionValue struct {
 }
 
 // ExecutionOptionsReport is the complete known execution-options state for a
-// session.
+// session. A successful update can advance Requested, clear invalidated
+// Effective evidence, and still leave Effective unknown; callers must not treat
+// acceptance as proof of current behavior.
 type ExecutionOptionsReport struct {
 	Model           ExecutionValue
 	ReasoningEffort ExecutionValue
@@ -51,7 +58,11 @@ type ExecutionOptionsReceipt struct {
 	Report     ExecutionOptionsReport
 }
 
-// ExecutionOptionsController updates one execution option at a time.
+// ExecutionOptionsController updates one execution option at a time. Updates
+// are accepted requests for provider-determined later work; they do not wait
+// for idle, interrupt active work, restart the process, retry, or configure
+// child sessions. Native behavior determines whether work already executing
+// observes the change.
 type ExecutionOptionsController interface {
 	ExecutionOptionsReporter
 

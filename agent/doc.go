@@ -14,8 +14,21 @@
 // or retries.
 // Sessions may optionally report or update the provider-native model and
 // reasoning effort through ExecutionOptionsReporter and
-// ExecutionOptionsController. Requested values and native observations remain
-// separate; these optional interfaces add no other configuration surface.
+// ExecutionOptionsController. An empty ExecutionOptions field omits that
+// option; a nonempty value is passed literally, without trimming, aliasing or
+// cross-provider conversion. The values belong to the main session and are
+// intended for provider-determined later work. A runtime update does not wait
+// for idle, interrupt an active turn, restart the process or configure child
+// sessions; native behavior determines whether work already executing observes
+// the change.
+// Successful receipts prove native acceptance. An Effective value is set only
+// from an explicit provider observation, so an accepted request can still have
+// unknown effectiveness. A successful update clears Effective evidence that it
+// may have invalidated; a model change normally invalidates both model and
+// effort evidence. These optional interfaces expose only model and reasoning
+// effort; sandbox, approval, permission-profile, ACP mode, collaboration,
+// fast-mode and custom-agent settings remain provider-specific native
+// capabilities.
 // Adapters implementing those interfaces may use ExecutionOptionsRuntime,
 // SetExecutionOption and SetExecutionModel to share controller mechanics;
 // ordinary Session implementations do not need those adapter support types.

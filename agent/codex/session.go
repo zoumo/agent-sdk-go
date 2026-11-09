@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	_ agent.Session         = (*session)(nil)
-	_ agent.Archiver        = (*session)(nil)
-	_ agent.ModelController = (*session)(nil)
-	_ agent.EventStream     = (*eventStream)(nil)
+	_ agent.Session                  = (*session)(nil)
+	_ agent.Archiver                 = (*session)(nil)
+	_ agent.ModelController          = (*session)(nil)
+	_ agent.EventStream              = (*eventStream)(nil)
+	_ agent.ExecutionOptionsReporter = (*session)(nil)
 )
 
 type session struct {
@@ -42,6 +43,7 @@ type session struct {
 	idleTurn     string
 	lastFinished string
 	state        *agent.SessionState
+	execution    agent.ExecutionOptionsReport
 	interactions map[agent.InteractionRef]*pendingInteraction
 	requestRefs  map[string]agent.InteractionRef
 	done         chan struct{}
@@ -60,11 +62,13 @@ func newSession(
 	provider *Provider,
 	native *codex.Session,
 	features agent.EffectiveFeatures,
+	execution agent.ExecutionOptionsReport,
 ) *session {
 	created := &session{
 		provider:        provider,
 		native:          native,
 		features:        features,
+		execution:       execution,
 		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
 		requestRefs:     make(map[string]agent.InteractionRef),
 		parents:         make(map[string]string),
@@ -87,6 +91,12 @@ func (s *session) Capabilities() agent.Capabilities {
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
+}
+
+func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cloneExecutionOptionsReport(s.execution)
 }
 
 func (s *session) Events() (agent.EventStream, error) {
@@ -345,8 +355,13 @@ func (s *session) SetModel(
 	}
 	result, err := s.native.SetModel(ctx, model)
 	if err != nil {
-		return agent.ConfigurationReceipt{}, nativeOperationError("set_model", err)
+		convertedErr := nativeOperationError("set_model", err)
+		if agent.CodeOf(convertedErr) == agent.ErrorOutcomeUnknown {
+			s.clearEffectiveExecutionOptions()
+		}
+		return agent.ConfigurationReceipt{}, convertedErr
 	}
+	s.recordAcceptedExecutionModel(model)
 	sent := true
 	accepted := result.NativeAccepted
 	return agent.ConfigurationReceipt{
@@ -356,6 +371,24 @@ func (s *session) SetModel(
 			NativeAccepted: &accepted,
 		},
 	}, nil
+}
+
+func (s *session) recordAcceptedExecutionModel(model string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.execution.Model.Requested = model
+	s.clearEffectiveExecutionOptionsLocked()
+}
+
+func (s *session) clearEffectiveExecutionOptions() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clearEffectiveExecutionOptionsLocked()
+}
+
+func (s *session) clearEffectiveExecutionOptionsLocked() {
+	s.execution.Model.Effective = nil
+	s.execution.ReasoningEffort.Effective = nil
 }
 
 func (s *session) Close(context.Context) error {

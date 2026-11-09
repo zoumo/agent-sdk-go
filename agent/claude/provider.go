@@ -277,6 +277,14 @@ func validateOpenOptions(options agent.OpenOptions) error {
 	if err := options.Validate(); err != nil {
 		return err
 	}
+	if options.Execution != (agent.ExecutionOptions{}) {
+		return adapterError(
+			agent.ErrorUnsupported,
+			"execution_options_unsupported",
+			"Claude execution options are not supported by this adapter",
+			nil,
+		)
+	}
 	if options.SystemPrompt != "" {
 		return adapterError(
 			agent.ErrorUnsupported,

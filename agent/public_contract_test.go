@@ -113,6 +113,12 @@ func (contractSession) SetModel(
 	return agent.ConfigurationReceipt{}, nil
 }
 
+type contractExecutionReporter struct{}
+
+func (contractExecutionReporter) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	return agent.ExecutionOptionsReport{}
+}
+
 type contractStream struct{}
 
 func (contractStream) Next(context.Context) (agent.Event, error) {
@@ -126,6 +132,7 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	var stream agent.EventStream = contractStream{}
 	var archiver agent.Archiver = contractSession{}
 	var modelController agent.ModelController = contractSession{}
+	var executionReporter agent.ExecutionOptionsReporter = contractExecutionReporter{}
 
 	require.NotNil(t, provider)
 	require.NotNil(t, initial)
@@ -133,6 +140,10 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)
 	require.NotNil(t, modelController)
+	require.NotNil(t, executionReporter)
+
+	_, implementsReporter := any(contractSession{}).(agent.ExecutionOptionsReporter)
+	assert.False(t, implementsReporter)
 }
 
 func TestUnifiedSessionHasOneInputOperation(t *testing.T) {

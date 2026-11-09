@@ -40,3 +40,20 @@ func TestProviderRequiresStartBeforeOpen(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
 }
+
+func TestProviderRejectsExecutionOptionsBeforeStartingNativeWork(t *testing.T) {
+	provider := agentclaude.New(agentclaude.Config{})
+	_, err := provider.Start(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err = provider.Open(context.Background(), agent.OpenOptions{
+		Cwd: t.TempDir(),
+		Execution: agent.ExecutionOptions{
+			Model:           "caller/model",
+			ReasoningEffort: "high",
+		},
+	})
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+}

@@ -204,7 +204,10 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, finishStream(s, run, inputClosed)) }()
+	defer func() {
+		err = errors.Join(err, finishStream(s, run, inputClosed))
+		<-done
+	}()
 
 	go func() {
 		defer close(done)
@@ -221,7 +224,6 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 			}
 		}
 	}()
-	defer func() { <-done }()
 	wait := func(raw json.RawMessage) error {
 		for {
 			mu.Lock()

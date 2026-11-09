@@ -99,7 +99,7 @@ func refreshSyntheticBinding(t *testing.T, capture string) {
 	writeJSONTest(t, filepath.Join(capture, "manifest.json"), manifest)
 }
 
-func TestSDKRequestUsesRunnerPeers(t *testing.T) {
+func TestSDKRequestUsesLibraryOwnedStdio(t *testing.T) {
 	source := controlledCapture(t)
 	output := filepath.Join(t.TempDir(), "run")
 	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
@@ -124,6 +124,13 @@ func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 	require.True(t, evidence.Executions[0].Connections[0].CleanupComplete)
 	require.False(t, evidence.Executions[0].Connections[0].NativeLaunched)
 	require.Empty(t, evidence.Executions[0].Connections[0].ProcessReceiptPath)
+	require.True(t, evidence.Executions[0].Complete)
+	require.Nil(t, evidence.Executions[0].Connections[0].ExitCode)
+	var request struct{ Peer map[string]any }
+	require.NoError(t, readJSON(filepath.Join(output, "preserve", "sdk", "request.json"), &request))
+	parent, err := filepath.EvalSymlinks(filepath.Join(output, "preserve"))
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"fixtureDir": filepath.Join(parent, "session"), "connection": "main"}, request.Peer)
 }
 
 func TestSourceSuppressPolicyStillRunsAndComparesBothPolicies(t *testing.T) {
@@ -252,9 +259,9 @@ func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
 	}{
 		{name: "remote-driver-crash", mutation: "crash", remote: true, wantRuns: 1, wantBridge: "0/2 required connections", wantEvidence: "abandoned"},
 		{name: "missing-probe", mutation: "missing-probe", remote: true, wantRuns: 1, wantProtocol: "connection probe", wantBusiness: true, wantEvidence: "passed"},
-		{name: "missing-suppress", mutation: "missing-suppress", wantRuns: 2, wantProtocol: "connection main", wantBusiness: true, wantEvidence: "passed"},
-		{name: "cross-run-suppress-receipt", mutation: "cross-run", wantRuns: 2, wantProtocol: "identity/status differs", wantBusiness: true, wantEvidence: "passed"},
-		{name: "missing-sdk-projection-invalid-receipt", mutation: "invalid-receipt", wantRuns: 2, wantCleanupError: "replay receipt", wantBusiness: true, wantEvidence: "passed"},
+		{name: "missing-suppress", mutation: "missing-suppress", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: true, wantEvidence: "unavailable"},
+		{name: "cross-run-suppress-receipt", mutation: "cross-run", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: true, wantEvidence: "unavailable"},
+		{name: "missing-sdk-projection-invalid-receipt", mutation: "invalid-receipt", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: true, wantEvidence: "unavailable"},
 		{name: "remote-postprocessing", mutation: "postprocess", remote: true, wantRuns: 1, wantProtocol: "not a regular file", wantBusiness: true, wantEvidence: "passed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -278,9 +285,9 @@ func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
 			require.Equal(t, "failed", result.Status)
 			require.Len(t, result.Runs, tc.wantRuns)
 			if tc.wantBusiness {
-				require.JSONEq(t, `{"status":"passed"}`, string(result.Runs[0].Business))
+				require.True(t, businessPassed(result.Runs[0].Business))
 				if tc.wantRuns == 2 {
-					require.JSONEq(t, `{"status":"passed"}`, string(result.Runs[1].Business))
+					require.True(t, businessPassed(result.Runs[1].Business))
 				}
 			} else {
 				require.JSONEq(t, "null", string(result.Runs[0].Business))
@@ -325,10 +332,11 @@ func mutationDriver(mutation, output string) string {
 	case "missing-probe":
 		body += "rm -f " + quote(filepath.Join(output, "preserve", "sdk", "result-probe.jsonl")) + "\n"
 	case "missing-suppress":
-		body += "rm -f " + quote(filepath.Join(output, "suppress", "sdk", "result-main.jsonl")) + "\n"
+		body += "rm -f " + quote(filepath.Join(output, "suppress", "session", "executions")) + "/*/mock/receipts/main.json\n"
 	case "cross-run":
-		body += "cp " + quote(filepath.Join(output, "preserve", "sdk", "result-main.jsonl")) + " " +
-			quote(filepath.Join(output, "suppress", "sdk", "result-main.jsonl")) + "\n"
+		saved := quote(filepath.Join(output, "saved-receipt.json"))
+		body += "for receipt in " + quote(filepath.Join(output, "preserve", "session", "executions")) + "/*/mock/receipts/main.json; do [ ! -f \"$receipt\" ] || cp \"$receipt\" " + saved + "; done\n"
+		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "executions")) + "/*/mock/receipts/main.json; do [ ! -f \"$receipt\" ] || cp " + saved + " \"$receipt\"; done\n"
 	case "invalid-receipt":
 		body += "rm -f " + quote(filepath.Join(output, "suppress", "sdk", "raw", "raw.jsonl")) + "\n"
 		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "executions")) +

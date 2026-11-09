@@ -54,6 +54,13 @@ func TestValidateExecutionEvidenceRequiresEmbeddedCompletionFacts(t *testing.T) 
 		require.NoError(t, os.Remove(fixture.receipt))
 		require.ErrorContains(t, validateExecutionEvidence(fixture.report, fixture.session, fixture.pkg), "receipt evidence is unavailable")
 	})
+	t.Run("failed cleanup", func(t *testing.T) {
+		fixture := executionEvidenceFixture(t)
+		fixture.report.Status = agenttestify.ExecutionStatusFailed
+		fixture.report.Connections[0].Status = agenttestify.ConnectionStatusFailed
+		fixture.report.Connections[0].CleanupComplete = false
+		require.ErrorContains(t, validateExecutionEvidence(fixture.report, fixture.session, fixture.pkg), "cleanup is incomplete")
+	})
 	t.Run("descriptor hash", func(t *testing.T) {
 		fixture := executionEvidenceFixture(t)
 		fixture.report.ExecutionSHA256 = "different"
@@ -123,12 +130,12 @@ func executionEvidenceFixture(t *testing.T) *executionEvidenceFixtureValues {
 		},
 		Connections: []agenttestify.ConnectionReport{{
 			ID: "main", Status: agenttestify.ConnectionStatusPassed,
-			Transport:          agenttestify.MockTransportInProcess,
-			FullConsumption:    true,
-			ClientEOF:          true,
-			CleanupComplete:    true,
-			ReceiptPath:        receiptPath,
-			ResultPath:         resultPath,
+			Transport:       agenttestify.MockTransportInProcess,
+			FullConsumption: true,
+			ClientEOF:       true,
+			CleanupComplete: true,
+			ReceiptPath:     receiptPath,
+			ResultPath:      resultPath,
 		}},
 	}
 	return &executionEvidenceFixtureValues{

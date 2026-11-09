@@ -328,7 +328,9 @@ func (s *Session) forget(run *Run) {
 	s.mu.Unlock()
 }
 
-func (s *Session) executionIDs() []string {
+// ExecutionIDs returns the execution IDs started by this coordinator, even if
+// final evidence is corrupt and Report cannot be read.
+func (s *Session) ExecutionIDs() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.executions)
@@ -557,7 +559,7 @@ func (s *Session) Report() (*SessionReport, error) {
 		SessionID:     s.SessionID,
 		Status:        "abandoned",
 	}
-	ids := s.executionIDs()
+	ids := s.ExecutionIDs()
 	active := false
 	failed := false
 	for _, id := range ids {

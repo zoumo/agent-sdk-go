@@ -82,3 +82,28 @@ func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
 }
+
+func TestBusinessFailureClosesStreamsBeforeJoiningReceiver(t *testing.T) {
+	frames := rootPrefix(t)
+	addRoot(&frames, "c2s", `{"id":103,"method":"unsupported/operation","params":{}}`)
+	addRoot(&frames, "s2c", `{"id":103,"result":{}}`)
+	var capture bytes.Buffer
+	for i, f := range frames {
+		require.NoError(t, json.NewEncoder(&capture).Encode(map[string]any{"ordinal": i + 1, "direction": f.Direction, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": f.Wire}))
+	}
+	source := filepath.Join(t.TempDir(), "raw.jsonl")
+	require.NoError(t, os.WriteFile(source, capture.Bytes(), 0o600))
+	mock, err := mocktest.Prepare(t.TempDir(), "codex", capture.Bytes(), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, mock.Close()) })
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	started := time.Now()
+	err = AcceptFlow(ctx, mock, source, codex.ChildDetailPreserve, io.Discard)
+	require.ErrorContains(t, err, "unsupported recorded operation")
+	require.Less(t, time.Since(started), 2*time.Second)
+	require.NoError(t, ctx.Err())
+	report, err := mock.Report()
+	require.NoError(t, err)
+	require.Equal(t, "failed", report.Status)
+}

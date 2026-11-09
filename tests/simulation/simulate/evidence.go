@@ -309,6 +309,9 @@ func validateEmbeddedConnection(connection agenttestify.ConnectionReport, sessio
 	if err := validateSessionEvidencePath(session, connection.ResultPath, "mock result"); err != nil {
 		return fmt.Errorf("connection %s: %w", connection.ID, err)
 	}
+	if !connection.CleanupComplete {
+		return fmt.Errorf("connection %s cleanup is incomplete", connection.ID)
+	}
 	if connection.Status == agenttestify.ConnectionStatusPassed {
 		if !connection.FullConsumption || !connection.ClientEOF || !connection.CleanupComplete {
 			return fmt.Errorf("connection %s does not prove full consumption, client EOF and cleanup", connection.ID)

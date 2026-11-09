@@ -68,9 +68,10 @@ func TestValidateExecutionEvidenceRequiresEmbeddedCompletionFacts(t *testing.T) 
 	})
 }
 
-func TestInspectSessionEvidenceLeavesExecutionlessFixtureAbandoned(t *testing.T) {
-	evidence, err := inspectSessionEvidence(&preparedSession{SessionID: "fixture-1"}, "")
+func TestReadExecutionEvidenceLeavesExecutionlessFixtureAbandoned(t *testing.T) {
+	evidence, report, err := readExecutionEvidence(&preparedSession{SessionID: "fixture-1"}, "")
 	require.NoError(t, err)
+	require.Nil(t, report)
 	require.Equal(t, preparedSessionSchema, evidence.SchemaVersion)
 	require.Equal(t, "fixture-1", evidence.SessionID)
 	require.Equal(t, "abandoned", evidence.Status)

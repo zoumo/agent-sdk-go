@@ -190,16 +190,13 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 	}
 
 	peer := struct {
-		FixtureDir string          `json:"fixtureDir"`
-		Connection string          `json:"connection"`
+		FixtureDir string          `json:"fixtureDir,omitempty"`
+		Connection string          `json:"connection,omitempty"`
 		Remote     *remoteEndpoint `json:"remote,omitempty"`
-	}{
-		FixtureDir: session.Dir,
-		Connection: "main",
-	}
+	}{}
 
 	var remote *mockRemoteService
-	if len(session.ConnectionIDs()) == 2 {
+	if session.Source.DriverProfile == "remote-close" {
 		remote, err = startMockRemote(ctx, session.Runner, hostRoot)
 		if err != nil {
 			r.BridgeError = err.Error()
@@ -216,6 +213,9 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 			}
 		}()
 		peer.Remote = &remote.endpoint
+	} else {
+		peer.FixtureDir = session.Dir
+		peer.Connection = "main"
 	}
 
 	request := filepath.Join(hostRoot, "request.json")

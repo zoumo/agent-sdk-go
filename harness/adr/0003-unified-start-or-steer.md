@@ -59,8 +59,6 @@ StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
   `NativeAccepted=false`。
 - 原生写入结果未知时返回 `outcome_unknown`，不自动重试；在 adapter 再次取得
   原生工作状态证据前，后续输入返回 `not_applied`。
-- 迁移期严格 `Submit` 保留 `failed_precondition` 的旧行为，只用于现有调用方
-  过渡；它不是第二个目标操作，调用方应迁移到 `StartOrSteer`。
 
 ## 后果
 
@@ -77,7 +75,7 @@ StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
 ## 未采用方案
 
 1. 并列公开 `Submit` 与 `Steer`。调用方要先猜测 Session 内部状态，两个操作
-   还会产生不同的并发、未知结果和错误合同。迁移期严格 `Submit` 仅作兼容。
+   还会产生不同的并发、未知结果和错误合同。
 2. 显式使用 Codex `turn/steer` 和 `expectedTurnId`。调用方必须持有并匹配
    provider 专属 turn 身份；原生 `turn/start` 已按 start-or-steer 语义处理
    输入，额外控制面不增加可证明性。

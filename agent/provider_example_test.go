@@ -260,13 +260,6 @@ func (s *exampleSession) Events() (agent.EventStream, error) {
 	return exampleStream{session: s}, nil
 }
 
-func (s *exampleSession) Submit(
-	ctx context.Context,
-	input agent.Input,
-) (agent.InputReceipt, error) {
-	return s.acceptInput(ctx, input)
-}
-
 func (s *exampleSession) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,

@@ -266,7 +266,10 @@ func TestStartOrSteerUnknownWriteIsNotRetriedOrQueued(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close(context.Background()) })
 
-	unknownCtx, stopUnknown := context.WithTimeout(ctx, 100*time.Millisecond)
+	// The peer delays its running state for one second. Leave enough time for
+	// the 1 MiB frame to encode before testing cancellation during the write;
+	// otherwise -race can turn this into a deterministic pre-write failure.
+	unknownCtx, stopUnknown := context.WithTimeout(ctx, 2*time.Second)
 	defer stopUnknown()
 	_, err = session.StartOrSteer(unknownCtx, claudeTextInput(strings.Repeat("x", 1<<20)))
 	require.Error(t, err)

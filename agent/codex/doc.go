@@ -24,8 +24,7 @@
 // one-shot, and remain pending until a native lifecycle fact closes them.
 // StartOrSteer calls native turn/start only: the response turn identity decides
 // current versus new work, a recognized native refusal returns not_applied, and
-// an unknown outcome remains unsettled until native turn evidence arrives. The
-// strict Submit remains transitional and rejects unsettled work.
+// an unknown outcome remains unsettled until native turn evidence arrives.
 //
 // The provider declares text input and permission capabilities. It declares form
 // support only when the native experimental API is enabled, and a session removes

@@ -11,7 +11,7 @@
 // and releases its own attachment and session-owned resources through Close.
 // StartOrSteer lets the adapter start new work, join acceptable current work, or
 // report that input was not applied; it never queues, waits for idle, persists,
-// or retries. The strict Submit remains transitional for existing callers.
+// or retries.
 //
 // Event payloads form a closed live union with stable session and item identity.
 // Adapters preserve native order, time, raw evidence, and explicit capability

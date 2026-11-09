@@ -14,8 +14,7 @@
   provider-specific, and the layer adds no history abstraction or root client.
 - Makes `StartOrSteer` the unified input operation with explicit
   `applied_current_work`, `applied_new_work`, `applied_best_effort` and
-  `not_applied` results. It does not queue, wait for idle, persist or retry; the
-  strict `Submit` remains transitional.
+  `not_applied` results. It does not queue, wait for idle, persist or retry.
 - Removes the unpublished SDK history replay projection while retaining native
   history queries, native replay protocol fields and simulation replay.
 - Adds typed Claude permission modes and Codex approval policies while retaining

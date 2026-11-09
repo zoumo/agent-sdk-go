@@ -128,6 +128,23 @@ _Avoid_: 保存内容、完整事件日志（未确认捕获完整性时）
 一次查询在所声明范围内实际完成的发现、采样或内容读取范围。
 _Avoid_: 全部历史、完整存储快照
 
+### MCP 配置
+
+**External MCP server（外部 MCP server）**:
+由原生 CLI 启动或通过 URL 连接的 MCP server，与应用在 SDK 内直接回答
+`mcp_message` 的 application-hosted MCP server 不同。
+_Avoid_: SDK MCP server（指外部 server 时）、普通工具
+
+**Runtime MCP defaults（Runtime MCP 默认项）**:
+调用方在构造 Provider 前从 Runtime 配置解析的外部 MCP 声明。Session 声明可按
+name 整体覆盖同名默认项。
+_Avoid_: native ambient MCP、用户配置、项目配置
+
+**Native ambient MCP（原生 ambient MCP）**:
+原生 CLI 从用户、项目、企业或其他外部设置自行发现的 MCP 配置。Session 或
+Runtime 的声明不保证整体替换或删除同名 ambient server。
+_Avoid_: Runtime MCP 默认项、Session MCP
+
 ### 故事、验证与采集
 
 **User story（用户故事）**:

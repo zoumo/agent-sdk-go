@@ -56,6 +56,9 @@ README 和包文档说明。现有原生 Session 的语义以
 8. 统一 `agent` 层不提供 `NativeHistory`、`HistoryReader`、`HistoryEvent`、
    `LoadSession` 或 replay。历史转换、replay、持久化、提交和失败释放全部由
    MASS 拥有。
+9. 统一 MCP 只配置 external stdio 与 Streamable HTTP；Runtime 默认项和 Session
+   声明按 name 合成，Session 同名项整体覆盖。统一层不提供 SSE、strict 或
+   config mode，也不保证清除 native ambient MCP。
 
 这里的取舍是：把“一个 Agent Session 如何操作和观察”收敛到 SDK，把“MASS
 如何命名、恢复、持久和发布一个 Session”留在 MASS。这样普通使用方只处理一套
@@ -65,7 +68,7 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、错误值 | provider 无关的单 Session 实时合同 |
+| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、错误值 | provider 无关的单 Session 实时合同 |
 | `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包 | 原生协议、查询、原始数据和 provider 语义 |
@@ -92,6 +95,7 @@ README 和包文档说明。现有原生 Session 的语义以
 - 同一套 Provider 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
 - 在 SDK 适配器内部保留原生工作归属、交互句柄和单次回答权限。
+- 透传由上层合成的最终 external MCP 列表，并明确 provider 字段支持差异。
 - 诚实表达能力与功能差异，不在 provider 之间伪造等价。
 
 统一层不负责：
@@ -104,6 +108,8 @@ README 和包文档说明。现有原生 Session 的语义以
 - EventStore、事件持久化分类、历史分页、Broadcast、SSE、HTTP 或 CLI。
 - 显式历史 load、历史 replay、跨连接恢复、自动重连或补历史。
 - 原生事件去重、跨运行复用回答权，或从统一事件重建原生控制句柄。
+- MCP 连接、OAuth、健康检查、tool discovery、tool 调用或
+  application-hosted MCP 的 JSON-RPC 实现。
 
 ## 分层与依赖
 
@@ -165,8 +171,8 @@ agent/claude.New(Config)  -> *agentclaude.Provider, implements agent.Provider
 ```
 
 `Config` 由具体 adapter 定义，可承载可执行文件、环境、初始化参数和原生连接
-选项。MASS 负责把 RuntimeConfig 解析成这些显式值，包括 secret 引用解析和
-环境继承策略；SDK 不解析 MASS 配置。
+选项。MASS 负责把 RuntimeConfig 解析成这些显式值，包括 Runtime MCP 默认项、
+Session 覆盖、secret 引用解析和环境继承策略；SDK 不解析 MASS 配置。
 
 ### Provider 接口
 
@@ -193,7 +199,8 @@ type Provider interface {
 Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
 （Claude）；后者由每个 Session 拥有并在 `Close` 中释放自己的原生进程。
 
-`Open` 与 `Resume` 的公共选项只包含两个 provider 都能解释的字段：
+`Open` 与 `Resume` 的公共选项使用同一结构；provider 只能部分解释的字段由
+adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
 type OpenOptions struct {
@@ -201,6 +208,7 @@ type OpenOptions struct {
     SystemPrompt   string
     AdditionalDirs []string
     Features       Features
+    MCPServers     []MCPServer
 }
 
 type ResumeOptions struct {
@@ -231,9 +239,117 @@ type EffectiveFeatures struct {
   false，并通过 `Session.EffectiveFeatures()` 返回。
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
+- `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
+  external MCP 列表；adapter 不再解释来源或执行第二种合并策略。
 - Provider 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
 - `Open` 和 `Resume` 要求 Provider 已启动；停止成功后不能重新 `Start`，也不能
   继续 `Open` 或 `Resume`。没有未关闭 Session 时，重复 `Stop` 返回成功。
+
+### MCP 配置
+
+<a id="mcp-configuration"></a>
+
+统一层只声明由原生 Codex 或 Claude 启动或连接的 external MCP server，不实现
+MCP 连接、OAuth、健康检查、tool discovery、tool 调用或 application-hosted SDK
+MCP 的 JSON-RPC 回答。后者的原始 `mcp_message` 控制仍由原生 Claude Session
+和应用处理，不进入统一 MCP 配置。
+
+```go
+type MCPTransport string
+
+const (
+    MCPTransportStdio MCPTransport = "stdio"
+    // MCPTransportHTTP 是 MCP Streamable HTTP，不是旧式 HTTP+SSE。
+    MCPTransportHTTP MCPTransport = "http"
+)
+
+type MCPServer struct {
+    Name              string
+    Transport         MCPTransport
+    Command           string
+    Args              []string
+    Env               map[string]string
+    Cwd               string
+    URL               string
+    Headers           map[string]string
+    EnvHeaders        map[string]string
+    BearerTokenEnvVar string
+}
+```
+
+统一层不定义 SSE transport。Claude 原生包仍可声明旧式 SSE server，但统一
+Provider 只支持两个 provider 共同具备的 stdio 与 Streamable HTTP；需要 SSE
+的调用方直接使用原生 `claude` Session。统一层也不定义
+`MCPConfigMode`、`inherit`/`replace`、`StrictMCPConfig` 或任何清空 native
+ambient MCP 的开关。
+
+<a id="mcp-runtime-overlay"></a>
+
+#### Runtime 与 Session 合成
+
+Runtime 默认 MCP 属于构造 Provider 之前的 Runtime 配置解释，不进入 Provider
+或 Session 状态。负责解析 RuntimeConfig 的上层必须在每次 `Open`、`Resume`
+以及通过 `Provider.Resume` 完成的显式 load 之前合成最终列表：
+
+- 不使用 Runtime 默认项的调用方直接把完整列表放入
+  `OpenOptions.MCPServers`，Provider 不自行补充默认 MCP。
+- 合成键是区分大小写的 server `Name`。
+- Session 声明与 Runtime 默认项同名时，Session 项整体替换 Runtime 项，不做字段
+  级合并，也不继承 Runtime 项未声明的 Args、Env、Headers 或其他字段。
+- 只在 Runtime 中出现的 server 继续保留；只在 Session 中出现的 server 追加。
+- Runtime 列表和 Session 列表分别要求 name 唯一；跨层同名合法，并由 Session
+  项确定最终值。
+- Session 列表为空表示不覆盖 Runtime，不能表示“删除全部 Runtime MCP”。需要
+  空集合时由 Runtime 配置本身提供空集合。
+- Session 项也不能删除单个 Runtime 默认项；统一层不定义 tombstone、禁用标记
+  或按 name 删除操作。需要减少默认项时修改 Runtime 配置。
+- Provider 只接收合成后的 `OpenOptions.MCPServers`，不知道某一项来自 Runtime
+  还是 Session，也不再次覆盖、去重或继承。
+
+该规则只合成调用方拥有的 Runtime 配置。Codex 或 Claude 自己从用户、项目、
+企业设置发现的 [native ambient MCP](../../../GLOSSARY.md)仍由原生 CLI 管理。
+集中声明的最终列表不能保证整体替换或删除 ambient 同名项：Codex 会按字段递归
+merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企业策略拒绝。
+需要确定性 server 集合时，调用方必须隔离原生配置来源或外层执行环境。
+
+#### Provider 映射
+
+| 统一字段或能力 | 约束 | Codex | Claude |
+|---|---|---|---|
+| `Name` | 非空、合法 UTF-8、无 `.`、列表内唯一 | `mcp_servers.<name>` key | `mcpServers.<name>` key |
+| `Transport` | 必须显式提供 | `stdio` 选择 command，`http` 选择 URL | 生成 `type:"stdio"` 或 `type:"http"` |
+| `Command` / `Args` / `Env` | 只用于 stdio | 同名字段 | 同名字段 |
+| `Cwd` | 只用于 stdio | `cwd` | 不支持 |
+| `URL` | 只用于 HTTP | `url` | `url` |
+| `Headers` | 只用于 HTTP | `http_headers` | `headers` |
+| `EnvHeaders` | 只用于 HTTP；值是环境变量名 | `env_http_headers` | 不支持 |
+| `BearerTokenEnvVar` | 只用于 HTTP；值是环境变量名 | `bearer_token_env_var` | 不支持 |
+| 旧式 HTTP+SSE | 不属于统一 transport | 不支持 | 原生包支持，统一层不暴露 |
+
+adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他字段。`Cwd` 与
+`EnvHeaders`、`BearerTokenEnvVar` 存在于统一结构是为了保留 Codex 的原生安全
+引用能力；Claude adapter 在启动进程前返回 `unsupported`。
+
+#### 校验、生命周期与敏感值
+
+- `Transport` 不能由 `Command`/`URL` 推断；未知值返回 `invalid_argument`。
+- stdio 必须有非空 `Command`，禁止 `URL`、`Headers`、`EnvHeaders` 和
+  `BearerTokenEnvVar`。
+- HTTP 必须有非空 `URL`，禁止 `Command`、`Args`、`Env` 和 `Cwd`。
+- 文本、名称、map key 与 value 必须是合法 UTF-8。结构校验和 provider 字段
+  支持检查都在原生进程启动或 thread RPC 前完成。
+- slice 和 map 在进入 Provider 时复制；调用方后续 mutation 不影响已经开始的
+  Open/Resume。
+- SDK 不解析、展开或持久化 Env/Header secret。错误只包含 server 序号、字段名、
+  provider 和 reason，不包含配置值；MCP 配置不进入统一 Event、Meta 或日志。
+- Claude 的 `--mcp-config` 位于进程 argv，调用方应使用原生环境引用；SDK 不能
+  承诺 argv 保密。Codex literal `Env`/`Headers` 会成为 native config，优先使用
+  `EnvHeaders` 或 `BearerTokenEnvVar`。
+- `Open`/`Resume` 成功不等于 MCP server 已连接、认证成功或暴露了工具，也不
+  新增统一 Capability 或 tool discovery 结果。
+- Resume 必须重新提供完整最终列表；SDK 不保存上次 Session 的 MCP 配置。
+  Codex 对仍被观察或运行的 warm loaded thread 可能忽略 resume config，统一层
+  不承诺运行中热替换 MCP tool set。
 
 ### 可显式带入初始输入
 
@@ -1017,6 +1133,12 @@ provider-specific 转换，但不生成 `agent.Event`。
 | `Driver.Stop` | 关闭全部 Session 后 `Provider.Stop` | 事件排空、EventPipe 终止、当前运行解除 |
 | `LoadSession` | `Provider.Resume` 只恢复同一原生会话；历史由 MASS Runtime 直接调用 Codex/Claude 原生查询 API | 显式恢复、历史读取、转换、提交、replay 与发布顺序 |
 
+`OpenSession`、`ResumeSession` 和通过 `Provider.Resume` 完成的 `LoadSession`
+都必须在调用 SDK 前按 [Runtime 与 Session 合成](#mcp-runtime-overlay)生成最终
+`MCPServers`。MASS 保留 RuntimeConfig 默认项、Session 覆盖和 secret 引用的解释；
+SDK 只校验并透传最终列表。Runtime 默认项与 native ambient 是不同来源，不能把
+后者枚举进 SDK 列表来伪造清除效果。
+
 ### 单 Session 中继
 
 ```text
@@ -1397,6 +1519,11 @@ block/message linkage 和无法归属的交互行为保持不变。
 - SDK 内部 history replay 投影已删除；原生历史查询、`Event.IsReplay`、
   `ThreadResumeParams.History`、录制回放和 simulation replay 仍可用。
 - 原生 `codex`、`claude` 及其 `types` 的公开接口和默认测试不因统一层变化。
+- 统一层只存在 stdio 和 Streamable HTTP MCP；没有 SSE transport 或
+  `MCPConfigMode`。Runtime 默认项与 Session 同名项由上层合成，Session 项整体
+  覆盖，且 Provider 不再二次合并。
+- MCP synthetic 测试固定 Codex thread config 与 Claude argv 的精确映射；无法
+  表达的字段在原生副作用前失败，secret sentinel 不出现在错误、事件或日志。
 - 默认验证保持离线，不使用真实 Agent 或新增录制作为完成证据。
 
 ## 合同影响
@@ -1409,5 +1536,7 @@ block/message linkage 和无法归属的交互行为保持不变。
   root generic client 或共享历史协议。
 - MASS 的公开 `RuntimeDriver` 和 `SessionEvent` 仍是其 Service 边界；SDK
   统一层不成为第二个 MASS 公开协议。
+- 统一层不暴露 Claude strict 或旧式 SSE；这两个原生能力继续由 `claude` 包
+  提供。Runtime 同名覆盖只作用于调用方拥有的最终列表，不清空 native ambient。
 - README 和包文档说明统一层的使用边界与离线示例；MASS 接入、发布和真实
   Agent 验证须分别记录，不从该合同推定完成。

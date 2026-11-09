@@ -127,8 +127,27 @@ Codex `SessionOptions.Features`、`Tools` 和 `MCPServers` 只在 `Open` 固定�
 路径冲突时，必须在 thread RPC 前返回 invalid-input；错误可包含字段和路径名，
 不得包含 header、token、env 或其他配置值。低层 `StartThread`/`ResumeThread`
 不隐式应用这些便利字段，也不写用户 config。Codex 没有 Claude 等价的 strict
-MCP 选项：本次声明只能新增或替换同名 server，不能移除 ambient 配置；
-需要独占 server 集合时，调用方必须使用隔离的 `CODEX_HOME` 或外层执行环境。
+MCP 选项；thread config 会与 ambient 配置按字段递归 merge。本次声明只保证
+添加或覆盖所声明的字段，不保证整体替换同名 ambient server，也不能删除其未
+声明字段。同名项可能保留不同 transport 的字段并由 Codex 拒绝；需要确定 server
+集合时，调用方必须使用隔离的 `CODEX_HOME` 或外层执行环境。
+
+`thread/resume` 对仍被观察或运行的 loaded thread 可能忽略 config overrides；
+恢复成功不表示 MCP tool set 已重建，SDK 不承诺运行中热替换。
+
+<a id="interface-claude-external-mcp"></a>
+
+### Claude 外部 MCP 配置
+
+Claude `SessionOptions.MCPServers` 支持 native `stdio`、Streamable HTTP 和
+旧式 HTTP+SSE。stdio 接受 command、args 和 env；HTTP/SSE 接受 URL 和 headers。
+Claude 外部 server 没有 stdio cwd、env header 或 bearer token 环境变量字段。
+`StrictMCPConfig` 向原生 CLI 传递 `--strict-mcp-config`，但其企业策略兼容性、
+同名优先级和 ambient 覆盖属于原生 CLI 行为。
+
+这些是原生 Claude 能力。统一 Agent 层只采用 stdio 与 Streamable HTTP，不暴露
+旧式 SSE 或 `StrictMCPConfig`；其 Runtime/Session 合成规则见
+[统一 Agent MCP 配置](../unified-agent/design.md#mcp-configuration)。
 
 <a id="interface-真实-incomingrequest"></a>
 

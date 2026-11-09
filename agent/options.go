@@ -11,11 +11,9 @@ import (
 type OpenOptions struct {
 	Cwd string
 	// AdditionalSystemPrompt appends caller text after provider defaults for
-	// this Open or Resume operation. It does not replace built-in instructions,
-	// persist in the Session, or promise an exact append position or child-Agent
-	// inheritance. Empty omits provider-native prompt configuration. The text
-	// must be valid UTF-8 and contain no NUL. Native argv or request transport
-	// may expose it; unified errors, events and logs do not.
+	// this Open or Resume operation. Empty omits provider-native prompt
+	// configuration. See harness/modules/unified-agent/design.md#additional-system-prompt
+	// for the complete contract.
 	AdditionalSystemPrompt string
 	AdditionalDirs         []string
 	Features               Features

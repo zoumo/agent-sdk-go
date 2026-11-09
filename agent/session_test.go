@@ -9,8 +9,8 @@ import (
 )
 
 func TestInputResultValuesAreStable(t *testing.T) {
-	assert.Equal(t, agent.InputResult("applied_current_work"), agent.InputAppliedCurrentWork)
-	assert.Equal(t, agent.InputResult("applied_new_work"), agent.InputAppliedNewWork)
-	assert.Equal(t, agent.InputResult("applied_best_effort"), agent.InputAppliedBestEffort)
-	assert.Equal(t, agent.InputResult("not_applied"), agent.InputNotApplied)
+	assert.Equal(t, agent.InputAppliedCurrentWork, agent.InputResult("applied_current_work"))
+	assert.Equal(t, agent.InputAppliedNewWork, agent.InputResult("applied_new_work"))
+	assert.Equal(t, agent.InputAppliedBestEffort, agent.InputResult("applied_best_effort"))
+	assert.Equal(t, agent.InputNotApplied, agent.InputResult("not_applied"))
 }

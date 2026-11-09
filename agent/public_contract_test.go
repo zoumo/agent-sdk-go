@@ -136,7 +136,7 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 }
 
 func TestUnifiedSessionHasOneInputOperation(t *testing.T) {
-	sessionType := reflect.TypeOf((*agent.Session)(nil)).Elem()
+	sessionType := reflect.TypeFor[agent.Session]()
 
 	_, hasStartOrSteer := sessionType.MethodByName("StartOrSteer")
 	_, hasSubmit := sessionType.MethodByName("Submit")

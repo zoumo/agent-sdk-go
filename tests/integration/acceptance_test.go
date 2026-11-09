@@ -2984,6 +2984,7 @@ func checkClaudeDetailLifecycle(s *NativeIntegrationSuite) {
 		require.Nil(t, got[8].Parent)
 	}
 }
+
 func checkEmbeddedResult(t *testing.T, run *mocktest.Run) {
 	t.Helper()
 	result, err := run.Wait(deadline(t))

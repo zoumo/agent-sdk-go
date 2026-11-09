@@ -121,10 +121,19 @@ func (p *Provider) open(
 	options agent.OpenOptions,
 	resumeID string,
 ) (agent.Session, error) {
+	mcpServers, err := claudeMCPServers(options.MCPServers)
+	if err != nil {
+		return nil, err
+	}
 	if err := p.reserveOpen(); err != nil {
 		return nil, err
 	}
-	nativeOptions := p.nativeOptions(options.Cwd, resumeID, options.Features)
+	nativeOptions := p.nativeOptions(
+		options.Cwd,
+		resumeID,
+		options.Features,
+		mcpServers,
+	)
 	native, err := claude.Open(ctx, claude.SessionOptions(nativeOptions))
 	if err != nil {
 		p.finishOpen()
@@ -242,11 +251,13 @@ func (p *Provider) nativeOptions(
 	workDir string,
 	resumeID string,
 	features agent.Features,
+	mcpServers []claude.MCPServer,
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
+		MCPServers:        mcpServers,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,

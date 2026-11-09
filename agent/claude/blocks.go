@@ -30,7 +30,7 @@ type claudeBlock struct {
 }
 
 type claudeCall struct {
-	name string
+	identity claudeToolIdentity
 }
 
 func (s *session) lane(parent string) (*claudeLane, error) {
@@ -175,7 +175,7 @@ func (s *session) uniqueBlock(parent, response, kind string) (int, bool) {
 	return stopped[0], true
 }
 
-func (s *session) observeToolCall(id, name string) error {
+func (s *session) observeToolCall(id string, identity claudeToolIdentity) error {
 	if s.calls == nil {
 		s.calls = make(map[string]claudeCall)
 	}
@@ -185,7 +185,7 @@ func (s *session) observeToolCall(id, name string) error {
 	if len(s.calls) >= maxClaudeLiveState {
 		return liveStateExhausted("tool_call_capacity")
 	}
-	s.calls[id] = claudeCall{name: name}
+	s.calls[id] = claudeCall{identity: identity}
 	return nil
 }
 

@@ -56,6 +56,9 @@ README 和包文档说明。现有原生 Session 的语义以
 8. 统一 `agent` 层不提供 `NativeHistory`、`HistoryReader`、`HistoryEvent`、
    `LoadSession` 或 replay。历史转换、replay、持久化、提交和失败释放全部由
    MASS 拥有。
+9. 统一 MCP 只配置 external stdio 与 Streamable HTTP；Runtime 默认项和 Session
+   声明按 name 合成，Session 同名项整体覆盖。统一层不提供 SSE、strict 或
+   config mode，也不保证清除 native ambient MCP。
 
 这里的取舍是：把“一个 Agent Session 如何操作和观察”收敛到 SDK，把“MASS
 如何命名、恢复、持久和发布一个 Session”留在 MASS。这样普通使用方只处理一套
@@ -65,7 +68,7 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、错误值 | provider 无关的单 Session 实时合同 |
+| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、错误值 | provider 无关的单 Session 实时合同 |
 | `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包 | 原生协议、查询、原始数据和 provider 语义 |
@@ -92,6 +95,7 @@ README 和包文档说明。现有原生 Session 的语义以
 - 同一套 Provider 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
 - 在 SDK 适配器内部保留原生工作归属、交互句柄和单次回答权限。
+- 透传由上层合成的最终 external MCP 列表，并明确 provider 字段支持差异。
 - 诚实表达能力与功能差异，不在 provider 之间伪造等价。
 
 统一层不负责：
@@ -106,6 +110,8 @@ README 和包文档说明。现有原生 Session 的语义以
 - 原生事件去重、跨运行复用回答权，或从统一事件重建原生控制句柄。
 - 并列的 `Submit`/`Steer` 操作、显式 Codex `turn/steer`、SDK 输入队列、
   等待空闲、输入持久化和自动重试。
+- MCP 连接、OAuth、健康检查、tool discovery、tool 调用或
+  application-hosted MCP 的 JSON-RPC 实现。
 
 ## 分层与依赖
 
@@ -167,8 +173,8 @@ agent/claude.New(Config)  -> *agentclaude.Provider, implements agent.Provider
 ```
 
 `Config` 由具体 adapter 定义，可承载可执行文件、环境、初始化参数和原生连接
-选项。MASS 负责把 RuntimeConfig 解析成这些显式值，包括 secret 引用解析和
-环境继承策略；SDK 不解析 MASS 配置。
+选项。MASS 负责把 RuntimeConfig 解析成这些显式值，包括 Runtime MCP 默认项、
+Session 覆盖、secret 引用解析和环境继承策略；SDK 不解析 MASS 配置。
 
 ### Provider 接口
 
@@ -195,7 +201,8 @@ type Provider interface {
 Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
 （Claude）；后者由每个 Session 拥有并在 `Close` 中释放自己的原生进程。
 
-`Open` 与 `Resume` 的公共选项只包含两个 provider 都能解释的字段：
+`Open` 与 `Resume` 的公共选项使用同一结构；provider 只能部分解释的字段由
+adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
 type OpenOptions struct {
@@ -203,6 +210,7 @@ type OpenOptions struct {
     SystemPrompt   string
     AdditionalDirs []string
     Features       Features
+    MCPServers     []MCPServer
 }
 
 type ResumeOptions struct {
@@ -233,9 +241,117 @@ type EffectiveFeatures struct {
   false，并通过 `Session.EffectiveFeatures()` 返回。
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
+- `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
+  external MCP 列表；adapter 不再解释来源或执行第二种合并策略。
 - Provider 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
 - `Open` 和 `Resume` 要求 Provider 已启动；停止成功后不能重新 `Start`，也不能
   继续 `Open` 或 `Resume`。没有未关闭 Session 时，重复 `Stop` 返回成功。
+
+### MCP 配置
+
+<a id="mcp-configuration"></a>
+
+统一层只声明由原生 Codex 或 Claude 启动或连接的 external MCP server，不实现
+MCP 连接、OAuth、健康检查、tool discovery、tool 调用或 application-hosted SDK
+MCP 的 JSON-RPC 回答。后者的原始 `mcp_message` 控制仍由原生 Claude Session
+和应用处理，不进入统一 MCP 配置。
+
+```go
+type MCPTransport string
+
+const (
+    MCPTransportStdio MCPTransport = "stdio"
+    // MCPTransportHTTP 是 MCP Streamable HTTP，不是旧式 HTTP+SSE。
+    MCPTransportHTTP MCPTransport = "http"
+)
+
+type MCPServer struct {
+    Name              string
+    Transport         MCPTransport
+    Command           string
+    Args              []string
+    Env               map[string]string
+    Cwd               string
+    URL               string
+    Headers           map[string]string
+    EnvHeaders        map[string]string
+    BearerTokenEnvVar string
+}
+```
+
+统一层不定义 SSE transport。Claude 原生包仍可声明旧式 SSE server，但统一
+Provider 只支持两个 provider 共同具备的 stdio 与 Streamable HTTP；需要 SSE
+的调用方直接使用原生 `claude` Session。统一层也不定义
+`MCPConfigMode`、`inherit`/`replace`、`StrictMCPConfig` 或任何清空 native
+ambient MCP 的开关。
+
+<a id="mcp-runtime-overlay"></a>
+
+#### Runtime 与 Session 合成
+
+Runtime 默认 MCP 属于构造 Provider 之前的 Runtime 配置解释，不进入 Provider
+或 Session 状态。负责解析 RuntimeConfig 的上层必须在每次 `Open`、`Resume`
+以及通过 `Provider.Resume` 完成的显式 load 之前合成最终列表：
+
+- 不使用 Runtime 默认项的调用方直接把完整列表放入
+  `OpenOptions.MCPServers`，Provider 不自行补充默认 MCP。
+- 合成键是区分大小写的 server `Name`。
+- Session 声明与 Runtime 默认项同名时，Session 项整体替换 Runtime 项，不做字段
+  级合并，也不继承 Runtime 项未声明的 Args、Env、Headers 或其他字段。
+- 只在 Runtime 中出现的 server 继续保留；只在 Session 中出现的 server 追加。
+- Runtime 列表和 Session 列表分别要求 name 唯一；跨层同名合法，并由 Session
+  项确定最终值。
+- Session 列表为空表示不覆盖 Runtime，不能表示“删除全部 Runtime MCP”。需要
+  空集合时由 Runtime 配置本身提供空集合。
+- Session 项也不能删除单个 Runtime 默认项；统一层不定义 tombstone、禁用标记
+  或按 name 删除操作。需要减少默认项时修改 Runtime 配置。
+- Provider 只接收合成后的 `OpenOptions.MCPServers`，不知道某一项来自 Runtime
+  还是 Session，也不再次覆盖、去重或继承。
+
+该规则只合成调用方拥有的 Runtime 配置。Codex 或 Claude 自己从用户、项目、
+企业设置发现的 [native ambient MCP](../../../GLOSSARY.md)仍由原生 CLI 管理。
+集中声明的最终列表不能保证整体替换或删除 ambient 同名项：Codex 会按字段递归
+merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企业策略拒绝。
+需要确定性 server 集合时，调用方必须隔离原生配置来源或外层执行环境。
+
+#### Provider 映射
+
+| 统一字段或能力 | 约束 | Codex | Claude |
+|---|---|---|---|
+| `Name` | 非空、合法 UTF-8、无 `.`、列表内唯一 | `mcp_servers.<name>` key | `mcpServers.<name>` key |
+| `Transport` | 必须显式提供 | `stdio` 选择 command，`http` 选择 URL | 生成 `type:"stdio"` 或 `type:"http"` |
+| `Command` / `Args` / `Env` | 只用于 stdio | 同名字段 | 同名字段 |
+| `Cwd` | 只用于 stdio | `cwd` | 不支持 |
+| `URL` | 只用于 HTTP | `url` | `url` |
+| `Headers` | 只用于 HTTP | `http_headers` | `headers` |
+| `EnvHeaders` | 只用于 HTTP；值是环境变量名 | `env_http_headers` | 不支持 |
+| `BearerTokenEnvVar` | 只用于 HTTP；值是环境变量名 | `bearer_token_env_var` | 不支持 |
+| 旧式 HTTP+SSE | 不属于统一 transport | 不支持 | 原生包支持，统一层不暴露 |
+
+adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他字段。`Cwd` 与
+`EnvHeaders`、`BearerTokenEnvVar` 存在于统一结构是为了保留 Codex 的原生安全
+引用能力；Claude adapter 在启动进程前返回 `unsupported`。
+
+#### 校验、生命周期与敏感值
+
+- `Transport` 不能由 `Command`/`URL` 推断；未知值返回 `invalid_argument`。
+- stdio 必须有非空 `Command`，禁止 `URL`、`Headers`、`EnvHeaders` 和
+  `BearerTokenEnvVar`。
+- HTTP 必须有非空 `URL`，禁止 `Command`、`Args`、`Env` 和 `Cwd`。
+- 文本、名称、map key 与 value 必须是合法 UTF-8。结构校验和 provider 字段
+  支持检查都在原生进程启动或 thread RPC 前完成。
+- slice 和 map 在进入 Provider 时复制；调用方后续 mutation 不影响已经开始的
+  Open/Resume。
+- SDK 不解析、展开或持久化 Env/Header secret。错误只包含 server 序号、字段名、
+  provider 和 reason，不包含配置值；MCP 配置不进入统一 Event、Meta 或日志。
+- Claude 的 `--mcp-config` 位于进程 argv，调用方应使用原生环境引用；SDK 不能
+  承诺 argv 保密。Codex literal `Env`/`Headers` 会成为 native config，优先使用
+  `EnvHeaders` 或 `BearerTokenEnvVar`。
+- `Open`/`Resume` 成功不等于 MCP server 已连接、认证成功或暴露了工具，也不
+  新增统一 Capability 或 tool discovery 结果。
+- Resume 必须重新提供完整最终列表；SDK 不保存上次 Session 的 MCP 配置。
+  Codex 对仍被观察或运行的 warm loaded thread 可能忽略 resume config，统一层
+  不承诺运行中热替换 MCP tool set。
 
 ### 可显式带入初始输入
 
@@ -715,10 +831,34 @@ type Truncation struct {
     OmittedBytes  *int64
 }
 
+type ToolKind string
+
+const (
+    ToolKindRead       ToolKind = "read"
+    ToolKindEdit       ToolKind = "edit"
+    ToolKindDelete     ToolKind = "delete"
+    ToolKindMove       ToolKind = "move"
+    ToolKindSearch     ToolKind = "search"
+    ToolKindExecute    ToolKind = "execute"
+    ToolKindThink      ToolKind = "think"
+    ToolKindFetch      ToolKind = "fetch"
+    ToolKindSwitchMode ToolKind = "switch_mode"
+    ToolKindOther      ToolKind = "other"
+)
+
+type ToolProvider string
+
+const (
+    ToolProviderAgent   ToolProvider = "agent"
+    ToolProviderDynamic ToolProvider = "dynamic"
+    ToolProviderMCP     ToolProvider = "mcp"
+)
+
 type ToolCallPayload struct {
     ID                  string
-    Kind                string
-    Name                string
+    Kind                ToolKind
+    ToolName            string
+    Provider            ToolProvider
     Title               string
     Phase               string
     InputRepresentation string
@@ -733,8 +873,9 @@ type ToolCallPayload struct {
 
 type ToolResultPayload struct {
     ID                  string
-    Kind                string
-    Name                string
+    Kind                ToolKind
+    ToolName            string
+    Provider            ToolProvider
     Title               string
     Phase               string
     InputRepresentation string
@@ -849,7 +990,192 @@ MASS 是否持久化。
 
 `*_chunk` 只追加，不是累计快照。adapter 不跨事件拼接完整历史，也不用结束后
 补造完整消息。工具调用和结果共享 `itemId`，但事件身份不同。完整消息与 chunk
-使用相同的 item/message 身份。
+使用相同的 item/message 身份。工具分块不携带完整工具身份，具体例外见
+[工具身份、Provider 与 Kind](#工具身份provider-与-kind)。
+
+### 工具身份、Provider 与 Kind
+
+公开 JSON 的工具身份由 `(provider, toolName)` 组成；`kind` 是 SDK 附加的
+跨 Agent 动作分类，只用于展示、统计和粗粒度路由提示，不参与权限判断，也不
+证明不同 provider 的工具执行行为等价。对应的 Go 字段是 `Provider`、
+`ToolName` 和 `Kind`。
+
+`toolName` 必须非空，表示 provider 最具体的原生工具标识，不是跨 provider
+规范化的 leaf name。选择顺序固定为：
+
+1. provider 原生显式 `tool` 或 `name` 字段；
+2. 可确定的一一对应原生枚举映射；
+3. 原生 item type fallback。
+
+只有第 3 种情况使用 fallback。fallback 必须保留原生大小写和拼写，不能把它
+描述成模型工具名。Claude 的 `mcp__...` 名称原样保留，不从字符串中剥离 server。
+
+`provider` 表示工具提供方，接受且只接受以下四种形式：
+
+| 值 | 语义 |
+|---|---|
+| `agent` | Agent runtime 自带的工具 |
+| `dynamic` | 应用侧或 runtime 动态注册的工具 |
+| `mcp` | 确定是 MCP，但 server 无法可靠确定 |
+| `mcp:<server>` | MCP 且 server 已知 |
+
+`mcp:` 非法；`<server>` 必须非空，并保留 `mcp:` 后的全部内容，允许继续
+包含 `:`，不得截断或重建。`agent`、`dynamic` 和 `mcp` 是完整值，不能带后缀。
+其他 provider 值均非法。新事件必须有非空 `provider`；不增加独立的
+`server`、`tool`、`action` 或 `type` payload 字段。MCP 的结构化 server
+定位放在 `provider`，而 `toolName` 仍保留 provider 原文。
+
+`kind` 使用 ACP 的取值：
+
+| `kind` | 语义 |
+|---|---|
+| `read` | 读取文件或数据 |
+| `edit` | 修改文件或内容 |
+| `delete` | 删除文件或数据 |
+| `move` | 移动或重命名 |
+| `search` | 搜索信息 |
+| `execute` | 运行命令或代码 |
+| `think` | 内部推理或规划 |
+| `fetch` | 获取外部数据 |
+| `switch_mode` | 切换 Session 的 mode 配置 |
+| `other` | 其他或无法分类的工具，作为默认值 |
+
+`kind` 只描述动作，不描述资源范围。当前不把 `read`/`edit` 改成
+`fs.read`/`fs.write`，也不把 `search` 拆成本地检索和网络检索：
+
+| 工具 | `kind` | 资源范围（仅用于说明，不进入 payload） |
+|---|---|---|
+| `Grep`、`Glob` | `search` | 本地 |
+| `WebSearch` | `search` | 网络 |
+| `WebFetch` | `fetch` | 网络 |
+
+`read` 和 `edit` 沿用 ACP 的广义定义：前者表示读取文件或数据，后者表示修改
+文件或内容；`fs.*` 会把这些动作错误地限制为文件系统操作。
+
+`search` 表示搜索信息；本地和网络的区别由 `toolName` 或未来单独的 scope
+维度表达，不改变 `kind`。`fetch` 表示获取已知外部数据，不能和 `search`
+混用。当前没有 scope 字段；如果以后需要做本地/网络权限或路由，再设计独立
+的正交字段。
+
+`delete` 和 `move` 当前没有稳定的 Codex/Claude 工具映射；不得从 patch 内容、
+命令文本或工具参数推断。`switch_mode` 只用于明确切换 session mode 的工具。
+
+`kind` 按工具本身分类，不解析命令的 `commandActions`、MCP 参数或工具输出。
+call 和 result 各自独立要求完整的 `(provider, toolName)` 身份和 `kind`；核心
+不从前一事件补造缺失字段。adapter 在观察到 call 时保存身份和分类，result
+复制 `provider`、`toolName`、`kind` 而不重新解析原生输出。adapter 测试必须
+证明 call/result 的这三个字段相等；其中只有前两个组成工具身份。
+
+#### 工具分块例外
+
+`agent.tool_call_chunk` 是工具事件的身份例外。它的 payload 恰好是
+`ToolChunkPayload{ID, Content}`，JSON 只有 `id` 和 `content`，不携带
+`kind`、`toolName` 或 `provider`。分块可能早于完整 call 身份出现；调用方按
+`id` 关联，不得从部分输入猜测身份。
+
+#### 工具状态边界
+
+工具 `status` 是 provider 原生生命周期的投影，不是工具身份，也不参与
+call/result 身份相等判断。支持的值为 `pending`、`in_progress`、`completed`、
+`failed`、`declined` 和 `unknown`；call 可以省略 status，result 必须有非空
+status。
+
+该枚举不建立跨 provider 的成功语义。Codex 继续使用现有
+`in_progress`/`completed`/`failed`/`declined`/`unknown` 投影；Claude 的 call
+省略 status，result 只使用 `completed`/`failed`。identity 或 kind 的变化不能
+改写 status，status 的变化也不能触发重新分类。
+
+#### JSON schema 与兼容性
+
+`agent.tool_call` 和 `agent.tool_result` 的 JSON payload 都要求 `kind`、
+`toolName` 和 `provider`。严格解码拒绝缺失或 null 的身份字段、空
+`toolName`、未知 kind、非法 provider、`mcp:` 空后缀，以及旧的 `name` 成员。
+旧任意字符串 kind 没有迁移或 alias。
+
+这是一次有意的 breaking schema 变更：新的统一 Agent JSON 不读取旧 `name`，
+也不提供 schema version 或兼容 shim。统一 Agent 面仍是未发布的候选接口，
+因此不保留双读或自动重写。
+
+#### Codex 映射
+
+| Codex item / 条件 | `ToolName` | `Kind` | `Provider` |
+|---|---|---|---|
+| `commandExecution`，`source=unifiedExecStartup` | `exec_command` | `execute` | `agent` |
+| `commandExecution`，`source=unifiedExecInteraction` | `write_stdin` | `execute` | `agent` |
+| `commandExecution`，`source=agent`、`userShell`、缺失或未知 | `commandExecution`（fallback；没有唯一模型工具名） | `execute` | `agent` |
+| `imageView` | `view_image` | `read` | `agent` |
+| `fileChange` | `fileChange`（fallback） | `edit` | `agent` |
+| `webSearch` | `webSearch`（fallback） | `search` | `agent` |
+| `sleep` | `sleep`（fallback） | `other` | `agent` |
+| `imageGeneration` | `imageGeneration`（fallback） | `other` | `agent` |
+| `mcpToolCall` | `item.Tool` | `other` | `mcp:<server>`；server 为空时为 `mcp` |
+| `dynamicToolCall` | `namespace + tool` | `other` | `dynamic` |
+| `functionCallOutput` | `namespace + name` | `other` | `dynamic` |
+| `collabAgentToolCall` | `string(item.Tool)` | `other` | `agent` |
+
+`dynamicToolCall` 和 `functionCallOutput` 的 namespace 与名称直接拼接，不插入
+`.`；namespace 为空时分别使用 `tool` 或 `name`。这是 ACP 的 Codex flatten
+规则，不是 SDK 自造格式。`commandExecution` 的 `source` 是 Codex 原生字段；
+只有 `unifiedExecStartup` 和 `unifiedExecInteraction` 能确定模型工具名。
+
+#### Claude 映射
+
+Claude 的 `ToolName` 直接使用 `tool_use.name` 原文，不剥离 `mcp__`，不重新
+拼接 server 或 leaf。
+
+| Claude 工具 | `Kind` | `Provider` |
+|---|---|---|
+| `Read` | `read` | `agent` |
+| `Edit`、`Write`、`MultiEdit`、`NotebookEdit` | `edit` | `agent` |
+| `Bash` | `execute` | `agent` |
+| `Glob`、`Grep`、`WebSearch` | `search` | `agent` |
+| `WebFetch` | `fetch` | `agent` |
+| `TodoWrite`、`TaskCreate`、`TaskUpdate` | `think` | `agent` |
+| `ExitPlanMode` | `switch_mode` | `agent` |
+| `Agent`、`Task` | `other` | `agent` |
+| MCP `mcp__...` | `other` | 能可靠确定 server 时为 `mcp:<server>`，否则为 `mcp` |
+| 其他未知非 MCP 工具 | `other` | `agent` |
+
+Claude MCP 名称只有去掉 `mcp__` 后恰好存在一个 `__` 分隔符、两侧都非空时，
+才能据名称确定 server；多个 `__`、空 segment 或畸形前缀一律保留完整
+`ToolName` 并使用 `mcp`。如果有权威 server 列表能够确认边界，可以使用
+`mcp:<server>`，但仍不得改写 `ToolName`。plugin/connector server alias 按原生
+token 原样处理。
+
+#### 与 ACP adapter 的差异
+
+这里只对齐 ACP 的 `Kind` 枚举，不照搬 ACP adapter 的分类结果。以下是 SDK
+有意的差异：
+
+- Codex `commandExecution` 固定为 `execute`；ACP 可能根据 `commandActions`
+  分为 `read`、`search` 或 `execute`。
+- Codex `mcpToolCall`、`dynamicToolCall`、`functionCallOutput` 固定为
+  `other`；ACP 的 Codex adapter 使用 `execute`。
+- Claude `WebSearch` 固定为 `search`；ACP 的 Claude adapter 使用 `fetch`。
+- Claude `Agent`、`Task` 固定为 `other`；ACP 的 Claude adapter 使用 `think`。
+
+这样可以保持 SDK 分类由工具身份决定，而不随单次参数或命令内容变化。
+
+Codex shell 示例（`source=unifiedExecStartup`）：
+
+```json
+{
+  "id": "cmd-01",
+  "kind": "execute",
+  "toolName": "exec_command",
+  "provider": "agent",
+  "title": "go test ./agent/...",
+  "rawInput": {
+    "command": "go test ./agent/...",
+    "cwd": "/Users/jim/code/zoumo/agent-sdk-go"
+  },
+  "status": "in_progress"
+}
+```
+
+若同一 `commandExecution` 的 `source` 为 `agent`、`userShell` 或缺失，则只能
+使用 `toolName: "commandExecution"` 这个 fallback，不能伪造
+`exec_command`。
 
 统一层暂不定义 Provider 无关的计划语义。Claude 的 `TodoWrite`、
 `TaskCreate` 和 `TaskUpdate` 原本就是工具调用，只保留带原生输入的
@@ -1066,6 +1392,12 @@ provider-specific 转换，但不生成 `agent.Event`。
 | `CloseSession` | `Session.Close` | 工作是否已结算、恢复材料保留、Driver 绑定移除 |
 | `Driver.Stop` | 关闭全部 Session 后 `Provider.Stop` | 事件排空、EventPipe 终止、当前运行解除 |
 | `LoadSession` | `Provider.Resume` 只恢复同一原生会话；历史由 MASS Runtime 直接调用 Codex/Claude 原生查询 API | 显式恢复、历史读取、转换、提交、replay 与发布顺序 |
+
+`OpenSession`、`ResumeSession` 和通过 `Provider.Resume` 完成的 `LoadSession`
+都必须在调用 SDK 前按 [Runtime 与 Session 合成](#mcp-runtime-overlay)生成最终
+`MCPServers`。MASS 保留 RuntimeConfig 默认项、Session 覆盖和 secret 引用的解释；
+SDK 只校验并透传最终列表。Runtime 默认项与 native ambient 是不同来源，不能把
+后者枚举进 SDK 列表来伪造清除效果。
 
 ### 单 Session 中继
 
@@ -1447,6 +1779,11 @@ block/message linkage 和无法归属的交互行为保持不变。
 - SDK 内部 history replay 投影已删除；原生历史查询、`Event.IsReplay`、
   `ThreadResumeParams.History`、录制回放和 simulation replay 仍可用。
 - 原生 `codex`、`claude` 及其 `types` 的公开接口和默认测试不因统一层变化。
+- 统一层只存在 stdio 和 Streamable HTTP MCP；没有 SSE transport 或
+  `MCPConfigMode`。Runtime 默认项与 Session 同名项由上层合成，Session 项整体
+  覆盖，且 Provider 不再二次合并。
+- MCP synthetic 测试固定 Codex thread config 与 Claude argv 的精确映射；无法
+  表达的字段在原生副作用前失败，secret sentinel 不出现在错误、事件或日志。
 - 默认验证保持离线，不使用真实 Agent 或新增录制作为完成证据。
 
 ## 合同影响
@@ -1459,5 +1796,7 @@ block/message linkage 和无法归属的交互行为保持不变。
   root generic client 或共享历史协议。
 - MASS 的公开 `RuntimeDriver` 和 `SessionEvent` 仍是其 Service 边界；SDK
   统一层不成为第二个 MASS 公开协议。
+- 统一层不暴露 Claude strict 或旧式 SSE；这两个原生能力继续由 `claude` 包
+  提供。Runtime 同名覆盖只作用于调用方拥有的最终列表，不清空 native ambient。
 - README 和包文档说明统一层的使用边界与离线示例；MASS 接入、发布和真实
   Agent 验证须分别记录，不从该合同推定完成。

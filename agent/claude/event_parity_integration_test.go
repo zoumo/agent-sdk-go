@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,8 +131,10 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	callPayload, ok := toolCall.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
 	assert.Equal(t, "tool-1", callPayload.ID)
-	assert.Equal(t, "Read", callPayload.Kind)
-	assert.Equal(t, "Read", callPayload.Name)
+	assert.Equal(t, agent.ToolKindRead, callPayload.Kind)
+	assert.Equal(t, "Read", callPayload.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, callPayload.Provider)
+	assert.Empty(t, callPayload.Status)
 	input, ok := callPayload.RawInput.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "a.txt", input["path"])
@@ -144,7 +148,9 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	resultPayload, ok := toolResult.Payload.(agent.ToolResultPayload)
 	require.True(t, ok)
 	assert.Equal(t, "tool-1", resultPayload.ID)
-	assert.Equal(t, "Read", resultPayload.Kind)
+	assert.Equal(t, agent.ToolKindRead, resultPayload.Kind)
+	assert.Equal(t, "Read", resultPayload.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, resultPayload.Provider)
 	assert.Equal(t, "completed", resultPayload.Status)
 	assert.Equal(t, []agent.ContentBlock{agent.TextBlock{Text: "file contents"}}, resultPayload.Content)
 	require.NotNil(t, resultPayload.RawOutput)
@@ -168,6 +174,188 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	require.NoError(t, session.Close(ctx))
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
+}
+
+func TestClaudeToolIdentityMapping(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	tests := []struct {
+		name     string
+		kind     agent.ToolKind
+		provider agent.ToolProvider
+		failed   bool
+	}{
+		{name: "Read", kind: agent.ToolKindRead, provider: agent.ToolProviderAgent},
+		{name: "Edit", kind: agent.ToolKindEdit, provider: agent.ToolProviderAgent},
+		{name: "Write", kind: agent.ToolKindEdit, provider: agent.ToolProviderAgent},
+		{name: "MultiEdit", kind: agent.ToolKindEdit, provider: agent.ToolProviderAgent},
+		{name: "NotebookEdit", kind: agent.ToolKindEdit, provider: agent.ToolProviderAgent},
+		{name: "Bash", kind: agent.ToolKindExecute, provider: agent.ToolProviderAgent},
+		{name: "Glob", kind: agent.ToolKindSearch, provider: agent.ToolProviderAgent},
+		{name: "Grep", kind: agent.ToolKindSearch, provider: agent.ToolProviderAgent},
+		{name: "WebSearch", kind: agent.ToolKindSearch, provider: agent.ToolProviderAgent},
+		{name: "WebFetch", kind: agent.ToolKindFetch, provider: agent.ToolProviderAgent},
+		{name: "TodoWrite", kind: agent.ToolKindThink, provider: agent.ToolProviderAgent},
+		{name: "TaskCreate", kind: agent.ToolKindThink, provider: agent.ToolProviderAgent},
+		{name: "TaskUpdate", kind: agent.ToolKindThink, provider: agent.ToolProviderAgent},
+		{name: "ExitPlanMode", kind: agent.ToolKindSwitchMode, provider: agent.ToolProviderAgent},
+		{name: "Agent", kind: agent.ToolKindOther, provider: agent.ToolProviderAgent},
+		{name: "Task", kind: agent.ToolKindOther, provider: agent.ToolProviderAgent},
+		{name: "FutureNativeTool", kind: agent.ToolKindOther, provider: agent.ToolProviderAgent},
+		{
+			name:     "mcp__filesystem__Read",
+			kind:     agent.ToolKindOther,
+			provider: agent.ToolProvider("mcp:filesystem"),
+		},
+		{
+			name:     "mcp__filesystem:prod__read_file",
+			kind:     agent.ToolKindOther,
+			provider: agent.ToolProvider("mcp:filesystem:prod"),
+		},
+		{
+			name:     "mcp__filesystem__read__file",
+			kind:     agent.ToolKindOther,
+			provider: agent.ToolProviderMCP,
+			failed:   true,
+		},
+		{
+			name:     "mcp__filesystem___read_file",
+			kind:     agent.ToolKindOther,
+			provider: agent.ToolProviderMCP,
+		},
+		{
+			name:     "mcp__filesystem__",
+			kind:     agent.ToolKindOther,
+			provider: agent.ToolProviderMCP,
+		},
+		{
+			name:     "mcp____read_file",
+			kind:     agent.ToolKindOther,
+			provider: agent.ToolProviderMCP,
+		},
+	}
+
+	var callBlocks []string
+	var resultBlocks []string
+	for index, test := range tests {
+		id := "tool-" + strconv.Itoa(index)
+		callBlocks = append(callBlocks,
+			`{"type":"tool_use","id":`+jsonString(t, id)+
+				`,"name":`+jsonString(t, test.name)+
+				`,"input":{"case":`+jsonString(t, test.name)+`}}`)
+		resultBlocks = append(resultBlocks,
+			`{"type":"tool_result","tool_use_id":`+jsonString(t, id)+
+				`,"content":`+jsonString(t, "result-"+test.name)+
+				`,"is_error":`+strconv.FormatBool(test.failed)+`}`)
+	}
+
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-tool-identity","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"assistant","session_id":"native-tool-identity","message":{`+
+			`"id":"response-tools","content":[`+strings.Join(callBlocks, ",")+`]}}`,
+		`<{"type":"user","session_id":"native-tool-identity","message":{`+
+			`"role":"user","content":[`+strings.Join(resultBlocks, ",")+`]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	for index, test := range tests {
+		id := "tool-" + strconv.Itoa(index)
+		event := nextEvent(t, ctx, stream)
+		assert.Equal(t, agent.EventAgentToolCall, event.Type())
+		assert.Equal(t, id, event.ItemID)
+		call, ok := event.Payload.(agent.ToolCallPayload)
+		require.True(t, ok)
+		assert.Equal(t, id, call.ID)
+		assert.Equal(t, test.kind, call.Kind)
+		assert.Equal(t, test.name, call.ToolName)
+		assert.Equal(t, test.provider, call.Provider)
+		assert.Empty(t, call.Status)
+		assert.Equal(t, map[string]any{"case": test.name}, call.RawInput)
+	}
+
+	for index, test := range tests {
+		id := "tool-" + strconv.Itoa(index)
+		event := nextEvent(t, ctx, stream)
+		assert.Equal(t, agent.EventAgentToolResult, event.Type())
+		assert.Equal(t, id, event.ItemID)
+		result, ok := event.Payload.(agent.ToolResultPayload)
+		require.True(t, ok)
+		assert.Equal(t, id, result.ID)
+		assert.Equal(t, test.kind, result.Kind)
+		assert.Equal(t, test.name, result.ToolName)
+		assert.Equal(t, test.provider, result.Provider)
+		assert.Equal(t, []agent.ContentBlock{
+			agent.TextBlock{Text: "result-" + test.name},
+		}, result.Content)
+		if test.failed {
+			assert.Equal(t, "failed", result.Status)
+		} else {
+			assert.Equal(t, "completed", result.Status)
+		}
+	}
+}
+
+func TestClaudeToolResultCopiesObservedIdentity(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-tool-result","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"assistant","session_id":"native-tool-result","message":{`+
+			`"id":"response-result","content":[`+
+			`{"type":"tool_use","id":"tool-1","name":"Read","input":{"path":"a.txt"}}]}}`,
+		`<{"type":"user","session_id":"native-tool-result",`+
+			`"tool_use_result":{"toolName":"Edit","kind":"execute","provider":"mcp:wrong"},`+
+			`"message":{"role":"user","content":[`+
+			`{"type":"tool_result","tool_use_id":"tool-1","content":"Bash","is_error":false}]}}`,
+	)
+	peerSession := prepareClaudePeer(t, "passed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	callEvent := nextEvent(t, ctx, stream)
+	call, ok := callEvent.Payload.(agent.ToolCallPayload)
+	require.True(t, ok)
+	assert.Equal(t, agent.ToolKindRead, call.Kind)
+	assert.Equal(t, "Read", call.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, call.Provider)
+
+	resultEvent := nextEvent(t, ctx, stream)
+	result, ok := resultEvent.Payload.(agent.ToolResultPayload)
+	require.True(t, ok)
+	assert.Equal(t, call.Kind, result.Kind)
+	assert.Equal(t, call.ToolName, result.ToolName)
+	assert.Equal(t, call.Provider, result.Provider)
+	assert.Equal(t, "completed", result.Status)
+	require.NotNil(t, result.RawOutput)
+	assert.Equal(t, map[string]any{
+		"toolName": "Edit",
+		"kind":     "execute",
+		"provider": "mcp:wrong",
+	}, *result.RawOutput)
 }
 
 func TestClaudeAssistantBlockIdentityGapsWithoutGuessing(t *testing.T) {
@@ -482,7 +670,9 @@ func TestClaudePlanLikeToolsRemainNativeToolCalls(t *testing.T) {
 	assert.Equal(t, "todo-1", todoCall.ItemID)
 	todo, ok := todoCall.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
-	assert.Equal(t, "TodoWrite", todo.Name)
+	assert.Equal(t, agent.ToolKindThink, todo.Kind)
+	assert.Equal(t, "TodoWrite", todo.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, todo.Provider)
 	encodedInput, err := json.Marshal(todo.RawInput)
 	require.NoError(t, err)
 	assert.JSONEq(t,
@@ -498,14 +688,18 @@ func TestClaudePlanLikeToolsRemainNativeToolCalls(t *testing.T) {
 	assert.Equal(t, "task-create", taskCreate.ItemID)
 	create, ok := taskCreate.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
-	assert.Equal(t, "TaskCreate", create.Name)
+	assert.Equal(t, agent.ToolKindThink, create.Kind)
+	assert.Equal(t, "TaskCreate", create.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, create.Provider)
 
 	taskUpdate := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventAgentToolCall, taskUpdate.Type())
 	assert.Equal(t, "task-update", taskUpdate.ItemID)
 	update, ok := taskUpdate.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
-	assert.Equal(t, "TaskUpdate", update.Name)
+	assert.Equal(t, agent.ToolKindThink, update.Kind)
+	assert.Equal(t, "TaskUpdate", update.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, update.Provider)
 }
 
 func TestClaudeInitialAndChangedCommandsPreserveOrder(t *testing.T) {

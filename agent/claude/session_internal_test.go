@@ -203,8 +203,14 @@ func TestMixedUserContentIsUnsupported(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			session := &session{
-				id:    "native-session",
-				calls: map[string]claudeCall{"tool-1": {name: "Read"}},
+				id: "native-session",
+				calls: map[string]claudeCall{"tool-1": {
+					identity: claudeToolIdentity{
+						kind:     agent.ToolKindRead,
+						toolName: "Read",
+						provider: agent.ToolProviderAgent,
+					},
+				}},
 			}
 			events, err := session.userEvent(claude.Received{
 				Event: &claude.Event{

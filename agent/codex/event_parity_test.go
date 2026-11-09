@@ -58,7 +58,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -120,7 +120,9 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 
 	call := payloadOf[agent.ToolCallPayload](t, events[8])
 	assert.Equal(t, "cmd", call.ID)
-	assert.Equal(t, "execute", call.Kind)
+	assert.Equal(t, agent.ToolKindExecute, call.Kind)
+	assert.Equal(t, "commandExecution", call.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, call.Provider)
 	assert.Equal(t, "echo hello", call.Title)
 	assert.Equal(t, "in_progress", call.Status)
 	rawInput, ok := call.RawInput.(map[string]any)
@@ -141,8 +143,9 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	assert.Equal(t, "hello\n", *result.RawOutput)
 
 	fileResult := payloadOf[agent.ToolResultPayload](t, events[11])
-	assert.Equal(t, "edit", fileResult.Kind)
-	assert.Equal(t, "file_change", fileResult.Name)
+	assert.Equal(t, agent.ToolKindEdit, fileResult.Kind)
+	assert.Equal(t, "fileChange", fileResult.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, fileResult.Provider)
 	assert.Equal(t, "completed", fileResult.Status)
 
 	assert.Equal(t, agent.AgentThinking{
@@ -205,7 +208,7 @@ func TestThreadStatusChangeExpiresInteractions(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "status"}},
 	})
 	require.NoError(t, err)
@@ -253,7 +256,7 @@ func TestThreadIdleBeforeTurnCompletionPreservesTerminalFact(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -300,7 +303,7 @@ func TestSessionRejectsUnrelatedTurnAfterIdleObservation(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -366,7 +369,7 @@ func TestSessionRejectsStaleMainTurnEvents(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -414,7 +417,7 @@ func TestSessionPreservesChildEvidenceAndLineage(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "delegate"}},
 	})
 	require.NoError(t, err)
@@ -463,8 +466,8 @@ func TestSessionPreservesChildEvidenceAndLineage(t *testing.T) {
 
 	collaboration := payloadOf[agent.ToolResultPayload](t, nextEvent(t, ctx, stream))
 	assert.Equal(t, "collab-root", collaboration.ID)
-	assert.Equal(t, "collaboration", collaboration.Kind)
-	assert.Equal(t, "sendInput", collaboration.Name)
+	assert.Equal(t, agent.ToolKindOther, collaboration.Kind)
+	assert.Equal(t, "sendInput", collaboration.ToolName)
 
 	observation := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventSessionError, observation.Type())

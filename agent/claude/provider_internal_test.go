@@ -3,6 +3,7 @@ package agentclaude
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,7 +47,7 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 	assert.JSONEq(t, `{"agent":"fixed"}`, string(provider.config.Initialize.Agents))
 	assert.Equal(t, "task", provider.config.Subagents.History[0].TaskID)
 
-	options := provider.nativeOptions("/workspace", "resume-id", agent.Features{})
+	options := provider.nativeOptions("/workspace", "resume-id", agent.Features{}, nil)
 	assert.Equal(t, "claude-fixture", options.CLIPath)
 	assert.Equal(t, "/workspace", options.WorkDir)
 	assert.Equal(t, "resume-id", options.ResumeID)
@@ -66,13 +67,13 @@ func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
 	assert.Empty(t,
 		provider.nativeOptions("/workspace", "", agent.Features{
 			AgentQuestions: &enabled,
-		}).DisallowedTools,
+		}, nil).DisallowedTools,
 	)
 	assert.Equal(t,
 		[]string{"AskUserQuestion"},
 		provider.nativeOptions("/workspace", "", agent.Features{
 			AgentQuestions: &disabled,
-		}).DisallowedTools,
+		}, nil).DisallowedTools,
 	)
 }
 
@@ -190,16 +191,28 @@ func TestInitBufferRejectsExcessEventsAndBytes(t *testing.T) {
 }
 
 // The pinned embedded bridge validates a reviewed startup declaration, not the
-// complete executable argv. SDK feature options still reach OpenStreams intact.
+// complete executable argv. SDK feature and MCP options still reach OpenStreams
+// intact.
 func TestEmbeddedStartupDeclarationKeepsFullSDKFeatureOptions(t *testing.T) {
-	options := claude.SessionOptions{Model: "synthetic", ResumeID: "resume-id", DisallowedTools: []string{"AskUserQuestion"}}
+	options := claude.SessionOptions{
+		Model:           "synthetic",
+		ResumeID:        "resume-id",
+		DisallowedTools: []string{"AskUserQuestion"},
+		MCPServers: []claude.MCPServer{{
+			Name:      "fixture",
+			Transport: claude.MCPTransportStdio,
+			Command:   "fixture-mcp",
+		}},
+	}
 	declaration, err := TestifyNativeArgs(options)
 	require.NoError(t, err)
 	assert.Contains(t, declaration, "--model=synthetic")
 	assert.Contains(t, declaration, "--resume=resume-id")
 	assert.NotContains(t, declaration, "--disallowedTools=AskUserQuestion")
+	assert.NotContains(t, strings.Join(declaration, "\n"), "--mcp-config=")
 	full, err := claude.NativeArgs(options)
 	require.NoError(t, err)
 	assert.Contains(t, full, "--disallowedTools=AskUserQuestion")
+	assert.Contains(t, strings.Join(full, "\n"), "--mcp-config=")
 	assert.Equal(t, []string{"AskUserQuestion"}, options.DisallowedTools)
 }

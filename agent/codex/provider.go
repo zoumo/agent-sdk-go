@@ -138,13 +138,15 @@ func (p *Provider) Open(
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
+	mcpServers := nativeMCPServers(options.MCPServers)
 	client, err := p.reserveOpen()
 	if err != nil {
 		return nil, err
 	}
 	features := effectiveFeatures(options.Features, p.formsSupported)
 	native, err := codex.Open(ctx, codex.SessionOptions{
-		Client: client,
+		Client:     client,
+		MCPServers: mcpServers,
 		Thread: codextypes.ThreadStartParams{
 			Config: threadConfig(features),
 			Cwd:    codextypes.Some(options.Cwd),
@@ -165,13 +167,15 @@ func (p *Provider) Resume(
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
 		return nil, err
 	}
+	mcpServers := nativeMCPServers(options.MCPServers)
 	client, err := p.reserveOpen()
 	if err != nil {
 		return nil, err
 	}
 	features := effectiveFeatures(options.Features, p.formsSupported)
 	native, err := codex.Open(ctx, codex.SessionOptions{
-		Client: client,
+		Client:     client,
+		MCPServers: mcpServers,
 		Resume: &codextypes.ThreadResumeParams{
 			Config:       threadConfig(features),
 			Cwd:          codextypes.Some(options.Cwd),

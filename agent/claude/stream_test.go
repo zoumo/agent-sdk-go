@@ -29,9 +29,9 @@ func NewWithStream(config Config, next func(context.Context, claude.SessionOptio
 
 // TestifyNativeArgs declares the reviewed stdio startup subset accepted by the
 // pinned bridge. It is intentionally not a claim of full CLI argv equivalence:
-// --disallowedTools is an SDK feature flag unsupported by that pin. The complete
-// options, including that flag, still go to OpenStreams and its native behavior.
-// Leave all other arguments intact so unknown declarations fail closed upstream.
+// external MCP declarations and --disallowedTools are unsupported by that pin.
+// The complete options still go to OpenStreams and its native behavior. Leave
+// all other arguments intact so unknown declarations fail closed upstream.
 func TestifyNativeArgs(options claude.SessionOptions) ([]string, error) {
 	args, err := claude.NativeArgs(options)
 	if err != nil {
@@ -39,7 +39,8 @@ func TestifyNativeArgs(options claude.SessionOptions) ([]string, error) {
 	}
 	declaration := make([]string, 0, len(args))
 	for _, arg := range args {
-		if !strings.HasPrefix(arg, "--disallowedTools=") {
+		if !strings.HasPrefix(arg, "--disallowedTools=") &&
+			!strings.HasPrefix(arg, "--mcp-config=") {
 			declaration = append(declaration, arg)
 		}
 	}

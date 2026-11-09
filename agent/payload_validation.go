@@ -18,8 +18,12 @@ func validatePayload(payload Payload) error {
 	case ThinkingChunk:
 		return validateMessagePayload(MessagePayload(value))
 	case ToolCallPayload:
-		if value.ID == "" || value.Kind == "" {
-			return invalidArgument("invalid_tool_call", "tool call requires ID and kind")
+		if value.ID == "" ||
+			!validToolIdentity(value.Kind, value.ToolName, value.Provider) {
+			return invalidArgument(
+				"invalid_tool_call",
+				"tool call requires ID, kind, toolName, and provider",
+			)
 		}
 		if err := validateToolDetails(
 			value.Status,
@@ -32,10 +36,12 @@ func validatePayload(payload Payload) error {
 			return err
 		}
 	case ToolResultPayload:
-		if value.ID == "" || value.Kind == "" || value.Status == "" {
+		if value.ID == "" ||
+			!validToolIdentity(value.Kind, value.ToolName, value.Provider) ||
+			value.Status == "" {
 			return invalidArgument(
 				"invalid_tool_result",
-				"tool result requires ID, kind, and status",
+				"tool result requires ID, kind, toolName, provider, and status",
 			)
 		}
 		if err := validateOptionalJSON(value.RawInput); err != nil {

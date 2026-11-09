@@ -230,6 +230,16 @@ func prepareCodexPeerWithStatus(
 	frames ...string,
 ) *mocktest.Session {
 	t.Helper()
+	return prepareCodexPeerWithFrameDelays(t, wantStatus, nil, frames...)
+}
+
+func prepareCodexPeerWithFrameDelays(
+	t *testing.T,
+	wantStatus string,
+	delays map[int]time.Duration,
+	frames ...string,
+) *mocktest.Session {
+	t.Helper()
 	scenario := make([]map[string]any, 0, len(frames))
 	for index, frame := range frames {
 		direction, data := frame[:1], frame[1:]
@@ -246,6 +256,9 @@ func prepareCodexPeerWithStatus(
 			item["disconnect"] = true
 		} else {
 			item["wire"] = json.RawMessage(data)
+		}
+		if delay := delays[index]; delay > 0 {
+			item["delayMs"] = delay.Milliseconds()
 		}
 		scenario = append(scenario, item)
 	}

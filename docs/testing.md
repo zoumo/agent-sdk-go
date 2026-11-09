@@ -123,11 +123,25 @@ Testify suites run sequentially; worker outcomes return to the owning test gorou
 The optional unified layer has separate public-contract, lifecycle, event, interaction
 and dependency tests under `agent/`, `agent/codex/` and `agent/claude/`. Adapter
 integration tests launch only synthetic protocol peers. `ExampleProvider` runs the
-provider-neutral open/resume/submit/stream/answer/close flow twice without a CLI:
+provider-neutral open/resume/start-or-steer/stream/answer/close flow twice without
+a CLI:
 
 ```sh
 go test -run '^ExampleProvider$' ./agent
 ```
+
+`ExampleMCPServer` validates the final external MCP list for both unified
+transports without starting a CLI or connecting to a server:
+
+```sh
+go test -run '^ExampleMCPServer$' ./agent
+go test -run '^TestProviderMapsFinalMCPServersToOpenAndResumeThreadConfig$' ./agent/codex
+go test -run '^TestProviderOpenPassesFinalMCPListToClaudeOptions$' ./agent/claude
+```
+
+The adapter checks use synthetic app-server and in-process native peers and assert
+only the generated native configuration. They do not establish real MCP
+connectivity, authentication, tool discovery, or execution.
 
 `NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
 app-server trace and Claude temporary saved storage. Native focused tests retain

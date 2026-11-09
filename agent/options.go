@@ -9,6 +9,11 @@ type OpenOptions struct {
 	SystemPrompt   string
 	AdditionalDirs []string
 	Features       Features
+	// MCPServers is the complete final external MCP list for this operation. The
+	// caller composes Runtime defaults with Session declarations before calling a
+	// provider, which does not merge them again. Resume callers must repeat the
+	// complete list because the SDK does not persist it.
+	MCPServers []MCPServer
 }
 
 // Validate checks the provider-neutral creation options before native side
@@ -20,7 +25,7 @@ func (o OpenOptions) Validate() error {
 	if !filepath.IsAbs(o.Cwd) {
 		return invalidArgument("cwd_not_absolute", "working directory must be absolute")
 	}
-	return nil
+	return validateMCPServers(o.MCPServers)
 }
 
 // ResumeOptions identifies an existing native main session to resume.

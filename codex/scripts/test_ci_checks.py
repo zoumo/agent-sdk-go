@@ -22,18 +22,13 @@ class WorkflowCoverage(unittest.TestCase):
 
     def test_offline_platforms_and_consumers_retain_supported_runners(self):
         jobs = self.workflow_jobs()
-        platforms = {
-            "offline_ubuntu": ("ubuntu-24.04", 5),
-            "offline_macos15": ("macos-15", 1),
-            "offline_macos26": ("macos-26", 1),
-        }
-        for job, (runner, max_parallel) in platforms.items():
-            with self.subTest(job=job):
-                self.assertIn(job, jobs)
-                self.assertIn("    name: " + runner, jobs[job])
-                self.assertIn("    uses: ./.github/workflows/offline-platform.yml", jobs[job])
-                self.assertIn("      runner: " + runner, jobs[job])
-                self.assertIn(f"      max_parallel: {max_parallel}", jobs[job])
+        offline = jobs["offline"]
+        self.assertIn("    name: ${{ matrix.runner }} / required", offline)
+        matrix = re.search(r"(?m)^        runner: \[([^\]]+)\]$", offline)
+        self.assertIsNotNone(matrix, "expected an explicit offline runner matrix")
+        labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
+        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
+        self.assertIn("    runs-on: ${{ matrix.runner }}", offline)
 
         consumer = jobs["consumer"]
         matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", consumer)
@@ -42,43 +37,40 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
         self.assertIn("    runs-on: ${{ matrix.os }}", consumer)
 
-    def test_platform_workflow_splits_offline_validation_by_task(self):
-        platform = (ROOT.parent / ".github/workflows/offline-platform.yml").read_text()
-        self.assertIn("  workflow_call:", platform)
-        self.assertIn("      runner:\n", platform)
-        self.assertIn("        type: string", platform)
-        self.assertIn("      max_parallel:\n", platform)
-        self.assertIn("        type: number", platform)
-        self.assertIn("      max-parallel: ${{ inputs.max_parallel }}", platform)
-        matrix = re.search(r"(?m)^        task: \[([^\]]+)\]$", platform)
-        self.assertIsNotNone(matrix, "expected an explicit offline task matrix")
-        tasks = [task.strip().strip("\"'") for task in matrix.group(1).split(",")]
-        self.assertCountEqual(tasks, ["quality", "test", "race", "e2e", "build"])
-        self.assertIn("    runs-on: ${{ inputs.runner }}", platform)
-        self.assertIn("matrix.task == 'test'", platform)
-        self.assertIn("matrix.task == 'race'", platform)
-        self.assertIn("sudo apt-get install -y ripgrep", platform)
-        self.assertIn("brew install ripgrep", platform)
-        self.assertIn("golangci-lint@v2.12.2", platform)
-        self.assertIn("python3 codex/scripts/check_whitespace.py", platform)
-        self.assertIn('bash scripts/check-offline.sh "${{ matrix.task }}"', platform)
-        platform_jobs = self.workflow_jobs(platform)
-        required = platform_jobs["required"]
-        self.assertIn("    name: required", required)
-        self.assertIn("    if: always()", required)
-        self.assertIn("    needs: validate", required)
-        self.assertIn("    runs-on: ${{ inputs.runner }}", required)
-        self.assertIn('test "${TASKS}" = success', required)
+    def test_offline_platform_job_runs_checks_in_one_environment(self):
+        offline = self.workflow_jobs()["offline"]
+        self.assertIn("sudo apt-get install -y ripgrep", offline)
+        self.assertIn("brew install ripgrep", offline)
+        self.assertIn("golangci-lint@v2.12.2", offline)
+        self.assertIn("python3 codex/scripts/check_whitespace.py", offline)
+        self.assertIn("make fmt-check", offline)
+        self.assertIn("make lint", offline)
+        self.assertIn("bash scripts/check-offline.sh parallel", offline)
+        self.assertNotIn("matrix.task", offline)
+        self.assertNotIn("    needs:", offline)
 
     def test_offline_script_exposes_each_ci_task(self):
         script = (ROOT.parent / "scripts/check-offline.sh").read_text()
         self.assertIn("task=${1:-all}", script)
-        for task in ("quality", "test", "race", "e2e", "build"):
+        for task in ("parallel", "quality", "test", "race", "e2e", "build"):
             with self.subTest(task=task):
                 self.assertIn(f"  {task})\n", script)
+        self.assertIn(
+            "  parallel)\n    quality_checks\n    parallel_checks\n    ;;\n",
+            script,
+        )
+        self.assertIn("local tasks=(test race e2e build)", script)
+        self.assertIn(
+            'export AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"',
+            script,
+        )
+        self.assertIn('wait "$pid"', script)
+        self.assertIn('if ! wait "$pid"; then', script)
 
-    def test_required_aggregate_is_scoped_to_each_platform(self):
-        self.assertNotIn("required", self.workflow_jobs())
+    def test_required_check_is_the_platform_job(self):
+        jobs = self.workflow_jobs()
+        self.assertNotIn("required", jobs)
+        self.assertIn("    name: ${{ matrix.runner }} / required", jobs["offline"])
 
     def test_same_repository_pr_consumers_fetch_published_head(self):
         consumer = self.workflow_jobs()["consumer"]

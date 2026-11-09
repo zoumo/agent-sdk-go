@@ -16,8 +16,9 @@ make lint
 bash scripts/check-offline.sh all
 ```
 
-The offline entry also accepts `quality`, `test`, `race`, `e2e` or `build`;
-`all` runs every task in that order.
+The offline entry also accepts `parallel`, `quality`, `test`, `race`, `e2e` or
+`build`. `all` runs every task in order; `parallel` runs `quality` first, then
+runs `test`, `race`, `e2e` and `build` concurrently in the same checkout.
 
 Test and simulation hosts link the exact test-only in-process testify module; no
 separate helper process is required. The dependency boundary and pin are fixed
@@ -91,24 +92,21 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) calls a reusable
-[platform workflow](../.github/workflows/offline-platform.yml) for each supported
-runner. Every platform expands into `quality`, `test`, `race`, `e2e` and `build`
-jobs; the quality job installs the pinned formatter/linter. The quality, test
-and race jobs install `ripgrep` for the contraction gates. The
-offline jobs build only the SDK-owned simulation runner and driver; the
-in-process testify module is fetched by the normal Go module graph. A required
-aggregate job on each platform (`ubuntu-24.04 / required`, `macos-15 / required`
-and `macos-26 / required`) succeeds only when that platform's five task jobs
-succeed. Ubuntu runs its five tasks concurrently; each macOS version runs one
-task at a time so both versions and their consumers fit the hosted runner
-capacity.
+The [workflow](../.github/workflows/ci.yml) defines one offline job for each
+supported runner: `ubuntu-24.04 / required`, `macos-15 / required` and
+`macos-26 / required`. Each job installs Go, `ripgrep` and the pinned formatter/
+linter once, runs `quality`, then runs `test`, `race`, `e2e` and `build`
+concurrently in the same checkout. The first task mutates generated files for
+its drift check, so it precedes the read-only concurrent tasks. The job status is
+the required aggregate for that platform; task output remains grouped in its
+logs. The offline tasks build only the SDK-owned simulation runner and driver;
+the in-process testify module is fetched by the normal Go module graph.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure fifteen offline task jobs, three platform aggregates and
-three External consumer jobs. Fork PRs retain the offline jobs and skip
+These events configure three offline platform jobs and three External consumer
+jobs. Fork PRs retain the offline jobs and skip
 consumers because fork-only SHAs are not assumed retrievable from this
 repository. Token permissions remain contents: read; no pull_request_target
 execution is added. Configured coverage does not prove that any runner executed. See
@@ -201,8 +199,8 @@ No Windows runtime support is claimed.
 One version covers all four native imports. Before an authorized publication:
 
 1. Confirm the intended main SHA and both imported source histories.
-2. Require the exact SHA's three platform aggregates and three External consumer
-   CI jobs, and inspect all five task results on each platform; rerun on the
+2. Require the exact SHA's three platform required checks and three External
+   consumer CI jobs, and inspect all five task logs on each platform; rerun on the
    resulting main commit after merge. Fork PR consumer skips do not satisfy this gate.
 3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
    coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).

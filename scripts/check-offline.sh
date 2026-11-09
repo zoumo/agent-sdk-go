@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 python=${PYTHON:-python3}
 task=${1:-all}
 if (( $# > 1 )); then
-  echo "usage: $0 [all|quality|test|race|e2e|build]" >&2
+  echo "usage: $0 [all|parallel|quality|test|race|e2e|build]" >&2
   exit 2
 fi
 export GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off
@@ -46,6 +46,38 @@ build_checks() {
   bash scripts/simulation.sh build
 }
 
+parallel_checks() {
+  local tasks=(test race e2e build)
+  local work
+  work=$(mktemp -d "${TMPDIR:-/tmp}/agent-sdk-offline.XXXXXXXX")
+  local failed=0
+  local pids=()
+  local task pid
+
+  for task in "${tasks[@]}"; do
+    (
+      export AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"
+      bash "$0" "$task"
+    ) >"$work/$task.log" 2>&1 &
+    pids+=("$!")
+  done
+
+  for i in "${!tasks[@]}"; do
+    task=${tasks[$i]}
+    pid=${pids[$i]}
+    if ! wait "$pid"; then
+      failed=1
+    fi
+  done
+
+  for task in "${tasks[@]}"; do
+    printf '\n===== %s =====\n' "$task"
+    cat "$work/$task.log"
+  done
+  rm -rf "$work"
+  return "$failed"
+}
+
 case "$task" in
   all)
     quality_checks
@@ -53,6 +85,10 @@ case "$task" in
     race_checks
     e2e_checks
     build_checks
+    ;;
+  parallel)
+    quality_checks
+    parallel_checks
     ;;
   quality)
     quality_checks
@@ -70,7 +106,7 @@ case "$task" in
     build_checks
     ;;
   *)
-    echo "usage: $0 [all|quality|test|race|e2e|build]" >&2
+    echo "usage: $0 [all|parallel|quality|test|race|e2e|build]" >&2
     exit 2
     ;;
 esac

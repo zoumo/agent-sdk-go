@@ -615,14 +615,15 @@ func (s *session) assistantToolUse(
 	if index, ok := s.blockIndexForTool(parent, response, toolID); ok {
 		meta["blockIndex"] = index
 	}
+	identity := identifyClaudeTool(toolName)
 	event, eventErr := s.newEvent(
 		received,
 		toolID,
 		agent.ToolCallPayload{
 			ID:       toolID,
-			Kind:     agent.ToolKindOther,
-			ToolName: toolName,
-			Provider: agent.ToolProviderAgent,
+			Kind:     identity.kind,
+			ToolName: identity.toolName,
+			Provider: identity.provider,
 			RawInput: input,
 		},
 		nativeEventTime(received.Raw),
@@ -631,7 +632,7 @@ func (s *session) assistantToolUse(
 	if eventErr != nil {
 		return nil, eventErr
 	}
-	if observeErr := s.observeToolCall(toolID, toolName); observeErr != nil {
+	if observeErr := s.observeToolCall(toolID, identity); observeErr != nil {
 		return nil, observeErr
 	}
 	return []agent.Event{event}, nil
@@ -960,9 +961,9 @@ func (s *session) toolResultEvent(
 		block.ToolUseID,
 		agent.ToolResultPayload{
 			ID:        block.ToolUseID,
-			Kind:      agent.ToolKindOther,
-			ToolName:  call.name,
-			Provider:  agent.ToolProviderAgent,
+			Kind:      call.identity.kind,
+			ToolName:  call.identity.toolName,
+			Provider:  call.identity.provider,
 			RawOutput: pointer,
 			Content:   content,
 			Output:    output,

@@ -27,14 +27,14 @@ class WorkflowCoverage(unittest.TestCase):
         matrix = re.search(r"(?m)^        runner: \[([^\]]+)\]$", offline)
         self.assertIsNotNone(matrix, "expected an explicit offline runner matrix")
         labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
+        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
         self.assertIn("    runs-on: ${{ matrix.runner }}", offline)
 
         consumer = jobs["consumer"]
         matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", consumer)
         self.assertIsNotNone(matrix, "expected an explicit consumer OS matrix")
         labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
+        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
         self.assertIn("    runs-on: ${{ matrix.os }}", consumer)
 
     def test_offline_platform_job_runs_checks_in_one_environment(self):

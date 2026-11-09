@@ -4,35 +4,39 @@ package claude
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {
 	t := s.T()
-	// Poison PATH proves default replay uses its explicit fake executable only.
 	dir := t.TempDir()
-	sentinel := filepath.Join(dir, "live-started")
-	poison := filepath.Join(dir, "claude")
-	{
-		err := os.WriteFile(poison, []byte("#!/bin/sh\nprintf live > '"+sentinel+"'\nexit 99\n"), 0o700)
-		require.NoError(t, err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("CLAUDE_E2E", "0")
-	exe, err := os.Executable()
-	require.NoError(t, err)
-	marker := filepath.Join(dir, "consumed")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := Open(ctx, SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "PATH=" + dir, transcript.PeerEnvironment + "=1", "CLAUDE_GO_REPLAY_COMPLETE=" + marker, "GORACE=atexit_sleep_ms=0"}})
+	fixture, err := transcript.Prepare(dir, bytes.NewReader(transcript.TaskFailureWire))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fixture.Close()) })
+	options := SessionOptions{CLIPath: "must-not-start", InitializeTimeout: time.Second, ShutdownTimeout: time.Second}
+	args, err := NativeArgs(options)
+	require.NoError(t, err)
+	run, err := fixture.NewRun(ctx, mocktest.RunOptions{NativeArgs: args})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = run.Abort(); _ = run.CloseSDK() })
+	options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
+	actualArgs, err := NativeArgs(options)
+	require.NoError(t, err)
+	require.Equal(t, run.Start.NativeArgs, actualArgs)
+	require.Equal(t, run.Start.Config, run.Start.Env["CLAUDE_CONFIG_DIR"])
+	client, err := OpenStreams(ctx, options, StreamTransport{
+		Reader: run.Reader, Writer: run.Writer, Stderr: run.Stderr, Wait: run.WaitError,
+	})
 	require.NoError(t, err)
 	defer client.Abort()
+	halfClosed := run.CloseInputWhenComplete(client.CloseInput)
 	prompt := transcript.TaskFailurePrompt
 	_, err = client.Submit(ctx, Input{Text: prompt})
 	require.NoError(t, err)
@@ -64,16 +68,23 @@ func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {
 		}
 	}
 	require.Falsef(t, nativeCount != 2 || rawCount != 2 || resultSequence == 0 || idleSequence <= resultSequence, "unexpected observations native=%d result=%d idle=%d", nativeCount, resultSequence, idleSequence)
-	{
-		err := client.Close()
-		require.NoError(t, err)
+	require.NoError(t, <-halfClosed)
+	select {
+	case <-client.Done():
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
 	}
-	{
-		data, err := os.ReadFile(marker)
-		require.False(t, err != nil || string(data) != "complete\n", "unconsumed fixture", err)
-	}
-	{
-		_, err := os.Stat(sentinel)
-		require.True(t, os.IsNotExist(err), "real CLI sentinel started")
-	}
+	require.NoError(t, client.Err())
+	require.NoError(t, client.Close())
+	result, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.True(t, result.Execution.Complete)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.True(t, connection.CleanupComplete)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
 }

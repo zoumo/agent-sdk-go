@@ -900,12 +900,13 @@ func (c *interaction) ownLifecycle() {
 }
 
 func (c *interaction) ownStreamLifecycle() {
-	start := time.Now()
 	select {
 	case <-c.stop:
 	case <-c.stdoutDone:
 	case <-c.inputClosedCh:
 	}
+	// The shutdown budget begins at termination, not at Session startup.
+	start := time.Now()
 
 	if !c.inputIsClosed() {
 		_ = c.closeInput()

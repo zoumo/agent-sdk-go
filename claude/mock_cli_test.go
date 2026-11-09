@@ -1,4 +1,4 @@
-// SDK integration against the Go mock CLI; all scenarios are synthetic.
+// SDK integration against the in-process library mock; all scenarios are synthetic.
 package claude_test
 
 import (
@@ -111,6 +111,47 @@ func (s *mockCLISuite) TestInteractions() {
 	}
 }
 
+// Completion must retain the final server result and wait for authoritative
+// library evidence, even when full consumption races the last SDK write.
+func (s *mockCLISuite) TestNormalCompletion() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`,
+		`<{"type":"system","subtype":"init","session_id":"synthetic"}`,
+		`<{"type":"result","subtype":"success","session_id":"synthetic","is_error":false,"result":"final frame"}`,
+	)
+	fixture, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { verifyMockSession(t, fixture, "passed") })
+	client, run := openMockSession(t, ctx, fixture)
+	require.NoError(t, submitMockCLIInput(ctx, client, "hello"))
+	result := receiveStreamEvent(t, client, func(event *claude.Event) bool { return event.Result != nil })
+	require.Equal(t, "final frame", result.Event.Result.Result)
+	select {
+	case <-client.Done():
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	require.NoError(t, client.Err())
+	require.NoError(t, client.Close())
+	require.NoError(t, client.Close())
+	evidence, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.True(t, evidence.Execution.Complete)
+	require.Len(t, evidence.Execution.Connections, 1)
+	connection := evidence.Execution.Connections[0]
+	require.Equal(t, "in-process", string(connection.Transport))
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.True(t, connection.CleanupComplete)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
+}
+
 // Controls and answers must remain available during an unread event burst.
 // After disconnection, every queued event must drain in order.
 func (s *mockCLISuite) TestSlowConsumerBurst() {
@@ -170,15 +211,23 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 
 func openMockSession(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*claude.Session, *mocktest.Run) {
 	t.Helper()
-	run, err := peerSession.NewRun(ctx, mocktest.RunOptions{})
-	require.NoError(t, err)
-	client, err := claude.OpenStreams(ctx, claude.SessionOptions{
+	options := claude.SessionOptions{
 		CLIPath:           "must-not-start",
-		WorkDir:           run.Start.Workspace,
-		Env:               run.Environment(),
+		WorkDir:           "",
+		Env:               []string{},
 		InitializeTimeout: 2 * time.Second,
 		ShutdownTimeout:   time.Second,
-	}, claude.StreamTransport{
+	}
+	args, err := claude.NativeArgs(options)
+	require.NoError(t, err)
+	run, err := peerSession.NewRun(ctx, mocktest.RunOptions{NativeArgs: args})
+	require.NoError(t, err)
+	options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
+	actualArgs, err := claude.NativeArgs(options)
+	require.NoError(t, err)
+	require.Equal(t, run.Start.NativeArgs, actualArgs)
+	require.Equal(t, run.Start.Config, run.Start.Env["CLAUDE_CONFIG_DIR"])
+	client, err := claude.OpenStreams(ctx, options, claude.StreamTransport{
 		Reader: run.Reader,
 		Writer: run.Writer,
 		Stderr: run.Stderr,

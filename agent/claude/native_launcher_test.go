@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	claudeTestLauncherEnv    = "AGENT_CLAUDE_TEST_NATIVE_LAUNCHER"
-	claudeTestArgvCaptureEnv = "AGENT_CLAUDE_TEST_ARGV_CAPTURE"
-	claudeTestUnsupportedArg = "--disallowedTools="
-	claudeTestUnsupportedMCP = "--mcp-config="
+	claudeTestLauncherEnv          = "AGENT_CLAUDE_TEST_NATIVE_LAUNCHER"
+	claudeTestArgvCaptureEnv       = "AGENT_CLAUDE_TEST_ARGV_CAPTURE"
+	claudeTestUnsupportedArg       = "--disallowedTools="
+	claudeTestUnsupportedPromptArg = "--append-system-prompt="
+	claudeTestUnsupportedMCP       = "--mcp-config="
 )
 
 func TestMain(m *testing.M) {
@@ -61,6 +62,7 @@ func runClaudeTestLauncher(launcher string, args []string) int {
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
 		if !strings.HasPrefix(arg, claudeTestUnsupportedArg) &&
+			!strings.HasPrefix(arg, claudeTestUnsupportedPromptArg) &&
 			!strings.HasPrefix(arg, claudeTestUnsupportedMCP) {
 			filtered = append(filtered, arg)
 		}

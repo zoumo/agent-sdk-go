@@ -32,9 +32,13 @@
 //
 // The provider declares text input and permission capabilities. It declares form
 // support only when the native experimental API is enabled, and a session removes
-// form support when AgentQuestions is disabled. System prompts and additional
-// directories are rejected before opening a session. URL, image, audio, resource,
-// and resource-link interactions or inputs are not advertised.
+// form support when AgentQuestions is disabled. A nonempty unified
+// AdditionalSystemPrompt maps to developerInstructions on thread/start and
+// thread/resume; an empty value omits that field, and baseInstructions is never
+// set. The prompt is not persisted by the SDK, so Resume requires the complete
+// value again. Additional directories are rejected before opening a session. URL,
+// image, audio, resource, and resource-link interactions or inputs are not
+// advertised.
 //
 // Several native facts intentionally have no unified representation. Codex does
 // not provide a selectable settings-option catalog or available-command catalog

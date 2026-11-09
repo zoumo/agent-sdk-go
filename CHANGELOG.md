@@ -15,6 +15,11 @@
 - Makes `StartOrSteer` the unified input operation with explicit
   `applied_current_work`, `applied_new_work`, `applied_best_effort` and
   `not_applied` results. It does not queue, wait for idle, persist or retry.
+- Renames the unpublished unified `SystemPrompt` option to
+  `AdditionalSystemPrompt` without a compatibility alias. Nonempty text appends
+  through Codex `developerInstructions` or Claude `--append-system-prompt`;
+  validation rejects invalid UTF-8 and NUL before native side effects, and
+  `Resume` requires the complete value again.
 - Gives unified tool calls and results a required `toolName`/`provider` identity
   and `kind` classification, with exact provider forms and preserved native
   names. Tool chunks remain `{id, content}`. The unreleased JSON schema is

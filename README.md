@@ -112,6 +112,39 @@ unified history, `LoadSession`, replay, or root convenience client. MASS resourc
 identity, history import, persistence, and multi-session aggregation also remain
 outside this module.
 
+### Additional system prompt
+
+`agent.OpenOptions.AdditionalSystemPrompt` adds caller text after provider
+defaults for one `Open` or `Resume` call. The former unpublished `SystemPrompt`
+field was renamed directly; there is no compatibility alias. The helper is
+append-only: it never replaces built-in instructions.
+
+| Unified value | Codex | Claude |
+|---|---|---|
+| Empty | Omit `developerInstructions` | Omit `--append-system-prompt` |
+| Nonempty | Literal `developerInstructions` on `thread/start` or `thread/resume`; `baseInstructions` is never set | Native `AppendSystemPrompt`, emitted as one `--append-system-prompt=<text>` argv element |
+
+The value must be valid UTF-8 and contain no NUL. Validation runs before a native
+thread request, Claude process launch, or open reservation. Other text is
+forwarded without trimming or normalization, including spaces, line endings,
+Unicode, and a leading dash. `Resume` requires the complete value again because
+the unified SDK does not persist a prompt from an earlier call. An empty value on
+resume means "no addition requested for this call"; it does not promise to clear
+native saved instructions.
+
+There is no Session setter or hot reload, and this option adds no Capability,
+Feature, Event, Meta member, or persistent Session state. The SDK makes no exact
+ordering or child-Agent inheritance promise. Codex app-server requests and Claude
+argv expose the text, so do not use this field as secret storage. Unified
+validation and adapter errors, Events, and logs do not echo the prompt text.
+
+```go
+options := agent.OpenOptions{
+    Cwd:                    "/absolute/workspace",
+    AdditionalSystemPrompt: "Follow the repository conventions.\nNever rewrite generated files.",
+}
+```
+
 ### External MCP servers
 
 The authoritative developer contract is

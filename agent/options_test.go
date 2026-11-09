@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -102,7 +101,7 @@ func TestOpenOptionsValidateAdditionalSystemPrompt(t *testing.T) {
 			var classified *agent.Error
 			require.ErrorAs(t, err, &classified)
 			assert.Equal(t, tt.wantReason, classified.Reason)
-			assert.False(t, strings.Contains(err.Error(), sentinel))
+			assert.NotContains(t, err.Error(), sentinel)
 		})
 	}
 }

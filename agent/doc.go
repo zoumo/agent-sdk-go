@@ -16,6 +16,9 @@
 // reasoning effort through ExecutionOptionsReporter and
 // ExecutionOptionsController. Requested values and native observations remain
 // separate; these optional interfaces add no other configuration surface.
+// Adapters implementing those interfaces may use ExecutionOptionsRuntime,
+// SetExecutionOption and SetExecutionModel to share controller mechanics;
+// ordinary Session implementations do not need those adapter support types.
 //
 // Event payloads form a closed live union with stable session and item identity.
 // Adapters preserve native order, time, raw evidence, and explicit capability

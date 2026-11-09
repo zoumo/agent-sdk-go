@@ -347,31 +347,7 @@ func (s *session) SetModel(
 	ctx context.Context,
 	model string,
 ) (agent.ConfigurationReceipt, error) {
-	if model == "" {
-		return agent.ConfigurationReceipt{}, adapterError(
-			agent.ErrorInvalidArgument,
-			"missing_model",
-			"model must be nonempty",
-			nil,
-		)
-	}
-	change := agent.ExecutionOptionChange{
-		Option: agent.ExecutionOptionModel,
-		Value:  model,
-	}
-	if err := validateExecutionOptionChange(change); err != nil {
-		return agent.ConfigurationReceipt{}, err
-	}
-	s.executionMu.Lock()
-	defer s.executionMu.Unlock()
-	receipt, err := s.setExecutionOptionLocked(ctx, change)
-	if err != nil {
-		return agent.ConfigurationReceipt{}, err
-	}
-	return agent.ConfigurationReceipt{
-		Model:      model,
-		Acceptance: receipt.Acceptance,
-	}, nil
+	return agent.SetExecutionModel(ctx, model, executionOptionsRuntime{session: s})
 }
 
 func (s *session) Close(context.Context) error {

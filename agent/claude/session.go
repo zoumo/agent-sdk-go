@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	_ agent.Session                  = (*session)(nil)
-	_ agent.EventStream              = (*eventStream)(nil)
-	_ agent.ExecutionOptionsReporter = (*session)(nil)
+	_ agent.Session                    = (*session)(nil)
+	_ agent.ModelController            = (*session)(nil)
+	_ agent.EventStream                = (*eventStream)(nil)
+	_ agent.ExecutionOptionsReporter   = (*session)(nil)
+	_ agent.ExecutionOptionsController = (*session)(nil)
 )
 
 type session struct {
@@ -28,6 +30,7 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
+	executionMu         sync.Mutex
 	mu                  sync.Mutex
 	eventsClaimed       bool
 	closed              bool

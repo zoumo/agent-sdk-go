@@ -130,6 +130,36 @@ func (contractExecutionController) SetExecutionOption(
 	return agent.ExecutionOptionsReceipt{}, nil
 }
 
+type contractExecutionRuntime struct {
+	contractExecutionReporter
+}
+
+func (contractExecutionRuntime) Lock()   {}
+func (contractExecutionRuntime) Unlock() {}
+
+func (contractExecutionRuntime) RequireOpen() error { return nil }
+
+func (contractExecutionRuntime) Apply(
+	context.Context,
+	agent.ExecutionOptionChange,
+) error {
+	return nil
+}
+
+func (contractExecutionRuntime) ConvertError(err error) error { return err }
+
+func (contractExecutionRuntime) PrepareAccepted(
+	agent.ExecutionOptionChange,
+) func() {
+	return func() {}
+}
+
+func (contractExecutionRuntime) ClearUncertain(agent.ExecutionOption) {}
+
+func (contractExecutionRuntime) Acceptance(error) agent.Acceptance {
+	return agent.Acceptance{}
+}
+
 type contractStream struct{}
 
 func (contractStream) Next(context.Context) (agent.Event, error) {
@@ -211,4 +241,30 @@ func TestPublicMCPContract(t *testing.T) {
 		_, found := reflect.TypeFor[agent.OpenOptions]().FieldByName(field)
 		assert.False(t, found, "unified OpenOptions must not expose %s", field)
 	}
+}
+
+func TestAdapterExecutionOptionRuntimeContracts(t *testing.T) {
+	var runtime agent.ExecutionOptionsRuntime = contractExecutionRuntime{}
+	change := agent.ExecutionOptionChange{
+		Option: agent.ExecutionOptionReasoningEffort,
+		Value:  "high",
+	}
+
+	receipt, err := agent.SetExecutionOption(context.Background(), change, runtime)
+	require.NoError(t, err)
+	assert.Equal(t, change, receipt.Change)
+	require.NotNil(t, receipt.Acceptance.Sent)
+	require.NotNil(t, receipt.Acceptance.NativeAccepted)
+	assert.True(t, *receipt.Acceptance.Sent)
+	assert.True(t, *receipt.Acceptance.NativeAccepted)
+
+	modelReceipt, err := agent.SetExecutionModel(
+		context.Background(),
+		"model",
+		runtime,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "model", modelReceipt.Model)
+	require.NotNil(t, modelReceipt.Acceptance.Sent)
+	require.NotNil(t, modelReceipt.Acceptance.NativeAccepted)
 }

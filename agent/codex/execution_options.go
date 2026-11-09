@@ -3,7 +3,6 @@ package agentcodex
 import (
 	"context"
 	"errors"
-	"unicode/utf8"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
@@ -21,48 +20,30 @@ func (s *session) SetExecutionOption(
 	ctx context.Context,
 	change agent.ExecutionOptionChange,
 ) (agent.ExecutionOptionsReceipt, error) {
-	if err := validateExecutionOptionChange(change); err != nil {
-		return s.executionOptionsReceipt(change, executionOptionsNotSent()), err
-	}
-	s.executionMu.Lock()
-	defer s.executionMu.Unlock()
-	return s.setExecutionOptionLocked(ctx, change)
+	return agent.SetExecutionOption(ctx, change, executionOptionsRuntime{session: s})
 }
 
-func (s *session) setExecutionOptionLocked(
-	ctx context.Context,
-	change agent.ExecutionOptionChange,
-) (agent.ExecutionOptionsReceipt, error) {
-	if err := s.requireOpen(); err != nil {
-		return s.executionOptionsReceipt(change, executionOptionsNotSent()), err
-	}
-	observedAt := s.executionObservationSequence()
-	err := s.applyNativeExecutionOption(ctx, change)
-	if err == nil {
-		s.recordAcceptedExecutionOption(change, observedAt)
-		return s.executionOptionsReceipt(change, executionOptionsAccepted()), nil
-	}
+type executionOptionsRuntime struct{ session *session }
 
-	convertedErr := nativeOperationError("set_execution_option", err)
-	if agent.CodeOf(convertedErr) == agent.ErrorOutcomeUnknown {
-		s.clearUncertainExecutionOptionEffective(change.Option)
-	}
-	return s.executionOptionsReceipt(
-		change,
-		executionOptionsAcceptance(err),
-	), convertedErr
+func (r executionOptionsRuntime) Lock()   { r.session.executionMu.Lock() }
+func (r executionOptionsRuntime) Unlock() { r.session.executionMu.Unlock() }
+
+func (r executionOptionsRuntime) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	return r.session.EffectiveExecutionOptions()
 }
 
-func (s *session) applyNativeExecutionOption(
+func (r executionOptionsRuntime) RequireOpen() error { return r.session.requireOpen() }
+
+func (r executionOptionsRuntime) Apply(
 	ctx context.Context,
 	change agent.ExecutionOptionChange,
 ) error {
 	switch change.Option {
 	case agent.ExecutionOptionModel:
-		_, err := s.native.SetModel(ctx, change.Value)
+		_, err := r.session.native.SetModel(ctx, change.Value)
 		return err
 	case agent.ExecutionOptionReasoningEffort:
-		_, err := s.native.SetThinking(ctx, codex.ThinkingChange{
+		_, err := r.session.native.SetThinking(ctx, codex.ThinkingChange{
 			Effort: codextypes.Some[codextypes.ReasoningEffort](change.Value),
 		})
 		return err
@@ -75,72 +56,36 @@ func (s *session) applyNativeExecutionOption(
 	}
 }
 
-func validateExecutionOptionChange(change agent.ExecutionOptionChange) error {
-	switch change.Option {
-	case agent.ExecutionOptionModel, agent.ExecutionOptionReasoningEffort:
-	default:
-		return adapterError(
-			agent.ErrorInvalidArgument,
-			"execution_option_unknown",
-			"execution option is not supported",
-			nil,
-		)
-	}
-	if change.Value == "" {
-		return adapterError(
-			agent.ErrorInvalidArgument,
-			"execution_option_empty_value",
-			"execution option value must be nonempty",
-			nil,
-		)
-	}
-	if !utf8.ValidString(change.Value) {
-		return adapterError(
-			agent.ErrorInvalidArgument,
-			"execution_option_invalid_utf8",
-			"execution option value must be valid UTF-8",
-			nil,
-		)
-	}
-	return nil
+func (r executionOptionsRuntime) ConvertError(err error) error {
+	return nativeOperationError("set_execution_option", err)
 }
 
-func executionOptionsAccepted() agent.Acceptance {
-	sent, accepted := true, true
-	return agent.Acceptance{
-		Sent:           &sent,
-		NativeAccepted: &accepted,
+func (r executionOptionsRuntime) PrepareAccepted(change agent.ExecutionOptionChange) func() {
+	observedAt := r.session.executionObservationSequence()
+	return func() {
+		r.session.recordAcceptedExecutionOption(change, observedAt)
 	}
 }
 
-func executionOptionsNotSent() agent.Acceptance {
-	sent := false
-	return agent.Acceptance{Sent: &sent}
+func (r executionOptionsRuntime) ClearUncertain(option agent.ExecutionOption) {
+	r.session.clearUncertainExecutionOptionEffective(option)
 }
 
-func executionOptionsAcceptance(err error) agent.Acceptance {
+func (r executionOptionsRuntime) Acceptance(err error) agent.Acceptance {
 	sent := true
 	var callErr *codex.CallError
-	if errors.As(err, &callErr) && callErr.Dispatch == codex.NotSent {
-		sent = false
+	if !errors.As(err, &callErr) {
 		return agent.Acceptance{Sent: &sent}
 	}
-	acceptance := agent.Acceptance{Sent: &sent}
-	if callErr != nil && callErr.Dispatch == codex.Responded {
+	switch callErr.Dispatch {
+	case codex.NotSent:
+		sent = false
+		return agent.Acceptance{Sent: &sent}
+	case codex.Responded:
 		accepted := false
-		acceptance.NativeAccepted = &accepted
-	}
-	return acceptance
-}
-
-func (s *session) executionOptionsReceipt(
-	change agent.ExecutionOptionChange,
-	acceptance agent.Acceptance,
-) agent.ExecutionOptionsReceipt {
-	return agent.ExecutionOptionsReceipt{
-		Change:     change,
-		Acceptance: acceptance,
-		Report:     s.EffectiveExecutionOptions(),
+		return agent.Acceptance{Sent: &sent, NativeAccepted: &accepted}
+	default:
+		return agent.Acceptance{Sent: &sent}
 	}
 }
 

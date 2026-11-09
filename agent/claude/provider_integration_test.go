@@ -175,13 +175,32 @@ func newTestClaudeProvider(
 
 func sequencedClaudeLauncher(t *testing.T, peers ...*mocktest.Session) string {
 	t.Helper()
+	launches := make([]claudeSequencedLaunch, len(peers))
+	for index, peer := range peers {
+		launcher, err := peer.Launcher("main")
+		require.NoError(t, err)
+		launches[index] = claudeSequencedLaunch{
+			command: launcher,
+			env:     peer.Env,
+		}
+	}
+	return sequencedClaudeCommands(t, launches...)
+}
+
+type claudeSequencedLaunch struct {
+	command string
+	env     []string
+}
+
+func sequencedClaudeCommands(t *testing.T, launches ...claudeSequencedLaunch) string {
+	t.Helper()
 	directory := t.TempDir()
 	counterPath := filepath.Join(directory, "counter")
 	require.NoError(t, os.WriteFile(counterPath, []byte("0\n"), 0o600))
 
 	keys := make(map[string]struct{})
-	for _, peer := range peers {
-		for _, entry := range peer.Env {
+	for _, launch := range launches {
+		for _, entry := range launch.env {
 			key, _, found := strings.Cut(entry, "=")
 			require.True(t, found)
 			keys[key] = struct{}{}
@@ -197,19 +216,17 @@ func sequencedClaudeLauncher(t *testing.T, peers ...*mocktest.Session) string {
 	script.WriteString("#!/bin/sh\nset -eu\n")
 	script.WriteString("counter=" + shellQuote(counterPath) + "\n")
 	script.WriteString("value=$(cat \"$counter\")\n")
-	for index, peer := range peers {
-		launcher, err := peer.Launcher("main")
-		require.NoError(t, err)
+	for index, launch := range launches {
 		script.WriteString(`if [ "$value" = "` + strconv.Itoa(index) + "\" ]; then\n")
 		script.WriteString("printf '%s\\n' " + strconv.Itoa(index+1) + " > \"$counter\"\n")
 		if len(orderedKeys) != 0 {
 			script.WriteString("unset " + strings.Join(orderedKeys, " ") + "\n")
 		}
-		for _, entry := range peer.Env {
+		for _, entry := range launch.env {
 			key, value, _ := strings.Cut(entry, "=")
 			script.WriteString("export " + key + "=" + shellQuote(value) + "\n")
 		}
-		script.WriteString("exec " + shellQuote(launcher) + " \"$@\"\n")
+		script.WriteString("exec " + shellQuote(launch.command) + " \"$@\"\n")
 		script.WriteString("fi\n")
 	}
 	script.WriteString("echo \"unexpected Claude launcher invocation\" >&2\nexit 69\n")

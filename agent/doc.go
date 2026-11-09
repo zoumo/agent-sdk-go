@@ -19,6 +19,25 @@
 // history APIs, and Resume does not turn saved content into live events. MASS
 // resource identity and persistence also remain outside this contract.
 //
+// OpenOptions.MCPServers carries the final provider-neutral external MCP list for
+// one Open or Resume call. The caller that interprets Runtime configuration must
+// compose Runtime defaults and the Session declaration before calling a provider.
+// Providers do not merge or persist that list; Resume requires a new final list.
+// The repository README section "External MCP servers" describes the composition
+// and provider-specific limits.
+//
+// The unified contract has only explicit stdio and MCP Streamable HTTP transports.
+// It has no SSE, MCPConfigMode, StrictMCPConfig, SDKMCPServers, or ambient-clear
+// control. Provider-specific field restrictions are rejected before native side
+// effects. The SDK forwards environment and header values without resolving them;
+// it does not persist MCP configuration or include its values in unified Events,
+// Meta, or logs. MCP validation and adapter field-support errors do not echo those
+// values. Open or Resume errors can wrap native diagnostics as a cause, which
+// callers must protect separately. Open or Resume success does not prove MCP
+// connectivity, authentication, or tool discovery.
+//
 // ExampleProvider runs the complete open, submit, stream, answer, close, resume,
 // and stop flow over two synthetic providers without launching a native CLI.
+// ExampleMCPServer validates an offline final MCP list without connecting to a
+// server.
 package agent

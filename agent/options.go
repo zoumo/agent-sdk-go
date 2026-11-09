@@ -9,7 +9,11 @@ type OpenOptions struct {
 	SystemPrompt   string
 	AdditionalDirs []string
 	Features       Features
-	MCPServers     []MCPServer
+	// MCPServers is the complete final external MCP list for this operation. The
+	// caller composes Runtime defaults with Session declarations before calling a
+	// provider, which does not merge them again. Resume callers must repeat the
+	// complete list because the SDK does not persist it.
+	MCPServers []MCPServer
 }
 
 // Validate checks the provider-neutral creation options before native side

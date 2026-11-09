@@ -2,8 +2,10 @@ package agent_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
@@ -131,4 +133,39 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)
 	require.NotNil(t, modelController)
+}
+
+func TestPublicMCPContract(t *testing.T) {
+	stdio := agent.MCPServer{
+		Name:      "local",
+		Transport: agent.MCPTransportStdio,
+		Command:   "mcp-local",
+		Args:      []string{"--stdio"},
+		Env:       map[string]string{"LOCAL_MODE": "read-only"},
+		Cwd:       "/synthetic/workspace",
+	}
+	http := agent.MCPServer{
+		Name:              "remote",
+		Transport:         agent.MCPTransportHTTP,
+		URL:               "https://mcp.example.invalid/tools",
+		Headers:           map[string]string{"X-Workspace": "sdk"},
+		EnvHeaders:        map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
+		BearerTokenEnvVar: "REMOTE_TOKEN",
+	}
+	options := agent.OpenOptions{
+		Cwd:        "/synthetic/workspace",
+		MCPServers: []agent.MCPServer{stdio, http},
+	}
+	resume := agent.ResumeOptions{
+		SessionID:   "session-1",
+		OpenOptions: options,
+	}
+
+	assert.Equal(t, "stdio", string(agent.MCPTransportStdio))
+	assert.Equal(t, "http", string(agent.MCPTransportHTTP))
+	assert.Equal(t, options.MCPServers, resume.MCPServers)
+	for _, field := range []string{"MCPConfigMode", "StrictMCPConfig", "SDKMCPServers"} {
+		_, found := reflect.TypeFor[agent.OpenOptions]().FieldByName(field)
+		assert.False(t, found, "unified OpenOptions must not expose %s", field)
+	}
 }

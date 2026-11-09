@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -139,7 +140,7 @@ func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
 	)
 	provider := newTestClaudeProviderWithConfig(t, agentclaude.Config{
 		// This budget also bounds the native initialize control handshake.
-		// Keep it well above mock process-startup variance under race so the
+		// Keep it above embedded replay initialization variance under race so the
 		// timeout proves that the separate system/init frame never arrived.
 		InitializeTimeout: 10 * time.Second,
 	}, peerSession)
@@ -168,7 +169,7 @@ func newTestClaudeProviderWithConfig(
 	t.Helper()
 	var mu sync.Mutex
 	next := 0
-	provider := agentclaude.NewWithStream(config, func(ctx context.Context) (agentclaude.TestStreamOpen, error) {
+	provider := agentclaude.NewWithStream(config, func(ctx context.Context, options claude.SessionOptions) (agentclaude.TestStreamOpen, error) {
 		mu.Lock()
 		if next >= len(peers) {
 			mu.Unlock()
@@ -181,10 +182,30 @@ func newTestClaudeProviderWithConfig(
 			context.WithoutCancel(ctx),
 			30*time.Second,
 		)
-		run, err := peer.NewRun(runCtx, mocktest.RunOptions{})
+		args, err := agentclaude.TestifyNativeArgs(options)
 		if err != nil {
 			cancelRun()
 			return agentclaude.TestStreamOpen{}, err
+		}
+		run, err := peer.NewRun(runCtx, mocktest.RunOptions{NativeArgs: args})
+		if err != nil {
+			cancelRun()
+			return agentclaude.TestStreamOpen{}, err
+		}
+		// Register run cleanup before SDK construction, including initialize failures.
+		t.Cleanup(func() {
+			_ = run.CloseSDK()
+			waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = run.Wait(waitCtx)
+			cancelRun()
+		})
+		options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
+		actualArgs, err := agentclaude.TestifyNativeArgs(options)
+		if err != nil || !slices.Equal(actualArgs, run.Start.NativeArgs) {
+			_ = run.Abort()
+			cancelRun()
+			return agentclaude.TestStreamOpen{}, errors.New("execution native arguments differ from SDK options")
 		}
 		return agentclaude.TestStreamOpen{
 			Transport: claude.StreamTransport{
@@ -196,11 +217,17 @@ func newTestClaudeProviderWithConfig(
 			Workspace: run.Start.Workspace,
 			Env:       run.Environment(),
 			Started: func(session *claude.Session) {
-				run.CloseInputWhenComplete(session.CloseInput)
+				completion := run.CloseInputWhenComplete(session.CloseInput)
 				t.Cleanup(func() {
 					_ = session.Close()
-					_ = run.CloseSDK()
-					cancelRun()
+					select {
+					case err := <-completion:
+						if err != nil {
+							assert.ErrorIs(t, err, claude.ErrInputClosed, "session Close may precede the watcher")
+						}
+					case <-time.After(5 * time.Second):
+						t.Error("input completion watcher did not finish")
+					}
 				})
 			},
 		}, nil

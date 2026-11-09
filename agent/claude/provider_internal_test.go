@@ -188,3 +188,18 @@ func TestInitBufferRejectsExcessEventsAndBytes(t *testing.T) {
 		assert.Equal(t, agent.ErrorResourceExhausted, agent.CodeOf(err))
 	})
 }
+
+// The pinned embedded bridge validates a reviewed startup declaration, not the
+// complete executable argv. SDK feature options still reach OpenStreams intact.
+func TestEmbeddedStartupDeclarationKeepsFullSDKFeatureOptions(t *testing.T) {
+	options := claude.SessionOptions{Model: "synthetic", ResumeID: "resume-id", DisallowedTools: []string{"AskUserQuestion"}}
+	declaration, err := TestifyNativeArgs(options)
+	require.NoError(t, err)
+	assert.Contains(t, declaration, "--model=synthetic")
+	assert.Contains(t, declaration, "--resume=resume-id")
+	assert.NotContains(t, declaration, "--disallowedTools=AskUserQuestion")
+	full, err := claude.NativeArgs(options)
+	require.NoError(t, err)
+	assert.Contains(t, full, "--disallowedTools=AskUserQuestion")
+	assert.Equal(t, []string{"AskUserQuestion"}, options.DisallowedTools)
+}

@@ -49,7 +49,7 @@ type streamOpen struct {
 	Started   func(*claude.Session)
 }
 
-type streamFactory func(context.Context) (streamOpen, error)
+type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, error)
 
 // New constructs a Claude provider without starting a native process.
 func New(config Config) *Provider {
@@ -135,16 +135,16 @@ func (p *Provider) open(
 	if err := p.reserveOpen(); err != nil {
 		return nil, err
 	}
+	nativeOptions := p.nativeOptions(options.Cwd, resumeID, options.Features)
 	var stream *streamOpen
 	if p.streams != nil {
-		opened, err := p.streams(ctx)
+		opened, err := p.streams(ctx, claude.SessionOptions(nativeOptions))
 		if err != nil {
 			p.finishOpen()
 			return nil, nativeOperationError("open", err)
 		}
 		stream = &opened
 	}
-	nativeOptions := p.nativeOptions(options.Cwd, resumeID, options.Features)
 	if stream != nil {
 		if stream.Workspace != "" {
 			nativeOptions.WorkDir = stream.Workspace

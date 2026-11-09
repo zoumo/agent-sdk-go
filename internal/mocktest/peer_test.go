@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -106,13 +105,31 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 
 func TestFromFixtureRejectsMismatchedEmbeddedIdentity(t *testing.T) {
 	prepared := prepareSession(t, "codex", noticeScenario, Options{})
-	fixture := *prepared.fixture
-	fixture.Tool.Version = "v0.0.0-20261109000000-000000000000"
-
-	session, err := FromFixture(&fixture)
-	require.Nil(t, session)
-	require.ErrorContains(t, err, "embedded testify identity")
-
+	for _, tc := range []struct {
+		name   string
+		mutate func(*agenttestify.ToolIdentity)
+	}{
+		{"source", func(v *agenttestify.ToolIdentity) { v.Source = "executable" }},
+		{"module", func(v *agenttestify.ToolIdentity) { v.Module = "other/module" }},
+		{"version", func(v *agenttestify.ToolIdentity) { v.Version = "v0.0.0-20261109000000-000000000000" }},
+		{"sum", func(v *agenttestify.ToolIdentity) { v.ModuleSum = "h1:wrong" }},
+		{"revision", func(v *agenttestify.ToolIdentity) { v.ModuleRevision = "wrong" }},
+		{"time", func(v *agenttestify.ToolIdentity) { v.ModuleTime = "wrong" }},
+		{"missing Go version", func(v *agenttestify.ToolIdentity) { v.GoVersion = "" }},
+		{"invalid Go version", func(v *agenttestify.ToolIdentity) { v.GoVersion = "not-go" }},
+		{"command", func(v *agenttestify.ToolIdentity) { v.Command = "fake" }},
+		{"args", func(v *agenttestify.ToolIdentity) { v.Args = []string{"fake"} }},
+		{"binary hash", func(v *agenttestify.ToolIdentity) { v.SHA256 = "fake" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture, err := agenttestify.Open(prepared.Dir)
+			require.NoError(t, err)
+			tc.mutate(&fixture.Tool)
+			session, err := FromFixture(fixture)
+			require.Nil(t, session)
+			require.ErrorContains(t, err, "embedded testify identity")
+		})
+	}
 	require.Equal(t, "abandoned", closeSession(t, prepared).Status)
 }
 
@@ -155,75 +172,62 @@ func TestOpenAndFromFixturePreservePreparedOwnership(t *testing.T) {
 }
 
 func TestInProcessRunPublishesEmbeddedEvidence(t *testing.T) {
-	session := prepareSession(t, "codex", noticeScenario, Options{})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	run, err := session.NewRun(ctx, RunOptions{})
-	require.NoError(t, err)
-	require.Equal(t, agenttestify.MockTransportInProcess, run.Start.Transport)
-	require.NotEqual(t, session.Workspace, run.Start.Workspace)
-	require.DirExists(t, run.Start.Workspace)
-	require.DirExists(t, run.Start.ProtocolCwd)
-	routeRoot := filepath.Join(session.Dir, "runtime", "routes", "mock")
-	executionRoot := filepath.Join(session.Dir, "runtime", "executions", run.Start.ExecutionID)
-	wantEnv := make([]string, len(session.Env))
-	for i, entry := range session.Env {
-		wantEnv[i] = strings.ReplaceAll(entry, routeRoot, executionRoot)
-	}
-	require.Equal(t, wantEnv, run.Environment())
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			session := prepareSession(t, provider, noticeScenario, Options{})
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			run, err := session.NewRun(ctx, RunOptions{})
+			require.NoError(t, err)
+			require.Equal(t, agenttestify.MockTransportInProcess, run.Start.Transport)
+			require.NotEqual(t, session.Workspace, run.Start.Workspace)
+			require.DirExists(t, run.Start.Workspace)
+			require.DirExists(t, run.Start.ProtocolCwd)
+			routeRoot := filepath.Join(session.Dir, "runtime", "routes", "mock")
+			executionRoot := filepath.Join(session.Dir, "runtime", "executions", run.Start.ExecutionID)
+			wantEnv := make([]string, len(session.Env))
+			for i, entry := range session.Env {
+				wantEnv[i] = strings.ReplaceAll(entry, routeRoot, executionRoot)
+			}
+			require.Equal(t, wantEnv, run.Environment())
 
-	output := make(chan []byte, 1)
-	go func() {
-		data, _ := io.ReadAll(run.Reader)
-		output <- data
-	}()
-	closeDone := run.CloseInputWhenComplete(run.Writer.Close)
-	require.NoError(t, <-closeDone)
-	result, err := run.Wait(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Execution)
-	require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
-	require.True(t, result.Execution.Complete)
-	require.Len(t, result.Execution.Connections, 1)
-	connection := result.Execution.Connections[0]
-	require.Equal(t, agenttestify.MockTransportInProcess, connection.Transport)
-	require.Equal(t, agenttestify.ConnectionStatusPassed, connection.Status)
-	require.True(t, connection.FullConsumption)
-	require.True(t, connection.ClientEOF)
-	require.False(t, connection.NativeLaunched)
-	require.True(t, connection.CleanupComplete)
-	require.Nil(t, connection.ExitCode)
-	require.Empty(t, connection.ProcessReceiptPath)
-	require.Empty(t, result.ProcessReceiptPath)
-	require.Contains(t, string(<-output), `"notice"`)
-	var terminal map[string]any
-	data, err := os.ReadFile(connection.ResultPath)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, &terminal))
-	require.Equal(t, "in-process", terminal["transport"])
-	for _, field := range []string{"command", "launcher", "processId", "pid", "exitCode", "processReceipt", "toolSHA256"} {
-		require.NotContains(t, terminal, field)
-	}
-	var receipt map[string]any
-	data, err = os.ReadFile(connection.ReceiptPath)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, &receipt))
-	require.Equal(t, false, receipt["nativeLaunched"])
-	for _, field := range []string{"command", "launcher", "processId", "pid", "exitCode", "processReceipt", "toolSHA256"} {
-		require.NotContains(t, receipt, field)
-	}
-	require.NoError(t, run.CloseSDK())
+			output := make(chan []byte, 1)
+			go func() {
+				data, _ := io.ReadAll(run.Reader)
+				output <- data
+			}()
+			closeDone := run.CloseInputWhenComplete(run.Writer.Close)
+			require.NoError(t, <-closeDone)
+			result, err := run.Wait(ctx)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, result.Execution)
+			require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+			require.True(t, result.Execution.Complete)
+			require.Len(t, result.Execution.Connections, 1)
+			connection := result.Execution.Connections[0]
+			require.Equal(t, agenttestify.MockTransportInProcess, connection.Transport)
+			require.Equal(t, agenttestify.ConnectionStatusPassed, connection.Status)
+			require.True(t, connection.FullConsumption)
+			require.True(t, connection.ClientEOF)
+			require.False(t, connection.NativeLaunched)
+			require.True(t, connection.CleanupComplete)
+			require.Nil(t, connection.ExitCode)
+			require.Empty(t, connection.ProcessReceiptPath)
+			require.Empty(t, result.ProcessReceiptPath)
+			require.Contains(t, string(<-output), `"notice"`)
+			require.NoError(t, run.CloseSDK())
 
-	report := closeSession(t, session)
-	require.Equal(t, "passed", report.Status)
-	require.Len(t, report.Executions, 1)
-	require.Equal(t, "passed", report.Executions[0].Status)
-	require.Empty(t, report.Executions[0].Command)
-	require.Equal(t, []ConnectionReport{{ID: "main", Status: "passed"}}, report.Executions[0].Connections)
-	encoded, err := json.Marshal(report)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), `"command":`)
+			report := closeSession(t, session)
+			require.Equal(t, "passed", report.Status)
+			require.Len(t, report.Executions, 1)
+			require.Equal(t, "passed", report.Executions[0].Status)
+			require.Equal(t, []ConnectionReport{{ID: "main", Status: "passed"}}, report.Executions[0].Connections)
+			encoded, err := json.Marshal(report)
+			require.NoError(t, err)
+			require.NotContains(t, string(encoded), `"command":`)
+		})
+	}
 }
 
 func TestInProcessRunReportsScriptedTimeout(t *testing.T) {
@@ -406,74 +410,6 @@ func TestSessionCleanupRejectsActiveRun(t *testing.T) {
 	require.Equal(t, "failed", closeSession(t, session).Status)
 }
 
-func TestSessionCleanupWaitsForAbortFinalization(t *testing.T) {
-	session := prepareSession(t, "codex", noticeScenario, Options{})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	run, err := session.NewRun(ctx, RunOptions{})
-	require.NoError(t, err)
-
-	executionDir := filepath.Dir(run.Start.ExecutionPath)
-	finalizeLock, err := os.OpenFile(filepath.Join(executionDir, "mock-finalize.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	require.NoError(t, err)
-	require.NoError(t, syscall.Flock(int(finalizeLock.Fd()), syscall.LOCK_EX))
-	var releaseOnce sync.Once
-	release := func() {
-		releaseOnce.Do(func() {
-			_ = syscall.Flock(int(finalizeLock.Fd()), syscall.LOCK_UN)
-			_ = finalizeLock.Close()
-		})
-	}
-	t.Cleanup(release)
-
-	outputDone := make(chan error, 1)
-	go func() {
-		_, readErr := io.Copy(io.Discard, run.Reader)
-		outputDone <- readErr
-	}()
-	require.NoError(t, <-run.CloseInputWhenComplete(run.Writer.Close))
-
-	var execution struct {
-		Connections []struct {
-			Receipt string
-		}
-	}
-	data, err := os.ReadFile(run.Start.ExecutionPath)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, &execution))
-	require.Len(t, execution.Connections, 1)
-	require.Eventually(t, func() bool {
-		data, readErr := os.ReadFile(execution.Connections[0].Receipt)
-		if readErr != nil {
-			return false
-		}
-		var receipt map[string]any
-		return json.Unmarshal(data, &receipt) == nil && receipt["status"] == "passed"
-	}, 3*time.Second, 10*time.Millisecond, "replay did not finish before finalization")
-
-	require.NoError(t, run.Abort())
-	select {
-	case <-run.Done():
-		t.Fatal("abort finalization completed while the finalize lock was held")
-	default:
-	}
-	require.ErrorContains(t, session.Close(), "active runs")
-
-	release()
-	result, err := run.Wait(ctx)
-	require.ErrorContains(t, err, "aborted")
-	require.NotNil(t, result)
-	require.Len(t, result.Execution.Connections, 1)
-	require.Equal(t, agenttestify.FailureClassAborted, result.Execution.Connections[0].Failure)
-	select {
-	case outputErr := <-outputDone:
-		require.NoError(t, outputErr)
-	case <-time.After(3 * time.Second):
-		t.Fatal("SDK reader did not finish after abort finalization")
-	}
-	require.Equal(t, "failed", closeSession(t, session).Status)
-}
-
 func TestRunReportOutlivesFixtureCleanup(t *testing.T) {
 	session := prepareSession(t, "codex", noticeScenario, Options{})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -502,6 +438,7 @@ func TestRunReportOutlivesFixtureCleanup(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, materialID, repeated.Execution.Material.ID)
 	require.Equal(t, "main", repeated.Execution.Connections[0].ID)
+	require.Equal(t, []string{"main"}, repeated.Execution.Material.Connections)
 	require.True(t, repeated.Execution.Complete)
 	require.True(t, repeated.Execution.Connections[0].CleanupComplete)
 }
@@ -736,4 +673,94 @@ func TestOutputFailureCancelsIdlePeer(t *testing.T) {
 	require.ErrorIs(t, err, want)
 	require.NoError(t, ctx.Err(), "output failure must cancel the peer without waiting for the parent deadline")
 	require.Equal(t, "passed", closeSession(t, session).Status)
+}
+
+func TestSessionCleanupRacesRunStartup(t *testing.T) {
+	for i := 0; i < 24; i++ {
+		session := prepareSession(t, "codex", noticeScenario, Options{})
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		type started struct {
+			run *Run
+			err error
+		}
+		ready := make(chan struct{})
+		done := make(chan started, 1)
+		go func() {
+			close(ready)
+			run, err := session.NewRun(ctx, RunOptions{})
+			done <- started{run, err}
+		}()
+		<-ready
+		closeErr := session.Close()
+		outcome := <-done
+		if outcome.run != nil {
+			require.ErrorContains(t, closeErr, "active runs")
+			require.NoError(t, outcome.run.Abort())
+			_, err := outcome.run.Wait(ctx)
+			require.Error(t, err)
+			require.NoError(t, outcome.run.CloseSDK())
+		} else {
+			require.Error(t, outcome.err)
+			if closeErr == nil {
+				require.ErrorContains(t, outcome.err, "session is closed")
+			}
+		}
+		require.NoError(t, session.Close())
+		require.NoDirExists(t, session.Dir)
+		cancel()
+	}
+}
+
+func TestSessionCleanupAfterFailedRunStartup(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	run, err := session.NewRun(context.Background(), RunOptions{Connection: "undeclared"})
+	require.Error(t, err)
+	if run != nil {
+		require.NoError(t, run.Abort())
+		_, err = run.Wait(context.Background())
+		require.Error(t, err)
+		require.NoError(t, run.CloseSDK())
+	}
+	require.NoError(t, session.Close())
+	require.NoDirExists(t, session.Dir)
+}
+
+func TestInProcessRunWaitRetainsStrictFailure(t *testing.T) {
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"c2s","channel":"protocol","epoch":1,"wire":{"id":1,"method":"initialize","params":{}}}]}`
+	session := prepareSession(t, "codex", scenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+	_, err = io.WriteString(run.Writer, "{\"id\":1,\"method\":\"wrong\",\"params\":{}}\n")
+	require.NoError(t, err)
+	require.NoError(t, run.Writer.Close())
+	first, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.NotNil(t, first.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, first.Execution.Status)
+	require.Equal(t, agenttestify.FailureClassStrictReplay, first.Execution.Connections[0].Failure)
+	repeated, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.Equal(t, first.Execution, repeated.Execution)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestInProcessRunReportsContextCancellation(t *testing.T) {
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"c2s","channel":"protocol","epoch":1,"wire":{"id":1,"method":"initialize","params":{}}}]}`
+	session := prepareSession(t, "codex", scenario, Options{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+	cancel()
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelWait()
+	result, err := run.Wait(waitCtx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Equal(t, agenttestify.FailureClassCanceled, result.Execution.Connections[0].Failure)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
 }

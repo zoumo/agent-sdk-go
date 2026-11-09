@@ -33,6 +33,7 @@ type Session struct {
 
 	mu         sync.Mutex
 	closed     bool
+	starting   int
 	executions []string
 	active     map[*Run]struct{}
 }
@@ -93,7 +94,6 @@ type SessionReport struct {
 
 type ExecutionReport struct {
 	ID          string             `json:"id"`
-	Command     string             `json:"command,omitempty"`
 	Status      string             `json:"status"`
 	Connections []ConnectionReport `json:"connections"`
 }
@@ -240,7 +240,15 @@ func (s *Session) NewRun(ctx context.Context, options RunOptions) (*Run, error) 
 		return nil, errors.New("prepared session is closed")
 	}
 	fixture := s.fixture
+	s.starting++
 	s.mu.Unlock()
+	// Reserve fixture ownership until startup either registers an active run or
+	// releases every endpoint on failure. Close must not delete it in this gap.
+	defer func() {
+		s.mu.Lock()
+		s.starting--
+		s.mu.Unlock()
+	}()
 	if fixture == nil {
 		return nil, errors.New("prepared fixture is unavailable")
 	}
@@ -616,7 +624,7 @@ func (s *Session) Close() error {
 	if s.closed {
 		return nil
 	}
-	if len(s.active) != 0 {
+	if s.starting != 0 || len(s.active) != 0 {
 		return errors.New("prepared session still has active runs")
 	}
 	s.closed = true

@@ -2,6 +2,7 @@ package mocktest
 
 import (
 	"fmt"
+	"go/version"
 	"runtime"
 
 	agenttestify "github.com/zoumo/agent-sdk-testify"
@@ -53,8 +54,8 @@ func validateEmbeddedTestifyIdentity(tool agenttestify.ToolIdentity) error {
 		return fmt.Errorf("embedded testify identity module revision %q, want %q", tool.ModuleRevision, want.Revision)
 	case tool.ModuleTime != "" && tool.ModuleTime != want.Time:
 		return fmt.Errorf("embedded testify identity module time %q, want %q", tool.ModuleTime, want.Time)
-	case tool.GoVersion == "":
-		return fmt.Errorf("embedded testify identity requires the Go version")
+	case !version.IsValid(tool.GoVersion):
+		return fmt.Errorf("embedded testify identity has invalid Go version %q", tool.GoVersion)
 	case tool.Command != "" || len(tool.Args) != 0 || tool.SHA256 != "":
 		return fmt.Errorf("embedded testify identity declares executable fields")
 	}

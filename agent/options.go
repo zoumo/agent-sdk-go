@@ -9,6 +9,7 @@ type OpenOptions struct {
 	SystemPrompt   string
 	AdditionalDirs []string
 	Features       Features
+	MCPServers     []MCPServer
 }
 
 // Validate checks the provider-neutral creation options before native side
@@ -20,7 +21,7 @@ func (o OpenOptions) Validate() error {
 	if !filepath.IsAbs(o.Cwd) {
 		return invalidArgument("cwd_not_absolute", "working directory must be absolute")
 	}
-	return nil
+	return validateMCPServers(o.MCPServers)
 }
 
 // ResumeOptions identifies an existing native main session to resume.

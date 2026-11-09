@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -102,6 +104,56 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	require.Equal(t, "abandoned", report.Status)
 }
 
+func TestFromFixtureRejectsMismatchedEmbeddedIdentity(t *testing.T) {
+	prepared := prepareSession(t, "codex", noticeScenario, Options{})
+	fixture := *prepared.fixture
+	fixture.Tool.Version = "v0.0.0-20261109000000-000000000000"
+
+	session, err := FromFixture(&fixture)
+	require.Nil(t, session)
+	require.ErrorContains(t, err, "embedded testify identity")
+
+	require.Equal(t, "abandoned", closeSession(t, prepared).Status)
+}
+
+func TestOpenRejectsLegacyFixtureSchemas(t *testing.T) {
+	for _, schemaVersion := range []int{3, 4} {
+		t.Run(strconv.Itoa(schemaVersion), func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dir, "fixture.json"),
+				[]byte(`{"schemaVersion":`+strconv.Itoa(schemaVersion)+`}`),
+				0o600,
+			))
+
+			session, err := Open(dir)
+			require.Nil(t, session)
+			require.ErrorContains(t, err, "unsupported fixture schemaVersion")
+			require.ErrorContains(t, err, "schema 5 is required")
+		})
+	}
+}
+
+func TestOpenAndFromFixturePreservePreparedOwnership(t *testing.T) {
+	prepared := prepareSession(t, "claude", noticeScenario, Options{})
+
+	opened, err := Open(prepared.Dir)
+	require.NoError(t, err)
+	require.Equal(t, prepared.SessionID, opened.SessionID)
+	require.Equal(t, prepared.ConnectionIDs(), opened.ConnectionIDs())
+
+	attached, err := FromFixture(opened.fixture)
+	require.NoError(t, err)
+	require.Equal(t, prepared.SessionID, attached.SessionID)
+	require.Equal(t, prepared.ConnectionIDs(), attached.ConnectionIDs())
+
+	require.NoError(t, attached.Close())
+	require.NoError(t, opened.Close())
+	require.DirExists(t, prepared.Dir, "attach must not take directory ownership")
+	require.NoError(t, prepared.Close())
+	require.NoDirExists(t, prepared.Dir)
+}
+
 func TestInProcessRunPublishesEmbeddedEvidence(t *testing.T) {
 	session := prepareSession(t, "codex", noticeScenario, Options{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -143,14 +195,35 @@ func TestInProcessRunPublishesEmbeddedEvidence(t *testing.T) {
 	require.True(t, connection.CleanupComplete)
 	require.Nil(t, connection.ExitCode)
 	require.Empty(t, connection.ProcessReceiptPath)
+	require.Empty(t, result.ProcessReceiptPath)
 	require.Contains(t, string(<-output), `"notice"`)
+	var terminal map[string]any
+	data, err := os.ReadFile(connection.ResultPath)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &terminal))
+	require.Equal(t, "in-process", terminal["transport"])
+	for _, field := range []string{"command", "launcher", "processId", "pid", "exitCode", "processReceipt", "toolSHA256"} {
+		require.NotContains(t, terminal, field)
+	}
+	var receipt map[string]any
+	data, err = os.ReadFile(connection.ReceiptPath)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &receipt))
+	require.Equal(t, false, receipt["nativeLaunched"])
+	for _, field := range []string{"command", "launcher", "processId", "pid", "exitCode", "processReceipt", "toolSHA256"} {
+		require.NotContains(t, receipt, field)
+	}
 	require.NoError(t, run.CloseSDK())
 
 	report := closeSession(t, session)
 	require.Equal(t, "passed", report.Status)
 	require.Len(t, report.Executions, 1)
 	require.Equal(t, "passed", report.Executions[0].Status)
+	require.Empty(t, report.Executions[0].Command)
 	require.Equal(t, []ConnectionReport{{ID: "main", Status: "passed"}}, report.Executions[0].Connections)
+	encoded, err := json.Marshal(report)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"command":`)
 }
 
 func TestInProcessRunReportsScriptedTimeout(t *testing.T) {
@@ -169,6 +242,268 @@ func TestInProcessRunReportsScriptedTimeout(t *testing.T) {
 	require.Equal(t, agenttestify.FailureClassTimeout, result.Execution.Connections[0].Failure)
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestInProcessRunReportsAbort(t *testing.T) {
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"c2s","channel":"protocol","epoch":1,"wire":{"id":1,"method":"initialize","params":{}}}]}`
+	session := prepareSession(t, "codex", scenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+
+	require.NoError(t, run.Abort())
+	require.NoError(t, run.Abort())
+	result, err := run.Wait(ctx)
+	require.ErrorContains(t, err, "aborted")
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.NotEqual(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	require.NotEqual(t, agenttestify.ConnectionStatusPassed, result.Execution.Connections[0].Status)
+	require.Equal(t, agenttestify.FailureClassAborted, result.Execution.Connections[0].Failure)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestInProcessRunReportsWaitCancellation(t *testing.T) {
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"c2s","channel":"protocol","epoch":1,"wire":{"id":1,"method":"initialize","params":{}}}]}`
+	session := prepareSession(t, "codex", scenario, Options{})
+	runCtx, cancelRun := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelRun()
+	run, err := session.NewRun(runCtx, RunOptions{})
+	require.NoError(t, err)
+
+	waitCtx, cancelWait := context.WithCancel(context.Background())
+	cancelWait()
+	result, err := run.Wait(waitCtx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.NotEqual(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	require.Equal(t, agenttestify.FailureClassCanceled, result.Execution.Connections[0].Failure)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestInProcessRunCancellationUnblocksWriter(t *testing.T) {
+	scenario, err := json.Marshal(map[string]any{
+		"version":    1,
+		"provenance": "synthetic",
+		"frames": []map[string]any{{
+			"ordinal":   1,
+			"direction": "s2c",
+			"channel":   "protocol",
+			"epoch":     1,
+			"wire": map[string]any{
+				"method":  "notice",
+				"type":    "notice",
+				"padding": strings.Repeat("x", 1<<20),
+			},
+		}},
+	})
+	require.NoError(t, err)
+	session := prepareSession(t, "codex", string(scenario), Options{})
+	runCtx, cancelRun := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelRun()
+	run, err := session.NewRun(runCtx, RunOptions{})
+	require.NoError(t, err)
+
+	writeDone := make(chan error, 1)
+	wrote := make(chan struct{}, 1)
+	go func() {
+		chunk := make([]byte, 4<<10)
+		for {
+			_, writeErr := run.Writer.Write(chunk)
+			if writeErr != nil {
+				writeDone <- writeErr
+				return
+			}
+			select {
+			case wrote <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	select {
+	case <-wrote:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SDK writer did not make progress")
+	}
+
+	waitCtx, cancelWait := context.WithCancel(context.Background())
+	cancelWait()
+	result, err := run.Wait(waitCtx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.NotEqual(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	require.Equal(t, agenttestify.FailureClassCanceled, result.Execution.Connections[0].Failure)
+	select {
+	case writeErr := <-writeDone:
+		require.Error(t, writeErr)
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancellation did not unblock the SDK writer")
+	}
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestInProcessRunHalfCloseIsIdempotent(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+
+	outputDone := make(chan error, 1)
+	go func() {
+		_, readErr := io.Copy(io.Discard, run.Reader)
+		outputDone <- readErr
+	}()
+	closeDone := run.CloseInputWhenComplete(func() error {
+		return errors.Join(run.Writer.Close(), run.Writer.Close())
+	})
+	select {
+	case closeErr := <-closeDone:
+		require.NoError(t, closeErr)
+	case <-time.After(3 * time.Second):
+		t.Fatal("idempotent half-close blocked")
+	}
+
+	result, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	select {
+	case outputErr := <-outputDone:
+		require.NoError(t, outputErr)
+	case <-time.After(3 * time.Second):
+		t.Fatal("SDK reader still blocked after final peer EOF")
+	}
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "passed", closeSession(t, session).Status)
+}
+
+func TestSessionCleanupRejectsActiveRun(t *testing.T) {
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"c2s","channel":"protocol","epoch":1,"wire":{"id":1,"method":"initialize","params":{}}}]}`
+	session := prepareSession(t, "claude", scenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+
+	require.ErrorContains(t, session.Close(), "active runs")
+	require.DirExists(t, session.Dir)
+
+	require.NoError(t, run.Abort())
+	result, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestSessionCleanupWaitsForAbortFinalization(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+
+	executionDir := filepath.Dir(run.Start.ExecutionPath)
+	finalizeLock, err := os.OpenFile(filepath.Join(executionDir, "mock-finalize.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, syscall.Flock(int(finalizeLock.Fd()), syscall.LOCK_EX))
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			_ = syscall.Flock(int(finalizeLock.Fd()), syscall.LOCK_UN)
+			_ = finalizeLock.Close()
+		})
+	}
+	t.Cleanup(release)
+
+	outputDone := make(chan error, 1)
+	go func() {
+		_, readErr := io.Copy(io.Discard, run.Reader)
+		outputDone <- readErr
+	}()
+	require.NoError(t, <-run.CloseInputWhenComplete(run.Writer.Close))
+
+	var execution struct {
+		Connections []struct {
+			Receipt string
+		}
+	}
+	data, err := os.ReadFile(run.Start.ExecutionPath)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &execution))
+	require.Len(t, execution.Connections, 1)
+	require.Eventually(t, func() bool {
+		data, readErr := os.ReadFile(execution.Connections[0].Receipt)
+		if readErr != nil {
+			return false
+		}
+		var receipt map[string]any
+		return json.Unmarshal(data, &receipt) == nil && receipt["status"] == "passed"
+	}, 3*time.Second, 10*time.Millisecond, "replay did not finish before finalization")
+
+	require.NoError(t, run.Abort())
+	select {
+	case <-run.Done():
+		t.Fatal("abort finalization completed while the finalize lock was held")
+	default:
+	}
+	require.ErrorContains(t, session.Close(), "active runs")
+
+	release()
+	result, err := run.Wait(ctx)
+	require.ErrorContains(t, err, "aborted")
+	require.NotNil(t, result)
+	require.Len(t, result.Execution.Connections, 1)
+	require.Equal(t, agenttestify.FailureClassAborted, result.Execution.Connections[0].Failure)
+	select {
+	case outputErr := <-outputDone:
+		require.NoError(t, outputErr)
+	case <-time.After(3 * time.Second):
+		t.Fatal("SDK reader did not finish after abort finalization")
+	}
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestRunReportOutlivesFixtureCleanup(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+
+	outputDone := make(chan error, 1)
+	go func() {
+		_, readErr := io.Copy(io.Discard, run.Reader)
+		outputDone <- readErr
+	}()
+	require.NoError(t, <-run.CloseInputWhenComplete(run.Writer.Close))
+	first, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.NoError(t, <-outputDone)
+	require.NoError(t, run.CloseSDK())
+
+	materialID := first.Execution.Material.ID
+	first.Execution.Connections[0].ID = "mutated"
+	first.Execution.Material.Connections[0] = "mutated"
+	report := closeSession(t, session)
+	require.Equal(t, "passed", report.Status)
+
+	repeated, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.Equal(t, materialID, repeated.Execution.Material.ID)
+	require.Equal(t, "main", repeated.Execution.Connections[0].ID)
+	require.True(t, repeated.Execution.Complete)
+	require.True(t, repeated.Execution.Connections[0].CleanupComplete)
 }
 
 func TestInProcessRunReportsScriptedDisconnect(t *testing.T) {

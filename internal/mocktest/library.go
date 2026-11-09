@@ -93,7 +93,7 @@ type SessionReport struct {
 
 type ExecutionReport struct {
 	ID          string             `json:"id"`
-	Command     string             `json:"command"`
+	Command     string             `json:"command,omitempty"`
 	Status      string             `json:"status"`
 	Connections []ConnectionReport `json:"connections"`
 }
@@ -171,6 +171,9 @@ func FromFixture(fixture *agenttestify.Fixture) (*Session, error) {
 func sessionFromFixture(fixture *agenttestify.Fixture, options Options, owned bool) (*Session, error) {
 	if fixture == nil {
 		return nil, errors.New("prepared fixture is unavailable")
+	}
+	if err := validateEmbeddedTestifyIdentity(fixture.Tool); err != nil {
+		return nil, err
 	}
 	route, ok := fixture.Routes["mock"]
 	if !ok || !route.Enabled {
@@ -289,11 +292,12 @@ func (s *Session) NewRun(ctx context.Context, options RunOptions) (*Run, error) 
 		session: s,
 		mock:    mock,
 	}
+	s.track(run)
 	go func() {
 		<-mock.Done()
 		_ = stderr.Close()
+		s.forget(run)
 	}()
-	s.track(run)
 	return run, startErr
 }
 
@@ -395,7 +399,6 @@ func (r *Run) Abort() error {
 	}
 	err := r.mock.Abort()
 	r.closeSDK()
-	r.session.forget(r)
 	return err
 }
 
@@ -572,7 +575,6 @@ func (s *Session) Report() (*SessionReport, error) {
 		}
 		report.Executions = append(report.Executions, ExecutionReport{
 			ID:          execution.ExecutionID,
-			Command:     "mock",
 			Status:      string(execution.Status),
 			Connections: connections,
 		})

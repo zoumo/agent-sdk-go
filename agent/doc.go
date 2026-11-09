@@ -45,6 +45,20 @@
 // The repository README section "External MCP servers" describes the composition
 // and provider-specific limits.
 //
+// OpenOptions.AdditionalSystemPrompt adds optional caller text for that Open or
+// Resume call only. Empty omits native prompt configuration. A nonempty value
+// must be valid UTF-8 and contain no NUL; it is forwarded literally without
+// trimming or normalization. Codex maps it to developerInstructions, never
+// baseInstructions. Claude maps it to one --append-system-prompt=<text> argv
+// element. The option has no runtime setter and adds no Capability, Feature,
+// Event, Meta member or persistent Session state. Resume requires the complete
+// value again and does not restore an earlier SDK value; an empty resume request
+// does not promise to clear native saved instructions. The SDK makes no exact
+// ordering or child-Agent inheritance promise. Native app-server requests and
+// Claude argv may expose the text, so it is not secret storage. Unified validation
+// and adapter errors, Events and logs do not echo it. The former unpublished
+// SystemPrompt field is removed without a compatibility alias.
+//
 // The unified contract has only explicit stdio and MCP Streamable HTTP transports.
 // It has no SSE, MCPConfigMode, StrictMCPConfig, SDKMCPServers, or ambient-clear
 // control. Provider-specific field restrictions are rejected before native side

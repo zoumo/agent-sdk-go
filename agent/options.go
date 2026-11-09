@@ -1,14 +1,24 @@
 package agent
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+	"unicode/utf8"
+)
 
 // OpenOptions contains only options that every provider adapter can interpret.
 // Provider-specific creation options belong on the concrete adapter.
 type OpenOptions struct {
-	Cwd            string
-	SystemPrompt   string
-	AdditionalDirs []string
-	Features       Features
+	Cwd string
+	// AdditionalSystemPrompt appends caller text after provider defaults for
+	// this Open or Resume operation. It does not replace built-in instructions,
+	// persist in the Session, or promise an exact append position or child-Agent
+	// inheritance. Empty omits provider-native prompt configuration. The text
+	// must be valid UTF-8 and contain no NUL. Native argv or request transport
+	// may expose it; unified errors, events and logs do not.
+	AdditionalSystemPrompt string
+	AdditionalDirs         []string
+	Features               Features
 	// MCPServers is the complete final external MCP list for this operation. The
 	// caller composes Runtime defaults with Session declarations before calling a
 	// provider, which does not merge them again. Resume callers must repeat the
@@ -24,6 +34,18 @@ func (o OpenOptions) Validate() error {
 	}
 	if !filepath.IsAbs(o.Cwd) {
 		return invalidArgument("cwd_not_absolute", "working directory must be absolute")
+	}
+	if !utf8.ValidString(o.AdditionalSystemPrompt) {
+		return invalidArgument(
+			"additional_system_prompt_invalid_utf8",
+			"additional system prompt must be valid UTF-8",
+		)
+	}
+	if strings.ContainsRune(o.AdditionalSystemPrompt, '\x00') {
+		return invalidArgument(
+			"additional_system_prompt_contains_nul",
+			"additional system prompt must not contain NUL",
+		)
 	}
 	return validateMCPServers(o.MCPServers)
 }

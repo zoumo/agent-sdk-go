@@ -134,6 +134,7 @@ func (p *Provider) open(
 		options.Features,
 		mcpServers,
 	)
+	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
 	native, err := claude.Open(ctx, claude.SessionOptions(nativeOptions))
 	if err != nil {
 		p.finishOpen()
@@ -276,14 +277,6 @@ func (p *Provider) nativeOptions(
 func validateOpenOptions(options agent.OpenOptions) error {
 	if err := options.Validate(); err != nil {
 		return err
-	}
-	if options.SystemPrompt != "" {
-		return adapterError(
-			agent.ErrorUnsupported,
-			"system_prompt_unsupported",
-			"Claude system prompts are not supported by this adapter",
-			nil,
-		)
 	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(

@@ -169,6 +169,14 @@ func codexThreadStartResult(threadID string) string {
 }
 
 func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Provider {
+	return newTestProviderWithExperimentalAPI(t, peerSession, true)
+}
+
+func newTestProviderWithExperimentalAPI(
+	t *testing.T,
+	peerSession *mocktest.Session,
+	enabled bool,
+) *agentcodex.Provider {
 	t.Helper()
 	return agentcodex.New(agentcodex.Config{Stdio: codex.StdioOptions{
 		Executable: mustCommand(t, peerSession),
@@ -177,6 +185,9 @@ func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Pr
 		Dir:        peerSession.Workspace,
 		Initialize: codextypes.InitializeParams{
 			ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
+			Capabilities: codextypes.Some(codextypes.InitializeCapabilities{
+				ExperimentalAPI: codextypes.Some(enabled),
+			}),
 		},
 	}})
 }

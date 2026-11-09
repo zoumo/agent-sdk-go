@@ -2,7 +2,8 @@ package agent
 
 import "path/filepath"
 
-// OpenOptions contains only options that every provider adapter can interpret.
+// OpenOptions contains provider-neutral creation options. An adapter that
+// cannot enforce a nonzero option rejects it before native side effects.
 // Provider-specific creation options belong on the concrete adapter.
 type OpenOptions struct {
 	Cwd            string
@@ -14,6 +15,8 @@ type OpenOptions struct {
 	// provider, which does not merge them again. Resume callers must repeat the
 	// complete list because the SDK does not persist it.
 	MCPServers []MCPServer
+
+	Execution ExecutionOptions
 }
 
 // Validate checks the provider-neutral creation options before native side

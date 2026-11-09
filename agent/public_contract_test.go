@@ -113,6 +113,53 @@ func (contractSession) SetModel(
 	return agent.ConfigurationReceipt{}, nil
 }
 
+type contractExecutionReporter struct{}
+
+func (contractExecutionReporter) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	return agent.ExecutionOptionsReport{}
+}
+
+type contractExecutionController struct {
+	contractExecutionReporter
+}
+
+func (contractExecutionController) SetExecutionOption(
+	context.Context,
+	agent.ExecutionOptionChange,
+) (agent.ExecutionOptionsReceipt, error) {
+	return agent.ExecutionOptionsReceipt{}, nil
+}
+
+type contractExecutionRuntime struct {
+	contractExecutionReporter
+}
+
+func (contractExecutionRuntime) Lock()   {}
+func (contractExecutionRuntime) Unlock() {}
+
+func (contractExecutionRuntime) RequireOpen() error { return nil }
+
+func (contractExecutionRuntime) Apply(
+	context.Context,
+	agent.ExecutionOptionChange,
+) error {
+	return nil
+}
+
+func (contractExecutionRuntime) ConvertError(err error) error { return err }
+
+func (contractExecutionRuntime) PrepareAccepted(
+	agent.ExecutionOptionChange,
+) func() {
+	return func() {}
+}
+
+func (contractExecutionRuntime) ClearUncertain(agent.ExecutionOption) {}
+
+func (contractExecutionRuntime) Acceptance(error) agent.Acceptance {
+	return agent.Acceptance{}
+}
+
 type contractStream struct{}
 
 func (contractStream) Next(context.Context) (agent.Event, error) {
@@ -126,6 +173,8 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	var stream agent.EventStream = contractStream{}
 	var archiver agent.Archiver = contractSession{}
 	var modelController agent.ModelController = contractSession{}
+	var executionReporter agent.ExecutionOptionsReporter = contractExecutionReporter{}
+	var executionController agent.ExecutionOptionsController = contractExecutionController{}
 
 	require.NotNil(t, provider)
 	require.NotNil(t, initial)
@@ -133,6 +182,18 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)
 	require.NotNil(t, modelController)
+	require.NotNil(t, executionReporter)
+	require.NotNil(t, executionController)
+
+	_, implementsReporter := any(contractSession{}).(agent.ExecutionOptionsReporter)
+	assert.False(t, implementsReporter)
+	_, implementsController := any(contractSession{}).(agent.ExecutionOptionsController)
+	assert.False(t, implementsController)
+}
+
+func TestExecutionOptionIDsAreFixed(t *testing.T) {
+	assert.Equal(t, "model", string(agent.ExecutionOptionModel))
+	assert.Equal(t, "reasoningEffort", string(agent.ExecutionOptionReasoningEffort))
 }
 
 func TestUnifiedSessionHasOneInputOperation(t *testing.T) {
@@ -180,4 +241,30 @@ func TestPublicMCPContract(t *testing.T) {
 		_, found := reflect.TypeFor[agent.OpenOptions]().FieldByName(field)
 		assert.False(t, found, "unified OpenOptions must not expose %s", field)
 	}
+}
+
+func TestAdapterExecutionOptionRuntimeContracts(t *testing.T) {
+	var runtime agent.ExecutionOptionsRuntime = contractExecutionRuntime{}
+	change := agent.ExecutionOptionChange{
+		Option: agent.ExecutionOptionReasoningEffort,
+		Value:  "high",
+	}
+
+	receipt, err := agent.SetExecutionOption(context.Background(), change, runtime)
+	require.NoError(t, err)
+	assert.Equal(t, change, receipt.Change)
+	require.NotNil(t, receipt.Acceptance.Sent)
+	require.NotNil(t, receipt.Acceptance.NativeAccepted)
+	assert.True(t, *receipt.Acceptance.Sent)
+	assert.True(t, *receipt.Acceptance.NativeAccepted)
+
+	modelReceipt, err := agent.SetExecutionModel(
+		context.Background(),
+		"model",
+		runtime,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "model", modelReceipt.Model)
+	require.NotNil(t, modelReceipt.Acceptance.Sent)
+	require.NotNil(t, modelReceipt.Acceptance.NativeAccepted)
 }

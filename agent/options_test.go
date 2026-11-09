@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,4 +50,32 @@ func TestResumeOptionsValidateRequiresSessionIdentity(t *testing.T) {
 		},
 	}).Validate()
 	require.NoError(t, err)
+}
+
+func TestExecutionOptionsHaveOnlyModelAndReasoningEffort(t *testing.T) {
+	optionType := reflect.TypeFor[agent.ExecutionOptions]()
+
+	require.Equal(t, 2, optionType.NumField())
+	assert.Equal(t, "Model", optionType.Field(0).Name)
+	assert.Equal(t, reflect.TypeFor[string](), optionType.Field(0).Type)
+	assert.Equal(t, "ReasoningEffort", optionType.Field(1).Name)
+	assert.Equal(t, reflect.TypeFor[string](), optionType.Field(1).Type)
+}
+
+func TestResumeOptionsInheritOpenExecutionOptions(t *testing.T) {
+	execution := agent.ExecutionOptions{
+		Model:           "native-model",
+		ReasoningEffort: "native-effort",
+	}
+	opened := agent.OpenOptions{
+		Cwd:       t.TempDir(),
+		Execution: execution,
+	}
+	resumed := agent.ResumeOptions{
+		SessionID:   "session-1",
+		OpenOptions: opened,
+	}
+
+	assert.Equal(t, execution, opened.Execution)
+	assert.Equal(t, execution, resumed.Execution)
 }

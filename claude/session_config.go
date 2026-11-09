@@ -5,7 +5,9 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
@@ -25,6 +27,14 @@ type ThinkingChange struct {
 	ThinkingDisplay   *string
 	ClearDisplay      bool
 }
+
+// EffortChange is the native runtime effort flag request. Nil Level clears the
+// flag-layer effort override with null. A nonnil value must be nonempty and is
+// passed literally. SetEffort confirms the current flag state first and closes
+// ultracode when it would override a different requested effort. Unrelated flag
+// settings remain intact. It never changes max_thinking_tokens or converts
+// effort into a token budget.
+type EffortChange struct{ Level *string }
 
 // ConfigurationReceipt separates the exact requested control payload, original
 // control_response and actual observations. Accepted means native success ack,
@@ -80,6 +90,57 @@ func (s *Session) SetThinking(ctx context.Context, change ThinkingChange) (Confi
 	return s.configure(ctx, "set_max_thinking_tokens", request)
 }
 
+func (s *Session) SetEffort(ctx context.Context, change EffortChange) (ConfigurationReceipt, error) {
+	fail := func(err error) error { return dispatchFailure("apply_flag_settings", err) }
+	if ctx == nil {
+		return ConfigurationReceipt{}, fail(queue.ErrNilContext)
+	}
+	if err := ctx.Err(); err != nil {
+		return ConfigurationReceipt{}, fail(err)
+	}
+	if err := validateInputEncoding(change); err != nil {
+		return ConfigurationReceipt{}, fail(err)
+	}
+	if change.Level != nil && *change.Level == "" {
+		return ConfigurationReceipt{}, fail(fmt.Errorf("%w: empty effort level", ErrInvalidInput))
+	}
+
+	s.effortMu.Lock()
+	defer s.effortMu.Unlock()
+
+	settings, err := s.client.controlRequest(
+		ctx,
+		"get_settings",
+		map[string]any{"subtype": "get_settings"},
+		false,
+	)
+	if err != nil {
+		var controlErr *ControlError
+		if errors.Is(err, ErrUnknownOutcome) || errors.As(err, &controlErr) {
+			return ConfigurationReceipt{}, &DispatchError{
+				Op:    "apply_flag_settings",
+				State: NotSent,
+				Err:   &effortPreflightError{cause: err},
+			}
+		}
+		return ConfigurationReceipt{}, fail(err)
+	}
+	ultracode, err := confirmEffortFlagSettings(settings)
+	if err != nil {
+		return ConfigurationReceipt{}, fail(err)
+	}
+	ultracode = effortKeepsUltracode(change.Level, ultracode)
+
+	request := map[string]any{
+		"subtype": "apply_flag_settings",
+		"settings": map[string]any{
+			"effortLevel": change.Level,
+			"ultracode":   ultracode,
+		},
+	}
+	return s.configure(ctx, "apply_flag_settings", request)
+}
+
 func (s *Session) configure(ctx context.Context, subtype string, request any) (ConfigurationReceipt, error) {
 	if ctx == nil {
 		return ConfigurationReceipt{}, dispatchFailure(subtype, queue.ErrNilContext)
@@ -95,4 +156,64 @@ func (s *Session) configure(ctx context.Context, subtype string, request any) (C
 	r.Response, err = s.client.controlRequest(ctx, subtype, json.RawMessage(data), true)
 	r.Accepted = err == nil
 	return r, dispatchFailure(subtype, err)
+}
+
+func confirmEffortFlagSettings(raw json.RawMessage) (bool, error) {
+	unsupported := func(format string, args ...any) error {
+		return fmt.Errorf("%w: get_settings cannot confirm %s", ErrUnsupported, fmt.Sprintf(format, args...))
+	}
+
+	var settings struct {
+		Applied struct {
+			Ultracode *bool `json:"ultracode"`
+		} `json:"applied"`
+	}
+	if err := json.Unmarshal(raw, &settings); err != nil || settings.Applied.Ultracode == nil {
+		return false, unsupported("the applied ultra code state")
+	}
+	return *settings.Applied.Ultracode, nil
+}
+
+type effortPreflightError struct{ cause error }
+
+func (e *effortPreflightError) Error() string {
+	return fmt.Sprintf(
+		"%s: cannot confirm current flag settings: %s",
+		ErrUnsupported,
+		e.cause,
+	)
+}
+
+func (e *effortPreflightError) Unwrap() error { return ErrUnsupported }
+
+func (e *effortPreflightError) Is(target error) bool {
+	if target == ErrUnsupported {
+		return true
+	}
+	if target == ErrUnknownOutcome {
+		return false
+	}
+	return errors.Is(e.cause, target)
+}
+
+func (e *effortPreflightError) As(target any) bool {
+	return errors.As(e.cause, target)
+}
+
+// effortKeepsUltracode retains ultracode only when the requested literal still
+// selects it or its xhigh effort. Any other requested level, including a null
+// clear, must close ultracode so Claude does not silently replace that effort
+// with xhigh.
+func effortKeepsUltracode(level *string, current bool) bool {
+	if level == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(*level)) {
+	case "ultracode":
+		return true
+	case "xhigh":
+		return current
+	default:
+		return false
+	}
 }

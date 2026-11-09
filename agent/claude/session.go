@@ -16,8 +16,11 @@ import (
 )
 
 var (
-	_ agent.Session     = (*session)(nil)
-	_ agent.EventStream = (*eventStream)(nil)
+	_ agent.Session                    = (*session)(nil)
+	_ agent.ModelController            = (*session)(nil)
+	_ agent.EventStream                = (*eventStream)(nil)
+	_ agent.ExecutionOptionsReporter   = (*session)(nil)
+	_ agent.ExecutionOptionsController = (*session)(nil)
 )
 
 type session struct {
@@ -27,6 +30,7 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
+	executionMu         sync.Mutex
 	mu                  sync.Mutex
 	eventsClaimed       bool
 	closed              bool
@@ -37,6 +41,7 @@ type session struct {
 	activeSubmit        string
 	state               *agent.SessionState
 	stateVersion        uint64
+	executionOptions    executionOptionsState
 	interactions        map[agent.InteractionRef]*pendingInteraction
 	interactionRefs     map[string]agent.InteractionRef
 	interactionSequence uint64
@@ -61,19 +66,21 @@ func newSession(
 	init *claudetypes.Event,
 	sessionID string,
 	features agent.Features,
+	executionOptions executionOptionsState,
 	buffered []claude.Received,
 	resume *resumeIdentityGuard,
 ) (*session, error) {
 	created := &session{
-		provider:        provider,
-		native:          native,
-		id:              sessionID,
-		features:        effectiveFeatures(features),
-		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
-		interactionRefs: make(map[string]agent.InteractionRef),
-		done:            make(chan struct{}),
-		observationDone: make(chan struct{}),
-		resume:          resume,
+		provider:         provider,
+		native:           native,
+		id:               sessionID,
+		features:         effectiveFeatures(features),
+		executionOptions: executionOptions,
+		interactions:     make(map[agent.InteractionRef]*pendingInteraction),
+		interactionRefs:  make(map[string]agent.InteractionRef),
+		done:             make(chan struct{}),
+		observationDone:  make(chan struct{}),
+		resume:           resume,
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
@@ -118,6 +125,12 @@ func (s *session) Capabilities() agent.Capabilities {
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
+}
+
+func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.executionOptions.report()
 }
 
 func (s *session) Events() (agent.EventStream, error) {

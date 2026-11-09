@@ -60,6 +60,37 @@ func runInputConfigFixture(reader *bufio.Reader) {
 		if wire["type"] == "control_request" {
 			request := wire["request"].(map[string]any)
 			fixtureEmit(map[string]any{"type": "assistant", "session_id": "main", "message": map[string]any{"content": "control seen"}, "wire": wire})
+			if request["subtype"] == "get_settings" {
+				mode := os.Getenv("CLAUDE_GO_SETTINGS_MODE")
+				if mode == "reject_settings" {
+					sessionReply(wire["request_id"].(string), "settings unavailable")
+					continue
+				}
+				if mode == "hang_settings" {
+					continue
+				}
+				applied := map[string]any{"model": "main", "effort": "medium", "advisor": nil, "ultracode": true}
+				switch mode {
+				case "missing_ultracode":
+					delete(applied, "ultracode")
+				case "invalid_ultracode":
+					applied["ultracode"] = "true"
+				case "ultracode_false":
+					applied["ultracode"] = false
+				}
+				fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{
+					"subtype":    "success",
+					"request_id": wire["request_id"],
+					"response": map[string]any{
+						"effective": map[string]any{"effortLevel": "medium", "fastMode": true},
+						"sources": []any{
+							map[string]any{"source": "flagSettings", "settings": map[string]any{"fastMode": true}},
+						},
+						"applied": applied,
+					},
+				}})
+				continue
+			}
 			if request["model"] == "exact-keys" {
 				fixtureEmit(map[string]any{"type": "control_response", "TYPE": "future", "response": map[string]any{"subtype": "success", "SUBTYPE": "error", "request_id": wire["request_id"], "REQUEST_ID": "wrong", "response": map[string]any{"exact": true}, "RESPONSE": map[string]any{"wrong": true}}, "RESPONSE": map[string]any{"subtype": "error", "request_id": wire["request_id"], "error": "wrong casing"}})
 				continue
@@ -110,6 +141,189 @@ func TestSessionNativeConfigurationWireAndEvidence(t *testing.T) {
 		require.NoError(t, json.Unmarshal(frame, &w))
 		assert.JSONEq(t, wants[i], string(w.Request))
 	}
+}
+
+func TestSessionEffortUsesMergedFlagSettingsWithoutBudgetMapping(t *testing.T) {
+	s, path := openInputConfigSession(t)
+	high := "high"
+	receipt, err := s.SetEffort(context.Background(), EffortChange{Level: &high})
+	require.NoError(t, err)
+	assert.True(t, receipt.Accepted)
+	assert.NotEmpty(t, receipt.Response)
+	assert.Contains(t, string(receipt.Response), `"future_ack":42`)
+	assert.Empty(t, receipt.Observed)
+	assert.JSONEq(t, `{"subtype":"apply_flag_settings","settings":{"effortLevel":"high","ultracode":false}}`, string(receipt.Requested))
+
+	cleared, err := s.SetEffort(context.Background(), EffortChange{})
+	require.NoError(t, err)
+	assert.True(t, cleared.Accepted)
+	assert.JSONEq(t, `{"subtype":"apply_flag_settings","settings":{"effortLevel":null,"ultracode":false}}`, string(cleared.Requested))
+	require.NoError(t, s.Close())
+
+	frames := permissionTranscript(t, path)
+	require.Len(t, frames, 4)
+	want := []struct {
+		subtype  string
+		settings string
+	}{
+		{subtype: "get_settings"},
+		{subtype: "apply_flag_settings", settings: `{"effortLevel":"high","ultracode":false}`},
+		{subtype: "get_settings"},
+		{subtype: "apply_flag_settings", settings: `{"effortLevel":null,"ultracode":false}`},
+	}
+	for i, frame := range frames {
+		var wire struct {
+			Request struct {
+				Subtype  string          `json:"subtype"`
+				Settings json.RawMessage `json:"settings"`
+			} `json:"request"`
+		}
+		require.NoError(t, json.Unmarshal(frame, &wire))
+		assert.Equal(t, want[i].subtype, wire.Request.Subtype)
+		if want[i].settings != "" {
+			assert.JSONEq(t, want[i].settings, string(wire.Request.Settings))
+		}
+	}
+	for _, frame := range frames {
+		assert.NotContains(t, string(frame), "set_max_thinking_tokens")
+	}
+}
+
+func TestSessionEffortKeepsUltracodeOnlyWhenRequestedModeStillUsesIt(t *testing.T) {
+	high, xhigh, ultracode := "high", "xhigh", "ultracode"
+	tests := []struct {
+		name      string
+		mode      string
+		level     *string
+		wantLevel any
+		wantUltra bool
+	}{
+		{
+			name:      "different level closes active ultracode",
+			mode:      "ultracode_true",
+			level:     &high,
+			wantLevel: "high",
+			wantUltra: false,
+		},
+		{
+			name:      "clear closes active ultracode",
+			mode:      "ultracode_true",
+			wantLevel: nil,
+			wantUltra: false,
+		},
+		{
+			name:      "xhigh keeps compatible ultracode",
+			mode:      "ultracode_true",
+			level:     &xhigh,
+			wantLevel: "xhigh",
+			wantUltra: true,
+		},
+		{
+			name:      "ultracode literal enables workflows",
+			mode:      "ultracode_false",
+			level:     &ultracode,
+			wantLevel: "ultracode",
+			wantUltra: true,
+		},
+		{
+			name:      "inactive ultracode stays closed",
+			mode:      "ultracode_false",
+			level:     &high,
+			wantLevel: "high",
+			wantUltra: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s, path := openInputConfigSessionWithEnv(
+				t,
+				"CLAUDE_GO_SETTINGS_MODE="+test.mode,
+			)
+			_, err := s.SetEffort(context.Background(), EffortChange{Level: test.level})
+			require.NoError(t, err)
+			require.NoError(t, s.Close())
+
+			frames := permissionTranscript(t, path)
+			require.Len(t, frames, 2)
+			var apply struct {
+				Request struct {
+					Subtype  string         `json:"subtype"`
+					Settings map[string]any `json:"settings"`
+				} `json:"request"`
+			}
+			require.NoError(t, json.Unmarshal(frames[1], &apply))
+			require.Equal(t, "apply_flag_settings", apply.Request.Subtype)
+			assert.Equal(t, test.wantLevel, apply.Request.Settings["effortLevel"])
+			assert.Equal(t, test.wantUltra, apply.Request.Settings["ultracode"])
+		})
+	}
+}
+
+func TestSessionEffortRequiresConfirmableFlagState(t *testing.T) {
+	for _, mode := range []string{
+		"missing_ultracode",
+		"invalid_ultracode",
+		"reject_settings",
+	} {
+		t.Run(mode, func(t *testing.T) {
+			s, path := openInputConfigSessionWithEnv(t, "CLAUDE_GO_SETTINGS_MODE="+mode)
+			high := "high"
+			receipt, err := s.SetEffort(context.Background(), EffortChange{Level: &high})
+			require.ErrorIs(t, err, ErrUnsupported)
+			if mode == "reject_settings" {
+				var controlErr *ControlError
+				require.ErrorAs(t, err, &controlErr)
+			}
+			var dispatch *DispatchError
+			require.ErrorAs(t, err, &dispatch)
+			assert.Equal(t, NotSent, dispatch.State)
+			assert.False(t, receipt.Accepted)
+			assert.Empty(t, receipt.Requested)
+			assert.Empty(t, receipt.Response)
+			require.NoError(t, s.Close())
+
+			frames := permissionTranscript(t, path)
+			require.Len(t, frames, 1)
+			var wire struct {
+				Request struct {
+					Subtype string `json:"subtype"`
+				} `json:"request"`
+			}
+			require.NoError(t, json.Unmarshal(frames[0], &wire))
+			assert.Equal(t, "get_settings", wire.Request.Subtype)
+		})
+	}
+}
+
+func TestSessionEffortPreflightTimeoutIsUnsupportedNotSent(t *testing.T) {
+	s, path := openInputConfigSessionWithEnv(t, "CLAUDE_GO_SETTINGS_MODE=hang_settings")
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	high := "high"
+	receipt, err := s.SetEffort(ctx, EffortChange{Level: &high})
+	require.ErrorIs(t, err, ErrUnsupported)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.NotErrorIs(t, err, ErrUnknownOutcome)
+	var nativeErr *Error
+	require.ErrorAs(t, err, &nativeErr)
+	assert.True(t, nativeErr.OutcomeUnknown)
+	var dispatch *DispatchError
+	require.ErrorAs(t, err, &dispatch)
+	assert.Equal(t, NotSent, dispatch.State)
+	assert.False(t, receipt.Accepted)
+	assert.Empty(t, receipt.Requested)
+	assert.Empty(t, receipt.Response)
+	require.NoError(t, s.Close())
+
+	frames := permissionTranscript(t, path)
+	require.Len(t, frames, 1)
+	var wire struct {
+		Request struct {
+			Subtype string `json:"subtype"`
+		} `json:"request"`
+	}
+	require.NoError(t, json.Unmarshal(frames[0], &wire))
+	assert.Equal(t, "get_settings", wire.Request.Subtype)
 }
 
 func TestSessionPermissionModesUseTypedWireValues(t *testing.T) {
@@ -183,10 +397,15 @@ func TestSessionCreationThinkingIsSeparateFromDynamicControl(t *testing.T) {
 }
 
 func openInputConfigSession(t *testing.T) (*Session, string) {
+	return openInputConfigSessionWithEnv(t)
+}
+
+func openInputConfigSessionWithEnv(t *testing.T, extraEnv ...string) (*Session, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "wire.jsonl")
 	o := SessionOptions(fixtureOptions(t, "input_config"))
 	o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path)
+	o.Env = append(o.Env, extraEnv...)
 	s, err := Open(context.Background(), o)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Abort() })
@@ -229,6 +448,11 @@ func TestSessionInputAndConfigLocalRejectionsRemainUsable(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidInput)
 	_, err = s.SetThinking(context.Background(), ThinkingChange{ThinkingDisplay: &invalid, ClearDisplay: true})
 	require.ErrorIs(t, err, ErrInvalidInput)
+	_, err = s.SetEffort(context.Background(), EffortChange{Level: &empty})
+	require.ErrorIs(t, err, ErrInvalidInput)
+	badEffort := string([]byte{0xff})
+	_, err = s.SetEffort(context.Background(), EffortChange{Level: &badEffort})
+	require.ErrorIs(t, err, ErrInvalidInput)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = s.SetModel(ctx, ModelChange{})
@@ -240,6 +464,11 @@ func TestSessionInputAndConfigLocalRejectionsRemainUsable(t *testing.T) {
 	require.NoError(t, s.Err())
 	submitFrame(t, s, "still usable")
 	require.NoError(t, s.Close())
+	_, err = s.SetEffort(context.Background(), EffortChange{})
+	var closed *DispatchError
+	require.ErrorAs(t, err, &closed)
+	assert.Equal(t, NotSent, closed.State)
+	require.ErrorIs(t, err, ErrClosed)
 	require.Len(t, permissionTranscript(t, path), 1, "local rejection must not send or add operations")
 }
 

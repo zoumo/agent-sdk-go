@@ -174,6 +174,7 @@ func (p *Provider) openReserved(
 		resumeID,
 		options.Features,
 		mcpServers,
+		options.Execution,
 	)
 	if resume != nil {
 		nativeOptions.SessionStartProbe = &resume.probe
@@ -236,6 +237,7 @@ func (p *Provider) openReserved(
 		init,
 		sessionIdentity(init, resume),
 		options.Features,
+		initialExecutionOptionsState(init, options.Execution),
 		buffered,
 		guard,
 	)
@@ -353,12 +355,15 @@ func (p *Provider) nativeOptions(
 	resumeID string,
 	features agent.Features,
 	mcpServers []claude.MCPServer,
+	execution agent.ExecutionOptions,
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
 		MCPServers:        mcpServers,
+		Model:             execution.Model,
+		Effort:            execution.ReasoningEffort,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,

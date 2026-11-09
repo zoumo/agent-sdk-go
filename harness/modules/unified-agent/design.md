@@ -68,7 +68,7 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、错误值 | provider 无关的单 Session 实时合同 |
+| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`ExecutionOptionsController`、错误值 | provider 无关的单 Session 实时合同 |
 | `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包 | 原生协议、查询、原始数据和 provider 语义 |
@@ -93,6 +93,8 @@ README 和包文档说明。现有原生 Session 的语义以
 统一层负责：
 
 - 同一套 Provider 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
+- 在打开、恢复及运行时更新时传递会话级 `model` 与 `reasoningEffort`，并如实
+  报告原生提供的生效证据。
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
 - 在 SDK 适配器内部保留原生工作归属、交互句柄和单次回答权限。
 - 透传由上层合成的最终 external MCP 列表，并明确 provider 字段支持差异。
@@ -101,7 +103,10 @@ README 和包文档说明。现有原生 Session 的语义以
 统一层不负责：
 
 - 修改或替换原生协议、原生 `Received`、原生 Session 或原生 `types`。
-- 统一 Codex 与 Claude 的全部创建参数、模型别名、思考预算和子 Agent 查询。
+- 除本页定义的模型与 effort 字面值外，统一其他创建参数、模型别名、思考预算
+  和子 Agent 查询。
+- 统一 `sandbox`、`approvalPolicy`、`permissionsProfile` 或其他原生安全、
+  审批和权限配置；这些字段不进入共享选项。
 - 统一原生历史查询、历史分页、保存记录格式或历史 wire 模型。
 - 将保存历史投影为统一 live 事件、历史完成事件，或可重放、完整的 wire 流。
 - MASS 的 namespace、Session 名称、当前运行映射和旧运行隔离。
@@ -205,12 +210,18 @@ Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Se
 adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
+type ExecutionOptions struct {
+    Model           string
+    ReasoningEffort string
+}
+
 type OpenOptions struct {
     Cwd            string
     SystemPrompt   string
     AdditionalDirs []string
     Features       Features
     MCPServers     []MCPServer
+    Execution      ExecutionOptions
 }
 
 type ResumeOptions struct {
@@ -352,6 +363,172 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 - Resume 必须重新提供完整最终列表；SDK 不保存上次 Session 的 MCP 配置。
   Codex 对仍被观察或运行的 warm loaded thread 可能忽略 resume config，统一层
   不承诺运行中热替换 MCP tool set。
+
+### 会话级模型与 effort
+
+`ExecutionOptions` 的全部字段只有 `Model` 和 `ReasoningEffort`。两者都使用
+provider 原生字面值，不在统一层定义模型别名、模型目录或 effort 枚举。
+
+#### 启动与恢复
+
+- 空字符串表示不传递该选项，由 provider 使用自己的默认值或恢复语义；适配器
+  不得填造跨 provider 默认值。没有“清空为默认值”的独立请求。
+- 非空值原样传递，不 trim、不大小写转换、不做别名映射，也不把一种 provider
+  的档位翻译成另一种 provider 的档位。值是否有效由原生接口判定。
+- 选项在 `Open` 或 `Resume` 时用于建立主 Session，不是逐 turn 选项，也不
+  自动作用于子 Agent。
+- 所有 adapter 必须先在原生进程或协议写入前完成自身可判定性检查。某项无法
+  被该 provider 执行时返回 `unsupported`，不能忽略该字段后继续打开 Session。
+- 原生明确拒绝模型或 effort 时保留原生原因并返回 `native_rejected`；只有原生
+  派发结果本身无法确定时才返回 `outcome_unknown`。不得因配置失败自动换成默认
+  模型、降低 effort 或重试。
+
+`Resume` 携带非空值时请求原生恢复路径应用这些值。Codex 的原生 resume 接受
+模型和配置覆盖；Claude 以带 `--resume` 的新进程启动，因此创建参数可用于该次
+恢复。若以后某个 provider 不能接受恢复覆盖，它必须在副作用前拒绝，不能悄悄
+沿用旧值或忽略请求。
+
+#### 报告
+
+成功建立 Session 的适配器通过可选接口报告当前已知的请求值和原生生效证据：
+
+```go
+type ExecutionValue struct {
+    // Requested 是最近一次获得原生接受回执的调用方字面值；空字符串表示
+    // 未请求或没有已知的已接受请求。它不是当前生效值的断言。
+    Requested string
+
+    // Effective 只在原生接口明确给出当前状态时设置。nil 表示未知或未观察，
+    // 不表示空字符串，也不能由请求值、回执或调用成功推断。
+    Effective *string
+}
+
+type ExecutionOptionsReport struct {
+    Model           ExecutionValue
+    ReasoningEffort ExecutionValue
+}
+
+type ExecutionOptionsReporter interface {
+    // EffectiveExecutionOptions 返回本 Session 当前已知的完整执行选项状态。
+    // 它不启动原生工作，可在 Session 打开期间并发调用。
+    EffectiveExecutionOptions() ExecutionOptionsReport
+}
+```
+
+报告只能选择性地实现，基础 `Session` 不增加方法。`Requested` 与
+`Effective` 必须分开保存：原生返回规范化后的值或不同值时，两边的值都原样
+保留，不能把请求值改写成观察值。未请求但原生返回默认值时，可以只填写
+`Effective`。成功回执只能推进 `Requested`；`Effective` 必须来自原生明确状态。
+运行时更新成功后，报告必须立即反映已知的新请求，不能继续返回启动快照。
+
+#### 运行时更新
+
+支持运行时更新的 Session 实现以下可选接口：
+
+```go
+type ExecutionOption string
+
+const (
+    ExecutionOptionModel           ExecutionOption = "model"
+    ExecutionOptionReasoningEffort ExecutionOption = "reasoningEffort"
+)
+
+type ExecutionOptionChange struct {
+    Option ExecutionOption
+    Value  string
+}
+
+type ExecutionOptionsReceipt struct {
+    Change     ExecutionOptionChange
+    Acceptance Acceptance
+    Report     ExecutionOptionsReport
+}
+
+type ExecutionOptionsController interface {
+    ExecutionOptionsReporter
+
+    // SetExecutionOption 请求修改一个主 Session 执行选项。
+    // 成功回执中的 Report 是本次更新后的完整已知状态。
+    SetExecutionOption(
+        ctx context.Context,
+        change ExecutionOptionChange,
+    ) (ExecutionOptionsReceipt, error)
+}
+```
+
+该接口沿用以一个配置 ID 和一个值更新 Session 的请求形状，但不复制任意配置
+目录、布尔选项或 provider 自定义配置项。常量值是统一层 ID，不是任一
+provider 的原生 config ID；adapter 负责映射到对应原生字段。
+
+- 只接受本节定义的两个 `ExecutionOption`。未知选项和空 `Value` 在原生写入前返回
+  `invalid_argument`；运行时空字符串不是“省略”或“恢复默认”。
+- 不定义跨 provider 的 `"default"`、清空或别名语义。任何非空值都按原生字面值
+  传递；provider 是否接受由原生接口决定，不得由适配器自行替换成默认值。
+- 每次只修改一个字段，不提供“模型与 effort 同时原子更新”的请求。成功后返回
+  两项的完整报告，因为修改模型可能改变、限制或删除 effort 的有效值。
+- 同一 Session 的更新串行进入原生接口；不合并请求，不与 `Submit`、`Interrupt`
+  或 `Close` 共享隐式调度。调用方需要顺序时必须顺序调用。
+- 更新只承诺影响后续 turn。若当前仍有执行，是否立即影响该执行由原生行为
+  决定；适配器不等待 idle、不中断、不 steer、不重建进程，也不自动重试。
+- 成功回执的 `Acceptance.NativeAccepted` 只表示原生接受了控制请求。
+  `Report` 中的 `Effective` 仍只能来自原生观察，不能由回执、请求值或后续文本
+  推断。原生拒绝返回 `native_rejected`；派发结果未知返回 `outcome_unknown`。
+- 原生写入前失败的调用不改变报告；原生拒绝不推进 `Requested`；结果未知时，
+  回执可以保留已观察的 acceptance 和错误后的已知报告，调用方必须按错误处理，
+  不能把旧报告当成排他状态。
+- 成功的模型更新在缺少同次原生完整状态时，必须把 `Model.Effective` 和
+  `ReasoningEffort.Effective` 清为未知，同时保留此前的
+  `ReasoningEffort.Requested` 作为最近接受请求；旧 effort 可能已不再适用，
+  不能继续作为当前值报告。模型更新结果未知时同样清除两项的 `Effective`；
+  后续原生完整状态可以同时更新两项。
+- 成功的 effort 更新在缺少原生观察时清空 `ReasoningEffort.Effective`，但不
+  改写无关的模型状态。原生拒绝不推进 `Requested`；结果未知时必须清除可能已
+  变化的 `Effective`。
+- 重复设置同一值不是幂等成功证明，也不保证产生可观察的变更。适配器不因本地
+  相等判断跳过原生更新，不用后续 turn 的文本自报或耗时反推配置生效。
+
+运行时更新不自动作用于子 Agent，也不把成功回执转换成统一的“已生效”事件。
+本版不新增配置更新事件，`SetExecutionOption` 的结果只通过 receipt 和 reporter
+交付。provider 的后续原生状态通知可以更新 `ExecutionOptionsReporter` 的内部
+观察值；尚未映射为既有统一事件的原生通知继续按未知/gap 规则处理，不能把通知
+当成同步 ack。
+
+#### Provider 映射
+
+provider 映射如下：
+
+| 选项 | Codex `Open` / `Resume` | Codex 运行时 | Claude `Open` / `Resume` | Claude 运行时 |
+|---|---|---|---|---|
+| `Model` | 顶层 `model` 参数；从启动/恢复响应的顶层 `model` 取得生效值 | `thread/settings/update` 的 `model`；后续 `thread/settings/updated` 可提供观察值 | 原生 `--model=<value>`；从 init 的 `model` 取得生效值 | 原生 `set_model` control request |
+| `ReasoningEffort` | 配置键 `model_reasoning_effort`；从启动/恢复响应的顶层 `reasoningEffort` 取得生效值 | `thread/settings/update` 的 `effort`；后续 `thread/settings/updated` 可提供观察值 | 原生 `--effort=<value>`；init 不提供 effort，生效值保持未知 | 原生 `apply_flag_settings` 的 `effortLevel` |
+
+Codex 恢复继续显式使用 `excludeTurns: true`，配置传递不得改变恢复身份或把
+保存历史转换成 live 事件。Claude 恢复仍按原生 init 核对 Session ID 和 cwd；
+`--effort` 没有对应读取字段时，只能报告请求值，不能声称已生效。
+
+Codex 的运行时 thread settings 需要 experimental API；初始化时未启用该能力，
+必须在写入前返回 `unsupported`。`thread/settings/update` 的接受回执不是当前
+turn 已切换的证据；只有 `thread/settings/updated` 中属于本主 Session 的明确
+字段才是原生观察值。
+
+Claude 的运行时 effort 必须通过原生 `claude` 包提供的
+`apply_flag_settings` control request 实现，不能映射到
+`set_max_thinking_tokens`，也不能通过重启进程应用。Claude 的模型与 effort
+control ack 没有可靠的同次完整状态；成功更新后保持 `Effective` 未知，直到
+原生另行给出可归属的观察。模型更新可能使 effort 被删除或收紧，即使更新调用
+成功，也不得保留旧的 effort 生效值。
+
+`apply_flag_settings` 会合并 flag layer。Claude 在改变 `effortLevel` 时还会
+依据当前 `ultracode` 值保持或关闭该设置；原生 `SetEffort` 必须保留不相关且
+仍然有效的 flag settings，或在无法确认当前值时在写入前返回 `unsupported`。
+统一层不暴露、推导或修改这些额外的原生设置。
+
+#### 不支持的共享配置
+
+本版明确不支持 `sandbox`、`approvalPolicy` 和 `permissionsProfile`：
+它们既不加入 `ExecutionOptions`，也不加入 `ExecutionOption`。统一 adapter
+不做同名映射，也不依据模型或 effort 推导其值。调用方需要这些原生能力时使用
+对应原生 SDK，不能把它们塞入共享执行选项。
 
 ### 可显式带入初始输入
 
@@ -1245,6 +1422,8 @@ type ConfigurationReceipt struct {
     Acceptance Acceptance
 }
 
+// ModelController 保留既有 provider-specific 的仅模型接口。统一调用方设置
+// 模型或 effort 时使用 ExecutionOptionsController。
 type ModelController interface {
     // model 必须是非空原生模型标识；不做跨 provider 别名映射。
     SetModel(ctx context.Context, model string) (ConfigurationReceipt, error)
@@ -1255,6 +1434,13 @@ type ModelController interface {
 默认值掩盖差异。归档、模型、思考和子 Agent 查询的 provider 专属语义不进入
 基础接口；高级调用方可以使用 adapter 具体类型及其原生入口，但不能绕过基础
 Session 的权限和关闭规则。
+
+`ExecutionOptionsController` 是模型与 effort 的统一运行时能力。一个 Session
+可以选择只实现 `ExecutionOptionsReporter`，或同时实现
+`ExecutionOptionsController`。`ModelController` 不扩展为 effort 接口；新代码
+应使用 `ExecutionOptionsController`。若同一 Session 同时实现旧
+`ModelController` 和新接口，两者必须共享同一原生状态和串行更新边界，不能
+形成两个配置所有者。
 
 第一版不定义统一的 `SubagentQuery` 或 `SubagentPage`。需要原生子 Agent 查询、
 关系证据或分页覆盖的使用方直接使用对应的原生 SDK；统一层不在两个不同查询
@@ -1762,6 +1948,26 @@ block/message linkage 和无法归属的交互行为保持不变。
 - 统一核心只依赖标准库，且不导入 `codex`、`claude` 或 MASS。
 - 两个 adapter 互不导入，原生包不导入统一层。
 - Provider、Session、EventStream、Input、Answer 和可选能力有公开接口编译测试。
+- `ExecutionOptions` 的空值省略、非空字面值传递和 `ResumeOptions` 继承规则有
+  公开合同测试；不实现可选 reporter 的自定义 Session 仍可满足基础接口。
+- `ExecutionOptionsController` 只接受两个固定选项和非空值；未知选项、空值、
+  已关闭 Session 和不可动态配置的 provider 都在原生写入前返回确定错误。
+- Codex 合成测试核对 `thread/start`、`thread/resume` 的精确 `model` 与
+  `model_reasoning_effort`，并从响应区分原生观察、请求未确认和恢复覆盖。
+- Codex 运行时测试核对 `thread/settings/update` 每次只携带一个目标字段；关闭
+  experimental API 时不写入，空 ack 只产生 accepted，后续
+  `thread/settings/updated` 才产生 observed。执行期间更新不得隐含等待 idle、
+  中断、重建或重试。
+- Claude 合成测试核对 `--model=`、`--effort=` 的精确命令行参数及空值省略，
+  验证 init 的模型观察，并确认 effort 不被报成原生生效值。
+- Claude 运行时测试核对 `set_model` 与
+  `apply_flag_settings.settings.effortLevel` 的精确请求，确认 effort 不映射为
+  `set_max_thinking_tokens`；成功 ack 不产生 observed，模型更新后旧 effort
+  生效值被清除，不相关且仍有效的 flag settings 不被静默清除，且更新不触发
+  进程重启。
+- 运行时 model 与 effort 更新返回两项完整报告；模型变化后没有原生新证据时，
+  effort 保持未知。重复值、原生拒绝和结果未知分别保留其 acceptance 与
+  observed 边界，不从当前执行结果反推配置生效。
 - Codex 与 Claude 的合成协议输入逐事件比较统一输出；比较类型、payload、身份、
   Meta、顺序和未知数据范围，忽略随机 EventID。
 - 每个 Session 只允许一个消费者；重复取流失败；慢消费者不重排事件；关闭一个
@@ -1784,6 +1990,8 @@ block/message linkage 和无法归属的交互行为保持不变。
   覆盖，且 Provider 不再二次合并。
 - MCP synthetic 测试固定 Codex thread config 与 Claude argv 的精确映射；无法
   表达的字段在原生副作用前失败，secret sentinel 不出现在错误、事件或日志。
+- 本版统一选项中不存在 `sandbox`、`approvalPolicy` 或 `permissionsProfile`
+  映射，也不把这些原生值从其他请求字段反推出来。
 - 默认验证保持离线，不使用真实 Agent 或新增录制作为完成证据。
 
 ## 合同影响

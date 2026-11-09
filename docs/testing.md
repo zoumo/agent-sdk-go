@@ -122,7 +122,8 @@ Testify suites run sequentially; worker outcomes return to the owning test gorou
 The optional unified layer has separate public-contract, lifecycle, event, interaction
 and dependency tests under `agent/`, `agent/codex/` and `agent/claude/`. Adapter
 integration tests launch only synthetic protocol peers. `ExampleProvider` runs the
-provider-neutral open/resume/submit/stream/answer/close flow twice without a CLI:
+provider-neutral open/resume/start-or-steer/stream/answer/close flow twice without
+a CLI:
 
 ```sh
 go test -run '^ExampleProvider$' ./agent

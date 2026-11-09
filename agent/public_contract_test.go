@@ -69,6 +69,10 @@ func (contractSession) Submit(context.Context, agent.Input) (agent.InputReceipt,
 	return agent.InputReceipt{}, nil
 }
 
+func (contractSession) StartOrSteer(context.Context, agent.Input) (agent.InputReceipt, error) {
+	return agent.InputReceipt{}, nil
+}
+
 func (contractSession) Answer(
 	context.Context,
 	agent.InteractionRef,

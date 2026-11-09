@@ -104,6 +104,8 @@ README 和包文档说明。现有原生 Session 的语义以
 - EventStore、事件持久化分类、历史分页、Broadcast、SSE、HTTP 或 CLI。
 - 显式历史 load、历史 replay、跨连接恢复、自动重连或补历史。
 - 原生事件去重、跨运行复用回答权，或从统一事件重建原生控制句柄。
+- 并列的 `Submit`/`Steer` 操作、显式 Codex `turn/steer`、SDK 输入队列、
+  等待空闲、输入持久化和自动重试。
 
 ## 分层与依赖
 
@@ -301,7 +303,7 @@ type Session interface {
     // Events 每个 Session 只能成功取得一次。
     Events() (EventStream, error)
 
-    Submit(ctx context.Context, input Input) (InputReceipt, error)
+    StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
     Answer(
         ctx context.Context,
         interaction InteractionRef,
@@ -326,12 +328,20 @@ type Session interface {
 
 - `ID` 只能在原生真实身份确认后非空。Codex 以启动/恢复响应确认身份，Claude
   以原生 init 确认身份；返回 Session 之前不能伪造 ID。
-- 每个 Session 只允许一个未结算工作。已有活动工作时再次 `Submit` 返回
-  `failed_precondition`，不排队、不自动 steer、不隐式中断。
-- `Submit` 成功只表示输入已按该原生语义提交，不表示工作开始或完成。收到接受
-  回执、收到消息 delta 和观察到工作开始是三种不同事实。
+- 每个 Session 只允许一个本地 `StartOrSteer` 写入在进行。并发调用返回
+  `not_applied` 和空 `Submission`，不等待、不写第二帧，也不形成本地输入队列。
+- `StartOrSteer` 先尝试加入可接受的当前工作；没有当前工作或原生调度可接收时，
+  启动新工作或交给原生 best-effort 调度。没有当前工作时启动新工作是正确结果，
+  不是错误。
+- `StartOrSteer` 成功只表示输入已按该原生语义提交，不表示工作开始或完成。
+  当前工作、新工作、best effort 和未应用是不同事实；收到消息 delta 和观察到
+  工作开始仍是独立观察。
+- 原生结果未知时返回 `outcome_unknown`，不自动重试。在 adapter 再次取得原生
+  工作状态证据前，后续输入返回 `not_applied`，不写原生帧。
 - `Interrupt` 只使用本 Session 已经确认的当前工作，不用最后收到的事件猜目标。
-  没有活动工作时返回 `no_active_work`，不发出原生中断。
+  Claude 的 best-effort 输入不证明特定当前工作已开始，但 adapter 会把该提交
+  保留为交互归属与中断的候选目标，直到原生 idle 清除；没有候选或已确认工作
+  时返回 `no_active_work`，不发出原生中断。
 - `Close` 停止新操作并使未结算交互失效，不等待外部消费者。已经接纳的事件仍
   可以排空；原生清理结果与业务执行结果分别表达。重复 `Close` 返回同一清理
   结果。
@@ -348,8 +358,18 @@ type Acceptance struct {
 
 type InputReceipt struct {
     Submission string
+    Result     InputResult
     Acceptance Acceptance
 }
+
+type InputResult string
+
+const (
+    InputAppliedCurrentWork InputResult = "applied_current_work"
+    InputAppliedNewWork     InputResult = "applied_new_work"
+    InputAppliedBestEffort  InputResult = "applied_best_effort"
+    InputNotApplied         InputResult = "not_applied"
+)
 
 type InteractionReceipt struct {
     Interaction InteractionRef
@@ -376,8 +396,38 @@ type InterruptReceipt struct {
 - 不得把 `Sent=true` 提升为原生接受，也不得用后续观察补造此前阶段。
 - Codex 能确认原生 turn 接受时填写 `NativeAccepted`；Claude 写入成功但不能
   确认 CLI 接受时，只填写能够证明的阶段。
+- `InputNotApplied` 的 `Submission` 为空；调用方保留输入并自行决定何时重试。
+  本地并发或未知状态拒绝只填 `Sent=false`；原生明确拒绝填 `Sent=true`、
+  `NativeAccepted=false`，不补 `NativeRecorded`。
+- `InputAppliedCurrentWork` 只在响应工作身份与已观察的活动工作一致时使用。
+  已观察工作与响应身份不同，或此前没有当前工作时，使用
+  `InputAppliedNewWork`。
+- `InputAppliedBestEffort` 只证明本地写入完成。Claude 不因写入成功而声称当前
+  turn 或下一 turn 已被原生调度；adapter 可以在内部保留该提交作为交互归属与
+  `Interrupt` 的候选目标，该内部事实不改变回执。
 - 取消确认不证明前台执行已经终止。原生结果未知时返回 `outcome_unknown`，
   不自动重试。
+
+### 输入操作的 provider 实现
+
+- Codex 的 `StartOrSteer` 只调用原生 `turn/start`，不依据本地 Busy 推断是否
+  切换方法，也不自动改用其他原生调用。原生 `turn/start` 在可接受的当前 turn
+  上按 start-or-steer 语义接收输入；响应 turn identity 与操作前已观察的活动
+  turn 一致时为 `applied_current_work`，否则为 `applied_new_work`。
+- Codex 能识别的原生明确拒绝（review/compact turn 不可并入、预期 turn 不匹配、
+  输出 schema 不一致或当前无法接收输入）返回 `not_applied`，保留 `Sent=true`、
+  `NativeAccepted=false`；响应缺少 turn identity 或写入结果未知时返回
+  `outcome_unknown`，不重试。
+- Claude 的 `StartOrSteer` 写入原生 user input，使用 `priority="next"` 和
+  `shouldQuery=true`，由 CLI 决定并入当前工作还是排入下一轮。写入成功返回
+  `applied_best_effort`；adapter 不伪造当前或下一 turn 身份，也不填写无法
+  证明的 `NativeAccepted`。内部保留该提交作为交互归属与中断的候选目标，
+  直到原生 idle 清除。
+- 两个 adapter 共用同一组四个结果值，不增加 provider 专属结果。原生 state
+  观察、消息 delta 和工作完成仍是输入回执之外的独立事实。
+
+输入操作的取舍和未采用方案见
+[ADR 0003](../../adr/0003-unified-start-or-steer.md)。
 
 ## 输入与内容块
 
@@ -997,7 +1047,7 @@ provider-specific 转换，但不生成 `agent.Event`。
 4. MASS 为 Session 启动唯一 relay，从 `SDK Session.Events()` 读取并补齐
    `SessionEvent`；Service 仍只读取 Driver 的公共事件流。
 5. MASS 把 `SendPrompt`、`AnswerInteraction` 和 `Cancel` 分别映射到 SDK
-   `Submit`、`Answer` 和 `Interrupt`，同时保留 MASS 的准入与运行校验。
+   `StartOrSteer`、`Answer` 和 `Interrupt`，同时保留 MASS 的准入与运行校验。
 6. 关闭 Session 时 MASS 先确认自己的工作已结算，再关闭 SDK Session 并排空
    该 Session 已接纳的事实；Driver 流继续服务其他 Session。
 7. Service 排空并关闭全部 Session 后调用 `Driver.Stop`，再调用
@@ -1010,7 +1060,7 @@ provider-specific 转换，但不生成 `agent.Event`。
 | `Driver.Start` | `Provider.Start` | Runtime 配置、运行绑定、共享资源责任 |
 | `OpenSession` | `Provider.Open` 或 `OpenWithInput` | Address、Source、恢复材料、事件队列 |
 | `ResumeSession` | `Provider.Resume` 或 `ResumeWithInput` | 恢复身份/cwd 校验、旧运行隔离 |
-| `SendPrompt` | `Session.Submit` | Session/运行归属、Service 回执和持久化 |
+| `SendPrompt` | `Session.StartOrSteer` | Session/运行归属、Service 回执和持久化 |
 | `AnswerInteraction` | `Session.Answer` | 当前运行和 Session 校验；原生句柄仍只在 adapter |
 | `Cancel` | `Session.Interrupt` | 是否允许关闭/归档、Service 取消回执 |
 | `CloseSession` | `Session.Close` | 工作是否已结算、恢复材料保留、Driver 绑定移除 |
@@ -1153,8 +1203,8 @@ provider-specific 查询职责：
    统一 SDK 不提供历史转换、历史事件或 replay，不为该路径增加通用历史值。
 6. `native_completed` 只表示原生历史读取穷尽。Service 还要确认前序 EventStore
    追加和 publish 已结算，才能保存 `completed`、开放该 Session 的普通输入。
-   成功 load 保留恢复的 `agent.Session` 供后续正常 `Submit` 和实时观察，不因
-   历史读取上下文结束而关闭。
+   成功 load 保留恢复的 `agent.Session` 供后续正常 `StartOrSteer` 和实时观察，
+   不因历史读取上下文结束而关闭。
 7. 失败或取消仍由 MASS 释放本次恢复资源、保留已提交的部分历史，并维持
    `outcome_unknown` 和禁止重试的原合同。
 

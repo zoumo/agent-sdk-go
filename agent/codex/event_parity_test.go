@@ -121,6 +121,8 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	call := payloadOf[agent.ToolCallPayload](t, events[8])
 	assert.Equal(t, "cmd", call.ID)
 	assert.Equal(t, agent.ToolKindExecute, call.Kind)
+	assert.Equal(t, "commandExecution", call.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, call.Provider)
 	assert.Equal(t, "echo hello", call.Title)
 	assert.Equal(t, "in_progress", call.Status)
 	rawInput, ok := call.RawInput.(map[string]any)
@@ -142,7 +144,8 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 
 	fileResult := payloadOf[agent.ToolResultPayload](t, events[11])
 	assert.Equal(t, agent.ToolKindEdit, fileResult.Kind)
-	assert.Equal(t, "file_change", fileResult.ToolName)
+	assert.Equal(t, "fileChange", fileResult.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, fileResult.Provider)
 	assert.Equal(t, "completed", fileResult.Status)
 
 	assert.Equal(t, agent.AgentThinking{

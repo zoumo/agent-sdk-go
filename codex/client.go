@@ -299,6 +299,10 @@ func (c *Client) callOwned(ctx context.Context, method string, params, result an
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, err)
 	}
+	if c.streamMode && c.inputIsClosed() {
+		c.mu.Unlock()
+		return fail(ID{}, NotSent, ErrInputClosed)
+	}
 	if owner != nil && owner.closed {
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, ErrClosed)
@@ -596,13 +600,12 @@ func (c *Client) finishCleanup() {
 }
 
 func (c *Client) cleanupStream() {
-	start := time.Now()
-	deadline := start.Add(c.limits.ShutdownTimeout)
 	select {
 	case <-c.inputClosedCh:
 	case <-c.done:
 	case <-c.readDone:
 	}
+	deadline := time.Now().Add(c.limits.ShutdownTimeout)
 	_ = c.closeInput()
 
 	var waitErr error
@@ -679,6 +682,9 @@ func (c *Client) completeStream() {
 	}
 	c.terminalClosed = true
 	c.cause = nil
+	for session := range c.ownership.sessionsLocked() {
+		session.finishLocked(nil)
+	}
 	close(c.done)
 }
 

@@ -162,6 +162,8 @@ func (s *GoMockSuite) startSDK(sc mockScenarioDefinition, wantStatus string) (*c
 	s.Require().NoError(err)
 	c, err := codex.NewStreams(ctx, codex.StreamOptions{
 		Args: run.Start.NativeArgs,
+		Env:  run.Environment(),
+		Dir:  run.Start.ProtocolCwd,
 		Initialize: types.InitializeParams{
 			ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"},
 		},

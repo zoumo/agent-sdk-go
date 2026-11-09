@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -190,6 +191,8 @@ func openMockClient(t *testing.T, ctx context.Context, peerSession *mocktest.Ses
 	require.NoError(t, err)
 	client, err := codex.NewStreams(ctx, codex.StreamOptions{
 		Args: run.Start.NativeArgs,
+		Env:  run.Environment(),
+		Dir:  run.Start.ProtocolCwd,
 		Initialize: codextypes.InitializeParams{
 			ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"},
 		},
@@ -218,4 +221,61 @@ func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
 	require.NoError(t, err)
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
+}
+
+// Normal replay completion must preserve queued final frames and close Receive.
+func (s *mockCLISuite) TestNormalCompletionDrainsFinalFrame() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	frames := append(append([]string(nil), mockCodexInit...), mockCodexOpen...)
+	frames = append(frames,
+		`>{"id":92,"method":"consumer/finish"}`,
+		`<{"id":92,"result":{"complete":true}}`,
+		`<{"method":"fixture/final","params":{"threadId":"root","value":"last"}}`)
+	fixture, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { verifyMockSession(t, fixture, "passed") })
+	client, run := openMockClient(t, ctx, fixture)
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Abort() })
+	var response struct{ Complete bool }
+	require.NoError(t, client.Call(ctx, "consumer/finish", nil, &response))
+	require.True(t, response.Complete)
+	select {
+	case <-client.Done():
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	require.NoError(t, client.Close())
+	require.NoError(t, client.Err())
+	closedCtx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer stop()
+	require.ErrorIs(t, client.Call(closedCtx, "consumer/after-close", nil, nil), codex.ErrInputClosed)
+	final, err := session.Receive(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, final.Event)
+	require.Equal(t, "fixture/final", final.Event.Method)
+	select {
+	case <-session.Done():
+	default:
+		t.Fatal("normal peer EOF did not finish the Session")
+	}
+	_, err = session.Receive(ctx)
+	require.ErrorIs(t, err, io.EOF)
+	require.NoError(t, session.Err())
+	require.NoError(t, session.Close())
+	result, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, result.Execution)
+	require.True(t, result.Execution.Complete)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.False(t, connection.NativeLaunched)
+	require.True(t, connection.CleanupComplete)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
 }

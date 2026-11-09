@@ -83,6 +83,7 @@ func TestStreamClientCompletesAfterInputHalfClose(t *testing.T) {
 	}
 	require.NoError(t, client.Err())
 	require.NoError(t, client.Close())
+	require.Equal(t, uint64(1), client.Diagnostics().Notifications)
 }
 
 func TestStreamClientRejectsUnexpectedPeerEOF(t *testing.T) {
@@ -337,4 +338,29 @@ func (w *observedWriteCloser) Write(value []byte) (int, error) {
 	default:
 	}
 	return w.WriteCloser.Write(value)
+}
+
+func TestStreamClientShutdownDeadlineStartsAtHalfClose(t *testing.T) {
+	peer := newStreamPeer()
+	peerDone := make(chan error, 1)
+	go func() { peerDone <- serveCodexStream(peer, true) }()
+	peer.transport.Wait = func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return peer.waitForResult(ctx)
+	}
+	const shutdownTimeout = 100 * time.Millisecond
+	client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+		Limits:     codex.Limits{ShutdownTimeout: shutdownTimeout},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+	}, peer.transport)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close(); _ = peer.reader.Close(); _ = peer.writer.Close() })
+	// A live conversation may outlast the budget reserved for its later shutdown.
+	time.Sleep(2 * shutdownTimeout)
+	peer.wait <- nil
+	require.NoError(t, client.CloseInput())
+	require.NoError(t, <-peerDone)
+	require.NoError(t, client.Close())
 }

@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	_ agent.Session     = (*session)(nil)
-	_ agent.EventStream = (*eventStream)(nil)
+	_ agent.Session                  = (*session)(nil)
+	_ agent.EventStream              = (*eventStream)(nil)
+	_ agent.ExecutionOptionsReporter = (*session)(nil)
 )
 
 type session struct {
@@ -37,6 +38,7 @@ type session struct {
 	activeSubmit        string
 	state               *agent.SessionState
 	stateVersion        uint64
+	executionOptions    executionOptionsState
 	interactions        map[agent.InteractionRef]*pendingInteraction
 	interactionRefs     map[string]agent.InteractionRef
 	interactionSequence uint64
@@ -60,17 +62,19 @@ func newSession(
 	init *claudetypes.Event,
 	sessionID string,
 	features agent.Features,
+	executionOptions executionOptionsState,
 	buffered []claude.Received,
 ) (*session, error) {
 	created := &session{
-		provider:        provider,
-		native:          native,
-		id:              sessionID,
-		features:        effectiveFeatures(features),
-		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
-		interactionRefs: make(map[string]agent.InteractionRef),
-		done:            make(chan struct{}),
-		observationDone: make(chan struct{}),
+		provider:         provider,
+		native:           native,
+		id:               sessionID,
+		features:         effectiveFeatures(features),
+		executionOptions: executionOptions,
+		interactions:     make(map[agent.InteractionRef]*pendingInteraction),
+		interactionRefs:  make(map[string]agent.InteractionRef),
+		done:             make(chan struct{}),
+		observationDone:  make(chan struct{}),
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
@@ -115,6 +119,12 @@ func (s *session) Capabilities() agent.Capabilities {
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
+}
+
+func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.executionOptions.report()
 }
 
 func (s *session) Events() (agent.EventStream, error) {

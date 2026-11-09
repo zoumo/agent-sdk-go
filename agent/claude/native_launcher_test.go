@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,8 +32,8 @@ func TestMain(m *testing.M) {
 
 // The external synthetic peer accepts only its prepared native startup
 // arguments. Production still emits these declarations for a real Claude CLI;
-// this launcher captures them first, then removes the peer-unsupported values
-// before exec.
+// this launcher captures the exact production argv first, then removes only the
+// peer-unsupported declarations before exec.
 func launchClaudeMockWithoutUnsupportedArgs(
 	t testing.TB,
 	peerSession *mocktest.Session,
@@ -45,6 +46,17 @@ func launchClaudeMockWithoutUnsupportedArgs(
 	env := append([]string(nil), peerSession.Env...)
 	env = append(env, claudeTestLauncherEnv+"="+launcher)
 	return executable, env
+}
+
+func launchClaudeMockCapturingArgs(
+	t testing.TB,
+	peerSession *mocktest.Session,
+) (string, []string, string) {
+	t.Helper()
+	executable, env := launchClaudeMockWithoutUnsupportedArgs(t, peerSession)
+	capture := filepath.Join(t.TempDir(), "argv.json")
+	env = append(env, claudeTestArgvCaptureEnv+"="+capture)
+	return executable, env, capture
 }
 
 func runClaudeTestLauncher(launcher string, args []string) int {
@@ -61,7 +73,8 @@ func runClaudeTestLauncher(launcher string, args []string) int {
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
 		if !strings.HasPrefix(arg, claudeTestUnsupportedArg) &&
-			!strings.HasPrefix(arg, claudeTestUnsupportedMCP) {
+			!strings.HasPrefix(arg, claudeTestUnsupportedMCP) &&
+			!strings.HasPrefix(arg, "--effort=") {
 			filtered = append(filtered, arg)
 		}
 	}

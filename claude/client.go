@@ -50,6 +50,9 @@ type Options struct {
 	HandleSDKMCP func(context.Context, IncomingRequest) error
 	Thinking     *types.ThinkingConfig
 	Initialize   *types.InitializeOptions
+	// SessionStartProbe appends one private SessionStart callback matcher to
+	// Initialize.Hooks. Nil leaves initialization unchanged.
+	SessionStartProbe *SessionStartProbe
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
@@ -68,6 +71,8 @@ type Options struct {
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
 	Limits            Limits
+
+	sessionStartProbeCallbackID string
 }
 
 func (o *Options) defaults() error {
@@ -94,6 +99,9 @@ func (o *Options) defaults() error {
 	}
 	if err := validateMCPServers(o.MCPServers, o.SDKMCPServers); err != nil {
 		return dispatchFailure("open", err)
+	}
+	if err := o.applySessionStartProbe(); err != nil {
+		return dispatchFailure("initialize", err)
 	}
 	if o.Initialize != nil {
 		data, err := json.Marshal(o.Initialize)
@@ -191,6 +199,7 @@ type interaction struct {
 	epoch                               uint64
 	permissions                         map[string]*permissionState
 	permissionIDs                       map[string]struct{}
+	sessionStartProbeReplySent          atomic.Bool
 }
 
 func openInteraction(ctx context.Context, options Options, session *Session) (*interaction, error) {
@@ -558,6 +567,17 @@ func (c *interaction) route(event Event) error {
 		}
 	}
 	if event.Control != nil {
+		if requestID, ok := c.ownsSessionStartProbe(event.Control); ok {
+			if !c.sessionStartProbeReplySent.Swap(true) {
+				work := incomingControl{probeRequestID: requestID}
+				select {
+				case c.responses <- work:
+				default:
+					return &ResourceLimitError{Resource: "incoming control queue", Limit: c.opts.Limits.ControlBuffer}
+				}
+			}
+			return c.acceptEvent(event)
+		}
 		permission, err := c.registerIncoming(event.Control)
 		if errors.Is(err, ErrClosed) {
 			return c.acceptEvent(event)
@@ -674,6 +694,10 @@ func (c *interaction) respondControls() {
 				if err := c.opts.HandleSDKMCP(request.permission.Context(), *request.request); err != nil {
 					c.fail(&Error{Op: "SDK MCP handler", Err: err})
 				}
+				continue
+			}
+			if request.probeRequestID != "" {
+				_ = c.answerSessionStartProbe(request.probeRequestID)
 				continue
 			}
 			_ = request.permission.answerUnsupported(context.Background(), request.subtype)

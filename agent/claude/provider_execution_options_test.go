@@ -75,8 +75,8 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 		{
 			name:      "resume",
 			resume:    true,
-			sessionID: "native-resume",
-			wantArgs:  claudeExpectedArgs("--resume=native-resume"),
+			sessionID: claudeResumePeerSessionID,
+			wantArgs:  claudeExpectedArgs("--resume=" + claudeResumePeerSessionID),
 		},
 	}
 
@@ -85,13 +85,24 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			cwd := t.TempDir()
-			frames := append([]string(nil), mockClaudeInit...)
-			frames = append(frames,
-				`<{"type":"system","subtype":"init","session_id":`+
-					jsonString(t, test.sessionID)+`,"cwd":`+jsonString(t, cwd)+
-					`,"claude_code_version":"2.1.258","model":" default/model "}`,
-			)
-			provider, capture := startClaudeExecutionProvider(t, ctx, frames...)
+			initJSON := `{"type":"system","subtype":"init","session_id":` +
+				jsonString(t, test.sessionID) + `,"cwd":` + jsonString(t, cwd) +
+				`,"claude_code_version":"2.1.258","model":" default/model "}`
+			var provider *agentclaude.Provider
+			var capture string
+			if test.resume {
+				provider, capture = startClaudeResumeExecutionProvider(
+					t,
+					ctx,
+					cwd,
+					test.sessionID,
+					initJSON,
+				)
+			} else {
+				frames := append([]string(nil), mockClaudeInit...)
+				frames = append(frames, "<"+initJSON)
+				provider, capture = startClaudeExecutionProvider(t, ctx, frames...)
+			}
 			var session agent.Session
 			var err error
 			if test.resume {
@@ -172,15 +183,19 @@ func TestClaudeResumePassesLiteralExecutionOptionsAndPreservesIdentity(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	frames := append([]string(nil), mockClaudeInit...)
-	frames = append(frames,
-		`<{"type":"system","subtype":"init","session_id":"native-resume",`+
-			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
-			`"model":" resumed/model "}`,
+	initJSON := `{"type":"system","subtype":"init","session_id":` +
+		jsonString(t, claudeResumePeerSessionID) + `,"cwd":` + jsonString(t, cwd) +
+		`,"claude_code_version":"2.1.258",` +
+		`"model":" resumed/model "}`
+	provider, capture := startClaudeResumeExecutionProvider(
+		t,
+		ctx,
+		cwd,
+		claudeResumePeerSessionID,
+		initJSON,
 	)
-	provider, capture := startClaudeExecutionProvider(t, ctx, frames...)
 	session, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID: "native-resume",
+		SessionID: claudeResumePeerSessionID,
 		OpenOptions: agent.OpenOptions{
 			Cwd: cwd,
 			Execution: agent.ExecutionOptions{
@@ -192,11 +207,11 @@ func TestClaudeResumePassesLiteralExecutionOptionsAndPreservesIdentity(t *testin
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 
-	assert.Equal(t, "native-resume", session.ID())
+	assert.Equal(t, claudeResumePeerSessionID, session.ID())
 	assert.Equal(t, claudeExpectedArgs(
 		"--model= Resume/Model ",
 		"--effort= Native/Resume ",
-		"--resume=native-resume",
+		"--resume="+claudeResumePeerSessionID,
 	), claudeCapturedArgv(t, capture))
 	report := claudeExecutionOptionsReport(t, session)
 	assert.Equal(t, " Resume/Model ", report.Model.Requested)
@@ -652,6 +667,40 @@ func startClaudeExecutionProvider(
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	return provider, capture
+}
+
+func startClaudeResumeExecutionProvider(
+	t *testing.T,
+	ctx context.Context,
+	cwd, sessionID string,
+	frames ...string,
+) (*agentclaude.Provider, string) {
+	t.Helper()
+	configDir := newResumeConfigDir(t)
+	transcript := writeResumeTranscript(
+		t,
+		configDir,
+		"project",
+		sessionID,
+		cwd,
+	)
+	argv := filepath.Join(t.TempDir(), "argv.json")
+	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
+		SessionID:      sessionID,
+		CWD:            cwd,
+		TranscriptPath: transcript,
+		ArgvPath:       argv,
+		Frames:         frames,
+	})
+	provider := agentclaude.New(agentclaude.Config{
+		CLIPath:   peer.CLIPath,
+		Env:       peer.Env,
+		ConfigDir: configDir,
+	})
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	return provider, argv
 }
 
 func claudeExpectedArgs(extras ...string) []string {

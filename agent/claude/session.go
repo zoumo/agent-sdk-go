@@ -48,6 +48,7 @@ type session struct {
 	done                chan struct{}
 	doneClosed          bool
 	err                 error
+	resume              *resumeIdentityGuard
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
@@ -67,6 +68,7 @@ func newSession(
 	features agent.Features,
 	executionOptions executionOptionsState,
 	buffered []claude.Received,
+	resume *resumeIdentityGuard,
 ) (*session, error) {
 	created := &session{
 		provider:         provider,
@@ -78,6 +80,7 @@ func newSession(
 		interactionRefs:  make(map[string]agent.InteractionRef),
 		done:             make(chan struct{}),
 		observationDone:  make(chan struct{}),
+		resume:           resume,
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
@@ -381,6 +384,15 @@ func (s *session) receiveUntilTerminal() error {
 				return nativeErr
 			}
 			return err
+		}
+		if received.Event != nil {
+			handled, resumeErr := s.resume.inspect(received.Event)
+			if resumeErr != nil {
+				return resumeErr
+			}
+			if handled {
+				continue
+			}
 		}
 		events, convertErr := s.convertReceived(received)
 		if convertErr != nil {

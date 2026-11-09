@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ import (
 )
 
 const (
-	agentExecutionSessionID  = "agent-execution-session"
+	agentExecutionSessionID  = "44444444-4444-4444-8444-444444444444"
 	agentExecutionSuccess    = "agent-execution-success"
 	agentExecutionResume     = "agent-execution-resume"
 	agentExecutionReject     = "agent-execution-reject"
@@ -150,14 +151,25 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsResumeAcrossProviders(
 	t := s.T()
 	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
 		tracePath := agentExecutionTracePath(t)
-		provider := newAgentExecutionProvider(t, providerName, agentExecutionResume)
+		cwd := t.TempDir()
+		configDir := ""
+		if providerName == "claude" {
+			configDir = t.TempDir()
+			writeAgentExecutionResumeTranscript(t, configDir, cwd)
+		}
+		provider := newAgentExecutionProvider(
+			t,
+			providerName,
+			agentExecutionResume,
+			configDir,
+		)
 		t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 		_, err := provider.Start(ctx)
 		require.NoError(t, err)
 		session, err := provider.Resume(ctx, agent.ResumeOptions{
 			SessionID: agentExecutionSessionID,
 			OpenOptions: agent.OpenOptions{
-				Cwd: t.TempDir(),
+				Cwd: cwd,
 				Execution: agent.ExecutionOptions{
 					Model:           " Resume/Model ",
 					ReasoningEffort: " Native/Resume ",
@@ -404,6 +416,10 @@ func forEachAgentExecutionProvider(
 }
 
 func agentExecutionPeer(provider, scenario string) (err error) {
+	if provider == "claude" && len(os.Args) == 2 && os.Args[1] == "--version" {
+		_, err := fmt.Fprintln(os.Stdout, "2.1.258 (Claude Code)")
+		return err
+	}
 	if scenario != agentExecutionSuccess &&
 		scenario != agentExecutionResume &&
 		scenario != agentExecutionReject &&
@@ -826,7 +842,7 @@ func openAgentExecutionSession(
 	execution agent.ExecutionOptions,
 ) agent.Session {
 	t.Helper()
-	provider := newAgentExecutionProvider(t, providerName, scenario)
+	provider := newAgentExecutionProvider(t, providerName, scenario, "")
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
@@ -850,6 +866,7 @@ func newAgentExecutionProvider(
 	t *testing.T,
 	providerName string,
 	scenario string,
+	configDir string,
 ) agent.Provider {
 	t.Helper()
 	executable, err := os.Executable()
@@ -877,6 +894,7 @@ func newAgentExecutionProvider(
 		return agentclaude.New(agentclaude.Config{
 			CLIPath:           executable,
 			Env:               env,
+			ConfigDir:         configDir,
 			InitializeTimeout: 10 * time.Second,
 			ShutdownTimeout:   5 * time.Second,
 		})
@@ -884,4 +902,25 @@ func newAgentExecutionProvider(
 		require.FailNow(t, "unknown provider", providerName)
 		return nil
 	}
+}
+
+func writeAgentExecutionResumeTranscript(t *testing.T, configDir, cwd string) {
+	t.Helper()
+	directory := filepath.Join(configDir, "projects", "-synthetic")
+	require.NoError(t, os.MkdirAll(directory, 0o700))
+	source, err := json.Marshal(map[string]any{
+		"type":      "user",
+		"sessionId": agentExecutionSessionID,
+		"cwd":       cwd,
+		"message": map[string]any{
+			"role":    "user",
+			"content": "saved",
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(directory, agentExecutionSessionID+".jsonl"),
+		append(source, '\n'),
+		0o600,
+	))
 }

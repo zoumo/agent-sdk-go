@@ -31,6 +31,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
+	if scenario := os.Getenv(claudeResumePeerEnv); scenario != "" {
+		os.Exit(runClaudeResumePeer(scenario, os.Args[1:]))
+	}
 	if launcher := os.Getenv(claudeTestLauncherEnv); launcher != "" {
 		os.Exit(runClaudeTestLauncher(launcher, os.Args[1:]))
 	}

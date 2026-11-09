@@ -356,15 +356,12 @@ func finishStream(run *mocktest.Run, client *codex.Client, session *codex.Sessio
 	if session != nil {
 		result = errors.Join(result, session.Close())
 	}
-	inputErr := client.CloseInput()
-	if errors.Is(inputErr, codex.ErrInputClosed) {
-		inputErr = nil
-	}
-	result = errors.Join(result, inputErr, client.Close())
+	result = joinInputCloseError(result, client.CloseInput())
+	result = errors.Join(result, client.Close())
 	if inputClosed != nil {
 		select {
 		case inputErr := <-inputClosed:
-			result = errors.Join(result, inputErr)
+			result = joinInputCloseError(result, inputErr)
 		case <-time.After(5 * time.Second):
 			result = errors.Join(result, errors.New("mock input close did not finish"))
 		}
@@ -372,6 +369,13 @@ func finishStream(run *mocktest.Run, client *codex.Client, session *codex.Sessio
 	waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return errors.Join(result, run.WaitError(waitCtx))
+}
+
+func joinInputCloseError(result, inputErr error) error {
+	if errors.Is(inputErr, codex.ErrInputClosed) {
+		return result
+	}
+	return errors.Join(result, inputErr)
 }
 
 func environment(values map[string]string) []string {

@@ -25,15 +25,12 @@ scan() {
 }
 
 # Exclusions must follow positive globs; ripgrep resolves globs in order.
-# Ticket 08 owns the formal harness adoption update; executable code and current
-# usage documentation remain gated here.
 common=(
   --glob '!.artifacts/**'
   --glob '!.git/**'
   --glob '!.scratch/**'
   --glob '!scripts/check-removed-cli-surfaces.sh'
   --glob '!tests/gates/contraction_test.go'
-  --glob '!harness/**'
   --glob '!go.mod'
   --glob '!go.sum'
 )
@@ -45,6 +42,17 @@ scan "external testify executable environment and completion file must remain re
 scan "external testify wrapper and version manifest must remain removed" \
   "${common[@]}" \
   'with-agent-sdk-testify|scripts/agent-sdk-testify-version\.json'
+
+scan "retired testify process workflow terms must remain absent from required documentation" \
+  -i \
+  --glob 'harness/modules/agent-sdk-testify/**' \
+  --glob 'harness/architecture.md' \
+  --glob 'harness/testing.md' \
+  --glob 'docs/testing.md' \
+  --glob 'tests/simulation/drivers/README.md' \
+  --glob '/README.md' \
+  "${common[@]}" \
+  'launcher|wrapper|result[[:space:]]+(descriptor|notice)|progress[[:space:]]+descriptor|process[[:space:]]+receipt|receipt\.json|executions/index\.json|schema-[34]|schemaVersion[[:space:]]+[34]'
 
 scan "external testify executable must not be launched" \
   "${common[@]}" \

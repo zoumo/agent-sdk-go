@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/codex"

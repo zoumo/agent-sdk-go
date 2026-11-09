@@ -981,4 +981,3 @@ func assertAccepted(t *testing.T, acceptance agent.Acceptance) {
 	assert.True(t, *acceptance.NativeAccepted)
 	assert.Nil(t, acceptance.NativeRecorded)
 }
-

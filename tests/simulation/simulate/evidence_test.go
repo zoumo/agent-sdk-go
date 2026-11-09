@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 )
 

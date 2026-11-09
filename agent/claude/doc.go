@@ -23,6 +23,11 @@
 // Meta. The provider declares text input, permission, and form capabilities;
 // disabling AgentQuestions removes form support and disables the native tool.
 //
+// Tool calls and results preserve the exact native tool_use.name, including the
+// complete mcp__... name. Their Claude-specific Provider and Kind mappings,
+// result-copy rule and status projection are defined in
+// harness/modules/unified-agent/design.md. Tool chunks remain {id, content}.
+//
 // Input is one plain text block without annotations. System prompts, additional
 // directories, URL interactions, multi-block input, and native frames or answer
 // extensions without an exact mapping are not advertised. TodoWrite, TaskCreate,

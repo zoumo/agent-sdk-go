@@ -42,6 +42,9 @@ type Truncation struct {
 	OmittedBytes  *int64 `json:"omittedBytes,omitempty"`
 }
 
+// ToolCallPayload records an observed provider-native tool call. ToolName and
+// Provider form the required identity; Kind is a required action category.
+// Status is a provider-specific lifecycle projection.
 type ToolCallPayload struct {
 	ID                  string         `json:"id"`
 	Kind                ToolKind       `json:"kind"`
@@ -66,6 +69,11 @@ func (p ToolCallPayload) MarshalJSON() ([]byte, error) {
 	return marshalToolContent(payload(p), p.Content)
 }
 
+// ToolResultPayload records an observed provider-native tool result. Its
+// provider and tool name must equal the call identity remembered by the adapter,
+// and its kind must equal the call classification. The core validates this
+// event independently rather than reconstructing missing fields from another
+// event.
 type ToolResultPayload struct {
 	ID                  string         `json:"id"`
 	Kind                ToolKind       `json:"kind"`
@@ -90,6 +98,8 @@ func (p ToolResultPayload) MarshalJSON() ([]byte, error) {
 	return marshalToolContent(payload(p), p.Content)
 }
 
+// ToolChunkPayload is partial tool input. It intentionally carries only the
+// call ID and content because a chunk may precede the complete tool identity.
 type ToolChunkPayload struct {
 	ID      string         `json:"id"`
 	Content []ContentBlock `json:"content"`

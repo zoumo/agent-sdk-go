@@ -17,6 +17,10 @@
 // completion or idleness until native settlement. Child-thread lifecycle
 // notifications remain explicit gaps.
 //
+// Tool calls and results use the Codex-specific ToolName, Provider and Kind
+// mappings, result-copy rule and native status projection defined in
+// harness/modules/unified-agent/design.md. Tool chunks remain {id, content}.
+//
 // Command and file-change approvals stay bound to their original native request
 // and may select only an option offered by that request. Native user-input forms
 // support accepted answers; decline and cancel are rejected because their native

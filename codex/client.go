@@ -56,6 +56,18 @@ type Client struct {
 	stdin              *os.File
 	stdout             *os.File
 	stderr             *os.File
+	streamReader       io.ReadCloser
+	streamWriter       io.WriteCloser
+	streamStderr       io.ReadCloser
+	streamWait         func(context.Context) error
+	streamMode         bool
+	inputMu            sync.Mutex
+	inputClosed        bool
+	inputCloseErr      error
+	inputClosedCh      chan struct{}
+	readEOF            bool
+	terminalClosed     bool
+	closing            bool
 	remote             *websocket.Conn
 	remoteToken        string
 	queue              chan outbound
@@ -160,7 +172,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{}), inputClosedCh: make(chan struct{})}
 	c.ownership.client = c
 	return c
 }
@@ -401,6 +413,19 @@ func (c *Client) writeLoop() {
 				c.mu.Unlock()
 				return
 			}
+			if c.streamMode && c.inputIsClosed() {
+				if m.answer != nil {
+					m.answer.finishLocked(ErrInputClosed)
+				}
+				if m.call != nil {
+					c.finishLocked(m.call, nil, &CallError{Method: m.call.method, ID: m.call.id, Dispatch: NotSent, Cause: ErrInputClosed})
+				}
+				c.mu.Unlock()
+				if m.written != nil {
+					m.written <- ErrInputClosed
+				}
+				continue
+			}
 			if err := m.ctx.Err(); err != nil {
 				if m.answer != nil {
 					m.answer.finishLocked(err)
@@ -440,6 +465,9 @@ func (c *Client) writeLoop() {
 			err := c.writeFrame(m.ctx, m.frame)
 			finished.Store(true)
 			timer.Stop()
+			if err != nil && c.streamMode && c.inputIsClosed() {
+				err = ErrInputClosed
+			}
 			c.mu.Lock()
 			if m.answer != nil {
 				m.answer.writing = false
@@ -447,12 +475,19 @@ func (c *Client) writeLoop() {
 			}
 			if m.call != nil {
 				m.call.writing = false
+				if errors.Is(err, ErrInputClosed) {
+					dispatch := NotSent
+					if m.call.started {
+						dispatch = OutcomeUnknown
+					}
+					c.finishLocked(m.call, nil, &CallError{Method: m.call.method, ID: m.call.id, Dispatch: dispatch, Cause: ErrInputClosed})
+				}
 			}
 			c.mu.Unlock()
 			if m.written != nil {
 				m.written <- err
 			}
-			if err != nil {
+			if err != nil && !errors.Is(err, ErrInputClosed) {
 				c.fail(err)
 				return
 			}
@@ -477,11 +512,12 @@ func (c *Client) fail(cause error) {
 		cause = ErrClosed
 	}
 	c.mu.Lock()
-	if c.cause != nil {
+	if c.cause != nil || c.terminalClosed {
 		c.mu.Unlock()
 		return
 	}
 	c.cause = cause
+	c.terminalClosed = true
 	for _, p := range c.pending {
 		state := NotSent
 		if p.started {
@@ -508,12 +544,18 @@ func (c *Client) fail(cause error) {
 	c.mu.Unlock()
 	if c.remote != nil {
 		_ = c.remote.CloseNow()
+	} else if c.streamMode {
+		_ = c.closeInput()
 	} else {
 		_ = c.stdin.Close()
 	}
 }
 
 func (c *Client) cleanup() {
+	if c.streamMode {
+		c.cleanupStream()
+		return
+	}
 	<-c.done
 	if c.remote != nil {
 		c.finishCleanup()
@@ -553,12 +595,152 @@ func (c *Client) finishCleanup() {
 	}
 }
 
+func (c *Client) cleanupStream() {
+	start := time.Now()
+	deadline := start.Add(c.limits.ShutdownTimeout)
+	select {
+	case <-c.inputClosedCh:
+	case <-c.done:
+	case <-c.readDone:
+	}
+	_ = c.closeInput()
+
+	var waitErr error
+	if c.streamWait != nil {
+		waitCtx, cancel := context.WithDeadline(context.Background(), deadline)
+		waitErr = c.streamWait(waitCtx)
+		cancel()
+		if waitErr != nil {
+			// Close is a request to stop this connection, not permission to hide
+			// the peer's authoritative completion failure. Replace only a generic
+			// local-close or premature-EOF cause; a specific terminal cause wins.
+			c.authoritativeStreamFailure(waitErr)
+			_ = c.streamReader.Close()
+		}
+	}
+
+	readComplete := awaitUntil(c.readDone, deadline)
+	_ = c.closeInput()
+	if !readComplete {
+		_ = c.streamReader.Close()
+		readComplete = awaitUntil(c.readDone, time.Now().Add(c.limits.ShutdownTimeout))
+	}
+	_ = c.streamReader.Close()
+	if c.streamStderr != nil {
+		_ = c.streamStderr.Close()
+	}
+
+	c.mu.Lock()
+	terminal := c.terminalClosed
+	closing := c.closing
+	readEOF := c.readEOF
+	c.mu.Unlock()
+	inputClosed := c.inputIsClosed()
+	switch {
+	case terminal:
+	case waitErr != nil:
+		c.fail(waitErr)
+	case !inputClosed:
+		c.fail(ErrShutdownTimeout)
+	case !readEOF || !readComplete:
+		if !closing {
+			c.fail(fmt.Errorf("%w: peer ended without an input-acknowledged EOF", ErrUnexpectedEOF))
+		}
+	default:
+		c.completeStream()
+	}
+
+	c.mu.Lock()
+	if c.closeErr == nil && c.cause != nil && !errors.Is(c.cause, ErrClosed) {
+		c.closeErr = c.cause
+	}
+	c.mu.Unlock()
+	c.finishCleanup()
+}
+
+func (c *Client) authoritativeStreamFailure(cause error) {
+	c.mu.Lock()
+	terminal := c.terminalClosed
+	generic := c.cause == nil || errors.Is(c.cause, ErrClosed) || errors.Is(c.cause, ErrUnexpectedEOF)
+	if terminal && generic {
+		c.cause = c.safeError(cause)
+	}
+	c.mu.Unlock()
+	if !terminal {
+		c.fail(cause)
+	}
+}
+
+func (c *Client) completeStream() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.terminalClosed {
+		return
+	}
+	c.terminalClosed = true
+	c.cause = nil
+	close(c.done)
+}
+
+func (c *Client) inputIsClosed() bool {
+	c.inputMu.Lock()
+	defer c.inputMu.Unlock()
+	return c.inputClosed
+}
+
+func (c *Client) closeInput() error {
+	c.inputMu.Lock()
+	defer c.inputMu.Unlock()
+	if c.inputClosed {
+		if c.inputCloseErr != nil {
+			return c.inputCloseErr
+		}
+		return ErrInputClosed
+	}
+	c.inputClosed = true
+	if c.streamMode {
+		c.inputCloseErr = c.streamWriter.Close()
+	} else {
+		c.inputCloseErr = c.stdin.Close()
+	}
+	close(c.inputClosedCh)
+	return c.inputCloseErr
+}
+
+// CloseInput half-closes the SDK outbound writer while retaining the reader for
+// final peer frames. It is intended for stream transports.
+func (c *Client) CloseInput() error {
+	if !c.streamMode {
+		return ErrStreamRequired
+	}
+	return c.closeInput()
+}
+
+func awaitUntil(ch <-chan struct{}, until time.Time) bool {
+	timer := time.NewTimer(max(time.Until(until), 0))
+	defer timer.Stop()
+	select {
+	case <-ch:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
 // Close is idempotent and bounded. A remote client closes only its socket. A
 // stdio client closes stdin, allows a bounded grace period, then kills only the
 // child it started and waits for reaping. It never sends a protocol shutdown RPC
 // or kills an unrelated process, process group, or remote server.
 func (c *Client) Close() error {
-	c.fail(ErrClosed)
+	c.mu.Lock()
+	if c.streamMode {
+		c.closing = true
+	}
+	terminal := c.terminalClosed
+	c.mu.Unlock()
+	if !terminal {
+		c.fail(ErrClosed)
+	}
 	<-c.cleaned
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -575,9 +757,13 @@ func saturatingAdd(a, b uint64) uint64 {
 }
 
 func (c *Client) drainStderr() {
+	reader := io.Reader(c.stderr)
+	if c.streamMode {
+		reader = c.streamStderr
+	}
 	buf := make([]byte, 4096)
 	for {
-		n, err := c.stderr.Read(buf)
+		n, err := reader.Read(buf)
 		if n > 0 {
 			c.mu.Lock()
 			c.diag.StderrBytes = saturatingAdd(c.diag.StderrBytes, uint64(n))

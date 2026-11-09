@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 )
 
 const noticeScenario = `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"wire":{"method":"notice","type":"notice"}}]}`
@@ -35,40 +36,63 @@ func closeSession(t *testing.T, session *Session) *SessionReport {
 	return report
 }
 
-func TestExplicitExecutableRequired(t *testing.T) {
-	for _, path := range []string{"", "agent-sdk-testify", filepath.Join(t.TempDir(), "missing")} {
-		t.Run(path, func(t *testing.T) {
-			t.Setenv("AGENT_SDK_TESTIFY_BIN", path)
-			_, err := Executable()
-			require.ErrorContains(t, err, "AGENT_SDK_TESTIFY_BIN")
-		})
-	}
-}
-
 func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	session := prepareSession(t, "codex", noticeScenario, Options{})
 	var descriptor struct {
 		SchemaVersion int
-		ToolSHA256    string
-		Source        struct {
+		FixtureID     string `json:"fixtureId"`
+		Tool          struct {
+			Source         string
+			Version        string
+			Command        string
+			Args           []string
+			SHA256         string
+			Module         string
+			ModuleSum      string `json:"moduleSum"`
+			ModuleRevision string `json:"moduleRevision"`
+			GoVersion      string `json:"goVersion"`
+		}
+		Source struct {
 			Kind, Path, Provenance string
 		}
-		Routes struct {
-			Mock struct {
-				Workspace string
-				Env       map[string]string
+		Routes map[string]struct {
+			Workspace   string
+			ProtocolCwd string `json:"protocolCwd"`
+			Env         map[string]string
+			Connections []struct {
+				ID        string
+				Transport string
+				Command   string
+				Args      []string
+				Launcher  string
 			}
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(session.Dir, "session.json"))
+	data, err := os.ReadFile(filepath.Join(session.Dir, "fixture.json"))
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, &descriptor))
-	require.Equal(t, 3, descriptor.SchemaVersion)
+	require.Equal(t, 5, descriptor.SchemaVersion)
+	require.Equal(t, session.SessionID, descriptor.FixtureID)
+	require.Equal(t, "embedded", descriptor.Tool.Source)
+	require.Equal(t, "github.com/zoumo/agent-sdk-testify", descriptor.Tool.Module)
+	require.NotEmpty(t, descriptor.Tool.ModuleRevision)
+	require.NotEmpty(t, descriptor.Tool.GoVersion)
+	require.Empty(t, descriptor.Tool.Command)
+	require.Empty(t, descriptor.Tool.Args)
+	require.Empty(t, descriptor.Tool.SHA256)
 	require.FileExists(t, filepath.Join(descriptor.Source.Path, "plan.json"))
 	require.Equal(t, "recording", descriptor.Source.Kind)
 	require.Equal(t, "external", descriptor.Source.Provenance)
-	require.Equal(t, session.Workspace, descriptor.Routes.Mock.Workspace)
-	require.Equal(t, session.Env, sortedEnvironment(descriptor.Routes.Mock.Env))
+	mockRoute := descriptor.Routes["mock"]
+	require.Equal(t, session.Workspace, mockRoute.Workspace)
+	require.Equal(t, session.ProtocolCwd, mockRoute.ProtocolCwd)
+	require.Equal(t, session.Env, sortedEnvironment(mockRoute.Env))
+	require.Len(t, mockRoute.Connections, 1)
+	require.Equal(t, "main", mockRoute.Connections[0].ID)
+	require.Equal(t, "in-process", mockRoute.Connections[0].Transport)
+	require.Empty(t, mockRoute.Connections[0].Command)
+	require.Empty(t, mockRoute.Connections[0].Args)
+	require.Empty(t, mockRoute.Connections[0].Launcher)
 	var manifest struct{ Provenance string }
 	data, err = os.ReadFile(filepath.Join(descriptor.Source.Path, "manifest.json"))
 	require.NoError(t, err)
@@ -76,6 +100,106 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	require.Equal(t, "synthetic", manifest.Provenance)
 	report := closeSession(t, session)
 	require.Equal(t, "abandoned", report.Status)
+}
+
+func TestInProcessRunPublishesEmbeddedEvidence(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+	require.Equal(t, agenttestify.MockTransportInProcess, run.Start.Transport)
+	require.NotEqual(t, session.Workspace, run.Start.Workspace)
+	require.DirExists(t, run.Start.Workspace)
+	require.DirExists(t, run.Start.ProtocolCwd)
+	routeRoot := filepath.Join(session.Dir, "runtime", "routes", "mock")
+	executionRoot := filepath.Join(session.Dir, "runtime", "executions", run.Start.ExecutionID)
+	wantEnv := make([]string, len(session.Env))
+	for i, entry := range session.Env {
+		wantEnv[i] = strings.ReplaceAll(entry, routeRoot, executionRoot)
+	}
+	require.Equal(t, wantEnv, run.Environment())
+
+	output := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(run.Reader)
+		output <- data
+	}()
+	closeDone := run.CloseInputWhenComplete(run.Writer.Close)
+	require.NoError(t, <-closeDone)
+	result, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.True(t, result.Execution.Complete)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.Equal(t, agenttestify.MockTransportInProcess, connection.Transport)
+	require.Equal(t, agenttestify.ConnectionStatusPassed, connection.Status)
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.False(t, connection.NativeLaunched)
+	require.True(t, connection.CleanupComplete)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
+	require.Contains(t, string(<-output), `"notice"`)
+	require.NoError(t, run.CloseSDK())
+
+	report := closeSession(t, session)
+	require.Equal(t, "passed", report.Status)
+	require.Len(t, report.Executions, 1)
+	require.Equal(t, "passed", report.Executions[0].Status)
+	require.Equal(t, []ConnectionReport{{ID: "main", Status: "passed"}}, report.Executions[0].Connections)
+}
+
+func TestInProcessRunReportsScriptedTimeout(t *testing.T) {
+	scenario := strings.Replace(noticeScenario, `"version":1`, `"version":1,"timeoutMs":25`, 1)
+	session := prepareSession(t, "codex", scenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+	result, err := run.Wait(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	require.Equal(t, agenttestify.FailureClassTimeout, result.Execution.Connections[0].Failure)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestInProcessRunReportsScriptedDisconnect(t *testing.T) {
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"disconnect":true}]}`
+	session := prepareSession(t, "codex", scenario, Options{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	run, err := session.NewRun(ctx, RunOptions{})
+	require.NoError(t, err)
+	require.NoError(t, run.Writer.Close())
+	result, err := run.Wait(ctx)
+	require.ErrorIs(t, err, ErrDisconnected)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	require.Equal(t, agenttestify.FailureClassStrictReplay, result.Execution.Connections[0].Failure)
+	require.NoError(t, run.CloseSDK())
+	require.Equal(t, "failed", closeSession(t, session).Status)
+}
+
+func TestEmbeddedConnectionHasNoExecutableIdentity(t *testing.T) {
+	session := prepareSession(t, "codex", noticeScenario, Options{})
+	command, args, err := session.Command("main")
+	require.Empty(t, command)
+	require.Empty(t, args)
+	require.ErrorContains(t, err, "no executable command")
+	launcher, err := session.Launcher("main")
+	require.Empty(t, launcher)
+	require.ErrorContains(t, err, "no launcher")
+	require.Equal(t, "abandoned", closeSession(t, session).Status)
 }
 
 func TestProgressBeforeEOFWithoutPython(t *testing.T) {
@@ -154,34 +278,6 @@ func TestBridgeFailureSemantics(t *testing.T) {
 		require.ErrorIs(t, err, want)
 		require.Equal(t, "passed", closeSession(t, session).Status)
 	})
-}
-
-func TestLauncherUsesPreparedSession(t *testing.T) {
-	for _, provider := range []string{"codex", "claude"} {
-		t.Run(provider, func(t *testing.T) {
-			session := prepareSession(t, provider, noticeScenario, Options{})
-			launcher, err := session.Launcher("main")
-			require.NoError(t, err)
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			command, err := commandContext(ctx, launcher)
-			require.NoError(t, err)
-			command.Env = session.Env
-			command.Dir = session.Workspace
-			command.Stdin = strings.NewReader("")
-			out, err := command.CombinedOutput()
-			require.NoError(t, err, string(out))
-			report := closeSession(t, session)
-			require.Equal(t, "passed", report.Status)
-		})
-	}
-}
-
-func commandContext(ctx context.Context, executable string) (*exec.Cmd, error) {
-	if executable == "" {
-		return nil, errors.New("empty executable")
-	}
-	return exec.CommandContext(ctx, executable), nil
 }
 
 // gateWriter releases a blocked Write as Close starts, but lets the test hold

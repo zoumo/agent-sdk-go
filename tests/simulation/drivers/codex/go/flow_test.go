@@ -53,15 +53,7 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 			t.Cleanup(func() { verifySDKSession(t, peerSession, "passed") })
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			executable, args, err := peerSession.Command("main")
-			require.NoError(t, err)
-			if decision == "accept" {
-				require.NoError(t, AcceptFlow(ctx, executable, args, source, codex.ChildDetailPreserve, io.Discard))
-			} else {
-				launcher, err := peerSession.Launcher("main")
-				require.NoError(t, err)
-				require.NoError(t, AcceptFlow(ctx, launcher, nil, source, codex.ChildDetailPreserve, io.Discard))
-			}
+			require.NoError(t, AcceptFlow(ctx, peerSession, source, codex.ChildDetailPreserve, io.Discard))
 		})
 	}
 }

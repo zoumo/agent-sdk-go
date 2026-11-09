@@ -7,16 +7,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // AcceptFlow executes recorded native operations through public Session and Client
 // APIs. The recording supplies inputs and expected facts, never outbound frames.
-func AcceptFlow(ctx context.Context, executable string, args []string, path string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -50,11 +53,12 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 	if err := json.Unmarshal(messages[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Initialize: init})
+	c, run, inputClosed, err := openStreamSession(ctx, mock, init)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, c.Close()) }()
+	var s *codex.Session
+	defer func() { err = errors.Join(err, finishStream(run, c, s, inputClosed)) }()
 	startAt := -1
 	for i, f := range frames {
 		if f.Direction == "c2s" && messages[i].Method == "thread/start" {
@@ -69,7 +73,7 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 	if err := json.Unmarshal(messages[startAt].Params, &start); err != nil {
 		return err
 	}
-	s, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: start, ChildDetailPolicy: policy})
+	s, err = codex.Open(ctx, codex.SessionOptions{Client: c, Thread: start, ChildDetailPolicy: policy})
 	if err != nil {
 		return err
 	}
@@ -128,7 +132,7 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 			}
 		}
 	}()
-	defer func() { err = errors.Join(err, c.Close(), s.Close()); <-done }()
+	defer func() { <-done }()
 	wait := func(raw json.RawMessage) error {
 		for {
 			mu.Lock()
@@ -306,4 +310,69 @@ func AcceptFlow(ctx context.Context, executable string, args []string, path stri
 		return receiveErr
 	}
 	return nil
+}
+
+func openStreamSession(ctx context.Context, mock *mocktest.Session, initialize types.InitializeParams) (*codex.Client, *mocktest.Run, <-chan error, error) {
+	if mock == nil {
+		return nil, nil, nil, errors.New("prepared mock session is required")
+	}
+	nativeArgs := []string{"app-server", "--listen", "stdio://"}
+	run, err := mock.NewRun(ctx, mocktest.RunOptions{
+		Connection: "main",
+		NativeArgs: nativeArgs,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	client, err := codex.NewStreams(ctx, codex.StreamOptions{
+		Args:       []string{"app-server", "--listen", "stdio://"},
+		Env:        environment(run.Start.Env),
+		Dir:        run.Start.ProtocolCwd,
+		Initialize: initialize,
+	}, codex.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.CloseSDK()
+		waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_, _ = run.Wait(waitCtx)
+		cancel()
+		return nil, run, nil, err
+	}
+	return client, run, run.CloseInputWhenComplete(client.CloseInput), nil
+}
+
+func finishStream(run *mocktest.Run, client *codex.Client, session *codex.Session, inputClosed <-chan error) error {
+	var result error
+	if session != nil {
+		result = errors.Join(result, session.Close())
+	}
+	inputErr := client.CloseInput()
+	if errors.Is(inputErr, codex.ErrInputClosed) {
+		inputErr = nil
+	}
+	result = errors.Join(result, inputErr, client.Close())
+	if inputClosed != nil {
+		select {
+		case inputErr := <-inputClosed:
+			result = errors.Join(result, inputErr)
+		case <-time.After(5 * time.Second):
+			result = errors.Join(result, errors.New("mock input close did not finish"))
+		}
+	}
+	waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return errors.Join(result, run.WaitError(waitCtx))
+}
+
+func environment(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for key, value := range values {
+		result = append(result, key+"="+value)
+	}
+	slices.Sort(result)
+	return result
 }

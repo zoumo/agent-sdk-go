@@ -3,74 +3,67 @@ package main
 import (
 	"context"
 	"net/http"
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
-func TestRemoteMissingProbeCancelsAndReapsOwnedPeer(t *testing.T) {
+func TestRemoteRequiresDeclaredMainAndProbe(t *testing.T) {
 	root := t.TempDir()
-	pidPath := filepath.Join(root, "peer.pid")
-	peer := command{Command: "/bin/sh", Args: []string{"-c", "echo $$ > '" + pidPath + "'; cat; sleep 60"}}
-	service, err := startMockRemote(context.Background(), map[string]command{"main": peer, "probe": peer}, root)
+	scenario := `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"wire":{"method":"notice","type":"notice"}}]}`
+	session, err := mocktest.Prepare(t.TempDir(), "codex", []byte(scenario), mocktest.Options{})
 	require.NoError(t, err)
-	defer service.close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	main := service.endpoint.Connections["main"]
-	conn, _, err := websocket.Dial(ctx, main.URL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + main.BearerToken}}}) //nolint:bodyclose // websocket.Dial owns the handshake body.
-	require.NoError(t, err)
-	defer func() { _ = conn.CloseNow() }()
-	require.Eventually(t, func() bool { _, e := os.Stat(pidPath); return e == nil }, time.Second, 5*time.Millisecond)
-	data, err := os.ReadFile(pidPath)
-	require.NoError(t, err)
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	require.NoError(t, err)
-	cleanupErr := service.close()
-	require.ErrorContains(t, cleanupErr, "1/2 required connections")
-	require.NotContains(t, cleanupErr.Error(), "cleanup did not complete")
-	require.NotContains(t, cleanupErr.Error(), "completion unavailable")
-	require.ErrorIs(t, syscall.Kill(pid, 0), syscall.ESRCH, "owned process was not reaped")
+	t.Cleanup(func() { require.NoError(t, session.Close()) })
+
+	service, err := startMockRemote(context.Background(), nil, root)
+	require.ErrorContains(t, err, "prepared fixture")
+	require.Nil(t, service)
+
+	service, err = startMockRemote(context.Background(), session, root)
+	require.ErrorContains(t, err, "main and probe")
+	require.Nil(t, service)
 }
 
-func TestRemoteRoutesByDeclaredConnectionID(t *testing.T) {
-	root := t.TempDir()
-	marker := func(name string) command {
-		return command{Command: "/bin/sh", Args: []string{"-c", "printf %s > " + filepath.Join(root, name) + ".called; cat"}}
-	}
-	service, err := startMockRemote(context.Background(), map[string]command{"main": marker("main"), "probe": marker("probe")}, root)
+func TestRemoteAuthenticatesOnlyDeclaredConnectionPaths(t *testing.T) {
+	sessionDir := filepath.Join(t.TempDir(), "session")
+	tool, err := discoverTool()
 	require.NoError(t, err)
-	defer service.close()
+	session, err := prepareSession(t.Context(), tool, sourceSelection{
+		Provider: "codex",
+		Case:     "SDK-CASE-032",
+	}, sessionDir, "test")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if session.Runner != nil {
+			_ = session.Runner.Close()
+		}
+		_ = cleanupPreparedSession(session.Dir)
+	})
 
-	dial := func(id string) *websocket.Conn {
-		endpoint := service.endpoint.Connections[id]
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		conn, _, err := websocket.Dial(ctx, endpoint.URL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + endpoint.BearerToken}}}) //nolint:bodyclose // websocket.Dial owns the handshake body.
-		require.NoError(t, err)
-		return conn
-	}
+	service, err := startMockRemote(context.Background(), session.Runner, t.TempDir())
+	require.NoError(t, err)
+	client := &http.Client{Timeout: 5 * time.Second}
 
-	probe := dial("probe")
-	require.Eventually(t, func() bool {
-		_, err := os.Stat(filepath.Join(root, "probe.called"))
-		return err == nil
-	}, time.Second, 5*time.Millisecond)
-	require.NoFileExists(t, filepath.Join(root, "main.called"))
-	require.NoError(t, probe.Close(websocket.StatusNormalClosure, ""))
+	mainURL := strings.Replace(service.endpoint.Connections["main"].URL, "ws://", "http://", 1)
+	unknown, err := client.Get(mainURL + "/extra")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, unknown.StatusCode)
+	require.NoError(t, unknown.Body.Close())
 
-	main := dial("main")
-	require.Eventually(t, func() bool {
-		_, err := os.Stat(filepath.Join(root, "main.called"))
-		return err == nil
-	}, time.Second, 5*time.Millisecond)
-	require.NoError(t, main.Close(websocket.StatusNormalClosure, ""))
-	require.NoError(t, service.close())
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		mainURL, nil)
+	require.NoError(t, err)
+	request.Header.Set("Authorization", "Bearer wrong")
+	unauthorized, err := client.Do(request)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, unauthorized.StatusCode)
+	require.NoError(t, unauthorized.Body.Close())
+
+	require.ErrorContains(t, service.close(), "0/2 required connections")
+	require.NoError(t, session.Runner.Close())
 }

@@ -1,95 +1,65 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
+	"sort"
+
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 )
 
-type evidenceStatus struct {
+type resultMaterial struct {
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	Action          string   `json:"action"`
+	Path            string   `json:"path"`
+	PlanSHA256      string   `json:"planSHA256"`
+	ManifestSHA256  string   `json:"manifestSHA256"`
+	RecordingSHA256 string   `json:"recordingSHA256"`
+	Provenance      string   `json:"provenance"`
+	Connections     []string `json:"connections"`
+}
+
+type evidenceConnection struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
+
+	Transport       string `json:"transport"`
+	FullConsumption bool   `json:"fullConsumption"`
+	ClientEOF       bool   `json:"clientEOF"`
+	NativeLaunched  bool   `json:"nativeLaunched"`
+	CleanupComplete bool   `json:"cleanupComplete"`
+	ExitCode        *int   `json:"exitCode,omitempty"`
+	Failure         string `json:"failure,omitempty"`
+	Error           string `json:"error,omitempty"`
+
+	ReceiptPath        string `json:"receiptPath,omitempty"`
+	ProcessReceiptPath string `json:"processReceiptPath,omitempty"`
+	ResultPath         string `json:"resultPath,omitempty"`
 }
 
-type evidenceIndexEntry struct {
-	ID               string           `json:"id"`
-	Command          string           `json:"command"`
-	DescriptorSHA256 string           `json:"descriptorSha256"`
-	Status           string           `json:"status"`
-	Connections      []evidenceStatus `json:"connections,omitempty"`
-}
-
-type evidenceIndex struct {
-	SchemaVersion int                  `json:"schemaVersion"`
-	SessionID     string               `json:"sessionId"`
-	Executions    []evidenceIndexEntry `json:"executions"`
-}
-
-type resultMaterial struct {
-	ID              string `json:"id"`
-	Path            string `json:"path"`
-	PlanSHA256      string `json:"planSHA256"`
-	ManifestSHA256  string `json:"manifestSHA256"`
-	RecordingSHA256 string `json:"recordingSHA256"`
-	Provenance      string `json:"provenance"`
-}
-
-type resultNotice struct {
-	SchemaVersion   int            `json:"schemaVersion"`
-	SessionID       string         `json:"sessionId"`
-	Command         string         `json:"command"`
-	ConnectionID    string         `json:"connectionId"`
-	Execution       string         `json:"execution"`
-	ExecutionID     string         `json:"executionId"`
-	ExecutionSHA256 string         `json:"executionSHA256"`
-	Material        resultMaterial `json:"material"`
-	ProcessID       int            `json:"processId"`
-	ProcessReceipt  string         `json:"processReceipt"`
-	Receipt         string         `json:"receipt"`
-	Result          string         `json:"result"`
-	Status          string         `json:"status"`
-}
-
-type executionDescriptor struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	ExecutionID   string            `json:"executionId"`
-	SessionID     string            `json:"sessionId"`
-	Command       string            `json:"command"`
-	Source        preparedSource    `json:"source"`
-	Provenance    string            `json:"provenance"`
-	Executor      string            `json:"executor"`
-	Target        string            `json:"target"`
-	Workspace     string            `json:"workspace"`
-	HistoryFiles  map[string]string `json:"historyFiles,omitempty"`
-	Connections   []executionEntry  `json:"connections"`
-}
-
-type executionEntry struct {
-	ID              string   `json:"id"`
-	Command         string   `json:"command"`
-	Args            []string `json:"args,omitempty"`
-	Material        string   `json:"material,omitempty"`
-	PlanSHA256      string   `json:"planSHA256,omitempty"`
-	ManifestSHA256  string   `json:"manifestSHA256,omitempty"`
-	RecordingSHA256 string   `json:"recordingSHA256,omitempty"`
-	Receipt         string   `json:"receipt"`
-	ProcessReceipt  string   `json:"processReceipt,omitempty"`
+type evidenceExecution struct {
+	ID              string               `json:"id"`
+	FixtureID       string               `json:"fixtureId"`
+	Command         string               `json:"command"`
+	Status          string               `json:"status"`
+	Complete        bool                 `json:"complete"`
+	Material        resultMaterial       `json:"material"`
+	ExecutionSHA256 string               `json:"executionSha256"`
+	ExecutionPath   string               `json:"executionPath"`
+	Connections     []evidenceConnection `json:"connections"`
 }
 
 type sessionEvidence struct {
-	SchemaVersion   int                   `json:"schemaVersion"`
-	SessionID       string                `json:"sessionId"`
-	Status          string                `json:"status"`
-	Index           evidenceIndex         `json:"index"`
-	Executions      []executionDescriptor `json:"executions"`
-	ValidationError string                `json:"validationError,omitempty"`
+	SchemaVersion   int                 `json:"schemaVersion"`
+	SessionID       string              `json:"sessionId"`
+	Status          string              `json:"status"`
+	Executions      []evidenceExecution `json:"executions"`
+	ValidationError string              `json:"validationError,omitempty"`
 }
 
 type evidenceOutcome struct {
@@ -98,118 +68,104 @@ type evidenceOutcome struct {
 	Error         error
 }
 
-func inspectSessionEvidence(session *preparedSession) (*sessionEvidence, error) {
-	indexPath := filepath.Join(session.Dir, "executions", "index.json")
-	data, err := os.ReadFile(indexPath)
-	if err != nil {
-		return nil, fmt.Errorf("execution index: %w", err)
+func inspectSessionEvidence(session *preparedSession, executionID string) (*sessionEvidence, error) {
+	evidence := &sessionEvidence{
+		SchemaVersion: preparedSessionSchema,
+		SessionID:     session.SessionID,
+		Status:        "abandoned",
 	}
-	evidence := &sessionEvidence{Status: materialStatusUnavailable}
-	if err := json.Unmarshal(data, &evidence.Index); err != nil {
-		return nil, fmt.Errorf("execution index: %w", err)
-	}
-	evidence.SchemaVersion = evidence.Index.SchemaVersion
-	evidence.SessionID = evidence.Index.SessionID
-	if evidence.SchemaVersion != preparedSessionSchema || evidence.SessionID != session.SessionID {
-		return nil, errors.New("execution index belongs to a different session")
-	}
-	if len(evidence.Index.Executions) == 0 {
-		evidence.Status = "abandoned"
+	if executionID == "" {
 		return evidence, nil
 	}
-	if len(evidence.Index.Executions) != 1 {
-		return nil, fmt.Errorf("session contains %d mock executions; exactly one is required", len(evidence.Index.Executions))
+	if session.Fixture == nil {
+		return evidence, errors.New("prepared fixture is unavailable")
 	}
-	indexed := evidence.Index.Executions[0]
-	if indexed.ID == "" || filepath.Base(indexed.ID) != indexed.ID || indexed.Command != "mock" || indexed.DescriptorSHA256 == "" {
-		return nil, errors.New("execution index identity is incomplete")
-	}
-	switch indexed.Status {
-	case "open", "running":
-		return nil, fmt.Errorf("mock execution %s remained %s after cleanup", indexed.ID, indexed.Status)
-	case "passed", "failed":
-	default:
-		return nil, fmt.Errorf("unsupported execution status %q", indexed.Status)
-	}
-	descriptorPath := filepath.Join(session.Dir, "executions", indexed.ID, "execution.json")
-	descriptorHash, err := digestPath(descriptorPath)
+	report, err := session.Fixture.ExecutionReport(executionID)
 	if err != nil {
-		return nil, err
+		evidence.Status = "unavailable"
+		return evidence, fmt.Errorf("execution report: %w", err)
 	}
-	if descriptorHash != indexed.DescriptorSHA256 {
-		return nil, errors.New("execution descriptor hash differs from the index")
+	if report == nil {
+		evidence.Status = "unavailable"
+		return evidence, errors.New("execution report is unavailable")
 	}
-	descriptorBytes, err := os.ReadFile(descriptorPath)
-	if err != nil {
-		return nil, err
-	}
-	var descriptor executionDescriptor
-	if err := json.Unmarshal(descriptorBytes, &descriptor); err != nil {
-		return nil, fmt.Errorf("execution descriptor: %w", err)
-	}
-	if descriptor.SchemaVersion != preparedSessionSchema ||
-		descriptor.ExecutionID != indexed.ID ||
-		descriptor.SessionID != session.SessionID ||
-		descriptor.Command != "mock" {
-		return nil, errors.New("execution descriptor identity differs from the index")
-	}
-	if err := validateIndexedConnections(indexed, descriptor); err != nil {
-		return nil, err
-	}
-	evidence.Status = indexed.Status
-	evidence.Executions = []executionDescriptor{descriptor}
+	evidence.Status = string(report.Status)
+	evidence.Executions = []evidenceExecution{evidenceExecutionView(report)}
 	return evidence, nil
 }
 
-func validateIndexedConnections(indexed evidenceIndexEntry, descriptor executionDescriptor) error {
-	if len(indexed.Connections) != len(descriptor.Connections) {
-		return errors.New("execution connection inventory differs from the index")
+func evidenceExecutionView(report *agenttestify.ExecutionReport) evidenceExecution {
+	execution := evidenceExecution{
+		ID:              report.ExecutionID,
+		FixtureID:       report.FixtureID,
+		Command:         "mock",
+		Status:          string(report.Status),
+		Complete:        report.Complete,
+		Material:        evidenceMaterial(report.Material),
+		ExecutionSHA256: report.ExecutionSHA256,
+		ExecutionPath:   report.ExecutionPath,
+		Connections:     make([]evidenceConnection, len(report.Connections)),
 	}
-	statuses := make(map[string]string, len(indexed.Connections))
-	for _, connection := range indexed.Connections {
-		if _, exists := statuses[connection.ID]; exists {
-			return fmt.Errorf("execution index repeats connection %s", connection.ID)
+	for i, connection := range report.Connections {
+		var exitCode *int
+		if connection.ExitCode != nil {
+			value := *connection.ExitCode
+			exitCode = &value
 		}
-		statuses[connection.ID] = connection.Status
+		execution.Connections[i] = evidenceConnection{
+			ID:                 connection.ID,
+			Status:             string(connection.Status),
+			Transport:          string(connection.Transport),
+			FullConsumption:    connection.FullConsumption,
+			ClientEOF:          connection.ClientEOF,
+			NativeLaunched:     connection.NativeLaunched,
+			CleanupComplete:    connection.CleanupComplete,
+			ExitCode:           exitCode,
+			Failure:            string(connection.Failure),
+			Error:              connection.Error,
+			ReceiptPath:        connection.ReceiptPath,
+			ProcessReceiptPath: connection.ProcessReceiptPath,
+			ResultPath:         connection.ResultPath,
+		}
 	}
-	for _, connection := range descriptor.Connections {
-		status, ok := statuses[connection.ID]
-		if !ok {
-			return fmt.Errorf("execution connection %s is absent from the index", connection.ID)
-		}
-		switch status {
-		case "passed", "failed":
-		case "pending":
-			if indexed.Status == "passed" {
-				return fmt.Errorf("passed execution leaves connection %s pending", connection.ID)
-			}
-		default:
-			return fmt.Errorf("execution connection %s has stale status %q", connection.ID, status)
-		}
-	}
-	return nil
+	return execution
 }
 
-func finalizePreparedSession(parent context.Context, session *preparedSession, pkg *materialPackage, logs map[string]string, output string, requireExecution bool) *evidenceOutcome {
+func evidenceMaterial(material agenttestify.Material) resultMaterial {
+	return resultMaterial{
+		ID:              material.ID,
+		Kind:            material.Kind,
+		Action:          material.Action,
+		Path:            material.Path,
+		PlanSHA256:      material.PlanSHA256,
+		ManifestSHA256:  material.ManifestSHA256,
+		RecordingSHA256: material.RecordingSHA256,
+		Provenance:      material.Provenance,
+		Connections:     append([]string(nil), material.Connections...),
+	}
+}
+
+func finalizePreparedSession(parent context.Context, session *preparedSession, pkg *materialPackage, executionID, output string, requireExecution bool) *evidenceOutcome {
 	outcome := &evidenceOutcome{}
-	evidence, evidenceErr := inspectSessionEvidence(session)
+	evidence, evidenceErr := inspectSessionEvidence(session, executionID)
 	outcome.Evidence = evidence
 	if evidenceErr != nil {
 		outcome.Error = errors.Join(outcome.Error, evidenceErr)
-	} else {
-		if requireExecution && len(evidence.Index.Executions) == 0 {
-			outcome.ProtocolError = errors.Join(outcome.ProtocolError, errors.New("SDK business passed without a mock execution"))
-		}
-		if pkg != nil {
-			for i, execution := range evidence.Executions {
-				if err := validateExecutionEvidence(execution, evidence.Index.Executions[i], session, pkg); err != nil {
-					outcome.Error = errors.Join(outcome.Error, err)
-				}
+	}
+	if requireExecution && executionID == "" {
+		outcome.ProtocolError = errors.Join(outcome.ProtocolError, errors.New("SDK business passed without a mock execution"))
+	}
+	if executionID != "" && session.Fixture != nil {
+		report, err := session.Fixture.ExecutionReport(executionID)
+		if err != nil {
+			outcome.Error = errors.Join(outcome.Error, fmt.Errorf("validate execution report: %w", err))
+		} else {
+			if err := validateExecutionEvidence(report, session, pkg); err != nil {
+				outcome.Error = errors.Join(outcome.Error, err)
 			}
-		}
-		if pkg != nil && logs != nil && len(evidence.Executions) == 1 {
-			if err := validateResultNotices(logs, session, pkg, evidence); err != nil {
-				outcome.ProtocolError = errors.Join(outcome.ProtocolError, err)
+			if requireExecution && report.Status != agenttestify.ExecutionStatusPassed {
+				outcome.ProtocolError = errors.Join(outcome.ProtocolError,
+					fmt.Errorf("SDK business passed with mock execution status %s", report.Status))
 			}
 		}
 	}
@@ -221,8 +177,13 @@ func finalizePreparedSession(parent context.Context, session *preparedSession, p
 	if cleanupCtx.Err() != nil {
 		outcome.Error = errors.Join(outcome.Error, cleanupCtx.Err())
 	}
-	if err := cleanupPreparedSession(session.Dir); err != nil {
-		outcome.Error = errors.Join(outcome.Error, err)
+	var cleanupErr error
+	if session.Runner != nil {
+		cleanupErr = session.Runner.Close()
+	}
+	cleanupErr = errors.Join(cleanupErr, cleanupPreparedSession(session.Dir))
+	if cleanupErr != nil {
+		outcome.Error = errors.Join(outcome.Error, cleanupErr)
 	}
 	if _, err := os.Lstat(session.ResourceRoot); err == nil {
 		outcome.Error = errors.Join(outcome.Error, errors.New("cleanup left the session resource root in place"))
@@ -238,356 +199,125 @@ func finalizePreparedSession(parent context.Context, session *preparedSession, p
 	return outcome
 }
 
-func validateExecutionEvidence(execution executionDescriptor, indexed evidenceIndexEntry, session *preparedSession, pkg *materialPackage) error {
-	if execution.Command != "mock" ||
-		execution.Executor != "external-sdk" ||
-		execution.Target != "replay" ||
-		execution.Provenance != pkg.Material.Provenance ||
-		!reflect.DeepEqual(execution.Source, session.Source) {
-		return errors.New("execution descriptor identity differs from the prepared session")
+func validateExecutionEvidence(report *agenttestify.ExecutionReport, session *preparedSession, pkg *materialPackage) error {
+	if report == nil {
+		return errors.New("execution report is unavailable")
 	}
-	if err := validateExecutionHistory(execution, pkg); err != nil {
+	if report.FixtureID != session.SessionID || report.ExecutionID == "" ||
+		report.ExecutionSHA256 == "" || report.ExecutionPath == "" {
+		return errors.New("execution report identity differs from the prepared session")
+	}
+	switch report.Status {
+	case agenttestify.ExecutionStatusOpen, agenttestify.ExecutionStatusRunning:
+		return fmt.Errorf("mock execution %s remained %s after cleanup", report.ExecutionID, report.Status)
+	case agenttestify.ExecutionStatusPassed, agenttestify.ExecutionStatusFailed:
+	default:
+		return fmt.Errorf("unsupported execution status %q", report.Status)
+	}
+	if !report.Complete {
+		return fmt.Errorf("mock execution %s is not complete", report.ExecutionID)
+	}
+	if err := validateSessionEvidencePath(session, report.ExecutionPath, "execution descriptor"); err != nil {
 		return err
 	}
-	seen := map[string]bool{}
-	statuses := map[string]string{}
-	for _, connection := range indexed.Connections {
-		statuses[connection.ID] = connection.Status
+	hash, err := digestPath(report.ExecutionPath)
+	if err != nil || hash != report.ExecutionSHA256 {
+		return errors.New("execution descriptor hash differs from the typed report")
 	}
-	for _, entry := range execution.Connections {
-		if seen[entry.ID] {
-			return fmt.Errorf("execution descriptor repeats connection %s", entry.ID)
-		}
-		seen[entry.ID] = true
-		routeConnection, ok := session.Connection(entry.ID)
-		if !ok || entry.Command != routeConnection.Command || !reflect.DeepEqual(entry.Args, routeConnection.Args) {
-			return fmt.Errorf("execution descriptor connection %s differs from the route", entry.ID)
-		}
-		recordingHash := pkg.Material.RecordingSHA256
-		if entry.ID == "probe" {
-			recordingHash = pkg.Material.Files["remote-probe/raw/raw.jsonl"]
-		}
-		if entry.PlanSHA256 != pkg.Material.PlanSHA256 ||
-			entry.ManifestSHA256 != pkg.Material.ManifestSHA256 ||
-			entry.RecordingSHA256 != recordingHash {
-			return fmt.Errorf("execution descriptor connection %s differs from the exported material", entry.ID)
-		}
-		materialPath, err := canonicalPath(entry.Material)
-		if err != nil {
-			return err
-		}
-		wantMaterial, err := canonicalPath(pkg.Material.Path)
-		if err != nil || materialPath != wantMaterial {
-			return fmt.Errorf("execution descriptor connection %s material differs from the export", entry.ID)
-		}
-		for label, path := range map[string]string{
-			"receipt":         entry.Receipt,
-			"process receipt": entry.ProcessReceipt,
-		} {
-			if err := validateSessionEvidencePath(session, path, label); err != nil {
-				return err
-			}
-		}
-		if err := validateDurableConnectionReceipt(entry, execution.ExecutionID, session, pkg, statuses[entry.ID]); err != nil {
+	if pkg != nil {
+		if err := validateExecutionMaterial(report.Material, pkg, session); err != nil {
 			return err
 		}
 	}
-	if !reflect.DeepEqual(sortedStrings(mapKeys(seen)), session.ConnectionIDs()) {
-		return errors.New("execution descriptor connections differ from the session route")
+	expected := session.ConnectionIDs()
+	got := make([]string, len(report.Connections))
+	for i, connection := range report.Connections {
+		got[i] = connection.ID
+		if err := validateEmbeddedConnection(connection, session); err != nil {
+			return err
+		}
 	}
-	return nil
-}
-
-func validateDurableConnectionReceipt(entry executionEntry, executionID string, session *preparedSession, pkg *materialPackage, status string) error {
-	if status != "passed" && status != "failed" {
-		return nil
+	sort.Strings(got)
+	if !reflect.DeepEqual(got, expected) {
+		return errors.New("execution report connections differ from the prepared route")
 	}
-	expectedRecording := pkg.Material.RecordingSHA256
-	if entry.ID == "probe" {
-		expectedRecording = pkg.Material.Files["remote-probe/raw/raw.jsonl"]
-	}
-	var receipt map[string]any
-	if err := readEvidenceJSON(entry.Receipt, "replay receipt", &receipt); err != nil {
-		return err
-	}
-	if receipt["version"] != float64(1) ||
-		receipt["status"] != status ||
-		receipt["provider"] != pkg.Plan.Provider ||
-		receipt["recordingSHA256"] != expectedRecording ||
-		receipt["planSHA256"] != pkg.Material.PlanSHA256 ||
-		receipt["error"] != nil {
-		return fmt.Errorf("connection %s replay receipt differs from the execution", entry.ID)
-	}
-	if status == "passed" &&
-		(receipt["fullConsumption"] != true || receipt["clientEOF"] != true ||
-			receipt["cleanupComplete"] != true || receipt["nativeLaunched"] != false) {
-		return fmt.Errorf("connection %s replay receipt is incomplete", entry.ID)
-	}
-	var process map[string]any
-	if err := readEvidenceJSON(entry.ProcessReceipt, "mock process receipt", &process); err != nil {
-		return err
-	}
-	if process["schemaVersion"] != float64(1) ||
-		process["sessionId"] != session.SessionID ||
-		process["executionId"] != executionID ||
-		process["connectionId"] != entry.ID ||
-		process["status"] != status {
-		return fmt.Errorf("connection %s process receipt differs from the execution", entry.ID)
-	}
-	if status == "passed" && (process["exitCode"] != float64(0) || process["error"] != nil) {
-		return fmt.Errorf("connection %s process receipt is not successful", entry.ID)
-	}
-	return nil
-}
-
-func validateExecutionHistory(execution executionDescriptor, pkg *materialPackage) error {
-	expected := map[string]string{}
-	maps.Copy(expected, pkg.Manifest.SavedFiles)
-	var plan map[string]any
-	if len(pkg.AssertionPlan) > 0 && json.Unmarshal(pkg.AssertionPlan, &plan) == nil {
-		seed, _ := plan["historySeed"].(map[string]any)
-		files, _ := seed["files"].(map[string]any)
-		for name, value := range files {
-			switch value := value.(type) {
-			case string:
-				expected[name] = value
-			case map[string]any:
-				if digest, ok := value["sha256"].(string); ok {
-					expected[name] = digest
-				}
+	if report.Status == agenttestify.ExecutionStatusPassed {
+		for _, connection := range report.Connections {
+			if connection.Status != agenttestify.ConnectionStatusPassed {
+				return fmt.Errorf("execution report passes while connection %s is %s", connection.ID, connection.Status)
 			}
 		}
 	}
-	runtimeKey := historyProjectKey(execution.Workspace)
-	allowedRuntime := make(map[string]bool, len(expected))
-	for name, digest := range expected {
-		if got, ok := execution.HistoryFiles[name]; !ok || got != digest {
-			return errors.New("execution history bindings differ from selected material")
-		}
-		tail, ok := historyProjectTail(name)
-		if ok {
-			allowedRuntime[filepath.Join("config", "projects", runtimeKey, tail)] = true
-		}
-	}
-	for name, digest := range execution.HistoryFiles {
-		if !safeRelative(name) {
-			return errors.New("execution history bindings differ from selected material")
-		}
-		if expected[name] == digest || allowedRuntime[name] {
-			continue
-		}
-		return errors.New("execution history bindings differ from selected material")
-	}
 	return nil
 }
 
-func historyProjectTail(path string) (string, bool) {
-	const marker = "config/projects/"
-	path = filepath.ToSlash(filepath.Clean(path))
-	_, rest, found := strings.Cut(path, marker)
-	if !found {
-		return "", false
+func validateExecutionMaterial(material agenttestify.Material, pkg *materialPackage, session *preparedSession) error {
+	want := pkg.Material
+	if material.ID != want.ID ||
+		material.Kind != want.Kind ||
+		material.Action != want.Action ||
+		material.Provenance != want.Provenance ||
+		material.PlanSHA256 != want.PlanSHA256 ||
+		material.ManifestSHA256 != want.ManifestSHA256 ||
+		material.RecordingSHA256 != want.RecordingSHA256 {
+		return errors.New("execution material identity differs from the exported material")
 	}
-	project, tail, ok := strings.Cut(rest, "/")
-	return tail, ok && project != "" && tail != ""
-}
-
-func historyProjectKey(path string) string {
-	return strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-			return r
-		}
-		return '-'
-	}, filepath.Clean(path))
-}
-
-func validateResultNotices(logs map[string]string, session *preparedSession, pkg *materialPackage, evidence *sessionEvidence) error {
-	if evidence == nil || len(evidence.Executions) != 1 || len(evidence.Index.Executions) != 1 {
-		return errors.New("result notices require one execution")
-	}
-	execution := evidence.Executions[0]
-	indexed := evidence.Index.Executions[0]
-	statuses := map[string]string{}
-	for _, connection := range indexed.Connections {
-		statuses[connection.ID] = connection.Status
-	}
-	if len(logs) != len(session.ConnectionIDs()) {
-		return errors.New("result notice inventory differs from the session route")
-	}
-	for _, id := range session.ConnectionIDs() {
-		expectedStatus := statuses[id]
-		if expectedStatus == "pending" {
-			continue
-		}
-		path, ok := logs[id]
-		if !ok {
-			return fmt.Errorf("result notice for connection %s is missing", id)
-		}
-		notices, err := readResultNotices(path)
-		if err != nil {
-			return fmt.Errorf("connection %s: %w", id, err)
-		}
-		if len(notices) != 2 {
-			return fmt.Errorf("connection %s has %d result notices; want start and completion", id, len(notices))
-		}
-		start, done := notices[0], notices[1]
-		if err := validateResultNotice(start, session, pkg, id, indexed.ID, "running"); err != nil {
-			return err
-		}
-		if err := validateResultNotice(done, session, pkg, id, indexed.ID, expectedStatus); err != nil {
-			return err
-		}
-		if err := validateConnectionReceipts(done, pkg); err != nil {
-			return fmt.Errorf("connection %s: %w", id, err)
-		}
-		start.Status, done.Status = "", ""
-		if !reflect.DeepEqual(start, done) {
-			return fmt.Errorf("connection %s result identity changed during execution", id)
-		}
-		if err := validateResultExecution(done, execution); err != nil {
-			return fmt.Errorf("connection %s: %w", id, err)
-		}
-	}
-	return nil
-}
-
-func readResultNotices(path string) ([]resultNotice, error) {
-	info, err := os.Lstat(path)
+	gotPath, err := canonicalPath(material.Path)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("execution material path: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return nil, errors.New("result notice log is not a regular file")
-	}
-	file, err := os.Open(path)
+	sessionPath, err := canonicalPath(session.Dir)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("prepared session path: %w", err)
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 4096), 1<<20)
-	var notices []resultNotice
-	for scanner.Scan() {
-		if len(notices) >= 2 {
-			return nil, errors.New("result notice log has extra records")
-		}
-		var notice resultNotice
-		if err := json.Unmarshal(scanner.Bytes(), &notice); err != nil {
-			return nil, fmt.Errorf("result notice: %w", err)
-		}
-		notices = append(notices, notice)
+	wantPath, err := canonicalPath(want.Path)
+	if err != nil || gotPath != wantPath {
+		return errors.New("execution material path differs from the prepared source")
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	if !pathWithin(gotPath, sessionPath) {
+		return errors.New("execution material is outside the prepared session")
 	}
-	return notices, nil
-}
-
-func validateResultNotice(notice resultNotice, session *preparedSession, pkg *materialPackage, id, executionID, status string) error {
-	if notice.SchemaVersion != 1 || notice.SessionID != session.SessionID ||
-		notice.Command != "mock" || notice.ConnectionID != id ||
-		notice.ExecutionID != executionID || notice.ExecutionSHA256 == "" ||
-		notice.Status != status || notice.ProcessID <= 0 {
-		return fmt.Errorf("result notice identity/status differs for connection %s", id)
-	}
-	if notice.Material.ID != pkg.Material.ID ||
-		notice.Material.Path != pkg.Material.Path ||
-		notice.Material.PlanSHA256 != pkg.Material.PlanSHA256 ||
-		notice.Material.ManifestSHA256 != pkg.Material.ManifestSHA256 ||
-		notice.Material.RecordingSHA256 != pkg.Material.RecordingSHA256 ||
-		notice.Material.Provenance != pkg.Material.Provenance {
-		return fmt.Errorf("result notice material differs for connection %s", id)
-	}
-	for label, path := range map[string]string{
-		"execution":       notice.Execution,
-		"receipt":         notice.Receipt,
-		"process receipt": notice.ProcessReceipt,
-		"result":          notice.Result,
-	} {
-		if err := validateSessionEvidencePath(session, path, label); err != nil {
-			return err
-		}
-	}
-	hash, err := digestPath(notice.Execution)
-	if err != nil || hash != notice.ExecutionSHA256 {
-		return fmt.Errorf("execution descriptor hash differs for connection %s", id)
+	gotConnections := append([]string(nil), material.Connections...)
+	wantConnections := append([]string(nil), want.Connections...)
+	sort.Strings(gotConnections)
+	sort.Strings(wantConnections)
+	if !reflect.DeepEqual(gotConnections, wantConnections) {
+		return errors.New("execution material connections differ from the exported material")
 	}
 	return nil
 }
 
-func validateConnectionReceipts(notice resultNotice, pkg *materialPackage) error {
-	expectedRecording := pkg.Material.RecordingSHA256
-	if notice.ConnectionID == "probe" {
-		expectedRecording = pkg.Material.Files["remote-probe/raw/raw.jsonl"]
+func validateEmbeddedConnection(connection agenttestify.ConnectionReport, session *preparedSession) error {
+	if _, ok := session.Connection(connection.ID); !ok {
+		return fmt.Errorf("execution report contains undeclared connection %s", connection.ID)
 	}
-	var receipt map[string]any
-	if err := readEvidenceJSON(notice.Receipt, "replay receipt", &receipt); err != nil {
-		return err
+	switch connection.Status {
+	case agenttestify.ConnectionStatusPending, agenttestify.ConnectionStatusRunning:
+		return fmt.Errorf("connection %s remained %s after cleanup", connection.ID, connection.Status)
+	case agenttestify.ConnectionStatusPassed, agenttestify.ConnectionStatusFailed:
+	default:
+		return fmt.Errorf("connection %s has unsupported status %q", connection.ID, connection.Status)
 	}
-	if receipt["version"] != float64(1) ||
-		receipt["status"] != notice.Status ||
-		receipt["provider"] != pkg.Plan.Provider ||
-		receipt["recordingSHA256"] != expectedRecording ||
-		receipt["planSHA256"] != pkg.Material.PlanSHA256 ||
-		receipt["error"] != nil {
-		return errors.New("replay receipt differs from the result notice")
+	if connection.Transport != agenttestify.MockTransportInProcess ||
+		connection.NativeLaunched || connection.ExitCode != nil ||
+		connection.ProcessReceiptPath != "" {
+		return fmt.Errorf("connection %s carries process identity in an embedded execution", connection.ID)
 	}
-	if notice.Status == "passed" {
-		if receipt["fullConsumption"] != true || receipt["clientEOF"] != true ||
-			receipt["cleanupComplete"] != true || receipt["nativeLaunched"] != false {
-			return errors.New("replay receipt does not prove full consumption, EOF and cleanup")
+	if err := validateSessionEvidencePath(session, connection.ReceiptPath, "replay receipt"); err != nil {
+		return fmt.Errorf("connection %s: %w", connection.ID, err)
+	}
+	if err := validateSessionEvidencePath(session, connection.ResultPath, "mock result"); err != nil {
+		return fmt.Errorf("connection %s: %w", connection.ID, err)
+	}
+	if connection.Status == agenttestify.ConnectionStatusPassed {
+		if !connection.FullConsumption || !connection.ClientEOF || !connection.CleanupComplete {
+			return fmt.Errorf("connection %s does not prove full consumption, client EOF and cleanup", connection.ID)
 		}
-	}
-	var process map[string]any
-	if err := readEvidenceJSON(notice.ProcessReceipt, "mock process receipt", &process); err != nil {
-		return err
-	}
-	if process["schemaVersion"] != float64(1) ||
-		process["sessionId"] != notice.SessionID ||
-		process["executionId"] != notice.ExecutionID ||
-		process["connectionId"] != notice.ConnectionID ||
-		process["status"] != notice.Status {
-		return errors.New("mock process receipt differs from the result notice")
-	}
-	if notice.Status == "passed" {
-		if process["exitCode"] != float64(0) || process["error"] != nil {
-			return errors.New("mock process receipt is not successful")
+		if connection.Failure != "" || connection.Error != "" {
+			return fmt.Errorf("connection %s reports a failure while passed", connection.ID)
 		}
 	}
 	return nil
-}
-
-func readEvidenceJSON(path, label string, value any) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return fmt.Errorf("%s evidence is unavailable: %w", label, err)
-	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%s is not a regular file", label)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(data, value); err != nil {
-		return fmt.Errorf("%s: %w", label, err)
-	}
-	return nil
-}
-
-func validateResultExecution(notice resultNotice, execution executionDescriptor) error {
-	if notice.ExecutionID != execution.ExecutionID || notice.ExecutionSHA256 == "" {
-		return errors.New("result notice execution identity differs")
-	}
-	for _, entry := range execution.Connections {
-		if entry.ID == notice.ConnectionID {
-			if notice.Receipt != entry.Receipt || notice.ProcessReceipt != entry.ProcessReceipt {
-				return errors.New("result notice receipt paths differ from the execution")
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("result notice connection %s is absent from the execution", notice.ConnectionID)
 }
 
 func validateSessionEvidencePath(session *preparedSession, path, label string) error {
@@ -603,12 +333,4 @@ func validateSessionEvidencePath(session *preparedSession, path, label string) e
 		return fmt.Errorf("%s evidence is unavailable", label)
 	}
 	return nil
-}
-
-func mapKeys(values map[string]bool) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	return keys
 }

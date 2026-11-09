@@ -65,11 +65,27 @@ func (s *mockSDKSuite) open(script mockScenarioDefinition, wantStatus string) {
 	session, err := mocktest.Prepare(dir, "claude", data, mocktest.Options{})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { verifySDKSession(s.T(), session, wantStatus) })
-	exe, err := session.Launcher("main")
+	run, err := session.NewRun(s.ctx, mocktest.RunOptions{})
 	s.Require().NoError(err)
-	env := append(append([]string(nil), session.Env...), "GORACE=atexit_sleep_ms=0")
-	s.client, err = claude.Open(s.ctx, claude.SessionOptions{CLIPath: exe, WorkDir: session.Workspace, Env: env, ShutdownTimeout: time.Second})
+	s.client, err = claude.OpenStreams(s.ctx, claude.SessionOptions{
+		CLIPath:           "must-not-start",
+		WorkDir:           run.Start.Workspace,
+		Env:               run.Environment(),
+		InitializeTimeout: 2 * time.Second,
+		ShutdownTimeout:   time.Second,
+	}, claude.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.Abort()
+	}
 	s.Require().NoError(err)
+	client := s.client
+	s.T().Cleanup(func() { _ = client.Close(); _ = run.CloseSDK() })
+	run.CloseInputWhenComplete(client.CloseInput)
 }
 
 func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {

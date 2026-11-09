@@ -18,15 +18,10 @@ import (
 )
 
 func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
-	runRecordedContinuation(t, false, nil)
+	runRecordedContinuation(t, false)
 }
 
-type sessionLauncher struct {
-	Path string
-	Env  []string
-}
-
-func runRecordedContinuation(t *testing.T, mcp bool, custom func(*testing.T, *mocktest.Session) sessionLauncher) {
+func runRecordedContinuation(t *testing.T, mcp bool) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0o700))
@@ -60,18 +55,10 @@ func runRecordedContinuation(t *testing.T, mcp bool, custom func(*testing.T, *mo
 	session, err := mocktest.Prepare(t.TempDir(), "claude", []byte(capture.String()), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, session, "passed") })
-	launcher := sessionLauncher{Path: ""}
-	if custom == nil {
-		launcher.Path, err = session.Launcher("main")
-		require.NoError(t, err)
-	} else {
-		launcher = custom(t, session)
-	}
 	host := preparedHost(t, session)
-	host.Env = append(host.Env, launcher.Env...)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	require.NoError(t, AcceptFlow(ctx, launcher.Path, root, host, claude.ChildDetailPreserve, io.Discard))
+	require.NoError(t, AcceptFlow(ctx, session, root, host, claude.ChildDetailPreserve, io.Discard))
 }
 
 func preparedHost(t *testing.T, session *mocktest.Session) Host {

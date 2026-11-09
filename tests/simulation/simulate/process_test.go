@@ -115,8 +115,15 @@ func TestSDKRequestUsesRunnerPeers(t *testing.T) {
 	require.Equal(t, "codex", result.Runs[0].Provider)
 	require.Empty(t, result.Runs[0].ProtocolError)
 	require.Empty(t, result.Runs[0].CleanupError)
-	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "result-main.jsonl"))
-	require.Equal(t, "passed", readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json")).Status)
+	evidence := readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json"))
+	require.Equal(t, "passed", evidence.Status)
+	require.Len(t, evidence.Executions, 1)
+	require.Equal(t, "in-process", evidence.Executions[0].Connections[0].Transport)
+	require.True(t, evidence.Executions[0].Connections[0].FullConsumption)
+	require.True(t, evidence.Executions[0].Connections[0].ClientEOF)
+	require.True(t, evidence.Executions[0].Connections[0].CleanupComplete)
+	require.False(t, evidence.Executions[0].Connections[0].NativeLaunched)
+	require.Empty(t, evidence.Executions[0].Connections[0].ProcessReceiptPath)
 }
 
 func TestSourceSuppressPolicyStillRunsAndComparesBothPolicies(t *testing.T) {
@@ -215,10 +222,20 @@ func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
 	require.Empty(t, result.Runs[0].BridgeError)
 	evidence := readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json"))
 	require.Equal(t, "passed", evidence.Status)
-	require.Len(t, evidence.Index.Executions, 1)
-	require.Len(t, evidence.Index.Executions[0].Connections, 2)
-	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "result-main.jsonl"))
-	require.FileExists(t, filepath.Join(output, "preserve", "sdk", "result-probe.jsonl"))
+	require.Len(t, evidence.Executions, 1)
+	require.Len(t, evidence.Executions[0].Connections, 2)
+	for _, connection := range evidence.Executions[0].Connections {
+		require.Equalf(t, "passed", connection.Status, connection.ID)
+		require.Equalf(t, "in-process", connection.Transport, connection.ID)
+		require.Truef(t, connection.FullConsumption, connection.ID)
+		require.Truef(t, connection.ClientEOF, connection.ID)
+		require.Falsef(t, connection.NativeLaunched, connection.ID)
+		require.Truef(t, connection.CleanupComplete, connection.ID)
+		require.Nilf(t, connection.ExitCode, connection.ID)
+		require.Emptyf(t, connection.ProcessReceiptPath, connection.ID)
+		require.NotEmptyf(t, connection.ReceiptPath, connection.ID)
+		require.NotEmptyf(t, connection.ResultPath, connection.ID)
+	}
 }
 
 func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {

@@ -1,12 +1,9 @@
 package main
 
 import (
-	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 type command struct {
@@ -17,26 +14,27 @@ type command struct {
 }
 
 type toolIdentity struct {
-	Command string
-	Version string
-	SHA256  string
+	Source         string `json:"source"`
+	Version        string `json:"version"`
+	Module         string `json:"module"`
+	ModuleSum      string `json:"moduleSum"`
+	ModuleRevision string `json:"moduleRevision"`
+	ModuleTime     string `json:"moduleTime"`
+	GoVersion      string `json:"goVersion"`
 }
 
-func discoverTool(ctx context.Context) (toolIdentity, error) {
-	path := os.Getenv("AGENT_SDK_TESTIFY_BIN")
-	if path == "" {
-		return toolIdentity{}, errors.New("no published testify pin; set absolute AGENT_SDK_TESTIFY_BIN for local integration")
+func discoverTool() (toolIdentity, error) {
+	identity := mocktest.EmbeddedIdentity()
+	if identity == nil || identity.Version == "" || identity.Sum == "" || identity.Revision == "" {
+		return toolIdentity{}, errors.New("embedded agent-sdk-testify identity is incomplete")
 	}
-	if !filepath.IsAbs(path) {
-		return toolIdentity{}, errors.New("AGENT_SDK_TESTIFY_BIN must be absolute")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return toolIdentity{}, err
-	}
-	out, err := exec.CommandContext(ctx, path, "version").Output()
-	if err != nil {
-		return toolIdentity{}, err
-	}
-	return toolIdentity{path, strings.TrimSpace(string(out)), digest(data)}, nil
+	return toolIdentity{
+		Source:         "embedded",
+		Version:        identity.Version,
+		Module:         "github.com/zoumo/agent-sdk-testify",
+		ModuleSum:      identity.Sum,
+		ModuleRevision: identity.Revision,
+		ModuleTime:     identity.Time,
+		GoVersion:      identity.GoVersion,
+	}, nil
 }

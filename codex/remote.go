@@ -176,6 +176,17 @@ func (c *Client) writeFrame(ctx context.Context, frame []byte) error {
 		}
 		return nil
 	}
+	if c.streamMode {
+		if c.inputIsClosed() {
+			return ErrInputClosed
+		}
+		frame = append(frame, '\n')
+		n, err := c.streamWriter.Write(frame)
+		if err == nil && n != len(frame) {
+			err = io.ErrShortWrite
+		}
+		return err
+	}
 	frame = append(frame, '\n')
 	n, err := c.stdin.Write(frame)
 	if err == nil && n != len(frame) {

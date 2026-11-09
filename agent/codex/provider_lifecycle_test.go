@@ -27,15 +27,7 @@ func TestProviderStartOwnsOneConnectionAndStopIsTerminal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	peerSession := prepareCodexPeer(t, mockCodexInit...)
-	provider := agentcodex.New(agentcodex.Config{Stdio: codex.StdioOptions{
-		Executable: mustCommand(t, peerSession),
-		Args:       mustCommandArgs(t, peerSession),
-		Env:        peerSession.Env,
-		Dir:        peerSession.Workspace,
-		Initialize: codextypes.InitializeParams{
-			ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
-		},
-	}})
+	provider := newTestProvider(t, peerSession)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	capabilities, err := provider.Start(ctx)
@@ -170,15 +162,44 @@ func codexThreadStartResult(threadID string) string {
 
 func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Provider {
 	t.Helper()
-	return agentcodex.New(agentcodex.Config{Stdio: codex.StdioOptions{
-		Executable: mustCommand(t, peerSession),
-		Args:       mustCommandArgs(t, peerSession),
-		Env:        peerSession.Env,
-		Dir:        peerSession.Workspace,
-		Initialize: codextypes.InitializeParams{
-			ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
-		},
-	}})
+	return newTestProviderWithInitialize(t, peerSession, codextypes.InitializeParams{
+		ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
+	})
+}
+
+func newTestProviderWithInitialize(
+	t *testing.T,
+	peerSession *mocktest.Session,
+	initialize codextypes.InitializeParams,
+) *agentcodex.Provider {
+	t.Helper()
+	runCtx, cancelRun := context.WithTimeout(
+		context.WithoutCancel(t.Context()),
+		30*time.Second,
+	)
+	run, err := peerSession.NewRun(runCtx, mocktest.RunOptions{})
+	require.NoError(t, err)
+	provider := agentcodex.NewWithStream(agentcodex.Config{Stdio: codex.StdioOptions{
+		Args:       run.Start.NativeArgs,
+		Env:        run.Environment(),
+		Dir:        run.Start.ProtocolCwd,
+		Initialize: initialize,
+	}}, codex.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	}, func(client *codex.Client) {
+		run.CloseInputWhenComplete(client.CloseInput)
+	})
+	t.Cleanup(func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = provider.Stop(stopCtx)
+		_ = run.CloseSDK()
+		cancelRun()
+	})
+	return provider
 }
 
 func prepareCodexPeer(t *testing.T, frames ...string) *mocktest.Session {
@@ -227,20 +248,6 @@ func prepareCodexPeerWithStatus(
 		require.NoError(t, peerSession.Close())
 	})
 	return peerSession
-}
-
-func mustCommand(t *testing.T, session *mocktest.Session) string {
-	t.Helper()
-	executable, _, err := session.Command("main")
-	require.NoError(t, err)
-	return executable
-}
-
-func mustCommandArgs(t *testing.T, session *mocktest.Session) []string {
-	t.Helper()
-	_, args, err := session.Command("main")
-	require.NoError(t, err)
-	return args
 }
 
 func closeSessionOnCleanup(t *testing.T, session agent.Session) {

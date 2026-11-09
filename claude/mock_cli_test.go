@@ -72,11 +72,7 @@ func (s *mockCLISuite) TestInteractions() {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
-			launcher, err := peerSession.Launcher("main")
-			require.NoError(t, err)
-			client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: peerSession.Workspace, Env: peerSession.Env})
-			require.NoError(t, err)
-			defer client.Abort()
+			client, _ := openMockSession(t, ctx, peerSession)
 			require.NoError(t, submitMockCLIInput(ctx, client, "hello"))
 			if mode != "permission-and-interrupt" {
 				for {
@@ -85,12 +81,10 @@ func (s *mockCLISuite) TestInteractions() {
 						require.NotErrorIs(t, err, context.DeadlineExceeded)
 						require.NoError(t, ctx.Err())
 						closeErr := client.Close()
-						var nativeErr *claude.Error
-						require.ErrorAs(t, closeErr, &nativeErr)
-						require.NotNil(t, nativeErr.ExitCode)
-						assert.Equal(t, 1, *nativeErr.ExitCode)
 						if mode == "disconnect" {
-							assert.Contains(t, nativeErr.Stderr, "scripted disconnect")
+							require.ErrorIs(t, closeErr, mocktest.ErrDisconnected)
+						} else {
+							require.Error(t, closeErr)
 						}
 						break
 					}
@@ -133,11 +127,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	peerSession, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
-	launcher, err := peerSession.Launcher("main")
-	require.NoError(t, err)
-	client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: peerSession.Workspace, Env: peerSession.Env})
-	require.NoError(t, err)
-	defer client.Abort()
+	client, _ := openMockSession(t, ctx, peerSession)
 	first, err := client.Receive(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "forwarding-not-confirmed", first.Observation.Reason)
@@ -175,11 +165,35 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
-	var terminal *claude.Error
-	require.ErrorAs(t, client.Close(), &terminal)
-	require.NotNil(t, terminal.ExitCode)
-	require.Equal(t, 1, *terminal.ExitCode)
-	require.Contains(t, terminal.Stderr, "scripted disconnect")
+	require.ErrorIs(t, client.Close(), mocktest.ErrDisconnected)
+}
+
+func openMockSession(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*claude.Session, *mocktest.Run) {
+	t.Helper()
+	run, err := peerSession.NewRun(ctx, mocktest.RunOptions{})
+	require.NoError(t, err)
+	client, err := claude.OpenStreams(ctx, claude.SessionOptions{
+		CLIPath:           "must-not-start",
+		WorkDir:           run.Start.Workspace,
+		Env:               run.Environment(),
+		InitializeTimeout: 2 * time.Second,
+		ShutdownTimeout:   time.Second,
+	}, claude.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.Abort()
+		require.NoError(t, err)
+	}
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = run.CloseSDK()
+	})
+	run.CloseInputWhenComplete(client.CloseInput)
+	return client, run
 }
 
 func submitMockCLIInput(ctx context.Context, session *claude.Session, text string) error {

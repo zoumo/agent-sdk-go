@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 func TestClaudePermissionAnswerOutcomes(t *testing.T) {
@@ -323,9 +321,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	)
 	firstPeer := prepareClaudePeer(t, "passed", firstFrames...)
 	secondPeer := prepareClaudePeer(t, "passed", secondFrames...)
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: sequencedClaudeLauncher(t, firstPeer, secondPeer),
-	})
+	provider := newTestClaudeProviderSequence(t, firstPeer, secondPeer)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -635,13 +631,12 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 			`"message":"AskUserQuestion is disabled for this session"}}}`,
 	}
 	disabled := false
-	session, stream := openClaudeInteractionSessionWithLaunch(
+	session, stream := openClaudeInteractionSession(
 		t,
 		ctx,
 		cwd,
 		"passed",
 		agent.Features{AgentQuestions: &disabled},
-		launchClaudeMockWithoutUnsupportedArgs,
 		frames...,
 	)
 
@@ -739,7 +734,9 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			requested := nextClaudeInteractionRequested(t, ctx, stream)
 
 			if test.closeFirst {
-				require.NoError(t, session.Close(ctx))
+				err := session.Close(ctx)
+				require.Error(t, err)
+				assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
 			}
 			closed := nextClaudeInteractionClosed(t, ctx, stream)
 			assert.Equal(t, requested.Interaction, closed.Interaction)
@@ -758,7 +755,11 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 				require.NoError(t, session.Close(ctx))
 			}
 			_, err = stream.Next(ctx)
-			require.ErrorIs(t, err, io.EOF)
+			if test.closeFirst {
+				assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+			} else {
+				require.ErrorIs(t, err, io.EOF)
+			}
 		})
 	}
 }
@@ -851,38 +852,11 @@ func openClaudeInteractionSession(
 	features agent.Features,
 	frames ...string,
 ) (agent.Session, agent.EventStream) {
-	return openClaudeInteractionSessionWithLaunch(
-		t,
-		ctx,
-		cwd,
-		wantStatus,
-		features,
-		nil,
-		frames...,
-	)
-}
-
-func openClaudeInteractionSessionWithLaunch(
-	t *testing.T,
-	ctx context.Context,
-	cwd string,
-	wantStatus string,
-	features agent.Features,
-	launch func(testing.TB, *mocktest.Session) (string, []string),
-	frames ...string,
-) (agent.Session, agent.EventStream) {
 	t.Helper()
 	all := append([]string(nil), mockClaudeInit...)
 	all = append(all, frames...)
 	peerSession := prepareClaudePeer(t, wantStatus, all...)
-	launcher, env := claudePeerLauncher(t, peerSession)
-	if launch != nil {
-		launcher, env = launch(t, peerSession)
-	}
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: launcher,
-		Env:     env,
-	})
+	provider := newTestClaudeProvider(t, peerSession)
 	t.Cleanup(func() {
 		assert.NoError(t, provider.Stop(context.Background()))
 	})
@@ -900,13 +874,6 @@ func openClaudeInteractionSessionWithLaunch(
 	stream, err := session.Events()
 	require.NoError(t, err)
 	return session, stream
-}
-
-func claudePeerLauncher(t testing.TB, peerSession *mocktest.Session) (string, []string) {
-	t.Helper()
-	launcher, err := peerSession.Launcher("main")
-	require.NoError(t, err)
-	return launcher, peerSession.Env
 }
 
 func claudeSessionInitFrame(t *testing.T, sessionID, cwd string) string {

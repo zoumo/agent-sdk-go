@@ -10,6 +10,8 @@ import (
 
 var (
 	ErrClosed                   = errors.New("claude: client is closed")
+	ErrInputClosed              = errors.New("claude: input is half-closed")
+	ErrStreamRequired           = errors.New("claude: stream transport required")
 	ErrInvalidInput             = errors.New("claude: invalid input")
 	ErrUnsupported              = errors.New("claude: unsupported operation")
 	ErrProtocol                 = errors.New("claude: invalid protocol frame")

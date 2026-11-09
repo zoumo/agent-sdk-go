@@ -15,6 +15,10 @@ verify, official orchestration and the consumer lifecycle implemented by prepare
 agent mock and export. The SDK consumes processes, never a cross-repository Go
 library.
 
+The proposed Go-library backend for Go test hosts is defined in
+[Go library mode](library-mode.md); this page remains the accepted process
+contract until that proposal is adopted.
+
 <a id="story-官方-sdk-仿真测试"></a>
 <a id="story-录制生命周期"></a>
 <a id="story-场景配置"></a>

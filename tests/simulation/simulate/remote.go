@@ -8,17 +8,18 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 type remotePeerEndpoint struct {
@@ -32,6 +33,7 @@ type remoteEndpoint struct {
 
 type mockRemoteService struct {
 	endpoint    remoteEndpoint
+	executionID string
 	server      *http.Server
 	cancel      context.CancelFunc
 	served      chan error
@@ -42,25 +44,60 @@ type mockRemoteService struct {
 	completions map[string]error
 	active      map[*websocket.Conn]bool
 	handlers    sync.WaitGroup
+	runs        map[string]*mocktest.Run
 	err         error
 }
 
-// The runner owns the offline service and its protocol children. Drivers see
-// only endpoints keyed by the declared connection ID. The URL path and bearer
-// token jointly select main or probe, so arrival order never grants identity.
-func startMockRemote(parent context.Context, peers map[string]command, root string) (*mockRemoteService, error) {
-	if len(peers) != 2 || peers["main"].Command == "" || peers["probe"].Command == "" {
-		return nil, errors.New("remote bridge requires declared main and probe peers")
+// The runner owns the authenticated loopback service and both in-process
+// replay connections. Drivers see only endpoints keyed by the declared
+// connection ID; protocol bytes never pass through a helper process.
+func startMockRemote(parent context.Context, mock *mocktest.Session, root string) (*mockRemoteService, error) {
+	if mock == nil {
+		return nil, errors.New("remote bridge requires a prepared fixture")
 	}
+	ids := mock.ConnectionIDs()
+	if len(ids) != 2 || ids[0] != "main" || ids[1] != "probe" {
+		return nil, errors.New("remote bridge requires declared main and probe connections")
+	}
+	nativeArgs := []string{"app-server", "--listen", "stdio://"}
+	mainRun, err := mock.NewRun(parent, mocktest.RunOptions{Connection: "main", NativeArgs: nativeArgs})
+	if err != nil {
+		return nil, fmt.Errorf("start remote main: %w", err)
+	}
+	cleanupMain := true
+	defer func() {
+		if cleanupMain {
+			_ = mainRun.Abort()
+			_ = mainRun.CloseSDK()
+		}
+	}()
+	probeRun, err := mock.NewRun(parent, mocktest.RunOptions{
+		Connection:  "probe",
+		ExecutionID: mainRun.Start.ExecutionID,
+		NativeArgs:  nativeArgs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start remote probe: %w", err)
+	}
+	cleanupMain = false
+
 	listener, err := (&net.ListenConfig{}).Listen(parent, "tcp", "127.0.0.1:0")
 	if err != nil {
+		_ = mainRun.Abort()
+		_ = probeRun.Abort()
+		_ = mainRun.CloseSDK()
+		_ = probeRun.CloseSDK()
 		return nil, err
 	}
-	endpoint := remoteEndpoint{Connections: make(map[string]remotePeerEndpoint, len(peers))}
+	endpoint := remoteEndpoint{Connections: make(map[string]remotePeerEndpoint, 2)}
 	for _, id := range []string{"main", "probe"} {
 		var secret [32]byte
 		if _, err := rand.Read(secret[:]); err != nil {
 			listener.Close()
+			_ = mainRun.Abort()
+			_ = probeRun.Abort()
+			_ = mainRun.CloseSDK()
+			_ = probeRun.CloseSDK()
 			return nil, err
 		}
 		endpoint.Connections[id] = remotePeerEndpoint{
@@ -71,15 +108,17 @@ func startMockRemote(parent context.Context, peers map[string]command, root stri
 	ctx, cancel := context.WithCancel(parent)
 	service := &mockRemoteService{
 		endpoint:    endpoint,
+		executionID: mainRun.Start.ExecutionID,
 		cancel:      cancel,
 		served:      make(chan error, 1),
 		opened:      map[string]bool{},
 		completions: map[string]error{},
 		active:      map[*websocket.Conn]bool{},
+		runs:        map[string]*mocktest.Run{"main": mainRun, "probe": probeRun},
 	}
 	service.server = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/")
-		peer, declared := peers[id]
+		run, declared := service.runs[id]
 		credentials, hasCredentials := service.endpoint.Connections[id]
 		if !declared || !hasCredentials || r.URL.Path != "/"+id || r.URL.RawQuery != "" {
 			http.NotFound(w, r)
@@ -96,10 +135,10 @@ func startMockRemote(parent context.Context, peers map[string]command, root stri
 			return
 		}
 		service.mu.Unlock()
-		conn, e := websocket.Accept(w, r, nil)
-		if e != nil {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
 			service.mu.Lock()
-			service.err = errors.Join(service.err, fmt.Errorf("remote %s handshake: %w", id, e))
+			service.err = errors.Join(service.err, fmt.Errorf("remote %s handshake: %w", id, err))
 			service.mu.Unlock()
 			return
 		}
@@ -120,7 +159,7 @@ func startMockRemote(parent context.Context, peers map[string]command, root stri
 			delete(service.active, conn)
 			service.mu.Unlock()
 		}()
-		runErr := forwardPeerSocket(ctx, conn, peer, filepath.Join(root, "phase-"+id+"-stderr.private"))
+		runErr := forwardPeerSocket(ctx, conn, run, filepath.Join(root, "phase-"+id+"-stderr.private"))
 		service.mu.Lock()
 		service.completions[id] = runErr
 		service.mu.Unlock()
@@ -144,6 +183,10 @@ func (s *mockRemoteService) close() error {
 		go func() { s.handlers.Wait(); close(complete) }()
 		abort := func() {
 			s.cancel()
+			for _, run := range s.runs {
+				_ = run.Abort()
+				_ = run.CloseSDK()
+			}
 			s.mu.Lock()
 			for conn := range s.active {
 				_ = conn.CloseNow()
@@ -182,91 +225,94 @@ func (s *mockRemoteService) close() error {
 	return s.err
 }
 
-func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, peer command, stderrPath string) error {
-	cmd := exec.CommandContext(ctx, peer.Command, peer.Args...)
-	cmd.Env = peer.Env
-	if cmd.Env == nil {
-		cmd.Env = []string{}
-	}
-	cmd.Dir = peer.Dir
-	cmd.WaitDelay = 3 * time.Second
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// Cancellation owns the entire peer tree, including the lifetime wrapper
-	// and mock process. Killing only the wrapper would orphan the mock.
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	input, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer input.Close()
-	output, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	defer output.Close()
+func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, run *mocktest.Run, stderrPath string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	defer func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }()
-	// A descendant can retain stdout after the direct peer exits. Cancellation
-	// must unblock pipe readers before Wait can reap the direct peer; waiting
-	// for natural EOF here can otherwise strand a zombie until cleanup times out.
-	canceled := make(chan struct{})
-	stopCancel := context.AfterFunc(ctx, func() {
-		defer close(canceled)
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = input.Close()
-		_ = output.Close()
-		_ = conn.CloseNow()
-	})
-	defer func() {
-		if !stopCancel() {
-			<-canceled
-		}
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		_, _ = io.Copy(&stderr, run.Stderr)
 	}()
-	readDone := make(chan error, 1)
+	closeInput := run.CloseInputWhenComplete(run.Writer.Close)
+
+	inputDone := make(chan error, 1)
 	go func() {
 		for {
 			kind, frame, err := conn.Read(ctx)
 			if err != nil {
-				readDone <- nil
+				inputDone <- err
 				return
 			}
 			if kind != websocket.MessageText || bytes.ContainsAny(frame, "\r\n") {
-				readDone <- errors.New("invalid SDK WebSocket frame")
+				inputDone <- errors.New("invalid SDK WebSocket frame")
 				return
 			}
-			if _, err := input.Write(append(frame, '\n')); err != nil {
-				readDone <- err
+			if _, err := run.Writer.Write(append(frame, '\n')); err != nil {
+				if errors.Is(err, io.ErrClosedPipe) {
+					inputDone <- nil
+				} else {
+					inputDone <- err
+				}
 				return
 			}
 		}
 	}()
-	writeDone := make(chan error, 1)
+	outputDone := make(chan error, 1)
 	go func() {
-		scan := bufio.NewScanner(output)
-		scan.Buffer(make([]byte, 4096), 4<<20)
-		for scan.Scan() {
-			if err := conn.Write(ctx, websocket.MessageText, scan.Bytes()); err != nil {
-				writeDone <- err
+		scanner := bufio.NewScanner(run.Reader)
+		scanner.Buffer(make([]byte, 4096), 4<<20)
+		for scanner.Scan() {
+			if err := conn.Write(ctx, websocket.MessageText, scanner.Bytes()); err != nil {
+				outputDone <- err
 				return
 			}
 		}
-		writeDone <- scan.Err()
+		outputDone <- scanner.Err()
 	}()
-	var inputErr, outputErr error
+
+	var bridgeErr error
 	select {
-	case inputErr = <-readDone:
-		_ = input.Close()
-		outputErr = <-writeDone
-	case outputErr = <-writeDone:
-		_ = conn.CloseNow()
-		inputErr = <-readDone
-		_ = input.Close()
+	case err := <-outputDone:
+		if !expectableRemoteClose(err) {
+			bridgeErr = errors.Join(bridgeErr, err)
+		}
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+	case err := <-inputDone:
+		if !expectableRemoteClose(err) {
+			bridgeErr = errors.Join(bridgeErr, err)
+		}
+	case <-ctx.Done():
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			bridgeErr = errors.Join(bridgeErr, ctx.Err())
+		}
 	}
-	processErr := cmd.Wait()
-	logErr := os.WriteFile(stderrPath, stderr.Bytes(), 0o600)
-	return errors.Join(inputErr, outputErr, processErr, logErr)
+	cancel()
+	_ = conn.CloseNow()
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	waitErr := run.WaitError(waitCtx)
+	waitCancel()
+	select {
+	case result := <-closeInput:
+		bridgeErr = errors.Join(bridgeErr, result)
+	default:
+	}
+	_ = run.CloseSDK()
+	<-stderrDone
+	_ = os.WriteFile(stderrPath, stderr.Bytes(), 0o600)
+	return errors.Join(bridgeErr, waitErr)
+}
+
+func expectableRemoteClose(err error) bool {
+	if err == nil || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	switch websocket.CloseStatus(err) {
+	case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+		return true
+	default:
+		return false
+	}
 }

@@ -93,6 +93,12 @@ it never builds the tool, searches `PATH`, or falls back to an Agent. The extern
 tool owns protocol matching, native preparation, history materialization and
 receipts. Session and export schemas are versioned process contracts, not a library
 or permission to traverse the tool's private storage layout.
+
+A proposed in-process Go-library backend is defined in
+[Go library mode](modules/agent-sdk-testify/library-mode.md). Until it is
+adopted, this process-only contract and the exact executable pin remain the
+governing implementation boundary.
+
 Do not add `cmd`, `pkg` or forwarding layers. Module responsibilities and dependency
 gates follow the module boundaries above.
 

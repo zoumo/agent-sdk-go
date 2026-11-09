@@ -85,11 +85,7 @@ func (s *mockCLISuite) TestInteractions() {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
-			executable, args, err := peerSession.Command("main")
-			require.NoError(t, err)
-			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: peerSession.Env, Dir: peerSession.Workspace, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
-			require.NoError(t, err)
-			defer client.Close()
+			client, _ := openMockClient(t, ctx, peerSession)
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 			require.NoError(t, err)
 			defer func() { _ = client.Close(); _ = session.Close() }()
@@ -99,8 +95,12 @@ func (s *mockCLISuite) TestInteractions() {
 				require.Error(t, err)
 				require.NotErrorIs(t, err, context.DeadlineExceeded)
 				require.NoError(t, ctx.Err())
-				require.NoError(t, client.Close())
-				require.Positive(t, client.Diagnostics().StderrBytes)
+				closeErr := client.Close()
+				if mode == "disconnect" {
+					require.ErrorIs(t, closeErr, mocktest.ErrDisconnected)
+				} else {
+					require.ErrorContains(t, closeErr, "client mismatch")
+				}
 				return
 			}
 			result := make(chan error, 1)
@@ -150,10 +150,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	peerSession, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
-	executable, args, err := peerSession.Command("main")
-	require.NoError(t, err)
-	client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: peerSession.Env, Dir: peerSession.Workspace, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
-	require.NoError(t, err)
+	client, _ := openMockClient(t, ctx, peerSession)
 	defer client.Close()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 	require.NoError(t, err)
@@ -185,6 +182,33 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
+}
+
+func openMockClient(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*codex.Client, *mocktest.Run) {
+	t.Helper()
+	run, err := peerSession.NewRun(ctx, mocktest.RunOptions{})
+	require.NoError(t, err)
+	client, err := codex.NewStreams(ctx, codex.StreamOptions{
+		Args: run.Start.NativeArgs,
+		Initialize: codextypes.InitializeParams{
+			ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"},
+		},
+	}, codex.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.Abort()
+		require.NoError(t, err)
+	}
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = run.CloseSDK()
+	})
+	run.CloseInputWhenComplete(client.CloseInput)
+	return client, run
 }
 
 func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {

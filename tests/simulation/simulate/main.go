@@ -67,7 +67,7 @@ func execute(ctx context.Context, o options) error {
 	if err := os.Mkdir(o.Output, 0o700); err != nil {
 		return err
 	}
-	tool, err := discoverTool(ctx)
+	tool, err := discoverTool()
 	if err != nil {
 		return err
 	}

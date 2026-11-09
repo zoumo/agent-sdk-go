@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 // Limits is the callback-free resource configuration shared with types.
@@ -171,6 +172,17 @@ type interaction struct {
 	opts                                Options
 	cmd                                 *exec.Cmd
 	stdin, stdout, stderr               *os.File
+	streamReader                        io.ReadCloser
+	streamWriter                        io.WriteCloser
+	streamStderr                        io.ReadCloser
+	streamWait                          func(context.Context) error
+	streamMode                          bool
+	inputMu                             sync.Mutex
+	inputClosed                         bool
+	inputCloseErr                       error
+	inputClosedCh                       chan struct{}
+	stdoutEOF                           bool
+	terminalClosed                      bool
 	responses                           chan incomingControl
 	writeGate                           chan struct{}
 	done                                chan struct{}
@@ -193,7 +205,22 @@ type interaction struct {
 	permissionIDs                       map[string]struct{}
 }
 
+func newInteraction(options Options, session *Session) *interaction {
+	return &interaction{
+		session: session, opts: options,
+		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
+		epoch:       connectionEpoch.Add(1),
+		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
+		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
+		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl),
+		inputClosedCh: make(chan struct{}),
+	}
+}
+
 func openInteraction(ctx context.Context, options Options, session *Session) (*interaction, error) {
+	if ctx == nil {
+		return nil, queue.ErrNilContext
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -237,14 +264,8 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 	inputR.Close()
 	outputW.Close()
 	errorW.Close()
-	c := &interaction{
-		session: session, opts: options, cmd: cmd, stdin: inputW, stdout: outputR, stderr: errorR,
-		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
-		epoch:       connectionEpoch.Add(1),
-		permissions: make(map[string]*permissionState), permissionIDs: make(map[string]struct{}),
-		writeGate: make(chan struct{}, 1), done: make(chan struct{}), stop: make(chan struct{}), cleaned: make(chan struct{}),
-		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl),
-	}
+	c := newInteraction(options, session)
+	c.cmd, c.stdin, c.stdout, c.stderr = cmd, inputW, outputR, errorR
 	if session != nil {
 		if session.bindClient(c) {
 			// A terminated owner cannot admit records from this process.
@@ -254,20 +275,39 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 			c.mu.Unlock()
 		}
 	}
+	c.start()
+	if err := c.initialize(ctx); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *interaction) start() {
 	go c.readStdout()
 	go c.readStderr()
 	go c.respondControls()
-	go func() { err := cmd.Wait(); c.mu.Lock(); c.processErr = err; c.mu.Unlock(); close(c.processDone) }()
+	if !c.streamMode {
+		go func() {
+			err := c.cmd.Wait()
+			c.mu.Lock()
+			c.processErr = err
+			c.mu.Unlock()
+			close(c.processDone)
+		}()
+	}
 	go c.ownLifecycle()
-	initCtx, cancel := context.WithTimeout(ctx, options.InitializeTimeout)
+}
+
+func (c *interaction) initialize(ctx context.Context) error {
+	initCtx, cancel := context.WithTimeout(ctx, c.opts.InitializeTimeout)
 	defer cancel()
 	forward := true
 	initialize := struct {
 		Subtype string `json:"subtype"`
 		types.InitializeOptions
 	}{Subtype: "initialize", InitializeOptions: types.InitializeOptions{ForwardSubagentText: &forward}}
-	if options.Initialize != nil {
-		initialize.InitializeOptions = *options.Initialize
+	if c.opts.Initialize != nil {
+		initialize.InitializeOptions = *c.opts.Initialize
 	}
 	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
 		c.mu.Lock()
@@ -283,15 +323,15 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 			startup.Stderr, startup.ExitCode = diagnostics.Stderr, diagnostics.ExitCode
 		}
 		startup.OutcomeUnknown = errors.Is(startup.Err, ErrUnknownOutcome)
-		return nil, startup
+		return startup
 	}
 	select {
 	case <-c.done:
 		c.cleanupFailedStartup()
-		return nil, c.operationError()
+		return c.operationError()
 	default:
 	}
-	return c, nil
+	return nil
 }
 
 // Open aborts its unreturned FIFO after failed startup cleanup.
@@ -438,6 +478,9 @@ func (c *interaction) writeEncodedChecked(ctx context.Context, encode func() ([]
 		return ErrClosed
 	default:
 	}
+	if c.streamMode && c.inputIsClosed() {
+		return ErrInputClosed
+	}
 	frame, err := encode()
 	if err != nil {
 		return &Error{Op: "encode", Err: err}
@@ -459,10 +502,14 @@ func (c *interaction) writeEncodedChecked(ctx context.Context, encode func() ([]
 	canceled := make(chan struct{})
 	stopCancel := context.AfterFunc(ctx, func() {
 		c.fail(&Error{Op: "write", Err: ctx.Err(), OutcomeUnknown: true})
-		_ = c.stdin.Close()
+		if c.streamMode {
+			_ = c.closeInput()
+		} else {
+			_ = c.stdin.Close()
+		}
 		close(canceled)
 	})
-	n, err := c.stdin.Write(frame)
+	n, err := c.outboundWriter().Write(frame)
 	if !stopCancel() {
 		<-canceled
 		return &Error{Op: "write", Err: ctx.Err(), OutcomeUnknown: true}
@@ -470,12 +517,59 @@ func (c *interaction) writeEncodedChecked(ctx context.Context, encode func() ([]
 	if err == nil && n != len(frame) {
 		err = io.ErrShortWrite
 	}
+	inputClosed := c.streamMode && c.inputIsClosed()
+	if err != nil && inputClosed {
+		err = ErrInputClosed
+	}
 	if err != nil {
 		e := &Error{Op: "write", Err: err, OutcomeUnknown: true}
-		c.fail(e)
+		if !errors.Is(err, ErrInputClosed) {
+			c.fail(e)
+		}
 		return e
 	}
 	return nil
+}
+
+func (c *interaction) outboundWriter() io.Writer {
+	if c.streamMode {
+		return c.streamWriter
+	}
+	return c.stdin
+}
+
+func (c *interaction) inputIsClosed() bool {
+	c.inputMu.Lock()
+	defer c.inputMu.Unlock()
+	return c.inputClosed
+}
+
+func (c *interaction) closeInput() error {
+	c.inputMu.Lock()
+	defer c.inputMu.Unlock()
+	if c.inputClosed {
+		if c.inputCloseErr != nil {
+			return c.inputCloseErr
+		}
+		return ErrInputClosed
+	}
+	c.inputClosed = true
+	if c.streamMode {
+		c.inputCloseErr = c.streamWriter.Close()
+	} else {
+		c.inputCloseErr = c.stdin.Close()
+	}
+	close(c.inputClosedCh)
+	return c.inputCloseErr
+}
+
+// CloseInput half-closes the SDK outbound writer while retaining the reader for
+// final peer frames. It is idempotent and does not wait for cleanup.
+func (c *interaction) CloseInput() error {
+	if !c.streamMode {
+		return ErrStreamRequired
+	}
+	return c.closeInput()
 }
 
 // control registers its waiter before writing. Keep this shared path for future
@@ -592,7 +686,11 @@ func (c *interaction) route(event Event) error {
 
 func (c *interaction) readStdout() {
 	defer close(c.stdoutDone)
-	reader := bufio.NewReaderSize(c.stdout, min(c.opts.Limits.FrameBytes+1, 32<<10))
+	input := io.Reader(c.stdout)
+	if c.streamMode {
+		input = c.streamReader
+	}
+	reader := bufio.NewReaderSize(input, min(c.opts.Limits.FrameBytes+1, 32<<10))
 	var frame []byte
 	for {
 		fragment, err := reader.ReadSlice('\n')
@@ -611,9 +709,23 @@ func (c *interaction) readStdout() {
 		if err != nil {
 			c.mu.Lock()
 			closing := c.closing
+			stopped := c.stopped
+			if c.streamMode && errors.Is(err, io.EOF) {
+				c.stdoutEOF = true
+			}
 			c.mu.Unlock()
 			if len(frame) > 0 {
 				c.fail(&Error{Op: "read", Err: fmt.Errorf("%w: truncated NDJSON frame", ErrProtocol)})
+			} else if c.streamMode {
+				switch {
+				case closing || stopped:
+				case errors.Is(err, io.EOF):
+					if !c.inputIsClosed() {
+						c.fail(&Error{Op: "read", Err: fmt.Errorf("%w: peer closed before SDK input", ErrUnexpectedEOF)})
+					}
+				default:
+					c.fail(&Error{Op: "read", Err: err})
+				}
 			} else if !closing && !errors.Is(err, io.EOF) {
 				c.fail(&Error{Op: "read", Err: err})
 			}
@@ -645,9 +757,16 @@ func (c *interaction) readStdout() {
 
 func (c *interaction) readStderr() {
 	defer close(c.stderrDone)
+	reader := io.Reader(c.stderr)
+	if c.streamMode {
+		if c.streamStderr == nil {
+			return
+		}
+		reader = c.streamStderr
+	}
 	buf := make([]byte, 4096)
 	for {
-		n, err := c.stderr.Read(buf)
+		n, err := reader.Read(buf)
 		if n > 0 {
 			c.mu.Lock()
 			c.stderrTail = append(c.stderrTail, buf[:n]...)
@@ -704,6 +823,10 @@ func (c *interaction) ownLifecycle() {
 			c.session.finish(c.Err())
 		}
 	}()
+	if c.streamMode {
+		c.ownStreamLifecycle()
+		return
+	}
 	select {
 	case <-c.stop:
 	case <-c.stdoutDone:
@@ -768,9 +891,86 @@ func (c *interaction) ownLifecycle() {
 	// accepted-event ordering or the final stderr snapshot.
 	<-c.stdoutDone
 	<-c.stderrDone
-	// Closing stdin releases an active pipe write. Wait for that serialized
-	// writer to record its result before exposing the final diagnostics. Do not
-	// wait beyond the same shutdown budget or for arbitrary permission callbacks.
+	c.settleWriter(start)
+	c.mu.Lock()
+	if !c.closing && c.processErr != nil && !errors.Is(c.terminal, c.processErr) {
+		c.terminal = errors.Join(c.terminal, &Error{Op: "process", Err: c.processErr})
+	}
+	c.mu.Unlock()
+}
+
+func (c *interaction) ownStreamLifecycle() {
+	start := time.Now()
+	select {
+	case <-c.stop:
+	case <-c.stdoutDone:
+	case <-c.inputClosedCh:
+	}
+
+	if !c.inputIsClosed() {
+		_ = c.closeInput()
+	}
+	var waitErr error
+	if c.streamWait != nil {
+		waitCtx, cancel := context.WithDeadline(context.Background(), start.Add(c.opts.ShutdownTimeout))
+		waitErr = c.streamWait(waitCtx)
+		cancel()
+	}
+
+	c.mu.Lock()
+	closing := c.closing
+	c.mu.Unlock()
+	if waitErr != nil {
+		// Close stops local work; it does not turn a failed peer completion into
+		// success. failLocked retains an earlier specific protocol cause while
+		// replacing a generic premature-EOF classification.
+		c.fail(&Error{Op: "wait", Err: waitErr})
+	}
+	if waitErr != nil {
+		_ = c.streamReader.Close()
+	}
+
+	readComplete := awaitUntil(c.stdoutDone, start.Add(c.opts.ShutdownTimeout))
+	if !readComplete {
+		c.mu.Lock()
+		closing = c.closing
+		terminal := c.terminal
+		c.mu.Unlock()
+		if !closing && terminal == nil {
+			c.fail(&Error{Op: "read", Err: fmt.Errorf("%w: peer did not close its output", ErrUnexpectedEOF)})
+		}
+		_ = c.streamReader.Close()
+		<-c.stdoutDone
+		readComplete = true
+	}
+	_ = c.streamReader.Close()
+	if c.streamStderr != nil {
+		_ = c.streamStderr.Close()
+	}
+	<-c.stderrDone
+	c.settleWriter(start)
+
+	c.mu.Lock()
+	closing = c.closing
+	terminal := c.terminal
+	readEOF := c.stdoutEOF
+	c.mu.Unlock()
+	if terminal == nil && waitErr == nil && !closing {
+		switch {
+		case !c.inputIsClosed():
+			c.fail(ErrShutdownTimeout)
+		case !readEOF || !readComplete:
+			c.fail(&Error{Op: "read", Err: fmt.Errorf("%w: peer ended without a complete output", ErrUnexpectedEOF)})
+		default:
+			c.fail(nil)
+		}
+	}
+}
+
+// Closing the outbound side releases an active write. Wait for that serialized
+// writer to record its result before exposing final diagnostics, without
+// exceeding the existing shutdown budget or waiting for arbitrary callbacks.
+func (c *interaction) settleWriter(start time.Time) {
 	writerSettled := false
 	select {
 	case c.writeGate <- struct{}{}:
@@ -786,15 +986,10 @@ func (c *interaction) ownLifecycle() {
 	}
 	if writerSettled {
 		<-c.writeGate
-	} else {
-		c.mu.Lock()
-		c.cleanupErr = ErrShutdownTimeout
-		c.mu.Unlock()
+		return
 	}
 	c.mu.Lock()
-	if !c.closing && c.processErr != nil && !errors.Is(c.terminal, c.processErr) {
-		c.terminal = errors.Join(c.terminal, &Error{Op: "process", Err: c.processErr})
-	}
+	c.cleanupErr = ErrShutdownTimeout
 	c.mu.Unlock()
 }
 

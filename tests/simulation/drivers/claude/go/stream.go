@@ -1,0 +1,86 @@
+package claudesim
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+)
+
+func openStreamSession(ctx context.Context, mock *mocktest.Session, options claude.SessionOptions) (*claude.Session, *mocktest.Run, <-chan error, error) {
+	if mock == nil {
+		return nil, nil, nil, errors.New("prepared mock session is required")
+	}
+	nativeArgs, err := claude.NativeArgs(options)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	run, err := mock.NewRun(ctx, mocktest.RunOptions{
+		Connection: "main",
+		NativeArgs: mockNativeArgs(nativeArgs),
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	options.WorkDir = run.Start.Workspace
+	options.Env = environment(run.Start.Env)
+	session, err := claude.OpenStreams(ctx, options, claude.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.CloseSDK()
+		waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_, _ = run.Wait(waitCtx)
+		cancel()
+		return nil, run, nil, err
+	}
+	return session, run, run.CloseInputWhenComplete(session.CloseInput), nil
+}
+
+func mockNativeArgs(args []string) []string {
+	result := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--model=") || strings.HasPrefix(arg, "--resume=") {
+			result = append(result, arg)
+		}
+	}
+	return result
+}
+
+func finishStream(session *claude.Session, run *mocktest.Run, inputClosed <-chan error) error {
+	var result error
+	if session != nil {
+		inputErr := session.CloseInput()
+		if errors.Is(inputErr, claude.ErrInputClosed) {
+			inputErr = nil
+		}
+		result = errors.Join(result, inputErr, session.Close())
+	}
+	if inputClosed != nil {
+		select {
+		case inputErr := <-inputClosed:
+			result = errors.Join(result, inputErr)
+		case <-time.After(5 * time.Second):
+			result = errors.Join(result, errors.New("mock input close did not finish"))
+		}
+	}
+	waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return errors.Join(result, run.WaitError(waitCtx))
+}
+
+func environment(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for key, value := range values {
+		result = append(result, key+"="+value)
+	}
+	slices.Sort(result)
+	return result
+}

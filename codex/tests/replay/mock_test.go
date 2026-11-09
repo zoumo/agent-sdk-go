@@ -140,7 +140,11 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 			if fault != "disconnect" {
 				s.Require().NoError(c.Call(ctx, "synthetic/done", nil, nil))
 			}
-			s.Require().NoError(c.Close())
+			if fault == "disconnect" {
+				s.Require().ErrorIs(c.Close(), mocktest.ErrDisconnected)
+			} else {
+				s.Require().NoError(c.Close())
+			}
 		})
 	}
 }
@@ -154,11 +158,25 @@ func (s *GoMockSuite) startSDK(sc mockScenarioDefinition, wantStatus string) (*c
 	s.T().Cleanup(func() { verifySDKSession(s.T(), session, wantStatus) })
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	s.T().Cleanup(cancel)
-	executable, args, err := session.Command("main")
+	run, err := session.NewRun(ctx, mocktest.RunOptions{})
 	s.Require().NoError(err)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: session.Env, Dir: session.Workspace, Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"}}})
+	c, err := codex.NewStreams(ctx, codex.StreamOptions{
+		Args: run.Start.NativeArgs,
+		Initialize: types.InitializeParams{
+			ClientInfo: types.ClientInfo{Name: "mock-consumer", Version: "1"},
+		},
+	}, codex.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.Abort()
+	}
 	s.Require().NoError(err)
-	s.T().Cleanup(func() { s.NoError(c.Close()) })
+	s.T().Cleanup(func() { _ = c.Close(); _ = run.CloseSDK() })
+	run.CloseInputWhenComplete(c.CloseInput)
 	return c, ctx
 }
 

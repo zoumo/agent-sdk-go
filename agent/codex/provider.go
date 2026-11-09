@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"slices"
 	"sync"
 
 	"github.com/zoumo/agent-sdk-go/agent"
@@ -25,6 +26,7 @@ const (
 type Provider struct {
 	mu             sync.Mutex
 	config         codex.StdioOptions
+	streams        streamFactory
 	formsSupported bool
 	state          providerState
 	client         *codex.Client
@@ -32,6 +34,13 @@ type Provider struct {
 	opening        int
 	sessions       map[*session]struct{}
 }
+
+type streamStart struct {
+	Transport codex.StreamTransport
+	Started   func(*codex.Client)
+}
+
+type streamFactory func(context.Context) (streamStart, error)
 
 // New constructs a Codex provider. No process or connection is created until
 // Start succeeds.
@@ -59,7 +68,26 @@ func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
 			nil,
 		)
 	}
-	client, err := codex.NewStdio(ctx, p.config)
+	var client *codex.Client
+	var err error
+	if p.streams == nil {
+		client, err = codex.NewStdio(ctx, p.config)
+	} else {
+		var stream streamStart
+		stream, err = p.streams(ctx)
+		if err == nil {
+			client, err = codex.NewStreams(ctx, codex.StreamOptions{
+				Args:       slices.Clone(p.config.Args),
+				Env:        slices.Clone(p.config.Env),
+				Dir:        p.config.Dir,
+				Initialize: p.config.Initialize,
+				Limits:     p.config.Limits,
+			}, stream.Transport)
+		}
+		if err == nil && stream.Started != nil {
+			stream.Started(client)
+		}
+	}
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,

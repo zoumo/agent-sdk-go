@@ -17,6 +17,17 @@
 // completion or idleness until native settlement. Child-thread lifecycle
 // notifications remain explicit gaps.
 //
+// Tool calls and results carry a required (Provider, ToolName) identity and an
+// SDK-assigned Kind. commandExecution uses exec_command for
+// unifiedExecStartup, write_stdin for unifiedExecInteraction, and the
+// commandExecution fallback otherwise. MCP calls use mcp:<server>, or mcp when
+// the native server is empty; dynamic and function calls flatten namespace and
+// name without a separator. Command actions are never inspected: command
+// execution is execute, while MCP and dynamic tool kinds are other. Results
+// copy the identity stored from their call. Tool chunks remain {id, content}.
+// Codex tool status retains its native in-progress, completed, failed, declined
+// and unknown projections; identity changes do not reclassify status.
+//
 // Command and file-change approvals stay bound to their original native request
 // and may select only an option offered by that request. Native user-input forms
 // support accepted answers; decline and cancel are rejected because their native

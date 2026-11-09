@@ -12,6 +12,10 @@
   adapters for live Provider and Session operations, events, input, interactions
   and classified errors. The core uses only the standard library; adapters stay
   provider-specific, and the layer adds no history abstraction or root client.
+- Gives unified tool calls and results required `kind`, `toolName` and `provider`
+  identity, with exact provider forms, ACP-derived kinds and preserved native
+  names. Tool chunks remain `{id, content}`. The unreleased JSON schema is
+  intentionally breaking: legacy `name` and arbitrary kind values are rejected.
 - Removes the unpublished SDK history replay projection while retaining native
   history queries, native replay protocol fields and simulation replay.
 - Adds typed Claude permission modes and Codex approval policies while retaining

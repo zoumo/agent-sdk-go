@@ -70,6 +70,11 @@ type Options struct {
 	Model   string
 	// Effort passes the native creation-only --effort value literally. Empty omits it.
 	Effort string
+	// AppendSystemPrompt appends text after the CLI's own system instructions
+	// through one native --append-system-prompt=<text> argument and does not
+	// replace them. Empty omits the option. The text must be valid UTF-8 and
+	// contain no NUL.
+	AppendSystemPrompt string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
 	// MCPServers declares external stdio, HTTP or SSE MCP servers. The SDK

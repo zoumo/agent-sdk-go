@@ -28,4 +28,10 @@
 // production dependencies. Configuration acceptance is separate from observed
 // effects. Query coverage and quarantine gaps remain explicit. The Session FIFO
 // is limited by available memory, independently of bounded indexes and frames.
+//
+// AppendSystemPrompt adds caller text after the CLI's own system instructions
+// without replacing them. A nonempty value becomes one literal
+// --append-system-prompt=<text> argument; empty omits the option. Invalid UTF-8
+// or NUL is rejected before process launch without echoing the text. Process
+// argument vectors are observable transport data, not secret storage.
 package claude

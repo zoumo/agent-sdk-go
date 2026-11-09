@@ -146,6 +146,7 @@ func TestAgentCodexProtocolPeer(t *testing.T) {
 		var message struct {
 			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &message); err != nil {
 			os.Exit(81)
@@ -156,6 +157,9 @@ func TestAgentCodexProtocolPeer(t *testing.T) {
 			fmt.Fprintln(os.Stdout, `{"method":"initialized"}`)
 		case "initialized":
 		case "thread/start":
+			if mode == "mcp-snapshot" {
+				holdCodexMCPPeerRequest(os.Getenv(codexMCPPeerGateDir), "start", message.Params)
+			}
 			replyProtocolPeer(message.ID, codexThreadStartResult("root-a"))
 		case "turn/start":
 			replyProtocolPeer(message.ID, `{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}`)

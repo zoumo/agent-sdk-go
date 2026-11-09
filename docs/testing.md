@@ -98,13 +98,15 @@ jobs; the quality job installs the pinned formatter/linter. The quality, test
 and race jobs install `ripgrep` for the contraction gates. The
 offline jobs build only the SDK-owned simulation runner and driver; the
 in-process testify module is fetched by the normal Go module graph. A required
-aggregate job succeeds only when all three platforms and their task jobs succeed.
+aggregate job on each platform (`ubuntu-24.04 / required`, `macos-15 / required`
+and `macos-26 / required`) succeeds only when that platform's five task jobs
+succeed.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure fifteen offline task jobs, three External consumer jobs
-and one required aggregate job. Fork PRs retain the offline jobs and skip
+These events configure fifteen offline task jobs, three platform aggregates and
+three External consumer jobs. Fork PRs retain the offline jobs and skip
 consumers because fork-only SHAs are not assumed retrievable from this
 repository. Token permissions remain contents: read; no pull_request_target
 execution is added. Configured coverage does not prove that any runner executed. See
@@ -197,9 +199,9 @@ No Windows runtime support is claimed.
 One version covers all four native imports. Before an authorized publication:
 
 1. Confirm the intended main SHA and both imported source histories.
-2. Require the exact SHA's offline aggregate and three External consumer CI jobs,
-   and inspect all five offline task results; rerun on the resulting main commit
-   after merge. Fork PR consumer skips do not satisfy this gate.
+2. Require the exact SHA's three platform aggregates and three External consumer
+   CI jobs, and inspect all five task results on each platform; rerun on the
+   resulting main commit after merge. Fork PR consumer skips do not satisfy this gate.
 3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
    coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
 4. Record the exact commit, CI URLs and remaining limits in the release review.

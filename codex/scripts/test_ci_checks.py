@@ -13,8 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WorkflowCoverage(unittest.TestCase):
-    def workflow_jobs(self):
-        workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
+    def workflow_jobs(self, workflow=None):
+        if workflow is None:
+            workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
         workflow = workflow.split("\njobs:\n", 1)[1]
         return dict(re.findall(
             r"(?ms)^  ([a-z0-9_]+):\n(.*?)(?=^  [a-z0-9_]+:\n|\Z)", workflow))
@@ -29,6 +30,7 @@ class WorkflowCoverage(unittest.TestCase):
         for job, runner in platforms.items():
             with self.subTest(job=job):
                 self.assertIn(job, jobs)
+                self.assertIn("    name: " + runner, jobs[job])
                 self.assertIn("    uses: ./.github/workflows/offline-platform.yml", jobs[job])
                 self.assertIn("      runner: " + runner, jobs[job])
 
@@ -56,6 +58,13 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("golangci-lint@v2.12.2", platform)
         self.assertIn("python3 codex/scripts/check_whitespace.py", platform)
         self.assertIn('bash scripts/check-offline.sh "${{ matrix.task }}"', platform)
+        platform_jobs = self.workflow_jobs(platform)
+        required = platform_jobs["required"]
+        self.assertIn("    name: required", required)
+        self.assertIn("    if: always()", required)
+        self.assertIn("    needs: validate", required)
+        self.assertIn("    runs-on: ${{ inputs.runner }}", required)
+        self.assertIn('test "${TASKS}" = success', required)
 
     def test_offline_script_exposes_each_ci_task(self):
         script = (ROOT.parent / "scripts/check-offline.sh").read_text()
@@ -64,13 +73,8 @@ class WorkflowCoverage(unittest.TestCase):
             with self.subTest(task=task):
                 self.assertIn(f"  {task})\n", script)
 
-    def test_required_job_waits_for_every_offline_platform(self):
-        required = self.workflow_jobs()["required"]
-        self.assertIn("    if: always()", required)
-        self.assertIn(
-            "    needs: [offline_ubuntu, offline_macos15, offline_macos26]",
-            required,
-        )
+    def test_required_aggregate_is_scoped_to_each_platform(self):
+        self.assertNotIn("required", self.workflow_jobs())
 
     def test_same_repository_pr_consumers_fetch_published_head(self):
         consumer = self.workflow_jobs()["consumer"]

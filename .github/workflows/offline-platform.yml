@@ -106,3 +106,18 @@ jobs:
           name: simulation-${{ inputs.runner }}-${{ matrix.task }}
           path: .artifacts/simulation/gates/
           if-no-files-found: warn
+
+  required:
+    name: required
+    if: always()
+    needs: validate
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 5
+    steps:
+      - name: Require every task on this platform
+        env:
+          TASKS: ${{ needs.validate.result }}
+        run: |
+          set -euo pipefail
+          echo "tasks: ${TASKS}"
+          test "${TASKS}" = success

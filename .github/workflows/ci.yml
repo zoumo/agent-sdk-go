@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   offline_ubuntu:
-    name: offline / ubuntu-24.04
+    name: ubuntu-24.04
     permissions:
       contents: read
     uses: ./.github/workflows/offline-platform.yml
@@ -23,7 +23,7 @@ jobs:
       runner: ubuntu-24.04
 
   offline_macos15:
-    name: offline / macos-15
+    name: macos-15
     permissions:
       contents: read
     uses: ./.github/workflows/offline-platform.yml
@@ -31,7 +31,7 @@ jobs:
       runner: macos-15
 
   offline_macos26:
-    name: offline / macos-26
+    name: macos-26
     permissions:
       contents: read
     uses: ./.github/workflows/offline-platform.yml
@@ -84,24 +84,3 @@ jobs:
           Same-repository PRs fetch their published head SHA; synthetic PR merge
           commits and fork-only heads are outside this remote retrieval gate.
           SUMMARY
-
-  required:
-    name: Offline (required)
-    if: always()
-    needs: [offline_ubuntu, offline_macos15, offline_macos26]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Require every platform and offline task
-        env:
-          UBUNTU: ${{ needs.offline_ubuntu.result }}
-          MACOS15: ${{ needs.offline_macos15.result }}
-          MACOS26: ${{ needs.offline_macos26.result }}
-        run: |
-          set -euo pipefail
-          echo "ubuntu-24.04: ${UBUNTU}"
-          echo "macos-15: ${MACOS15}"
-          echo "macos-26: ${MACOS26}"
-          test "${UBUNTU}" = success
-          test "${MACOS15}" = success
-          test "${MACOS26}" = success

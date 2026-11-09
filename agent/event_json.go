@@ -34,8 +34,9 @@ type messagePayloadWire struct {
 
 type toolCallPayloadWire struct {
 	ID                  string            `json:"id"`
-	Kind                string            `json:"kind"`
-	Name                string            `json:"name"`
+	Kind                ToolKind          `json:"kind"`
+	ToolName            string            `json:"toolName"`
+	Provider            ToolProvider      `json:"provider"`
 	Title               string            `json:"title"`
 	Phase               string            `json:"phase"`
 	InputRepresentation string            `json:"inputRepresentation"`
@@ -50,8 +51,9 @@ type toolCallPayloadWire struct {
 
 type toolResultPayloadWire struct {
 	ID                  string            `json:"id"`
-	Kind                string            `json:"kind"`
-	Name                string            `json:"name"`
+	Kind                ToolKind          `json:"kind"`
+	ToolName            string            `json:"toolName"`
+	Provider            ToolProvider      `json:"provider"`
 	Title               string            `json:"title"`
 	Phase               string            `json:"phase"`
 	InputRepresentation string            `json:"inputRepresentation"`
@@ -229,6 +231,9 @@ func unmarshalToolCallPayload(data []byte) (Payload, error) {
 	if err := requireJSONMemberPresence(data, "rawInput"); err != nil {
 		return nil, err
 	}
+	if err := requireJSONMembers(data, "kind", "toolName", "provider"); err != nil {
+		return nil, err
+	}
 	var wire toolCallPayloadWire
 	if err := decodeStrictJSON(data, &wire); err != nil {
 		return nil, err
@@ -244,7 +249,8 @@ func unmarshalToolCallPayload(data []byte) (Payload, error) {
 	return ToolCallPayload{
 		ID:                  wire.ID,
 		Kind:                wire.Kind,
-		Name:                wire.Name,
+		ToolName:            wire.ToolName,
+		Provider:            wire.Provider,
 		Title:               wire.Title,
 		Phase:               wire.Phase,
 		InputRepresentation: wire.InputRepresentation,
@@ -259,6 +265,9 @@ func unmarshalToolCallPayload(data []byte) (Payload, error) {
 }
 
 func unmarshalToolResultPayload(data []byte) (Payload, error) {
+	if err := requireJSONMembers(data, "kind", "toolName", "provider"); err != nil {
+		return nil, err
+	}
 	var wire toolResultPayloadWire
 	if err := decodeStrictJSON(data, &wire); err != nil {
 		return nil, err
@@ -278,7 +287,8 @@ func unmarshalToolResultPayload(data []byte) (Payload, error) {
 	return ToolResultPayload{
 		ID:                  wire.ID,
 		Kind:                wire.Kind,
-		Name:                wire.Name,
+		ToolName:            wire.ToolName,
+		Provider:            wire.Provider,
 		Title:               wire.Title,
 		Phase:               wire.Phase,
 		InputRepresentation: wire.InputRepresentation,

@@ -44,8 +44,9 @@ type Truncation struct {
 
 type ToolCallPayload struct {
 	ID                  string         `json:"id"`
-	Kind                string         `json:"kind"`
-	Name                string         `json:"name,omitempty"`
+	Kind                ToolKind       `json:"kind"`
+	ToolName            string         `json:"toolName"`
+	Provider            ToolProvider   `json:"provider"`
 	Title               string         `json:"title,omitempty"`
 	Phase               string         `json:"phase,omitempty"`
 	InputRepresentation string         `json:"inputRepresentation,omitempty"`
@@ -67,8 +68,9 @@ func (p ToolCallPayload) MarshalJSON() ([]byte, error) {
 
 type ToolResultPayload struct {
 	ID                  string         `json:"id"`
-	Kind                string         `json:"kind"`
-	Name                string         `json:"name,omitempty"`
+	Kind                ToolKind       `json:"kind"`
+	ToolName            string         `json:"toolName"`
+	Provider            ToolProvider   `json:"provider"`
 	Title               string         `json:"title,omitempty"`
 	Phase               string         `json:"phase,omitempty"`
 	InputRepresentation string         `json:"inputRepresentation,omitempty"`

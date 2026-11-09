@@ -45,23 +45,24 @@ func TestSessionConvertsSupportedCodexToolVariants(t *testing.T) {
 
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
 	want := []struct {
-		id     string
-		kind   string
-		name   string
-		title  string
-		status string
-		output bool
+		id       string
+		kind     agent.ToolKind
+		name     string
+		provider agent.ToolProvider
+		title    string
+		status   string
+		output   bool
 	}{
-		{"command", "execute", "command", "echo hello", "completed", true},
-		{"file", "edit", "file_change", "", "completed", false},
-		{"function", "function", "ns.lookup", "", "completed", true},
-		{"mcp", "mcp", "srv.echo", "echo", "completed", true},
-		{"dynamic", "dynamic", "ns.dyn", "dyn", "completed", true},
-		{"collab", "collaboration", "spawnAgent", "", "completed", true},
-		{"web", "search", "web_search", "synthetic query", "completed", true},
-		{"image", "read", "image_view", "/synthetic/image.png", "completed", false},
-		{"sleep", "wait", "sleep", "Sleep for 5ms", "completed", false},
-		{"generated", "generate", "image_generation", "draw", "completed", true},
+		{"command", agent.ToolKindExecute, "command", agent.ToolProviderAgent, "echo hello", "completed", true},
+		{"file", agent.ToolKindEdit, "file_change", agent.ToolProviderAgent, "", "completed", false},
+		{"function", agent.ToolKindOther, "ns.lookup", agent.ToolProviderDynamic, "", "completed", true},
+		{"mcp", agent.ToolKindOther, "srv.echo", agent.ToolProviderMCP, "echo", "completed", true},
+		{"dynamic", agent.ToolKindOther, "ns.dyn", agent.ToolProviderDynamic, "dyn", "completed", true},
+		{"collab", agent.ToolKindOther, "spawnAgent", agent.ToolProviderAgent, "", "completed", true},
+		{"web", agent.ToolKindSearch, "web_search", agent.ToolProviderAgent, "synthetic query", "completed", true},
+		{"image", agent.ToolKindRead, "image_view", agent.ToolProviderAgent, "/synthetic/image.png", "completed", false},
+		{"sleep", agent.ToolKindOther, "sleep", agent.ToolProviderAgent, "Sleep for 5ms", "completed", false},
+		{"generated", agent.ToolKindOther, "image_generation", agent.ToolProviderAgent, "draw", "completed", true},
 	}
 	for _, expected := range want {
 		callEvent := nextEvent(t, ctx, stream)
@@ -69,7 +70,8 @@ func TestSessionConvertsSupportedCodexToolVariants(t *testing.T) {
 		call := payloadOf[agent.ToolCallPayload](t, callEvent)
 		assert.Equal(t, expected.id, call.ID)
 		assert.Equal(t, expected.kind, call.Kind)
-		assert.Equal(t, expected.name, call.Name)
+		assert.Equal(t, expected.name, call.ToolName)
+		assert.Equal(t, expected.provider, call.Provider)
 		assert.Equal(t, expected.title, call.Title)
 		assert.Equal(t, "in_progress", call.Status)
 
@@ -78,7 +80,8 @@ func TestSessionConvertsSupportedCodexToolVariants(t *testing.T) {
 		result := payloadOf[agent.ToolResultPayload](t, resultEvent)
 		assert.Equal(t, expected.id, result.ID)
 		assert.Equal(t, expected.kind, result.Kind)
-		assert.Equal(t, expected.name, result.Name)
+		assert.Equal(t, expected.name, result.ToolName)
+		assert.Equal(t, expected.provider, result.Provider)
 		assert.Equal(t, expected.title, result.Title)
 		assert.Equal(t, expected.status, result.Status)
 		require.NotNil(t, result.Output)

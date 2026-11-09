@@ -119,6 +119,17 @@ func (contractExecutionReporter) EffectiveExecutionOptions() agent.ExecutionOpti
 	return agent.ExecutionOptionsReport{}
 }
 
+type contractExecutionController struct {
+	contractExecutionReporter
+}
+
+func (contractExecutionController) SetExecutionOption(
+	context.Context,
+	agent.ExecutionOptionChange,
+) (agent.ExecutionOptionsReceipt, error) {
+	return agent.ExecutionOptionsReceipt{}, nil
+}
+
 type contractStream struct{}
 
 func (contractStream) Next(context.Context) (agent.Event, error) {
@@ -133,6 +144,7 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	var archiver agent.Archiver = contractSession{}
 	var modelController agent.ModelController = contractSession{}
 	var executionReporter agent.ExecutionOptionsReporter = contractExecutionReporter{}
+	var executionController agent.ExecutionOptionsController = contractExecutionController{}
 
 	require.NotNil(t, provider)
 	require.NotNil(t, initial)
@@ -141,9 +153,17 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	require.NotNil(t, archiver)
 	require.NotNil(t, modelController)
 	require.NotNil(t, executionReporter)
+	require.NotNil(t, executionController)
 
 	_, implementsReporter := any(contractSession{}).(agent.ExecutionOptionsReporter)
 	assert.False(t, implementsReporter)
+	_, implementsController := any(contractSession{}).(agent.ExecutionOptionsController)
+	assert.False(t, implementsController)
+}
+
+func TestExecutionOptionIDsAreFixed(t *testing.T) {
+	assert.Equal(t, "model", string(agent.ExecutionOptionModel))
+	assert.Equal(t, "reasoningEffort", string(agent.ExecutionOptionReasoningEffort))
 }
 
 func TestUnifiedSessionHasOneInputOperation(t *testing.T) {

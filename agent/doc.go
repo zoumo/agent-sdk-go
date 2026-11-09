@@ -12,6 +12,10 @@
 // StartOrSteer lets the adapter start new work, join acceptable current work, or
 // report that input was not applied; it never queues, waits for idle, persists,
 // or retries.
+// Sessions may optionally report or update the provider-native model and
+// reasoning effort through ExecutionOptionsReporter and
+// ExecutionOptionsController. Requested values and native observations remain
+// separate; these optional interfaces add no other configuration surface.
 //
 // Event payloads form a closed live union with stable session and item identity.
 // Adapters preserve native order, time, raw evidence, and explicit capability

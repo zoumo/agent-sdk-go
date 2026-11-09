@@ -16,11 +16,12 @@ import (
 )
 
 var (
-	_ agent.Session                  = (*session)(nil)
-	_ agent.Archiver                 = (*session)(nil)
-	_ agent.ModelController          = (*session)(nil)
-	_ agent.EventStream              = (*eventStream)(nil)
-	_ agent.ExecutionOptionsReporter = (*session)(nil)
+	_ agent.Session                    = (*session)(nil)
+	_ agent.Archiver                   = (*session)(nil)
+	_ agent.ModelController            = (*session)(nil)
+	_ agent.EventStream                = (*eventStream)(nil)
+	_ agent.ExecutionOptionsReporter   = (*session)(nil)
+	_ agent.ExecutionOptionsController = (*session)(nil)
 )
 
 type session struct {
@@ -29,6 +30,7 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
+	executionMu   sync.Mutex
 	mu            sync.Mutex
 	eventsClaimed bool
 	closed        bool
@@ -44,10 +46,13 @@ type session struct {
 	lastFinished string
 	state        *agent.SessionState
 	execution    agent.ExecutionOptionsReport
-	interactions map[agent.InteractionRef]*pendingInteraction
-	requestRefs  map[string]agent.InteractionRef
-	done         chan struct{}
-	err          error
+	// executionObservationSeq prevents an ACK from erasing settings observed
+	// while the native update was in flight.
+	executionObservationSeq uint64
+	interactions            map[agent.InteractionRef]*pendingInteraction
+	requestRefs             map[string]agent.InteractionRef
+	done                    chan struct{}
+	err                     error
 
 	parentMu sync.RWMutex
 	parents  map[string]string
@@ -350,45 +355,23 @@ func (s *session) SetModel(
 			nil,
 		)
 	}
-	if err := s.requireOpen(); err != nil {
+	change := agent.ExecutionOptionChange{
+		Option: agent.ExecutionOptionModel,
+		Value:  model,
+	}
+	if err := validateExecutionOptionChange(change); err != nil {
 		return agent.ConfigurationReceipt{}, err
 	}
-	result, err := s.native.SetModel(ctx, model)
+	s.executionMu.Lock()
+	defer s.executionMu.Unlock()
+	receipt, err := s.setExecutionOptionLocked(ctx, change)
 	if err != nil {
-		convertedErr := nativeOperationError("set_model", err)
-		if agent.CodeOf(convertedErr) == agent.ErrorOutcomeUnknown {
-			s.clearEffectiveExecutionOptions()
-		}
-		return agent.ConfigurationReceipt{}, convertedErr
+		return agent.ConfigurationReceipt{}, err
 	}
-	s.recordAcceptedExecutionModel(model)
-	sent := true
-	accepted := result.NativeAccepted
 	return agent.ConfigurationReceipt{
-		Model: model,
-		Acceptance: agent.Acceptance{
-			Sent:           &sent,
-			NativeAccepted: &accepted,
-		},
+		Model:      model,
+		Acceptance: receipt.Acceptance,
 	}, nil
-}
-
-func (s *session) recordAcceptedExecutionModel(model string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.execution.Model.Requested = model
-	s.clearEffectiveExecutionOptionsLocked()
-}
-
-func (s *session) clearEffectiveExecutionOptions() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.clearEffectiveExecutionOptionsLocked()
-}
-
-func (s *session) clearEffectiveExecutionOptionsLocked() {
-	s.execution.Model.Effective = nil
-	s.execution.ReasoningEffort.Effective = nil
 }
 
 func (s *session) Close(context.Context) error {

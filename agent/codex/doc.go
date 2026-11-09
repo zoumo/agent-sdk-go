@@ -35,13 +35,17 @@
 // form support when AgentQuestions is disabled. System prompts and additional
 // directories are rejected before opening a session. URL, image, audio, resource,
 // and resource-link interactions or inputs are not advertised.
+// Model and reasoning-effort execution options use native thread start/resume
+// values and thread settings updates. Runtime updates require the experimental
+// API and only update the fields exposed by ExecutionOptionsController.
 //
 // Several native facts intentionally have no unified representation. Codex does
-// not provide a selectable settings-option catalog or available-command catalog
-// through this adapter. Archive and unarchive actions are supported, but their
-// notifications have no unified payload. Native plan items, plan text deltas,
-// and turn plan updates are intentionally not emitted, while their original
-// types and notifications remain available in the native Codex package.
+// not provide an arbitrary selectable settings-option catalog or
+// available-command catalog through this adapter. Archive and unarchive actions
+// are supported, but their notifications have no unified payload. Native plan
+// items, plan text deltas, and turn plan updates are intentionally not emitted,
+// while their original types and notifications remain available in the native
+// Codex package.
 // Reasoning part boundaries are also not represented.
 //
 // Permission-profile approvals are unsupported, as are native item and

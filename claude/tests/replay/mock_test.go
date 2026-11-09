@@ -65,15 +65,23 @@ func (s *mockSDKSuite) open(script mockScenarioDefinition, wantStatus string) {
 	session, err := mocktest.Prepare(dir, "claude", data, mocktest.Options{})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { verifySDKSession(s.T(), session, wantStatus) })
-	run, err := session.NewRun(s.ctx, mocktest.RunOptions{})
-	s.Require().NoError(err)
-	s.client, err = claude.OpenStreams(s.ctx, claude.SessionOptions{
+	options := claude.SessionOptions{
 		CLIPath:           "must-not-start",
-		WorkDir:           run.Start.Workspace,
-		Env:               run.Environment(),
+		WorkDir:           "",
+		Env:               []string{},
 		InitializeTimeout: 2 * time.Second,
 		ShutdownTimeout:   time.Second,
-	}, claude.StreamTransport{
+	}
+	args, err := claude.NativeArgs(options)
+	require.NoError(s.T(), err)
+	run, err := session.NewRun(s.ctx, mocktest.RunOptions{NativeArgs: args})
+	s.Require().NoError(err)
+	options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
+	actualArgs, err := claude.NativeArgs(options)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), run.Start.NativeArgs, actualArgs)
+	require.Equal(s.T(), run.Start.Config, run.Start.Env["CLAUDE_CONFIG_DIR"])
+	s.client, err = claude.OpenStreams(s.ctx, options, claude.StreamTransport{
 		Reader: run.Reader,
 		Writer: run.Writer,
 		Stderr: run.Stderr,

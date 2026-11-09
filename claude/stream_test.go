@@ -86,6 +86,29 @@ func TestStreamSessionKeepsReaderAfterInputHalfClose(t *testing.T) {
 	require.NoError(t, session.Close())
 }
 
+// Session lifetime must not consume the budget reserved for peer shutdown.
+func TestStreamSessionCompletionAfterShutdownBudget(t *testing.T) {
+	peer := newStreamPeer()
+	peerDone := make(chan error, 1)
+	go func() { peerDone <- serveStreamUntilEOF(peer) }()
+	session, err := claude.OpenStreams(t.Context(), claude.SessionOptions{
+		WorkDir: t.TempDir(), Env: []string{}, ShutdownTimeout: 50 * time.Millisecond,
+	}, peer.transport)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close(); peer.close() })
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, session.CloseInput())
+	require.NoError(t, <-peerDone)
+	peer.wait <- nil
+	select {
+	case <-session.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("normal stream completion timed out")
+	}
+	require.NoError(t, session.Err())
+	require.NoError(t, session.Close())
+}
+
 func TestStreamSessionRejectsUnexpectedPeerEOF(t *testing.T) {
 	peer := newStreamPeer()
 	peerDone := make(chan error, 1)

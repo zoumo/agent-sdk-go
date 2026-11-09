@@ -6,13 +6,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
-type command struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	Env     []string `json:"-"`
-	Dir     string   `json:"-"`
-}
-
 type toolIdentity struct {
 	Source         string `json:"source"`
 	Version        string `json:"version"`

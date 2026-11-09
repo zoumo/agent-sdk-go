@@ -7,13 +7,13 @@
 cancellation and authenticated loopback remote main/probe forwarding.
 The [external tool](https://github.com/zoumo/agent-sdk-testify) owns record/verify,
 official drivers, case/binding contracts, recordings, matching, preparation and
-export. SDK code consumes only the versioned prepare/session/export/execution/
-result contracts and never resolves or reads the tool's source or material
-directories directly. The status file records the tool source revision and
-immutable builtin source revision separately, so source-layout changes do not
-rewrite material provenance.
-This branch does not build tool sources or read legacy recordings, scenarios,
-official-driver code or Python packaging as a fallback.
+export. SDK code links the exact pinned module and consumes only its public
+prepare/open/session, execution-start and typed execution-report surfaces. It
+never resolves or reads the tool's source or material directories directly.
+Embedded identity records the module revision and sum, while material identity
+records the immutable builtin source revision separately. This repository does
+not build tool sources or read legacy recordings, scenarios, official-driver
+code or Python packaging as a fallback.
 
 <a id="fixtures-仿真录制与测试输入"></a>
 <a id="stage-handoff"></a>
@@ -24,45 +24,42 @@ Build only the SDK host and simulate executable:
 
 ```sh
 bash scripts/simulation.sh build
-export AGENT_SDK_TESTIFY_BIN=/absolute/prebuilt/agent-sdk-testify
 bash scripts/simulation.sh simulate --provider claude --case SDK-CASE-001 --output /absolute/new-run
 bash scripts/simulation.sh simulate --recording /absolute/external-capture --output /absolute/new-run
 bash scripts/simulation.sh gate --jobs 2
 ```
 
-Use Go 1.26 or newer. There is no published release pin; the single status
-file records the observed development artifact source/hash and is not a release
-pin. Build never creates the tool or a wheel. Hosted CI separately builds the
-public tool at the status file's source revision and exports its absolute path;
-local checks still require an explicit `AGENT_SDK_TESTIFY_BIN`.
+Use Go 1.26 or newer. Test and simulation hosts link the pinned in-process
+testify library; no external binary or environment override is required. Build
+never creates the tool or a wheel.
 
 ### 审核采用和日常门禁
 
-Prepare is the only material source entry. SDK validates the schemaVersion 3
-session descriptor, tool identity, source and mock route, then launches only the
-declared commands. Export into a new directory outside the session is the only
-assertion-input source: SDK validates the export inventory, plan/source-plan,
-native frames, report and manifest-bound saved history before projection.
+Prepare is the only material source entry. SDK validates the schemaVersion 5
+session descriptor, embedded identity, source and in-process mock route. Export
+into a new directory outside the session is the only assertion-input source: SDK
+validates the export inventory, plan/source-plan, native frames, report and
+manifest-bound saved history before projection.
 
 plan.json/case.json and source streams are projected into INTERNAL SDK fixture
 files under each run's sdk directory so the existing typed Go flows retain their
 assertions. Source bytes and projected `agent-mock-jsonl` bytes are both retained
 with hashes. For built-in exports, the official verification report supplies the
-recorded receipt expectations; an external capture falls back to its top-level
-report. Those files are SDK implementation details, not paths the SDK may discover
-inside the tool. runtime.json contains workspace/config paths from the prepared
-host. Opaque saved-history IDs never become paths. Claude history queries use the
-config and workspace of the actual launched execution, resolved from the result
-start notice rather than the pre-launch template.
+assertion expectations; an external capture falls back to its top-level report.
+Those files are SDK implementation details, not paths the SDK may discover inside
+the tool. runtime.json contains workspace/config paths from the prepared host.
+Opaque saved-history IDs never become paths. Claude history queries use the
+config and workspace of the actual execution, resolved from the typed execution
+start rather than the pre-launch template.
 
 Prepare twice for policy comparison. Export every successful prepare, read its
 execution evidence, and remove the caller-owned session after failures or
 cancellation. summary.json keeps business results separate from
-protocol/process/evidence/bridge failures. Result notices bind the session,
-execution, connection and material hashes, and SDK validation must bind exactly
-the one execution that used that export even if SDK projection files disappear. Source
-capture paths are opaque to assertions; external captures are passed only to tool
-CLI operations.
+protocol/evidence/bridge failures. Typed execution reports bind the session,
+execution, connection and material hashes; SDK validation must bind exactly the
+one execution that used that export even if SDK projection files disappear.
+Source capture paths are opaque to assertions; external captures are passed only
+to library prepare/export operations.
 
 Coverage retains all 72 provider/case slots with source verification, route,
 required/optional and current simulation status. Required gaps fail. Optional
@@ -86,11 +83,11 @@ are independent evidence. No model or new recording runs by default.
 ### 代码集成测试输入
 
 Native tests/testdata integration inputs are explicitly synthetic. internal/mocktest
-converts them into manifest-bound external captures and drives the declared
-prepare/agent mock lifecycle with independent progress and result evidence.
-Simulation hosts separately consume result notices bound to the
-exported material; the adapter contains no matching engine. The mock's inherited
-progress descriptor signals consumption before EOF so tests can close input.
+converts them into manifest-bound synthetic captures and drives the in-process
+library lifecycle with typed execution evidence.
+Simulation hosts separately consume typed reports bound to the
+exported material; the adapter contains no matching engine. Full-consumption
+notification signals when tests can half-close SDK input.
 
 <a id="catalog-仿真测试流程目录"></a>
 

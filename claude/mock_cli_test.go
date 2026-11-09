@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	agenttestify "github.com/zoumo/agent-sdk-testify"
+
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
@@ -72,7 +74,7 @@ func (s *mockCLISuite) TestInteractions() {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
-			client, _ := openMockSession(t, ctx, peerSession)
+			client, run := openMockSession(t, ctx, peerSession)
 			require.NoError(t, submitMockCLIInput(ctx, client, "hello"))
 			if mode != "permission-and-interrupt" {
 				for {
@@ -82,7 +84,8 @@ func (s *mockCLISuite) TestInteractions() {
 						require.NoError(t, ctx.Err())
 						closeErr := client.Close()
 						if mode == "disconnect" {
-							require.ErrorIs(t, closeErr, mocktest.ErrDisconnected)
+							require.Error(t, closeErr)
+							requireStrictReplayFailure(t, ctx, run)
 						} else {
 							require.Error(t, closeErr)
 						}
@@ -168,7 +171,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	peerSession, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
-	client, _ := openMockSession(t, ctx, peerSession)
+	client, run := openMockSession(t, ctx, peerSession)
 	first, err := client.Receive(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "forwarding-not-confirmed", first.Observation.Reason)
@@ -206,7 +209,8 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
-	require.ErrorIs(t, client.Close(), mocktest.ErrDisconnected)
+	require.Error(t, client.Close())
+	requireStrictReplayFailure(t, ctx, run)
 }
 
 func openMockSession(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*claude.Session, *mocktest.Run) {
@@ -268,4 +272,19 @@ func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
 	require.NoError(t, err)
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
+}
+
+func requireStrictReplayFailure(t *testing.T, ctx context.Context, run *mocktest.Run) {
+	t.Helper()
+	result, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.Equal(t, agenttestify.FailureClassStrictReplay, connection.Failure)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
 }

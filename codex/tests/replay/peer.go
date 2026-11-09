@@ -88,9 +88,6 @@ func mockPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, 
 	}
 	result, err := run.Wait(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "scripted disconnect") {
-			err = errors.Join(mocktest.ErrDisconnected, err)
-		}
 		return err
 	}
 	if result == nil || result.Execution == nil {

@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [[ -z "${AGENT_SDK_TESTIFY_BIN:-}" ]]; then
-  exec bash scripts/with-agent-sdk-testify.sh bash scripts/check-offline.sh "$@"
-fi
 export GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off
 export CODEX_E2E_STDIO=0 CODEX_E2E_INTERACTIONS=0 CODEX_E2E_WEBSOCKET=0
 export CLAUDE_E2E=0 SDK_REAL_AGENT_E2E=0
 export GORACE=atexit_sleep_ms=0
 export GOMAXPROCS=2
 bash scripts/check-boundaries.sh
+bash scripts/check-removed-cli-surfaces.sh
 go mod verify
 python3 -m unittest discover -s codex/scripts -p 'test_ci_checks.py' -v
 python3 codex/docs/protocol/verify_inventory.py

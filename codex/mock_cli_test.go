@@ -1,4 +1,4 @@
-// SDK integration against the Go mock CLI; all scenarios are synthetic.
+// SDK integration against the in-process library mock; all scenarios are synthetic.
 package codex_test
 
 import (
@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
@@ -86,7 +88,7 @@ func (s *mockCLISuite) TestInteractions() {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
-			client, _ := openMockClient(t, ctx, peerSession)
+			client, run := openMockClient(t, ctx, peerSession)
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 			require.NoError(t, err)
 			defer func() { _ = client.Close(); _ = session.Close() }()
@@ -98,7 +100,8 @@ func (s *mockCLISuite) TestInteractions() {
 				require.NoError(t, ctx.Err())
 				closeErr := client.Close()
 				if mode == "disconnect" {
-					require.ErrorIs(t, closeErr, mocktest.ErrDisconnected)
+					require.Error(t, closeErr)
+					requireStrictReplayFailure(t, ctx, run)
 				} else {
 					require.ErrorContains(t, closeErr, "client mismatch")
 				}
@@ -151,7 +154,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	peerSession, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
-	client, _ := openMockClient(t, ctx, peerSession)
+	client, run := openMockClient(t, ctx, peerSession)
 	defer client.Close()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 	require.NoError(t, err)
@@ -183,6 +186,8 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
+	require.Error(t, client.Close())
+	requireStrictReplayFailure(t, ctx, run)
 }
 
 func openMockClient(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*codex.Client, *mocktest.Run) {
@@ -221,6 +226,21 @@ func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
 	require.NoError(t, err)
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
+}
+
+func requireStrictReplayFailure(t *testing.T, ctx context.Context, run *mocktest.Run) {
+	t.Helper()
+	result, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.Equal(t, agenttestify.FailureClassStrictReplay, connection.Failure)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
 }
 
 // Normal replay completion must preserve queued final frames and close Receive.

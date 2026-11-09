@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,7 +27,6 @@ type Session struct {
 	SessionID   string
 
 	fixture *agenttestify.Fixture
-	options Options
 	owned   bool
 
 	mu         sync.Mutex
@@ -58,18 +56,6 @@ type Run struct {
 	mock      *agenttestify.MockRun
 	closeOnce sync.Once
 	closeErr  error
-}
-
-type classifiedPeerReader struct {
-	io.ReadCloser
-}
-
-func (r classifiedPeerReader) Read(p []byte) (int, error) {
-	n, err := r.ReadCloser.Read(p)
-	if err != nil && strings.Contains(err.Error(), "scripted disconnect") {
-		err = errors.Join(ErrDisconnected, err)
-	}
-	return n, err
 }
 
 type idempotentPipeFile struct {
@@ -147,7 +133,7 @@ func Prepare(dir, provider string, scenario []byte, options Options) (result *Se
 	if err != nil {
 		return nil, fmt.Errorf("prepare in-process fixture: %w", err)
 	}
-	return sessionFromFixture(fixture, options, true)
+	return sessionFromFixture(fixture, true)
 }
 
 // Open attaches to an existing fixture without consuming or deleting it. The
@@ -160,15 +146,15 @@ func Open(dir string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sessionFromFixture(fixture, Options{}, false)
+	return sessionFromFixture(fixture, false)
 }
 
 // FromFixture attaches a run coordinator to an already opened fixture.
 func FromFixture(fixture *agenttestify.Fixture) (*Session, error) {
-	return sessionFromFixture(fixture, Options{}, false)
+	return sessionFromFixture(fixture, false)
 }
 
-func sessionFromFixture(fixture *agenttestify.Fixture, options Options, owned bool) (*Session, error) {
+func sessionFromFixture(fixture *agenttestify.Fixture, owned bool) (*Session, error) {
 	if fixture == nil {
 		return nil, errors.New("prepared fixture is unavailable")
 	}
@@ -186,7 +172,6 @@ func sessionFromFixture(fixture *agenttestify.Fixture, options Options, owned bo
 		Env:         sortedEnvironment(route.Env),
 		SessionID:   fixture.FixtureID,
 		fixture:     fixture,
-		options:     options,
 		owned:       owned,
 		active:      make(map[*Run]struct{}),
 	}, nil
@@ -294,7 +279,7 @@ func (s *Session) NewRun(ctx context.Context, options RunOptions) (*Run, error) 
 	}
 	run := &Run{
 		Start:   mock.Start,
-		Reader:  classifiedPeerReader{ReadCloser: sdkInputCloser},
+		Reader:  sdkInputCloser,
 		Writer:  sdkOutputCloser,
 		Stderr:  stderr,
 		session: s,
@@ -384,15 +369,13 @@ func (r *Run) CloseInputWhenComplete(closeInput func() error) <-chan error {
 	return result
 }
 
-// Wait returns the authoritative typed result. Scripted disconnect and timeout
-// retain the legacy bridge errors used by the SDK replay suites.
+// Wait returns the authoritative typed result.
 func (r *Run) Wait(ctx context.Context) (*agenttestify.MockAgentResult, error) {
 	if r == nil || r.mock == nil {
 		return nil, errors.New("mock run is unavailable")
 	}
 	result, err := r.mock.Wait(ctx)
 	r.session.forget(r)
-	err = legacyFailure(err, result, r.Start.ConnectionID)
 	return result, err
 }
 
@@ -428,128 +411,8 @@ func (r *Run) closeSDK() {
 	})
 }
 
-func legacyFailure(err error, result *agenttestify.MockAgentResult, connection string) error {
-	if err == nil {
-		return nil
-	}
-	if strings.Contains(err.Error(), "scripted disconnect") {
-		return errors.Join(ErrDisconnected, err)
-	}
-	if result != nil && result.Execution != nil {
-		for _, connectionReport := range result.Execution.Connections {
-			if connectionReport.ID != connection {
-				continue
-			}
-			switch connectionReport.Failure {
-			case agenttestify.FailureClassTimeout:
-				return errors.Join(context.DeadlineExceeded, err)
-			case agenttestify.FailureClassCanceled:
-				return errors.Join(context.Canceled, err)
-			}
-		}
-	}
-	return err
-}
-
-// Run is the compatibility path for byte-oriented bridge tests. New SDK-facing
-// tests use NewRun with codex.NewStreams or claude.OpenStreams directly.
-func (s *Session) Run(ctx context.Context, in io.Reader, out io.Writer) error {
-	if s == nil {
-		return errors.New("prepared session required")
-	}
-	if ctx == nil {
-		return errors.New("peer context required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if in == nil {
-		return errors.New("input reader required")
-	}
-	if out == nil {
-		out = io.Discard
-	}
-	peerCtx, cancelPeer := context.WithTimeout(context.WithoutCancel(ctx), lifecycleTimeout)
-	defer cancelPeer()
-	run, err := s.NewRun(peerCtx, RunOptions{})
-	if run == nil {
-		return err
-	}
-	if err != nil {
-		_ = run.CloseSDK()
-		return err
-	}
-	cancellationDone := make(chan struct{})
-	stopCancellation := context.AfterFunc(ctx, func() {
-		defer close(cancellationDone)
-		_ = run.Writer.Close()
-		_ = run.Reader.Close()
-		if closer, ok := in.(io.Closer); ok {
-			_ = closer.Close()
-		}
-		if closer, ok := out.(io.Closer); ok {
-			_ = closer.Close()
-		}
-	})
-	defer func() {
-		if !stopCancellation() {
-			<-cancellationDone
-		}
-	}()
-
-	inputDone := make(chan error, 1)
-	go func() {
-		_, copyErr := io.Copy(run.Writer, in)
-		closeErr := run.Writer.Close()
-		inputDone <- errors.Join(copyErr, closeErr)
-	}()
-	outputDone := make(chan error, 1)
-	go func() {
-		_, copyErr := io.Copy(out, run.Reader)
-		if copyErr != nil {
-			_ = run.Writer.Close()
-		}
-		outputDone <- copyErr
-	}()
-
-	var completionErr error
-	completionDone := make(chan struct{})
-	go func() {
-		defer close(completionDone)
-		select {
-		case <-run.FullConsumption():
-			if s.options.Complete != nil {
-				completionErr = s.options.Complete()
-				_ = run.Writer.Close()
-			}
-		case <-run.Done():
-		}
-	}()
-
-	result, waitErr := run.Wait(peerCtx)
-	_ = run.Writer.Close()
-	_ = run.Reader.Close()
-	<-completionDone
-	outputErr := <-outputDone
-	var inputErr error
-	if waitErr == nil && outputErr == nil && ctx.Err() == nil {
-		inputErr = <-inputDone
-	} else {
-		select {
-		case inputErr = <-inputDone:
-		default:
-		}
-	}
-	_ = run.CloseSDK()
-	waitErr = errors.Join(ctx.Err(), waitErr)
-	if waitErr != nil {
-		return errors.Join(completionErr, inputErr, outputErr, legacyFailure(waitErr, result, run.Start.ConnectionID))
-	}
-	return errors.Join(completionErr, inputErr, outputErr)
-}
-
 // Report returns an aggregate view from typed execution reports tracked by this
-// session. It never parses execution descriptors, receipts or result notices.
+// session.
 func (s *Session) Report() (*SessionReport, error) {
 	if s == nil || s.fixture == nil {
 		return nil, errors.New("prepared session required")
@@ -602,17 +465,6 @@ func (s *Session) Report() (*SessionReport, error) {
 		}
 	}
 	return report, nil
-}
-
-// Command is intentionally unavailable: embedded connections have no
-// executable identity. Tests must use NewRun and the SDK stream constructors.
-func (s *Session) Command(string) (string, []string, error) {
-	return "", nil, errors.New("embedded mock connections have no executable command")
-}
-
-// Launcher is intentionally unavailable: embedded connections have no launcher.
-func (s *Session) Launcher(string) (string, error) {
-	return "", errors.New("embedded mock connections have no launcher")
 }
 
 // Close removes a fixture created by Prepare after every run has terminated.

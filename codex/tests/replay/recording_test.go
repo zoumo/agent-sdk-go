@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	agenttestify "github.com/zoumo/agent-sdk-testify"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
@@ -130,7 +132,7 @@ func TestRunSessionPreservesEarlyFailure(t *testing.T) {
 				require.EqualValues(t, -32042, rpc.Code)
 			default:
 				require.ErrorIs(t, err, codex.ErrUnexpectedEOF)
-				require.ErrorIs(t, c.Close(), mocktest.ErrDisconnected)
+				require.Error(t, c.Close())
 			}
 		})
 	}
@@ -208,6 +210,14 @@ func replayClient(t *testing.T, ctx context.Context, frames []Frame, handshakes 
 		require.NotNil(t, result)
 		require.NotNil(t, result.Execution)
 		require.Equal(t, wantStatus, string(result.Execution.Status))
+		if wantStatus == "failed" {
+			require.Len(t, result.Execution.Connections, 1)
+			connection := result.Execution.Connections[0]
+			require.Equal(t, agenttestify.FailureClassStrictReplay, connection.Failure)
+			require.False(t, connection.NativeLaunched)
+			require.Nil(t, connection.ExitCode)
+			require.Empty(t, connection.ProcessReceiptPath)
+		}
 	})
 	run.CloseInputWhenComplete(client.CloseInput)
 	return client

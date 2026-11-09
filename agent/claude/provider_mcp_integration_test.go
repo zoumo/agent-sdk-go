@@ -107,20 +107,36 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 		`<{"type":"system","subtype":"init","session_id":"mcp-open","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 	)
-	resumeFrames := append([]string(nil), mockClaudeInit...)
-	resumeFrames = append(resumeFrames,
-		`<{"type":"system","subtype":"init","session_id":"mcp-resume","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-	)
 	openPeer := prepareClaudePeer(t, "passed", openFrames...)
-	resumePeer := prepareClaudePeer(t, "passed", resumeFrames...)
-	launcher, captures := captureSequencedClaudeLauncher(t, openPeer, resumePeer)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
-	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
+	openLauncher, openCaptures := captureSequencedClaudeLauncher(t, openPeer)
+	openProvider := agentclaude.New(agentclaude.Config{CLIPath: openLauncher})
+	t.Cleanup(func() { require.NoError(t, openProvider.Stop(context.Background())) })
+	configDir := newResumeConfigDir(t)
+	writeResumeTranscript(
+		t,
+		configDir,
+		"project",
+		claudeResumePeerSessionID,
+		cwd,
+	)
+	resumeArgv := filepath.Join(t.TempDir(), "resume-argv.json")
+	resumePeer := newClaudeResumePeer(t, claudeResumePeerScenario{
+		CWD:      cwd,
+		Frames:   []string{resumeInitFrame(t, claudeResumePeerSessionID, cwd)},
+		ArgvPath: resumeArgv,
+	})
+	resumeProvider := agentclaude.New(agentclaude.Config{
+		CLIPath:   resumePeer.CLIPath,
+		Env:       resumePeer.Env,
+		ConfigDir: configDir,
+	})
+	t.Cleanup(func() {
+		require.NoError(t, resumeProvider.Stop(context.Background()))
+	})
 
-	_, err := provider.Start(ctx)
+	_, err := openProvider.Start(ctx)
 	require.NoError(t, err)
-	first, err := provider.Open(ctx, agent.OpenOptions{
+	first, err := openProvider.Open(ctx, agent.OpenOptions{
 		Cwd: cwd,
 		MCPServers: []agent.MCPServer{{
 			Name:      "open-only",
@@ -132,10 +148,12 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	require.NoError(t, first.Close(ctx))
 	require.JSONEq(t, `{"mcpServers":{"open-only":{
 		"type":"stdio","command":"fixture-mcp"
-	}}}`, claudeMCPConfig(t, readClaudeArgv(t, captures[0])))
+	}}}`, claudeMCPConfig(t, readClaudeArgv(t, openCaptures[0])))
 
-	second, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID: "mcp-resume",
+	_, err = resumeProvider.Start(ctx)
+	require.NoError(t, err)
+	second, err := resumeProvider.Resume(ctx, agent.ResumeOptions{
+		SessionID: claudeResumePeerSessionID,
 		OpenOptions: agent.OpenOptions{
 			Cwd: cwd,
 			MCPServers: []agent.MCPServer{{
@@ -149,7 +167,7 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	closeSessionOnCleanup(t, second)
 	require.JSONEq(t, `{"mcpServers":{"resume-only":{
 		"type":"http","url":"https://example.invalid/resume"
-	}}}`, claudeMCPConfig(t, readClaudeArgv(t, captures[1])))
+	}}}`, claudeMCPConfig(t, readClaudeArgv(t, resumeArgv)))
 }
 
 func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {

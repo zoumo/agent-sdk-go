@@ -16,8 +16,17 @@ type Session interface {
 	// consumer and retains accepted events for draining after Close.
 	Events() (EventStream, error)
 
-	// Submit validates and copies input before writing to the native protocol.
-	// It fails with failed_precondition while prior work remains unsettled.
+	// StartOrSteer validates and copies input before writing to the native
+	// protocol. It tries to join acceptable active work, otherwise it starts or
+	// hands the input to native scheduling. It never queues, waits for idle,
+	// persists, or retries. InputNotApplied leaves Submission empty and leaves
+	// the input with the caller.
+	StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
+
+	// Submit is the transitional strict input operation. It validates and copies
+	// input before writing to the native protocol and fails with
+	// failed_precondition while prior work remains unsettled. Callers should
+	// migrate to StartOrSteer.
 	Submit(ctx context.Context, input Input) (InputReceipt, error)
 
 	// Answer rechecks the live session, current work, request identity, and
@@ -54,11 +63,32 @@ type Acceptance struct {
 	NativeRecorded *bool
 }
 
+// InputResult describes what the provider could truthfully confirm about input
+// after StartOrSteer. The values are part of the public contract.
+type InputResult string
+
+const (
+	// InputAppliedCurrentWork means the provider accepted the input as current
+	// work already observed for the session.
+	InputAppliedCurrentWork InputResult = "applied_current_work"
+	// InputAppliedNewWork means the provider accepted the input with a new work
+	// identity, or no current work was known before the operation.
+	InputAppliedNewWork InputResult = "applied_new_work"
+	// InputAppliedBestEffort means the local write succeeded but the provider did
+	// not prove where or whether the input was scheduled.
+	InputAppliedBestEffort InputResult = "applied_best_effort"
+	// InputNotApplied means the input was definitely not applied. Submission is
+	// empty; the caller retains the input and controls any retry.
+	InputNotApplied InputResult = "not_applied"
+)
+
 // InputReceipt identifies a submission and the acceptance stages observed for
-// it. Submission identifies the submitted input; it does not prove execution
+// it. Result is empty for the transitional Submit. Submission identifies the
+// applied input; it is empty for InputNotApplied and does not prove execution
 // started or completed.
 type InputReceipt struct {
 	Submission string
+	Result     InputResult
 	Acceptance Acceptance
 }
 

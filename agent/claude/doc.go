@@ -23,13 +23,16 @@
 // Meta. The provider declares text input, permission, and form capabilities;
 // disabling AgentQuestions removes form support and disables the native tool.
 //
-// Input is one plain text block without annotations. System prompts, additional
-// directories, URL interactions, multi-block input, and native frames or answer
-// extensions without an exact mapping are not advertised. TodoWrite, TaskCreate,
-// and TaskUpdate remain ordinary tool calls with their native input; they do not
+// Input is one plain text block without annotations. StartOrSteer writes with
+// priority="next" and shouldQuery=true and reports only best-effort local write
+// success; native state observations establish active work. The strict Submit
+// remains transitional. System prompts, additional directories, URL
+// interactions, multi-block input, and native frames or answer extensions
+// without an exact mapping are not advertised. TodoWrite, TaskCreate, and
+// TaskUpdate remain ordinary tool calls with their native input; they do not
 // also produce a provider-neutral plan event. AskUserQuestion accepts string
-// answers and, for multi-select questions, string arrays. Multi-select arrays are
-// joined with ", " before the native write; native array answers are not
+// answers and, for multi-select questions, string arrays. Multi-select arrays
+// are joined with ", " before the native write; native array answers are not
 // supported.
 // Initialization, internal control responses, and positive member or parent
 // relationship confirmations are lifecycle plumbing and produce no unified

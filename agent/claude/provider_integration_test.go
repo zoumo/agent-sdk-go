@@ -238,6 +238,17 @@ func prepareClaudePeerWithReplayTimeout(
 	frames ...string,
 ) *mocktest.Session {
 	t.Helper()
+	return prepareClaudePeerWithTiming(t, wantStatus, timeout, nil, frames...)
+}
+
+func prepareClaudePeerWithTiming(
+	t *testing.T,
+	wantStatus string,
+	timeout time.Duration,
+	delays map[int]time.Duration,
+	frames ...string,
+) *mocktest.Session {
+	t.Helper()
 	scenario := make([]map[string]any, 0, len(frames))
 	for index, frame := range frames {
 		direction, data := frame[:1], frame[1:]
@@ -249,6 +260,9 @@ func prepareClaudePeerWithReplayTimeout(
 		}[direction]
 		if direction != "!" {
 			item["data"] = json.RawMessage(data)
+		}
+		if delay := delays[index]; delay > 0 {
+			item["delay_ms"] = delay.Milliseconds()
 		}
 		scenario = append(scenario, item)
 	}

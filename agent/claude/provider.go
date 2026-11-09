@@ -133,6 +133,7 @@ func (p *Provider) open(
 		resumeID,
 		options.Features,
 		mcpServers,
+		options.Execution,
 	)
 	native, err := claude.Open(ctx, claude.SessionOptions(nativeOptions))
 	if err != nil {
@@ -170,6 +171,7 @@ func (p *Provider) open(
 		init,
 		init.SessionID,
 		options.Features,
+		initialExecutionOptionsState(init, options.Execution),
 		buffered,
 	)
 	if err != nil {
@@ -252,12 +254,15 @@ func (p *Provider) nativeOptions(
 	resumeID string,
 	features agent.Features,
 	mcpServers []claude.MCPServer,
+	execution agent.ExecutionOptions,
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
 		MCPServers:        mcpServers,
+		Model:             execution.Model,
+		Effort:            execution.ReasoningEffort,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,

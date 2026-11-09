@@ -12,6 +12,9 @@
   adapters for live Provider and Session operations, events, input, interactions
   and classified errors. The core uses only the standard library; adapters stay
   provider-specific, and the layer adds no history abstraction or root client.
+- Makes `StartOrSteer` the unified input operation with explicit
+  `applied_current_work`, `applied_new_work`, `applied_best_effort` and
+  `not_applied` results. It does not queue, wait for idle, persist or retry.
 - Gives unified tool calls and results a required `toolName`/`provider` identity
   and `kind` classification, with exact provider forms and preserved native
   names. Tool chunks remain `{id, content}`. The unreleased JSON schema is

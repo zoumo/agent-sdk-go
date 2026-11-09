@@ -2,8 +2,10 @@ package agentcodex
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,7 +114,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	return &eventStream{session: s}, nil
 }
 
-func (s *session) Submit(
+func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
 ) (agent.InputReceipt, error) {
@@ -131,15 +133,11 @@ func (s *session) Submit(
 			nil,
 		)
 	}
-	if s.hasUnsettledWorkLocked() {
+	if s.submitting || s.submitUnknown {
 		s.mu.Unlock()
-		return agent.InputReceipt{}, adapterError(
-			agent.ErrorFailedPrecondition,
-			"work_in_progress",
-			"the session already has unsettled work",
-			nil,
-		)
+		return codexInputNotApplied(false), nil
 	}
+	activeBefore := s.activeTurn
 	s.submitting = true
 	submitEpoch := s.workEpoch
 	s.mu.Unlock()
@@ -149,10 +147,13 @@ func (s *session) Submit(
 	s.mu.Lock()
 	s.submitting = false
 	if submitErr != nil {
-		convertedErr := nativeOperationError("submit", submitErr)
+		notApplied := codexTurnInputNotApplied(submitErr)
 		s.recordSubmitErrorLocked(submitErr, submitEpoch)
 		s.mu.Unlock()
-		return agent.InputReceipt{}, convertedErr
+		if notApplied {
+			return codexInputNotApplied(true), nil
+		}
+		return agent.InputReceipt{}, nativeOperationError("start_or_steer", submitErr)
 	}
 	turnID := submission.Response.Turn.ID
 	if turnID == "" {
@@ -162,12 +163,16 @@ func (s *session) Submit(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
-			"submit_identity_missing",
+			"start_or_steer_identity_missing",
 			"Codex accepted the input without returning a turn identity",
 			nil,
 		)
 	}
-	if s.activeTurn == "" && s.lastFinished != turnID {
+	result := agent.InputAppliedNewWork
+	if activeBefore != "" && activeBefore == turnID {
+		result = agent.InputAppliedCurrentWork
+	}
+	if s.lastFinished != turnID {
 		s.activeTurn = turnID
 	}
 	s.mu.Unlock()
@@ -175,6 +180,7 @@ func (s *session) Submit(
 	sent, accepted := true, true
 	return agent.InputReceipt{
 		Submission: turnID,
+		Result:     result,
 		Acceptance: agent.Acceptance{
 			Sent:           &sent,
 			NativeAccepted: &accepted,
@@ -182,8 +188,58 @@ func (s *session) Submit(
 	}, nil
 }
 
-func (s *session) hasUnsettledWorkLocked() bool {
-	return s.submitting || s.submitUnknown || s.activeTurn != ""
+func codexInputNotApplied(sent bool) agent.InputReceipt {
+	receipt := agent.InputReceipt{
+		Result: agent.InputNotApplied,
+		Acceptance: agent.Acceptance{
+			Sent: &sent,
+		},
+	}
+	if sent {
+		accepted := false
+		receipt.Acceptance.NativeAccepted = &accepted
+	}
+	return receipt
+}
+
+func codexTurnInputNotApplied(err error) bool {
+	var callErr *codex.CallError
+	if !errors.As(err, &callErr) || callErr.Dispatch != codex.Responded {
+		return false
+	}
+	var rpcErr *codex.RPCError
+	if !errors.As(err, &rpcErr) {
+		return false
+	}
+	if len(rpcErr.Data) != 0 {
+		var turnErr codextypes.TurnError
+		if json.Unmarshal(rpcErr.Data, &turnErr) == nil {
+			if info, ok := turnErr.CodexErrorInfo.Get(); ok &&
+				info.ActiveTurnNotSteerable != nil {
+				return true
+			}
+		}
+	}
+	for _, marker := range []string{
+		"no active turn to steer",
+		"expected active turn id ",
+		"cannot steer a review turn",
+		"cannot steer a compact turn",
+		"active turn uses a different output schema",
+		"failed to submit turn input: NoActiveTurn",
+		"failed to submit turn input: NotIdle",
+		"failed to submit turn input: ActiveTurnNotSteerable",
+		"failed to submit turn input: ExpectedTurnMismatch",
+		"failed to submit turn input: ActiveTurnOutputSchemaMismatch",
+		"failed to submit turn input: PendingTriggerTurn",
+		"failed to submit turn input: PlanMode",
+		"failed to submit turn input: Superseded",
+	} {
+		if strings.Contains(rpcErr.Message, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *session) recordSubmitErrorLocked(err error, epoch uint64) {

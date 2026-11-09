@@ -31,11 +31,11 @@ func ExampleProvider() {
 
 		stream, err := session.Events()
 		mustExample(err)
-		receipt, err := session.Submit(ctx, agent.Input{
+		receipt, err := session.StartOrSteer(ctx, agent.Input{
 			Content: []agent.ContentBlock{agent.TextBlock{Text: "Explain the change"}},
 		})
 		mustExample(err)
-		fmt.Printf("%s submit=%s\n", providerName, receipt.Submission)
+		fmt.Printf("%s start_or_steer=%s\n", providerName, receipt.Submission)
 
 		idle := false
 		for !idle {
@@ -92,7 +92,7 @@ func ExampleProvider() {
 	// Output:
 	// codex text_input=true
 	// codex open=codex-session
-	// codex submit=codex-submission
+	// codex start_or_steer=codex-submission
 	// codex event=user.message text="Explain the change"
 	// codex interaction=codex/interaction-1 tool=codex-tool
 	// codex answer=codex/interaction-1
@@ -103,7 +103,7 @@ func ExampleProvider() {
 	// codex stop=ok
 	// claude text_input=true
 	// claude open=claude-session
-	// claude submit=claude-submission
+	// claude start_or_steer=claude-submission
 	// claude event=user.message text="Explain the change"
 	// claude interaction=claude/interaction-1 tool=claude-tool
 	// claude answer=claude/interaction-1
@@ -260,7 +260,19 @@ func (s *exampleSession) Events() (agent.EventStream, error) {
 	return exampleStream{session: s}, nil
 }
 
-func (s *exampleSession) Submit(
+func (s *exampleSession) StartOrSteer(
+	ctx context.Context,
+	input agent.Input,
+) (agent.InputReceipt, error) {
+	receipt, err := s.acceptInput(ctx, input)
+	if err != nil {
+		return agent.InputReceipt{}, err
+	}
+	receipt.Result = agent.InputAppliedBestEffort
+	return receipt, nil
+}
+
+func (s *exampleSession) acceptInput(
 	ctx context.Context,
 	input agent.Input,
 ) (agent.InputReceipt, error) {

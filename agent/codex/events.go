@@ -195,7 +195,7 @@ func (s *session) ownsMainTurn(turnID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// A pristine session may receive a live turn-scoped delta after Resume or
-	// before the local Submit response. Keep that native fact without treating
+	// before the local StartOrSteer response. Keep that native fact without treating
 	// the delta as work start; once a turn has been observed, unrelated turns
 	// are stale.
 	return s.activeTurn == turnID ||

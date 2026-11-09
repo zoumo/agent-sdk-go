@@ -32,6 +32,7 @@ type session struct {
 	closed              bool
 	explicitClose       bool
 	submitting          bool
+	submitUnknown       bool
 	workActive          bool
 	activeSubmit        string
 	state               *agent.SessionState
@@ -141,7 +142,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	return &eventStream{session: s}, nil
 }
 
-func (s *session) Submit(
+func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
 ) (agent.InputReceipt, error) {
@@ -160,42 +161,42 @@ func (s *session) Submit(
 			nil,
 		)
 	}
-	if s.submitting || s.workActive {
+	if s.submitting || s.submitUnknown {
 		s.mu.Unlock()
-		return agent.InputReceipt{}, adapterError(
-			agent.ErrorFailedPrecondition,
-			"work_in_progress",
-			"the session already has unsettled work",
-			nil,
-		)
+		return claudeInputNotApplied(), nil
 	}
-	s.submitting = true
 	stateVersion := s.stateVersion
+	s.submitting = true
 	s.mu.Unlock()
 
-	submissionID, idErr := uuidv4.New()
-	if idErr != nil {
-		s.finishSubmit(false, stateVersion)
-		return agent.InputReceipt{}, adapterError(
-			agent.ErrorUnavailable,
-			"submission_id_failed",
-			"create unified submission identity",
-			idErr,
-		)
+	submissionID, err := s.newSubmissionID(stateVersion)
+	if err != nil {
+		return agent.InputReceipt{}, err
 	}
 
-	nativeSubmission, submitErr := s.native.Submit(ctx, claude.Input{Text: text})
+	priority := "next"
+	shouldQuery := true
+	nativeSubmission, submitErr := s.native.Submit(ctx, claude.Input{
+		User: &claudetypes.UserInput{
+			Message: claudetypes.InputMessage{
+				Role:    "user",
+				Content: claudetypes.Content{Text: &text},
+			},
+			Priority:    &priority,
+			ShouldQuery: &shouldQuery,
+		},
+	})
 	if submitErr != nil {
-		mapped := nativeOperationError("submit", submitErr)
-		s.finishSubmit(agent.CodeOf(mapped) == agent.ErrorOutcomeUnknown, stateVersion)
+		mapped := nativeOperationError("start_or_steer", submitErr)
+		s.finishInputWrite(agent.CodeOf(mapped) == agent.ErrorOutcomeUnknown, stateVersion)
 		return agent.InputReceipt{}, mapped
 	}
 	if !nativeSubmission.Written {
-		s.finishSubmit(true, stateVersion)
+		s.finishInputWrite(true, stateVersion)
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
-			"submit_acceptance_missing",
-			"Claude submit returned without write evidence",
+			"start_or_steer_acceptance_missing",
+			"Claude start-or-steer returned without write evidence",
 			nil,
 		)
 	}
@@ -203,23 +204,49 @@ func (s *session) Submit(
 	s.mu.Lock()
 	s.submitting = false
 	if s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle {
+		if s.activeSubmit == "" {
+			s.activeSubmit = submissionID
+		}
 		s.workActive = true
-		s.activeSubmit = submissionID
 	}
 	s.mu.Unlock()
 
 	sent := true
 	return agent.InputReceipt{
 		Submission: submissionID,
+		Result:     agent.InputAppliedBestEffort,
 		Acceptance: agent.Acceptance{Sent: &sent},
 	}, nil
 }
 
-func (s *session) finishSubmit(outcomeUnknown bool, stateVersion uint64) {
+func claudeInputNotApplied() agent.InputReceipt {
+	sent := false
+	return agent.InputReceipt{
+		Result:     agent.InputNotApplied,
+		Acceptance: agent.Acceptance{Sent: &sent},
+	}
+}
+
+func (s *session) newSubmissionID(stateVersion uint64) (string, error) {
+	submissionID, err := uuidv4.New()
+	if err != nil {
+		s.finishInputWrite(false, stateVersion)
+		return "", adapterError(
+			agent.ErrorUnavailable,
+			"submission_id_failed",
+			"create unified submission identity",
+			err,
+		)
+	}
+	return submissionID, nil
+}
+
+func (s *session) finishInputWrite(outcomeUnknown bool, stateVersion uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.submitting = false
 	if outcomeUnknown && s.stateVersion == stateVersion {
+		s.submitUnknown = true
 		s.workActive = true
 	}
 }
@@ -389,6 +416,7 @@ func (s *session) updateState(state agent.SessionState) *agent.SessionState {
 	next := state
 	s.state = &next
 	s.workActive = next != agent.StateIdle
+	s.submitUnknown = false
 	if next == agent.StateIdle {
 		s.activeSubmit = ""
 	}

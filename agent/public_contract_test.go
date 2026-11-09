@@ -67,7 +67,7 @@ func (contractSession) Events() (agent.EventStream, error) {
 	return contractStream{}, nil
 }
 
-func (contractSession) Submit(context.Context, agent.Input) (agent.InputReceipt, error) {
+func (contractSession) StartOrSteer(context.Context, agent.Input) (agent.InputReceipt, error) {
 	return agent.InputReceipt{}, nil
 }
 
@@ -133,6 +133,18 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)
 	require.NotNil(t, modelController)
+}
+
+func TestUnifiedSessionHasOneInputOperation(t *testing.T) {
+	sessionType := reflect.TypeFor[agent.Session]()
+
+	_, hasStartOrSteer := sessionType.MethodByName("StartOrSteer")
+	_, hasSubmit := sessionType.MethodByName("Submit")
+	_, hasSteer := sessionType.MethodByName("Steer")
+
+	require.True(t, hasStartOrSteer)
+	require.False(t, hasSubmit)
+	require.False(t, hasSteer)
 }
 
 func TestPublicMCPContract(t *testing.T) {

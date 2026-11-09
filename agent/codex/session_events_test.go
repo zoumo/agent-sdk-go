@@ -22,12 +22,14 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
 		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"hello","type":"text"}],"threadId":"root-a"}}`,
 		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`>{"id":94,"method":"turn/start","params":{"input":[{"text":"overlap","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
 		`<{"method":"turn/started","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"inProgress","startedAt":1700000000,"future":true}},"futureEnvelope":1}`,
 		`<{"method":"item/agentMessage/delta","params":{"threadId":"root-a","turnId":"turn-a","itemId":"item-a","delta":"hello","future":null}}`,
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000000123,"item":{"type":"agentMessage","id":"item-a","text":"hello","phase":"final_answer","future":{"big":9007199254740993}},"future":true}}`,
 		`<{"method":"turn/completed","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"completed","startedAt":1700000000,"completedAt":1700000001,"future":null}}}`,
-		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
-		`<{"id":94,"result":{"status":"unsubscribed"}}`,
+		`>{"id":95,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":95,"result":{"status":"unsubscribed"}}`,
 	)
 	peerSession := prepareCodexPeer(t, frames...)
 	provider := newTestProvider(t, peerSession)
@@ -50,20 +52,22 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 	default:
 	}
 
-	receipt, err := session.Submit(ctx, agent.Input{
+	receipt, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedNewWork, receipt.Result)
 	assert.Equal(t, "turn-a", receipt.Submission)
 	require.NotNil(t, receipt.Acceptance.Sent)
 	require.NotNil(t, receipt.Acceptance.NativeAccepted)
 	assert.True(t, *receipt.Acceptance.Sent)
 	assert.True(t, *receipt.Acceptance.NativeAccepted)
-	_, err = session.Submit(ctx, agent.Input{
+	overlap, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "overlap"}},
 	})
-	require.Error(t, err)
-	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedCurrentWork, overlap.Result)
+	assert.Equal(t, receipt.Submission, overlap.Submission)
 
 	events := make([]agent.Event, 0, 4)
 	for range 4 {

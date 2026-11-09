@@ -52,10 +52,18 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
     if err != nil {
         return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
     }
-    if _, err := session.Submit(ctx, agent.Input{
+    receipt, err := session.StartOrSteer(ctx, agent.Input{
         Content: []agent.ContentBlock{agent.TextBlock{Text: "Explain this change."}},
-    }); err != nil {
+    })
+    if err != nil {
         return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+    }
+    if receipt.Result == agent.InputNotApplied {
+        return errors.Join(
+            errors.New("input was not applied; the caller still owns it"),
+            session.Close(ctx),
+            provider.Stop(ctx),
+        )
     }
     idle := false
     for !idle {

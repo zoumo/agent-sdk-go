@@ -1,6 +1,7 @@
 package agentclaude
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -23,6 +24,49 @@ func TestUnknownStateClearsPreviousStateAndRemainsActive(t *testing.T) {
 
 	assert.Nil(t, session.updateState(agent.StateIdle))
 	assert.False(t, session.workActive)
+}
+
+func TestStartOrSteerRefusesConcurrentOrUnknownWrite(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*session)
+	}{
+		{
+			name:  "concurrent write",
+			setup: func(s *session) { s.submitting = true },
+		},
+		{
+			name:  "unknown write",
+			setup: func(s *session) { s.submitUnknown = true },
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			session := &session{}
+			test.setup(session)
+
+			receipt, err := session.StartOrSteer(context.Background(), agent.Input{
+				Content: []agent.ContentBlock{agent.TextBlock{Text: "retained"}},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, agent.InputNotApplied, receipt.Result)
+			assert.Empty(t, receipt.Submission)
+			require.NotNil(t, receipt.Acceptance.Sent)
+			assert.False(t, *receipt.Acceptance.Sent)
+			assert.Nil(t, receipt.Acceptance.NativeAccepted)
+			assert.Nil(t, receipt.Acceptance.NativeRecorded)
+		})
+	}
+}
+
+func TestKnownNativeStateClearsUnknownWrite(t *testing.T) {
+	session := &session{submitUnknown: true}
+	session.updateState(agent.StateIdle)
+	assert.False(t, session.submitUnknown)
+
+	session.submitUnknown = true
+	session.markUnknownState()
+	assert.True(t, session.submitUnknown)
 }
 
 func TestRelationshipObservationBecomesDiagnosticGap(t *testing.T) {

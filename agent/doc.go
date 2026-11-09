@@ -7,8 +7,11 @@
 // processes, in each Session. After Start, Open creates a main session and Resume
 // restores an existing native identity; both return the same Session contract.
 // Each Session exposes one EventStream to one consumer, accepts text through
-// Submit, answers original requests through opaque InteractionRef values, and
-// releases its own attachment and session-owned resources through Close.
+// StartOrSteer, answers original requests through opaque InteractionRef values,
+// and releases its own attachment and session-owned resources through Close.
+// StartOrSteer lets the adapter start new work, join acceptable current work, or
+// report that input was not applied; it never queues, waits for idle, persists,
+// or retries.
 //
 // Event payloads form a closed live union with stable session and item identity.
 // Adapters preserve native order, time, raw evidence, and explicit capability
@@ -52,8 +55,9 @@
 // callers must protect separately. Open or Resume success does not prove MCP
 // connectivity, authentication, or tool discovery.
 //
-// ExampleProvider runs the complete open, submit, stream, answer, close, resume,
-// and stop flow over two synthetic providers without launching a native CLI.
+// ExampleProvider runs the complete open, start-or-steer, stream, answer, close,
+// resume, and stop flow over two synthetic providers without launching a native
+// CLI.
 // ExampleMCPServer validates an offline final MCP list without connecting to a
 // server.
 package agent

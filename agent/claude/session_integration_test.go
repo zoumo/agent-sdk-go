@@ -13,7 +13,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 )
 
-func TestSubmitMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
+func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
@@ -21,7 +21,8 @@ func TestSubmitMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-loop","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"hello"}}`,
+		claudeStartOrSteerFrame(t, "hello"),
+		claudeStartOrSteerFrame(t, "follow-up"),
 		`<{"type":"assistant","session_id":"native-loop","uuid":"assistant-event","timestamp":"2026-11-07T12:34:56.789Z","message":{"id":"message-1","role":"assistant","model":"synthetic","content":[{"type":"text","text":"hello from Claude","apiBlockIndex":0}],"future_message":null},"future":{"precise":9007199254740993},"future_message":null}`,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-loop","state":"running","timestamp":"2026-11-07T12:34:57Z"}`,
 		`<{"type":"result","subtype":"success","session_id":"native-loop","is_error":false,"result":"done","timestamp":"2026-11-07T12:34:58Z"}`,
@@ -40,21 +41,27 @@ func TestSubmitMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "native-loop", session.ID())
 
-	receipt, err := session.Submit(ctx, agent.Input{
+	receipt, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
 	assert.NotEmpty(t, receipt.Submission)
 	require.NotNil(t, receipt.Acceptance.Sent)
 	assert.True(t, *receipt.Acceptance.Sent)
 	assert.Nil(t, receipt.Acceptance.NativeAccepted)
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
 
-	_, err = session.Submit(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "too early"}},
+	second, err := session.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{agent.TextBlock{Text: "follow-up"}},
 	})
-	require.Error(t, err)
-	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedBestEffort, second.Result)
+	assert.NotEmpty(t, second.Submission)
+	assert.NotEqual(t, receipt.Submission, second.Submission)
+	require.NotNil(t, second.Acceptance.Sent)
+	assert.True(t, *second.Acceptance.Sent)
+	assert.Nil(t, second.Acceptance.NativeAccepted)
 
 	message, err := stream.Next(ctx)
 	require.NoError(t, err)

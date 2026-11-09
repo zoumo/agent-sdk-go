@@ -29,15 +29,16 @@ with each package, including upstream protocol and third-party attribution.
 
 ## Session
 
-The normal interface is `Open`, followed by `Session.Submit`
-and the single `Session.Receive` FIFO. The native SDKs and `types` imports stay
+The native SDK interface is `Open`, followed by the native
+`codex.Session.Submit` or `claude.Session.Submit` and the single
+`Session.Receive` FIFO. The native SDKs and `types` imports stay
 independent. [Session interfaces](../harness/modules/native-session/design.md#interface-原生-session-公开-interface)
 and [event delivery](../harness/modules/native-session/design.md#delivery-event-delivery) govern the behavior.
 
 | Previous consumer coordination | Session path |
 |---|---|
 | Codex start/resume + Subscribe + Requests | Open fixes main ownership; Receive delivers events and actual requests |
-| Claude NewClient + Send + callback worker pool | Open + Submit + Receive; process interaction private; application owns decision UI |
+| Claude NewClient + Send + callback worker pool | Open + native Submit + Receive; process interaction private; application owns decision UI |
 | Ancestor-first held events and occurrence/UUID dedup | Native arrival order and duplicates remain; optional parent knowledge follows evidence |
 
 ### Input and requests

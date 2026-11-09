@@ -10,6 +10,19 @@
 跨多次输入和执行持续存在的原生交互上下文。一次执行结果是会话内的事实，不是会话本身。
 _Avoid_: 任务、单次执行、Turn（指整个 Session 时）
 
+**Execution options（执行选项）**:
+Session 级、可由多个 provider 共同解释的模型与推理 effort 配置。它们可以在打开、
+恢复或运行时请求修改；请求、被原生接受和实际生效是不同事实。
+_Avoid_: 全部 Session 配置、权限设置、跨 provider 思考预算
+
+**Requested execution value（已接受请求值）**:
+执行选项最近一次获得原生接受回执的调用方字面值。它不表示当前原生状态。
+_Avoid_: 生效值、当前值
+
+**Effective execution value（原生生效值）**:
+由原生接口明确给出、当前归属于主 Session 的执行选项值。缺少观察时保持未知。
+_Avoid_: 请求值、由回执推断的值
+
 **Main conversation（主会话）**:
 本次打开或恢复的原生会话，也是普通输入的默认目标。
 _Avoid_: 最近发出事件的 Agent（指输入目标时）

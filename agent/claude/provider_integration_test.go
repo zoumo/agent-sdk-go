@@ -177,6 +177,19 @@ func newTestClaudeProviderWithObserver(
 	peers ...*mocktest.Session,
 ) *agentclaude.Provider {
 	t.Helper()
+	return newTestClaudeProviderWithStreamHook(t, config, observe, nil, peers...)
+}
+
+type claudeTestStreamHook func(claude.StreamTransport) claude.StreamTransport
+
+func newTestClaudeProviderWithStreamHook(
+	t *testing.T,
+	config agentclaude.Config,
+	observe func(claude.SessionOptions),
+	hook claudeTestStreamHook,
+	peers ...*mocktest.Session,
+) *agentclaude.Provider {
+	t.Helper()
 	var mu sync.Mutex
 	next := 0
 	provider := agentclaude.NewWithStream(config, func(ctx context.Context, options claude.SessionOptions) (agentclaude.TestStreamOpen, error) {
@@ -220,13 +233,17 @@ func newTestClaudeProviderWithObserver(
 			cancelRun()
 			return agentclaude.TestStreamOpen{}, errors.New("execution native arguments differ from SDK options")
 		}
+		transport := claude.StreamTransport{
+			Reader: run.Reader,
+			Writer: run.Writer,
+			Stderr: run.Stderr,
+			Wait:   run.WaitError,
+		}
+		if hook != nil {
+			transport = hook(transport)
+		}
 		return agentclaude.TestStreamOpen{
-			Transport: claude.StreamTransport{
-				Reader: run.Reader,
-				Writer: run.Writer,
-				Stderr: run.Stderr,
-				Wait:   run.WaitError,
-			},
+			Transport: transport,
 			Workspace: run.Start.Workspace,
 			Env:       run.Environment(),
 			Started: func(session *claude.Session) {

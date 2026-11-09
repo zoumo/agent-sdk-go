@@ -59,6 +59,7 @@ type Session struct {
 	done             chan struct{}
 	clientReady      chan struct{}
 	requestedID      string
+	effortMu         sync.Mutex
 	mu               sync.Mutex
 	fifo             queue.Queue[Received]
 	root             string

@@ -61,6 +61,14 @@
 // Conversion gaps are non-fatal; a native decoder/protocol failure terminates
 // the stream after its diagnostic gap.
 //
+// Model and reasoning-effort execution options use literal Claude CLI arguments
+// on open and resume; empty values are omitted. Claude init can provide an
+// explicit effective model, but it has no effort observation, so a requested
+// effort remains unverified. Runtime model and effort updates use native control
+// requests. Their acknowledgments prove acceptance only and do not populate an
+// Effective value. A model update clears any previous model Effective value and
+// invalidates any previous effort Effective evidence.
+//
 // This package has no unified history or NativeClient escape hatch. Native
 // package-level session, metadata, message, and subagent queries remain the
 // history APIs.

@@ -25,6 +25,9 @@ func TestMain(m *testing.M) {
 // external connection, loads account configuration, or starts a native agent.
 // Fault companions use only a loopback application synchronization channel.
 func peer(provider, scenario string) error {
+	if strings.HasPrefix(scenario, "agent-execution-") {
+		return agentExecutionPeer(provider, scenario)
+	}
 	if provider == "claude" && scenario == "child-detail" {
 		return claudeChildDetailPeer()
 	}

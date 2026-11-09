@@ -13,22 +13,20 @@ go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 go mod download
 make fmt-check
 make lint
-export AGENT_SDK_TESTIFY_BIN=/absolute/prebuilt/agent-sdk-testify
 bash scripts/check-offline.sh
-GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-sdk-testify.sh go test -race -p=1 -count=1 -timeout 300s ./...
+GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 go test -race -p=1 -count=1 -timeout 300s ./...
 go vet ./...
 ```
 
-Set absolute `AGENT_SDK_TESTIFY_BIN` to a separately built external binary before
-SDK tests. There is no published release pin; scripts fail explicitly when this
-override is absent. `scripts/simulation.sh build` builds only SDK runner/driver.
-The external tool owns official driver/package and material checks. Scenario,
-recording, official-driver and Python snapshots do not remain in this repository.
-SDK process tests use `prepare` and `agent mock`; simulation obtains assertion
-inputs only from `export`. Callers read the execution index and result notices,
-then remove the caller-owned session after every SDK client and peer exits. The
-migrated synthetic, single-case and 72-slot gate checks remain in
-`tests/simulation/simulate`.
+Test and simulation hosts link the pinned in-process testify library; no external
+binary, environment override or launcher is required. `scripts/simulation.sh
+build` builds only SDK runner/driver. The external tool owns official
+driver/package and material checks. Scenario, recording, official-driver and
+Python snapshots do not remain in this repository. Simulation obtains assertion
+inputs from the typed execution report and prepared material. Callers read the
+execution report, then remove the caller-owned session after every SDK client
+and peer exits. The migrated synthetic, single-case and 72-slot gate checks
+remain in `tests/simulation/simulate`.
 
 The remaining gates check module and native dependency boundaries, the
 standard-library-only native types and `agent` core, provider-specific adapter
@@ -37,10 +35,9 @@ reproducible Codex generation, unit/subprocess tests and offline examples. `GOMA
 package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
-The external tool owns official driver/package checks. Hosted CI builds the
-public tool at the exact source revision recorded in
-[`scripts/agent-sdk-testify-version.json`](../scripts/agent-sdk-testify-version.json)
-before running SDK tests; it does not assume a release artifact exists.
+The external tool owns official driver/package checks. Hosted CI builds only the
+SDK-owned simulation runner and driver and links the pinned testify module; it
+does not build or download a testify executable.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -89,7 +86,8 @@ revision, not uncommitted changes in the working checkout.
 ## Hosted gates
 
 The [workflow](../.github/workflows/ci.yml) runs offline, race and vet checks. It
-builds the external tool from the pinned source revision before running SDK tests.
+builds only the SDK-owned simulation runner and driver before running SDK tests;
+the in-process testify module is fetched by the normal Go module graph.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
@@ -104,15 +102,16 @@ prove that any runner executed. See
 ## Code integration tests
 
 [Codex public API tests](../codex/public_api_test.go) check API signatures, import
-identity and configuration during ordinary package tests. Go mock CLI integration
+identity and configuration during ordinary package tests. Mock integration
 lives in [Codex](../codex/mock_cli_test.go) and [Claude](../claude/mock_cli_test.go)
-package tests: each SDK starts its Go mock executable as the CLI process and checks
-question/permission answers, interrupts, cancellation, disconnects and mismatches.
-Both tests also pause consumption during 2,048-event bursts, complete control and
-answer operations, then verify ordered drain after disconnection. The external
-tool checks mock command exit status and handshake completion. Shared FIFO tests cover
-cancellation, atomic batches, concurrent producers, close/abort races and reference
-release. See the [event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
+package tests: each SDK opens the in-process mock through closeable SDK streams and
+checks question/permission answers, interrupts, cancellation, disconnects and
+mismatches. Both tests also pause consumption during 2,048-event bursts, complete
+control and answer operations, then verify ordered drain after disconnection.
+Typed execution reports check strict replay, full consumption, client EOF and the
+absence of a native launch. Shared FIFO tests cover cancellation, atomic batches,
+concurrent producers, close/abort races and reference release. See the
+[event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
 
 `TestNativeIntegration` in `tests/integration` exercises both native SDK public
 interfaces through synthetic protocol peers. It retains original-handle authority,
@@ -136,14 +135,17 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The catalog defines eight stories and 36 flows. Available material comes from the external tool builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
+The catalog defines eight stories and 36 flows. Available material comes from the pinned library's builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
 Go SDK simulation flow implementations and their regression tests live in
 `tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`; the drivers root
-owns the process entry and delivery checks. Native `tests/replay` packages retain
-SDK integration tests and synthetic fixture/process adapters. Pure protocol matching and official verification belong to the [external tool](https://github.com/zoumo/agent-sdk-testify).
-See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the current process boundary.
+owns the driver entry and delivery checks. Native `tests/replay` packages retain
+SDK integration tests and synthetic fixture adapters over in-process streams. Pure
+protocol matching and official verification belong to the
+[external tool](https://github.com/zoumo/agent-sdk-testify).
+See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the
+library-backed fixture boundary.
 
 ## Focused checks
 
@@ -152,7 +154,7 @@ Run these from the repository root; default live gates remain disabled:
 ```sh
 python3 codex/docs/protocol/verify_inventory.py
 (cd codex && bash scripts/check_generated.sh)
-bash scripts/with-agent-sdk-testify.sh go test -count=1 ./tests/integration ./codex ./claude
+go test -count=1 ./tests/integration ./codex ./claude
 ```
 
 Codex generation uses the checked-in schema without downloading upstream sources;

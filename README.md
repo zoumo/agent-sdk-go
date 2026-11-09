@@ -127,7 +127,7 @@ pushed module and dependencies over the network, then compiles public imports,
 examples and documentation snippets without invoking a real CLI or model.
 Simulation catalog availability and source inspection do not establish successful
 real recordings. Code integration tests use explicitly synthetic input.
-The offline entry also requires an explicit separately built external tool and the
-fixed reviewed corpus in its embedded mock catalog; absent recordings fail the
-simulation gate. Material adoption and catalog maintenance belong to the
+The offline entry links the exact pinned testify module and its embedded fixed
+corpus; absent recordings fail the simulation gate. Material adoption and catalog
+maintenance belong to the
 [external tool](https://github.com/zoumo/agent-sdk-testify).

@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	agenttestify "github.com/zoumo/agent-sdk-testify"
+
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -55,7 +57,7 @@ func (s *GoMockSuite) TestRealSDKStdio() {
 				`c2s {"id":"reverse","result":`+tc.answer+`}`,
 				`c2s {"id":103,"method":"synthetic/done"}`,
 				`s2c {"id":103,"result":{}}`)
-			c, ctx := s.startSDK(mockScenario(fs), "passed")
+			c, _, ctx := s.startSDK(mockScenario(fs), "passed")
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: c})
 			s.Require().NoError(err)
 			defer func() { _ = c.Close(); _ = session.Close() }()
@@ -109,7 +111,7 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 			if fault == "disconnect" {
 				wantStatus = "failed"
 			}
-			c, ctx := s.startSDK(mockScenario(fs), wantStatus)
+			c, run, ctx := s.startSDK(mockScenario(fs), wantStatus)
 			var err error
 			if fault == "late response" {
 				session, openErr := codex.Open(ctx, codex.SessionOptions{Client: c})
@@ -141,7 +143,20 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 				s.Require().NoError(c.Call(ctx, "synthetic/done", nil, nil))
 			}
 			if fault == "disconnect" {
-				s.Require().ErrorIs(c.Close(), mocktest.ErrDisconnected)
+				s.Require().Error(c.Close())
+				waitCtx, cancelWait := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancelWait()
+				result, waitErr := run.Wait(waitCtx)
+				s.Require().Error(waitErr)
+				s.Require().NotNil(result)
+				s.Require().NotNil(result.Execution)
+				s.Require().Equal(agenttestify.ExecutionStatusFailed, result.Execution.Status)
+				s.Require().Len(result.Execution.Connections, 1)
+				connection := result.Execution.Connections[0]
+				s.Require().Equal(agenttestify.FailureClassStrictReplay, connection.Failure)
+				s.Require().False(connection.NativeLaunched)
+				s.Require().Nil(connection.ExitCode)
+				s.Require().Empty(connection.ProcessReceiptPath)
 			} else {
 				s.Require().NoError(c.Close())
 			}
@@ -149,7 +164,7 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 	}
 }
 
-func (s *GoMockSuite) startSDK(sc mockScenarioDefinition, wantStatus string) (*codex.Client, context.Context) {
+func (s *GoMockSuite) startSDK(sc mockScenarioDefinition, wantStatus string) (*codex.Client, *mocktest.Run, context.Context) {
 	s.T().Helper()
 	b, err := json.Marshal(sc)
 	s.Require().NoError(err)
@@ -179,7 +194,7 @@ func (s *GoMockSuite) startSDK(sc mockScenarioDefinition, wantStatus string) (*c
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = c.Close(); _ = run.CloseSDK() })
 	run.CloseInputWhenComplete(c.CloseInput)
-	return c, ctx
+	return c, run, ctx
 }
 
 func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {

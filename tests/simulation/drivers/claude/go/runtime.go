@@ -60,7 +60,7 @@ func resolveHost(root, project, fixtureProject, config string, prepared Host) (H
 }
 
 // executionHostFromRun adopts the immutable execution snapshot returned by the
-// public library before protocol I/O. It never reads process result notices.
+// public library before protocol I/O. It never reads result files.
 func executionHostFromRun(run *mocktest.Run) (Host, error) {
 	if run == nil || run.Start.ExecutionID == "" || run.Start.ConnectionID == "" {
 		return Host{}, errors.New("main execution start is missing")

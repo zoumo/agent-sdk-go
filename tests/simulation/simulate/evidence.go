@@ -45,7 +45,6 @@ type evidenceConnection struct {
 type evidenceExecution struct {
 	ID              string               `json:"id"`
 	FixtureID       string               `json:"fixtureId"`
-	Command         string               `json:"command"`
 	Status          string               `json:"status"`
 	Complete        bool                 `json:"complete"`
 	Material        resultMaterial       `json:"material"`
@@ -98,7 +97,6 @@ func evidenceExecutionView(report *agenttestify.ExecutionReport) evidenceExecuti
 	execution := evidenceExecution{
 		ID:              report.ExecutionID,
 		FixtureID:       report.FixtureID,
-		Command:         "mock",
 		Status:          string(report.Status),
 		Complete:        report.Complete,
 		Material:        evidenceMaterial(report.Material),

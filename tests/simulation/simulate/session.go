@@ -22,11 +22,8 @@ const (
 )
 
 type preparedConnection struct {
-	ID       string   `json:"id"`
-	Transport string  `json:"transport"`
-	Command  string   `json:"command"`
-	Args     []string `json:"args,omitempty"`
-	Launcher string   `json:"launcher,omitempty"`
+	ID        string `json:"id"`
+	Transport string `json:"transport"`
 }
 
 type preparedRoute struct {
@@ -64,9 +61,9 @@ type preparedSession struct {
 	Env           map[string]string        `json:"env"`
 	Routes        map[string]preparedRoute `json:"routes"`
 
-	Dir     string        `json:"-"`
-	RawJSON []byte        `json:"-"`
-	Mock    preparedRoute `json:"-"`
+	Dir     string                `json:"-"`
+	RawJSON []byte                `json:"-"`
+	Mock    preparedRoute         `json:"-"`
 	Fixture *agenttestify.Fixture `json:"-"`
 	Runner  *mocktest.Session     `json:"-"`
 }
@@ -148,9 +145,6 @@ func viewPreparedSession(fixture *agenttestify.Fixture) *preparedSession {
 		connections[i] = preparedConnection{
 			ID:        connection.ID,
 			Transport: string(connection.Transport),
-			Command:   connection.Command,
-			Args:      append([]string(nil), connection.Args...),
-			Launcher:  connection.Launcher,
 		}
 	}
 	session := &preparedSession{
@@ -173,7 +167,7 @@ func viewPreparedSession(fixture *agenttestify.Fixture) *preparedSession {
 		Tmp:          fixture.Tmp,
 		ProtocolCwd:  fixture.ProtocolCwd,
 		Env:          mapsClone(fixture.Env),
-		Routes:       map[string]preparedRoute{"mock": {
+		Routes: map[string]preparedRoute{"mock": {
 			Enabled:     route.Enabled,
 			Executor:    route.Executor,
 			Target:      route.Target,
@@ -358,8 +352,7 @@ func validateRoute(session *preparedSession) error {
 			return fmt.Errorf("duplicate mock connection %q", connection.ID)
 		}
 		seen[connection.ID] = true
-		if connection.Transport != string(agenttestify.ConnectionTransportInProcess) ||
-			connection.Command != "" || len(connection.Args) != 0 || connection.Launcher != "" {
+		if connection.Transport != string(agenttestify.ConnectionTransportInProcess) {
 			return fmt.Errorf("mock connection %s is not an embedded in-process route", connection.ID)
 		}
 	}

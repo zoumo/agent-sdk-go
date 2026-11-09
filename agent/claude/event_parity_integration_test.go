@@ -127,8 +127,9 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	callPayload, ok := toolCall.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
 	assert.Equal(t, "tool-1", callPayload.ID)
-	assert.Equal(t, "Read", callPayload.Kind)
-	assert.Equal(t, "Read", callPayload.Name)
+	assert.Equal(t, agent.ToolKindOther, callPayload.Kind)
+	assert.Equal(t, "Read", callPayload.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, callPayload.Provider)
 	input, ok := callPayload.RawInput.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "a.txt", input["path"])
@@ -142,7 +143,9 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	resultPayload, ok := toolResult.Payload.(agent.ToolResultPayload)
 	require.True(t, ok)
 	assert.Equal(t, "tool-1", resultPayload.ID)
-	assert.Equal(t, "Read", resultPayload.Kind)
+	assert.Equal(t, agent.ToolKindOther, resultPayload.Kind)
+	assert.Equal(t, "Read", resultPayload.ToolName)
+	assert.Equal(t, agent.ToolProviderAgent, resultPayload.Provider)
 	assert.Equal(t, "completed", resultPayload.Status)
 	assert.Equal(t, []agent.ContentBlock{agent.TextBlock{Text: "file contents"}}, resultPayload.Content)
 	require.NotNil(t, resultPayload.RawOutput)
@@ -481,7 +484,7 @@ func TestClaudePlanLikeToolsRemainNativeToolCalls(t *testing.T) {
 	assert.Equal(t, "todo-1", todoCall.ItemID)
 	todo, ok := todoCall.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
-	assert.Equal(t, "TodoWrite", todo.Name)
+	assert.Equal(t, "TodoWrite", todo.ToolName)
 	encodedInput, err := json.Marshal(todo.RawInput)
 	require.NoError(t, err)
 	assert.JSONEq(t,
@@ -497,14 +500,14 @@ func TestClaudePlanLikeToolsRemainNativeToolCalls(t *testing.T) {
 	assert.Equal(t, "task-create", taskCreate.ItemID)
 	create, ok := taskCreate.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
-	assert.Equal(t, "TaskCreate", create.Name)
+	assert.Equal(t, "TaskCreate", create.ToolName)
 
 	taskUpdate := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventAgentToolCall, taskUpdate.Type())
 	assert.Equal(t, "task-update", taskUpdate.ItemID)
 	update, ok := taskUpdate.Payload.(agent.ToolCallPayload)
 	require.True(t, ok)
-	assert.Equal(t, "TaskUpdate", update.Name)
+	assert.Equal(t, "TaskUpdate", update.ToolName)
 }
 
 func TestClaudeInitialAndChangedCommandsPreserveOrder(t *testing.T) {

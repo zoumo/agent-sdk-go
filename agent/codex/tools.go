@@ -10,8 +10,9 @@ import (
 
 type unifiedToolItem struct {
 	id           string
-	kind         string
+	kind         agent.ToolKind
 	name         string
+	provider     agent.ToolProvider
 	title        string
 	callStatus   string
 	resultStatus string
@@ -43,7 +44,8 @@ func (s *session) toolCall(
 		agent.ToolCallPayload{
 			ID:         tool.id,
 			Kind:       tool.kind,
-			Name:       tool.name,
+			ToolName:   tool.name,
+			Provider:   tool.provider,
 			Title:      tool.title,
 			RawInput:   tool.rawInput,
 			Content:    tool.content,
@@ -88,7 +90,8 @@ func (s *session) toolResult(
 		agent.ToolResultPayload{
 			ID:         tool.id,
 			Kind:       tool.kind,
-			Name:       tool.name,
+			ToolName:   tool.name,
+			Provider:   tool.provider,
 			Title:      tool.title,
 			RawInput:   rawInput,
 			RawOutput:  tool.rawOutput,
@@ -139,8 +142,9 @@ func commandTool(item *codextypes.CommandExecutionThreadItem) unifiedToolItem {
 	exitCode := optionalInt32(item.ExitCode)
 	tool := unifiedToolItem{
 		id:           item.ID,
-		kind:         "execute",
+		kind:         agent.ToolKindExecute,
 		name:         "command",
+		provider:     agent.ToolProviderAgent,
 		title:        item.Command,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
@@ -163,8 +167,9 @@ func commandTool(item *codextypes.CommandExecutionThreadItem) unifiedToolItem {
 func fileChangeTool(item *codextypes.FileChangeThreadItem) unifiedToolItem {
 	return unifiedToolItem{
 		id:           item.ID,
-		kind:         "edit",
+		kind:         agent.ToolKindEdit,
 		name:         "file_change",
+		provider:     agent.ToolProviderAgent,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
 		rawInput:     map[string]any{"changes": item.Changes},
@@ -175,8 +180,9 @@ func fileChangeTool(item *codextypes.FileChangeThreadItem) unifiedToolItem {
 func functionTool(item *codextypes.FunctionCallOutputThreadItem) unifiedToolItem {
 	return unifiedToolItem{
 		id:           item.ID,
-		kind:         "function",
+		kind:         agent.ToolKindOther,
 		name:         qualifiedToolName(item.Namespace, item.Name),
+		provider:     agent.ToolProviderDynamic,
 		callStatus:   "in_progress",
 		resultStatus: "completed",
 		rawOutput:    anyValuePointer(item.Output),
@@ -187,8 +193,9 @@ func functionTool(item *codextypes.FunctionCallOutputThreadItem) unifiedToolItem
 func mcpTool(item *codextypes.MCPToolCallThreadItem) unifiedToolItem {
 	tool := unifiedToolItem{
 		id:           item.ID,
-		kind:         "mcp",
+		kind:         agent.ToolKindOther,
 		name:         qualifiedToolName(optionalString(item.Server), item.Tool),
+		provider:     agent.ToolProviderMCP,
 		title:        item.Tool,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
@@ -209,8 +216,9 @@ func mcpTool(item *codextypes.MCPToolCallThreadItem) unifiedToolItem {
 func dynamicTool(item *codextypes.DynamicToolCallThreadItem) unifiedToolItem {
 	tool := unifiedToolItem{
 		id:           item.ID,
-		kind:         "dynamic",
+		kind:         agent.ToolKindOther,
 		name:         qualifiedToolName(item.Namespace, item.Tool),
+		provider:     agent.ToolProviderDynamic,
 		title:        item.Tool,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
@@ -243,8 +251,9 @@ func collabTool(item *codextypes.CollabAgentToolCallThreadItem) unifiedToolItem 
 	}
 	return unifiedToolItem{
 		id:           item.ID,
-		kind:         "collaboration",
+		kind:         agent.ToolKindOther,
 		name:         string(item.Tool),
+		provider:     agent.ToolProviderAgent,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
 		rawInput:     rawInput,
@@ -266,8 +275,9 @@ func webSearchTool(item *codextypes.WebSearchThreadItem) unifiedToolItem {
 	}
 	tool := unifiedToolItem{
 		id:           item.ID,
-		kind:         "search",
+		kind:         agent.ToolKindSearch,
 		name:         "web_search",
+		provider:     agent.ToolProviderAgent,
 		title:        item.Query,
 		callStatus:   "in_progress",
 		resultStatus: "completed",
@@ -284,8 +294,9 @@ func webSearchTool(item *codextypes.WebSearchThreadItem) unifiedToolItem {
 func imageViewTool(item *codextypes.ImageViewThreadItem) unifiedToolItem {
 	return unifiedToolItem{
 		id:           item.ID,
-		kind:         "read",
+		kind:         agent.ToolKindRead,
 		name:         "image_view",
+		provider:     agent.ToolProviderAgent,
 		title:        item.Path,
 		callStatus:   "in_progress",
 		resultStatus: "completed",
@@ -297,8 +308,9 @@ func imageViewTool(item *codextypes.ImageViewThreadItem) unifiedToolItem {
 func sleepTool(item *codextypes.SleepThreadItem) unifiedToolItem {
 	return unifiedToolItem{
 		id:           item.ID,
-		kind:         "wait",
+		kind:         agent.ToolKindOther,
 		name:         "sleep",
+		provider:     agent.ToolProviderAgent,
 		title:        fmt.Sprintf("Sleep for %dms", item.DurationMs),
 		callStatus:   "in_progress",
 		resultStatus: "completed",
@@ -319,8 +331,9 @@ func imageGenerationTool(item *codextypes.ImageGenerationThreadItem) unifiedTool
 	}
 	tool := unifiedToolItem{
 		id:           item.ID,
-		kind:         "generate",
+		kind:         agent.ToolKindOther,
 		name:         "image_generation",
+		provider:     agent.ToolProviderAgent,
 		title:        title,
 		callStatus:   toolStatus(item.Status),
 		resultStatus: toolStatus(item.Status),

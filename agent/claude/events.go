@@ -620,8 +620,9 @@ func (s *session) assistantToolUse(
 		toolID,
 		agent.ToolCallPayload{
 			ID:       toolID,
-			Kind:     toolName,
-			Name:     toolName,
+			Kind:     agent.ToolKindOther,
+			ToolName: toolName,
+			Provider: agent.ToolProviderAgent,
 			RawInput: input,
 		},
 		nativeEventTime(received.Raw),
@@ -959,8 +960,9 @@ func (s *session) toolResultEvent(
 		block.ToolUseID,
 		agent.ToolResultPayload{
 			ID:        block.ToolUseID,
-			Kind:      call.name,
-			Name:      call.name,
+			Kind:      agent.ToolKindOther,
+			ToolName:  call.name,
+			Provider:  agent.ToolProviderAgent,
 			RawOutput: pointer,
 			Content:   content,
 			Output:    output,

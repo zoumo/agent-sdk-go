@@ -19,9 +19,9 @@ type remoteConnection struct {
 	BearerToken string `json:"bearerToken"`
 }
 type driverPeer struct {
-	FixtureDir  string `json:"fixtureDir"`
-	Connection  string `json:"connection"`
-	Remote *struct {
+	FixtureDir string `json:"fixtureDir"`
+	Connection string `json:"connection"`
+	Remote     *struct {
 		Connections map[string]remoteConnection `json:"connections"`
 	} `json:"remote"`
 }
@@ -86,6 +86,9 @@ func runRequest(path string) error {
 func acceptRequest(ctx context.Context, provider, profile, root string, peer driverPeer, policy string) (executionID string, result error) {
 	var mock *mocktest.Session
 	if profile != "remote-close" {
+		if peer.Connection != "main" {
+			return "", errors.New("stdio connection must be main")
+		}
 		if peer.FixtureDir == "" {
 			return "", errors.New("runner must provide a prepared fixture")
 		}
@@ -100,9 +103,13 @@ func acceptRequest(ctx context.Context, provider, profile, root string, peer dri
 	if mock == nil {
 		return "", result
 	}
+	ids := mock.ExecutionIDs()
+	if len(ids) == 1 {
+		executionID = ids[0]
+	}
 	report, reportErr := mock.Report()
 	if reportErr != nil {
-		return "", errors.Join(result, reportErr)
+		return executionID, errors.Join(result, reportErr)
 	}
 	if len(report.Executions) == 1 {
 		executionID = report.Executions[0].ID

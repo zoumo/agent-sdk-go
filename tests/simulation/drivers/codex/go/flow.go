@@ -58,7 +58,13 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 		return err
 	}
 	var s *codex.Session
-	defer func() { err = errors.Join(err, finishStream(run, c, s, inputClosed)) }()
+	var receiveDone <-chan struct{}
+	defer func() {
+		err = errors.Join(err, finishStream(run, c, s, inputClosed))
+		if receiveDone != nil {
+			<-receiveDone
+		}
+	}()
 	startAt := -1
 	for i, f := range frames {
 		if f.Direction == "c2s" && messages[i].Method == "thread/start" {
@@ -132,7 +138,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 			}
 		}
 	}()
-	defer func() { <-done }()
+	receiveDone = done
 	wait := func(raw json.RawMessage) error {
 		for {
 			mu.Lock()
@@ -325,7 +331,7 @@ func openStreamSession(ctx context.Context, mock *mocktest.Session, initialize t
 		return nil, nil, nil, err
 	}
 	client, err := codex.NewStreams(ctx, codex.StreamOptions{
-		Args:       []string{"app-server", "--listen", "stdio://"},
+		Args:       append([]string(nil), run.Start.NativeArgs...),
 		Env:        environment(run.Start.Env),
 		Dir:        run.Start.ProtocolCwd,
 		Initialize: initialize,

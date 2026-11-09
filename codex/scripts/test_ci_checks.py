@@ -23,16 +23,17 @@ class WorkflowCoverage(unittest.TestCase):
     def test_offline_platforms_and_consumers_retain_supported_runners(self):
         jobs = self.workflow_jobs()
         platforms = {
-            "offline_ubuntu": "ubuntu-24.04",
-            "offline_macos15": "macos-15",
-            "offline_macos26": "macos-26",
+            "offline_ubuntu": ("ubuntu-24.04", 5),
+            "offline_macos15": ("macos-15", 1),
+            "offline_macos26": ("macos-26", 1),
         }
-        for job, runner in platforms.items():
+        for job, (runner, max_parallel) in platforms.items():
             with self.subTest(job=job):
                 self.assertIn(job, jobs)
                 self.assertIn("    name: " + runner, jobs[job])
                 self.assertIn("    uses: ./.github/workflows/offline-platform.yml", jobs[job])
                 self.assertIn("      runner: " + runner, jobs[job])
+                self.assertIn(f"      max_parallel: {max_parallel}", jobs[job])
 
         consumer = jobs["consumer"]
         matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", consumer)
@@ -46,6 +47,9 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("  workflow_call:", platform)
         self.assertIn("      runner:\n", platform)
         self.assertIn("        type: string", platform)
+        self.assertIn("      max_parallel:\n", platform)
+        self.assertIn("        type: number", platform)
+        self.assertIn("      max-parallel: ${{ inputs.max_parallel }}", platform)
         matrix = re.search(r"(?m)^        task: \[([^\]]+)\]$", platform)
         self.assertIsNotNone(matrix, "expected an explicit offline task matrix")
         tasks = [task.strip().strip("\"'") for task in matrix.group(1).split(",")]

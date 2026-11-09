@@ -100,7 +100,9 @@ offline jobs build only the SDK-owned simulation runner and driver; the
 in-process testify module is fetched by the normal Go module graph. A required
 aggregate job on each platform (`ubuntu-24.04 / required`, `macos-15 / required`
 and `macos-26 / required`) succeeds only when that platform's five task jobs
-succeed.
+succeed. Ubuntu runs its five tasks concurrently; each macOS version runs one
+task at a time so both versions and their consumers fit the hosted runner
+capacity.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the

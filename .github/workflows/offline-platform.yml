@@ -7,6 +7,10 @@ on:
         description: Runner label for the platform
         required: true
         type: string
+      max_parallel:
+        description: Maximum concurrent task jobs for this platform
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -16,6 +20,7 @@ jobs:
     name: ${{ matrix.task }}
     strategy:
       fail-fast: false
+      max-parallel: ${{ inputs.max_parallel }}
       matrix:
         task: [quality, test, race, e2e, build]
     runs-on: ${{ inputs.runner }}

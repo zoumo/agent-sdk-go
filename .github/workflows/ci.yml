@@ -21,6 +21,7 @@ jobs:
     uses: ./.github/workflows/offline-platform.yml
     with:
       runner: ubuntu-24.04
+      max_parallel: 5
 
   offline_macos15:
     name: macos-15
@@ -29,6 +30,7 @@ jobs:
     uses: ./.github/workflows/offline-platform.yml
     with:
       runner: macos-15
+      max_parallel: 1
 
   offline_macos26:
     name: macos-26
@@ -37,6 +39,7 @@ jobs:
     uses: ./.github/workflows/offline-platform.yml
     with:
       runner: macos-26
+      max_parallel: 1
 
   consumer:
     name: External consumer (${{ matrix.os }}, pushed commit)

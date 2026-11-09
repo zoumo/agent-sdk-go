@@ -17,8 +17,9 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 	forward := true
 	env := []string{}
 	config := Config{
-		CLIPath: "claude-fixture",
-		Env:     env,
+		CLIPath:   "claude-fixture",
+		Env:       env,
+		ConfigDir: "/explicit/claude-config",
 		Initialize: &claudetypes.InitializeOptions{
 			Hooks:               json.RawMessage(`{"hook":"fixed"}`),
 			Agents:              json.RawMessage(`{"agent":"fixed"}`),
@@ -32,6 +33,7 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 	provider := New(config)
 
 	config.Env = append(config.Env, "MUTATED=1")
+	config.ConfigDir = "/mutated"
 	forward = false
 	config.Initialize.Hooks[1] = 'X'
 	config.Initialize.Agents[1] = 'X'
@@ -39,6 +41,7 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 
 	assert.NotNil(t, provider.config.Env)
 	assert.Empty(t, provider.config.Env)
+	assert.Equal(t, "/explicit/claude-config", provider.config.ConfigDir)
 	require.NotNil(t, provider.config.Initialize)
 	require.NotNil(t, provider.config.Initialize.ForwardSubagentText)
 	assert.True(t, *provider.config.Initialize.ForwardSubagentText)

@@ -3,9 +3,10 @@
 //
 // Provider Start only makes the provider lifecycle ready; each Session owns its
 // native Claude CLI process. Open waits for a live native init before returning
-// the real session identity, and Resume additionally verifies the requested
-// session ID and working directory. Saved replay material is not converted into
-// live events.
+// the real session identity. Resume first confirms the reviewed CLI version and
+// the requested saved transcript under Config.ConfigDir, then accepts matching
+// live init or its private SessionStart callback as the resumed identity.
+// Saved replay material is not converted into live events.
 //
 // The adapter maps Claude user and assistant text and thinking, message and
 // content-block deltas, tool calls and results, session state, usage, available

@@ -393,9 +393,10 @@ type permissionState struct {
 }
 
 type incomingControl struct {
-	request    *IncomingRequest
-	subtype    string
-	permission *PermissionRequest
+	request        *IncomingRequest
+	subtype        string
+	permission     *PermissionRequest
+	probeRequestID string
 }
 
 var connectionEpoch atomic.Uint64

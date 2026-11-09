@@ -242,8 +242,10 @@ type EffectiveFeatures struct {
 规则：
 
 - `Cwd` 必须由调用方明确给出且为绝对路径；provider 不接受隐式工作目录。
-- `Resume` 必须定向并确认原原生身份；恢复响应中的保存历史不转换为实时事件，
-  也不重建旧交互权限。普通恢复只交付恢复后的新观察。
+- `Resume` 必须定向并确认原原生身份；Claude 还必须在启动前预检保存材料，
+  以 live init 或匹配的私有 `SessionStart` callback 确认身份，并在返回前复核
+  同一文件身份（见 [Claude 恢复身份](#claude-resume-identity)）。恢复响应中的
+  保存历史不转换为实时事件，也不重建旧交互权限。普通恢复只交付恢复后的新观察。
 - 原生 resume 支持排除历史时，adapter 必须显式关闭保存内容的回放；如果原生
   连接仍收到保存记录，adapter 只能把它当作恢复/查询材料，不能生成统一 live
   `Event`、当前工作状态或回答权限。
@@ -257,6 +259,66 @@ type EffectiveFeatures struct {
 - Provider 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
 - `Open` 和 `Resume` 要求 Provider 已启动；停止成功后不能重新 `Start`，也不能
   继续 `Open` 或 `Resume`。没有未关闭 Session 时，重复 `Stop` 返回成功。
+
+<a id="claude-resume-identity"></a>
+
+### Claude 恢复身份
+
+Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Provider 使用与 Session
+相同的 `CLIPath` 和 `Env` 执行无会话副作用的版本查询；版本不能确认时，
+`Resume` 在启动 Session 进程前失败关闭。不能从 `SessionStart` lifecycle frame
+或 init 是否出现推断 CLI 版本。新建 `Open` 不使用恢复探针或该版本门禁，仍只以
+non-replay 的 live `system/init` 确认身份。
+
+Claude Provider 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
+复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生 hook 名称、matcher
+限制和 callback 应答由
+[Claude SessionStart 身份探针](../native-session/design.md#claude-sessionstart-probe)
+维护。
+
+`Resume` 在启动原生进程前完成 metadata 预检：
+
+1. 用显式绝对 `ConfigDir` 和请求的绝对 `Cwd` 调用
+   `claude.GetSessionInfo`。错误、`Info == nil`、coverage 非 `complete`、
+   Session ID 不符、stored cwd 与请求目录不是同一目录，或 transcript 不是
+   `ConfigDir` 下的普通文件时，返回确定的本地拒绝，原生 Session 进程不得启动。
+2. 保存 transcript 的绝对 `Path` 和平台文件身份（与 Go `os.SameFile` 等价）。
+   metadata 查询只证明保存材料，不证明 Session 存活、未被占用或可恢复。
+3. 保留调用方 `Initialize.Hooks` 的原生语义，追加 SDK 私有 `SessionStart`
+   matcher；每次 `Resume` 生成新的 callback ID，进程启动前完成注册。
+
+身份证据按以下顺序接受：
+
+- 主证据是 non-replay 的 live `system/init`，要求非空 `session_id` 等于目标、
+  init cwd 与请求目录为同一目录。init 先到时完成身份确认，但私有 responder
+  仍须继续存活并应答之后到达的匹配 callback，避免 CLI 等待。
+- init 没有先到时，接受匹配私有 callback ID 的 `hook_callback` control request。
+  输入必须同时满足 `hook_event_name == "SessionStart"`、`source == "resume"`、
+  目标 Session ID、同一 cwd，以及与预检结果同一文件身份的 `transcript_path`。
+  callback 先到时可以据此确认身份；迟到 init 必须与已确认的 Session ID 和 cwd
+  一致。匹配 callback 返回空 `HookJSONOutput` `{}`，至多一次作为身份证据。
+- `hook_started`、`hook_progress`、`hook_response` 即使带有
+  `SessionStart:resume`，也只是通用 lifecycle frame，不是探针命中或身份证据。
+  调用方同 source hook 的启动、完成或失败不参与探针归属。
+
+身份确认后、返回 Session 前，Provider 必须再次用同一显式 `ConfigDir` 调用
+`GetSessionInfo`，核对同一 Session ID、同一 transcript `Path` 和平台文件身份、
+同一 cwd 与完整 coverage。比较文件身份，不要求文件大小、mtime 或 bytes 不变；
+正常恢复可以追加 transcript。metadata 缺失、歧义、coverage 不完整、文件身份
+漂移或 cwd 不符时，关闭进程且不返回 Session。
+
+错误分类固定为：预检无法建立唯一目标或目录/文件前置条件时为
+`failed_precondition`；版本查询无法执行时为 `unavailable`，版本不受支持时为
+`unsupported`；探测超时且没有 init/callback 证据时为 `unavailable`；init、
+callback 或 metadata 证据互相矛盾、重复 callback 或恢复后身份漂移时为
+`native_rejected`。关闭失败是附加 cause 与清理诊断，不覆盖主错误类别。
+
+callback 的 Session ID、cwd 或 transcript 不匹配，重复的有效 callback，
+init 与 callback 互相矛盾，或探测超时后仍无可用身份证据，均失败关闭。身份
+确认并返回 Session 后，迟到的匹配 callback 仍须应答一次；迟到 callback 或
+迟到 init 的重复或矛盾证据通过 Session `Done`/`Err` 终止交互，不创建替代
+Session，也不自动重试恢复。`ResumeWithInput` 同样适用本门禁；身份失败后的
+关闭不声称已经提交的输入未发送。
 
 ### MCP 配置
 
@@ -619,8 +681,10 @@ type Session interface {
 
 ### 生命周期与状态
 
-- `ID` 只能在原生真实身份确认后非空。Codex 以启动/恢复响应确认身份，Claude
-  以原生 init 确认身份；返回 Session 之前不能伪造 ID。
+- `ID` 只能在原生真实身份确认后非空。Codex 以启动/恢复响应确认身份；Claude
+  新建时以非 replay 的原生 init 确认身份，恢复时还可用匹配的私有
+  `SessionStart` callback 确认身份，单独 hook lifecycle frame 不充分。返回
+  Session 之前不能伪造 ID。
 - 每个 Session 只允许一个本地 `StartOrSteer` 写入在进行。并发调用返回
   `not_applied` 和空 `Submission`，不等待、不写第二帧，也不形成本地输入队列。
 - `StartOrSteer` 先尝试加入可接受的当前工作；没有当前工作或原生调度可接收时，
@@ -1571,7 +1635,7 @@ provider-specific 转换，但不生成 `agent.Event`。
 |---|---|---|
 | `Driver.Start` | `Provider.Start` | Runtime 配置、运行绑定、共享资源责任 |
 | `OpenSession` | `Provider.Open` 或 `OpenWithInput` | Address、Source、恢复材料、事件队列 |
-| `ResumeSession` | `Provider.Resume` 或 `ResumeWithInput` | 恢复身份/cwd 校验、旧运行隔离 |
+| `ResumeSession` | `Provider.Resume` 或 `ResumeWithInput` | 恢复前 metadata/文件身份、init 或私有探针确认、恢复后复核、旧运行隔离 |
 | `SendPrompt` | `Session.StartOrSteer` | Session/运行归属、Service 回执和持久化 |
 | `AnswerInteraction` | `Session.Answer` | 当前运行和 Session 校验；原生句柄仍只在 adapter |
 | `Cancel` | `Session.Interrupt` | 是否允许关闭/归档、Service 取消回执 |
@@ -1698,7 +1762,7 @@ provider-specific 查询职责：
 | Provider | metadata / 身份 | 保存内容 | 恢复后复核 |
 |---|---|---|---|
 | Codex | `ReadThread(IncludeTurns=false)` | `ListThreadTurns`（按原生 item view，必要时 `ListThreadItems`） | 再次 `ReadThread` 并重新分页核对元数据、顺序、cursor 穷尽和内容摘要 |
-| Claude | `GetSessionInfo`，以及恢复后首个 native init | `GetSessionMessages` | 再次读取完整有界消息链，并核对 coverage、原始 bytes、UUID/parent 顺序 |
+| Claude | `GetSessionInfo` 预检；恢复后 live init 或匹配的私有 `SessionStart:resume` callback | `GetSessionMessages` | 再次 `GetSessionInfo` 核对同一 ID、Path、文件身份、cwd 与完整 coverage；再读取完整有界消息链，并核对 coverage、原始 bytes、UUID/parent 顺序 |
 
 `ListThreads` 和 `ListSessions` 只用于发现候选，不证明指定 native Session
 存在、可恢复或内容完整。导入不能只凭列表结果创建本地 Session。
@@ -1856,7 +1920,8 @@ provider-specific 查询职责：
 
 在 `agent/claude` 包装 Claude Session，迁移：
 
-- init 身份确认和恢复身份/cwd 校验；
+- `GetSessionInfo` 恢复前预检、保留调用方 Hooks 并注册私有
+  `SessionStart` 探针、init 或 callback 身份确认，以及恢复后的文件身份复核；
 - text/thinking 的 message、block 和 linkage 身份；
 - work attribution、工具调用/结果和状态；
 - permission 和 AskUserQuestion form；
@@ -1924,8 +1989,9 @@ Codex，再接入 Claude。新实现只保留：
 
 ### 9. 切换 Claude Runtime
 
-按 Codex 相同的退出条件切换 Claude。Claude 额外要求恢复前身份、init 观察、
-block/message linkage 和无法归属的交互行为保持不变。
+按 Codex 相同的退出条件切换 Claude。Claude 额外要求恢复前 metadata 预检、
+init 或私有 `SessionStart` 探针证据、恢复后文件身份复核、block/message
+linkage 和无法归属的交互行为保持不变。
 
 退出条件：两个 provider 的实时与历史兼容测试均使用新路径通过；无法证明的
 身份和归属仍明确失败；旧路径保留到回退窗口结束。
@@ -1993,6 +2059,24 @@ block/message linkage 和无法归属的交互行为保持不变。
 - 本版统一选项中不存在 `sandbox`、`approvalPolicy` 或 `permissionsProfile`
   映射，也不把这些原生值从其他请求字段反推出来。
 - 默认验证保持离线，不使用真实 Agent 或新增录制作为完成证据。
+
+### Claude 恢复身份验收
+
+以下使用 fake peer、合成 metadata 和 wire 断言，不把合成通过计为真实 Agent
+验证。
+
+| 场景 | 公开操作与独立预期 |
+|---|---|
+| 预检拒绝 | missing、partial、ambiguous、cwd 不符和非普通 transcript 分别在启动前返回 `failed_precondition`；fake peer 未收到原生 Session 启动或 RPC。 |
+| 匹配 resume callback | 唯一 `SessionStart:resume` callback 的 ID/event/source/session/cwd/transcript 全部匹配；返回 `{}` 一次，metadata 复核后返回目标 Session。 |
+| 仅通用 lifecycle | 只收到 `hook_started`、`hook_progress` 或 `hook_response`，即使名称为 `SessionStart:resume` 也不能完成身份；超时后以 `unavailable` 关闭且不返回 Session。 |
+| 错误探针输入 | session、cwd、transcript 分别不匹配时均以 `native_rejected` 失败关闭；错误值不能产生成功 Session 或第二次有效应答。 |
+| 重复 callback | 同一私有 ID 第二次到达时以 `native_rejected` 失败；返回前不产生 Session，返回后由稳定 `Done`/`Err` 终止，不创建替代 Session。 |
+| 用户 hook 交错 | 调用方同 source hook 的 start/progress/response、成功或失败与探针交错时，探针归属不受影响；通用 frame 不被当命中。 |
+| init 与 callback 交错 | init 先确认身份时允许返回 Session，迟到匹配 callback 仍被应答一次；callback 先确认身份时，迟到 init 必须一致；两者 ID/cwd 矛盾时以 `native_rejected` 失败关闭。 |
+| 恢复后漂移 | 身份确认后 transcript 被替换、Path 或文件身份变化、coverage 不完整或 cwd 变化时，以 `native_rejected` 关闭进程且不返回 Session。 |
+| 版本门禁 | `Resume` 的版本查询无法执行时返回 `unavailable`，结果不是已确认的 2.1.258 时返回 `unsupported`；两种情况都在启动 Session 进程前失败。 |
+| 调用方 Hooks | 调用方其他 hook 语义保留，SDK matcher 只追加；非法 Hooks、保留前缀 ID 或无法无损追加时在进程启动前拒绝。 |
 
 ## 合同影响
 

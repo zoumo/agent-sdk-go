@@ -93,6 +93,10 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if mode == "session_start_probe" || mode == "session_start_probe_wrong" || mode == "session_start_probe_duplicate" {
+		runSessionStartProbeFixture(reader, init, mode)
+		return
+	}
 	if mode == "tree" {
 		runTreeFixture(reader)
 		return

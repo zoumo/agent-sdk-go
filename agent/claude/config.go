@@ -12,8 +12,11 @@ import (
 // Config fixes the local Claude CLI process and its initialization. Session
 // working directories and resume identities come from the unified operation.
 type Config struct {
-	CLIPath           string
-	Env               []string
+	CLIPath string
+	Env     []string
+	// ConfigDir is the explicit absolute Claude local-storage root used by
+	// Resume preflight and postcheck. It is not inferred from HOME or Cwd.
+	ConfigDir         string
 	Initialize        *claudetypes.InitializeOptions
 	ChildDetailPolicy claude.ChildDetailPolicy
 	Subagents         claude.SubagentOptions

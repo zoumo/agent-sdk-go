@@ -48,6 +48,7 @@ type session struct {
 	done                chan struct{}
 	doneClosed          bool
 	err                 error
+	resume              *resumeIdentityGuard
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
@@ -67,6 +68,7 @@ func newSession(
 	features agent.Features,
 	executionOptions executionOptionsState,
 	buffered []claude.Received,
+	resume *resumeIdentityGuard,
 ) (*session, error) {
 	created := &session{
 		provider:         provider,
@@ -78,6 +80,7 @@ func newSession(
 		interactionRefs:  make(map[string]agent.InteractionRef),
 		done:             make(chan struct{}),
 		observationDone:  make(chan struct{}),
+		resume:           resume,
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
@@ -216,7 +219,7 @@ func (s *session) StartOrSteer(
 
 	s.mu.Lock()
 	s.submitting = false
-	if s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle {
+	if s.inputWriteMayBeActiveLocked(stateVersion) {
 		if s.activeSubmit == "" {
 			s.activeSubmit = submissionID
 		}
@@ -258,10 +261,14 @@ func (s *session) finishInputWrite(outcomeUnknown bool, stateVersion uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.submitting = false
-	if outcomeUnknown && s.stateVersion == stateVersion {
+	if outcomeUnknown && s.inputWriteMayBeActiveLocked(stateVersion) {
 		s.submitUnknown = true
 		s.workActive = true
 	}
+}
+
+func (s *session) inputWriteMayBeActiveLocked(stateVersion uint64) bool {
+	return s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle
 }
 
 func (s *session) Interrupt(
@@ -382,6 +389,15 @@ func (s *session) receiveUntilTerminal() error {
 			}
 			return err
 		}
+		if received.Event != nil {
+			handled, resumeErr := s.resume.inspect(received.Event)
+			if resumeErr != nil {
+				return resumeErr
+			}
+			if handled {
+				continue
+			}
+		}
 		events, convertErr := s.convertReceived(received)
 		if convertErr != nil {
 			return convertErr
@@ -429,8 +445,8 @@ func (s *session) updateState(state agent.SessionState) *agent.SessionState {
 	next := state
 	s.state = &next
 	s.workActive = next != agent.StateIdle
-	s.submitUnknown = false
 	if next == agent.StateIdle {
+		s.submitUnknown = false
 		s.activeSubmit = ""
 	}
 	s.stateVersion++

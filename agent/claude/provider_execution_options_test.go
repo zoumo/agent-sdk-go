@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -75,8 +76,8 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 		{
 			name:      "resume",
 			resume:    true,
-			sessionID: "native-resume",
-			wantArgs:  claudeExpectedArgs("--resume=native-resume"),
+			sessionID: claudeResumePeerSessionID,
+			wantArgs:  claudeExpectedArgs("--resume=" + claudeResumePeerSessionID),
 		},
 	}
 
@@ -85,13 +86,30 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			cwd := t.TempDir()
-			frames := append([]string(nil), mockClaudeInit...)
-			frames = append(frames,
-				`<{"type":"system","subtype":"init","session_id":`+
-					jsonString(t, test.sessionID)+`,"cwd":`+jsonString(t, cwd)+
-					`,"claude_code_version":"2.1.258","model":" default/model "}`,
-			)
-			provider, capture := startClaudeExecutionProvider(t, ctx, frames...)
+			initJSON := `{"type":"system","subtype":"init","session_id":` +
+				jsonString(t, test.sessionID) + `,"cwd":` + jsonString(t, cwd) +
+				`,"claude_code_version":"2.1.258","model":" default/model "}`
+			var provider *agentclaude.Provider
+			var capturedArgv func(*testing.T) []string
+			if test.resume {
+				var capture string
+				provider, capture = startClaudeResumeExecutionProvider(
+					t,
+					ctx,
+					cwd,
+					test.sessionID,
+					initJSON,
+				)
+				capturedArgv = func(t *testing.T) []string {
+					return readClaudeArgv(t, capture)
+				}
+			} else {
+				frames := append([]string(nil), mockClaudeInit...)
+				frames = append(frames, "<"+initJSON)
+				var capture *claudeExecutionCapture
+				provider, capture = startClaudeExecutionProvider(t, ctx, frames...)
+				capturedArgv = capture.argv
+			}
 			var session agent.Session
 			var err error
 			if test.resume {
@@ -105,7 +123,7 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 			require.NoError(t, err)
 			closeSessionOnCleanup(t, session)
 
-			assert.Equal(t, test.wantArgs, capture.argv(t))
+			assert.Equal(t, test.wantArgs, capturedArgv(t))
 			report := claudeExecutionOptionsReport(t, session)
 			assert.Empty(t, report.Model.Requested)
 			require.NotNil(t, report.Model.Effective)
@@ -172,15 +190,19 @@ func TestClaudeResumePassesLiteralExecutionOptionsAndPreservesIdentity(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	frames := append([]string(nil), mockClaudeInit...)
-	frames = append(frames,
-		`<{"type":"system","subtype":"init","session_id":"native-resume",`+
-			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
-			`"model":" resumed/model "}`,
+	initJSON := `{"type":"system","subtype":"init","session_id":` +
+		jsonString(t, claudeResumePeerSessionID) + `,"cwd":` + jsonString(t, cwd) +
+		`,"claude_code_version":"2.1.258",` +
+		`"model":" resumed/model "}`
+	provider, capture := startClaudeResumeExecutionProvider(
+		t,
+		ctx,
+		cwd,
+		claudeResumePeerSessionID,
+		initJSON,
 	)
-	provider, capture := startClaudeExecutionProvider(t, ctx, frames...)
 	session, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID: "native-resume",
+		SessionID: claudeResumePeerSessionID,
 		OpenOptions: agent.OpenOptions{
 			Cwd: cwd,
 			Execution: agent.ExecutionOptions{
@@ -192,12 +214,12 @@ func TestClaudeResumePassesLiteralExecutionOptionsAndPreservesIdentity(t *testin
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 
-	assert.Equal(t, "native-resume", session.ID())
+	assert.Equal(t, claudeResumePeerSessionID, session.ID())
 	assert.Equal(t, claudeExpectedArgs(
 		"--model= Resume/Model ",
 		"--effort= Native/Resume ",
-		"--resume=native-resume",
-	), capture.argv(t))
+		"--resume="+claudeResumePeerSessionID,
+	), readClaudeArgv(t, capture))
 	report := claudeExecutionOptionsReport(t, session)
 	assert.Equal(t, " Resume/Model ", report.Model.Requested)
 	require.NotNil(t, report.Model.Effective)
@@ -674,6 +696,40 @@ func (c *claudeExecutionCapture) argv(t *testing.T) []string {
 	argv, err := claude.NativeArgs(c.options)
 	require.NoError(t, err)
 	return argv
+}
+
+func startClaudeResumeExecutionProvider(
+	t *testing.T,
+	ctx context.Context,
+	cwd, sessionID string,
+	frames ...string,
+) (*agentclaude.Provider, string) {
+	t.Helper()
+	configDir := newResumeConfigDir(t)
+	transcript := writeResumeTranscript(
+		t,
+		configDir,
+		"project",
+		sessionID,
+		cwd,
+	)
+	argv := filepath.Join(t.TempDir(), "argv.json")
+	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
+		SessionID:      sessionID,
+		CWD:            cwd,
+		TranscriptPath: transcript,
+		ArgvPath:       argv,
+		Frames:         frames,
+	})
+	provider := agentclaude.New(agentclaude.Config{
+		CLIPath:   peer.CLIPath,
+		Env:       peer.Env,
+		ConfigDir: configDir,
+	})
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	return provider, argv
 }
 
 func claudeExpectedArgs(extras ...string) []string {

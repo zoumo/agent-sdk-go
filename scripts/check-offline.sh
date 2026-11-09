@@ -46,32 +46,54 @@ build_checks() {
   bash scripts/simulation.sh build
 }
 
+run_task_lane() {
+  local work=$1
+  shift
+  local failed=0 task
+
+  for task in "$@"; do
+    if AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation" \
+      bash "$0" "$task" >"$work/$task.log" 2>&1; then
+      printf 'passed\n' >"$work/$task.status"
+    else
+      printf 'failed\n' >"$work/$task.status"
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
 parallel_checks() {
-  local tasks=(test race e2e build)
+  local parallel_tasks=(test build)
+  local serial_tasks=(race e2e)
+  local all_tasks=(test race e2e build)
   local work
   work=$(mktemp -d "${TMPDIR:-/tmp}/agent-sdk-offline.XXXXXXXX")
   local failed=0
   local pids=()
   local task pid
 
-  for task in "${tasks[@]}"; do
-    (
-      export AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"
-      bash "$0" "$task"
-    ) >"$work/$task.log" 2>&1 &
+  for task in "${parallel_tasks[@]}"; do
+    run_task_lane "$work" "$task" &
     pids+=("$!")
   done
 
-  for i in "${!tasks[@]}"; do
-    task=${tasks[$i]}
-    pid=${pids[$i]}
+  for pid in "${pids[@]}"; do
     if ! wait "$pid"; then
       failed=1
     fi
   done
 
-  for task in "${tasks[@]}"; do
-    printf '\n===== %s =====\n' "$task"
+  # Race and the recording gate both exercise timing-sensitive subprocess
+  # protocols. Keep them isolated from each other and from package tests.
+  for task in "${serial_tasks[@]}"; do
+    if ! run_task_lane "$work" "$task"; then
+      failed=1
+    fi
+  done
+
+  for task in "${all_tasks[@]}"; do
+    printf '\n===== %s (%s) =====\n' "$task" "$(cat "$work/$task.status")"
     cat "$work/$task.log"
   done
   rm -rf "$work"

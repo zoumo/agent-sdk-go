@@ -18,7 +18,8 @@ bash scripts/check-offline.sh all
 
 The offline entry also accepts `parallel`, `quality`, `test`, `race`, `e2e` or
 `build`. `all` runs every task in order; `parallel` runs `quality` first, then
-runs `test`, `race`, `e2e` and `build` concurrently in the same checkout.
+runs `test` and `build` concurrently, then runs `race` and `e2e` one at a time
+in the same checkout.
 
 Test and simulation hosts link the exact test-only in-process testify module; no
 separate helper process is required. The dependency boundary and pin are fixed
@@ -95,12 +96,14 @@ revision, not uncommitted changes in the working checkout.
 The [workflow](../.github/workflows/ci.yml) defines one offline job for each
 supported runner: `ubuntu-24.04 / required` and `macos-26 / required`. Each job
 installs Go, `ripgrep` and the pinned formatter/linter once, runs `quality`, then
-runs `test`, `race`, `e2e` and `build` concurrently in the same checkout. The
-first task mutates generated files for its drift check, so it precedes the
-read-only concurrent tasks. The job status is the required aggregate for that
-platform; task output remains grouped in its logs. The offline tasks build only
-the SDK-owned simulation runner and driver; the in-process testify module is
-fetched by the normal Go module graph.
+runs `test` and `build` concurrently, then runs `race` and `e2e` separately.
+Race and the required recording gate both exercise timing-sensitive subprocess
+protocols, so they do not overlap each other or package tests. The first task
+mutates generated files for its drift check, so it precedes the concurrent
+phase. The job status is the required aggregate for that platform; task output
+remains grouped in its logs. The offline tasks build only the SDK-owned
+simulation runner and driver; the in-process testify module is fetched by the
+normal Go module graph.
 External consumer CI uses the same `ubuntu-24.04` and `macos-26` matrix for
 pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the

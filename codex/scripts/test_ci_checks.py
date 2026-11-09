@@ -59,13 +59,17 @@ class WorkflowCoverage(unittest.TestCase):
             "  parallel)\n    quality_checks\n    parallel_checks\n    ;;\n",
             script,
         )
-        self.assertIn("local tasks=(test race e2e build)", script)
+        self.assertIn("local parallel_tasks=(test build)", script)
+        self.assertIn("local serial_tasks=(race e2e)", script)
+        self.assertIn("local all_tasks=(test race e2e build)", script)
         self.assertIn(
-            'export AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"',
+            'AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"',
             script,
         )
         self.assertIn('wait "$pid"', script)
         self.assertIn('if ! wait "$pid"; then', script)
+        self.assertIn('for task in "${serial_tasks[@]}"; do', script)
+        self.assertIn('if ! run_task_lane "$work" "$task"; then', script)
 
     def test_required_check_is_the_platform_job(self):
         jobs = self.workflow_jobs()

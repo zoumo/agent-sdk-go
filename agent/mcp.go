@@ -6,7 +6,9 @@ import (
 	"unicode/utf8"
 )
 
-// MCPTransport identifies how an external MCP server is reached.
+// MCPTransport identifies how an external MCP server is reached. The unified
+// contract requires an explicit transport and supports only stdio and MCP
+// Streamable HTTP.
 type MCPTransport string
 
 const (
@@ -16,22 +18,34 @@ const (
 	MCPTransportHTTP MCPTransport = "http"
 )
 
-// MCPServer is one provider-neutral external MCP server declaration.
-// OpenOptions validates the final list before a provider adapter forwards it
-// without connecting to the server.
+// MCPServer is one provider-neutral external MCP server declaration in the final
+// list prepared by the caller. OpenOptions validates the list before a provider
+// adapter forwards it without connecting to the server.
+//
+// Name is the case-sensitive, list-unique provider configuration key and must be
+// nonempty valid UTF-8 without a dot. Transport must be explicit. Stdio uses
+// Command, Args, Env, and Cwd. Streamable HTTP uses URL, Headers, EnvHeaders, and
+// BearerTokenEnvVar. A provider rejects a valid unified field that it cannot
+// represent instead of dropping or rewriting it.
+//
+// The SDK forwards these values without resolving secrets. EnvHeaders values and
+// BearerTokenEnvVar are environment-variable names rather than secret values.
 type MCPServer struct {
 	Name      string
 	Transport MCPTransport
 
-	// Command, Args, Env, and Cwd are valid only for stdio.
+	// Command, Args, Env, and Cwd are valid only for stdio. Env values are
+	// forwarded literally and may be visible in native configuration.
 	Command string
 	Args    []string
 	Env     map[string]string
 	Cwd     string
 
 	// URL, Headers, EnvHeaders, and BearerTokenEnvVar are valid only for HTTP.
-	// EnvHeaders values and BearerTokenEnvVar name environment variables rather
-	// than carrying secret values.
+	// URL selects MCP Streamable HTTP. Headers values are forwarded literally.
+	// EnvHeaders maps header names to environment-variable names, and
+	// BearerTokenEnvVar names an environment variable rather than carrying its
+	// secret value.
 	URL               string
 	Headers           map[string]string
 	EnvHeaders        map[string]string

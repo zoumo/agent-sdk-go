@@ -66,7 +66,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			cwd := t.TempDir()
 			frames := []string{
 				claudeSessionInitFrame(t, "native-permission", cwd),
-				claudeSubmitFrame(t, "run"),
+				claudeStartOrSteerFrame(t, "run"),
 				claudeStateFrame("native-permission", "running", "2026-11-07T14:00:00Z"),
 				claudePermissionRequestFrame(
 					test.requestID,
@@ -86,10 +86,11 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				frames...,
 			)
 
-			submitted, err := session.Submit(ctx, agent.Input{
+			submitted, err := session.StartOrSteer(ctx, agent.Input{
 				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 			})
 			require.NoError(t, err)
+			assert.Equal(t, agent.InputAppliedBestEffort, submitted.Result)
 			assert.NotEmpty(t, submitted.Submission)
 
 			running := nextEvent(t, ctx, stream)
@@ -164,7 +165,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	cwd := t.TempDir()
 	frames := []string{
 		claudeSessionInitFrame(t, "native-repeat", cwd),
-		claudeSubmitFrame(t, "run"),
+		claudeStartOrSteerFrame(t, "run"),
 		claudeStateFrame("native-repeat", "running", "2026-11-07T14:10:00Z"),
 		claudePermissionRequestFrame(
 			"permission-repeat",
@@ -185,7 +186,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 		frames...,
 	)
 
-	_, err := session.Submit(ctx, agent.Input{
+	_, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -225,7 +226,7 @@ func TestClaudeConcurrentAnswersHaveSingleAdmission(t *testing.T) {
 	cwd := t.TempDir()
 	frames := []string{
 		claudeSessionInitFrame(t, "native-concurrent", cwd),
-		claudeSubmitFrame(t, "run"),
+		claudeStartOrSteerFrame(t, "run"),
 		claudeStateFrame("native-concurrent", "running", "2026-11-07T14:15:00Z"),
 		claudePermissionRequestFrame(
 			"permission-concurrent",
@@ -246,7 +247,7 @@ func TestClaudeConcurrentAnswersHaveSingleAdmission(t *testing.T) {
 		frames...,
 	)
 
-	_, err := session.Submit(ctx, agent.Input{
+	_, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -305,7 +306,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	firstFrames := append([]string(nil), mockClaudeInit...)
 	firstFrames = append(firstFrames,
 		claudeSessionInitFrame(t, "native-scoped-first", cwd),
-		claudeSubmitFrame(t, "run"),
+		claudeStartOrSteerFrame(t, "run"),
 		claudeStateFrame("native-scoped-first", "running", "2026-11-07T14:17:00Z"),
 		claudePermissionRequestFrame(
 			"permission-scoped",
@@ -339,7 +340,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 
 	firstStream, err := first.Events()
 	require.NoError(t, err)
-	_, err = first.Submit(ctx, agent.Input{
+	_, err = first.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -424,7 +425,7 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 			cwd := t.TempDir()
 			frames := []string{
 				claudeSessionInitFrame(t, "native-form", cwd),
-				claudeSubmitFrame(t, "ask"),
+				claudeStartOrSteerFrame(t, "ask"),
 				claudeStateFrame("native-form", "running", "2026-11-07T14:20:00Z"),
 				claudePermissionRequestFrame(
 					"question",
@@ -444,7 +445,7 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 				frames...,
 			)
 
-			_, err := session.Submit(ctx, agent.Input{
+			_, err := session.StartOrSteer(ctx, agent.Input{
 				Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
 			})
 			require.NoError(t, err)
@@ -495,7 +496,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 		`"options":[{"label":"json"},{"label":"yaml"}],"multiSelect":true}]}`
 	frames := []string{
 		claudeSessionInitFrame(t, "native-form-invalid", cwd),
-		claudeSubmitFrame(t, "ask"),
+		claudeStartOrSteerFrame(t, "ask"),
 		claudeStateFrame("native-form-invalid", "running", "2026-11-07T14:30:00Z"),
 		claudePermissionRequestFrame(
 			"question-invalid",
@@ -521,7 +522,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 		frames...,
 	)
 
-	_, err := session.Submit(ctx, agent.Input{
+	_, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
 	})
 	require.NoError(t, err)
@@ -622,7 +623,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 	cwd := t.TempDir()
 	frames := []string{
 		claudeSessionInitFrame(t, "native-form-disabled", cwd),
-		claudeSubmitFrame(t, "ask"),
+		claudeStartOrSteerFrame(t, "ask"),
 		claudeStateFrame("native-form-disabled", "running", "2026-11-07T14:40:00Z"),
 		claudePermissionRequestFrame(
 			"question-disabled",
@@ -647,7 +648,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 
 	assert.False(t, session.EffectiveFeatures().AgentQuestions)
 	assert.False(t, session.Capabilities().Supports(agent.CapabilityForm))
-	_, err := session.Submit(ctx, agent.Input{
+	_, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
 	})
 	require.NoError(t, err)
@@ -694,7 +695,7 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			cwd := t.TempDir()
 			frames := []string{
 				claudeSessionInitFrame(t, "native-pending", cwd),
-				claudeSubmitFrame(t, "run"),
+				claudeStartOrSteerFrame(t, "run"),
 				claudeStateFrame("native-pending", "running", "2026-11-07T14:50:00Z"),
 				claudePermissionRequestFrame(
 					"permission-pending",
@@ -724,7 +725,7 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 				frames...,
 			)
 
-			_, err := session.Submit(ctx, agent.Input{
+			_, err := session.StartOrSteer(ctx, agent.Input{
 				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 			})
 			require.NoError(t, err)
@@ -769,7 +770,7 @@ func TestClaudeInterruptTargetsActiveSubmissionAndClearsOnIdle(t *testing.T) {
 	cwd := t.TempDir()
 	frames := []string{
 		claudeSessionInitFrame(t, "native-interrupt", cwd),
-		claudeSubmitFrame(t, "run"),
+		claudeStartOrSteerFrame(t, "run"),
 		claudeStateFrame("native-interrupt", "running", "2026-11-07T15:00:00Z"),
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"interrupt"}}`,
 		`<{"type":"control_response","response":{"subtype":"success",` +
@@ -785,10 +786,11 @@ func TestClaudeInterruptTargetsActiveSubmissionAndClearsOnIdle(t *testing.T) {
 		frames...,
 	)
 
-	submitted, err := session.Submit(ctx, agent.Input{
+	submitted, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
+	require.Equal(t, agent.InputAppliedBestEffort, submitted.Result)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
 
 	receipt, err := session.Interrupt(ctx, agent.InterruptOptions{})
@@ -812,7 +814,7 @@ func TestClaudeInterruptAfterWriteReportsUnknownOutcome(t *testing.T) {
 	cwd := t.TempDir()
 	frames := []string{
 		claudeSessionInitFrame(t, "native-interrupt-unknown", cwd),
-		claudeSubmitFrame(t, "run"),
+		claudeStartOrSteerFrame(t, "run"),
 		claudeStateFrame("native-interrupt-unknown", "running", "2026-11-07T15:10:00Z"),
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"interrupt"}}`,
 		`!`,
@@ -826,7 +828,7 @@ func TestClaudeInterruptAfterWriteReportsUnknownOutcome(t *testing.T) {
 		frames...,
 	)
 
-	_, err := session.Submit(ctx, agent.Input{
+	_, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -914,12 +916,6 @@ func claudeSessionInitFrame(t *testing.T, sessionID, cwd string) string {
 	return `<{"type":"system","subtype":"init","session_id":"` + sessionID +
 		`","cwd":` + jsonString(t, cwd) +
 		`,"claude_code_version":"2.1.258"}`
-}
-
-func claudeSubmitFrame(t *testing.T, text string) string {
-	t.Helper()
-	return `>{"type":"user","session_id":"","parent_tool_use_id":null,` +
-		`"message":{"role":"user","content":` + jsonString(t, text) + `}}`
 }
 
 func claudeStateFrame(sessionID, state, at string) string {

@@ -22,7 +22,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-parity","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"inspect"}}`,
+		claudeStartOrSteerFrame(t, "inspect"),
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-parity","state":"running","timestamp":"2026-11-07T13:00:00Z"}`,
 		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-1","model":"synthetic-model","content":[]}}}`,
 		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}}`,
@@ -56,12 +56,14 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 
-	receipt, err := session.Submit(ctx, agent.Input{
+	receipt, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "inspect"}},
 	})
 	require.NoError(t, err)
+	require.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
 	require.NotNil(t, receipt.Acceptance.Sent)
 	assert.True(t, *receipt.Acceptance.Sent)
+	assert.Nil(t, receipt.Acceptance.NativeAccepted)
 
 	running := nextEvent(t, ctx, stream)
 	assertStateUpdate(t, running, nil, agent.StateRunning, time.Date(2026, 11, 7, 13, 0, 0, 0, time.UTC))
@@ -409,8 +411,7 @@ func TestClaudeWrongAssistantBlockTypeBecomesDecodeGapBeforeNativeTermination(t 
 		`<{"type":"system","subtype":"init","session_id":"native-decode-gap","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 		// Keep the malformed frame behind a client frame so Open cannot race it.
-		`>{"type":"user","session_id":"","parent_tool_use_id":null,`+
-			`"message":{"role":"user","content":"trigger malformed decode"}}`,
+		claudeStartOrSteerFrame(t, "trigger malformed decode"),
 		`<{"type":"assistant","session_id":"native-decode-gap","uuid":"wrong-type-frame",`+
 			`"message":{"id":"response-wrong-type","content":[`+
 			`{"type":"text","text":42,"apiBlockIndex":0}]}}`,
@@ -426,7 +427,7 @@ func TestClaudeWrongAssistantBlockTypeBecomesDecodeGapBeforeNativeTermination(t 
 	t.Cleanup(func() { _ = session.Close(context.Background()) })
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "trigger malformed decode"}},
 	})
 	require.NoError(t, err)

@@ -220,7 +220,7 @@ func (o *sessionOwnership) release(s *Session) error {
 		if _, ok := a.observers[s]; !ok {
 			continue
 		}
-		if c.cause != nil {
+		if c.cause != nil || c.terminalClosed {
 			delete(a.observers, s)
 			if len(a.observers) == 0 {
 				delete(o.attachments, id)

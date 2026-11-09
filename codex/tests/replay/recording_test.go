@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,12 +19,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
-// ManagedRecordingSuite uses only this test binary as the protocol peer.
-// Every test gets its own executable lookup and keeps bounded lifecycle cleanup.
-type ManagedRecordingSuite struct {
-	suite.Suite
-	executable string
-}
+// ManagedRecordingSuite exercises synthetic fixtures through in-process streams.
+type ManagedRecordingSuite struct{ suite.Suite }
 
 func frame(n int, d, w string) Frame {
 	return Frame{Ordinal: n, Direction: d, Epoch: 1, Channel: "protocol", Wire: json.RawMessage(w)}
@@ -33,9 +28,21 @@ func frame(n int, d, w string) Frame {
 
 func TestGoMockAdapterPreservesNativeLexemes(t *testing.T) {
 	wire := `{"method" : "notice", "params" : {"html":"<tag>","number":0.123456789012345678901234567890} }`
-	var out bytes.Buffer
-	require.NoError(t, mockPeer(context.Background(), strings.NewReader(""), &out, []Frame{frame(1, "s2c", wire)}, ""))
-	require.Equal(t, wire+"\n", out.String())
+
+	data, err := syntheticScenario([]Frame{frame(1, "s2c", wire)})
+	require.NoError(t, err)
+	fixture, err := mocktest.Prepare(t.TempDir(), "codex", data, mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fixture.Close()) })
+	run, err := fixture.NewRun(t.Context(), mocktest.RunOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = run.CloseSDK() })
+	closed := run.CloseInputWhenComplete(run.Writer.Close)
+	out, err := io.ReadAll(run.Reader)
+	require.NoError(t, err)
+	require.Equal(t, wire+"\n", string(out))
+	require.NoError(t, <-closed)
+	require.NoError(t, run.WaitError(t.Context()))
 }
 
 func TestSyntheticFileBoundary(t *testing.T) {
@@ -87,12 +94,22 @@ func TestRunSessionPreservesEarlyFailure(t *testing.T) {
 			turn.Environments = types.Some([]types.TurnEnvironmentParams{})
 			wire, err := json.Marshal(turn)
 			require.NoError(t, err)
-			exe, err := os.Executable()
-			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--session-failure-peer", mode}, Env: append(os.Environ(), "EXPECTED_TURN="+string(wire)), Initialize: initialize})
-			require.NoError(t, err)
+			frames = frames[:5]
+			if mode != "unsupported-extension" {
+				frames = append(frames, frame(6, "c2s", `{"id":103,"method":"turn/start","params":`+string(wire)+`}`))
+				if mode == "disconnect" {
+					frames = append(frames, Frame{Ordinal: 7, Direction: "s2c", Epoch: 1, Channel: "protocol", Disconnect: true})
+				} else {
+					frames = append(frames, frame(7, "s2c", `{"id":103,"error":{"code":-32042,"message":"synthetic rejected input"}}`))
+				}
+			}
+			wantStatus := "passed"
+			if mode == "disconnect" {
+				wantStatus = "failed"
+			}
+			c := replayClient(t, ctx, frames, "", initialize, wantStatus)
 			defer c.Close()
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: thread})
 			require.NoError(t, err)
@@ -112,45 +129,10 @@ func TestRunSessionPreservesEarlyFailure(t *testing.T) {
 				require.ErrorAs(t, err, &rpc)
 				require.EqualValues(t, -32042, rpc.Code)
 			default:
-				require.ErrorIs(t, err, io.EOF)
+				require.ErrorIs(t, err, codex.ErrUnexpectedEOF)
+				require.ErrorIs(t, c.Close(), mocktest.ErrDisconnected)
 			}
 		})
-	}
-}
-
-func init() {
-	if len(os.Args) == 3 && os.Args[1] == "--session-failure-peer" {
-		b, _ := fixtures.ReadFile("integration/lifecycle.jsonl")
-		frames, err := Decode(bytes.NewReader(b))
-		if err != nil {
-			os.Exit(31)
-		}
-		frames = frames[:5]
-		if os.Args[2] != "unsupported-extension" {
-			frames = append(frames, frame(6, "c2s", `{"id":103,"method":"turn/start","params":`+os.Getenv("EXPECTED_TURN")+`}`))
-			if os.Args[2] == "disconnect" {
-				frames = append(frames, Frame{Ordinal: 7, Direction: "s2c", Epoch: 1, Channel: "protocol", Disconnect: true})
-			} else {
-				frames = append(frames, frame(7, "s2c", `{"id":103,"error":{"code":-32042,"message":"synthetic rejected input"}}`))
-			}
-		}
-		err = mockPeer(context.Background(), os.Stdin, os.Stdout, frames, "")
-		if err != nil && !errors.Is(err, mocktest.ErrDisconnected) {
-			os.Exit(32)
-		}
-		os.Exit(0)
-	}
-
-	if len(os.Args) == 2 && os.Args[1] == "--synthetic-peer" {
-		b, _ := fixtures.ReadFile("integration/lifecycle.jsonl")
-		f, e := Decode(bytes.NewReader(b))
-		if e == nil {
-			e = Peer(os.Stdin, os.Stdout, f)
-		}
-		if e != nil {
-			os.Exit(2)
-		}
-		os.Exit(0)
 	}
 }
 
@@ -176,9 +158,7 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	executable := s.executable
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: []string{"--synthetic-peer"}, Env: os.Environ(), Initialize: init})
-	require.NoError(t, err)
+	c := replayClient(t, ctx, frames, "answer-and-assert", init, "passed")
 
 	defer c.Close()
 	root := t.TempDir()
@@ -198,8 +178,67 @@ func (s *ManagedRecordingSuite) TestSyntheticManagedSession() {
 
 func TestManagedRecording(t *testing.T) { suite.Run(t, new(ManagedRecordingSuite)) }
 
-func (s *ManagedRecordingSuite) SetupTest() {
-	executable, err := os.Executable()
-	s.Require().NoError(err)
-	s.executable = executable
+func replayClient(t *testing.T, ctx context.Context, frames []Frame, handshakes string, initialize types.InitializeParams, wantStatus string) *codex.Client {
+	t.Helper()
+	data, err := syntheticScenario(frames)
+	require.NoError(t, err)
+	fixture, err := mocktest.Prepare(t.TempDir(), "codex", data, mocktest.Options{Handshakes: handshakes})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fixture.Close()) })
+	run, err := fixture.NewRun(ctx, mocktest.RunOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = run.CloseSDK() })
+	client, err := codex.NewStreams(ctx, codex.StreamOptions{
+		Args: run.Start.NativeArgs, Env: run.Environment(), Dir: run.Start.ProtocolCwd, Initialize: initialize,
+	}, codex.StreamTransport{Reader: run.Reader, Writer: run.Writer, Stderr: run.Stderr, Wait: run.WaitError})
+	if err != nil {
+		_ = run.Abort()
+	}
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = client.Close()
+		waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		result, waitErr := run.Wait(waitCtx)
+		if wantStatus == "passed" {
+			require.NoError(t, waitErr)
+		} else {
+			require.Error(t, waitErr)
+		}
+		require.NotNil(t, result)
+		require.NotNil(t, result.Execution)
+		require.Equal(t, wantStatus, string(result.Execution.Status))
+	})
+	run.CloseInputWhenComplete(client.CloseInput)
+	return client
+}
+
+type readerOnly struct{ io.Reader }
+type writerOnly struct{ io.Writer }
+
+func TestSyntheticPeerRejectsUninterruptibleStreams(t *testing.T) {
+	for _, direction := range []string{"input", "output"} {
+		t.Run(direction, func(t *testing.T) {
+			reader, writer := io.Pipe()
+			t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+			var input io.Reader = strings.NewReader("")
+			var output io.Writer = io.Discard
+			if direction == "input" {
+				input = readerOnly{reader}
+			} else {
+				output = writerOnly{writer}
+			}
+			done := make(chan error, 1)
+			go func() { done <- Peer(input, output, []Frame{frame(1, "s2c", `{"method":"notice"}`)}) }()
+			select {
+			case err := <-done:
+				require.ErrorContains(t, err, "closeable "+direction)
+			case <-time.After(time.Second):
+				_ = reader.Close()
+				_ = writer.Close()
+				<-done
+				t.Fatal("synthetic peer accepted an uninterruptible stream")
+			}
+		})
+	}
 }

@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -29,36 +27,11 @@ func TestSavedQueryRequiresExplicitSyntheticScope(t *testing.T) {
 	require.Error(t, err)
 }
 
-func init() {
-	if len(os.Args) == 3 && os.Args[1] == "--root-peer" {
-		b, e := os.ReadFile(os.Args[2])
-		var fs []Frame
-		if e == nil {
-			e = json.Unmarshal(b, &fs)
-		}
-		if e == nil {
-			e = Peer(os.Stdin, os.Stdout, fs)
-		}
-		if e != nil {
-			os.Exit(35)
-		}
-		os.Exit(0)
-	}
-}
-
 func rootClient(t *testing.T, fs []Frame) (*codex.Client, context.Context) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "synthetic.json")
-	b, e := json.Marshal(fs)
-	require.NoError(t, e)
-	require.NoError(t, os.WriteFile(path, b, 0o600))
-	exe, e := os.Executable()
-	require.NoError(t, e)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
-	c, e := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"--root-peer", path}, Env: os.Environ(), Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "synthetic-preflight", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}})
-	require.NoError(t, e)
-	t.Cleanup(func() { require.NoError(t, c.Close()) })
+	c := replayClient(t, ctx, fs, "answer-and-assert", types.InitializeParams{ClientInfo: types.ClientInfo{Name: "synthetic-preflight", Version: "1"}, Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})}, "passed")
 	return c, ctx
 }
 

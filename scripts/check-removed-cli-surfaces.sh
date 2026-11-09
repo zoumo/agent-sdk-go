@@ -2,6 +2,11 @@
 # Reject reintroduction of the retired external testify CLI workflow.
 set -euo pipefail
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "check-removed-cli-surfaces.sh requires ripgrep (rg)" >&2
+  exit 1
+fi
+
 root=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 cd "$root"
 go_binary=${GO:-go}

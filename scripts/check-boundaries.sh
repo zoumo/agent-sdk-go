@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if ! command -v rg >/dev/null 2>&1; then
+  echo "check-boundaries.sh requires ripgrep (rg)" >&2
+  exit 1
+fi
 cd "$(dirname "$0")/.."
 test "$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')" = 1
 test -z "$(find . \( -name go.work -o -name go.work.sum \) -not -path './.git/*' -print)"

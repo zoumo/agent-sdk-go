@@ -9,14 +9,15 @@ availability and synthetic checks do not prove real recordings; see
 Run from the repository root with Go 1.26 or newer:
 
 ```sh
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 go mod download
 make fmt-check
 make lint
-bash scripts/check-offline.sh
-GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 go test -race -p=1 -count=1 -timeout 300s ./...
-go vet ./...
+bash scripts/check-offline.sh all
 ```
+
+The offline entry also accepts `quality`, `test`, `race`, `e2e` or `build`;
+`all` runs every task in that order.
 
 Test and simulation hosts link the exact test-only in-process testify module; no
 separate helper process is required. The dependency boundary and pin are fixed
@@ -30,12 +31,15 @@ execution report, then remove the caller-owned fixture after every SDK client
 and mock exits. The migrated synthetic, single-case and 72-slot gate checks
 remain in `tests/simulation/simulate`.
 
-The remaining gates check module and native dependency boundaries, the
+The `quality` task checks module and native dependency boundaries, the
 standard-library-only native types and `agent` core, provider-specific adapter
 imports, the absence of reverse native/adapter/MASS imports, native inventory,
-reproducible Codex generation, unit/subprocess tests and offline examples. `GOMAXPROCS=2`,
-package scheduling `-p=1` and
-`GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
+reproducible Codex generation and committed whitespace, then runs `go vet`.
+`test` runs unit/subprocess tests and offline examples. `race` repeats the
+package suite under the race detector, `e2e` runs the fixed real-recording
+simulation gate, and `build` compiles every package and the SDK simulation
+runner/driver. `GOMAXPROCS=2`, package scheduling `-p=1` and
+`GORACE=atexit_sleep_ms=0` bound test load. CI runs all five tasks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
 The pinned testify module owns official driver/package checks. Hosted CI builds
 only the SDK-owned simulation runner and driver and links that module; it does
@@ -87,18 +91,23 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) runs offline, race and vet checks. It
-builds only the SDK-owned simulation runner and driver before running SDK tests;
-the in-process testify module is fetched by the normal Go module graph.
+The [workflow](../.github/workflows/ci.yml) calls a reusable
+[platform workflow](../.github/workflows/offline-platform.yml) for each supported
+runner. Every platform expands into `quality`, `test`, `race`, `e2e` and `build`
+jobs; the quality job installs the pinned formatter/linter. The quality, test
+and race jobs install `ripgrep` for the contraction gates. The
+offline jobs build only the SDK-owned simulation runner and driver; the
+in-process testify module is fetched by the normal Go module graph. A required
+aggregate job succeeds only when all three platforms and their task jobs succeed.
 External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
 matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure six jobs (three Offline and three External consumer).
-Fork PRs retain three Offline jobs and skip consumers because fork-only SHAs are
-not assumed retrievable from this repository. Token permissions remain contents:
-read; no pull_request_target execution is added. Configured coverage does not
-prove that any runner executed. See
+These events configure fifteen offline task jobs, three External consumer jobs
+and one required aggregate job. Fork PRs retain the offline jobs and skip
+consumers because fork-only SHAs are not assumed retrievable from this
+repository. Token permissions remain contents: read; no pull_request_target
+execution is added. Configured coverage does not prove that any runner executed. See
 [release readiness](#release-preparation) for the required exact-commit CI evidence.
 
 ## Code integration tests
@@ -188,8 +197,9 @@ No Windows runtime support is claimed.
 One version covers all four native imports. Before an authorized publication:
 
 1. Confirm the intended main SHA and both imported source histories.
-2. Require the exact SHA's three Offline and three External consumer CI jobs;
-   rerun on the resulting main commit after merge. Fork PR skips do not satisfy this gate.
+2. Require the exact SHA's offline aggregate and three External consumer CI jobs,
+   and inspect all five offline task results; rerun on the resulting main commit
+   after merge. Fork PR consumer skips do not satisfy this gate.
 3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
    coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
 4. Record the exact commit, CI URLs and remaining limits in the release review.

@@ -1,29 +1,30 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	agenttestify "github.com/zoumo/agent-sdk-testify"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 const (
-	preparedSessionSchema = 3
+	preparedSessionSchema = 5
 	lifecycleTimeout      = 30 * time.Second
 )
 
 type preparedConnection struct {
-	ID       string   `json:"id"`
-	Command  string   `json:"command"`
-	Args     []string `json:"args,omitempty"`
-	Launcher string   `json:"launcher,omitempty"`
+	ID        string `json:"id"`
+	Transport string `json:"transport"`
 }
 
 type preparedRoute struct {
@@ -49,9 +50,7 @@ type preparedSource struct {
 type preparedSession struct {
 	SchemaVersion int                      `json:"schemaVersion"`
 	SessionID     string                   `json:"sessionId"`
-	Tool          command                  `json:"tool"`
-	ToolVersion   string                   `json:"toolVersion"`
-	ToolSHA256    string                   `json:"toolSHA256"`
+	Tool          toolIdentity             `json:"tool"`
 	AgentType     string                   `json:"agentType"`
 	Source        preparedSource           `json:"source"`
 	ResourceRoot  string                   `json:"resourceRoot"`
@@ -63,9 +62,11 @@ type preparedSession struct {
 	Env           map[string]string        `json:"env"`
 	Routes        map[string]preparedRoute `json:"routes"`
 
-	Dir     string        `json:"-"`
-	RawJSON []byte        `json:"-"`
-	Mock    preparedRoute `json:"-"`
+	Dir     string                `json:"-"`
+	RawJSON []byte                `json:"-"`
+	Mock    preparedRoute         `json:"-"`
+	Fixture *agenttestify.Fixture `json:"-"`
+	Runner  *mocktest.Session     `json:"-"`
 }
 
 type sourceSelection struct {
@@ -75,6 +76,12 @@ type sourceSelection struct {
 }
 
 func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelection, dir, policy string) (session *preparedSession, err error) {
+	if ctx == nil {
+		return nil, errors.New("prepare requires a context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !filepath.IsAbs(dir) {
 		return nil, errors.New("prepared session directory must be absolute")
 	}
@@ -84,42 +91,34 @@ func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelecti
 		}
 		return nil, statErr
 	}
-	args := []string{"prepare"}
+	options := agenttestify.PrepareOptions{
+		FixtureDir:       dir,
+		EmbeddedIdentity: mocktest.EmbeddedIdentity(),
+	}
 	switch {
 	case source.Recording != "":
 		if !filepath.IsAbs(source.Recording) {
 			return nil, errors.New("--recording must be absolute")
 		}
-		args = append(args, "--recording", source.Recording)
+		options.Recording = source.Recording
 	case source.Case != "":
-		args = append(args, "--agent", source.Provider, "--case", source.Case)
+		options.Agent = source.Provider
+		options.Case = source.Case
 	default:
 		return nil, errors.New("prepare requires --case with --provider or --recording")
 	}
-	args = append(args, "--session-dir", dir)
-	prepareCtx, cancel := context.WithTimeout(ctx, lifecycleTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(prepareCtx, tool.Command, args...)
-	cmd.Env = os.Environ()
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	prepareErr := cmd.Run()
+	fixture, prepareErr := agenttestify.Prepare(options)
 	if prepareErr != nil {
-		return nil, errors.Join(
-			fmt.Errorf("prepare %s session: %w: %s%s", policy, prepareErr, stderr.String(), stdout.String()),
-			cleanupPreparedSession(dir),
-		)
+		return nil, errors.Join(fmt.Errorf("prepare %s session: %w", policy, prepareErr), cleanupPreparedSession(dir))
 	}
-	canonicalDir, err := canonicalPath(dir)
+	session, err = viewPreparedSession(fixture)
 	if err != nil {
 		return nil, errors.Join(err, cleanupPreparedSession(dir))
 	}
-	session, err = readPreparedSession(canonicalDir)
+	session.Runner, err = mocktest.FromFixture(fixture)
 	if err != nil {
 		return nil, errors.Join(err, cleanupPreparedSession(dir))
 	}
-	// Validation happens before the caller registers cleanup, so every malformed
-	// descriptor produced by a successful prepare is closed here.
 	if err = validatePreparedSession(session, tool, source); err != nil {
 		return nil, errors.Join(err, cleanupPreparedSession(dir))
 	}
@@ -127,27 +126,109 @@ func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelecti
 }
 
 func readPreparedSession(dir string) (*preparedSession, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	canonicalDir, err := canonicalPath(dir)
 	if err != nil {
 		return nil, err
 	}
-	var session preparedSession
-	if err := json.Unmarshal(data, &session); err != nil {
-		return nil, fmt.Errorf("session descriptor: %w", err)
+	fixture, err := agenttestify.Open(canonicalDir)
+	if err != nil {
+		return nil, err
 	}
-	session.Dir = dir
-	session.RawJSON = append([]byte(nil), data...)
+	session, err := viewPreparedSession(fixture)
+	if err != nil {
+		return nil, err
+	}
+	session.Runner, err = mocktest.FromFixture(fixture)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func viewPreparedSession(fixture *agenttestify.Fixture) (*preparedSession, error) {
+	route := fixture.Routes["mock"]
+	connections := make([]preparedConnection, len(route.Connections))
+	for i, connection := range route.Connections {
+		connections[i] = preparedConnection{
+			ID:        connection.ID,
+			Transport: string(connection.Transport),
+		}
+	}
+	session := &preparedSession{
+		SchemaVersion: preparedSessionSchema,
+		SessionID:     fixture.FixtureID,
+		Tool: toolIdentity{
+			Source:         string(fixture.Tool.Source),
+			Version:        fixture.Tool.Version,
+			Module:         fixture.Tool.Module,
+			ModuleSum:      fixture.Tool.ModuleSum,
+			ModuleRevision: fixture.Tool.ModuleRevision,
+			ModuleTime:     fixture.Tool.ModuleTime,
+			GoVersion:      fixture.Tool.GoVersion,
+		},
+		AgentType:    fixture.AgentType,
+		ResourceRoot: fixture.ResourceRoot,
+		Workspace:    fixture.Workspace,
+		Home:         fixture.Home,
+		Config:       fixture.Config,
+		Tmp:          fixture.Tmp,
+		ProtocolCwd:  fixture.ProtocolCwd,
+		Env:          mapsClone(fixture.Env),
+		Routes: map[string]preparedRoute{"mock": {
+			Enabled:     route.Enabled,
+			Executor:    route.Executor,
+			Target:      route.Target,
+			Provenance:  route.Provenance,
+			Workspace:   route.Workspace,
+			ProtocolCwd: route.ProtocolCwd,
+			Env:         mapsClone(route.Env),
+			Connections: connections,
+		}},
+		Source: preparedSource{
+			Kind:          fixture.Source.Kind,
+			ID:            fixture.Source.ID,
+			Path:          fixture.Source.Path,
+			SHA256:        fixture.Source.SHA256,
+			Provenance:    fixture.Source.Provenance,
+			DriverProfile: fixture.Source.DriverProfile,
+		},
+		Dir:     fixture.FixtureDir,
+		Fixture: fixture,
+	}
 	session.Mock = session.Routes["mock"]
-	return &session, nil
+	rawJSON, err := json.Marshal(session)
+	if err != nil {
+		return nil, fmt.Errorf("marshal prepared session: %w", err)
+	}
+	session.RawJSON = rawJSON
+	return session, nil
+}
+
+func mapsClone(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	maps.Copy(cloned, values)
+	return cloned
 }
 
 func validatePreparedSession(session *preparedSession, tool toolIdentity, source sourceSelection) error {
 	if session.SchemaVersion != preparedSessionSchema {
 		return fmt.Errorf("unsupported session schemaVersion %d", session.SchemaVersion)
 	}
-	if session.SessionID == "" || session.AgentType == "" || session.ToolSHA256 == "" ||
-		session.Tool.Command == "" || len(session.Tool.Args) != 0 {
+	if session.SessionID == "" || session.AgentType == "" || session.Fixture == nil ||
+		session.Tool.Source != "embedded" ||
+		session.Tool.Module != "github.com/zoumo/agent-sdk-testify" ||
+		session.Tool.Version == "" || session.Tool.ModuleSum == "" {
 		return errors.New("prepared session identity is incomplete")
+	}
+	if tool.Source != session.Tool.Source || tool.Module != session.Tool.Module ||
+		tool.ModuleSum != session.Tool.ModuleSum || tool.Version != session.Tool.Version ||
+		(session.Tool.ModuleRevision != "" && tool.ModuleRevision != session.Tool.ModuleRevision) ||
+		(session.Tool.ModuleTime != "" && tool.ModuleTime != session.Tool.ModuleTime) ||
+		(session.Tool.GoVersion != "" && tool.GoVersion != session.Tool.GoVersion) {
+		return errors.New("prepared session tool differs from the linked library")
 	}
 	if source.Provider != "" && session.AgentType != source.Provider {
 		return fmt.Errorf("prepared agent %s differs from requested %s", session.AgentType, source.Provider)
@@ -157,27 +238,6 @@ func validatePreparedSession(session *preparedSession, tool toolIdentity, source
 	}
 	if err := validateSource(session, source); err != nil {
 		return err
-	}
-	toolPath, err := canonicalPath(session.Tool.Command)
-	if err != nil {
-		return fmt.Errorf("session tool: %w", err)
-	}
-	wantPath, err := canonicalPath(tool.Command)
-	if err != nil {
-		return fmt.Errorf("configured tool: %w", err)
-	}
-	if toolPath != wantPath {
-		return errors.New("session tool differs from AGENT_SDK_TESTIFY_BIN")
-	}
-	actualToolHash, err := digestPath(toolPath)
-	if err != nil {
-		return err
-	}
-	if session.ToolSHA256 != actualToolHash || tool.SHA256 != actualToolHash {
-		return errors.New("session tool hash differs from the executable")
-	}
-	if session.ToolVersion != "" && !strings.HasSuffix(tool.Version, session.ToolVersion) {
-		return errors.New("session tool version differs from the executable")
 	}
 	for name, path := range map[string]string{
 		"resourceRoot": session.ResourceRoot,
@@ -204,7 +264,7 @@ func validatePreparedSession(session *preparedSession, tool toolIdentity, source
 	if filepath.Clean(session.ResourceRoot) != filepath.Join(sessionPath, "runtime") {
 		return errors.New("prepared session runtime must be session/runtime")
 	}
-	if err := validateRoute(session, toolPath); err != nil {
+	if err := validateRoute(session); err != nil {
 		return err
 	}
 	return nil
@@ -255,7 +315,7 @@ func sourceDirectoryDigestMatches(dir, want string) bool {
 		digest([]byte(planHash+"\n"+manifestHash+"\n")) == want
 }
 
-func validateRoute(session *preparedSession, toolPath string) error {
+func validateRoute(session *preparedSession) error {
 	route, ok := session.Routes["mock"]
 	if !ok {
 		return errors.New("prepared session has no mock route")
@@ -301,57 +361,12 @@ func validateRoute(session *preparedSession, toolPath string) error {
 			return fmt.Errorf("duplicate mock connection %q", connection.ID)
 		}
 		seen[connection.ID] = true
-		if err := validateToolCommand(command{Command: connection.Command, Args: connection.Args}, toolPath, session.ToolSHA256); err != nil {
-			return fmt.Errorf("mock connection %s: %w", connection.ID, err)
-		}
-		if err := validateMockArgs(connection.Args, session.Dir, connection.ID); err != nil {
-			return fmt.Errorf("mock connection %s: %w", connection.ID, err)
-		}
-		if connection.Launcher != "" {
-			if !filepath.IsAbs(connection.Launcher) {
-				return fmt.Errorf("mock connection %s launcher must be absolute", connection.ID)
-			}
-			info, err := os.Lstat(connection.Launcher)
-			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-				return fmt.Errorf("mock connection %s launcher is unavailable", connection.ID)
-			}
+		if connection.Transport != string(agenttestify.ConnectionTransportInProcess) {
+			return fmt.Errorf("mock connection %s is not an embedded in-process route", connection.ID)
 		}
 	}
 	if !seen["main"] {
 		return errors.New("prepared mock route has no main connection")
-	}
-	if session.AgentType == "claude" {
-		main, _ := session.Connection("main")
-		if main.Launcher == "" {
-			return errors.New("claude mock main connection has no launcher")
-		}
-	}
-	return nil
-}
-
-func validateToolCommand(value command, canonical, wantHash string) error {
-	path, err := canonicalPath(value.Command)
-	if err != nil {
-		return err
-	}
-	if path != canonical {
-		return errors.New("command differs from the prepared tool")
-	}
-	hash, err := digestPath(path)
-	if err != nil {
-		return err
-	}
-	if hash != wantHash {
-		return errors.New("command hash differs from the prepared tool")
-	}
-	return nil
-}
-
-func validateMockArgs(args []string, sessionDir, connectionID string) error {
-	if len(args) != 6 || args[0] != "agent" || args[1] != "mock" ||
-		args[2] != "--session-dir" || args[3] != sessionDir ||
-		args[4] != "--connection" || args[5] != connectionID {
-		return errors.New("declared mock arguments differ from the prepared session")
 	}
 	return nil
 }
@@ -378,7 +393,7 @@ func (s *preparedSession) HostEnv() []string {
 	return hostEnvironment(s.Mock.Env)
 }
 
-func exportPreparedSession(ctx context.Context, tool toolIdentity, session *preparedSession, output string) error {
+func exportPreparedSession(ctx context.Context, session *preparedSession, output string) error {
 	if !filepath.IsAbs(output) {
 		return errors.New("export output must be absolute")
 	}
@@ -391,13 +406,11 @@ func exportPreparedSession(ctx context.Context, tool toolIdentity, session *prep
 		}
 		return err
 	}
-	exportCtx, cancel := context.WithTimeout(ctx, lifecycleTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(exportCtx, tool.Command, "export", "--session-dir", session.Dir, "--output", output)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("export prepared material: %w: %s%s", err, stderr.String(), stdout.String())
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := agenttestify.Export(agenttestify.ExportOptions{FixtureDir: session.Dir, Output: output}); err != nil {
+		return fmt.Errorf("export prepared material: %w", err)
 	}
 	return nil
 }

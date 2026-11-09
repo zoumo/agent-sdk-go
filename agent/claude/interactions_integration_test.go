@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 func TestClaudePermissionAnswerOutcomes(t *testing.T) {
@@ -76,6 +74,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				),
 				test.response,
 				claudeStateFrame("native-permission", "running", "2026-11-07T14:00:03Z"),
+				claudeStartOrSteerFrame(t, "keep-open"),
 			}
 			session, stream := openClaudeInteractionSession(
 				t,
@@ -152,6 +151,10 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			require.Error(t, err)
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 
+			_, err = session.StartOrSteer(ctx, agent.Input{
+				Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+			})
+			require.NoError(t, err)
 			require.NoError(t, session.Close(ctx))
 			_, err = stream.Next(ctx)
 			require.ErrorIs(t, err, io.EOF)
@@ -176,6 +179,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 		`>{"type":"control_response","response":{"subtype":"success",` +
 			`"request_id":"permission-repeat","response":{"behavior":"allow",` +
 			`"updatedInput":{"file_path":"a.txt"}}}}`,
+		claudeStartOrSteerFrame(t, "keep-open"),
 	}
 	session, stream := openClaudeInteractionSession(
 		t,
@@ -207,6 +211,10 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
 
+	_, err = session.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+	})
+	require.NoError(t, err)
 	require.NoError(t, session.Close(ctx))
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
@@ -321,12 +329,21 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	secondFrames := append([]string(nil), mockClaudeInit...)
 	secondFrames = append(secondFrames,
 		claudeSessionInitFrame(t, "native-scoped-second", cwd),
+		claudeStartOrSteerFrame(t, "run-second"),
+		claudeStateFrame("native-scoped-second", "running", "2026-11-07T14:18:00Z"),
+		claudePermissionRequestFrame(
+			"permission-scoped-second",
+			"Read",
+			"read-tool-second",
+			`{"file_path":"b.txt"}`,
+		),
+		`>{"type":"control_response","response":{"subtype":"success",`+
+			`"request_id":"permission-scoped-second","response":{"behavior":"allow",`+
+			`"updatedInput":{"file_path":"b.txt"}}}}`,
 	)
 	firstPeer := prepareClaudePeer(t, "passed", firstFrames...)
 	secondPeer := prepareClaudePeer(t, "passed", secondFrames...)
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: sequencedClaudeLauncher(t, firstPeer, secondPeer),
-	})
+	provider := newTestClaudeProviderSequence(t, firstPeer, secondPeer)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -349,6 +366,17 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	requested := nextClaudeInteractionRequested(t, ctx, firstStream)
 	assert.NotEmpty(t, requested.Interaction)
 
+	secondStream, err := second.Events()
+	require.NoError(t, err)
+	_, err = second.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{agent.TextBlock{Text: "run-second"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, secondStream))
+	require.Equal(t, agent.StateRequiresAction, nextStateValue(t, ctx, secondStream))
+	secondRequested := nextClaudeInteractionRequested(t, ctx, secondStream)
+	assert.NotEmpty(t, secondRequested.Interaction)
+
 	answer := agent.PermissionAnswer{
 		Outcome:  agent.PermissionSelected,
 		OptionID: "allow-once",
@@ -365,6 +393,11 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, receipt.Acceptance.Sent)
 	assert.True(t, *receipt.Acceptance.Sent)
+
+	secondReceipt, err := second.Answer(ctx, secondRequested.Interaction, answer)
+	require.NoError(t, err)
+	require.NotNil(t, secondReceipt.Acceptance.Sent)
+	assert.True(t, *secondReceipt.Acceptance.Sent)
 
 	require.NoError(t, first.Close(ctx))
 	require.NoError(t, second.Close(ctx))
@@ -636,13 +669,12 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 			`"message":"AskUserQuestion is disabled for this session"}}}`,
 	}
 	disabled := false
-	session, stream := openClaudeInteractionSessionWithLaunch(
+	session, stream := openClaudeInteractionSession(
 		t,
 		ctx,
 		cwd,
 		"passed",
 		agent.Features{AgentQuestions: &disabled},
-		launchClaudeMockWithoutUnsupportedArgs,
 		frames...,
 	)
 
@@ -740,7 +772,9 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			requested := nextClaudeInteractionRequested(t, ctx, stream)
 
 			if test.closeFirst {
-				require.NoError(t, session.Close(ctx))
+				err := session.Close(ctx)
+				require.Error(t, err)
+				assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
 			}
 			closed := nextClaudeInteractionClosed(t, ctx, stream)
 			assert.Equal(t, requested.Interaction, closed.Interaction)
@@ -759,7 +793,11 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 				require.NoError(t, session.Close(ctx))
 			}
 			_, err = stream.Next(ctx)
-			require.ErrorIs(t, err, io.EOF)
+			if test.closeFirst {
+				assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+			} else {
+				require.ErrorIs(t, err, io.EOF)
+			}
 		})
 	}
 }
@@ -853,38 +891,11 @@ func openClaudeInteractionSession(
 	features agent.Features,
 	frames ...string,
 ) (agent.Session, agent.EventStream) {
-	return openClaudeInteractionSessionWithLaunch(
-		t,
-		ctx,
-		cwd,
-		wantStatus,
-		features,
-		nil,
-		frames...,
-	)
-}
-
-func openClaudeInteractionSessionWithLaunch(
-	t *testing.T,
-	ctx context.Context,
-	cwd string,
-	wantStatus string,
-	features agent.Features,
-	launch func(testing.TB, *mocktest.Session) (string, []string),
-	frames ...string,
-) (agent.Session, agent.EventStream) {
 	t.Helper()
 	all := append([]string(nil), mockClaudeInit...)
 	all = append(all, frames...)
 	peerSession := prepareClaudePeer(t, wantStatus, all...)
-	launcher, env := claudePeerLauncher(t, peerSession)
-	if launch != nil {
-		launcher, env = launch(t, peerSession)
-	}
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: launcher,
-		Env:     env,
-	})
+	provider := newTestClaudeProvider(t, peerSession)
 	t.Cleanup(func() {
 		assert.NoError(t, provider.Stop(context.Background()))
 	})
@@ -902,13 +913,6 @@ func openClaudeInteractionSessionWithLaunch(
 	stream, err := session.Events()
 	require.NoError(t, err)
 	return session, stream
-}
-
-func claudePeerLauncher(t testing.TB, peerSession *mocktest.Session) (string, []string) {
-	t.Helper()
-	launcher, err := peerSession.Launcher("main")
-	require.NoError(t, err)
-	return launcher, peerSession.Env
 }
 
 func claudeSessionInitFrame(t *testing.T, sessionID, cwd string) string {

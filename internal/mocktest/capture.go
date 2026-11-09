@@ -15,17 +15,6 @@ import (
 
 func hash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
 
-type syntheticSource struct {
-	plan struct {
-		Provider   string `json:"provider"`
-		CaseID     string `json:"caseId"`
-		Provenance string `json:"provenance"`
-	}
-	planSHA256     string
-	manifestSHA256 string
-	rawSHA256      string
-}
-
 // Capture authors a manifest-bound EXPLICITLY SYNTHETIC external input from an
 // SDK fixture. It is not an adopted recording and contains no matching engine.
 func Capture(dir, provider string, data []byte, options Options) (string, error) {
@@ -159,44 +148,4 @@ func Capture(dir, provider string, data []byte, options Options) (string, error)
 		}
 	}
 	return root, nil
-}
-
-func inspectSyntheticSource(root, provider string) (*syntheticSource, error) {
-	source := &syntheticSource{}
-	plan, err := os.ReadFile(filepath.Join(root, "plan.json"))
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(plan, &source.plan); err != nil {
-		return nil, fmt.Errorf("synthetic plan: %w", err)
-	}
-	if source.plan.Provider != provider || source.plan.CaseID == "" || source.plan.Provenance != "synthetic" {
-		return nil, errors.New("synthetic plan identity is incomplete")
-	}
-	manifest, err := os.ReadFile(filepath.Join(root, "manifest.json"))
-	if err != nil {
-		return nil, err
-	}
-	var metadata struct {
-		Provenance string            `json:"provenance"`
-		PlanSHA256 string            `json:"planSHA256"`
-		Files      map[string]string `json:"files"`
-	}
-	if err := json.Unmarshal(manifest, &metadata); err != nil {
-		return nil, fmt.Errorf("synthetic manifest: %w", err)
-	}
-	source.planSHA256 = hash(plan)
-	source.manifestSHA256 = hash(manifest)
-	source.rawSHA256 = metadata.Files["raw.jsonl"]
-	if metadata.Provenance != "synthetic" || metadata.PlanSHA256 != source.planSHA256 || source.rawSHA256 == "" {
-		return nil, errors.New("synthetic manifest hashes or provenance are invalid")
-	}
-	raw, err := os.ReadFile(filepath.Join(root, "raw", "raw.jsonl"))
-	if err != nil {
-		return nil, err
-	}
-	if hash(raw) != source.rawSHA256 {
-		return nil, errors.New("synthetic raw stream hash mismatch")
-	}
-	return source, nil
 }

@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -35,11 +36,21 @@ const (
 type Provider struct {
 	mu       sync.Mutex
 	config   Config
+	streams  streamFactory
 	state    providerState
 	opening  int
 	sessions map[*session]struct{}
 	stopErr  error
 }
+
+type streamOpen struct {
+	Transport claude.StreamTransport
+	Workspace string
+	Env       []string
+	Started   func(*claude.Session)
+}
+
+type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, error)
 
 // New constructs a Claude provider without starting a native process.
 func New(config Config) *Provider {
@@ -179,10 +190,36 @@ func (p *Provider) openReserved(
 	if resume != nil {
 		nativeOptions.SessionStartProbe = &resume.probe
 	}
-	native, err := claude.Open(ctx, claude.SessionOptions(nativeOptions))
+	var stream *streamOpen
+	if p.streams != nil {
+		opened, err := p.streams(ctx, claude.SessionOptions(nativeOptions))
+		if err != nil {
+			p.finishOpen()
+			return nil, nativeOperationError("open", err)
+		}
+		stream = &opened
+	}
+	if stream != nil {
+		if stream.Workspace != "" {
+			nativeOptions.WorkDir = stream.Workspace
+		}
+		if stream.Env != nil {
+			nativeOptions.Env = slices.Clone(stream.Env)
+		}
+	}
+	var native *claude.Session
+	var err error
+	if stream == nil {
+		native, err = claude.Open(ctx, claude.SessionOptions(nativeOptions))
+	} else {
+		native, err = claude.OpenStreams(ctx, claude.SessionOptions(nativeOptions), stream.Transport)
+	}
 	if err != nil {
 		p.finishOpen()
 		return nil, nativeOperationError("open", err)
+	}
+	if stream != nil && stream.Started != nil {
+		stream.Started(native)
 	}
 	initContext, cancelInit := waitForInitContext(ctx, p.config.InitializeTimeout)
 	var (

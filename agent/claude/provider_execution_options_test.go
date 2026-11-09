@@ -1,10 +1,11 @@
 package agentclaude_test
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"os"
+	"io"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestClaudeOpenPassesLiteralExecutionOptionsAndReportsInitModel(t *testing.T
 	assert.Equal(t, claudeExpectedArgs(
 		"--model= Caller/Model v2 ",
 		"--effort= Native/High ",
-	), claudeCapturedArgv(t, capture))
+	), capture.argv(t))
 
 	stream, err := session.Events()
 	require.NoError(t, err)
@@ -89,8 +90,9 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 				jsonString(t, test.sessionID) + `,"cwd":` + jsonString(t, cwd) +
 				`,"claude_code_version":"2.1.258","model":" default/model "}`
 			var provider *agentclaude.Provider
-			var capture string
+			var capturedArgv func(*testing.T) []string
 			if test.resume {
+				var capture string
 				provider, capture = startClaudeResumeExecutionProvider(
 					t,
 					ctx,
@@ -98,10 +100,15 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 					test.sessionID,
 					initJSON,
 				)
+				capturedArgv = func(t *testing.T) []string {
+					return readClaudeArgv(t, capture)
+				}
 			} else {
 				frames := append([]string(nil), mockClaudeInit...)
 				frames = append(frames, "<"+initJSON)
+				var capture *claudeExecutionCapture
 				provider, capture = startClaudeExecutionProvider(t, ctx, frames...)
+				capturedArgv = capture.argv
 			}
 			var session agent.Session
 			var err error
@@ -116,7 +123,7 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 			require.NoError(t, err)
 			closeSessionOnCleanup(t, session)
 
-			assert.Equal(t, test.wantArgs, claudeCapturedArgv(t, capture))
+			assert.Equal(t, test.wantArgs, capturedArgv(t))
 			report := claudeExecutionOptionsReport(t, session)
 			assert.Empty(t, report.Model.Requested)
 			require.NotNil(t, report.Model.Effective)
@@ -168,7 +175,7 @@ func TestClaudeOpenPassesExecutionFieldsIndependently(t *testing.T) {
 			require.NoError(t, err)
 			closeSessionOnCleanup(t, session)
 
-			assert.Equal(t, test.wantArgs, claudeCapturedArgv(t, capture))
+			assert.Equal(t, test.wantArgs, capture.argv(t))
 			report := claudeExecutionOptionsReport(t, session)
 			assert.Equal(t, test.wantModel, report.Model.Requested)
 			require.NotNil(t, report.Model.Effective)
@@ -212,7 +219,7 @@ func TestClaudeResumePassesLiteralExecutionOptionsAndPreservesIdentity(t *testin
 		"--model= Resume/Model ",
 		"--effort= Native/Resume ",
 		"--resume="+claudeResumePeerSessionID,
-	), claudeCapturedArgv(t, capture))
+	), readClaudeArgv(t, capture))
 	report := claudeExecutionOptionsReport(t, session)
 	assert.Equal(t, " Resume/Model ", report.Model.Requested)
 	require.NotNil(t, report.Model.Effective)
@@ -487,9 +494,7 @@ func TestClaudeControllerEffortPreflightFailureIsUnsupportedNotSent(t *testing.T
 		`!`,
 	}
 	peerSession := prepareClaudePeer(t, "failed", frames...)
-	launcher, env, _ := launchClaudeMockCapturingArgs(t, peerSession)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher, Env: env})
-	t.Cleanup(func() { _ = provider.Stop(context.Background()) })
+	provider := newTestClaudeProvider(t, peerSession)
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{
@@ -534,9 +539,7 @@ func TestClaudeControllerReportsUnknownOutcomeAndClearsUncertainEffective(t *tes
 		`!`,
 	}
 	peerSession := prepareClaudePeer(t, "failed", frames...)
-	launcher, env, _ := launchClaudeMockCapturingArgs(t, peerSession)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher, Env: env})
-	t.Cleanup(func() { _ = provider.Stop(context.Background()) })
+	provider := newTestClaudeProvider(t, peerSession)
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{
@@ -577,16 +580,14 @@ func TestClaudeLegacyAndControllerSerializeConcurrentUpdates(t *testing.T) {
 		`<{"type":"control_response","response":{"subtype":"success","request_id":"go_1","response":{}}}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
-	launcher, env, _ := launchClaudeMockCapturingArgs(t, peerSession)
-	signalPath := filepath.Join(t.TempDir(), "request-seen")
-	releasePath := filepath.Join(t.TempDir(), "release-response")
-	env = append(env,
-		claudeTestGateRequestEnv+`="subtype":"set_model"`,
-		claudeTestGateSignalEnv+"="+signalPath,
-		claudeTestGateReleaseEnv+"="+releasePath,
+	gate := newClaudeTestGate(`"subtype":"set_model"`)
+	provider := newTestClaudeProviderWithStreamHook(
+		t,
+		agentclaude.Config{},
+		nil,
+		gate.wrap,
+		peerSession,
 	)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher, Env: env})
-	t.Cleanup(func() { _ = provider.Stop(context.Background()) })
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
@@ -611,10 +612,11 @@ func TestClaudeLegacyAndControllerSerializeConcurrentUpdates(t *testing.T) {
 		}
 	}()
 
-	require.Eventually(t, func() bool {
-		_, statErr := os.Stat(signalPath)
-		return statErr == nil
-	}, 5*time.Second, 5*time.Millisecond, "legacy update did not reach the native request")
+	select {
+	case <-gate.requestSeen:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "legacy update did not reach the native request")
+	}
 
 	fastCtx, cancelFast := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancelFast()
@@ -640,7 +642,7 @@ func TestClaudeLegacyAndControllerSerializeConcurrentUpdates(t *testing.T) {
 		require.FailNow(t, "execution option update returned while the first response was held", "%+v", got)
 	case <-time.After(100 * time.Millisecond):
 	}
-	require.NoError(t, os.WriteFile(releasePath, []byte("release\n"), 0o600))
+	gate.releaseResponse()
 
 	byName := make(map[string]result, 2)
 	for range 2 {
@@ -658,15 +660,42 @@ func startClaudeExecutionProvider(
 	t *testing.T,
 	ctx context.Context,
 	frames ...string,
-) (*agentclaude.Provider, string) {
+) (*agentclaude.Provider, *claudeExecutionCapture) {
 	t.Helper()
 	peerSession := prepareClaudePeer(t, "passed", frames...)
-	launcher, env, capture := launchClaudeMockCapturingArgs(t, peerSession)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher, Env: env})
-	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	capture := &claudeExecutionCapture{}
+	provider := newTestClaudeProviderWithObserver(
+		t,
+		agentclaude.Config{},
+		capture.observe,
+		peerSession,
+	)
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	return provider, capture
+}
+
+type claudeExecutionCapture struct {
+	mu      sync.Mutex
+	options claude.SessionOptions
+	seen    bool
+}
+
+func (c *claudeExecutionCapture) observe(options claude.SessionOptions) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.options = options
+	c.seen = true
+}
+
+func (c *claudeExecutionCapture) argv(t *testing.T) []string {
+	t.Helper()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	require.True(t, c.seen, "Claude session did not observe execution options")
+	argv, err := claude.NativeArgs(c.options)
+	require.NoError(t, err)
+	return argv
 }
 
 func startClaudeResumeExecutionProvider(
@@ -714,15 +743,6 @@ func claudeExpectedArgs(extras ...string) []string {
 	return append(args, extras...)
 }
 
-func claudeCapturedArgv(t *testing.T, path string) []string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var argv []string
-	require.NoError(t, json.Unmarshal(data, &argv))
-	return argv
-}
-
 func claudeExecutionOptionsReport(
 	t *testing.T,
 	session agent.Session,
@@ -747,4 +767,128 @@ func requireExecutionValue(
 	}
 	require.NotNil(t, value.Effective)
 	require.Equal(t, effective, *value.Effective)
+}
+
+type claudeTestGate struct {
+	match        []byte
+	requestSeen  chan struct{}
+	responseOpen chan struct{}
+	signalOnce   sync.Once
+	releaseOnce  sync.Once
+}
+
+func newClaudeTestGate(match string) *claudeTestGate {
+	return &claudeTestGate{
+		match:        []byte(match),
+		requestSeen:  make(chan struct{}),
+		responseOpen: make(chan struct{}),
+	}
+}
+
+func (g *claudeTestGate) wrap(transport claude.StreamTransport) claude.StreamTransport {
+	transport.Writer = &claudeTestGateWriter{
+		WriteCloser: transport.Writer,
+		gate:        g,
+	}
+	transport.Reader = newClaudeTestGateReader(transport.Reader, g)
+	return transport
+}
+
+func (g *claudeTestGate) signalRequest() {
+	g.signalOnce.Do(func() { close(g.requestSeen) })
+}
+
+func (g *claudeTestGate) releaseResponse() {
+	g.releaseOnce.Do(func() { close(g.responseOpen) })
+}
+
+func (g *claudeTestGate) waitForRelease() {
+	select {
+	case <-g.requestSeen:
+		<-g.responseOpen
+	default:
+	}
+}
+
+type claudeTestGateWriter struct {
+	io.WriteCloser
+	gate    *claudeTestGate
+	mu      sync.Mutex
+	pending []byte
+}
+
+func (w *claudeTestGateWriter) Write(p []byte) (int, error) {
+	n, err := w.WriteCloser.Write(p)
+	if n == 0 {
+		return n, err
+	}
+	w.mu.Lock()
+	w.pending = append(w.pending, p[:n]...)
+	if bytes.Contains(w.pending, w.gate.match) {
+		w.gate.signalRequest()
+	}
+	if index := bytes.LastIndexByte(w.pending, '\n'); index >= 0 {
+		w.pending = append(w.pending[:0], w.pending[index+1:]...)
+	}
+	w.mu.Unlock()
+	return n, err
+}
+
+type claudeTestGateReader struct {
+	source    io.ReadCloser
+	reader    *io.PipeReader
+	writer    *io.PipeWriter
+	gate      *claudeTestGate
+	done      chan struct{}
+	closeOnce sync.Once
+}
+
+func newClaudeTestGateReader(
+	source io.ReadCloser,
+	gate *claudeTestGate,
+) *claudeTestGateReader {
+	reader, writer := io.Pipe()
+	result := &claudeTestGateReader{
+		source: source,
+		reader: reader,
+		writer: writer,
+		gate:   gate,
+		done:   make(chan struct{}),
+	}
+	go result.pump()
+	return result
+}
+
+func (r *claudeTestGateReader) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
+func (r *claudeTestGateReader) Close() error {
+	r.closeOnce.Do(func() {
+		_ = r.reader.Close()
+		_ = r.source.Close()
+	})
+	<-r.done
+	return nil
+}
+
+func (r *claudeTestGateReader) pump() {
+	defer close(r.done)
+	defer func() { _ = r.writer.Close() }()
+	buffer := make([]byte, 32*1024)
+	for {
+		n, err := r.source.Read(buffer)
+		if n > 0 {
+			r.gate.waitForRelease()
+			if _, writeErr := r.writer.Write(buffer[:n]); writeErr != nil {
+				return
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				_ = r.writer.CloseWithError(err)
+			}
+			return
+		}
+	}
 }

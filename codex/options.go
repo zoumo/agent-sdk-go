@@ -1,8 +1,10 @@
 package codex
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -91,6 +93,28 @@ type StdioOptions struct {
 	Dir        string
 	Initialize types.InitializeParams
 	Limits     Limits
+}
+
+// StreamOptions configures a process-free app-server connection. Args is the
+// validated native startup declaration, not an executable argv. Env is a
+// complete environment snapshot; Dir is the logical protocol working directory.
+type StreamOptions struct {
+	Args       []string
+	Env        []string
+	Dir        string
+	Initialize types.InitializeParams
+	Limits     Limits
+}
+
+// StreamTransport supplies already-open directional protocol streams. Reader
+// carries peer-to-SDK bytes and Writer carries SDK-to-peer bytes. Stderr is
+// optional diagnostics. Wait is the authoritative peer result when present;
+// nil is valid only when reader EOF alone is authoritative.
+type StreamTransport struct {
+	Reader io.ReadCloser
+	Writer io.WriteCloser
+	Stderr io.ReadCloser
+	Wait   func(context.Context) error
 }
 
 // DiagnosticSnapshot never contains the child's raw stderr or wire payloads.

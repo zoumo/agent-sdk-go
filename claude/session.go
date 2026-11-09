@@ -5,6 +5,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
@@ -167,11 +168,31 @@ func (s *Session) Close() error {
 	}
 	return nil
 }
+
+// CloseInput half-closes the SDK outbound writer while retaining the reader for
+// final native frames. It is available only for stream-backed Sessions.
+func (s *Session) CloseInput() error {
+	s.mu.Lock()
+	c := s.client
+	s.mu.Unlock()
+	if c == nil {
+		return ErrClosed
+	}
+	return c.CloseInput()
+}
+
 func (s *Session) Abort() error { err := s.Close(); _ = s.fifo.Abort(s.Err()); return err }
 func (s *Session) finish(cause error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
+		if cause != nil && (s.cause == nil ||
+			errors.Is(s.cause, ErrUnexpectedEOF) ||
+			errors.Is(s.cause, ErrClosed)) {
+			// Local Close and premature stream EOF are not authoritative peer
+			// outcomes. A later completion failure still becomes observable.
+			s.cause = cause
+		}
 		return
 	}
 	s.closed = true

@@ -13,21 +13,68 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WorkflowCoverage(unittest.TestCase):
-    def workflow_jobs(self):
-        workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
+    def workflow_jobs(self, workflow=None):
+        if workflow is None:
+            workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
+        workflow = workflow.split("\njobs:\n", 1)[1]
         return dict(re.findall(
-            r"(?ms)^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:\n|\Z)", workflow))
+            r"(?ms)^  ([a-z0-9_]+):\n(.*?)(?=^  [a-z0-9_]+:\n|\Z)", workflow))
 
-    def test_offline_and_consumers_retain_macos15_and_add_macos26(self):
+    def test_offline_platforms_and_consumers_retain_supported_runners(self):
         jobs = self.workflow_jobs()
-        for job in ("test", "consumer"):
-            with self.subTest(job=job):
-                self.assertIn(job, jobs)
-                matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", jobs[job])
-                self.assertIsNotNone(matrix, "expected an explicit OS matrix: " + job)
-                labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-                self.assertCountEqual(labels, ["ubuntu-24.04", "macos-15", "macos-26"])
-                self.assertIn("    runs-on: ${{ matrix.os }}", jobs[job])
+        offline = jobs["offline"]
+        self.assertIn("    name: ${{ matrix.runner }} / required", offline)
+        matrix = re.search(r"(?m)^        runner: \[([^\]]+)\]$", offline)
+        self.assertIsNotNone(matrix, "expected an explicit offline runner matrix")
+        labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
+        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
+        self.assertIn("    runs-on: ${{ matrix.runner }}", offline)
+
+        consumer = jobs["consumer"]
+        matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", consumer)
+        self.assertIsNotNone(matrix, "expected an explicit consumer OS matrix")
+        labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
+        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
+        self.assertIn("    runs-on: ${{ matrix.os }}", consumer)
+
+    def test_offline_platform_job_runs_checks_in_one_environment(self):
+        offline = self.workflow_jobs()["offline"]
+        self.assertIn("sudo apt-get install -y ripgrep", offline)
+        self.assertIn("brew install ripgrep", offline)
+        self.assertIn("golangci-lint@v2.12.2", offline)
+        self.assertIn("python3 codex/scripts/check_whitespace.py", offline)
+        self.assertIn("make fmt-check", offline)
+        self.assertIn("make lint", offline)
+        self.assertIn("bash scripts/check-offline.sh parallel", offline)
+        self.assertNotIn("matrix.task", offline)
+        self.assertNotIn("    needs:", offline)
+
+    def test_offline_script_exposes_each_ci_task(self):
+        script = (ROOT.parent / "scripts/check-offline.sh").read_text()
+        self.assertIn("task=${1:-all}", script)
+        for task in ("parallel", "quality", "test", "race", "e2e", "build"):
+            with self.subTest(task=task):
+                self.assertIn(f"  {task})\n", script)
+        self.assertIn(
+            "  parallel)\n    quality_checks\n    parallel_checks\n    ;;\n",
+            script,
+        )
+        self.assertIn("local parallel_tasks=(test build)", script)
+        self.assertIn("local serial_tasks=(race e2e)", script)
+        self.assertIn("local all_tasks=(test race e2e build)", script)
+        self.assertIn(
+            'AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"',
+            script,
+        )
+        self.assertIn('wait "$pid"', script)
+        self.assertIn('if ! wait "$pid"; then', script)
+        self.assertIn('for task in "${serial_tasks[@]}"; do', script)
+        self.assertIn('if ! run_task_lane "$work" "$task"; then', script)
+
+    def test_required_check_is_the_platform_job(self):
+        jobs = self.workflow_jobs()
+        self.assertNotIn("required", jobs)
+        self.assertIn("    name: ${{ matrix.runner }} / required", jobs["offline"])
 
     def test_same_repository_pr_consumers_fetch_published_head(self):
         consumer = self.workflow_jobs()["consumer"]

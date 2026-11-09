@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 type existingChildSeedFile struct {
@@ -25,7 +26,7 @@ type existingChildSeedFile struct {
 // AcceptExistingChildren establishes a fresh native observer from a recorded
 // resume hook before querying the copied, verified pre-existing child storage.
 // It sends no input and never promotes stored messages into Session events.
-func AcceptExistingChildren(ctx context.Context, launcher, root string) (err error) {
+func AcceptExistingChildren(ctx context.Context, mock *mocktest.Session, root string) (err error) {
 	var plan struct {
 		Project, Config, HistoryProject string
 		FixtureProject                  string `json:"_fixtureProject"`
@@ -118,8 +119,8 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	if requests != 1 {
 		return errors.New("existing-child recording requires exactly one initialization")
 	}
-	s, err := claude.Open(ctx, claude.SessionOptions{
-		CLIPath: launcher, WorkDir: executionProject(plan.HistoryProject, plan.FixtureProject),
+	s, run, inputClosed, err := openStreamSession(ctx, mock, claude.SessionOptions{
+		WorkDir:  executionProject(plan.HistoryProject, plan.FixtureProject),
 		ResumeID: seed.SessionID, Env: []string{"CLAUDE_CONFIG_DIR=" + plan.Config},
 	})
 	if err != nil {
@@ -128,7 +129,7 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 	closed := false
 	defer func() {
 		if !closed {
-			err = errors.Join(err, s.Close())
+			err = errors.Join(err, finishStream(s, run, inputClosed))
 		}
 	}()
 	for {
@@ -163,7 +164,11 @@ func AcceptExistingChildren(ctx context.Context, launcher, root string) (err err
 		return err
 	}
 	closed = true
-	execution, err := executionHost(root)
+	err = finishStream(s, run, inputClosed)
+	if err != nil {
+		return err
+	}
+	execution, err := executionHostFromRun(run)
 	if err != nil {
 		return err
 	}

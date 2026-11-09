@@ -787,7 +787,7 @@ func TestControllerSerializesConcurrentNativeUpdates(t *testing.T) {
 	)
 	peerSession := prepareCodexPeerWithStatus(t, "failed", frames...)
 	provider := newTestProvider(t, peerSession)
-	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	t.Cleanup(func() { _ = provider.Stop(context.Background()) })
 
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)

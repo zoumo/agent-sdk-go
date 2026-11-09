@@ -127,17 +127,16 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 		DriverProfile: session.Source.DriverProfile,
 	}
 	var pkg *materialPackage
-	var resultLogs map[string]string
 	// Register immediately after prepare. Evidence is read before the
 	// caller-owned session is removed, including after cancellation or crashes.
 	defer func() {
-		finalized := finalizePreparedSession(parent, session, pkg, resultLogs, r.Output, businessPassed(r.Business))
+		finalized := finalizePreparedSession(parent, session, pkg, r.RunID, r.Output, businessPassed(r.Business))
 		if finalized.Evidence != nil {
 			if finalized.Evidence.SessionID != session.SessionID {
 				finalized.Error = errors.Join(finalized.Error, errors.New("evidence session changed"))
 			}
-			if len(finalized.Evidence.Index.Executions) > 0 {
-				r.RunID = finalized.Evidence.Index.Executions[0].ID
+			if len(finalized.Evidence.Executions) > 0 {
+				r.RunID = finalized.Evidence.Executions[0].ID
 			}
 		}
 		if finalized.Error != nil {
@@ -151,7 +150,7 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 	}()
 
 	exportDir := filepath.Join(r.Output, "material")
-	if err := exportPreparedSession(ctx, tool, session, exportDir); err != nil {
+	if err := exportPreparedSession(ctx, session, exportDir); err != nil {
 		if isMaterialUnavailable(err) {
 			r.MaterialStatus = materialStatusUnavailable
 		} else {
@@ -190,28 +189,20 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 		return r, err
 	}
 
-	peers, logs, err := peerLaunchers(hostRoot, session)
-	if err != nil {
-		return r, err
-	}
-	resultLogs = logs
-	mainPeer, ok := peers["main"]
-	if !ok {
-		return r, errors.New("prepared main connection missing")
-	}
 	peer := struct {
-		command
-		Remote *remoteEndpoint `json:"remote,omitempty"`
+		FixtureDir string          `json:"fixtureDir,omitempty"`
+		Connection string          `json:"connection,omitempty"`
+		Remote     *remoteEndpoint `json:"remote,omitempty"`
 	}{}
-	peer.command = mainPeer
 
 	var remote *mockRemoteService
-	if len(peers) == 2 {
-		remote, err = startMockRemote(ctx, peers, hostRoot)
+	if session.Source.DriverProfile == "remote-close" {
+		remote, err = startMockRemote(ctx, session.Runner, hostRoot)
 		if err != nil {
 			r.BridgeError = err.Error()
 			return r, err
 		}
+		r.RunID = remote.executionID
 		defer func() {
 			if remote == nil {
 				return
@@ -222,6 +213,9 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 			}
 		}()
 		peer.Remote = &remote.endpoint
+	} else {
+		peer.FixtureDir = session.Dir
+		peer.Connection = "main"
 	}
 
 	request := filepath.Join(hostRoot, "request.json")
@@ -273,11 +267,21 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 		err = errors.Join(err, readErr)
 	} else {
 		r.Business = businessBytes
-		var business struct{ Status, Message string }
+		var business struct {
+			Status      string
+			Message     string
+			ExecutionID string `json:"executionId"`
+		}
 		if decodeErr := json.Unmarshal(businessBytes, &business); decodeErr != nil {
 			err = errors.Join(err, decodeErr)
 		} else if business.Status != "passed" {
 			err = errors.Join(err, fmt.Errorf("SDK business %s: %s", business.Status, business.Message))
+		}
+		if business.ExecutionID != "" {
+			if r.RunID != "" && r.RunID != business.ExecutionID {
+				err = errors.Join(err, errors.New("SDK business execution changed"))
+			}
+			r.RunID = business.ExecutionID
 		}
 	}
 	return r, errors.Join(err, ctx.Err())
@@ -297,6 +301,7 @@ func isMaterialUnavailable(err error) bool {
 	message := strings.ToLower(err.Error())
 	for _, marker := range []string{
 		"session has no current recording",
+		"fixture has no current recording",
 		"absent from shared materials",
 		"builtin unavailable ",
 		"material unavailable",
@@ -311,38 +316,6 @@ func isMaterialUnavailable(err error) bool {
 func businessPassed(raw json.RawMessage) bool {
 	var business struct{ Status string }
 	return len(raw) > 0 && json.Unmarshal(raw, &business) == nil && business.Status == "passed"
-}
-
-func peerLaunchers(root string, session *preparedSession) (map[string]command, map[string]string, error) {
-	peers := make(map[string]command, len(session.Mock.Connections))
-	logs := make(map[string]string, len(session.Mock.Connections))
-	for _, connection := range session.Mock.Connections {
-		logPath := filepath.Join(root, "result-"+connection.ID+".jsonl")
-		launcherPath := filepath.Join(root, "peer-"+connection.ID)
-		var script strings.Builder
-		script.WriteString("#!/bin/sh\nset -e\n")
-		script.WriteString("cd " + shellQuote(session.Mock.ProtocolCwd) + "\n")
-		script.WriteString("exec 3>" + shellQuote(logPath) + "\n")
-		script.WriteString("exec " + shellQuote(connection.Command))
-		for _, arg := range connection.Args {
-			script.WriteString(" " + shellQuote(arg))
-		}
-		script.WriteString(" --result-fd 3 -- \"$@\"\n")
-		if err := os.WriteFile(launcherPath, []byte(script.String()), 0o700); err != nil {
-			return nil, nil, err
-		}
-		peers[connection.ID] = command{
-			Command: launcherPath,
-			Env:     session.HostEnv(),
-			Dir:     session.Mock.ProtocolCwd,
-		}
-		logs[connection.ID] = logPath
-	}
-	return peers, logs, nil
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func hostEnvironment(overrides map[string]string) []string {

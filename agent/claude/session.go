@@ -219,7 +219,7 @@ func (s *session) StartOrSteer(
 
 	s.mu.Lock()
 	s.submitting = false
-	if s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle {
+	if s.inputWriteMayBeActiveLocked(stateVersion) {
 		if s.activeSubmit == "" {
 			s.activeSubmit = submissionID
 		}
@@ -261,10 +261,14 @@ func (s *session) finishInputWrite(outcomeUnknown bool, stateVersion uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.submitting = false
-	if outcomeUnknown && s.stateVersion == stateVersion {
+	if outcomeUnknown && s.inputWriteMayBeActiveLocked(stateVersion) {
 		s.submitUnknown = true
 		s.workActive = true
 	}
+}
+
+func (s *session) inputWriteMayBeActiveLocked(stateVersion uint64) bool {
+	return s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle
 }
 
 func (s *session) Interrupt(
@@ -441,8 +445,8 @@ func (s *session) updateState(state agent.SessionState) *agent.SessionState {
 	next := state
 	s.state = &next
 	s.workActive = next != agent.StateIdle
-	s.submitUnknown = false
 	if next == agent.StateIdle {
+		s.submitUnknown = false
 		s.activeSubmit = ""
 	}
 	s.stateVersion++

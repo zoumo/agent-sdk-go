@@ -151,7 +151,8 @@ func AcceptRemoteClose(ctx context.Context, root, mainEndpoint, mainToken, probe
 	if err := first.Close(); err != nil {
 		return err
 	}
-	if _, err := session.Submit(ctx, codex.Input{Input: turn.Input}); !errors.Is(err, codex.ErrClosed) {
+	if _, err := session.Submit(ctx, codex.Input{Input: turn.Input}); err == nil ||
+		(!errors.Is(err, codex.ErrClosed) && !errors.Is(err, codex.ErrRemoteTransport)) {
 		return errors.New("closed remote Session did not reject input")
 	}
 	second, err := open(probeRequests[0], probeEndpoint, probeToken)

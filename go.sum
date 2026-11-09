@@ -1,8 +1,16 @@
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
+github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
+github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
+github.com/zoumo/agent-sdk-testify v0.0.0-20261109034908-dd68cf0f84ef h1:2NRBuvuFQhS8Snq8TBYECyLmaYpQuPwI75bxIzvGfRE=
+github.com/zoumo/agent-sdk-testify v0.0.0-20261109034908-dd68cf0f84ef/go.mod h1:yPx7HTYxq8lm5ljTWGcrhRp2J5SmCPSD9iqdRIdnNqc=
+github.com/zoumo/agent-sdk-testify v0.0.0-20261109044915-b606272c88c1 h1:PGGn9abQro2aCssr/tElOCkSHEg6wwNpXEhD5pPn8Ac=
+github.com/zoumo/agent-sdk-testify v0.0.0-20261109044915-b606272c88c1/go.mod h1:yPx7HTYxq8lm5ljTWGcrhRp2J5SmCPSD9iqdRIdnNqc=
 github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a h1:Hyb0V2EaZhrmAh/kEl4Cxi1p3uAmSXAI2ZCL9xLbUWY=
 github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a/go.mod h1:bBk2oZ4wN9zgq+9H2bObmGW7vVEetcJV1M/AvieZUN0=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
+golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
+golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=

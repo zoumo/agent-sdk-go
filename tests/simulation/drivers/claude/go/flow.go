@@ -16,11 +16,12 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // AcceptFlow executes recorded operations with the public Go Session. Incoming
 // permissions retain their original handles, including held approvals.
-func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Project, Config, Model, DriverProfile string
 		FixtureProject                        string `json:"_fixtureProject"`
@@ -156,7 +157,7 @@ func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy cl
 		}
 		return nil
 	}
-	options := claude.SessionOptions{ChildDetailPolicy: policy, CLIPath: launcher, WorkDir: host.Workspace, Model: plan.Model, Env: host.Env, Initialize: &init, SDKMCPServers: servers}
+	options := claude.SessionOptions{ChildDetailPolicy: policy, WorkDir: host.Workspace, Model: plan.Model, Env: host.Env, Initialize: &init, SDKMCPServers: servers}
 	for i := 0; i < len(plan.Args); i++ {
 		name, value, inline := strings.Cut(plan.Args[i], "=")
 		if name != "--model" && name != "--effort" && name != "--max-thinking-tokens" {
@@ -198,16 +199,15 @@ func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy cl
 			}
 			return r.ReplyMCP(ctx, answer.MCPResponse)
 		}
-		launcher, err = mcpFilterLauncher(root, launcher)
-		if err != nil {
-			return err
-		}
-		options.CLIPath = launcher
 	}
-	s, err := claude.Open(ctx, options)
+	s, run, inputClosed, err := openStreamSession(ctx, mock, options)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err = errors.Join(err, finishStream(s, run, inputClosed))
+		<-done
+	}()
 
 	go func() {
 		defer close(done)
@@ -224,7 +224,6 @@ func AcceptFlow(ctx context.Context, launcher, root string, host Host, policy cl
 			}
 		}
 	}()
-	defer func() { err = errors.Join(err, s.Close()); <-done }()
 	wait := func(raw json.RawMessage) error {
 		for {
 			mu.Lock()

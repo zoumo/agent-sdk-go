@@ -13,11 +13,12 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // AcceptSavedHistory uses a real captured mock process for Session execution,
 // then the public local-history API for the captured immutable saved files.
-func AcceptSavedHistory(ctx context.Context, launcher, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Project, Config, DriverProfile string
 		FixtureProject                 string `json:"_fixtureProject"`
@@ -90,14 +91,14 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, host Host, p
 			return errors.New("history input has no recorded result")
 		}
 	}
-	s, err := claude.Open(ctx, claude.SessionOptions{
-		CLIPath: launcher, WorkDir: host.Workspace,
-		Env: host.Env, Initialize: &initialize, ChildDetailPolicy: policy,
+	s, run, inputClosed, err := openStreamSession(ctx, mock, claude.SessionOptions{
+		WorkDir: host.Workspace,
+		Env:     host.Env, Initialize: &initialize, ChildDetailPolicy: policy,
 	})
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, s.Close()) }()
+	defer func() { err = errors.Join(err, finishStream(s, run, inputClosed)) }()
 	observed := json.NewEncoder(deliveries)
 	for i := range inputs {
 		if _, err := s.Submit(ctx, claude.Input{User: &inputs[i]}); err != nil {
@@ -142,7 +143,7 @@ func AcceptSavedHistory(ctx context.Context, launcher, root string, host Host, p
 	if plan.DriverProfile == "continuation" {
 		return nil
 	}
-	host, err = executionHost(root)
+	host, err = executionHostFromRun(run)
 	if err != nil {
 		return err
 	}

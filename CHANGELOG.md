@@ -31,12 +31,14 @@
   Native event parsing, creation evidence, Claude aliases and
   transport ownership remain in their respective SDKs.
 - Moves recording, replay, material qualification and official SDK drivers into the
-  independent `agent-sdk-testify` tool. This repository retains the Go SDK drivers,
-  public-flow assertions, simulation orchestration and authenticated loopback bridge,
-  and consumes the external tool only through its versioned CLI/process contract.
-- Runs SDK fixture adapters against the external `mock` process using versioned
-  synthetic captures and strict matching. No protocol matcher or recording source
-  tree remains in this repository.
+  independent `agent-sdk-testify` project. This repository retains the Go SDK
+  drivers, public-flow assertions, simulation orchestration and authenticated
+  loopback bridge, and links the exact pinned module through its public in-process
+  prepare, start, export and typed-report surfaces.
+- Runs SDK fixture adapters against the pinned in-process mock using versioned
+  synthetic captures and strict matching. The default gates link only the
+  test-only module; no protocol matcher or recording source tree remains in this
+  repository.
 - Requires Go 1.26 or newer, uses the root Makefile for formatting and linting,
   and checks Linux/macOS offline contracts, race, vet, schemas/inventories,
   types boundaries, simulation tooling and examples.

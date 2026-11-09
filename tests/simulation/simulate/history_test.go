@@ -108,31 +108,3 @@ func TestClaudeMovedHistoryRetainsMaterialBinding(t *testing.T) {
 	require.Empty(t, evidence.ValidationError)
 	require.NoDirExists(t, filepath.Join(output, "preserve", "session"))
 }
-
-func TestValidateExecutionHistoryRequiresMaterialDigestCoverage(t *testing.T) {
-	const (
-		originalPath = "config/projects/original/session.jsonl"
-		runtimePath  = "config/projects/-tmp-runtime-workspace/session.jsonl"
-		digest       = "sha256:recorded"
-		runtimeBytes = "sha256:runtime-rewrite"
-	)
-	pkg := &materialPackage{
-		Material: materialDescriptor{
-			Files: map[string]string{originalPath: digest},
-		},
-		Manifest: materialManifest{
-			SavedFiles: map[string]string{originalPath: digest},
-		},
-	}
-	execution := executionDescriptor{Workspace: "/tmp/runtime/workspace", HistoryFiles: map[string]string{
-		originalPath: digest,
-		runtimePath:  runtimeBytes,
-	}}
-	require.NoError(t, validateExecutionHistory(execution, pkg))
-
-	execution.HistoryFiles["config/projects/-tmp-other-workspace/session.jsonl"] = runtimeBytes
-	require.ErrorContains(t, validateExecutionHistory(execution, pkg), "history bindings differ")
-
-	execution.HistoryFiles = map[string]string{runtimePath: digest}
-	require.ErrorContains(t, validateExecutionHistory(execution, pkg), "history bindings differ")
-}

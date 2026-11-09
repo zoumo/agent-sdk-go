@@ -3,12 +3,10 @@ package agentclaude_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
-	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +15,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
+	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
@@ -94,9 +93,7 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 	)
 	firstPeer := prepareClaudePeer(t, "passed", firstFrames...)
 	secondPeer := prepareClaudePeer(t, "passed", secondFrames...)
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: sequencedClaudeLauncher(t, firstPeer, secondPeer),
-	})
+	provider := newTestClaudeProviderSequence(t, firstPeer, secondPeer)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -141,19 +138,15 @@ func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
 		30*time.Second,
 		mockClaudeInit...,
 	)
-	launcher, err := peerSession.Launcher("main")
-	require.NoError(t, err)
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: launcher,
-		Env:     peerSession.Env,
+	provider := newTestClaudeProviderWithConfig(t, agentclaude.Config{
 		// This budget also bounds the native initialize control handshake.
-		// Keep it well above mock process-startup variance under race so the
+		// Keep it above embedded replay initialization variance under race so the
 		// timeout proves that the separate system/init frame never arrived.
 		InitializeTimeout: 10 * time.Second,
-	})
+	}, peerSession)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
-	_, err = provider.Start(ctx)
+	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	_, err = provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.Error(t, err)
@@ -165,79 +158,121 @@ func newTestClaudeProvider(
 	peerSession *mocktest.Session,
 ) *agentclaude.Provider {
 	t.Helper()
-	launcher, err := peerSession.Launcher("main")
-	require.NoError(t, err)
-	return agentclaude.New(agentclaude.Config{
-		CLIPath: launcher,
-		Env:     peerSession.Env,
+	return newTestClaudeProviderWithConfig(t, agentclaude.Config{}, peerSession)
+}
+
+func newTestClaudeProviderWithConfig(
+	t *testing.T,
+	config agentclaude.Config,
+	peers ...*mocktest.Session,
+) *agentclaude.Provider {
+	t.Helper()
+	return newTestClaudeProviderWithObserver(t, config, nil, peers...)
+}
+
+func newTestClaudeProviderWithObserver(
+	t *testing.T,
+	config agentclaude.Config,
+	observe func(claude.SessionOptions),
+	peers ...*mocktest.Session,
+) *agentclaude.Provider {
+	t.Helper()
+	return newTestClaudeProviderWithStreamHook(t, config, observe, nil, peers...)
+}
+
+type claudeTestStreamHook func(claude.StreamTransport) claude.StreamTransport
+
+func newTestClaudeProviderWithStreamHook(
+	t *testing.T,
+	config agentclaude.Config,
+	observe func(claude.SessionOptions),
+	hook claudeTestStreamHook,
+	peers ...*mocktest.Session,
+) *agentclaude.Provider {
+	t.Helper()
+	var mu sync.Mutex
+	next := 0
+	provider := agentclaude.NewWithStream(config, func(ctx context.Context, options claude.SessionOptions) (agentclaude.TestStreamOpen, error) {
+		mu.Lock()
+		if observe != nil {
+			observe(options)
+		}
+		if next >= len(peers) {
+			mu.Unlock()
+			return agentclaude.TestStreamOpen{}, errors.New("unexpected Claude session")
+		}
+		peer := peers[next]
+		next++
+		mu.Unlock()
+		runCtx, cancelRun := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			30*time.Second,
+		)
+		args, err := agentclaude.TestifyNativeArgs(options)
+		if err != nil {
+			cancelRun()
+			return agentclaude.TestStreamOpen{}, err
+		}
+		run, err := peer.NewRun(runCtx, mocktest.RunOptions{NativeArgs: args})
+		if err != nil {
+			cancelRun()
+			return agentclaude.TestStreamOpen{}, err
+		}
+		// Register run cleanup before SDK construction, including initialize failures.
+		t.Cleanup(func() {
+			_ = run.CloseSDK()
+			waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = run.Wait(waitCtx)
+			cancelRun()
+		})
+		options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
+		actualArgs, err := agentclaude.TestifyNativeArgs(options)
+		if err != nil || !slices.Equal(actualArgs, run.Start.NativeArgs) {
+			_ = run.Abort()
+			cancelRun()
+			return agentclaude.TestStreamOpen{}, errors.New("execution native arguments differ from SDK options")
+		}
+		transport := claude.StreamTransport{
+			Reader: run.Reader,
+			Writer: run.Writer,
+			Stderr: run.Stderr,
+			Wait:   run.WaitError,
+		}
+		if hook != nil {
+			transport = hook(transport)
+		}
+		return agentclaude.TestStreamOpen{
+			Transport: transport,
+			Workspace: run.Start.Workspace,
+			Env:       run.Environment(),
+			Started: func(session *claude.Session) {
+				completion := run.CloseInputWhenComplete(session.CloseInput)
+				t.Cleanup(func() {
+					_ = session.Close()
+					select {
+					case err := <-completion:
+						if err != nil {
+							assert.ErrorIs(t, err, claude.ErrInputClosed, "session Close may precede the watcher")
+						}
+					case <-time.After(5 * time.Second):
+						t.Error("input completion watcher did not finish")
+					}
+				})
+			},
+		}, nil
 	})
+	t.Cleanup(func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = provider.Stop(stopCtx)
+	})
+	return provider
 }
 
-func sequencedClaudeLauncher(t *testing.T, peers ...*mocktest.Session) string {
+func newTestClaudeProviderSequence(t *testing.T, peers ...*mocktest.Session) *agentclaude.Provider {
 	t.Helper()
-	launches := make([]claudeSequencedLaunch, len(peers))
-	for index, peer := range peers {
-		launcher, err := peer.Launcher("main")
-		require.NoError(t, err)
-		launches[index] = claudeSequencedLaunch{
-			command: launcher,
-			env:     peer.Env,
-		}
-	}
-	return sequencedClaudeCommands(t, launches...)
-}
-
-type claudeSequencedLaunch struct {
-	command string
-	env     []string
-}
-
-func sequencedClaudeCommands(t *testing.T, launches ...claudeSequencedLaunch) string {
-	t.Helper()
-	directory := t.TempDir()
-	counterPath := filepath.Join(directory, "counter")
-	require.NoError(t, os.WriteFile(counterPath, []byte("0\n"), 0o600))
-
-	keys := make(map[string]struct{})
-	for _, launch := range launches {
-		for _, entry := range launch.env {
-			key, _, found := strings.Cut(entry, "=")
-			require.True(t, found)
-			keys[key] = struct{}{}
-		}
-	}
-	orderedKeys := make([]string, 0, len(keys))
-	for key := range keys {
-		orderedKeys = append(orderedKeys, key)
-	}
-	sort.Strings(orderedKeys)
-
-	var script strings.Builder
-	script.WriteString("#!/bin/sh\nset -eu\n")
-	script.WriteString("counter=" + shellQuote(counterPath) + "\n")
-	script.WriteString("value=$(cat \"$counter\")\n")
-	for index, launch := range launches {
-		script.WriteString(`if [ "$value" = "` + strconv.Itoa(index) + "\" ]; then\n")
-		script.WriteString("printf '%s\\n' " + strconv.Itoa(index+1) + " > \"$counter\"\n")
-		if len(orderedKeys) != 0 {
-			script.WriteString("unset " + strings.Join(orderedKeys, " ") + "\n")
-		}
-		for _, entry := range launch.env {
-			key, value, _ := strings.Cut(entry, "=")
-			script.WriteString("export " + key + "=" + shellQuote(value) + "\n")
-		}
-		script.WriteString("exec " + shellQuote(launch.command) + " \"$@\"\n")
-		script.WriteString("fi\n")
-	}
-	script.WriteString("echo \"unexpected Claude launcher invocation\" >&2\nexit 69\n")
-
-	path := filepath.Join(directory, "claude-launcher")
-	require.NoError(t, os.WriteFile(path, []byte(script.String()), 0o700))
-	return path
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+	return newTestClaudeProviderWithConfig(t, agentclaude.Config{}, peers...)
 }
 
 func prepareClaudePeer(

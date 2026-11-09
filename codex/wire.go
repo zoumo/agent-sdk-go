@@ -59,7 +59,11 @@ func (c *Client) readLoop() {
 	if c.limits.MaxFrameBytes < size {
 		size = c.limits.MaxFrameBytes + 1
 	}
-	r := bufio.NewReaderSize(c.stdout, size)
+	reader := io.Reader(c.stdout)
+	if c.streamMode {
+		reader = c.streamReader
+	}
+	r := bufio.NewReaderSize(reader, size)
 	var frame []byte
 	for {
 		part, err := r.ReadSlice('\n')
@@ -80,6 +84,15 @@ func (c *Client) readLoop() {
 		if err != nil {
 			if len(frame) > 0 {
 				c.fail(fmt.Errorf("%w: unterminated frame: %w", ErrProtocol, err))
+			} else if c.streamMode && errors.Is(err, io.EOF) {
+				c.mu.Lock()
+				c.readEOF = true
+				closing := c.closing
+				c.mu.Unlock()
+				if c.inputIsClosed() || closing {
+					return
+				}
+				c.fail(fmt.Errorf("%w: peer closed before SDK input", ErrUnexpectedEOF))
 			} else {
 				c.fail(err)
 			}

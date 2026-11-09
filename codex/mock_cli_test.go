@@ -1,16 +1,18 @@
-// SDK integration against the Go mock CLI; all scenarios are synthetic.
+// SDK integration against the in-process library mock; all scenarios are synthetic.
 package codex_test
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
@@ -85,11 +87,7 @@ func (s *mockCLISuite) TestInteractions() {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
-			executable, args, err := peerSession.Command("main")
-			require.NoError(t, err)
-			client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: peerSession.Env, Dir: peerSession.Workspace, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
-			require.NoError(t, err)
-			defer client.Close()
+			client, run := openMockClient(t, ctx, peerSession)
 			session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 			require.NoError(t, err)
 			defer func() { _ = client.Close(); _ = session.Close() }()
@@ -99,8 +97,13 @@ func (s *mockCLISuite) TestInteractions() {
 				require.Error(t, err)
 				require.NotErrorIs(t, err, context.DeadlineExceeded)
 				require.NoError(t, ctx.Err())
-				require.NoError(t, client.Close())
-				require.Positive(t, client.Diagnostics().StderrBytes)
+				closeErr := client.Close()
+				if mode == "disconnect" {
+					require.Error(t, closeErr)
+					requireStrictReplayFailure(t, ctx, run)
+				} else {
+					require.ErrorContains(t, closeErr, "client mismatch")
+				}
 				return
 			}
 			result := make(chan error, 1)
@@ -150,10 +153,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	peerSession, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
-	executable, args, err := peerSession.Command("main")
-	require.NoError(t, err)
-	client, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Env: peerSession.Env, Dir: peerSession.Workspace, Initialize: codextypes.InitializeParams{ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"}}})
-	require.NoError(t, err)
+	client, run := openMockClient(t, ctx, peerSession)
 	defer client.Close()
 	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
 	require.NoError(t, err)
@@ -185,6 +185,37 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
+	require.Error(t, client.Close())
+	requireStrictReplayFailure(t, ctx, run)
+}
+
+func openMockClient(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*codex.Client, *mocktest.Run) {
+	t.Helper()
+	run, err := peerSession.NewRun(ctx, mocktest.RunOptions{})
+	require.NoError(t, err)
+	client, err := codex.NewStreams(ctx, codex.StreamOptions{
+		Args: run.Start.NativeArgs,
+		Env:  run.Environment(),
+		Dir:  run.Start.ProtocolCwd,
+		Initialize: codextypes.InitializeParams{
+			ClientInfo: codextypes.ClientInfo{Name: "consumer", Version: "1"},
+		},
+	}, codex.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.Abort()
+		require.NoError(t, err)
+	}
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = run.CloseSDK()
+	})
+	run.CloseInputWhenComplete(client.CloseInput)
+	return client, run
 }
 
 func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
@@ -194,4 +225,76 @@ func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
 	require.NoError(t, err)
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
+}
+
+func requireStrictReplayFailure(t *testing.T, ctx context.Context, run *mocktest.Run) {
+	t.Helper()
+	result, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.Equal(t, agenttestify.FailureClassStrictReplay, connection.Failure)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
+}
+
+// Normal replay completion must preserve queued final frames and close Receive.
+func (s *mockCLISuite) TestNormalCompletionDrainsFinalFrame() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	frames := append(append([]string(nil), mockCodexInit...), mockCodexOpen...)
+	frames = append(frames,
+		`>{"id":92,"method":"consumer/finish"}`,
+		`<{"id":92,"result":{"complete":true}}`,
+		`<{"method":"fixture/final","params":{"threadId":"root","value":"last"}}`)
+	fixture, err := mocktest.Prepare(t.TempDir(), "codex", mockCLIScenario(t, frames...), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { verifyMockSession(t, fixture, "passed") })
+	client, run := openMockClient(t, ctx, fixture)
+	session, err := codex.Open(ctx, codex.SessionOptions{Client: client})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Abort() })
+	var response struct{ Complete bool }
+	require.NoError(t, client.Call(ctx, "consumer/finish", nil, &response))
+	require.True(t, response.Complete)
+	select {
+	case <-client.Done():
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	require.NoError(t, client.Close())
+	require.NoError(t, client.Err())
+	closedCtx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer stop()
+	require.ErrorIs(t, client.Call(closedCtx, "consumer/after-close", nil, nil), codex.ErrInputClosed)
+	final, err := session.Receive(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, final.Event)
+	require.Equal(t, "fixture/final", final.Event.Method)
+	select {
+	case <-session.Done():
+	default:
+		t.Fatal("normal peer EOF did not finish the Session")
+	}
+	_, err = session.Receive(ctx)
+	require.ErrorIs(t, err, io.EOF)
+	require.NoError(t, session.Err())
+	require.NoError(t, session.Close())
+	result, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, result.Execution)
+	require.True(t, result.Execution.Complete)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.False(t, connection.NativeLaunched)
+	require.True(t, connection.CleanupComplete)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
 }

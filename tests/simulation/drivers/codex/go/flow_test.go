@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +19,35 @@ import (
 	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
+
+func TestJoinInputCloseError(t *testing.T) {
+	prior := errors.New("prior failure")
+	closeFailure := errors.New("close failure")
+	for _, tc := range []struct {
+		name     string
+		result   error
+		inputErr error
+		want     []error
+	}{
+		{name: "no error"},
+		{name: "expected sentinel"},
+		{name: "wrapped expected sentinel", inputErr: fmt.Errorf("watch: %w", codex.ErrInputClosed)},
+		{name: "preserves prior result with sentinel", result: prior, inputErr: codex.ErrInputClosed, want: []error{prior}},
+		{name: "joins unexpected failure", inputErr: closeFailure, want: []error{closeFailure}},
+		{name: "joins with prior result", result: prior, inputErr: closeFailure, want: []error{prior, closeFailure}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := joinInputCloseError(tc.result, tc.inputErr)
+			if len(tc.want) == 0 {
+				require.NoError(t, got)
+			}
+			for _, want := range tc.want {
+				require.ErrorIs(t, got, want)
+			}
+			require.NotErrorIs(t, got, codex.ErrInputClosed)
+		})
+	}
+}
 
 func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 	for _, decision := range []string{"accept", "decline"} {
@@ -53,15 +84,7 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 			t.Cleanup(func() { verifySDKSession(t, peerSession, "passed") })
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			executable, args, err := peerSession.Command("main")
-			require.NoError(t, err)
-			if decision == "accept" {
-				require.NoError(t, AcceptFlow(ctx, executable, args, source, codex.ChildDetailPreserve, io.Discard))
-			} else {
-				launcher, err := peerSession.Launcher("main")
-				require.NoError(t, err)
-				require.NoError(t, AcceptFlow(ctx, launcher, nil, source, codex.ChildDetailPreserve, io.Discard))
-			}
+			require.NoError(t, AcceptFlow(ctx, peerSession, source, codex.ChildDetailPreserve, io.Discard))
 		})
 	}
 }
@@ -89,4 +112,29 @@ func verifySDKSession(t *testing.T, session *mocktest.Session, want string) {
 	require.NoError(t, err)
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
+}
+
+func TestBusinessFailureClosesStreamsBeforeJoiningReceiver(t *testing.T) {
+	frames := rootPrefix(t)
+	addRoot(&frames, "c2s", `{"id":103,"method":"unsupported/operation","params":{}}`)
+	addRoot(&frames, "s2c", `{"id":103,"result":{}}`)
+	var capture bytes.Buffer
+	for i, f := range frames {
+		require.NoError(t, json.NewEncoder(&capture).Encode(map[string]any{"ordinal": i + 1, "direction": f.Direction, "channel": "protocol", "epoch": 1, "elapsedMs": 0, "wire": f.Wire}))
+	}
+	source := filepath.Join(t.TempDir(), "raw.jsonl")
+	require.NoError(t, os.WriteFile(source, capture.Bytes(), 0o600))
+	mock, err := mocktest.Prepare(t.TempDir(), "codex", capture.Bytes(), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, mock.Close()) })
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	started := time.Now()
+	err = AcceptFlow(ctx, mock, source, codex.ChildDetailPreserve, io.Discard)
+	require.ErrorContains(t, err, "unsupported recorded operation")
+	require.Less(t, time.Since(started), 2*time.Second)
+	require.NoError(t, ctx.Err())
+	report, err := mock.Report()
+	require.NoError(t, err)
+	require.Equal(t, "failed", report.Status)
 }

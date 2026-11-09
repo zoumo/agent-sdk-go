@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -63,22 +61,4 @@ func validateSyntheticMCPConfig(raw string) error {
 		}
 	}
 	return nil
-}
-
-func mcpFilterLauncher(root, launcher string) (string, error) {
-	executable, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(root, "launcher-mcp")
-	script := "#!/bin/sh\nexec " + quoteLauncher(executable) +
-		" --filter-mcp " + quoteLauncher(launcher) + " \"$@\"\n"
-	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-func quoteLauncher(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

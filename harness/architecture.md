@@ -62,37 +62,38 @@ Both native SDKs use the same separation of responsibilities:
 | `tests/simulation/simulate/` | SDK-owned simulate, coverage, independent policy hosts, cancellation and authenticated loopback bridge |
 | `tests/simulation/drivers/` | Go simulation process entry and driver documentation |
 | `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |
-| `codex/tests/replay`, `claude/tests/replay` | Synthetic fixture decoding/process adapters and SDK integration tests; SDK exercise helpers remain test-only; protocol matching belongs to agent-sdk-testify |
-| `internal/mocktest` | Shared standard-library test process bridge, without native matching or SDK imports |
+| `codex/tests/replay`, `claude/tests/replay` | Synthetic fixture decoding and in-process stream adapters with SDK integration tests; SDK exercise helpers remain test-only; protocol matching belongs to the pinned testify library |
+| `internal/mocktest` | Shared test-only bridge to the pinned testify library, without native matching or SDK imports |
 | `codex/tests/testdata/integration`, `claude/tests/testdata/integration` | Explicitly synthetic protocol inputs owned by code integration tests |
 | `codex/tests/e2e`, `claude/tests/e2e` | Explicitly enabled real CLI/agent checks; scope and evidence are documented separately from offline tests |
 | Each native `examples` | Genuine SDK usage and offline usage demonstrations |
-| Each native `*_test.go` | Public API checks and SDK integration against mock CLI processes |
+| Each native `*_test.go` | Public API checks and SDK integration against in-process mock streams |
 | `agent/*_test.go` | Public contract compile, validation, JSON and dependency checks |
 | `tests/integration` | Shared code integration suite, native test adapters and synthetic protocol peers |
 
-SDK integration tests use the external `agent-sdk-testify prepare`, `agent mock`
-and `export` process interface. Sessions are caller-owned: tests read the
-execution index and result notices, then remove the session directory after all
-clients and peers exit.
-`internal/mocktest` authors manifest-bound synthetic captures from SDK-owned fixtures;
-it contains no protocol matcher. Simulation validates the prepared session
-descriptor, launches only its declared mock route, exports the complete material
-outside the session and validates the exported inventory, plans, native streams,
-reports and history bindings. It never traverses tool recording directories or
-calls runtime list/describe.
+SDK test and simulation hosts link the exact `agent-sdk-testify` Go module. Tests
+prepare a caller-owned fixture, start every declared connection with directional
+in-process streams, and read the typed execution report before removing the
+fixture directory. The exact version, checksum and test-only boundary are fixed
+by [Go library mode](modules/agent-sdk-testify/library-mode.md).
+`internal/mocktest` authors manifest-bound synthetic captures from SDK-owned
+fixtures, creates the SDK-side streams and exposes typed evidence; it contains
+no protocol matcher and imports neither native SDK. Simulation validates the
+prepared schema-5 identity and route, exports the complete material outside the
+fixture and validates the exported inventory, plans, native streams, reports and
+history bindings. It never traverses the library's private storage.
 SDK assertion projections are INTERNAL SDK data derived from the public export;
 immutable source bytes, projected agent-mock frames and live runtime paths remain
-separate. The external binary never imports or launches the SDK driver. Tool
-sources, official drivers, recordings and scenarios are not copied into this
-repository: the independently built binary is the only execution dependency,
-with no source or real-Agent fallback.
+separate. The linked library owns protocol matching, native preparation, history
+materialization and typed reports. Library sources, official drivers, recordings
+and scenarios are not copied into this repository. The SDK never installs,
+locates, launches or falls back to a separate testify program.
 
-The SDK runner always requires an explicit absolute prebuilt `AGENT_SDK_TESTIFY_BIN`;
-it never builds the tool, searches `PATH`, or falls back to an Agent. The external
-tool owns protocol matching, native preparation, history materialization and
-receipts. Session and export schemas are versioned process contracts, not a library
-or permission to traverse the tool's private storage layout.
+The SDK runner imports the exact pinned module. It does not build another tool,
+search `PATH` or fall back to an Agent. Prepared and exported schemas are public
+library contracts; they do not grant permission to traverse private library
+storage.
+
 Do not add `cmd`, `pkg` or forwarding layers. Module responsibilities and dependency
 gates follow the module boundaries above.
 
@@ -100,25 +101,27 @@ Each native `tests/testdata/embed.go` is a small standard-library-only fixture
 container because `go:embed` cannot read a parent directory. Embedded paths
 resolve within the container, independently of the caller’s working directory.
 SDK tests and offline examples reuse fixture access; example-local synthetic data
-may remain with its example. The mock tool owns protocol matching; fixture adapters
-only decode data and bridge processes. SDK integration tests assert SDK results;
+may remain with its example. The pinned testify library owns protocol matching;
+fixture adapters only decode data and connect directional streams. SDK
+integration tests assert SDK results;
 simulation operation sequences and business assertions live with the provider driver
 under `tests/simulation/drivers/<agent>/go/`. Test-local SDK policies belong in `*_test.go`, not
 exported runtime helper packages. Pure protocol matching matrices live with the
-external tool, without duplicate copies in SDK test adapters.
+pinned testify library, without duplicate copies in SDK test adapters.
 
 Move data rather than copying it. Update imports, embeds, scripts, examples, CI
-and documentation links whenever paths change. The external tool's inventories
-retain direct asset references and evidence limits, and link back to these layout rules.
+and documentation links whenever paths change. The library's inventories retain
+direct asset references and evidence limits, and link back to these layout rules.
 
 <a id="layout-simulation-data-and-integration-fixtures"></a>
 
 ### Simulation data and integration fixtures
 
 Simulation outputs are persistent SDK-owned evidence outside immutable recordings.
-The external tool owns reviewed material/index maintenance and publishes the full
-material set through prepare/export. This repository retains no recording, scenario
-or official-driver snapshot and never reads a tool material directory directly.
+The pinned testify library owns reviewed material/index maintenance and publishes
+the full material set through prepare/export. This repository retains no
+recording, scenario or official-driver snapshot and never reads a library
+material directory directly.
 Source identity, observed versions, raw hashes, sanitization and publication
 review follow the [recording data contract](modules/agent-sdk-testify/design.md#story-数据格式与存储).
 Preserve original bytes and provenance when moving data; synthetic data must never
@@ -129,10 +132,10 @@ code integration tests, with semantic names rather than simulation case identiti
 Test-only peers and fault controls stay in test code, without a separate
 technical-check registry. Story/case scope follows the [case catalog](sdk/validation-cases.md).
 
-external agent-sdk-testify 的通用协议入口读取显式提供的录制或合成输入；内置场景入口
-从随版本发布的合格材料中选择并准备资源。发布资格、环境和下游边界见
-[工具设计](modules/agent-sdk-testify/design.md#内置材料与下游直接使用)。
-工具专项测试不构成已发布的真实录制仿真证据。
+`agent-sdk-testify` 的库入口读取显式提供的录制或合成输入；内置场景入口从随版本
+发布的合格材料中选择并准备资源。发布资格、环境和下游边界见
+[仿真设计](modules/agent-sdk-testify/design.md#内置材料与下游直接使用)。
+合成输入或工具专项测试不构成真实录制仿真证据。
 
 ## 编码约定
 

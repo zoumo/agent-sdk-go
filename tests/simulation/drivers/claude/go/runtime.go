@@ -1,14 +1,13 @@
 package claudesim
 
 import (
-	"bufio"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // Host is the prepared SDK host identity. Empty fields retain the legacy
@@ -60,78 +59,27 @@ func resolveHost(root, project, fixtureProject, config string, prepared Host) (H
 	return Host{Workspace: workspace, Config: runtimeConfig, Env: env}, nil
 }
 
-type executionNotice struct {
-	SchemaVersion   int    `json:"schemaVersion"`
-	Command         string `json:"command"`
-	ConnectionID    string `json:"connectionId"`
-	Execution       string `json:"execution"`
-	ExecutionID     string `json:"executionId"`
-	ExecutionSHA256 string `json:"executionSHA256"`
-}
-
-type executionDescriptor struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	ExecutionID   string            `json:"executionId"`
-	Command       string            `json:"command"`
-	Workspace     string            `json:"workspace"`
-	Config        string            `json:"config"`
-	Env           map[string]string `json:"env"`
-}
-
-// executionHost adopts the launched main execution after Session.Open has
-// created it. History is materialized into that execution, not the pre-launch
-// mock route template.
-func executionHost(root string) (Host, error) {
-	logPath := filepath.Join(root, "result-main.jsonl")
-	file, err := os.Open(logPath)
-	if err != nil {
-		return Host{}, err
+// executionHostFromRun adopts the immutable execution snapshot returned by the
+// public library before protocol I/O. It never reads result files.
+func executionHostFromRun(run *mocktest.Run) (Host, error) {
+	if run == nil || run.Start.ExecutionID == "" || run.Start.ConnectionID == "" {
+		return Host{}, errors.New("main execution start is missing")
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 4096), 1<<20)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return Host{}, err
-		}
-		return Host{}, errors.New("main execution notice is missing")
+	start := run.Start
+	if !filepath.IsAbs(start.Workspace) || !filepath.IsAbs(start.Config) || len(start.Env) == 0 {
+		return Host{}, errors.New("main execution start identity differs")
 	}
-	var notice executionNotice
-	if err := json.Unmarshal(scanner.Bytes(), &notice); err != nil {
-		return Host{}, fmt.Errorf("main execution notice: %w", err)
-	}
-	if notice.SchemaVersion != 1 || notice.Command != "mock" || notice.ConnectionID != "main" ||
-		!filepath.IsAbs(notice.Execution) || notice.ExecutionID == "" || notice.ExecutionSHA256 == "" {
-		return Host{}, errors.New("main execution notice identity differs")
-	}
-	data, err := os.ReadFile(notice.Execution)
-	if err != nil {
-		return Host{}, err
-	}
-	sum := sha256.Sum256(data)
-	if hex.EncodeToString(sum[:]) != notice.ExecutionSHA256 {
-		return Host{}, errors.New("main execution descriptor hash differs")
-	}
-	var descriptor executionDescriptor
-	if err := json.Unmarshal(data, &descriptor); err != nil {
-		return Host{}, fmt.Errorf("main execution descriptor: %w", err)
-	}
-	if descriptor.SchemaVersion != 3 || descriptor.ExecutionID != notice.ExecutionID ||
-		descriptor.Command != "mock" || !filepath.IsAbs(descriptor.Workspace) ||
-		!filepath.IsAbs(descriptor.Config) || len(descriptor.Env) == 0 {
-		return Host{}, errors.New("main execution descriptor identity differs")
-	}
-	for _, path := range []string{descriptor.Workspace, descriptor.Config} {
+	for _, path := range []string{start.Workspace, start.Config} {
 		if info, err := os.Stat(path); err != nil || !info.IsDir() {
 			return Host{}, fmt.Errorf("main execution host path is unavailable: %s", path)
 		}
 	}
-	if descriptor.Env["CLAUDE_CONFIG_DIR"] != descriptor.Config {
+	if start.Env["CLAUDE_CONFIG_DIR"] != start.Config {
 		return Host{}, errors.New("main execution config environment differs")
 	}
-	env := make([]string, 0, len(descriptor.Env))
-	for key, value := range descriptor.Env {
-		env = append(env, key+"="+value)
-	}
-	return Host{Workspace: descriptor.Workspace, Config: descriptor.Config, Env: env}, nil
+	return Host{
+		Workspace: start.Workspace,
+		Config:    start.Config,
+		Env:       environment(start.Env),
+	}, nil
 }

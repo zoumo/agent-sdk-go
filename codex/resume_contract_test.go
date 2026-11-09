@@ -117,6 +117,9 @@ func (p *resumePeer) handle(mode string, m fakeEnvelope, send func(json.RawMessa
 
 func assertMethods(t *testing.T, f fixture, want ...string) []fakeEnvelope {
 	t.Helper()
+	if len(want) > 0 {
+		waitTrace(t, f.trace, want[len(want)-1])
+	}
 	frames := trace(t, f.trace)
 	got := make([]string, len(frames))
 	for i, frame := range frames {

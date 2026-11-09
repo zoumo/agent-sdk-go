@@ -36,6 +36,16 @@
 // answers and, for multi-select questions, string arrays. Multi-select arrays are
 // joined with ", " before the native write; native array answers are not
 // supported.
+// Open and Resume pass the final provider-neutral external MCP list to native
+// Claude stdio or Streamable HTTP configuration. Stdio maps Command, Args, and
+// Env; Streamable HTTP maps URL and Headers. Cwd, EnvHeaders, and
+// BearerTokenEnvVar are rejected as unsupported before process launch rather than
+// being dropped or rewritten. Native SSE, SDK-hosted MCP, and strict config remain
+// available only through the claude package. The unified adapter does not merge
+// ambient configuration: same-name precedence is target-CLI behavior and may vary
+// by version or policy. Enterprise policy may also reject dynamic or strict native
+// MCP configuration. A successful Open or Resume does not prove MCP connectivity,
+// authentication, or tool discovery.
 // Initialization, internal control responses, and positive member or parent
 // relationship confirmations are lifecycle plumbing and produce no unified
 // event. Confirmed source and parent identities remain in the Meta of subsequent

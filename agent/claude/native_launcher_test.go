@@ -2,6 +2,7 @@ package agentclaude_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -16,7 +17,9 @@ import (
 
 const (
 	claudeTestLauncherEnv    = "AGENT_CLAUDE_TEST_NATIVE_LAUNCHER"
+	claudeTestArgvCaptureEnv = "AGENT_CLAUDE_TEST_ARGV_CAPTURE"
 	claudeTestUnsupportedArg = "--disallowedTools="
+	claudeTestUnsupportedMCP = "--mcp-config="
 )
 
 func TestMain(m *testing.M) {
@@ -26,9 +29,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// The external synthetic peer accepts only reviewed native startup arguments.
-// Production still emits --disallowedTools for a real Claude CLI; this test
-// launcher removes only that peer-unsupported declaration before exec.
+// The external synthetic peer accepts only its prepared native startup
+// arguments. Production still emits these declarations for a real Claude CLI;
+// this launcher captures them first, then removes the peer-unsupported values
+// before exec.
 func launchClaudeMockWithoutUnsupportedArgs(
 	t testing.TB,
 	peerSession *mocktest.Session,
@@ -44,9 +48,20 @@ func launchClaudeMockWithoutUnsupportedArgs(
 }
 
 func runClaudeTestLauncher(launcher string, args []string) int {
+	if capture := os.Getenv(claudeTestArgvCaptureEnv); capture != "" {
+		data, err := json.Marshal(args)
+		if err == nil {
+			err = os.WriteFile(capture, data, 0o600)
+		}
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Claude test argv capture: %v\n", err)
+			return 126
+		}
+	}
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
-		if !strings.HasPrefix(arg, claudeTestUnsupportedArg) {
+		if !strings.HasPrefix(arg, claudeTestUnsupportedArg) &&
+			!strings.HasPrefix(arg, claudeTestUnsupportedMCP) {
 			filtered = append(filtered, arg)
 		}
 	}

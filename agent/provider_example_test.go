@@ -264,6 +264,25 @@ func (s *exampleSession) Submit(
 	ctx context.Context,
 	input agent.Input,
 ) (agent.InputReceipt, error) {
+	return s.acceptInput(ctx, input)
+}
+
+func (s *exampleSession) StartOrSteer(
+	ctx context.Context,
+	input agent.Input,
+) (agent.InputReceipt, error) {
+	receipt, err := s.acceptInput(ctx, input)
+	if err != nil {
+		return agent.InputReceipt{}, err
+	}
+	receipt.Result = agent.InputAppliedBestEffort
+	return receipt, nil
+}
+
+func (s *exampleSession) acceptInput(
+	ctx context.Context,
+	input agent.Input,
+) (agent.InputReceipt, error) {
 	if err := input.Validate(); err != nil {
 		return agent.InputReceipt{}, err
 	}
@@ -275,18 +294,6 @@ func (s *exampleSession) Submit(
 		Submission: s.provider + "-submission",
 		Acceptance: agent.Acceptance{Sent: &sent},
 	}, nil
-}
-
-func (s *exampleSession) StartOrSteer(
-	ctx context.Context,
-	input agent.Input,
-) (agent.InputReceipt, error) {
-	receipt, err := s.Submit(ctx, input)
-	if err != nil {
-		return agent.InputReceipt{}, err
-	}
-	receipt.Result = agent.InputAppliedBestEffort
-	return receipt, nil
 }
 
 func (s *exampleSession) Answer(

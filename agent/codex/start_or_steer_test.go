@@ -96,10 +96,39 @@ func TestStartOrSteerReportsNotAppliedForNonSteerableTurn(t *testing.T) {
 	assert.True(t, *receipt.Acceptance.Sent)
 	assert.False(t, *receipt.Acceptance.NativeAccepted)
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
+}
 
-	_, err = session.Submit(ctx, textInput("still blocked"))
-	require.Error(t, err)
-	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
+func TestStartOrSteerReportsNewWorkWhenResponseTurnDiffers(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"first","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`>{"id":94,"method":"turn/start","params":{"input":[{"text":"later","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"turn":{"id":"turn-b","items":[],"status":"inProgress"}}}`,
+		`>{"id":95,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":95,"result":{"status":"unsubscribed"}}`,
+	)
+	session := openStartOrSteerSession(t, ctx, frames...)
+
+	first, err := session.StartOrSteer(ctx, textInput("first"))
+	require.NoError(t, err)
+	require.Equal(t, agent.InputAppliedNewWork, first.Result)
+	require.Equal(t, "turn-a", first.Submission)
+
+	later, err := session.StartOrSteer(ctx, textInput("later"))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedNewWork, later.Result)
+	assert.Equal(t, "turn-b", later.Submission)
+	assert.NotEqual(t, first.Submission, later.Submission)
+	require.NotNil(t, later.Acceptance.Sent)
+	require.NotNil(t, later.Acceptance.NativeAccepted)
+	assert.True(t, *later.Acceptance.Sent)
+	assert.True(t, *later.Acceptance.NativeAccepted)
+	assert.Nil(t, later.Acceptance.NativeRecorded)
 }
 
 func TestStartOrSteerUnknownWriteBlocksLaterInputWithoutRetry(t *testing.T) {
@@ -136,6 +165,55 @@ func TestStartOrSteerUnknownWriteBlocksLaterInputWithoutRetry(t *testing.T) {
 	assert.False(t, *receipt.Acceptance.Sent)
 	assert.Nil(t, receipt.Acceptance.NativeAccepted)
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
+}
+
+func TestStartOrSteerRejectsOverlapWithoutSecondNativeWrite(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"first","type":"text"}],"threadId":"root-a"}}`,
+		`<{"method":"turn/started","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"inProgress","startedAt":1700000000}}}`,
+		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"status":"unsubscribed"}}`,
+	)
+	peerSession := prepareCodexPeerWithFrameDelays(
+		t,
+		"passed",
+		map[int]time.Duration{7: time.Second},
+		frames...,
+	)
+	session := openStartOrSteerSessionWithPeer(t, ctx, peerSession)
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	type firstResult struct {
+		receipt agent.InputReceipt
+		err     error
+	}
+	firstDone := make(chan firstResult, 1)
+	go func() {
+		receipt, err := session.StartOrSteer(ctx, textInput("first"))
+		firstDone <- firstResult{receipt: receipt, err: err}
+	}()
+
+	// The peer emits turn/started before its delayed turn/start response, so
+	// receiving the state event proves the first native write is still in flight.
+	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+	overlap, overlapErr := session.StartOrSteer(ctx, textInput("overlap"))
+	require.NoError(t, overlapErr)
+	require.Equal(t, agent.InputNotApplied, overlap.Result)
+	assert.Empty(t, overlap.Submission)
+	require.NotNil(t, overlap.Acceptance.Sent)
+	assert.False(t, *overlap.Acceptance.Sent)
+
+	first := <-firstDone
+	require.NoError(t, first.err)
+	assert.Equal(t, agent.InputAppliedNewWork, first.receipt.Result)
+	assert.Equal(t, "turn-a", first.receipt.Submission)
 }
 
 func TestStartOrSteerMissingTurnIdentityIsOutcomeUnknown(t *testing.T) {

@@ -58,7 +58,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestThreadStatusChangeExpiresInteractions(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "status"}},
 	})
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestThreadIdleBeforeTurnCompletionPreservesTerminalFact(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestSessionRejectsUnrelatedTurnAfterIdleObservation(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -366,7 +366,7 @@ func TestSessionRejectsStaleMainTurnEvents(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
 	})
 	require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestSessionPreservesChildEvidenceAndLineage(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
-	_, err = session.Submit(ctx, agent.Input{
+	_, err = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "delegate"}},
 	})
 	require.NoError(t, err)

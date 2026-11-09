@@ -132,7 +132,7 @@ func TestStartOrSteerPreservesExistingInterruptTarget(t *testing.T) {
 	cwd := t.TempDir()
 	frames := []string{
 		claudeSessionInitFrame(t, "native-start-existing", cwd),
-		claudeSubmitFrame(t, "first"),
+		claudeStartOrSteerFrame(t, "first"),
 		claudeStateFrame("native-start-existing", "running", "2026-11-09T10:40:00Z"),
 		claudeStartOrSteerFrame(t, "second"),
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"interrupt"}}`,
@@ -149,8 +149,9 @@ func TestStartOrSteerPreservesExistingInterruptTarget(t *testing.T) {
 		frames...,
 	)
 
-	first, err := session.Submit(ctx, claudeTextInput("first"))
+	first, err := session.StartOrSteer(ctx, claudeTextInput("first"))
 	require.NoError(t, err)
+	require.Equal(t, agent.InputAppliedBestEffort, first.Result)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
 
 	second, err := session.StartOrSteer(ctx, claudeTextInput("second"))

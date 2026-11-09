@@ -58,7 +58,7 @@ func TestClosingOneSessionLeavesAnotherHealthyAndRetainsEarlyEvents(t *testing.T
 	assert.Equal(t, agent.EventAgentMessageChunk, early.Type())
 	assert.Equal(t, "early", early.Payload.(agent.MessageChunk).Content[0].(agent.TextBlock).Text)
 
-	_, err = second.Submit(ctx, agent.Input{
+	_, err = second.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{agent.TextBlock{Text: "second"}},
 	})
 	require.NoError(t, err)

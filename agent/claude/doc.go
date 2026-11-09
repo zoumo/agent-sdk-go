@@ -23,13 +23,10 @@
 // Meta. The provider declares text input, permission, and form capabilities;
 // disabling AgentQuestions removes form support and disables the native tool.
 //
-// Tool calls and results preserve the exact native tool_use.name as ToolName,
-// including the complete mcp__... name. A unique nonempty mcp__<server>__<tool>
-// shape yields Provider mcp:<server>; ambiguous or malformed names use mcp.
-// WebSearch is search, Agent and Task are other, and unknown tools are other.
-// Results copy the identity remembered from their call. Claude calls omit tool
-// status and results use only completed or failed. Tool chunks remain {id,
-// content} and may precede the complete call identity.
+// Tool calls and results preserve the exact native tool_use.name, including the
+// complete mcp__... name. Their Claude-specific Provider and Kind mappings,
+// result-copy rule and status projection are defined in
+// harness/modules/unified-agent/design.md. Tool chunks remain {id, content}.
 //
 // Input is one plain text block without annotations. System prompts, additional
 // directories, URL interactions, multi-block input, and native frames or answer

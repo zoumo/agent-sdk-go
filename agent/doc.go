@@ -14,21 +14,21 @@
 // Adapters preserve native order, time, raw evidence, and explicit capability
 // gaps. They do not invent cross-provider equivalence.
 //
-// ToolCallPayload and ToolResultPayload identify a tool with the required
-// (Provider, ToolName) pair and SDK-assigned Kind. Provider accepts exactly
-// "agent", "dynamic", "mcp", and "mcp:<server>"; the empty "mcp:" suffix is
-// invalid, while a nonempty server suffix may contain further colons. Kind is
-// an ACP-derived action category, not a permission decision or proof that tools
-// from different providers behave equivalently. A result copies the identity
-// observed on its call. ToolChunkPayload is deliberately only {id, content}
-// because a chunk can arrive before the complete tool identity.
+// ToolCallPayload and ToolResultPayload carry the required provider-native
+// (ToolName, Provider) identity and SDK-assigned Kind. ToolName and Provider
+// form the identity; Kind is an ACP-derived action category, not a permission
+// decision or proof that tools from different providers behave equivalently. A
+// result copies the provider, tool name and kind observed on its call.
+// ToolChunkPayload is deliberately only {id, content} because a chunk can
+// arrive before the complete tool identity.
 //
-// Tool status remains a provider-specific lifecycle projection. Codex retains
-// its in-progress, completed, failed, declined and unknown values; Claude omits
-// call status and uses completed or failed results. Tool JSON requires kind,
-// toolName and provider and has no scope field. This unreleased schema is
-// intentionally breaking: strict decoding rejects the legacy name member and
-// old arbitrary kind strings, with no compatibility alias.
+// Tool status remains a provider-specific lifecycle projection. Tool call and
+// result JSON requires kind, toolName and provider and has no scope field. This
+// unreleased schema is intentionally breaking: strict decoding rejects the
+// legacy name member and old arbitrary kind strings, with no compatibility
+// alias. The accepted provider forms, kind boundaries, provider mappings and
+// exact validation rules are defined by ToolProvider, ToolKind and the
+// unified-agent design under harness/modules/unified-agent.
 //
 // This package intentionally has no unified history, LoadSession, replay, root
 // client, or multi-session aggregation. Codex and Claude keep their native

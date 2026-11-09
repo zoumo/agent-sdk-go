@@ -86,8 +86,8 @@ _Avoid_: 没有活动、任务已停止（仅存在缺口时）
 
 **Tool identity（工具身份）**:
 由工具提供方和 provider 原生工具名共同确定的身份，公开 JSON 表示为
-`(provider, toolName)`。call 与 result 复制同一身份三元组；它不等同于工具
-动作类别。
+`(provider, toolName)`。call 与 result 复制相同的 `provider`、`toolName` 和
+`kind`；只有前两者组成身份，`kind` 不是身份的一部分。
 _Avoid_: 工具类别、展示标题
 
 **Tool name（工具名）**:

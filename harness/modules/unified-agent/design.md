@@ -895,9 +895,10 @@ MASS 是否持久化。
 命令文本或工具参数推断。`switch_mode` 只用于明确切换 session mode 的工具。
 
 `kind` 按工具本身分类，不解析命令的 `commandActions`、MCP 参数或工具输出。
-call 和 result 各自独立要求完整的 `(provider, toolName, kind)`；核心不从前
-一事件补造缺失身份。adapter 在观察到 call 时保存该三元组，result 复制保存
-值而不重新解析原生输出。adapter 测试必须证明 call/result 的三元组相等。
+call 和 result 各自独立要求完整的 `(provider, toolName)` 身份和 `kind`；核心
+不从前一事件补造缺失字段。adapter 在观察到 call 时保存身份和分类，result
+复制 `provider`、`toolName`、`kind` 而不重新解析原生输出。adapter 测试必须
+证明 call/result 的这三个字段相等；其中只有前两个组成工具身份。
 
 #### 工具分块例外
 
@@ -927,7 +928,7 @@ status。
 
 这是一次有意的 breaking schema 变更：新的统一 Agent JSON 不读取旧 `name`，
 也不提供 schema version 或兼容 shim。统一 Agent 面仍是未发布的候选接口，
-因此不保留双读或自动重写。工具身份、状态和分块也不新增 scope 字段。
+因此不保留双读或自动重写。
 
 #### Codex 映射
 
@@ -964,10 +965,10 @@ Claude 的 `ToolName` 直接使用 `tool_use.name` 原文，不剥离 `mcp__`，
 | `Glob`、`Grep`、`WebSearch` | `search` | `agent` |
 | `WebFetch` | `fetch` | `agent` |
 | `TodoWrite`、`TaskCreate`、`TaskUpdate` | `think` | `agent` |
-| 明确切换 mode 的工具 | `switch_mode` | `agent` |
+| `ExitPlanMode` | `switch_mode` | `agent` |
 | `Agent`、`Task` | `other` | `agent` |
 | MCP `mcp__...` | `other` | 能可靠确定 server 时为 `mcp:<server>`，否则为 `mcp` |
-| 其他未知工具 | `other` | 按来源填写 |
+| 其他未知非 MCP 工具 | `other` | `agent` |
 
 Claude MCP 名称只有去掉 `mcp__` 后恰好存在一个 `__` 分隔符、两侧都非空时，
 才能据名称确定 server；多个 `__`、空 segment 或畸形前缀一律保留完整

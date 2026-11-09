@@ -25,6 +25,17 @@ type unifiedToolItem struct {
 	meta         map[string]any
 }
 
+type toolIdentityKey struct {
+	threadID string
+	itemID   string
+}
+
+type toolIdentity struct {
+	kind     agent.ToolKind
+	toolName string
+	provider agent.ToolProvider
+}
+
 func (s *session) toolCall(
 	received codex.Received,
 	startedAtMs int64,
@@ -59,6 +70,7 @@ func (s *session) toolCall(
 	if err != nil {
 		return nil, err
 	}
+	s.rememberToolIdentity(received.Source.ThreadID, tool)
 	return []agent.Event{event}, nil
 }
 
@@ -73,6 +85,13 @@ func (s *session) toolResult(
 	}
 	if tool.id == "" {
 		return nil, invalidNativeEvent(received.Event.Method)
+	}
+	key := toolIdentityKey{threadID: received.Source.ThreadID, itemID: tool.id}
+	identity, remembered := s.lookupToolIdentity(key)
+	if remembered {
+		tool.kind = identity.kind
+		tool.name = identity.toolName
+		tool.provider = identity.provider
 	}
 	var rawInput *any
 	if tool.rawInput != nil {
@@ -107,7 +126,30 @@ func (s *session) toolResult(
 	if err != nil {
 		return nil, err
 	}
+	if remembered {
+		s.forgetToolIdentity(key)
+	}
 	return []agent.Event{event}, nil
+}
+
+func (s *session) rememberToolIdentity(threadID string, tool unifiedToolItem) {
+	if s.toolIdentities == nil {
+		s.toolIdentities = make(map[toolIdentityKey]toolIdentity)
+	}
+	s.toolIdentities[toolIdentityKey{threadID: threadID, itemID: tool.id}] = toolIdentity{
+		kind:     tool.kind,
+		toolName: tool.name,
+		provider: tool.provider,
+	}
+}
+
+func (s *session) lookupToolIdentity(key toolIdentityKey) (toolIdentity, bool) {
+	identity, present := s.toolIdentities[key]
+	return identity, present
+}
+
+func (s *session) forgetToolIdentity(key toolIdentityKey) {
+	delete(s.toolIdentities, key)
 }
 
 func unifiedCodexTool(item codextypes.ThreadItem) (unifiedToolItem, bool) {
@@ -143,7 +185,7 @@ func commandTool(item *codextypes.CommandExecutionThreadItem) unifiedToolItem {
 	tool := unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindExecute,
-		name:         "command",
+		name:         commandToolName(item),
 		provider:     agent.ToolProviderAgent,
 		title:        item.Command,
 		callStatus:   toolStatus(string(item.Status)),
@@ -164,11 +206,24 @@ func commandTool(item *codextypes.CommandExecutionThreadItem) unifiedToolItem {
 	return tool
 }
 
+func commandToolName(item *codextypes.CommandExecutionThreadItem) string {
+	source, present := item.Source.Get()
+	if present {
+		switch source {
+		case codextypes.CommandExecutionSourceUnifiedExecStartup:
+			return "exec_command"
+		case codextypes.CommandExecutionSourceUnifiedExecInteraction:
+			return "write_stdin"
+		}
+	}
+	return "commandExecution"
+}
+
 func fileChangeTool(item *codextypes.FileChangeThreadItem) unifiedToolItem {
 	return unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindEdit,
-		name:         "file_change",
+		name:         "fileChange",
 		provider:     agent.ToolProviderAgent,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
@@ -181,7 +236,7 @@ func functionTool(item *codextypes.FunctionCallOutputThreadItem) unifiedToolItem
 	return unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindOther,
-		name:         qualifiedToolName(item.Namespace, item.Name),
+		name:         flattenedToolName(item.Namespace, item.Name),
 		provider:     agent.ToolProviderDynamic,
 		callStatus:   "in_progress",
 		resultStatus: "completed",
@@ -194,8 +249,8 @@ func mcpTool(item *codextypes.MCPToolCallThreadItem) unifiedToolItem {
 	tool := unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindOther,
-		name:         qualifiedToolName(optionalString(item.Server), item.Tool),
-		provider:     agent.ToolProviderMCP,
+		name:         item.Tool,
+		provider:     mcpToolProvider(item.Server),
 		title:        item.Tool,
 		callStatus:   toolStatus(string(item.Status)),
 		resultStatus: toolStatus(string(item.Status)),
@@ -217,7 +272,7 @@ func dynamicTool(item *codextypes.DynamicToolCallThreadItem) unifiedToolItem {
 	tool := unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindOther,
-		name:         qualifiedToolName(item.Namespace, item.Tool),
+		name:         flattenedToolName(item.Namespace, item.Tool),
 		provider:     agent.ToolProviderDynamic,
 		title:        item.Tool,
 		callStatus:   toolStatus(string(item.Status)),
@@ -276,7 +331,7 @@ func webSearchTool(item *codextypes.WebSearchThreadItem) unifiedToolItem {
 	tool := unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindSearch,
-		name:         "web_search",
+		name:         "webSearch",
 		provider:     agent.ToolProviderAgent,
 		title:        item.Query,
 		callStatus:   "in_progress",
@@ -295,7 +350,7 @@ func imageViewTool(item *codextypes.ImageViewThreadItem) unifiedToolItem {
 	return unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindRead,
-		name:         "image_view",
+		name:         "view_image",
 		provider:     agent.ToolProviderAgent,
 		title:        item.Path,
 		callStatus:   "in_progress",
@@ -332,7 +387,7 @@ func imageGenerationTool(item *codextypes.ImageGenerationThreadItem) unifiedTool
 	tool := unifiedToolItem{
 		id:           item.ID,
 		kind:         agent.ToolKindOther,
-		name:         "image_generation",
+		name:         "imageGeneration",
 		provider:     agent.ToolProviderAgent,
 		title:        title,
 		callStatus:   toolStatus(item.Status),
@@ -350,18 +405,18 @@ func imageGenerationTool(item *codextypes.ImageGenerationThreadItem) unifiedTool
 	return tool
 }
 
-func qualifiedToolName(namespace codextypes.Optional[string], name string) string {
+func flattenedToolName(namespace codextypes.Optional[string], name string) string {
 	if value, present := namespace.Get(); present && value != "" {
-		return value + "." + name
+		return value + name
 	}
 	return name
 }
 
-func optionalString(value string) codextypes.Optional[string] {
-	if value == "" {
-		return codextypes.Optional[string]{}
+func mcpToolProvider(server string) agent.ToolProvider {
+	if server == "" {
+		return agent.ToolProviderMCP
 	}
-	return codextypes.Some(value)
+	return agent.ToolProvider("mcp:" + server)
 }
 
 func optionalFloat(value codextypes.Optional[int64]) *float64 {

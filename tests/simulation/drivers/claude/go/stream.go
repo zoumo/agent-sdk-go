@@ -57,16 +57,13 @@ func mockNativeArgs(args []string) []string {
 func finishStream(session *claude.Session, run *mocktest.Run, inputClosed <-chan error) error {
 	var result error
 	if session != nil {
-		inputErr := session.CloseInput()
-		if errors.Is(inputErr, claude.ErrInputClosed) {
-			inputErr = nil
-		}
-		result = errors.Join(result, inputErr, session.Close())
+		result = joinInputCloseError(result, session.CloseInput())
+		result = errors.Join(result, session.Close())
 	}
 	if inputClosed != nil {
 		select {
 		case inputErr := <-inputClosed:
-			result = errors.Join(result, inputErr)
+			result = joinInputCloseError(result, inputErr)
 		case <-time.After(5 * time.Second):
 			result = errors.Join(result, errors.New("mock input close did not finish"))
 		}
@@ -74,6 +71,13 @@ func finishStream(session *claude.Session, run *mocktest.Run, inputClosed <-chan
 	waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return errors.Join(result, run.WaitError(waitCtx))
+}
+
+func joinInputCloseError(result, inputErr error) error {
+	if errors.Is(inputErr, claude.ErrInputClosed) {
+		return result
+	}
+	return errors.Join(result, inputErr)
 }
 
 func environment(values map[string]string) []string {

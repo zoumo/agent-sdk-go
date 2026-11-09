@@ -86,6 +86,80 @@ func TestStreamClientCompletesAfterInputHalfClose(t *testing.T) {
 	require.Equal(t, uint64(1), client.Diagnostics().Notifications)
 }
 
+func TestStreamSessionCloseToleratesCompletedInputHalfClose(t *testing.T) {
+	peer := newStreamPeer()
+	peerReady := make(chan struct{})
+	inputEOF := make(chan struct{})
+	finishPeer := make(chan struct{})
+	peerDone := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(peer.reader)
+		initialize, err := readCodexFrame(reader)
+		if err != nil {
+			peerDone <- err
+			return
+		}
+		if err := writeCodexResponse(peer.writer, initialize["id"]); err != nil {
+			peerDone <- err
+			return
+		}
+		if _, err := readCodexFrame(reader); err != nil {
+			peerDone <- err
+			return
+		}
+		start, err := readCodexFrame(reader)
+		if err != nil {
+			peerDone <- err
+			return
+		}
+		if _, err := io.WriteString(peer.writer, `{"id":`+string(start["id"])+`,"result":`+startResult+`}`+"\n"); err != nil {
+			peerDone <- err
+			return
+		}
+		close(peerReady)
+		if _, err := io.Copy(io.Discard, reader); err != nil {
+			peerDone <- err
+			return
+		}
+		close(inputEOF)
+		<-finishPeer
+		peerDone <- peer.writer.Close()
+	}()
+	peer.wait <- nil
+
+	client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+		Args:       []string{"app-server", "--listen", "stdio://"},
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+	}, peer.transport)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close(); _ = peer.reader.Close(); _ = peer.writer.Close() })
+	session, err := codex.Open(t.Context(), codex.SessionOptions{Client: client})
+	require.NoError(t, err)
+	<-peerReady
+
+	require.NoError(t, client.CloseInput())
+	require.NoError(t, session.Close())
+	select {
+	case <-inputEOF:
+	case <-time.After(5 * time.Second):
+		t.Fatal("fixture did not observe SDK input EOF")
+	}
+	_, err = codex.Open(t.Context(), codex.SessionOptions{
+		Client: client,
+		Resume: &types.ThreadResumeParams{ThreadID: "native-thread-42"},
+	})
+	require.ErrorIs(t, err, codex.ErrOwnershipConflict)
+	close(finishPeer)
+	require.NoError(t, <-peerDone)
+	select {
+	case <-client.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream client did not finish after session cleanup")
+	}
+	require.NoError(t, client.Err())
+	require.NoError(t, client.Close())
+}
+
 func TestStreamClientRejectsUnexpectedPeerEOF(t *testing.T) {
 	peer := newStreamPeer()
 	peerDone := make(chan error, 1)

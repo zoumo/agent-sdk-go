@@ -18,14 +18,16 @@ GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 go test -race -p=1 -count=1 -timeout 300s 
 go vet ./...
 ```
 
-Test and simulation hosts link the pinned in-process testify library; no external
-binary, environment override or launcher is required. `scripts/simulation.sh
-build` builds only SDK runner/driver. The external tool owns official
-driver/package and material checks. Scenario, recording, official-driver and
-Python snapshots do not remain in this repository. Simulation obtains assertion
-inputs from the typed execution report and prepared material. Callers read the
-execution report, then remove the caller-owned session after every SDK client
-and peer exits. The migrated synthetic, single-case and 72-slot gate checks
+Test and simulation hosts link the exact test-only in-process testify module; no
+separate helper process is required. The dependency boundary and pin are fixed
+by [Go library mode](../harness/modules/agent-sdk-testify/library-mode.md).
+`scripts/simulation.sh build` builds only the SDK runner and driver. The library
+owns official driver/package and material checks. Scenario, recording,
+official-driver and Python snapshots do not remain in this repository.
+Simulation obtains assertion inputs from the typed execution report and prepared
+material. Callers read the
+execution report, then remove the caller-owned fixture after every SDK client
+and mock exits. The migrated synthetic, single-case and 72-slot gate checks
 remain in `tests/simulation/simulate`.
 
 The remaining gates check module and native dependency boundaries, the
@@ -35,9 +37,9 @@ reproducible Codex generation, unit/subprocess tests and offline examples. `GOMA
 package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
 `ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
-The external tool owns official driver/package checks. Hosted CI builds only the
-SDK-owned simulation runner and driver and links the pinned testify module; it
-does not build or download a testify executable.
+The pinned testify module owns official driver/package checks. Hosted CI builds
+only the SDK-owned simulation runner and driver and links that module; it does
+not build or download a separate testify artifact.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -143,7 +145,7 @@ Go SDK simulation flow implementations and their regression tests live in
 owns the driver entry and delivery checks. Native `tests/replay` packages retain
 SDK integration tests and synthetic fixture adapters over in-process streams. Pure
 protocol matching and official verification belong to the
-[external tool](https://github.com/zoumo/agent-sdk-testify).
+[pinned testify library](https://github.com/zoumo/agent-sdk-testify).
 See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the
 library-backed fixture boundary.
 

@@ -69,6 +69,48 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 			want: "external testify executable environment",
 		},
 		{
+			name: "harness environment variable",
+			file: "harness/modules/agent-sdk-testify/adoption.md",
+			body: "Use AGENT_SDK_TESTIFY_BIN to select the executable.\n",
+			want: "external testify executable environment",
+		},
+		{
+			name: "harness wrapper",
+			file: "harness/modules/agent-sdk-testify/adoption.md",
+			body: "Run scripts/with-agent-sdk-testify.sh before the test.\n",
+			want: "external testify wrapper",
+		},
+		{
+			name: "harness executable launch",
+			file: "harness/modules/agent-sdk-testify/adoption.md",
+			body: "exec agent-sdk-testify mock fixture\n",
+			want: "external testify executable must not be launched",
+		},
+		{
+			name: "documented result descriptor",
+			file: "harness/modules/agent-sdk-testify/design.md",
+			body: "Read the result descriptor before validating the run.\n",
+			want: "retired testify process workflow terms",
+		},
+		{
+			name: "documented progress descriptor",
+			file: "harness/modules/agent-sdk-testify/library-mode.md",
+			body: "The progress descriptor announces completion.\n",
+			want: "retired testify process workflow terms",
+		},
+		{
+			name: "documented process receipt",
+			file: "README.md",
+			body: "Validate the process receipt after exit.\n",
+			want: "retired testify process workflow terms",
+		},
+		{
+			name: "documented launcher",
+			file: "harness/modules/agent-sdk-testify/design.md",
+			body: "Start the launcher before the test.\n",
+			want: "retired testify process workflow terms",
+		},
+		{
 			name: "wrapper script",
 			file: "scripts/run.sh",
 			body: "bash scripts/with-agent-sdk-testify.sh true\n",

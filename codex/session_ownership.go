@@ -183,10 +183,11 @@ func (o *sessionOwnership) close(s *Session) error {
 // resume. Keep references for all confirmed observers separately from main
 // ownership and request authority. All fields are protected by Client.mu.
 type sessionAttachment struct {
-	observers map[*Session]struct{}
-	managed   bool
-	releasing bool
-	uncertain error
+	observers       map[*Session]struct{}
+	managed         bool
+	releasing       bool
+	uncertain       error
+	inputHalfClosed bool
 }
 
 func (o *sessionOwnership) retainLocked(s *Session, id string) bool {
@@ -201,7 +202,7 @@ func (o *sessionOwnership) retainLocked(s *Session, id string) bool {
 		a = &sessionAttachment{observers: make(map[*Session]struct{})}
 		o.attachments[id] = a
 	}
-	if a.releasing || a.uncertain != nil {
+	if a.releasing || a.uncertain != nil || a.inputHalfClosed {
 		return false
 	}
 	a.observers[s] = struct{}{}
@@ -209,8 +210,8 @@ func (o *sessionOwnership) retainLocked(s *Session, id string) bool {
 }
 
 // release removes this observer and releases only physical
-// attachments no remaining Session needs. An uncertain release keeps a fence;
-// neither a new owner nor a new observer can silently reuse that attachment.
+// attachments no remaining Session needs. Failed or impossible release keeps a
+// fence; neither a new owner nor a new observer can silently reuse it.
 func (o *sessionOwnership) release(s *Session) error {
 	c := o.client
 	c.mu.Lock()
@@ -235,6 +236,9 @@ func (o *sessionOwnership) release(s *Session) error {
 			result = errors.Join(result, a.uncertain)
 			continue
 		}
+		if a.inputHalfClosed {
+			continue
+		}
 		if !a.managed || c.cause != nil {
 			delete(o.attachments, id)
 			continue
@@ -244,6 +248,12 @@ func (o *sessionOwnership) release(s *Session) error {
 	}
 	c.mu.Unlock()
 	for _, id := range release {
+		if c.streamMode && c.inputIsClosed() {
+			c.mu.Lock()
+			o.retainInputHalfClosedFenceLocked(id)
+			c.mu.Unlock()
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), c.limits.ShutdownTimeout)
 		r, err := c.unsubscribeThread(ctx, types.ThreadUnsubscribeParams{ThreadID: id})
 		cancel()
@@ -253,19 +263,32 @@ func (o *sessionOwnership) release(s *Session) error {
 		c.mu.Lock()
 		if err == nil || c.cause != nil {
 			delete(o.attachments, id)
+		} else if c.streamMode && errors.Is(err, ErrInputClosed) {
+			o.retainInputHalfClosedFenceLocked(id)
 		} else {
 			a := o.attachments[id]
 			a.releasing = false
 			a.uncertain = err
 		}
 		c.mu.Unlock()
-		result = errors.Join(result, err)
+		if !errors.Is(err, ErrInputClosed) {
+			result = errors.Join(result, err)
+		}
 	}
 	return result
+}
+
+func (o *sessionOwnership) retainInputHalfClosedFenceLocked(id string) {
+	a := o.attachments[id]
+	if a == nil {
+		return
+	}
+	a.releasing = false
+	a.inputHalfClosed = true
 }
 
 // busyLocked covers both active observers and release tombstones.
 func (o *sessionOwnership) busyLocked(id string) bool {
 	a := o.attachments[id]
-	return a != nil && (len(a.observers) != 0 || a.releasing || a.uncertain != nil)
+	return a != nil && (len(a.observers) != 0 || a.releasing || a.uncertain != nil || a.inputHalfClosed)
 }

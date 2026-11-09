@@ -29,8 +29,8 @@
   loopback bridge, and links the exact pinned module through its public in-process
   prepare, start, export and typed-report surfaces.
 - Runs SDK fixture adapters against the pinned in-process mock using versioned
-  synthetic captures and strict matching. The legacy testify CLI/process workflow
-  is removed. No protocol matcher or recording source tree remains in this
+  synthetic captures and strict matching. The default gates link only the
+  test-only module; no protocol matcher or recording source tree remains in this
   repository.
 - Requires Go 1.26 or newer, uses the root Makefile for formatting and linting,
   and checks Linux/macOS offline contracts, race, vet, schemas/inventories,

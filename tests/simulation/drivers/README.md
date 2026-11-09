@@ -5,7 +5,7 @@
 `codex/go` and `claude/go` own public SDK operations and business assertions.
 `../simulate` owns process orchestration, independent policy hosts, coverage,
 cancellation and authenticated loopback remote main/probe forwarding.
-The [external tool](https://github.com/zoumo/agent-sdk-testify) owns record/verify,
+The [pinned testify library](https://github.com/zoumo/agent-sdk-testify) owns record/verify,
 official drivers, case/binding contracts, recordings, matching, preparation and
 export. SDK code links the exact pinned module and consumes only its public
 prepare/open/session, execution-start and typed execution-report surfaces. It
@@ -14,6 +14,11 @@ Embedded identity records the module revision and sum, while material identity
 records the immutable builtin source revision separately. This repository does
 not build tool sources or read legacy recordings, scenarios, official-driver
 code or Python packaging as a fallback.
+
+The accepted test-only pin and checksum are maintained in
+[Go library mode](../../../harness/modules/agent-sdk-testify/library-mode.md).
+The SDK-owned fixture coordinator owns preparation and cleanup; the SDK host
+owns its streams, public operations and business assertions.
 
 <a id="fixtures-仿真录制与测试输入"></a>
 <a id="stage-handoff"></a>
@@ -29,15 +34,15 @@ bash scripts/simulation.sh simulate --recording /absolute/external-capture --out
 bash scripts/simulation.sh gate --jobs 2
 ```
 
-Use Go 1.26 or newer. Test and simulation hosts link the pinned in-process
-testify library; no external binary or environment override is required. Build
-never creates the tool or a wheel.
+Use Go 1.26 or newer. Test and simulation hosts link the exact in-process
+testify module; no separate helper process is required. Build creates only the
+SDK host and simulation runner.
 
 ### 审核采用和日常门禁
 
 Prepare is the only material source entry. SDK validates the schemaVersion 5
-session descriptor, embedded identity, source and in-process mock route. Export
-into a new directory outside the session is the only assertion-input source: SDK
+fixture identity, embedded identity, source and in-process mock route. Export
+into a new directory outside the fixture is the only assertion-input source: SDK
 validates the export inventory, plan/source-plan, native frames, report and
 manifest-bound saved history before projection.
 
@@ -53,11 +58,12 @@ config and workspace of the actual execution, resolved from the typed execution
 start rather than the pre-launch template.
 
 Prepare twice for policy comparison. Export every successful prepare, read its
-execution evidence, and remove the caller-owned session after failures or
+execution evidence, and remove the caller-owned fixture after failures or
 cancellation. summary.json keeps business results separate from
-protocol/evidence/bridge failures. Typed execution reports bind the session,
-execution, connection and material hashes; SDK validation must bind exactly the
-one execution that used that export even if SDK projection files disappear.
+protocol/evidence/bridge failures. Typed execution reports bind the prepared
+fixture, execution, connection and material hashes; SDK validation must bind
+exactly the one execution that used that export even if SDK projection files
+disappear.
 Source capture paths are opaque to assertions; external captures are passed only
 to library prepare/export operations.
 

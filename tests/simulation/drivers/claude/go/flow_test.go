@@ -3,6 +3,7 @@ package claudesim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,35 @@ import (
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
+
+func TestJoinInputCloseError(t *testing.T) {
+	prior := errors.New("prior failure")
+	closeFailure := errors.New("close failure")
+	for _, tc := range []struct {
+		name     string
+		result   error
+		inputErr error
+		want     []error
+	}{
+		{name: "no error"},
+		{name: "expected sentinel"},
+		{name: "wrapped expected sentinel", inputErr: fmt.Errorf("watch: %w", claude.ErrInputClosed)},
+		{name: "preserves prior result with sentinel", result: prior, inputErr: claude.ErrInputClosed, want: []error{prior}},
+		{name: "joins unexpected failure", inputErr: closeFailure, want: []error{closeFailure}},
+		{name: "joins with prior result", result: prior, inputErr: closeFailure, want: []error{prior, closeFailure}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := joinInputCloseError(tc.result, tc.inputErr)
+			if len(tc.want) == 0 {
+				require.NoError(t, got)
+			}
+			for _, want := range tc.want {
+				require.ErrorIs(t, got, want)
+			}
+			require.NotErrorIs(t, got, claude.ErrInputClosed)
+		})
+	}
+}
 
 func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
 	runRecordedContinuation(t, false)

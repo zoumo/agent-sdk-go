@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
@@ -223,8 +222,10 @@ func replayClient(t *testing.T, ctx context.Context, frames []Frame, handshakes 
 	return client
 }
 
-type readerOnly struct{ io.Reader }
-type writerOnly struct{ io.Writer }
+type (
+	readerOnly struct{ io.Reader }
+	writerOnly struct{ io.Writer }
+)
 
 func TestSyntheticPeerRejectsUninterruptibleStreams(t *testing.T) {
 	for _, direction := range []string{"input", "output"} {

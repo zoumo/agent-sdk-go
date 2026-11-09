@@ -11,10 +11,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
 )
 
 func TestRemoteRequiresDeclaredMainAndProbe(t *testing.T) {

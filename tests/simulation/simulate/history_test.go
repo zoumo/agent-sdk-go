@@ -108,4 +108,3 @@ func TestClaudeMovedHistoryRetainsMaterialBinding(t *testing.T) {
 	require.Empty(t, evidence.ValidationError)
 	require.NoDirExists(t, filepath.Join(output, "preserve", "session"))
 }
-

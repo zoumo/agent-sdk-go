@@ -19,8 +19,9 @@ type Session interface {
 	// StartOrSteer validates and copies input before writing to the native
 	// protocol. It tries to join acceptable active work, otherwise it starts or
 	// hands the input to native scheduling. It never queues, waits for idle,
-	// persists, or retries. InputNotApplied leaves Submission empty and leaves
-	// the input with the caller.
+	// persists, or retries. An adapter may retain internal attribution state for
+	// accepted input without claiming the provider scheduled it. InputNotApplied
+	// leaves Submission empty and leaves the input with the caller.
 	StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
 
 	// Submit is the transitional strict input operation. It validates and copies
@@ -75,7 +76,8 @@ const (
 	// identity, or no current work was known before the operation.
 	InputAppliedNewWork InputResult = "applied_new_work"
 	// InputAppliedBestEffort means the local write succeeded but the provider did
-	// not prove where or whether the input was scheduled.
+	// not prove where or whether the input was scheduled. An adapter may retain
+	// internal candidate state for attribution without changing this result.
 	InputAppliedBestEffort InputResult = "applied_best_effort"
 	// InputNotApplied means the input was definitely not applied. Submission is
 	// empty; the caller retains the input and controls any retry.

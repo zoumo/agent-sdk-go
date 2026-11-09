@@ -339,8 +339,9 @@ type Session interface {
 - 原生结果未知时返回 `outcome_unknown`，不自动重试。在 adapter 再次取得原生
   工作状态证据前，后续输入返回 `not_applied`，不写原生帧。
 - `Interrupt` 只使用本 Session 已经确认的当前工作，不用最后收到的事件猜目标。
-  Claude 的 best-effort 输入不创建特定当前工作的证明。没有活动工作时返回
-  `no_active_work`，不发出原生中断。
+  Claude 的 best-effort 输入不证明特定当前工作已开始，但 adapter 会把该提交
+  保留为交互归属与中断的候选目标，直到原生 idle 清除；没有候选或已确认工作
+  时返回 `no_active_work`，不发出原生中断。
 - `Close` 停止新操作并使未结算交互失效，不等待外部消费者。已经接纳的事件仍
   可以排空；原生清理结果与业务执行结果分别表达。重复 `Close` 返回同一清理
   结果。
@@ -402,7 +403,8 @@ type InterruptReceipt struct {
   已观察工作与响应身份不同，或此前没有当前工作时，使用
   `InputAppliedNewWork`。
 - `InputAppliedBestEffort` 只证明本地写入完成。Claude 不因写入成功而声称当前
-  turn 或下一 turn 已被原生调度。
+  turn 或下一 turn 已被原生调度；adapter 可以在内部保留该提交作为交互归属与
+  `Interrupt` 的候选目标，该内部事实不改变回执。
 - 取消确认不证明前台执行已经终止。原生结果未知时返回 `outcome_unknown`，
   不自动重试。
 
@@ -419,7 +421,8 @@ type InterruptReceipt struct {
 - Claude 的 `StartOrSteer` 写入原生 user input，使用 `priority="next"` 和
   `shouldQuery=true`，由 CLI 决定并入当前工作还是排入下一轮。写入成功返回
   `applied_best_effort`；adapter 不伪造当前或下一 turn 身份，也不填写无法
-  证明的 `NativeAccepted`。
+  证明的 `NativeAccepted`。内部保留该提交作为交互归属与中断的候选目标，
+  直到原生 idle 清除。
 - 两个 adapter 共用同一组四个结果值，不增加 provider 专属结果。原生 state
   观察、消息 delta 和工作完成仍是输入回执之外的独立事实。
 

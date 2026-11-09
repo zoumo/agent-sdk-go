@@ -52,7 +52,8 @@ StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
   其他原生调用，也不要求调用方提供 `expectedTurnId`。
 - Claude adapter 写入原生 user input，使用 `priority="next"` 和
   `shouldQuery=true`；成功写入只返回 `applied_best_effort`，不伪造当前或下一
-  turn 身份，也不填写无法证明的 `NativeAccepted`。
+  turn 身份，也不填写无法证明的 `NativeAccepted`。adapter 可以在内部保留该
+  提交作为交互归属与中断的候选目标，直到原生 idle 清除；该候选不改变回执。
 - 本地并发写或尚未取得原生状态证据的未知写不再写原生帧，返回 `not_applied`
   和 nil error；原生明确拒绝也返回 `not_applied`，并保留 `Sent=true`、
   `NativeAccepted=false`。

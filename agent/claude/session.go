@@ -271,8 +271,12 @@ func (s *session) StartOrSteer(
 
 	s.mu.Lock()
 	s.submitting = false
-	// A successful write proves only best-effort scheduling. Native state
-	// observations, not this receipt, establish active work.
+	if s.stateVersion == stateVersion || s.state == nil || *s.state != agent.StateIdle {
+		if s.activeSubmit == "" {
+			s.activeSubmit = submissionID
+		}
+		s.workActive = true
+	}
 	s.mu.Unlock()
 
 	sent := true

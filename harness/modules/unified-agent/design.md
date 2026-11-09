@@ -45,7 +45,8 @@ README 和包文档说明。现有原生 Session 的语义以
 4. MASS 的两个 Runtime adapter 变成薄的编排层：调用 SDK Provider/Session，
    把统一事件补齐为 `SessionEvent`，继续实现现有 `RuntimeDriver`。
 5. 原生 `codex`、`claude`、`codex/types` 和 `claude/types` 仍是第一等公开
-   接口。统一层不修改原生会话、原生查询或原生协议字段。
+   接口。统一层不修改原生会话、原生查询或原生协议字段；本设计只为 Claude
+   原生配置增加追加 system prompt 字段，不改变原生协议。
 6. 删除 SDK 中未公开的 history replay 实现、只服务 replay 的测试，以及
    `Event.History` / `HistorySource`。不保留 deprecated 包装，因为该能力没有
    公开启动入口，仓库也未发布稳定兼容面。
@@ -59,6 +60,10 @@ README 和包文档说明。现有原生 Session 的语义以
 9. 统一 MCP 只配置 external stdio 与 Streamable HTTP；Runtime 默认项和 Session
    声明按 name 合成，Session 同名项整体覆盖。统一层不提供 SSE、strict 或
    config mode，也不保证清除 native ambient MCP。
+10. `OpenOptions.AdditionalSystemPrompt` 直接表达追加文本而非替换：Codex 映射到
+    创建/恢复的 `developerInstructions`，Claude 通过新增的
+    `AppendSystemPrompt` 映射到 `--append-system-prompt`。首版不提供运行时
+    热更新，恢复时由调用方重新提供完整文本。
 
 这里的取舍是：把“一个 Agent Session 如何操作和观察”收敛到 SDK，把“MASS
 如何命名、恢复、持久和发布一个 Session”留在 MASS。这样普通使用方只处理一套
@@ -71,7 +76,7 @@ README 和包文档说明。现有原生 Session 的语义以
 | `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、错误值 | provider 无关的单 Session 实时合同 |
 | `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
-| 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包 | 原生协议、查询、原始数据和 provider 语义 |
+| 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Claude 增加 `AppendSystemPrompt` 启动选项 | 原生协议、查询、原始数据和 provider 语义 |
 | MASS Runtime | `RuntimeDriver`、`DriverSession`、`SessionEvent`、`LoadSession` | 资源身份、多 Session 汇聚、恢复、历史导入、持久化和发布 |
 | MASS Service | Session、History、EventStore、Broadcast、SSE、HTTP/CLI | 面向 MASS 使用方的业务合同 |
 
@@ -96,11 +101,14 @@ README 和包文档说明。现有原生 Session 的语义以
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
 - 在 SDK 适配器内部保留原生工作归属、交互句柄和单次回答权限。
 - 透传由上层合成的最终 external MCP 列表，并明确 provider 字段支持差异。
+- 通过 `AdditionalSystemPrompt` 为 `Open`/`Resume` 传递一段可选的追加 system
+  prompt，并明确 provider 映射、安全边界和不持久化语义。
 - 诚实表达能力与功能差异，不在 provider 之间伪造等价。
 
 统一层不负责：
 
-- 修改或替换原生协议、原生 `Received`、原生 Session 或原生 `types`。
+- 修改或替换原生协议、原生 `Received`、原生 Session 或既有原生 `types`
+  字段；Claude 只增加本设计列出的追加 system prompt 启动选项。
 - 统一 Codex 与 Claude 的全部创建参数、模型别名、思考预算和子 Agent 查询。
 - 统一原生历史查询、历史分页、保存记录格式或历史 wire 模型。
 - 将保存历史投影为统一 live 事件、历史完成事件，或可重放、完整的 wire 流。
@@ -110,6 +118,8 @@ README 和包文档说明。现有原生 Session 的语义以
 - 原生事件去重、跨运行复用回答权，或从统一事件重建原生控制句柄。
 - 并列的 `Submit`/`Steer` 操作、显式 Codex `turn/steer`、SDK 输入队列、
   等待空闲、输入持久化和自动重试。
+- 替换原生内置 system prompt、读取 prompt 文件或模板、解析 secret 引用，或在
+  Session 运行中热更新 system prompt。
 - MCP 连接、OAuth、健康检查、tool discovery、tool 调用或
   application-hosted MCP 的 JSON-RPC 实现。
 
@@ -206,11 +216,11 @@ adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
 type OpenOptions struct {
-    Cwd            string
-    SystemPrompt   string
-    AdditionalDirs []string
-    Features       Features
-    MCPServers     []MCPServer
+    Cwd                    string
+    AdditionalSystemPrompt string
+    AdditionalDirs         []string
+    Features               Features
+    MCPServers             []MCPServer
 }
 
 type ResumeOptions struct {
@@ -236,7 +246,8 @@ type EffectiveFeatures struct {
 - 原生 resume 支持排除历史时，adapter 必须显式关闭保存内容的回放；如果原生
   连接仍收到保存记录，adapter 只能把它当作恢复/查询材料，不能生成统一 live
   `Event`、当前工作状态或回答权限。
-- 已知不支持的系统提示、附加目录或其他选项，在原生副作用前明确拒绝。
+- `AdditionalSystemPrompt` 按下述追加合同解释；其他已知不支持或无法解释的
+  字段，在原生副作用前明确拒绝。
 - 请求关闭某项功能必须得到 false；请求开启但 adapter 不支持时，允许降级为
   false，并通过 `Session.EffectiveFeatures()` 返回。
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
@@ -246,6 +257,73 @@ type EffectiveFeatures struct {
 - Provider 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
 - `Open` 和 `Resume` 要求 Provider 已启动；停止成功后不能重新 `Start`，也不能
   继续 `Open` 或 `Resume`。没有未关闭 Session 时，重复 `Stop` 返回成功。
+
+### Additional system prompt
+
+<a id="additional-system-prompt"></a>
+
+`OpenOptions.AdditionalSystemPrompt` 是唯一统一入口，字段名直接表达“追加”而不是
+“替换”。它只接受 inline 文本：空字符串表示本次不请求追加；非空文本表示在
+provider 内置或默认指令之后增加一段调用方指令。统一层不暴露替换内置 prompt 的
+能力，也不保证追加文本相对 provider 动态段落、工具说明或子 Agent 的精确顺序和
+继承关系。
+
+原未发布的 `SystemPrompt` 字段直接改名为 `AdditionalSystemPrompt`，不保留兼容
+别名、deprecated shim 或双重字段。仓库仍处于
+`v0.1.0-rc.1 planned, unreleased`，因此这里不承担已发布 API 的兼容义务。
+
+| 统一输入 | Codex | Claude |
+|---|---|---|
+| 空 `AdditionalSystemPrompt` | 省略 `developerInstructions` | 省略 `--append-system-prompt` |
+| 非空 `AdditionalSystemPrompt` | `thread/start` 与 `thread/resume` 的 `developerInstructions` | `AppendSystemPrompt` 映射为 `--append-system-prompt=<text>` |
+| 替换内置系统提示 | 不提供；不设置 `baseInstructions` | 不提供；不设置 `--system-prompt` |
+
+Claude 原生包在 `claude.Options` 与 `claude/types.Options` 增加
+`AppendSystemPrompt string`，并由 `OptionsFromTypes` 和 `Types()` 原样往返。
+该字段只接受 inline 文本；非空时生成一个 `--append-system-prompt=<text>` argv
+元素，空串省略。使用 `=` 绑定值，避免以 `-` 开头的文本被当成另一个 CLI 选项。
+该选项不经过 shell。统一 `agent/claude` adapter 只把
+`AdditionalSystemPrompt` 填入这个原生字段。
+
+Codex 原生字段已存在：统一 adapter 在非空时填写 `thread/start` 和
+`thread/resume` 的 `developerInstructions`，空串保持省略。不得改用
+`baseInstructions`，因为那是替换而不是追加合同。
+
+首版只支持这段 inline string，不解释文件、路径、数组、模板、动态 boundary 或
+secret 引用。`AGENTS.md`、`CLAUDE.md`、原生 agent 定义、配置文件和 provider
+自有动态指令仍由原生 CLI/SDK 管理，统一层不合并、不读取也不改写。
+
+`Resume` 必须由调用方重新提供完整文本；SDK 不保存上次 `Open`/`Resume` 的
+prompt。空字符串表示本次调用不追加，不应被解释为清除原生会话可能保存的旧
+指令；需要确定的初始指令集时，调用方应新建 Session，或恢复后显式传入完整目标
+文本并接受 provider 原生恢复语义。
+
+校验必须在原生副作用前完成。非空文本必须是合法 UTF-8，且不能包含 NUL
+（U+0000）；换行、Unicode 和其他合法文本原样传递。统一入口在
+`OpenOptions.Validate` 中返回 `invalid_argument`，不能先创建 thread、启动
+Claude 进程或发送原生请求。直接使用原生 `claude.Options` 时，同一文本约束也在
+进程启动前校验。
+
+统一层不把 prompt 当作保密存储。Claude 会把文本放入 CLI argv，Codex 会把
+文本放入 app-server 请求；统一错误、事件和日志不得回显 prompt 内容。调用方
+不得依赖该字段传递密钥或恢复材料。
+
+首版不定义 `Session.SetAdditionalSystemPrompt`、
+`Session.AppendAdditionalSystemPrompt` 或等价的运行时热更新接口：
+
+- Codex 的稳定 `thread/settings/update` 合同没有 `developerInstructions`；
+  `turn/start.collaborationMode.settings.developer_instructions` 是实验性的
+  collaboration mode 配置，会覆盖该模式下的 developer instructions，不是统一
+  层的 live append 合同。
+- Claude 的 `--append-system-prompt` 是进程启动配置；公开控制协议没有可依赖的
+  稳定“修改追加提示”操作，CLI 内部设置命令不能作为公开合同。
+- 要改变 prompt，调用方应结束当前 Session 后重新 `Open`，或重新 `Resume` 并
+  提供完整新选项。不能假定同一 Session 的后续 turn 自动采用新文本。
+
+`AdditionalSystemPrompt` 不增加统一 `Capabilities`、`Features`、`Event`、`Meta`
+或持久化 Session 状态。两个 adapter 首版都必须实现上述映射；如果未来某一
+provider 不能表达该字段，必须在原生副作用前返回 `unsupported`，不能静默忽略或
+伪造已应用。
 
 ### MCP 配置
 
@@ -403,6 +481,8 @@ const (
 - 缺失或 false 都表示调用方不能假定支持。能力存在也不绕过当前 Session 状态。
 - `EffectiveFeatures` 表达本次请求最终是否启用，不能仅从 `Capabilities`
   推断。
+- `AdditionalSystemPrompt` 是 `Open`/`Resume` 输入，不是运行时能力或 feature；
+  它不进入 `Capabilities`，也不能通过 `EffectiveFeatures` 表达。
 - 当前两个 provider 首版只宣告 `textInput`、`permission` 和 `form`；没有
   经 adapter 证明的图片、音频、资源、URL 或其他能力不宣告。
 
@@ -1656,6 +1736,7 @@ provider-specific 查询职责：
 在 `agent/codex` 包装 `codex.Client` 和 `codex.Session`，迁移：
 
 - provider 共享连接与 Session 打开/恢复；
+- `AdditionalSystemPrompt` 到 Codex `developerInstructions` 的创建/恢复追加映射；
 - turn/item 身份和工作归属；
 - 消息、思考、工具、状态、错误和 usage 等事件；
 - command/file change 权限和 Codex user-input form；
@@ -1671,6 +1752,8 @@ provider-specific 查询职责：
 在 `agent/claude` 包装 Claude Session，迁移：
 
 - init 身份确认和恢复身份/cwd 校验；
+- Claude 原生 `AppendSystemPrompt` 及其 `--append-system-prompt` argv 映射；
+- `AdditionalSystemPrompt` 到原生 `AppendSystemPrompt` 的创建/恢复映射；
 - text/thinking 的 message、block 和 linkage 身份；
 - work attribution、工具调用/结果和状态；
 - permission 和 AskUserQuestion form；
@@ -1778,12 +1861,18 @@ block/message linkage 和无法归属的交互行为保持不变。
   Meta 不被改写。
 - SDK 内部 history replay 投影已删除；原生历史查询、`Event.IsReplay`、
   `ThreadResumeParams.History`、录制回放和 simulation replay 仍可用。
-- 原生 `codex`、`claude` 及其 `types` 的公开接口和默认测试不因统一层变化。
+- 除 Claude 原生 `AppendSystemPrompt` 的增量字段外，原生 `codex`、`claude`
+  及其 `types` 的公开接口和默认测试不因统一层变化；该字段由
+  `OptionsFromTypes`/`Types()` 往返，并由进程启动测试固定 argv。
 - 统一层只存在 stdio 和 Streamable HTTP MCP；没有 SSE transport 或
   `MCPConfigMode`。Runtime 默认项与 Session 同名项由上层合成，Session 项整体
   覆盖，且 Provider 不再二次合并。
 - MCP synthetic 测试固定 Codex thread config 与 Claude argv 的精确映射；无法
   表达的字段在原生副作用前失败，secret sentinel 不出现在错误、事件或日志。
+- Additional system prompt synthetic 测试固定空值省略、Unicode/换行原样传递、
+  Codex `thread/start` 与 `thread/resume` JSON、Claude
+  `--append-system-prompt=` argv、`Resume` 重新提供完整文本，以及非法
+  UTF-8/NUL 在原生副作用前失败；prompt sentinel 不出现在错误、事件或日志。
 - 默认验证保持离线，不使用真实 Agent 或新增录制作为完成证据。
 
 ## 合同影响
@@ -1798,5 +1887,11 @@ block/message linkage 和无法归属的交互行为保持不变。
   统一层不成为第二个 MASS 公开协议。
 - 统一层不暴露 Claude strict 或旧式 SSE；这两个原生能力继续由 `claude` 包
   提供。Runtime 同名覆盖只作用于调用方拥有的最终列表，不清空 native ambient。
+- Additional system prompt 是创建/恢复选项，不是 Session 持久状态或统一事件；
+  SDK 不提供 Session 内热更新，也不承诺跨 provider 精确一致的追加位置或子
+  Agent 继承。`SystemPrompt` 不保留兼容别名；调用方必须显式迁移到
+  `AdditionalSystemPrompt`。
+- Claude 原生包新增的 `AppendSystemPrompt` 是增量启动配置，不改变原生 wire
+  协议或替换内置 system prompt 的能力。
 - README 和包文档说明统一层的使用边界与离线示例；MASS 接入、发布和真实
   Agent 验证须分别记录，不从该合同推定完成。

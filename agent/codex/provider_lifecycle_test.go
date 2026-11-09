@@ -177,8 +177,12 @@ func newTestProviderWithInitialize(
 		context.WithoutCancel(t.Context()),
 		30*time.Second,
 	)
-	run, err := peerSession.NewRun(runCtx, mocktest.RunOptions{})
+	// This is an embedded synthetic fixture, not a native agent process.
+	args := []string{"app-server", "--listen", "stdio://"}
+	run, err := peerSession.NewRun(runCtx, mocktest.RunOptions{NativeArgs: args})
 	require.NoError(t, err)
+	require.Equal(t, args, run.Start.NativeArgs)
+	var completion <-chan error
 	provider := agentcodex.NewWithStream(agentcodex.Config{Stdio: codex.StdioOptions{
 		Args:       run.Start.NativeArgs,
 		Env:        run.Environment(),
@@ -190,13 +194,26 @@ func newTestProviderWithInitialize(
 		Stderr: run.Stderr,
 		Wait:   run.WaitError,
 	}, func(client *codex.Client) {
-		run.CloseInputWhenComplete(client.CloseInput)
+		completion = run.CloseInputWhenComplete(client.CloseInput)
 	})
 	t.Cleanup(func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = provider.Stop(stopCtx)
 		_ = run.CloseSDK()
+		waitCtx, stopWait := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopWait()
+		_, _ = run.Wait(waitCtx)
+		if completion != nil {
+			select {
+			case err := <-completion:
+				if err != nil {
+					assert.ErrorIs(t, err, codex.ErrInputClosed, "provider Stop may close input before the watcher")
+				}
+			case <-waitCtx.Done():
+				t.Error("input completion watcher did not finish")
+			}
+		}
 		cancelRun()
 	})
 	return provider

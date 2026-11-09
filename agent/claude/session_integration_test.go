@@ -249,6 +249,7 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-disconnect","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"disconnect"}}`,
 		"!",
 	)
 	peerSession := prepareClaudePeer(t, "failed", frames...)
@@ -260,6 +261,9 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.NoError(t, err)
 
+	// Hold the scripted disconnect until Open has returned; otherwise an early
+	// transport failure can legitimately win the initialization race.
+	_, _ = session.Submit(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "disconnect"}}})
 	select {
 	case <-session.Done():
 	case <-ctx.Done():

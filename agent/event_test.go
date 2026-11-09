@@ -57,7 +57,9 @@ func TestEventTypeIsDerivedFromEveryPayloadBranch(t *testing.T) {
 			itemID: "tool-1",
 			payload: agent.ToolCallPayload{
 				ID:       "tool-1",
-				Kind:     "command",
+				Kind:     agent.ToolKindExecute,
+				ToolName: "exec_command",
+				Provider: agent.ToolProviderAgent,
 				Status:   "in_progress",
 				RawInput: map[string]any{"command": "go test"},
 			},
@@ -68,7 +70,9 @@ func TestEventTypeIsDerivedFromEveryPayloadBranch(t *testing.T) {
 			itemID: "tool-1",
 			payload: agent.ToolResultPayload{
 				ID:        "tool-1",
-				Kind:      "command",
+				Kind:      agent.ToolKindExecute,
+				ToolName:  "exec_command",
+				Provider:  agent.ToolProviderAgent,
 				Status:    "completed",
 				RawOutput: ptr[any]("ok"),
 			},
@@ -240,7 +244,9 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 		{
 			name: "tool call without identity",
 			event: validEvent("tool-1", agent.ToolCallPayload{
-				Kind:     "command",
+				Kind:     agent.ToolKindExecute,
+				ToolName: "exec_command",
+				Provider: agent.ToolProviderAgent,
 				RawInput: map[string]any{},
 			}),
 		},
@@ -248,7 +254,9 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			name: "tool result without status",
 			event: validEvent("tool-1", agent.ToolResultPayload{
 				ID:       "tool-1",
-				Kind:     "command",
+				Kind:     agent.ToolKindExecute,
+				ToolName: "exec_command",
+				Provider: agent.ToolProviderAgent,
 				RawInput: ptr[any](map[string]any{}),
 			}),
 		},
@@ -256,7 +264,9 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			name: "tool call with unsupported status",
 			event: validEvent("tool-1", agent.ToolCallPayload{
 				ID:       "tool-1",
-				Kind:     "command",
+				Kind:     agent.ToolKindExecute,
+				ToolName: "exec_command",
+				Provider: agent.ToolProviderAgent,
 				RawInput: map[string]any{},
 				Status:   "running",
 			}),
@@ -265,7 +275,9 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			name: "tool call with NaN duration",
 			event: validEvent("tool-1", agent.ToolCallPayload{
 				ID:         "tool-1",
-				Kind:       "command",
+				Kind:       agent.ToolKindExecute,
+				ToolName:   "exec_command",
+				Provider:   agent.ToolProviderAgent,
 				RawInput:   map[string]any{},
 				DurationMs: &nanDuration,
 			}),
@@ -274,7 +286,9 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			name: "tool call with infinite duration",
 			event: validEvent("tool-1", agent.ToolCallPayload{
 				ID:         "tool-1",
-				Kind:       "command",
+				Kind:       agent.ToolKindExecute,
+				ToolName:   "exec_command",
+				Provider:   agent.ToolProviderAgent,
 				RawInput:   map[string]any{},
 				DurationMs: &infDuration,
 			}),
@@ -395,7 +409,13 @@ func TestEventJSONRejectsUnknownOrMismatchedPayloadType(t *testing.T) {
 				"time":"2026-11-07T09:00:00Z",
 				"itemId":"item-1",
 				"type":"agent.message",
-				"payload":{"id":"tool-1","kind":"command","rawInput":{}}
+				"payload":{
+					"id":"tool-1",
+					"kind":"execute",
+					"toolName":"exec_command",
+					"provider":"agent",
+					"rawInput":{}
+				}
 			}`,
 		},
 	}
@@ -449,7 +469,7 @@ func TestEventJSONRejectsMissingOrNullRequiredPayloadFields(t *testing.T) {
 			name:      "tool call missing raw input",
 			eventType: agent.EventAgentToolCall,
 			itemID:    "tool-1",
-			payload:   `{"id":"tool-1","kind":"command"}`,
+			payload:   `{"id":"tool-1","kind":"execute","toolName":"exec_command","provider":"agent"}`,
 		},
 	}
 
@@ -487,7 +507,13 @@ func TestEventJSONAllowsExplicitNullRequiredDynamicMembers(t *testing.T) {
 			name:      "tool call null raw input",
 			eventType: agent.EventAgentToolCall,
 			itemID:    "tool-1",
-			payload:   `{"id":"tool-1","kind":"command","rawInput":null}`,
+			payload: `{
+				"id":"tool-1",
+				"kind":"execute",
+				"toolName":"exec_command",
+				"provider":"agent",
+				"rawInput":null
+			}`,
 			check: func(t *testing.T, payload agent.Payload) {
 				call := payload.(agent.ToolCallPayload)
 				assert.Nil(t, call.RawInput)
@@ -519,7 +545,9 @@ func TestToolPayloadJSONPreservesExplicitNullAndEmptyContent(t *testing.T) {
 			name: "tool call",
 			payload: agent.ToolCallPayload{
 				ID:        "tool-1",
-				Kind:      "command",
+				Kind:      agent.ToolKindExecute,
+				ToolName:  "exec_command",
+				Provider:  agent.ToolProviderAgent,
 				RawInput:  nil,
 				RawOutput: &null,
 				Content:   explicitEmpty,
@@ -536,7 +564,9 @@ func TestToolPayloadJSONPreservesExplicitNullAndEmptyContent(t *testing.T) {
 			name: "tool result",
 			payload: agent.ToolResultPayload{
 				ID:        "tool-1",
-				Kind:      "command",
+				Kind:      agent.ToolKindExecute,
+				ToolName:  "exec_command",
+				Provider:  agent.ToolProviderAgent,
 				Status:    "completed",
 				RawInput:  &null,
 				RawOutput: &null,
@@ -605,7 +635,9 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 			itemID: "tool-1",
 			value: agent.ToolCallPayload{
 				ID:       "tool-1",
-				Kind:     "command",
+				Kind:     agent.ToolKindExecute,
+				ToolName: "exec_command",
+				Provider: agent.ToolProviderAgent,
 				RawInput: map[string]any{"command": "go test"},
 				Content:  textContent("running"),
 				Status:   "in_progress",
@@ -616,7 +648,9 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 			itemID: "tool-1",
 			value: agent.ToolResultPayload{
 				ID:        "tool-1",
-				Kind:      "command",
+				Kind:      agent.ToolKindExecute,
+				ToolName:  "exec_command",
+				Provider:  agent.ToolProviderAgent,
 				RawInput:  ptr[any](map[string]any{"command": "go test"}),
 				RawOutput: ptr[any]("ok"),
 				Content:   textContent("done"),
@@ -715,6 +749,190 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 			assert.Equal(t, original.Type(), decoded.Type())
 			assert.Equal(t, original.Payload, decoded.Payload)
 		})
+	}
+}
+
+func TestToolIdentityJSONContract(t *testing.T) {
+	provider := agent.ToolProvider("mcp:filesystem:prod")
+	call := validEvent("tool-1", agent.ToolCallPayload{
+		ID:       "tool-1",
+		Kind:     agent.ToolKindRead,
+		ToolName: "mcp__filesystem__read_file",
+		Provider: provider,
+		RawInput: map[string]any{"path": "a.txt"},
+		Status:   "in_progress",
+	})
+	result := validEvent("tool-1", agent.ToolResultPayload{
+		ID:        "tool-1",
+		Kind:      agent.ToolKindRead,
+		ToolName:  "mcp__filesystem__read_file",
+		Provider:  provider,
+		RawOutput: ptr[any]("contents"),
+		Status:    "completed",
+	})
+
+	for _, event := range []agent.Event{call, result} {
+		encoded, err := json.Marshal(event)
+		require.NoError(t, err)
+
+		var envelope struct {
+			Payload map[string]json.RawMessage `json:"payload"`
+		}
+		require.NoError(t, json.Unmarshal(encoded, &envelope))
+		assert.JSONEq(t, `"read"`, string(envelope.Payload["kind"]))
+		assert.JSONEq(
+			t,
+			`"mcp__filesystem__read_file"`,
+			string(envelope.Payload["toolName"]),
+		)
+		assert.JSONEq(t, `"mcp:filesystem:prod"`, string(envelope.Payload["provider"]))
+		assert.NotContains(t, envelope.Payload, "name")
+
+		var decoded agent.Event
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		assert.Equal(t, event.Payload, decoded.Payload)
+		switch payload := decoded.Payload.(type) {
+		case agent.ToolCallPayload:
+			assert.Equal(t, provider, payload.Provider)
+		case agent.ToolResultPayload:
+			assert.Equal(t, provider, payload.Provider)
+		default:
+			t.Fatalf("unexpected payload type %T", decoded.Payload)
+		}
+	}
+
+	chunk := validEvent("tool-1", agent.ToolChunkPayload{
+		ID:      "tool-1",
+		Content: textContent(`{"path"`),
+	})
+	encoded, err := json.Marshal(chunk)
+	require.NoError(t, err)
+	var envelope struct {
+		Payload map[string]json.RawMessage `json:"payload"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &envelope))
+	require.Len(t, envelope.Payload, 2)
+	assert.Contains(t, envelope.Payload, "id")
+	assert.Contains(t, envelope.Payload, "content")
+
+	var decodedChunk agent.Event
+	err = json.Unmarshal(eventJSONForPayload(
+		t,
+		agent.EventAgentToolCallChunk,
+		"tool-1",
+		`{
+			"id":"tool-1",
+			"content":[{"type":"text","text":"chunk"}],
+			"kind":"read",
+			"toolName":"Read",
+			"provider":"agent"
+		}`,
+	), &decodedChunk)
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+}
+
+func TestEventJSONRejectsInvalidToolIdentity(t *testing.T) {
+	tests := []struct {
+		name   string
+		call   string
+		result string
+	}{
+		{
+			name:   "missing tool name",
+			call:   `{"id":"tool-1","kind":"read","provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "null tool name",
+			call:   `{"id":"tool-1","kind":"read","toolName":null,"provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":null,"provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "empty tool name",
+			call:   `{"id":"tool-1","kind":"read","toolName":"","provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"","provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "missing provider",
+			call:   `{"id":"tool-1","kind":"read","toolName":"Read","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"Read","status":"completed"}`,
+		},
+		{
+			name:   "null provider",
+			call:   `{"id":"tool-1","kind":"read","toolName":"Read","provider":null,"rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"Read","provider":null,"status":"completed"}`,
+		},
+		{
+			name:   "empty provider",
+			call:   `{"id":"tool-1","kind":"read","toolName":"Read","provider":"","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"Read","provider":"","status":"completed"}`,
+		},
+		{
+			name:   "empty MCP server",
+			call:   `{"id":"tool-1","kind":"read","toolName":"Read","provider":"mcp:","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"Read","provider":"mcp:","status":"completed"}`,
+		},
+		{
+			name:   "unknown provider",
+			call:   `{"id":"tool-1","kind":"read","toolName":"Read","provider":"plugin","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"Read","provider":"plugin","status":"completed"}`,
+		},
+		{
+			name:   "missing kind",
+			call:   `{"id":"tool-1","toolName":"Read","provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","toolName":"Read","provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "null kind",
+			call:   `{"id":"tool-1","kind":null,"toolName":"Read","provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","kind":null,"toolName":"Read","provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "empty kind",
+			call:   `{"id":"tool-1","kind":"","toolName":"Read","provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"","toolName":"Read","provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "unknown kind",
+			call:   `{"id":"tool-1","kind":"command","toolName":"Read","provider":"agent","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"command","toolName":"Read","provider":"agent","status":"completed"}`,
+		},
+		{
+			name:   "legacy name member",
+			call:   `{"id":"tool-1","kind":"read","toolName":"Read","provider":"agent","name":"Read","rawInput":null}`,
+			result: `{"id":"tool-1","kind":"read","toolName":"Read","provider":"agent","name":"Read","status":"completed"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		for _, scenario := range []struct {
+			name      string
+			eventType agent.EventType
+			payload   string
+		}{
+			{
+				name:      "call",
+				eventType: agent.EventAgentToolCall,
+				payload:   tt.call,
+			},
+			{
+				name:      "result",
+				eventType: agent.EventAgentToolResult,
+				payload:   tt.result,
+			},
+		} {
+			t.Run(scenario.name+"/"+tt.name, func(t *testing.T) {
+				var event agent.Event
+				err := json.Unmarshal(
+					eventJSONForPayload(t, scenario.eventType, "tool-1", scenario.payload),
+					&event,
+				)
+
+				require.Error(t, err)
+				assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+			})
+		}
 	}
 }
 

@@ -82,6 +82,41 @@ _Avoid_: 根的直接子级、不属于 Session（仅缺少父级证据时）
 因原生证据、身份归属、可用观察能力或资源边界而无法确认完整覆盖的区间或范围。
 _Avoid_: 没有活动、任务已停止（仅存在缺口时）
 
+### 工具调用
+
+**Tool identity（工具身份）**:
+由工具提供方和 provider 原生工具名共同确定的身份，公开 JSON 表示为
+`(provider, toolName)`。call 与 result 复制相同的 `provider`、`toolName` 和
+`kind`；只有前两者组成身份，`kind` 不是身份的一部分。
+_Avoid_: 工具类别、展示标题
+
+**Tool name（工具名）**:
+provider 能提供的最具体的原生工具标识。它可以是显式模型工具名，也可以是原生
+item type fallback；必须非空，且不承诺跨 provider 相同。
+_Avoid_: 统一 leaf name、工具动作类别
+
+**Tool provider（工具提供方）**:
+工具由 Agent runtime、动态注册机制还是 MCP 提供的分类。合法形式恰好是
+`agent`、`dynamic`、`mcp` 或 `mcp:<server>`；`mcp:` 非法，`<server>` 非空
+且允许继续包含 `:`。已知 MCP server 时把 server 放在 `mcp:<server>` 中，
+不另设 payload server 字段。
+_Avoid_: 事件来源、Session provider
+
+**Tool kind（工具类别）**:
+SDK 按 ACP 词汇附加的跨 Agent 动作分类，用于展示、统计和粗粒度路由提示，不表示
+权限、资源范围或不同 provider 的行为等价。
+_Avoid_: 原生工具名、审批类别
+
+**Tool status（工具状态）**:
+工具 call 或 result 上由 provider 原生生命周期投影得到的状态。它不是工具身份
+或工具类别，SDK 不从状态推断身份，也不统一跨 provider 的成功语义。
+_Avoid_: 工具类别、Session 状态、执行结果
+
+**Tool chunk（工具调用分块）**:
+与某个工具调用 ID 关联的部分原生输入内容。分块只表达 `{id, content}`，不单独
+承载完整工具身份，并可能早于完整 call 出现。
+_Avoid_: 完整工具调用、工具结果
+
 ### 子 Agent 输出
 
 **Agent output settings（Agent 输出设置）**:

@@ -781,10 +781,34 @@ type Truncation struct {
     OmittedBytes  *int64
 }
 
+type ToolKind string
+
+const (
+    ToolKindRead       ToolKind = "read"
+    ToolKindEdit       ToolKind = "edit"
+    ToolKindDelete     ToolKind = "delete"
+    ToolKindMove       ToolKind = "move"
+    ToolKindSearch     ToolKind = "search"
+    ToolKindExecute    ToolKind = "execute"
+    ToolKindThink      ToolKind = "think"
+    ToolKindFetch      ToolKind = "fetch"
+    ToolKindSwitchMode ToolKind = "switch_mode"
+    ToolKindOther      ToolKind = "other"
+)
+
+type ToolProvider string
+
+const (
+    ToolProviderAgent   ToolProvider = "agent"
+    ToolProviderDynamic ToolProvider = "dynamic"
+    ToolProviderMCP     ToolProvider = "mcp"
+)
+
 type ToolCallPayload struct {
     ID                  string
-    Kind                string
-    Name                string
+    Kind                ToolKind
+    ToolName            string
+    Provider            ToolProvider
     Title               string
     Phase               string
     InputRepresentation string
@@ -799,8 +823,9 @@ type ToolCallPayload struct {
 
 type ToolResultPayload struct {
     ID                  string
-    Kind                string
-    Name                string
+    Kind                ToolKind
+    ToolName            string
+    Provider            ToolProvider
     Title               string
     Phase               string
     InputRepresentation string
@@ -915,7 +940,192 @@ MASS 是否持久化。
 
 `*_chunk` 只追加，不是累计快照。adapter 不跨事件拼接完整历史，也不用结束后
 补造完整消息。工具调用和结果共享 `itemId`，但事件身份不同。完整消息与 chunk
-使用相同的 item/message 身份。
+使用相同的 item/message 身份。工具分块不携带完整工具身份，具体例外见
+[工具身份、Provider 与 Kind](#工具身份provider-与-kind)。
+
+### 工具身份、Provider 与 Kind
+
+公开 JSON 的工具身份由 `(provider, toolName)` 组成；`kind` 是 SDK 附加的
+跨 Agent 动作分类，只用于展示、统计和粗粒度路由提示，不参与权限判断，也不
+证明不同 provider 的工具执行行为等价。对应的 Go 字段是 `Provider`、
+`ToolName` 和 `Kind`。
+
+`toolName` 必须非空，表示 provider 最具体的原生工具标识，不是跨 provider
+规范化的 leaf name。选择顺序固定为：
+
+1. provider 原生显式 `tool` 或 `name` 字段；
+2. 可确定的一一对应原生枚举映射；
+3. 原生 item type fallback。
+
+只有第 3 种情况使用 fallback。fallback 必须保留原生大小写和拼写，不能把它
+描述成模型工具名。Claude 的 `mcp__...` 名称原样保留，不从字符串中剥离 server。
+
+`provider` 表示工具提供方，接受且只接受以下四种形式：
+
+| 值 | 语义 |
+|---|---|
+| `agent` | Agent runtime 自带的工具 |
+| `dynamic` | 应用侧或 runtime 动态注册的工具 |
+| `mcp` | 确定是 MCP，但 server 无法可靠确定 |
+| `mcp:<server>` | MCP 且 server 已知 |
+
+`mcp:` 非法；`<server>` 必须非空，并保留 `mcp:` 后的全部内容，允许继续
+包含 `:`，不得截断或重建。`agent`、`dynamic` 和 `mcp` 是完整值，不能带后缀。
+其他 provider 值均非法。新事件必须有非空 `provider`；不增加独立的
+`server`、`tool`、`action` 或 `type` payload 字段。MCP 的结构化 server
+定位放在 `provider`，而 `toolName` 仍保留 provider 原文。
+
+`kind` 使用 ACP 的取值：
+
+| `kind` | 语义 |
+|---|---|
+| `read` | 读取文件或数据 |
+| `edit` | 修改文件或内容 |
+| `delete` | 删除文件或数据 |
+| `move` | 移动或重命名 |
+| `search` | 搜索信息 |
+| `execute` | 运行命令或代码 |
+| `think` | 内部推理或规划 |
+| `fetch` | 获取外部数据 |
+| `switch_mode` | 切换 Session 的 mode 配置 |
+| `other` | 其他或无法分类的工具，作为默认值 |
+
+`kind` 只描述动作，不描述资源范围。当前不把 `read`/`edit` 改成
+`fs.read`/`fs.write`，也不把 `search` 拆成本地检索和网络检索：
+
+| 工具 | `kind` | 资源范围（仅用于说明，不进入 payload） |
+|---|---|---|
+| `Grep`、`Glob` | `search` | 本地 |
+| `WebSearch` | `search` | 网络 |
+| `WebFetch` | `fetch` | 网络 |
+
+`read` 和 `edit` 沿用 ACP 的广义定义：前者表示读取文件或数据，后者表示修改
+文件或内容；`fs.*` 会把这些动作错误地限制为文件系统操作。
+
+`search` 表示搜索信息；本地和网络的区别由 `toolName` 或未来单独的 scope
+维度表达，不改变 `kind`。`fetch` 表示获取已知外部数据，不能和 `search`
+混用。当前没有 scope 字段；如果以后需要做本地/网络权限或路由，再设计独立
+的正交字段。
+
+`delete` 和 `move` 当前没有稳定的 Codex/Claude 工具映射；不得从 patch 内容、
+命令文本或工具参数推断。`switch_mode` 只用于明确切换 session mode 的工具。
+
+`kind` 按工具本身分类，不解析命令的 `commandActions`、MCP 参数或工具输出。
+call 和 result 各自独立要求完整的 `(provider, toolName)` 身份和 `kind`；核心
+不从前一事件补造缺失字段。adapter 在观察到 call 时保存身份和分类，result
+复制 `provider`、`toolName`、`kind` 而不重新解析原生输出。adapter 测试必须
+证明 call/result 的这三个字段相等；其中只有前两个组成工具身份。
+
+#### 工具分块例外
+
+`agent.tool_call_chunk` 是工具事件的身份例外。它的 payload 恰好是
+`ToolChunkPayload{ID, Content}`，JSON 只有 `id` 和 `content`，不携带
+`kind`、`toolName` 或 `provider`。分块可能早于完整 call 身份出现；调用方按
+`id` 关联，不得从部分输入猜测身份。
+
+#### 工具状态边界
+
+工具 `status` 是 provider 原生生命周期的投影，不是工具身份，也不参与
+call/result 身份相等判断。支持的值为 `pending`、`in_progress`、`completed`、
+`failed`、`declined` 和 `unknown`；call 可以省略 status，result 必须有非空
+status。
+
+该枚举不建立跨 provider 的成功语义。Codex 继续使用现有
+`in_progress`/`completed`/`failed`/`declined`/`unknown` 投影；Claude 的 call
+省略 status，result 只使用 `completed`/`failed`。identity 或 kind 的变化不能
+改写 status，status 的变化也不能触发重新分类。
+
+#### JSON schema 与兼容性
+
+`agent.tool_call` 和 `agent.tool_result` 的 JSON payload 都要求 `kind`、
+`toolName` 和 `provider`。严格解码拒绝缺失或 null 的身份字段、空
+`toolName`、未知 kind、非法 provider、`mcp:` 空后缀，以及旧的 `name` 成员。
+旧任意字符串 kind 没有迁移或 alias。
+
+这是一次有意的 breaking schema 变更：新的统一 Agent JSON 不读取旧 `name`，
+也不提供 schema version 或兼容 shim。统一 Agent 面仍是未发布的候选接口，
+因此不保留双读或自动重写。
+
+#### Codex 映射
+
+| Codex item / 条件 | `ToolName` | `Kind` | `Provider` |
+|---|---|---|---|
+| `commandExecution`，`source=unifiedExecStartup` | `exec_command` | `execute` | `agent` |
+| `commandExecution`，`source=unifiedExecInteraction` | `write_stdin` | `execute` | `agent` |
+| `commandExecution`，`source=agent`、`userShell`、缺失或未知 | `commandExecution`（fallback；没有唯一模型工具名） | `execute` | `agent` |
+| `imageView` | `view_image` | `read` | `agent` |
+| `fileChange` | `fileChange`（fallback） | `edit` | `agent` |
+| `webSearch` | `webSearch`（fallback） | `search` | `agent` |
+| `sleep` | `sleep`（fallback） | `other` | `agent` |
+| `imageGeneration` | `imageGeneration`（fallback） | `other` | `agent` |
+| `mcpToolCall` | `item.Tool` | `other` | `mcp:<server>`；server 为空时为 `mcp` |
+| `dynamicToolCall` | `namespace + tool` | `other` | `dynamic` |
+| `functionCallOutput` | `namespace + name` | `other` | `dynamic` |
+| `collabAgentToolCall` | `string(item.Tool)` | `other` | `agent` |
+
+`dynamicToolCall` 和 `functionCallOutput` 的 namespace 与名称直接拼接，不插入
+`.`；namespace 为空时分别使用 `tool` 或 `name`。这是 ACP 的 Codex flatten
+规则，不是 SDK 自造格式。`commandExecution` 的 `source` 是 Codex 原生字段；
+只有 `unifiedExecStartup` 和 `unifiedExecInteraction` 能确定模型工具名。
+
+#### Claude 映射
+
+Claude 的 `ToolName` 直接使用 `tool_use.name` 原文，不剥离 `mcp__`，不重新
+拼接 server 或 leaf。
+
+| Claude 工具 | `Kind` | `Provider` |
+|---|---|---|
+| `Read` | `read` | `agent` |
+| `Edit`、`Write`、`MultiEdit`、`NotebookEdit` | `edit` | `agent` |
+| `Bash` | `execute` | `agent` |
+| `Glob`、`Grep`、`WebSearch` | `search` | `agent` |
+| `WebFetch` | `fetch` | `agent` |
+| `TodoWrite`、`TaskCreate`、`TaskUpdate` | `think` | `agent` |
+| `ExitPlanMode` | `switch_mode` | `agent` |
+| `Agent`、`Task` | `other` | `agent` |
+| MCP `mcp__...` | `other` | 能可靠确定 server 时为 `mcp:<server>`，否则为 `mcp` |
+| 其他未知非 MCP 工具 | `other` | `agent` |
+
+Claude MCP 名称只有去掉 `mcp__` 后恰好存在一个 `__` 分隔符、两侧都非空时，
+才能据名称确定 server；多个 `__`、空 segment 或畸形前缀一律保留完整
+`ToolName` 并使用 `mcp`。如果有权威 server 列表能够确认边界，可以使用
+`mcp:<server>`，但仍不得改写 `ToolName`。plugin/connector server alias 按原生
+token 原样处理。
+
+#### 与 ACP adapter 的差异
+
+这里只对齐 ACP 的 `Kind` 枚举，不照搬 ACP adapter 的分类结果。以下是 SDK
+有意的差异：
+
+- Codex `commandExecution` 固定为 `execute`；ACP 可能根据 `commandActions`
+  分为 `read`、`search` 或 `execute`。
+- Codex `mcpToolCall`、`dynamicToolCall`、`functionCallOutput` 固定为
+  `other`；ACP 的 Codex adapter 使用 `execute`。
+- Claude `WebSearch` 固定为 `search`；ACP 的 Claude adapter 使用 `fetch`。
+- Claude `Agent`、`Task` 固定为 `other`；ACP 的 Claude adapter 使用 `think`。
+
+这样可以保持 SDK 分类由工具身份决定，而不随单次参数或命令内容变化。
+
+Codex shell 示例（`source=unifiedExecStartup`）：
+
+```json
+{
+  "id": "cmd-01",
+  "kind": "execute",
+  "toolName": "exec_command",
+  "provider": "agent",
+  "title": "go test ./agent/...",
+  "rawInput": {
+    "command": "go test ./agent/...",
+    "cwd": "/Users/jim/code/zoumo/agent-sdk-go"
+  },
+  "status": "in_progress"
+}
+```
+
+若同一 `commandExecution` 的 `source` 为 `agent`、`userShell` 或缺失，则只能
+使用 `toolName: "commandExecution"` 这个 fallback，不能伪造
+`exec_command`。
 
 统一层暂不定义 Provider 无关的计划语义。Claude 的 `TodoWrite`、
 `TaskCreate` 和 `TaskUpdate` 原本就是工具调用，只保留带原生输入的

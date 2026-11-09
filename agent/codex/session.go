@@ -48,6 +48,7 @@ type session struct {
 	parentMu sync.RWMutex
 	parents  map[string]string
 
+	toolIdentities  map[toolIdentityKey]toolIdentity
 	observationDone chan struct{}
 	closeOnce       sync.Once
 	closeErr        error
@@ -65,6 +66,7 @@ func newSession(
 		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
 		requestRefs:     make(map[string]agent.InteractionRef),
 		parents:         make(map[string]string),
+		toolIdentities:  make(map[toolIdentityKey]toolIdentity),
 		done:            make(chan struct{}),
 		observationDone: make(chan struct{}),
 	}
@@ -408,6 +410,7 @@ func (s *session) failObservation(cause error) {
 }
 
 func (s *session) endObservation(cause error, reason string) {
+	s.toolIdentities = nil
 	invalidated := s.closeForOperations(false)
 	events := s.closedInteractionEvents(
 		invalidated,

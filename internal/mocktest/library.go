@@ -14,8 +14,6 @@ import (
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 )
 
-const lifecycleTimeout = 30 * time.Second
-
 // Session is one prepared in-process testify fixture. Callers start a Run for
 // each declared connection, construct the SDK against run.Start, and remove the
 // fixture directory after every run has reached a terminal state.

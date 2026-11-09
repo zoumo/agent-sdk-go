@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -110,7 +111,10 @@ func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelecti
 	if prepareErr != nil {
 		return nil, errors.Join(fmt.Errorf("prepare %s session: %w", policy, prepareErr), cleanupPreparedSession(dir))
 	}
-	session = viewPreparedSession(fixture)
+	session, err = viewPreparedSession(fixture)
+	if err != nil {
+		return nil, errors.Join(err, cleanupPreparedSession(dir))
+	}
 	session.Runner, err = mocktest.FromFixture(fixture)
 	if err != nil {
 		return nil, errors.Join(err, cleanupPreparedSession(dir))
@@ -130,7 +134,10 @@ func readPreparedSession(dir string) (*preparedSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	session := viewPreparedSession(fixture)
+	session, err := viewPreparedSession(fixture)
+	if err != nil {
+		return nil, err
+	}
 	session.Runner, err = mocktest.FromFixture(fixture)
 	if err != nil {
 		return nil, err
@@ -138,7 +145,7 @@ func readPreparedSession(dir string) (*preparedSession, error) {
 	return session, nil
 }
 
-func viewPreparedSession(fixture *agenttestify.Fixture) *preparedSession {
+func viewPreparedSession(fixture *agenttestify.Fixture) (*preparedSession, error) {
 	route := fixture.Routes["mock"]
 	connections := make([]preparedConnection, len(route.Connections))
 	for i, connection := range route.Connections {
@@ -189,8 +196,12 @@ func viewPreparedSession(fixture *agenttestify.Fixture) *preparedSession {
 		Fixture: fixture,
 	}
 	session.Mock = session.Routes["mock"]
-	session.RawJSON, _ = json.Marshal(session)
-	return session
+	rawJSON, err := json.Marshal(session)
+	if err != nil {
+		return nil, fmt.Errorf("marshal prepared session: %w", err)
+	}
+	session.RawJSON = rawJSON
+	return session, nil
 }
 
 func mapsClone(values map[string]string) map[string]string {
@@ -198,9 +209,7 @@ func mapsClone(values map[string]string) map[string]string {
 		return nil
 	}
 	cloned := make(map[string]string, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
+	maps.Copy(cloned, values)
 	return cloned
 }
 
@@ -384,7 +393,7 @@ func (s *preparedSession) HostEnv() []string {
 	return hostEnvironment(s.Mock.Env)
 }
 
-func exportPreparedSession(ctx context.Context, tool toolIdentity, session *preparedSession, output string) error {
+func exportPreparedSession(ctx context.Context, session *preparedSession, output string) error {
 	if !filepath.IsAbs(output) {
 		return errors.New("export output must be absolute")
 	}

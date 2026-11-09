@@ -182,7 +182,6 @@ type interaction struct {
 	inputCloseErr                       error
 	inputClosedCh                       chan struct{}
 	stdoutEOF                           bool
-	terminalClosed                      bool
 	responses                           chan incomingControl
 	writeGate                           chan struct{}
 	done                                chan struct{}
@@ -918,9 +917,6 @@ func (c *interaction) ownStreamLifecycle() {
 		cancel()
 	}
 
-	c.mu.Lock()
-	closing := c.closing
-	c.mu.Unlock()
 	if waitErr != nil {
 		// Close stops local work; it does not turn a failed peer completion into
 		// success. failLocked retains an earlier specific protocol cause while
@@ -934,7 +930,7 @@ func (c *interaction) ownStreamLifecycle() {
 	readComplete := awaitUntil(c.stdoutDone, start.Add(c.opts.ShutdownTimeout))
 	if !readComplete {
 		c.mu.Lock()
-		closing = c.closing
+		closing := c.closing
 		terminal := c.terminal
 		c.mu.Unlock()
 		if !closing && terminal == nil {
@@ -952,7 +948,7 @@ func (c *interaction) ownStreamLifecycle() {
 	c.settleWriter(start)
 
 	c.mu.Lock()
-	closing = c.closing
+	closing := c.closing
 	terminal := c.terminal
 	readEOF := c.stdoutEOF
 	c.mu.Unlock()

@@ -53,13 +53,16 @@ func TestRemoteAuthenticatesOnlyDeclaredConnectionPaths(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	mainURL := strings.Replace(service.endpoint.Connections["main"].URL, "ws://", "http://", 1)
-	unknown, err := client.Get(mainURL + "/extra")
+	unknownRequest, err := http.NewRequestWithContext(
+		t.Context(), http.MethodGet, mainURL+"/extra", http.NoBody)
+	require.NoError(t, err)
+	unknown, err := client.Do(unknownRequest)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, unknown.StatusCode)
 	require.NoError(t, unknown.Body.Close())
 
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		mainURL, nil)
+		mainURL, http.NoBody)
 	require.NoError(t, err)
 	request.Header.Set("Authorization", "Bearer wrong")
 	unauthorized, err := client.Do(request)
@@ -148,9 +151,12 @@ func TestRemoteBridgeDrainFailureRetainsTypedEvidence(t *testing.T) {
 
 	for _, id := range remoteConnectionIDs {
 		endpoint := service.endpoint.Connections[id]
-		conn, _, err := websocket.Dial(t.Context(), endpoint.URL, &websocket.DialOptions{
+		conn, response, err := websocket.Dial(t.Context(), endpoint.URL, &websocket.DialOptions{
 			HTTPHeader: http.Header{"Authorization": []string{"Bearer " + endpoint.BearerToken}},
 		})
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = conn.CloseNow() })
 	}
@@ -187,10 +193,8 @@ func TestRemoteBridgeDrainFailureRetainsTypedEvidence(t *testing.T) {
 
 func TestRemotePassedEvidenceRequiresProbeResult(t *testing.T) {
 	session := prepareRemoteSession(t)
-	tool, err := discoverTool()
-	require.NoError(t, err)
 	material := filepath.Join(t.TempDir(), "material")
-	require.NoError(t, exportPreparedSession(t.Context(), tool, session, material))
+	require.NoError(t, exportPreparedSession(t.Context(), session, material))
 
 	service, err := startMockRemote(context.Background(), session.Runner, t.TempDir())
 	require.NoError(t, err)

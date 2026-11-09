@@ -348,7 +348,8 @@ func openStreamSession(ctx context.Context, mock *mocktest.Session, initialize t
 		cancel()
 		return nil, run, nil, err
 	}
-	return client, run, run.CloseInputWhenComplete(client.CloseInput), nil
+	inputClosed := run.CloseInputWhenComplete(client.CloseInput)
+	return client, run, inputClosed, nil
 }
 
 func finishStream(run *mocktest.Run, client *codex.Client, session *codex.Session, inputClosed <-chan error) error {

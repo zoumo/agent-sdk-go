@@ -52,7 +52,7 @@ func Prepare(dir string, capture io.Reader) (*mocktest.Session, error) {
 // Input/output operations and complete must return promptly. A blocking endpoint
 // must implement io.Closer with Close unblocking I/O; Replay closes such endpoints
 // on cancellation or failure and joins the copy workers before returning.
-func Replay(input io.Reader, output io.Writer, capture io.Reader, complete func() error) error {
+func Replay(input io.Reader, output io.Writer, capture io.Reader, complete func() error) (result error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	dir, err := os.MkdirTemp("", "claude-synthetic-replay-")
@@ -68,7 +68,11 @@ func Replay(input io.Reader, output io.Writer, capture io.Reader, complete func(
 	if err != nil {
 		return errors.Join(err, session.Close())
 	}
-	defer run.CloseSDK()
+	defer func() {
+		if closeErr := run.CloseSDK(); closeErr != nil {
+			result = errors.Join(result, closeErr)
+		}
+	}()
 	if output == nil {
 		output = io.Discard
 	}

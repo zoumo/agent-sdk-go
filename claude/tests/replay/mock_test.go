@@ -73,14 +73,14 @@ func (s *mockSDKSuite) open(script mockScenarioDefinition, wantStatus string) {
 		ShutdownTimeout:   time.Second,
 	}
 	args, err := claude.NativeArgs(options)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	run, err := session.NewRun(s.ctx, mocktest.RunOptions{NativeArgs: args})
 	s.Require().NoError(err)
 	options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
 	actualArgs, err := claude.NativeArgs(options)
-	require.NoError(s.T(), err)
-	require.Equal(s.T(), run.Start.NativeArgs, actualArgs)
-	require.Equal(s.T(), run.Start.Config, run.Start.Env["CLAUDE_CONFIG_DIR"])
+	s.Require().NoError(err)
+	s.Require().Equal(run.Start.NativeArgs, actualArgs)
+	s.Require().Equal(run.Start.Config, run.Start.Env["CLAUDE_CONFIG_DIR"])
 	s.client, err = claude.OpenStreams(s.ctx, options, claude.StreamTransport{
 		Reader: run.Reader,
 		Writer: run.Writer,

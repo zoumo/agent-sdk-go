@@ -1,6 +1,7 @@
 package mocktest
 
 import (
+	"errors"
 	"fmt"
 	"go/version"
 	"runtime"
@@ -57,7 +58,7 @@ func validateEmbeddedTestifyIdentity(tool agenttestify.ToolIdentity) error {
 	case !version.IsValid(tool.GoVersion):
 		return fmt.Errorf("embedded testify identity has invalid Go version %q", tool.GoVersion)
 	case tool.Command != "" || len(tool.Args) != 0 || tool.SHA256 != "":
-		return fmt.Errorf("embedded testify identity declares executable fields")
+		return errors.New("embedded testify identity declares executable fields")
 	}
 	return nil
 }

@@ -233,7 +233,7 @@ func TestSyntheticPeerRejectsUninterruptibleStreams(t *testing.T) {
 			reader, writer := io.Pipe()
 			t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
 			var input io.Reader = strings.NewReader("")
-			var output io.Writer = io.Discard
+			output := io.Discard
 			if direction == "input" {
 				input = readerOnly{reader}
 			} else {

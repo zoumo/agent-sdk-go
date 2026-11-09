@@ -41,7 +41,8 @@ func openStreamSession(ctx context.Context, mock *mocktest.Session, options clau
 		cancel()
 		return nil, run, nil, err
 	}
-	return session, run, run.CloseInputWhenComplete(session.CloseInput), nil
+	inputClosed := run.CloseInputWhenComplete(session.CloseInput)
+	return session, run, inputClosed, nil
 }
 
 func mockNativeArgs(args []string) []string {

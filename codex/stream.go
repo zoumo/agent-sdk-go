@@ -37,12 +37,10 @@ func NewStreams(ctx context.Context, options StreamOptions, transport StreamTran
 	c.streamWriter = transport.Writer
 	c.streamStderr = transport.Stderr
 	c.streamWait = transport.Wait
-	c.workers.Add(2)
-	go func() { defer c.workers.Done(); defer close(c.readDone); c.readLoop() }()
-	go func() { defer c.workers.Done(); c.writeLoop() }()
+	c.workers.Go(func() { defer close(c.readDone); c.readLoop() })
+	c.workers.Go(c.writeLoop)
 	if transport.Stderr != nil {
-		c.workers.Add(1)
-		go func() { defer c.workers.Done(); c.drainStderr() }()
+		c.workers.Go(c.drainStderr)
 	}
 	go c.cleanup()
 	return c.initialize(ctx, options.Initialize)

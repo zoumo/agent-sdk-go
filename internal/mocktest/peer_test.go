@@ -512,7 +512,7 @@ func requireEmbeddedFailure(t *testing.T, connection agenttestify.ConnectionRepo
 }
 
 func TestSessionCleanupRacesRunStartup(t *testing.T) {
-	for i := 0; i < 24; i++ {
+	for range 24 {
 		session := prepareSession(t, "codex", noticeScenario, Options{})
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		type started struct {

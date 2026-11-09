@@ -150,7 +150,7 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 	}()
 
 	exportDir := filepath.Join(r.Output, "material")
-	if err := exportPreparedSession(ctx, tool, session, exportDir); err != nil {
+	if err := exportPreparedSession(ctx, session, exportDir); err != nil {
 		if isMaterialUnavailable(err) {
 			r.MaterialStatus = materialStatusUnavailable
 		} else {

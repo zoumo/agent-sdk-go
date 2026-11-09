@@ -280,13 +280,13 @@ func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, run *mocktest.
 		case <-closeRequested:
 			finalize.Lock()
 			closeErr := run.Writer.Close()
-			waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			waitCtx, stopWait := context.WithTimeout(context.Background(), 30*time.Second)
 			select {
 			case <-run.Done():
 			case <-waitCtx.Done():
 				closeErr = errors.Join(closeErr, errors.New("mock run did not finish after input half-close"))
 			}
-			cancel()
+			stopWait()
 			finalize.Unlock()
 			closeDone <- closeErr
 		case <-coordinatorCtx.Done():

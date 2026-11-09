@@ -46,7 +46,7 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 	assert.JSONEq(t, `{"agent":"fixed"}`, string(provider.config.Initialize.Agents))
 	assert.Equal(t, "task", provider.config.Subagents.History[0].TaskID)
 
-	options := provider.nativeOptions("/workspace", "resume-id", agent.Features{})
+	options := provider.nativeOptions("/workspace", "resume-id", agent.Features{}, nil)
 	assert.Equal(t, "claude-fixture", options.CLIPath)
 	assert.Equal(t, "/workspace", options.WorkDir)
 	assert.Equal(t, "resume-id", options.ResumeID)
@@ -66,13 +66,13 @@ func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
 	assert.Empty(t,
 		provider.nativeOptions("/workspace", "", agent.Features{
 			AgentQuestions: &enabled,
-		}).DisallowedTools,
+		}, nil).DisallowedTools,
 	)
 	assert.Equal(t,
 		[]string{"AskUserQuestion"},
 		provider.nativeOptions("/workspace", "", agent.Features{
 			AgentQuestions: &disabled,
-		}).DisallowedTools,
+		}, nil).DisallowedTools,
 	)
 }
 

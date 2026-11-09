@@ -31,6 +31,10 @@
 // answers and, for multi-select questions, string arrays. Multi-select arrays are
 // joined with ", " before the native write; native array answers are not
 // supported.
+// Open and Resume pass the final provider-neutral external MCP list to native
+// Claude stdio or Streamable HTTP configuration. Claude-only restrictions are
+// rejected before process launch; native SSE, SDK-hosted MCP, and strict config
+// remain available only through the claude package.
 // Initialization, internal control responses, and positive member or parent
 // relationship confirmations are lifecycle plumbing and produce no unified
 // event. Confirmed source and parent identities remain in the Meta of subsequent

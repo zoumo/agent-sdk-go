@@ -99,6 +99,15 @@ empty non-nil strings are invalid. Thinking budget nil clears with null; zero st
 zero. Display omission, summarized/omitted and explicit clear remain distinct.
 A configuration acknowledgment does not prove the active model or children changed.
 
+`AppendSystemPrompt` adds caller text after the CLI's own system instructions
+without replacing them. A nonempty value becomes one literal
+`--append-system-prompt=<text>` argv element; empty omits the option. Spaces,
+line breaks, Unicode and dash-leading text are preserved exactly. Invalid UTF-8
+and NUL are rejected at Open with `ErrInvalidInput` before the process starts,
+and the error does not echo the prompt. Because the text is embedded in argv,
+other local processes that can inspect the argument vector may observe it; do
+not treat this field as secret storage.
+
 `PermissionMode` and the corresponding `PermissionMode*` constants enumerate
 `default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk` and `auto`.
 `SetPermissionMode` rejects empty or unknown values before writing, and

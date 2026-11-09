@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
+
+var remoteConnectionIDs = [...]string{"main", "probe"}
 
 type remotePeerEndpoint struct {
 	URL         string `json:"url"`
@@ -39,6 +42,7 @@ type mockRemoteService struct {
 	served      chan error
 	once        sync.Once
 	mu          sync.Mutex
+	finalize    sync.Mutex
 	closing     bool
 	opened      map[string]bool
 	completions map[string]error
@@ -56,7 +60,7 @@ func startMockRemote(parent context.Context, mock *mocktest.Session, root string
 		return nil, errors.New("remote bridge requires a prepared fixture")
 	}
 	ids := mock.ConnectionIDs()
-	if len(ids) != 2 || ids[0] != "main" || ids[1] != "probe" {
+	if !slices.Equal(ids, remoteConnectionIDs[:]) {
 		return nil, errors.New("remote bridge requires declared main and probe connections")
 	}
 	nativeArgs := []string{"app-server", "--listen", "stdio://"}
@@ -89,8 +93,8 @@ func startMockRemote(parent context.Context, mock *mocktest.Session, root string
 		_ = probeRun.CloseSDK()
 		return nil, err
 	}
-	endpoint := remoteEndpoint{Connections: make(map[string]remotePeerEndpoint, 2)}
-	for _, id := range []string{"main", "probe"} {
+	endpoint := remoteEndpoint{Connections: make(map[string]remotePeerEndpoint, len(remoteConnectionIDs))}
+	for _, id := range remoteConnectionIDs {
 		var secret [32]byte
 		if _, err := rand.Read(secret[:]); err != nil {
 			listener.Close()
@@ -159,7 +163,7 @@ func startMockRemote(parent context.Context, mock *mocktest.Session, root string
 			delete(service.active, conn)
 			service.mu.Unlock()
 		}()
-		runErr := forwardPeerSocket(ctx, conn, run, filepath.Join(root, "phase-"+id+"-stderr.private"))
+		runErr := forwardPeerSocket(ctx, conn, run, filepath.Join(root, "phase-"+id+"-stderr.private"), &service.finalize)
 		service.mu.Lock()
 		service.completions[id] = runErr
 		service.mu.Unlock()
@@ -183,9 +187,19 @@ func (s *mockRemoteService) close() error {
 		go func() { s.handlers.Wait(); close(complete) }()
 		abort := func() {
 			s.cancel()
-			for _, run := range s.runs {
+			for _, id := range remoteConnectionIDs {
+				run := s.runs[id]
+				if run == nil {
+					continue
+				}
+				s.finalize.Lock()
 				_ = run.Abort()
 				_ = run.CloseSDK()
+				select {
+				case <-run.Done():
+				case <-time.After(5 * time.Second):
+				}
+				s.finalize.Unlock()
 			}
 			s.mu.Lock()
 			for conn := range s.active {
@@ -211,8 +225,9 @@ func (s *mockRemoteService) close() error {
 				runErr = errors.Join(runErr, errors.New("remote peer cleanup did not complete"))
 			}
 		}
+		runErr = errors.Join(runErr, s.waitRuns())
 		s.mu.Lock()
-		for _, id := range []string{"main", "probe"} {
+		for _, id := range remoteConnectionIDs {
 			if !s.opened[id] {
 				runErr = errors.Join(runErr, fmt.Errorf("remote %s connection missing", id))
 			} else {
@@ -225,7 +240,25 @@ func (s *mockRemoteService) close() error {
 	return s.err
 }
 
-func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, run *mocktest.Run, stderrPath string) error {
+func (s *mockRemoteService) waitRuns() error {
+	var result error
+	for _, id := range remoteConnectionIDs {
+		run := s.runs[id]
+		if run == nil {
+			continue
+		}
+		select {
+		case <-run.Done():
+			result = errors.Join(result, run.WaitError(context.Background()))
+		case <-time.After(lifecycleTimeout):
+			result = errors.Join(result, fmt.Errorf("remote %s run did not finish", id))
+		}
+		result = errors.Join(result, run.CloseSDK())
+	}
+	return result
+}
+
+func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, run *mocktest.Run, stderrPath string, finalize *sync.Mutex) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -235,7 +268,31 @@ func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, run *mocktest.
 		defer close(stderrDone)
 		_, _ = io.Copy(&stderr, run.Stderr)
 	}()
-	closeInput := run.CloseInputWhenComplete(run.Writer.Close)
+	closeRequested := make(chan struct{})
+	closeInput := run.CloseInputWhenComplete(func() error {
+		close(closeRequested)
+		return nil
+	})
+	coordinatorCtx, stopCoordinator := context.WithCancel(context.Background())
+	closeDone := make(chan error, 1)
+	go func() {
+		select {
+		case <-closeRequested:
+			finalize.Lock()
+			closeErr := run.Writer.Close()
+			waitCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			select {
+			case <-run.Done():
+			case <-waitCtx.Done():
+				closeErr = errors.Join(closeErr, errors.New("mock run did not finish after input half-close"))
+			}
+			cancel()
+			finalize.Unlock()
+			closeDone <- closeErr
+		case <-coordinatorCtx.Done():
+			closeDone <- nil
+		}
+	}()
 
 	inputDone := make(chan error, 1)
 	go func() {
@@ -300,6 +357,13 @@ func forwardPeerSocket(ctx context.Context, conn *websocket.Conn, run *mocktest.
 	default:
 	}
 	_ = run.CloseSDK()
+	stopCoordinator()
+	select {
+	case closeErr := <-closeDone:
+		bridgeErr = errors.Join(bridgeErr, closeErr)
+	case <-time.After(30 * time.Second):
+		bridgeErr = errors.Join(bridgeErr, errors.New("mock input half-close did not complete"))
+	}
 	<-stderrDone
 	_ = os.WriteFile(stderrPath, stderr.Bytes(), 0o600)
 	return errors.Join(bridgeErr, waitErr)

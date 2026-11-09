@@ -64,6 +64,45 @@ func TestCancellationAlwaysFinalizesPreparedSession(t *testing.T) {
 	require.FileExists(t, filepath.Join(output, "summary.json"))
 }
 
+func TestRemoteCancellationRetainsTypedEvidence(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "run")
+	host := filepath.Join(t.TempDir(), "idle-remote-host")
+	hostReady := filepath.Join(t.TempDir(), "host-ready")
+	require.NoError(t, os.WriteFile(host, []byte("#!/bin/sh\nprintf ready > "+quote(hostReady)+"\nsleep 60\n"), 0o700))
+	cmd := exec.CommandContext(context.Background(), runnerBinary,
+		"--provider", "codex", "--case", "SDK-CASE-032",
+		"--output", output, "--driver", host)
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	})
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(hostReady)
+		return err == nil
+	}, 10*time.Second, 10*time.Millisecond)
+	require.NoError(t, cmd.Process.Signal(os.Interrupt))
+	require.Error(t, cmd.Wait())
+
+	var result summary
+	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
+	require.Equal(t, "failed", result.Status)
+	require.Len(t, result.Runs, 1)
+	require.Contains(t, result.Runs[0].BridgeError, "0/2 required connections")
+	evidence := readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json"))
+	require.Equal(t, "failed", evidence.Status)
+	require.Len(t, evidence.Executions, 1)
+	require.True(t, evidence.Executions[0].Complete)
+	require.Len(t, evidence.Executions[0].Connections, 2)
+	for _, connection := range evidence.Executions[0].Connections {
+		require.Equal(t, agenttestify.ConnectionStatusFailed, agenttestify.ConnectionStatus(connection.Status))
+		requireEmbeddedConnectionFacts(t, connection)
+		require.Equal(t, string(agenttestify.FailureClassCanceled), connection.Failure)
+	}
+	require.NoDirExists(t, filepath.Join(output, "preserve", "session"))
+}
+
 func TestPassedBusinessWithoutMockExecutionFails(t *testing.T) {
 	source := controlledCapture(t)
 	output := filepath.Join(t.TempDir(), "run")
@@ -138,10 +177,7 @@ func TestCanceledStdioExecutionRetainsTypedFailureBeforeRemoval(t *testing.T) {
 	require.Len(t, report.Connections, 1)
 	connection := report.Connections[0]
 	require.Equal(t, agenttestify.FailureClassCanceled, connection.Failure)
-	require.Equal(t, agenttestify.MockTransportInProcess, connection.Transport)
-	require.True(t, connection.CleanupComplete)
-	require.False(t, connection.NativeLaunched)
-	require.Nil(t, connection.ExitCode)
+	requireEmbeddedConnectionFacts(t, evidenceExecutionView(report).Connections[0])
 	outcome := finalizePreparedSession(ctx, session, nil, run.Start.ExecutionID, root, false)
 	require.NotNil(t, outcome.Evidence)
 	require.Equal(t, "failed", outcome.Evidence.Status)

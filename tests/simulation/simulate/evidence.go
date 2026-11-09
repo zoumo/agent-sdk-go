@@ -68,30 +68,30 @@ type evidenceOutcome struct {
 	Error         error
 }
 
-func inspectSessionEvidence(session *preparedSession, executionID string) (*sessionEvidence, error) {
+func readExecutionEvidence(session *preparedSession, executionID string) (*sessionEvidence, *agenttestify.ExecutionReport, error) {
 	evidence := &sessionEvidence{
 		SchemaVersion: preparedSessionSchema,
 		SessionID:     session.SessionID,
 		Status:        "abandoned",
 	}
 	if executionID == "" {
-		return evidence, nil
+		return evidence, nil, nil
 	}
 	if session.Fixture == nil {
-		return evidence, errors.New("prepared fixture is unavailable")
+		return evidence, nil, errors.New("prepared fixture is unavailable")
 	}
 	report, err := session.Fixture.ExecutionReport(executionID)
 	if err != nil {
 		evidence.Status = "unavailable"
-		return evidence, fmt.Errorf("execution report: %w", err)
+		return evidence, nil, fmt.Errorf("execution report: %w", err)
 	}
 	if report == nil {
 		evidence.Status = "unavailable"
-		return evidence, errors.New("execution report is unavailable")
+		return evidence, nil, errors.New("execution report is unavailable")
 	}
 	evidence.Status = string(report.Status)
 	evidence.Executions = []evidenceExecution{evidenceExecutionView(report)}
-	return evidence, nil
+	return evidence, report, nil
 }
 
 func evidenceExecutionView(report *agenttestify.ExecutionReport) evidenceExecution {
@@ -147,7 +147,7 @@ func evidenceMaterial(material agenttestify.Material) resultMaterial {
 
 func finalizePreparedSession(parent context.Context, session *preparedSession, pkg *materialPackage, executionID, output string, requireExecution bool) *evidenceOutcome {
 	outcome := &evidenceOutcome{}
-	evidence, evidenceErr := inspectSessionEvidence(session, executionID)
+	evidence, report, evidenceErr := readExecutionEvidence(session, executionID)
 	outcome.Evidence = evidence
 	if evidenceErr != nil {
 		outcome.Error = errors.Join(outcome.Error, evidenceErr)
@@ -155,18 +155,13 @@ func finalizePreparedSession(parent context.Context, session *preparedSession, p
 	if requireExecution && executionID == "" {
 		outcome.ProtocolError = errors.Join(outcome.ProtocolError, errors.New("SDK business passed without a mock execution"))
 	}
-	if executionID != "" && session.Fixture != nil {
-		report, err := session.Fixture.ExecutionReport(executionID)
-		if err != nil {
-			outcome.Error = errors.Join(outcome.Error, fmt.Errorf("validate execution report: %w", err))
-		} else {
-			if err := validateExecutionEvidence(report, session, pkg); err != nil {
-				outcome.Error = errors.Join(outcome.Error, err)
-			}
-			if requireExecution && report.Status != agenttestify.ExecutionStatusPassed {
-				outcome.ProtocolError = errors.Join(outcome.ProtocolError,
-					fmt.Errorf("SDK business passed with mock execution status %s", report.Status))
-			}
+	if report != nil {
+		if err := validateExecutionEvidence(report, session, pkg); err != nil {
+			outcome.Error = errors.Join(outcome.Error, err)
+		}
+		if requireExecution && report.Status != agenttestify.ExecutionStatusPassed {
+			outcome.ProtocolError = errors.Join(outcome.ProtocolError,
+				fmt.Errorf("SDK business passed with mock execution status %s", report.Status))
 		}
 	}
 	if err := writeJSON(filepath.Join(output, "evidence.json"), evidence); err != nil {

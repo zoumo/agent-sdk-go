@@ -16,7 +16,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
-var runnerBinary, driverBinary string
+var runnerBinary, driverBinary, requestMutatorBinary string
 
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "sdk-simulate-tests-")
@@ -25,7 +25,12 @@ func TestMain(m *testing.M) {
 	}
 	runnerBinary = filepath.Join(dir, "simulate")
 	driverBinary = filepath.Join(dir, "driver")
-	for _, entry := range [][2]string{{runnerBinary, "."}, {driverBinary, "../drivers"}} {
+	requestMutatorBinary = filepath.Join(dir, "mutate-request")
+	for _, entry := range [][2]string{
+		{runnerBinary, "."},
+		{driverBinary, "../drivers"},
+		{requestMutatorBinary, "./testdata/mutate-request"},
+	} {
 		cmd := exec.CommandContext(context.Background(), "go", "build", "-o", entry[0], entry[1])
 		if b, e := cmd.CombinedOutput(); e != nil {
 			os.Stderr.Write(b)
@@ -230,18 +235,35 @@ func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
 	evidence := readSessionEvidence(t, filepath.Join(output, "preserve", "evidence.json"))
 	require.Equal(t, "passed", evidence.Status)
 	require.Len(t, evidence.Executions, 1)
+	require.Equal(t, "passed", evidence.Executions[0].Status)
+	require.True(t, evidence.Executions[0].Complete)
 	require.Len(t, evidence.Executions[0].Connections, 2)
 	for _, connection := range evidence.Executions[0].Connections {
 		require.Equalf(t, "passed", connection.Status, connection.ID)
-		require.Equalf(t, "in-process", connection.Transport, connection.ID)
 		require.Truef(t, connection.FullConsumption, connection.ID)
 		require.Truef(t, connection.ClientEOF, connection.ID)
-		require.Falsef(t, connection.NativeLaunched, connection.ID)
-		require.Truef(t, connection.CleanupComplete, connection.ID)
-		require.Nilf(t, connection.ExitCode, connection.ID)
-		require.Emptyf(t, connection.ProcessReceiptPath, connection.ID)
+		requireEmbeddedConnectionFacts(t, connection)
 		require.NotEmptyf(t, connection.ReceiptPath, connection.ID)
 		require.NotEmptyf(t, connection.ResultPath, connection.ID)
+		require.Emptyf(t, connection.Failure, connection.ID)
+	}
+
+	var request struct{ Peer map[string]any }
+	require.NoError(t, readJSON(filepath.Join(output, "preserve", "sdk", "request.json"), &request))
+	require.Len(t, request.Peer, 1)
+	remote, ok := request.Peer["remote"].(map[string]any)
+	require.True(t, ok)
+	connections, ok := remote["connections"].(map[string]any)
+	require.True(t, ok)
+	require.Len(t, connections, 2)
+	for _, id := range remoteConnectionIDs {
+		endpoint, ok := connections[id].(map[string]any)
+		require.True(t, ok)
+		require.Len(t, endpoint, 2)
+		require.NotEmpty(t, endpoint["url"])
+		require.NotEmpty(t, endpoint["bearerToken"])
+		require.Contains(t, endpoint["url"], "ws://127.0.0.1:")
+		require.True(t, strings.HasSuffix(endpoint["url"].(string), "/"+id))
 	}
 }
 
@@ -254,15 +276,16 @@ func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
 		wantProtocol     string
 		wantBridge       string
 		wantCleanupError string
-		wantBusiness     bool
+		wantBusiness     string
 		wantEvidence     string
+		wantConnections  map[string]string
 	}{
-		{name: "remote-driver-crash", mutation: "crash", remote: true, wantRuns: 1, wantBridge: "0/2 required connections", wantEvidence: "abandoned"},
-		{name: "missing-probe", mutation: "missing-probe", remote: true, wantRuns: 1, wantProtocol: "connection probe", wantBusiness: true, wantEvidence: "passed"},
-		{name: "missing-suppress", mutation: "missing-suppress", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: true, wantEvidence: "unavailable"},
-		{name: "cross-run-suppress-receipt", mutation: "cross-run", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: true, wantEvidence: "unavailable"},
-		{name: "missing-sdk-projection-invalid-receipt", mutation: "invalid-receipt", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: true, wantEvidence: "unavailable"},
-		{name: "remote-postprocessing", mutation: "postprocess", remote: true, wantRuns: 1, wantProtocol: "not a regular file", wantBusiness: true, wantEvidence: "passed"},
+		{name: "remote-driver-crash", mutation: "crash", remote: true, wantRuns: 1, wantBridge: "0/2 required connections", wantEvidence: "failed", wantConnections: map[string]string{"main": "failed", "probe": "failed"}},
+		{name: "missing-probe", mutation: "blank-probe-url", remote: true, wantRuns: 1, wantBridge: "1/2 required connections", wantBusiness: "failed", wantEvidence: "failed", wantConnections: map[string]string{"main": "passed", "probe": "failed"}},
+		{name: "remote-postprocessing", mutation: "corrupt-probe-result", remote: true, wantRuns: 1, wantCleanupError: "mock result is not a regular unlinked file", wantBusiness: "passed", wantEvidence: "unavailable"},
+		{name: "missing-suppress", mutation: "missing-suppress", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: "passed", wantEvidence: "unavailable"},
+		{name: "cross-run-suppress-receipt", mutation: "cross-run", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: "passed", wantEvidence: "unavailable"},
+		{name: "missing-sdk-projection-invalid-receipt", mutation: "invalid-receipt", wantRuns: 2, wantCleanupError: "execution report", wantBusiness: "passed", wantEvidence: "unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			output := filepath.Join(t.TempDir(), "run")
@@ -284,10 +307,10 @@ func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
 			require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
 			require.Equal(t, "failed", result.Status)
 			require.Len(t, result.Runs, tc.wantRuns)
-			if tc.wantBusiness {
-				require.True(t, businessPassed(result.Runs[0].Business))
+			if tc.wantBusiness != "" {
+				require.Equal(t, tc.wantBusiness, businessStatus(t, result.Runs[0].Business))
 				if tc.wantRuns == 2 {
-					require.True(t, businessPassed(result.Runs[1].Business))
+					require.Equal(t, tc.wantBusiness, businessStatus(t, result.Runs[1].Business))
 				}
 			} else {
 				require.JSONEq(t, "null", string(result.Runs[0].Business))
@@ -313,6 +336,25 @@ func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
 					wantEvidence = "passed"
 				}
 				require.Equal(t, wantEvidence, evidence.Status)
+				if len(evidence.Executions) > 0 {
+					execution := evidence.Executions[0]
+					require.True(t, execution.Complete)
+					for _, connection := range execution.Connections {
+						requireEmbeddedConnectionFacts(t, connection)
+						if connection.Status == "passed" {
+							require.True(t, connection.FullConsumption)
+							require.True(t, connection.ClientEOF)
+							require.Empty(t, connection.Failure)
+						} else {
+							require.NotEmpty(t, connection.Failure)
+						}
+						if tc.wantConnections != nil {
+							want, ok := tc.wantConnections[connection.ID]
+							require.True(t, ok)
+							require.Equal(t, want, connection.Status)
+						}
+					}
+				}
 				prepared, err := readPreparedSession(filepath.Join(output, policy, "session"))
 				require.Error(t, err)
 				require.Nil(t, prepared)
@@ -326,11 +368,17 @@ func mutationDriver(mutation, output string) string {
 	switch mutation {
 	case "crash":
 		return body + "exit 9\n"
+	case "blank-probe-url":
+		body += quote(requestMutatorBinary) + " \"$2\"\n"
+	case "corrupt-probe-result":
+		body += "for result in " + quote(filepath.Join(output, "preserve", "session", "executions")) +
+			"/*/receipts/probe.result.json; do\n" +
+			"  rm -f \"$result\"\n" +
+			"  mkdir -p \"$result\"\n" +
+			"done\n"
 	}
 	body += quote(driverBinary) + " \"$@\"\nstatus=$?\nif [ \"$status\" -eq 0 ]; then\n"
 	switch mutation {
-	case "missing-probe":
-		body += "rm -f " + quote(filepath.Join(output, "preserve", "sdk", "result-probe.jsonl")) + "\n"
 	case "missing-suppress":
 		body += "rm -f " + quote(filepath.Join(output, "suppress", "session", "executions")) + "/*/mock/receipts/main.json\n"
 	case "cross-run":
@@ -343,9 +391,6 @@ func mutationDriver(mutation, output string) string {
 			"/*/mock/receipts/main.json; do\n" +
 			"  if [ -f \"$receipt\" ]; then printf '{}\\n' > \"$receipt\"; fi\n" +
 			"done\n"
-	case "postprocess":
-		path := filepath.Join(output, "preserve", "sdk", "result-probe.jsonl")
-		body += "rm -f " + quote(path) + "\nmkdir " + quote(path) + "\n"
 	}
 	body += "fi\nexit \"$status\"\n"
 	return body
@@ -387,6 +432,13 @@ func readSessionEvidence(t *testing.T, path string) sessionEvidence {
 	var evidence sessionEvidence
 	require.NoError(t, readJSON(path, &evidence))
 	return evidence
+}
+
+func businessStatus(t *testing.T, raw json.RawMessage) string {
+	t.Helper()
+	var result struct{ Status string }
+	require.NoError(t, json.Unmarshal(raw, &result))
+	return result.Status
 }
 
 func inventoryTest(t *testing.T, root string) map[string]string {

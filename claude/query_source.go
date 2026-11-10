@@ -36,7 +36,7 @@ func openQuerySource(ctx context.Context, root, directory *os.Root, path string,
 		return s, err
 	}
 	name := filepath.Base(path)
-	opened, err := openQueryRegularFile(directory, name, expected)
+	opened, err := openQueryRegularFile(directory, name, expected, nil)
 	if opened.pathInfo != nil && !errors.Is(err, errQueryRegularFileRequired) {
 		s.info = opened.pathInfo
 	}

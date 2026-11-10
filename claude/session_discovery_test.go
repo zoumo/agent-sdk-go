@@ -308,6 +308,22 @@ func TestSessionDiscoveryMetadataNeverGatesRecordDiscovery(t *testing.T) {
 	}
 }
 
+func TestSessionDiscoveryBudgetDoesNotMaskAbsentSidecar(t *testing.T) {
+	s, base, _ := discoveryFixture(t)
+	discoveryWrite(t, filepath.Join(base, "subagents", "agent-old.jsonl"), "{}\n")
+	main, err := os.Stat(base + ".jsonl")
+	require.NoError(t, err)
+
+	p, err := s.ListSubagents(context.Background(), SubagentQuery{MaxBytes: main.Size()})
+	require.ErrorIs(t, err, ErrDiscoveryCoverage)
+	require.ErrorIs(t, err, ErrResourceLimit)
+	require.Len(t, p.Records, 1)
+	require.Equal(t, "old", p.Records[0].AgentID)
+	require.Equal(t, main.Size(), p.Coverage.Bytes)
+	require.Len(t, p.Coverage.Issues, 1)
+	require.Equal(t, "transcript-metadata-incomplete", p.Coverage.Issues[0].Reason)
+}
+
 func TestSessionDiscoveryAccessFailuresKeepDiscoveredIdentity(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("requires non-root permission enforcement")

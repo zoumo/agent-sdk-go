@@ -92,9 +92,9 @@ type queryRegularFile struct {
 
 // openQueryRegularFile owns the Lstat/open/Stat identity sequence and closes
 // the handle on every failed result. The caller may compare pathInfo with an
-// inventory entry before open, and retain pathInfo for partial metadata when a
-// later access step fails.
-func openQueryRegularFile(directory *os.Root, name string, expected os.FileInfo) (*queryRegularFile, error) {
+// inventory entry or apply pre-open resource policy after ordinary-file
+// validation. pathInfo remains available for partial metadata on later failure.
+func openQueryRegularFile(directory *os.Root, name string, expected os.FileInfo, beforeOpen func() error) (*queryRegularFile, error) {
 	result := &queryRegularFile{}
 	st, err := directory.Lstat(name)
 	if err != nil {
@@ -106,6 +106,11 @@ func openQueryRegularFile(directory *os.Root, name string, expected os.FileInfo)
 	}
 	if expected != nil && (!os.SameFile(expected, st) || expected.Size() != st.Size() || !expected.ModTime().Equal(st.ModTime())) {
 		return result, errQueryInventoryIdentityChanged
+	}
+	if beforeOpen != nil {
+		if err := beforeOpen(); err != nil {
+			return result, err
+		}
 	}
 	f, err := openDiscoveryFile(directory, name)
 	if err != nil {

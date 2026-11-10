@@ -305,11 +305,14 @@ func (d *discoveryReader) read(path string) ([]json.RawMessage, error) {
 	}
 	defer parent.Close()
 	name := filepath.Base(path)
-	available := min(d.q.MaxBytes-d.page.Coverage.Bytes, d.q.MaxFileBytes)
-	if available <= 0 {
-		return nil, d.limit("metadata bytes", int(d.q.MaxBytes))
-	}
-	opened, err := openQueryRegularFile(parent, name, nil)
+	var available int64
+	opened, err := openQueryRegularFile(parent, name, nil, func() error {
+		available = min(d.q.MaxBytes-d.page.Coverage.Bytes, d.q.MaxFileBytes)
+		if available <= 0 {
+			return d.limit("metadata bytes", int(d.q.MaxBytes))
+		}
+		return nil
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, errQueryRegularFileRequired):

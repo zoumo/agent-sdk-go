@@ -95,7 +95,7 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 	// Additional fields cannot silently expand the creation or update contract.
 	checked := checkAgentProductionPackage(t)
 	for name, want := range map[string][]string{
-		"SessionConfig": {"Model", "ReasoningEffort"},
+		"SessionConfig": {"Model", "Effort"},
 		"ConfigChange":  {"ID", "Value"},
 	} {
 		object := checked.Scope().Lookup(name)

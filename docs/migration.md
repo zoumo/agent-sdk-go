@@ -45,7 +45,7 @@ and [event delivery](../harness/modules/native-session/design.md#delivery-event-
 
 For the optional `agent` layer, replace `OpenOptions.Execution` with
 `OpenOptions.Config`, whose type is `SessionConfig`. Set its `Model` and
-`ReasoningEffort` fields when opening or resuming a session; empty fields omit
+`Effort` fields when opening or resuming a session; empty fields omit
 the option. Replace unified `ModelController` and execution-option setters with
 the optional `ConfigController.SetConfig(ctx, ConfigChange{ID, Value})` method.
 `ConfigID` supports only `ConfigModel` (`model`) and `ConfigEffort` (`effort`).

@@ -128,8 +128,8 @@ func ExampleConfigController() {
 	session, err := provider.Open(ctx, agent.OpenOptions{
 		Cwd: "/synthetic",
 		Config: agent.SessionConfig{
-			Model:           " Caller/Model v2 ",
-			ReasoningEffort: " Native/High ",
+			Model:  " Caller/Model v2 ",
+			Effort: " Native/High ",
 		},
 	})
 	mustExample(err)

@@ -243,7 +243,7 @@ func (p *Provider) openingConfiguration(
 	error,
 ) {
 	features := effectiveFeatures(options.Features, p.formsSupported)
-	config, err := threadConfig(features, options.Config.ReasoningEffort)
+	config, err := threadConfig(features, options.Config.Effort)
 	if err != nil {
 		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(
 			agent.ErrorInvalidArgument,
@@ -257,14 +257,14 @@ func (p *Provider) openingConfiguration(
 
 func threadConfig(
 	features agent.EffectiveFeatures,
-	reasoningEffort string,
+	effort string,
 ) (codextypes.Optional[map[string]json.RawMessage], error) {
 	config := make(map[string]json.RawMessage, 2)
 	if !features.AgentQuestions {
 		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
 	}
-	if reasoningEffort != "" {
-		encoded, err := json.Marshal(reasoningEffort)
+	if effort != "" {
+		encoded, err := json.Marshal(effort)
 		if err != nil {
 			return codextypes.Optional[map[string]json.RawMessage]{}, err
 		}

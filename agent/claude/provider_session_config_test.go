@@ -30,8 +30,8 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		session, err := provider.Open(ctx, agent.OpenOptions{
 			Cwd: cwd,
 			Config: agent.SessionConfig{
-				Model:           " Caller/Model ",
-				ReasoningEffort: " Native/High ",
+				Model:  " Caller/Model ",
+				Effort: " Native/High ",
 			},
 		})
 		require.NoError(t, err)
@@ -61,8 +61,8 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 			OpenOptions: agent.OpenOptions{
 				Cwd: cwd,
 				Config: agent.SessionConfig{
-					Model:           " Resume/Model ",
-					ReasoningEffort: " Resume/Effort ",
+					Model:  " Resume/Model ",
+					Effort: " Resume/Effort ",
 				},
 			},
 		})
@@ -90,7 +90,7 @@ func TestClaudeOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 		},
 		{
 			name:     "open effort only",
-			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			config:   agent.SessionConfig{Effort: "effort-only"},
 			wantArgs: claudeExpectedArgs("--effort=effort-only"),
 		},
 		{
@@ -102,7 +102,7 @@ func TestClaudeOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 		{
 			name:     "resume effort only",
 			resume:   true,
-			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			config:   agent.SessionConfig{Effort: "effort-only"},
 			wantArgs: claudeExpectedArgs("--effort=effort-only", "--resume="+claudeResumePeerSessionID),
 		},
 	}
@@ -185,7 +185,7 @@ func TestClaudeRejectsInvalidSessionConfigBeforeLaunch(t *testing.T) {
 		{
 			name: "NUL",
 			config: agent.SessionConfig{
-				ReasoningEffort: sentinel + "\x00tail",
+				Effort: sentinel + "\x00tail",
 			},
 			wantReason: "config_value_contains_nul",
 		},

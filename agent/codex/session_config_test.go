@@ -40,8 +40,8 @@ func TestOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 	opened, err := provider.Open(ctx, agent.OpenOptions{
 		Cwd: "/synthetic",
 		Config: agent.SessionConfig{
-			Model:           " Caller/Model ",
-			ReasoningEffort: " Native/High ",
+			Model:  " Caller/Model ",
+			Effort: " Native/High ",
 		},
 	})
 	require.NoError(t, err)
@@ -53,8 +53,8 @@ func TestOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		OpenOptions: agent.OpenOptions{
 			Cwd: "/synthetic",
 			Config: agent.SessionConfig{
-				Model:           " Resume/Model ",
-				ReasoningEffort: " Resume/Effort ",
+				Model:  " Resume/Model ",
+				Effort: " Resume/Effort ",
 			},
 		},
 	})
@@ -82,7 +82,7 @@ func TestOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 			name:     "open effort only",
 			method:   "thread/start",
 			params:   `{"config":{"model_reasoning_effort":"effort-only"},"cwd":"/synthetic"}`,
-			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			config:   agent.SessionConfig{Effort: "effort-only"},
 			nativeID: "root-open",
 		},
 		{
@@ -98,7 +98,7 @@ func TestOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 			method:   "thread/resume",
 			params:   `{"config":{"model_reasoning_effort":"effort-only"},"cwd":"/synthetic","excludeTurns":true,"threadId":"root-resume"}`,
 			resume:   true,
-			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			config:   agent.SessionConfig{Effort: "effort-only"},
 			nativeID: "root-resume",
 		},
 	}
@@ -241,8 +241,8 @@ func TestOpenRejectsInvalidSessionConfigBeforeNativeRequest(t *testing.T) {
 	}{
 		{"model invalid UTF-8", agent.SessionConfig{Model: string([]byte{0xff})}, "config_value_invalid_utf8", "model must be valid UTF-8"},
 		{"model NUL", agent.SessionConfig{Model: "model\x00tail"}, "config_value_contains_nul", "model must not contain NUL"},
-		{"effort invalid UTF-8", agent.SessionConfig{ReasoningEffort: string([]byte{0xff})}, "config_value_invalid_utf8", "reasoning effort must be valid UTF-8"},
-		{"effort NUL", agent.SessionConfig{ReasoningEffort: "effort\x00tail"}, "config_value_contains_nul", "reasoning effort must not contain NUL"},
+		{"effort invalid UTF-8", agent.SessionConfig{Effort: string([]byte{0xff})}, "config_value_invalid_utf8", "reasoning effort must be valid UTF-8"},
+		{"effort NUL", agent.SessionConfig{Effort: "effort\x00tail"}, "config_value_contains_nul", "reasoning effort must not contain NUL"},
 	} {
 		for _, operation := range []string{"open", "resume"} {
 			t.Run(test.name+"/"+operation, func(t *testing.T) {
@@ -287,8 +287,8 @@ func TestOpenPreservesNativeSessionConfigRejection(t *testing.T) {
 	session, err := provider.Open(ctx, agent.OpenOptions{
 		Cwd: "/synthetic",
 		Config: agent.SessionConfig{
-			Model:           "future-model",
-			ReasoningEffort: "future-effort",
+			Model:  "future-model",
+			Effort: "future-effort",
 		},
 	})
 	require.Error(t, err)

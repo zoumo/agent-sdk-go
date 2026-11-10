@@ -136,6 +136,50 @@ func TestValidInteractionRequests(t *testing.T) {
 	}
 }
 
+type embeddedAnswer struct {
+	agent.Answer
+}
+
+func TestAnswerRejectsEmbeddedInterfaceWrappers(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		answer     agent.Answer
+		wantReason string
+	}{
+		{name: "nil embedded value", answer: embeddedAnswer{}, wantReason: "unsupported_answer"},
+		{name: "nil embedded pointer", answer: &embeddedAnswer{}, wantReason: "unsupported_answer"},
+		{
+			name:       "populated embedded value",
+			answer:     embeddedAnswer{Answer: agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow"}},
+			wantReason: "unsupported_answer",
+		},
+		{
+			name:       "populated embedded pointer",
+			answer:     &embeddedAnswer{Answer: agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow"}},
+			wantReason: "unsupported_answer",
+		},
+		{name: "typed nil wrapper", answer: (*embeddedAnswer)(nil), wantReason: "missing_answer"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				got, err := agent.MatchAnswer(agent.InteractionPermission, tt.answer)
+				assert.Nil(t, got)
+				var classified *agent.Error
+				require.ErrorAs(t, err, &classified)
+				assert.Equal(t, agent.ErrorInvalidArgument, classified.Code)
+				assert.Equal(t, tt.wantReason, classified.Reason)
+			})
+			require.NotPanics(t, func() {
+				err := agent.ValidateAnswer(agent.InteractionPermission, tt.answer)
+				var classified *agent.Error
+				require.ErrorAs(t, err, &classified)
+				assert.Equal(t, agent.ErrorInvalidArgument, classified.Code)
+				assert.Equal(t, tt.wantReason, classified.Reason)
+			})
+		})
+	}
+}
+
 func TestMatchAnswerCanonicalizesAndValidates(t *testing.T) {
 	permission := agent.PermissionAnswer{
 		Outcome:  agent.PermissionSelected,

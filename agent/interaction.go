@@ -251,18 +251,30 @@ func concreteAnswer(answer Answer) (Answer, error) {
 	if answer == nil {
 		return nil, invalidArgument("missing_answer", "answer is required")
 	}
-	value := reflect.ValueOf(answer)
-	if value.Kind() != reflect.Pointer {
+	switch value := answer.(type) {
+	case PermissionAnswer, FormAnswer, URLAnswer:
 		return answer, nil
+	case *PermissionAnswer:
+		if value != nil {
+			return *value, nil
+		}
+	case *FormAnswer:
+		if value != nil {
+			return *value, nil
+		}
+	case *URLAnswer:
+		if value != nil {
+			return *value, nil
+		}
+	default:
+		// Embedded Answer interfaces can promote answerKind even when nil.
+		// Reject wrappers without invoking a method on caller-owned values.
+		reflected := reflect.ValueOf(answer)
+		if reflected.Kind() != reflect.Pointer || !reflected.IsNil() {
+			return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
+		}
 	}
-	if value.IsNil() {
-		return nil, invalidArgument("missing_answer", "answer is required")
-	}
-	concrete, ok := value.Elem().Interface().(Answer)
-	if !ok {
-		return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
-	}
-	return concrete, nil
+	return nil, invalidArgument("missing_answer", "answer is required")
 }
 
 type InteractionOutcome string

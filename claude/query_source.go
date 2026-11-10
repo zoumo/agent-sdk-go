@@ -36,34 +36,29 @@ func openQuerySource(ctx context.Context, root, directory *os.Root, path string,
 		return s, err
 	}
 	name := filepath.Base(path)
-	st, err := directory.Lstat(name)
+	opened, err := openQueryRegularFile(directory, name, expected, nil)
+	if opened.pathInfo != nil && !errors.Is(err, errQueryRegularFileRequired) {
+		s.info = opened.pathInfo
+	}
 	if err != nil {
-		return s, queryAccess(display, err)
-	}
-	if !st.Mode().IsRegular() {
-		return s, queryError("unsupported", display, "not a regular file", ErrUnsupported)
-	}
-	s.info = st
-	if expected != nil && (!os.SameFile(expected, st) || expected.Size() != st.Size() || !expected.ModTime().Equal(st.ModTime())) {
-		return s, queryError("changed", display, "source changed after inventory", nil)
-	}
-	f, err := openDiscoveryFile(directory, name)
-	if err != nil {
-		if errors.Is(err, ErrUnsupported) {
+		switch {
+		case errors.Is(err, errQueryRegularFileRequired):
+			return s, queryError("unsupported", display, "not a regular file", ErrUnsupported)
+		case errors.Is(err, errQueryInventoryIdentityChanged):
+			return s, queryError("changed", display, "source changed after inventory", nil)
+		case errors.Is(err, errQueryOpenedSourceChanged):
+			return s, queryError("changed", display, "source changed during open", nil)
+		case errors.Is(err, ErrUnsupported):
 			return s, queryError("unsupported", display, "local query platform", err)
+		default:
+			return s, queryAccess(display, err)
 		}
-		return s, queryAccess(display, err)
 	}
-	initial, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return s, queryAccess(display, err)
-	}
-	if !initial.Mode().IsRegular() || !os.SameFile(st, initial) || initial.Size() != st.Size() {
-		f.Close()
+	if opened.openedInfo.Size() != opened.pathInfo.Size() {
+		_ = opened.file.Close()
 		return s, queryError("changed", display, "source changed during open", nil)
 	}
-	s.file, s.info = f, initial
+	s.file, s.info = opened.file, opened.openedInfo
 	return s, nil
 }
 

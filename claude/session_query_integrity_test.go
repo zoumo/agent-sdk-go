@@ -65,6 +65,22 @@ func TestQuerySourceIntegrity(t *testing.T) {
 	}
 }
 
+func TestQuerySourceInventoryIdentityChange(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "source")
+	require.NoError(t, os.WriteFile(path, []byte("original\n"), 0o600))
+	root, err := os.OpenRoot(dir)
+	require.NoError(t, err)
+	defer root.Close()
+	expected, err := os.Lstat(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte("changed after inventory\n"), 0o600))
+
+	source, err := openQuerySource(context.Background(), root, root, "source", expected)
+	childQueryKind(t, err, "changed")
+	require.Nil(t, source.file)
+}
+
 // A sample must verify exactly the bytes it read, including its tail probe;
 // it must not silently become a full-source read or promise whole-file coverage.
 func TestQuerySourceSampleCoverage(t *testing.T) {

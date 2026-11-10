@@ -35,6 +35,22 @@ func TestSessionConfigValidation(t *testing.T) {
 			wantMessage: "model must be valid UTF-8",
 		},
 		{
+			name: "model NUL",
+			config: agent.SessionConfig{
+				Model: configSentinel + "\x00tail",
+			},
+			wantReason:  "config_value_contains_nul",
+			wantMessage: "model must not contain NUL",
+		},
+		{
+			name: "effort invalid UTF-8",
+			config: agent.SessionConfig{
+				ReasoningEffort: configSentinel + string([]byte{0xff}),
+			},
+			wantReason:  "config_value_invalid_utf8",
+			wantMessage: "reasoning effort must be valid UTF-8",
+		},
+		{
 			name: "effort NUL",
 			config: agent.SessionConfig{
 				ReasoningEffort: configSentinel + "\x00tail",
@@ -83,6 +99,24 @@ func TestConfigChangeValidation(t *testing.T) {
 			},
 			wantReason:  "config_value_invalid_utf8",
 			wantMessage: "model must be valid UTF-8",
+		},
+		{
+			name: "model NUL",
+			change: agent.ConfigChange{
+				ID:    agent.ConfigModel,
+				Value: configSentinel + "\x00tail",
+			},
+			wantReason:  "config_value_contains_nul",
+			wantMessage: "model must not contain NUL",
+		},
+		{
+			name: "effort invalid UTF-8",
+			change: agent.ConfigChange{
+				ID:    agent.ConfigEffort,
+				Value: configSentinel + string([]byte{0xff}),
+			},
+			wantReason:  "config_value_invalid_utf8",
+			wantMessage: "reasoning effort must be valid UTF-8",
 		},
 		{
 			name: "effort NUL",

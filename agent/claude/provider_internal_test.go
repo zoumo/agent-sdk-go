@@ -1,6 +1,7 @@
 package agentclaude
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -180,14 +181,121 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 	}
 }
 
-func TestAnswerTerminalOutcomePreservesUnknownWrite(t *testing.T) {
-	interaction := &pendingInteraction{}
-	outcome, reason := answerTerminalOutcome(
-		interaction,
-		errors.Join(claude.ErrPermissionCancelled, claude.ErrUnknownOutcome),
-	)
-	assert.Equal(t, agent.InteractionFailed, outcome)
-	assert.Equal(t, "answer_outcome_unknown", reason)
+func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
+	tests := []struct {
+		name        string
+		cause       error
+		err         error
+		wantOutcome agent.InteractionOutcome
+		wantReason  string
+		wantCode    agent.ErrorCode
+	}{
+		{
+			name:        "unknown",
+			cause:       claude.ErrUnknownOutcome,
+			err:         notSentAnswerError(),
+			wantOutcome: agent.InteractionFailed,
+			wantReason:  "answer_outcome_unknown",
+			wantCode:    agent.ErrorOutcomeUnknown,
+		},
+		{
+			name:        "used",
+			cause:       claude.ErrPermissionUsed,
+			err:         notSentAnswerError(),
+			wantOutcome: agent.InteractionExpired,
+			wantReason:  "native_request_ended",
+			wantCode:    agent.ErrorFailedPrecondition,
+		},
+		{
+			name:        "stale",
+			cause:       claude.ErrPermissionStale,
+			err:         notSentAnswerError(),
+			wantOutcome: agent.InteractionExpired,
+			wantReason:  "native_request_ended",
+			wantCode:    agent.ErrorFailedPrecondition,
+		},
+		{
+			name:        "cancelled",
+			cause:       claude.ErrPermissionCancelled,
+			err:         notSentAnswerError(),
+			wantOutcome: agent.InteractionCancelled,
+			wantReason:  "native_request_ended",
+			wantCode:    agent.ErrorFailedPrecondition,
+		},
+		{
+			name:        "closed",
+			cause:       claude.ErrClosed,
+			err:         notSentAnswerError(),
+			wantOutcome: agent.InteractionCancelled,
+			wantReason:  "session_closed",
+			wantCode:    agent.ErrorClosed,
+		},
+		{
+			name:        "unknown answer without cause",
+			err:         claude.ErrUnknownOutcome,
+			wantOutcome: agent.InteractionFailed,
+			wantReason:  "answer_outcome_unknown",
+			wantCode:    agent.ErrorOutcomeUnknown,
+		},
+		{
+			name:        "used answer without cause",
+			err:         claude.ErrPermissionUsed,
+			wantOutcome: agent.InteractionExpired,
+			wantReason:  "native_request_ended",
+			wantCode:    agent.ErrorFailedPrecondition,
+		},
+		{
+			name:        "stale answer without cause",
+			err:         claude.ErrPermissionStale,
+			wantOutcome: agent.InteractionExpired,
+			wantReason:  "native_request_ended",
+			wantCode:    agent.ErrorFailedPrecondition,
+		},
+		{
+			name:        "cancelled answer without cause",
+			err:         claude.ErrPermissionCancelled,
+			wantOutcome: agent.InteractionCancelled,
+			wantReason:  "native_request_ended",
+			wantCode:    agent.ErrorFailedPrecondition,
+		},
+		{
+			name:        "closed answer without cause",
+			err:         claude.ErrClosed,
+			wantOutcome: agent.InteractionCancelled,
+			wantReason:  "session_closed",
+			wantCode:    agent.ErrorClosed,
+		},
+		{
+			name:        "unknown outranks joined cancellation",
+			err:         errors.Join(claude.ErrPermissionCancelled, claude.ErrUnknownOutcome),
+			wantOutcome: agent.InteractionFailed,
+			wantReason:  "answer_outcome_unknown",
+			wantCode:    agent.ErrorOutcomeUnknown,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requestContext := context.Background()
+			if test.cause != nil {
+				var cancel context.CancelCauseFunc
+				requestContext, cancel = context.WithCancelCause(requestContext)
+				cancel(test.cause)
+			}
+			outcome, reason := answerTerminalOutcome(requestContext, test.err)
+			assert.Equal(t, test.wantOutcome, outcome)
+			assert.Equal(t, test.wantReason, reason)
+
+			err := interactionAnswerError(reason, test.err)
+			assert.Equal(t, test.wantCode, agent.CodeOf(err))
+			var classified *agent.Error
+			require.ErrorAs(t, err, &classified)
+			assert.Equal(t, test.wantReason, classified.Reason)
+		})
+	}
+}
+
+func notSentAnswerError() error {
+	return &claude.DispatchError{Op: "permission answer", State: claude.NotSent, Err: context.Canceled}
 }
 
 func TestInitBufferRejectsExcessEventsAndBytes(t *testing.T) {

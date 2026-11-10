@@ -316,16 +316,26 @@ func (s *exampleSession) SetConfig(
 	ctx context.Context,
 	change agent.ConfigChange,
 ) (agent.ConfigReceipt, error) {
-	if err := ctx.Err(); err != nil {
-		return agent.ConfigReceipt{Change: change}, err
-	}
+	receipt := exampleConfigNotSent(change)
 	if err := change.Validate(); err != nil {
-		return agent.ConfigReceipt{Change: change}, err
+		return receipt, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return agent.ConfigReceipt{Change: change}, errors.New("session closed")
+		return receipt, &agent.Error{
+			Code:    agent.ErrorClosed,
+			Reason:  "session_closed",
+			Message: "session is closed",
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return receipt, &agent.Error{
+			Code:    agent.ErrorUnavailable,
+			Reason:  "set_config_not_sent",
+			Message: "session configuration was not sent",
+			Cause:   err,
+		}
 	}
 	sent, accepted := true, true
 	return agent.ConfigReceipt{
@@ -335,6 +345,14 @@ func (s *exampleSession) SetConfig(
 			NativeAccepted: &accepted,
 		},
 	}, nil
+}
+
+func exampleConfigNotSent(change agent.ConfigChange) agent.ConfigReceipt {
+	sent := false
+	return agent.ConfigReceipt{
+		Change:     change,
+		Acceptance: agent.Acceptance{Sent: &sent},
+	}
 }
 
 func (s *exampleSession) Events() (agent.EventStream, error) {

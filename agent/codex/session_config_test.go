@@ -2,6 +2,7 @@ package agentcodex_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -54,6 +55,89 @@ func TestOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, resumed)
+}
+
+func TestOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
+	tests := []struct {
+		name     string
+		method   string
+		params   string
+		resume   bool
+		config   agent.SessionConfig
+		nativeID string
+	}{
+		{
+			name:     "open model only",
+			method:   "thread/start",
+			params:   `{"cwd":"/synthetic","model":"model-only"}`,
+			config:   agent.SessionConfig{Model: "model-only"},
+			nativeID: "root-open",
+		},
+		{
+			name:     "open effort only",
+			method:   "thread/start",
+			params:   `{"config":{"model_reasoning_effort":"effort-only"},"cwd":"/synthetic"}`,
+			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			nativeID: "root-open",
+		},
+		{
+			name:     "resume model only",
+			method:   "thread/resume",
+			params:   `{"cwd":"/synthetic","excludeTurns":true,"model":"model-only","threadId":"root-resume"}`,
+			resume:   true,
+			config:   agent.SessionConfig{Model: "model-only"},
+			nativeID: "root-resume",
+		},
+		{
+			name:     "resume effort only",
+			method:   "thread/resume",
+			params:   `{"config":{"model_reasoning_effort":"effort-only"},"cwd":"/synthetic","excludeTurns":true,"threadId":"root-resume"}`,
+			resume:   true,
+			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			nativeID: "root-resume",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			result := codexThreadStartResult(test.nativeID)
+			if test.resume {
+				result = codexThreadResumeResult(test.nativeID)
+			}
+			frames := append([]string(nil), mockCodexInit...)
+			frames = append(frames,
+				fmt.Sprintf(`>{"id":92,"method":%q,"params":%s}`, test.method, test.params),
+				`<{"id":92,"result":`+result+`}`,
+				fmt.Sprintf(`>{"id":93,"method":"thread/unsubscribe","params":{"threadId":%q}}`, test.nativeID),
+				`<{"id":93,"result":{"status":"unsubscribed"}}`,
+			)
+			peerSession := prepareCodexPeer(t, frames...)
+			provider := newTestProvider(t, peerSession)
+			t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+
+			_, err := provider.Start(ctx)
+			require.NoError(t, err)
+			var session agent.Session
+			if test.resume {
+				session, err = provider.Resume(ctx, agent.ResumeOptions{
+					SessionID: test.nativeID,
+					OpenOptions: agent.OpenOptions{
+						Cwd:    "/synthetic",
+						Config: test.config,
+					},
+				})
+			} else {
+				session, err = provider.Open(ctx, agent.OpenOptions{
+					Cwd:    "/synthetic",
+					Config: test.config,
+				})
+			}
+			require.NoError(t, err)
+			closeSessionOnCleanup(t, session)
+		})
+	}
 }
 
 func TestOpenAndResumeOmitEmptySessionConfig(t *testing.T) {
@@ -255,7 +339,7 @@ func TestSetConfigRequiresExperimentalAPIBeforeNativeWrite(t *testing.T) {
 }
 
 func TestSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) {
-	t.Run("native rejection", func(t *testing.T) {
+	t.Run("native rejection then success", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		frames := append([]string(nil), mockCodexInit...)
@@ -264,8 +348,10 @@ func TestSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) {
 			`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
 			`>{"id":93,"method":"thread/settings/update","params":{"model":"rejected/model","threadId":"root-a"}}`,
 			`<{"id":93,"error":{"code":-32602,"message":"unsupported model"}}`,
-			`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
-			`<{"id":94,"result":{"status":"unsubscribed"}}`,
+			`>{"id":94,"method":"thread/settings/update","params":{"model":"accepted/model","threadId":"root-a"}}`,
+			`<{"id":94,"result":{}}`,
+			`>{"id":95,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+			`<{"id":95,"result":{"status":"unsubscribed"}}`,
 		)
 		peerSession := prepareCodexPeer(t, frames...)
 		provider := newTestProvider(t, peerSession)
@@ -285,6 +371,18 @@ func TestSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) {
 		require.NotNil(t, receipt.Acceptance.NativeAccepted)
 		assert.True(t, *receipt.Acceptance.Sent)
 		assert.False(t, *receipt.Acceptance.NativeAccepted)
+
+		recoveryChange := agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: "accepted/model",
+		}
+		recoveryReceipt, err := session.(agent.ConfigController).SetConfig(
+			ctx,
+			recoveryChange,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, recoveryChange, recoveryReceipt.Change)
+		assertAccepted(t, recoveryReceipt.Acceptance)
 	})
 
 	t.Run("outcome unknown", func(t *testing.T) {

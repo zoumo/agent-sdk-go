@@ -91,9 +91,12 @@ func (c ConfigChange) Validate() error {
 	return validateConfigValue(c.ID, c.Value)
 }
 
-// ConfigReceipt reports the exact change sent to a provider and the native
-// acceptance stages observed for it. It does not claim that a configuration
-// value is currently effective.
+// ConfigReceipt reports the change requested by this call and the native
+// acceptance stages observed for it. Change echoes the request for every
+// result, including invalid and closed-session failures; Acceptance.Sent
+// distinguishes a change sent to the provider from one rejected before a
+// native write. It does not claim that a configuration value is currently
+// effective.
 type ConfigReceipt struct {
 	Change     ConfigChange
 	Acceptance Acceptance

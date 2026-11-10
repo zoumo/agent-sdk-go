@@ -25,6 +25,7 @@ import (
 const (
 	agentExecutionSessionID = "44444444-4444-4444-8444-444444444444"
 	agentExecutionSuccess   = "agent-session-config-success"
+	agentExecutionActive    = "agent-session-config-active"
 	agentExecutionResume    = "agent-session-config-resume"
 	agentExecutionReject    = "agent-session-config-reject"
 	agentExecutionUnknown   = "agent-session-config-unknown"
@@ -86,6 +87,52 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigRuntimeAcrossProviders() 
 		require.NotNil(t, closedReceipt.Acceptance.Sent)
 		assert.False(t, *closedReceipt.Acceptance.Sent)
 		assert.Nil(t, closedReceipt.Acceptance.NativeAccepted)
+	})
+}
+
+func (s *NativeIntegrationSuite) TestAgentSessionConfigUpdatesActiveWorkAcrossProviders() {
+	t := s.T()
+	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
+		tracePath := agentExecutionTracePath(t)
+		session := openAgentExecutionSession(
+			t,
+			ctx,
+			providerName,
+			agentExecutionActive,
+			agent.SessionConfig{
+				Model:           "initial/model",
+				ReasoningEffort: "initial-effort",
+			},
+		)
+		controller, ok := session.(agent.ConfigController)
+		require.True(t, ok)
+		stream, err := session.Events()
+		require.NoError(t, err)
+		initialID := session.ID()
+
+		submitted, err := session.StartOrSteer(ctx, agent.Input{
+			Content: []agent.ContentBlock{
+				agent.TextBlock{Text: "active/before"},
+			},
+		})
+		require.NoError(t, err)
+		assert.NotEmpty(t, submitted.Submission)
+		awaitAgentExecutionState(t, ctx, stream, agent.StateRunning)
+
+		change := agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: "active/model",
+		}
+		receipt, err := controller.SetConfig(ctx, change)
+		require.NoError(t, err)
+		assert.Equal(t, change, receipt.Change)
+		assertAgentExecutionAccepted(t, receipt.Acceptance)
+
+		awaitAgentExecutionIdle(t, ctx, stream)
+		submitAgentExecutionInput(t, ctx, session, stream, "active/after")
+		assert.Equal(t, initialID, session.ID())
+		assertAgentExecutionActiveConfigTrace(t, providerName, tracePath)
+		require.NoError(t, session.Close(ctx))
 	})
 }
 
@@ -242,6 +289,7 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 		return err
 	}
 	if scenario != agentExecutionSuccess &&
+		scenario != agentExecutionActive &&
 		scenario != agentExecutionResume &&
 		scenario != agentExecutionReject &&
 		scenario != agentExecutionUnknown {
@@ -276,6 +324,9 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 	scanner := bufio.NewScanner(os.Stdin)
 	encoder := json.NewEncoder(os.Stdout)
 	codexTurnCount := 0
+	codexActiveTurn := ""
+	claudeTurnCount := 0
+	claudeActiveTurn := false
 	for scanner.Scan() {
 		raw := append(json.RawMessage(nil), scanner.Bytes()...)
 		var frame struct {
@@ -365,6 +416,23 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 				}); err != nil {
 					return err
 				}
+				if scenario == agentExecutionActive && codexActiveTurn != "" {
+					if err := encoder.Encode(map[string]any{
+						"method": "turn/completed",
+						"params": map[string]any{
+							"threadId": sessionID,
+							"turn": map[string]any{
+								"id":     codexActiveTurn,
+								"status": "completed",
+								"items":  []any{},
+								"error":  nil,
+							},
+						},
+					}); err != nil {
+						return err
+					}
+					codexActiveTurn = ""
+				}
 			case "thread/unsubscribe":
 				if err := encoder.Encode(map[string]any{
 					"id":     frame.ID,
@@ -402,6 +470,10 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 				}); err != nil {
 					return err
 				}
+				if scenario == agentExecutionActive && codexTurnCount == 1 {
+					codexActiveTurn = turnID
+					continue
+				}
 				if err := encoder.Encode(map[string]any{
 					"method": "turn/completed",
 					"params": map[string]any{
@@ -421,6 +493,7 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 			}
 		case "claude":
 			if frame.Type == "user" {
+				claudeTurnCount++
 				at := time.Now().UTC().Format(time.RFC3339Nano)
 				if err := encoder.Encode(map[string]any{
 					"type":       "system",
@@ -430,6 +503,10 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 					"timestamp":  at,
 				}); err != nil {
 					return err
+				}
+				if scenario == agentExecutionActive && claudeTurnCount == 1 {
+					claudeActiveTurn = true
+					continue
 				}
 				if err := encoder.Encode(map[string]any{
 					"type":            "result",
@@ -513,11 +590,119 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 					return err
 				}
 			}
+			if scenario == agentExecutionActive &&
+				claudeActiveTurn &&
+				(frame.Request.Subtype == "set_model" ||
+					frame.Request.Subtype == "apply_flag_settings") {
+				at := time.Now().UTC().Format(time.RFC3339Nano)
+				if err := encoder.Encode(map[string]any{
+					"type":            "result",
+					"subtype":         "success",
+					"session_id":      sessionID,
+					"is_error":        false,
+					"result":          "synthetic execution completed",
+					"num_turns":       1,
+					"duration_ms":     1,
+					"duration_api_ms": 1,
+					"total_cost_usd":  0,
+					"usage":           map[string]any{},
+					"timestamp":       at,
+				}); err != nil {
+					return err
+				}
+				if err := encoder.Encode(map[string]any{
+					"type":       "system",
+					"subtype":    "session_state_changed",
+					"session_id": sessionID,
+					"state":      "idle",
+					"timestamp":  at,
+				}); err != nil {
+					return err
+				}
+				claudeActiveTurn = false
+			}
 		default:
 			return fmt.Errorf("unknown agent execution provider %q", provider)
 		}
 	}
 	return scanner.Err()
+}
+
+func awaitAgentExecutionState(
+	t *testing.T,
+	ctx context.Context,
+	stream agent.EventStream,
+	want agent.SessionState,
+) {
+	t.Helper()
+	for {
+		event, err := stream.Next(ctx)
+		require.NoError(t, err)
+		payload, ok := event.Payload.(agent.StateUpdatePayload)
+		if !ok || payload.State == nil {
+			continue
+		}
+		if *payload.State == want {
+			return
+		}
+	}
+}
+
+func assertAgentExecutionActiveConfigTrace(
+	t *testing.T,
+	providerName string,
+	path string,
+) {
+	t.Helper()
+	entries := readAgentExecutionTrace(t, path)
+	_ = agentExecutionTraceArgv(t, entries)
+	frames := agentExecutionTraceFrames(t, entries)
+	switch providerName {
+	case "codex":
+		starts := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/start"
+		})
+		turns := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "turn/start"
+		})
+		settings := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/settings/update"
+		})
+		require.Len(t, starts, 1)
+		require.Len(t, turns, 2)
+		require.Len(t, settings, 1)
+		requireAgentExecutionTurnText(t, turns[0].frame.Params, "active/before")
+		requireAgentExecutionTurnText(t, turns[1].frame.Params, "active/after")
+		require.Less(t, turns[0].index, settings[0].index)
+		require.Less(t, settings[0].index, turns[1].index)
+		var params map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(settings[0].frame.Params, &params))
+		requireAgentExecutionString(t, params, "model", "active/model")
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "turn/interrupt"
+		}))
+	case "claude":
+		users := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "user"
+		})
+		models := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "control_request" &&
+				frame.Request.Subtype == "set_model"
+		})
+		require.Len(t, users, 2)
+		require.Len(t, models, 1)
+		requireAgentExecutionClaudeText(t, users[0].frame, "active/before")
+		requireAgentExecutionClaudeText(t, users[1].frame, "active/after")
+		require.Less(t, users[0].index, models[0].index)
+		require.Less(t, models[0].index, users[1].index)
+		assert.Equal(t, "active/model", models[0].frame.Request.Model)
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "control_request" &&
+				frame.Request.Subtype == "interrupt"
+		}))
+	default:
+		require.FailNow(t, "unknown provider", providerName)
+	}
 }
 
 type agentExecutionTracer struct {

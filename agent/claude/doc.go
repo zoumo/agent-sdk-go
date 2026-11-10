@@ -66,13 +66,15 @@
 // Conversion gaps are non-fatal; a native decoder/protocol failure terminates
 // the stream after its diagnostic gap.
 //
-// Model and reasoning-effort execution options use literal Claude CLI arguments
-// on open and resume; empty values are omitted. Claude init can provide an
-// explicit effective model, but it has no effort observation, so a requested
-// effort remains unverified. Runtime model and effort updates use native control
-// requests. Their acknowledgments prove acceptance only and do not populate an
-// Effective value. A model update clears any previous model Effective value and
-// invalidates any previous effort Effective evidence.
+// Open and Resume use SessionConfig. Nonempty model and reasoning-effort values
+// become literal Claude CLI arguments on open and resume; empty values are
+// omitted. Runtime configuration uses the optional ConfigController.SetConfig
+// path: model maps to native SetModel and effort maps to native SetEffort,
+// including its native settings preflight. Updates affect provider-determined
+// later work; they do not wait for idle, interrupt, steer, or restart the
+// process. A successful receipt means only that Claude accepted the request.
+// Claude init may report a native model observation, but the unified layer does
+// not cache, infer, or report an observed current configuration.
 //
 // This package has no unified history or NativeClient escape hatch. Native
 // package-level session, metadata, message, and subagent queries remain the

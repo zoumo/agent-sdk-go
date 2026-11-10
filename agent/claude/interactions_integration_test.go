@@ -219,7 +219,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 
 	_, err = session.Answer(ctx, requested.Interaction, answer)
 	require.Error(t, err)
@@ -302,7 +302,7 @@ func TestClaudeConcurrentAnswersHaveSingleAdmission(t *testing.T) {
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 }
@@ -591,7 +591,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 				}},
 			},
 			code:   agent.ErrorInvalidArgument,
-			reason: "unknown_form_question",
+			reason: agent.ErrorReasonUnknownFormQuestion,
 		},
 		{
 			name: "array for single select",
@@ -602,7 +602,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 				}},
 			},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "non-string multi select label",
@@ -613,7 +613,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 				}},
 			},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 	}
 	for _, test := range tests {
@@ -690,7 +690,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 	assert.Equal(t, agent.EventSessionError, gap.Type())
 	assert.Equal(t, agent.SessionErrorPayload{
 		Message: "Claude questions are disabled for this session",
-		Reason:  "agent_questions_disabled",
+		Reason:  agent.ErrorReasonAgentQuestionsDisabled,
 	}, gap.Payload)
 	assert.Equal(t, true, requireClaudeMeta(t, gap)["requestRejected"])
 
@@ -716,7 +716,7 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 		{
 			name:       "session close",
 			closeFirst: true,
-			reason:     "session_closed",
+			reason:     agent.ErrorReasonSessionClosed,
 			report:     "failed",
 		},
 	}

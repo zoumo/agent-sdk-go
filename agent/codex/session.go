@@ -119,7 +119,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.closed && s.explicitClose {
 		return nil, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -127,7 +127,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.eventsClaimed {
 		return nil, adapterError(
 			agent.ErrorFailedPrecondition,
-			"events_already_claimed",
+			agent.ErrorReasonEventsAlreadyClaimed,
 			"the session event stream has already been claimed",
 			nil,
 		)
@@ -150,7 +150,7 @@ func (s *session) StartOrSteer(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -185,7 +185,7 @@ func (s *session) StartOrSteer(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
-			"start_or_steer_identity_missing",
+			ErrorReasonStartOrSteerIdentityMissing,
 			"Codex accepted the input without returning a turn identity",
 			nil,
 		)
@@ -303,7 +303,7 @@ func (s *session) Interrupt(
 		s.mu.Unlock()
 		return agent.InterruptReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -365,7 +365,7 @@ func (s *session) Close(context.Context) error {
 		events := s.closedInteractionEvents(
 			invalidated,
 			agent.InteractionCancelled,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			time.Now().UTC(),
 		)
 		_ = s.pushEvents(events)
@@ -390,7 +390,7 @@ func (s *session) requireOpen() error {
 	if s.closed {
 		return adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -418,7 +418,7 @@ func (s *session) observe() {
 		if err := s.pushEvents(events); err != nil {
 			s.failObservation(adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver unified Codex event",
 				err,
 			))
@@ -538,7 +538,7 @@ func textInput(input agent.Input) (codex.Input, error) {
 		if block.Text == nil {
 			return codex.Input{}, adapterError(
 				agent.ErrorUnsupported,
-				"content_block_unsupported",
+				agent.ErrorReasonContentBlockUnsupported,
 				"Codex input supports text blocks only",
 				nil,
 			)
@@ -546,7 +546,7 @@ func textInput(input agent.Input) (codex.Input, error) {
 		if block.Text.Annotations != nil {
 			return codex.Input{}, adapterError(
 				agent.ErrorUnsupported,
-				"text_annotations_unsupported",
+				agent.ErrorReasonTextAnnotationsUnsupported,
 				"Codex input does not support text annotations",
 				nil,
 			)
@@ -567,7 +567,7 @@ func sessionTerminationError(cause error) error {
 	}
 	return adapterError(
 		agent.ErrorUnavailable,
-		"session_terminated",
+		agent.ErrorReasonSessionTerminated,
 		"Codex session terminated",
 		cause,
 	)
@@ -587,7 +587,7 @@ func nativeOperationError(operation string, err error) error {
 		case codex.OutcomeUnknown:
 			return adapterError(
 				agent.ErrorOutcomeUnknown,
-				operation+"_outcome_unknown",
+				agent.ErrorReasonForCode(operation, agent.ErrorOutcomeUnknown),
 				operation+" result is unknown; do not retry",
 				err,
 			)
@@ -595,7 +595,7 @@ func nativeOperationError(operation string, err error) error {
 			if code := nativeCauseCode(answerErr.Cause); code != "" {
 				return adapterError(
 					code,
-					operation+"_"+string(code),
+					agent.ErrorReasonForCode(operation, code),
 					operation+" failed",
 					err,
 				)
@@ -608,7 +608,7 @@ func nativeOperationError(operation string, err error) error {
 		if callErr.Dispatch == codex.OutcomeUnknown {
 			return adapterError(
 				agent.ErrorOutcomeUnknown,
-				operation+"_outcome_unknown",
+				agent.ErrorReasonForCode(operation, agent.ErrorOutcomeUnknown),
 				operation+" result is unknown; do not retry",
 				err,
 			)
@@ -616,7 +616,7 @@ func nativeOperationError(operation string, err error) error {
 		if code := nativeCauseCode(callErr.Cause); code != "" {
 			return adapterError(
 				code,
-				operation+"_"+string(code),
+				agent.ErrorReasonForCode(operation, code),
 				operation+" failed",
 				err,
 			)
@@ -627,17 +627,17 @@ func nativeOperationError(operation string, err error) error {
 	if errors.As(err, &rpcErr) {
 		return adapterError(
 			agent.ErrorNativeRejected,
-			operation+"_native_rejected",
+			agent.ErrorReasonForCode(operation, agent.ErrorNativeRejected),
 			operation+" was rejected by Codex",
 			err,
 		)
 	}
 	if code := nativeCauseCode(err); code != "" {
-		return adapterError(code, operation+"_"+string(code), operation+" failed", err)
+		return adapterError(code, agent.ErrorReasonForCode(operation, code), operation+" failed", err)
 	}
 	return adapterError(
 		agent.ErrorUnavailable,
-		operation+"_failed",
+		agent.ErrorReasonForOperation(operation, agent.ErrorReasonSuffixFailed),
 		operation+" failed",
 		err,
 	)

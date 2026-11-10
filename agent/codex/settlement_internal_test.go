@@ -28,7 +28,7 @@ func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
 		outcome, reason := s.settlement(
 			interaction,
 			agent.InteractionCancelled,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 		)
 		settled <- result{outcome: outcome, reason: reason}
 	}()
@@ -48,7 +48,7 @@ func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
 	select {
 	case got := <-settled:
 		assert.Equal(t, agent.InteractionAnswered, got.outcome)
-		assert.Equal(t, "session_closed", got.reason)
+		assert.Equal(t, agent.ErrorReasonSessionClosed, got.reason)
 	case <-time.After(time.Second):
 		require.FailNow(t, "settlement did not resume")
 	}
@@ -82,7 +82,7 @@ func TestInteractionSettlementPreservesUnknownAnswerOutcome(t *testing.T) {
 				Cause:    errors.New("synthetic write failure"),
 			},
 			wantOutcome: agent.InteractionFailed,
-			wantReason:  "answer_outcome_unknown",
+			wantReason:  agent.ErrorReasonAnswerOutcomeUnknown,
 		},
 	}
 	for _, test := range tests {

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
@@ -382,9 +383,9 @@ func TestClaudeAssistantBlockIdentityGapsWithoutGuessing(t *testing.T) {
 	require.NoError(t, err)
 
 	first := nextEvent(t, ctx, stream)
-	assertGap(t, first, "assistant_block_coordinate_missing")
+	assertGap(t, first, agentclaude.ErrorReasonAssistantBlockCoordinateMissing)
 	second := nextEvent(t, ctx, stream)
-	assertGap(t, second, "assistant_block_coordinate_missing")
+	assertGap(t, second, agentclaude.ErrorReasonAssistantBlockCoordinateMissing)
 	orphan := nextEvent(t, ctx, stream)
 	assertGap(t, orphan, "tool_result_without_call")
 }

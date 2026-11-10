@@ -109,7 +109,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 			name:    "missing answers",
 			content: map[string]any{},
 			code:    agent.ErrorInvalidArgument,
-			reason:  "invalid_form_answer",
+			reason:  agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "unknown question",
@@ -117,7 +117,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Other?": "json",
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "unknown_form_question",
+			reason: agent.ErrorReasonUnknownFormQuestion,
 		},
 		{
 			name: "array for single select",
@@ -125,7 +125,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Which format?": []any{"json", "yaml"},
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "non-string multi select label",
@@ -133,7 +133,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Which sections?": []any{"intro", json.Number("1")},
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "non string answer",
@@ -141,7 +141,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Which format?": json.Number("1"),
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 	}
 	for _, test := range tests {
@@ -187,7 +187,7 @@ func TestAnswerTerminalOutcomePreservesUnknownWrite(t *testing.T) {
 		errors.Join(claude.ErrPermissionCancelled, claude.ErrUnknownOutcome),
 	)
 	assert.Equal(t, agent.InteractionFailed, outcome)
-	assert.Equal(t, "answer_outcome_unknown", reason)
+	assert.Equal(t, agent.ErrorReasonAnswerOutcomeUnknown, reason)
 }
 
 func TestInitBufferRejectsExcessEventsAndBytes(t *testing.T) {

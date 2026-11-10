@@ -238,12 +238,12 @@ func TestProviderRejectsInvalidUTF8BeforeNativeRequest(t *testing.T) {
 		{
 			name:       "model",
 			execution:  agent.ExecutionOptions{Model: string([]byte{0xff})},
-			wantReason: "execution_option_invalid_utf8",
+			wantReason: agent.ErrorReasonExecutionOptionInvalidUTF8,
 		},
 		{
 			name:       "reasoning effort",
 			execution:  agent.ExecutionOptions{ReasoningEffort: string([]byte{0xff})},
-			wantReason: "execution_option_invalid_utf8",
+			wantReason: agent.ErrorReasonExecutionOptionInvalidUTF8,
 		},
 	}
 

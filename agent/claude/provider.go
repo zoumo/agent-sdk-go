@@ -98,7 +98,7 @@ func (p *Provider) Resume(
 	if ctx == nil {
 		return nil, adapterError(
 			agent.ErrorInvalidArgument,
-			"nil_context",
+			ErrorReasonNilContext,
 			"resume context is required",
 			nil,
 		)
@@ -219,7 +219,7 @@ func (p *Provider) openNativeSession(
 		if resumeID != "" && init.SessionID != resumeID {
 			return nil, closeAfterOpenFailure(native, adapterError(
 				agent.ErrorNativeRejected,
-				"resume_identity_mismatch",
+				ErrorReasonResumeIdentityMismatch,
 				"Claude resumed a different native session",
 				nil,
 			))
@@ -227,7 +227,7 @@ func (p *Provider) openNativeSession(
 		if !sameDirectory(init.System.CWD, options.Cwd) {
 			return nil, closeAfterOpenFailure(native, adapterError(
 				agent.ErrorNativeRejected,
-				"session_cwd_mismatch",
+				ErrorReasonSessionCWDMismatch,
 				"Claude init working directory does not match the requested directory",
 				nil,
 			))
@@ -272,14 +272,14 @@ func (p *Provider) validateResumeConfig() error {
 	case p.config.ConfigDir == "":
 		return adapterError(
 			agent.ErrorFailedPrecondition,
-			"resume_config_dir_required",
+			ErrorReasonResumeConfigDirRequired,
 			"Claude resume requires an explicit configuration directory",
 			nil,
 		)
 	case !filepath.IsAbs(p.config.ConfigDir):
 		return adapterError(
 			agent.ErrorFailedPrecondition,
-			"resume_config_dir_not_absolute",
+			ErrorReasonResumeConfigDirNotAbsolute,
 			"Claude resume configuration directory must be absolute",
 			nil,
 		)
@@ -345,7 +345,7 @@ func validateOpenOptions(options agent.OpenOptions) error {
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,
-			"additional_dirs_unsupported",
+			agent.ErrorReasonAdditionalDirsUnsupported,
 			"Claude additional directories are not supported by this adapter",
 			nil,
 		)
@@ -363,7 +363,7 @@ func waitForInit(
 		if err != nil {
 			return nil, nil, adapterError(
 				agent.ErrorUnavailable,
-				"initialize_wait_failed",
+				ErrorReasonInitializeWaitFailed,
 				"wait for Claude init",
 				err,
 			)
@@ -380,7 +380,7 @@ func waitForInit(
 			if received.Event.SessionID == "" {
 				return nil, nil, adapterError(
 					agent.ErrorUnavailable,
-					"initialize_identity_missing",
+					ErrorReasonInitializeIdentityMissing,
 					"Claude init has no session identity",
 					nil,
 				)
@@ -388,7 +388,7 @@ func waitForInit(
 			if received.Event.IsReplay != nil && *received.Event.IsReplay {
 				return nil, nil, adapterError(
 					agent.ErrorNativeRejected,
-					"initialize_replayed",
+					ErrorReasonInitializeReplayed,
 					"Claude returned replay material instead of a live init",
 					nil,
 				)
@@ -426,7 +426,7 @@ func (b *initBuffer) add(received claude.Received) error {
 		size > maxInitBufferedBytes-b.bytes {
 		return adapterError(
 			agent.ErrorResourceExhausted,
-			"initialize_buffer_exhausted",
+			ErrorReasonInitializeBufferExhausted,
 			"Claude init staging exceeded its limit",
 			nil,
 		)

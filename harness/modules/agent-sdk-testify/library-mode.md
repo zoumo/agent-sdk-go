@@ -21,12 +21,12 @@ cancellation and its simulation orchestration.
 The repository uses this exact test dependency:
 
 ```text
-require github.com/zoumo/agent-sdk-testify v0.0.0-20261109044915-b606272c88c1
-sum h1:PGGn9abQro2aCssr/tElOCkSHEg6wwNpXEhD5pPn8Ac=
+require github.com/zoumo/agent-sdk-testify v0.1.2
+sum h1:7pO42y7Dg8NXbQNg51d02+TKLzjmQ8WyW4EvCsCZ51k=
 ```
 
-The pseudo-version resolves to revision
-`b606272c88c12e113ef084dc12e0f3dcb22a8050`. The exact version and checksum
+The tag resolves to revision
+`ec80d165277190756b6506594141436a9bdcab97`. The exact version and checksum
 appear in `go.mod`, `go.sum` and `internal/mocktest/testify_identity.go`.
 `TestTestifyIdentityMatchesModulePin` guards agreement between those sources.
 A version or checksum change is an explicit reviewed dependency update, not a

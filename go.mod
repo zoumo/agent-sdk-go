@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/stretchr/testify v1.12.1
-	github.com/zoumo/agent-sdk-testify v0.0.0-20261109044915-b606272c88c1
+	github.com/zoumo/agent-sdk-testify v0.1.2
 	github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a
 )
 

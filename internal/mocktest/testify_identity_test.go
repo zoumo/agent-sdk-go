@@ -30,11 +30,20 @@ func TestTestifyIdentityMatchesModulePin(t *testing.T) {
 		testifyModulePath+" "+testifyModuleVersion+" "+testifyModuleSum,
 		"embedded identity sum must match go.sum",
 	)
-	require.True(
-		t,
-		strings.HasPrefix(testifyModuleRevision, pseudoRevision(testifyModuleVersion)),
-		"embedded revision must match the pseudo-version suffix",
-	)
+	if strings.HasPrefix(testifyModuleVersion, "v0.0.0-") {
+		require.True(
+			t,
+			strings.HasPrefix(testifyModuleRevision, pseudoRevision(testifyModuleVersion)),
+			"embedded revision must match the pseudo-version suffix",
+		)
+	} else {
+		require.Regexp(
+			t,
+			`^[0-9a-f]{40}$`,
+			testifyModuleRevision,
+			"embedded revision must be a full commit ID",
+		)
+	}
 }
 
 func moduleRoot(t *testing.T) string {

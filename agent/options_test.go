@@ -150,20 +150,20 @@ func TestAdditionalSystemPromptValidationDoesNotExposeSentinel(t *testing.T) {
 	}
 }
 
-func TestSessionConfigHasOnlyModelAndReasoningEffort(t *testing.T) {
+func TestSessionConfigHasOnlyModelAndEffort(t *testing.T) {
 	configType := reflect.TypeFor[agent.SessionConfig]()
 
 	require.Equal(t, 2, configType.NumField())
 	assert.Equal(t, "Model", configType.Field(0).Name)
 	assert.Equal(t, reflect.TypeFor[string](), configType.Field(0).Type)
-	assert.Equal(t, "ReasoningEffort", configType.Field(1).Name)
+	assert.Equal(t, "Effort", configType.Field(1).Name)
 	assert.Equal(t, reflect.TypeFor[string](), configType.Field(1).Type)
 }
 
 func TestResumeOptionsInheritOpenSessionConfig(t *testing.T) {
 	config := agent.SessionConfig{
-		Model:           "native-model",
-		ReasoningEffort: "native-effort",
+		Model:  "native-model",
+		Effort: "native-effort",
 	}
 	opened := agent.OpenOptions{
 		Cwd:    t.TempDir(),

@@ -12,7 +12,7 @@
 // StartOrSteer lets the adapter start new work, join acceptable current work, or
 // report that input was not applied; it never queues, waits for idle, persists,
 // or retries.
-// OpenOptions.Config groups main-session model and reasoning-effort values. An
+// OpenOptions.Config groups main-session Model and Effort values. An
 // empty field omits that value; a nonempty value is passed literally, without
 // trimming, aliasing or cross-provider conversion. Sessions may optionally
 // implement ConfigController to update one value through SetConfig using the

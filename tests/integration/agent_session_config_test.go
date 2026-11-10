@@ -41,8 +41,8 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigRuntimeAcrossProviders() 
 			providerName,
 			agentExecutionSuccess,
 			agent.SessionConfig{
-				Model:           " Caller/Model v2 ",
-				ReasoningEffort: " Native/High ",
+				Model:  " Caller/Model v2 ",
+				Effort: " Native/High ",
 			},
 		)
 		controller, ok := session.(agent.ConfigController)
@@ -100,8 +100,8 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigUpdatesActiveWorkAcrossPr
 			providerName,
 			agentExecutionActive,
 			agent.SessionConfig{
-				Model:           "initial/model",
-				ReasoningEffort: "initial-effort",
+				Model:  "initial/model",
+				Effort: "initial-effort",
 			},
 		)
 		controller, ok := session.(agent.ConfigController)
@@ -160,8 +160,8 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigResumeAcrossProviders() {
 			OpenOptions: agent.OpenOptions{
 				Cwd: cwd,
 				Config: agent.SessionConfig{
-					Model:           " Resume/Model ",
-					ReasoningEffort: " Native/Resume ",
+					Model:  " Resume/Model ",
+					Effort: " Native/Resume ",
 				},
 			},
 		})
@@ -185,8 +185,8 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigNativeRejectionAcrossProv
 			providerName,
 			agentExecutionReject,
 			agent.SessionConfig{
-				Model:           "initial/model",
-				ReasoningEffort: "initial-effort",
+				Model:  "initial/model",
+				Effort: "initial-effort",
 			},
 		)
 		controller, ok := session.(agent.ConfigController)
@@ -244,8 +244,8 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigUnknownOutcomeAcrossProvi
 					providerName,
 					agentExecutionUnknown,
 					agent.SessionConfig{
-						Model:           "initial/model",
-						ReasoningEffort: "initial-effort",
+						Model:  "initial/model",
+						Effort: "initial-effort",
 					},
 				)
 				controller, ok := session.(agent.ConfigController)

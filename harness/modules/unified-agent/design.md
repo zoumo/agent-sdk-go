@@ -226,8 +226,8 @@ adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
 type SessionConfig struct {
-    Model           string
-    ReasoningEffort string
+    Model  string
+    Effort string
 }
 
 type OpenOptions struct {
@@ -519,7 +519,7 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 
 ### 会话级模型与 effort
 
-`SessionConfig` 的全部字段只有 `Model` 和 `ReasoningEffort`。两者都使用
+`SessionConfig` 的全部字段只有 `Model` 和 `Effort`。两者都使用
 provider 原生字面值，不在统一层定义模型别名、模型目录或 effort 枚举。
 
 #### 启动与恢复
@@ -611,7 +611,7 @@ provider 映射如下：
 | 配置 ID | Codex `Open` / `Resume` | Codex 运行时 | Claude `Open` / `Resume` | Claude 运行时 |
 |---|---|---|---|---|
 | `model` | `SessionConfig.Model` 映射到顶层 `model` 参数 | 原生 `SetModel` 映射到 `thread/settings/update` 的 `model` | `SessionConfig.Model` 映射到 `--model=<value>` | 原生 `SetModel` 映射到 `set_model` control request |
-| `effort` | `SessionConfig.ReasoningEffort` 映射到配置键 `model_reasoning_effort` | 原生 `SetThinking` 映射到 `thread/settings/update` 的 `effort` | `SessionConfig.ReasoningEffort` 映射到 `--effort=<value>` | 原生 `SetEffort` 映射到 `get_settings` 预检后的 `apply_flag_settings.effortLevel` |
+| `effort` | `SessionConfig.Effort` 映射到配置键 `model_reasoning_effort` | 原生 `SetThinking` 映射到 `thread/settings/update` 的 `effort` | `SessionConfig.Effort` 映射到 `--effort=<value>` | 原生 `SetEffort` 映射到 `get_settings` 预检后的 `apply_flag_settings.effortLevel` |
 
 Codex 恢复继续显式使用 `excludeTurns: true`，配置传递不得改变恢复身份或把
 保存历史转换成 live 事件。Claude 恢复仍按原生 init 核对 Session ID 和 cwd；

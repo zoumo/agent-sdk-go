@@ -22,8 +22,8 @@ func TestSessionConfigValidation(t *testing.T) {
 		{
 			name: "literal values",
 			config: agent.SessionConfig{
-				Model:           " literal/model ",
-				ReasoningEffort: " Native/High ",
+				Model:  " literal/model ",
+				Effort: " Native/High ",
 			},
 		},
 		{
@@ -45,7 +45,7 @@ func TestSessionConfigValidation(t *testing.T) {
 		{
 			name: "effort invalid UTF-8",
 			config: agent.SessionConfig{
-				ReasoningEffort: configSentinel + string([]byte{0xff}),
+				Effort: configSentinel + string([]byte{0xff}),
 			},
 			wantReason:  "config_value_invalid_utf8",
 			wantMessage: "reasoning effort must be valid UTF-8",
@@ -53,7 +53,7 @@ func TestSessionConfigValidation(t *testing.T) {
 		{
 			name: "effort NUL",
 			config: agent.SessionConfig{
-				ReasoningEffort: configSentinel + "\x00tail",
+				Effort: configSentinel + "\x00tail",
 			},
 			wantReason:  "config_value_contains_nul",
 			wantMessage: "reasoning effort must not contain NUL",
@@ -173,8 +173,8 @@ func TestSessionConfigValidationUsesStableFieldOrder(t *testing.T) {
 		{
 			name: "model before reasoning effort",
 			config: agent.SessionConfig{
-				Model:           configSentinel + "\x00",
-				ReasoningEffort: configSentinel + string([]byte{0xff}),
+				Model:  configSentinel + "\x00",
+				Effort: configSentinel + string([]byte{0xff}),
 			},
 			wantReason:  "config_value_contains_nul",
 			wantMessage: "model must not contain NUL",

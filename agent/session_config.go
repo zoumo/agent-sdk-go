@@ -11,8 +11,8 @@ import (
 // Nonempty values are passed literally without trimming, aliasing or
 // cross-provider conversion.
 type SessionConfig struct {
-	Model           string
-	ReasoningEffort string
+	Model  string
+	Effort string
 }
 
 // Validate checks session configuration before native side effects. Empty
@@ -21,7 +21,7 @@ func (c SessionConfig) Validate() error {
 	if err := validateConfigValue(ConfigModel, c.Model); err != nil {
 		return err
 	}
-	return validateConfigValue(ConfigEffort, c.ReasoningEffort)
+	return validateConfigValue(ConfigEffort, c.Effort)
 }
 
 func validateConfigValue(

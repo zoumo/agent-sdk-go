@@ -324,7 +324,7 @@ func (p *Provider) nativeOptions(
 		WorkDir:           workDir,
 		MCPServers:        mcpServers,
 		Model:             sessionConfig.Model,
-		Effort:            sessionConfig.ReasoningEffort,
+		Effort:            sessionConfig.Effort,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,

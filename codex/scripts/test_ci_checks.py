@@ -92,6 +92,19 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn('bash scripts/check-consumers.sh "$SDK_CONSUMER_SHA"', consumer)
         self.assertIn('bash claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"', consumer)
 
+    def test_external_consumer_retrieves_exact_commit_through_configured_proxy(self):
+        script = (ROOT.parent / "scripts/check-consumers.sh").read_text()
+        self.assertIn(
+            'export GOPROXY="${SDK_CONSUMER_GOPROXY:-https://proxy.golang.org,direct}"',
+            script,
+        )
+        self.assertIn(
+            'go mod download -json "github.com/zoumo/agent-sdk-go@$revision"',
+            script,
+        )
+        self.assertNotIn("GOPROXY=direct", script)
+        self.assertIn("module.get('Origin', {}).get('Hash') == sys.argv[2]", script)
+
 
 class CIGates(unittest.TestCase):
     def setUp(self):

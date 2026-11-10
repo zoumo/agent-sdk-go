@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,7 +109,7 @@ func TestQuerySourceInventoryIdentityChange(t *testing.T) {
 
 			source, err := openQuerySource(context.Background(), root, root, "source", expected)
 			childQueryKind(t, err, "changed")
-			require.Nil(t, source.file)
+			assert.Nil(t, source.file)
 		})
 	}
 }

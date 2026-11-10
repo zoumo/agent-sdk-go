@@ -250,6 +250,77 @@ func TestClaudeOpenPreservesNativeExecutionRejection(t *testing.T) {
 	assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
 }
 
+func TestClaudeProviderRejectsInvalidExecutionOptionsBeforeNativeLaunch(
+	t *testing.T,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	launched := 0
+	provider := newTestClaudeProviderWithObserver(
+		t,
+		agentclaude.Config{},
+		func(claude.SessionOptions) {
+			launched++
+		},
+	)
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+
+	const sentinel = "execution-option-secret-claude"
+	tests := []struct {
+		name       string
+		execution  agent.ExecutionOptions
+		wantReason string
+	}{
+		{
+			name: "invalid UTF-8",
+			execution: agent.ExecutionOptions{
+				Model: sentinel + string([]byte{0xff}),
+			},
+			wantReason: "execution_option_invalid_utf8",
+		},
+		{
+			name: "NUL",
+			execution: agent.ExecutionOptions{
+				ReasoningEffort: sentinel + "\x00tail",
+			},
+			wantReason: "execution_option_contains_nul",
+		},
+	}
+
+	for _, test := range tests {
+		for _, operation := range []string{"open", "resume"} {
+			t.Run(test.name+"/"+operation, func(t *testing.T) {
+				options := agent.OpenOptions{
+					Cwd:       cwd,
+					Execution: test.execution,
+				}
+				var operationErr error
+				if operation == "open" {
+					_, operationErr = provider.Open(ctx, options)
+				} else {
+					_, operationErr = provider.Resume(ctx, agent.ResumeOptions{
+						SessionID:   "execution-existing",
+						OpenOptions: options,
+					})
+				}
+				require.Error(t, operationErr)
+				assert.Zero(t, launched)
+				assert.Equal(
+					t,
+					agent.ErrorInvalidArgument,
+					agent.CodeOf(operationErr),
+				)
+				var classified *agent.Error
+				require.ErrorAs(t, operationErr, &classified)
+				assert.Equal(t, test.wantReason, classified.Reason)
+				assert.NotContains(t, operationErr.Error(), sentinel)
+			})
+		}
+	}
+}
+
 func TestClaudeExecutionReporterRequiresInitModelObservation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

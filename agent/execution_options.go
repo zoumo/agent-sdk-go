@@ -1,6 +1,10 @@
 package agent
 
-import "context"
+import (
+	"context"
+	"strings"
+	"unicode/utf8"
+)
 
 // ExecutionOptions contains provider-native execution values for a main
 // session. An empty field is omitted and is not a request to clear or restore a
@@ -12,6 +16,52 @@ import "context"
 type ExecutionOptions struct {
 	Model           string
 	ReasoningEffort string
+}
+
+// Validate checks the provider-neutral execution-option values before native
+// side effects. Empty values are valid because they omit the option.
+func (o ExecutionOptions) Validate() error {
+	if err := validateExecutionOptionEncoding(
+		ExecutionOptionModel,
+		o.Model,
+	); err != nil {
+		return err
+	}
+	return validateExecutionOptionEncoding(
+		ExecutionOptionReasoningEffort,
+		o.ReasoningEffort,
+	)
+}
+
+func validateExecutionOptionEncoding(
+	option ExecutionOption,
+	value string,
+) error {
+	if value == "" {
+		return nil
+	}
+	name := "execution option"
+	switch option {
+	case ExecutionOptionModel:
+		name = "model"
+	case ExecutionOptionReasoningEffort:
+		name = "reasoning effort"
+	}
+	if !utf8.ValidString(value) {
+		return &Error{
+			Code:    ErrorInvalidArgument,
+			Reason:  "execution_option_invalid_utf8",
+			Message: name + " must be valid UTF-8",
+		}
+	}
+	if strings.ContainsRune(value, '\x00') {
+		return &Error{
+			Code:    ErrorInvalidArgument,
+			Reason:  "execution_option_contains_nul",
+			Message: name + " must not contain NUL",
+		}
+	}
+	return nil
 }
 
 // ExecutionValue separates the caller's last accepted request from an explicit

@@ -48,7 +48,10 @@ func (o OpenOptions) Validate() error {
 			"additional system prompt must not contain NUL",
 		)
 	}
-	return validateMCPServers(o.MCPServers)
+	if err := validateMCPServers(o.MCPServers); err != nil {
+		return err
+	}
+	return o.Execution.Validate()
 }
 
 // ResumeOptions identifies an existing native main session to resume.

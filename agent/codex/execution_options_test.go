@@ -231,16 +231,19 @@ func TestProviderOpenSurfacesNativeExecutionOptionRejection(t *testing.T) {
 
 func TestProviderRejectsInvalidUTF8BeforeNativeRequest(t *testing.T) {
 	tests := []struct {
-		name      string
-		execution agent.ExecutionOptions
+		name       string
+		execution  agent.ExecutionOptions
+		wantReason string
 	}{
 		{
-			name:      "model",
-			execution: agent.ExecutionOptions{Model: string([]byte{0xff})},
+			name:       "model",
+			execution:  agent.ExecutionOptions{Model: string([]byte{0xff})},
+			wantReason: "execution_option_invalid_utf8",
 		},
 		{
-			name:      "reasoning effort",
-			execution: agent.ExecutionOptions{ReasoningEffort: string([]byte{0xff})},
+			name:       "reasoning effort",
+			execution:  agent.ExecutionOptions{ReasoningEffort: string([]byte{0xff})},
+			wantReason: "execution_option_invalid_utf8",
 		},
 	}
 
@@ -261,6 +264,9 @@ func TestProviderRejectsInvalidUTF8BeforeNativeRequest(t *testing.T) {
 			require.Error(t, err)
 			assert.Nil(t, session)
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+			var classified *agent.Error
+			require.ErrorAs(t, err, &classified)
+			assert.Equal(t, test.wantReason, classified.Reason)
 		})
 	}
 }

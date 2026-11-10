@@ -66,19 +66,51 @@ func TestQuerySourceIntegrity(t *testing.T) {
 }
 
 func TestQuerySourceInventoryIdentityChange(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "source")
-	require.NoError(t, os.WriteFile(path, []byte("original\n"), 0o600))
-	root, err := os.OpenRoot(dir)
-	require.NoError(t, err)
-	defer root.Close()
-	expected, err := os.Lstat(path)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte("changed after inventory\n"), 0o600))
+	cases := []struct {
+		name   string
+		change func(t *testing.T, path string, expected os.FileInfo)
+	}{
+		{
+			name: "in-place-size-change",
+			change: func(t *testing.T, path string, _ os.FileInfo) {
+				require.NoError(t, os.WriteFile(path, []byte("changed after inventory\n"), 0o600))
+			},
+		},
+		{
+			name: "same-size-same-mtime-replacement",
+			change: func(t *testing.T, path string, expected os.FileInfo) {
+				// Keep the old inode alive so the replacement has a distinct identity.
+				require.NoError(t, os.Rename(path, path+".old"))
+				old, err := os.Lstat(path + ".old")
+				require.NoError(t, err)
+				require.True(t, os.SameFile(expected, old))
+				require.NoError(t, os.WriteFile(path, []byte("replaced\n"), 0o600))
+				require.NoError(t, os.Chtimes(path, expected.ModTime(), expected.ModTime()))
+				replaced, err := os.Lstat(path)
+				require.NoError(t, err)
+				require.Equal(t, expected.Size(), replaced.Size())
+				require.True(t, expected.ModTime().Equal(replaced.ModTime()))
+				require.False(t, os.SameFile(expected, replaced))
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "source")
+			require.NoError(t, os.WriteFile(path, []byte("original\n"), 0o600))
+			root, err := os.OpenRoot(dir)
+			require.NoError(t, err)
+			defer root.Close()
+			expected, err := os.Lstat(path)
+			require.NoError(t, err)
+			tc.change(t, path, expected)
 
-	source, err := openQuerySource(context.Background(), root, root, "source", expected)
-	childQueryKind(t, err, "changed")
-	require.Nil(t, source.file)
+			source, err := openQuerySource(context.Background(), root, root, "source", expected)
+			childQueryKind(t, err, "changed")
+			require.Nil(t, source.file)
+		})
+	}
 }
 
 // A sample must verify exactly the bytes it read, including its tail probe;

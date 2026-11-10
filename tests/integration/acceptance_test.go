@@ -3181,7 +3181,7 @@ func submitAgentExecutionInput(
 ) {
 	t.Helper()
 	receipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: text}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: text}}},
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, receipt.Submission)

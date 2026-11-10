@@ -299,7 +299,9 @@ func (s *session) streamDelta(
 			key.itemID(),
 			agent.MessageChunk{
 				MessageID: key.itemID(),
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: frame.Delta.Text}},
+				Content: []agent.ContentBlock{
+					{Text: &agent.ContentBlockText{Text: frame.Delta.Text}},
+				},
 			},
 			nativeEventTime(received.Raw),
 			meta,
@@ -314,7 +316,9 @@ func (s *session) streamDelta(
 			key.itemID(),
 			agent.ThinkingChunk{
 				MessageID: key.itemID(),
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: frame.Delta.Thinking}},
+				Content: []agent.ContentBlock{
+					{Text: &agent.ContentBlockText{Text: frame.Delta.Thinking}},
+				},
 			},
 			nativeEventTime(received.Raw),
 			meta,
@@ -338,7 +342,7 @@ func (s *session) streamDelta(
 			agent.ToolChunkPayload{
 				ID: block.toolUseID,
 				Content: []agent.ContentBlock{
-					agent.TextBlock{Text: frame.Delta.PartialJSON},
+					{Text: &agent.ContentBlockText{Text: frame.Delta.PartialJSON}},
 				},
 			},
 			nativeEventTime(received.Raw),
@@ -494,12 +498,16 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 			}
 			var payload agent.Payload = agent.AgentMessage{
 				MessageID: key.itemID(),
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: text}},
+				Content: []agent.ContentBlock{
+					{Text: &agent.ContentBlockText{Text: text}},
+				},
 			}
 			if kind == "thinking" {
 				payload = agent.AgentThinking{
 					MessageID: key.itemID(),
-					Content:   []agent.ContentBlock{agent.TextBlock{Text: text}},
+					Content: []agent.ContentBlock{
+						{Text: &agent.ContentBlockText{Text: text}},
+					},
 				}
 			}
 			event, eventErr := s.newEvent(
@@ -660,7 +668,9 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 		return s.userMessageEvent(
 			received,
 			message,
-			[]agent.ContentBlock{agent.TextBlock{Text: *message.Content.Text}},
+			[]agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: *message.Content.Text}},
+			},
 		)
 	}
 	if len(message.Content.Blocks) == 0 {
@@ -735,7 +745,9 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			}
 			textContent = append(
 				textContent,
-				agent.TextBlock{Text: block.Text.Text},
+				agent.ContentBlock{
+					Text: &agent.ContentBlockText{Text: block.Text.Text},
+				},
 			)
 		case "tool_result":
 			if err := flushText(); err != nil {
@@ -1636,7 +1648,9 @@ func toolResultContent(
 		if err := json.Unmarshal(trimmed, &text); err != nil {
 			return nil, false, err
 		}
-		return []agent.ContentBlock{agent.TextBlock{Text: text}}, true, nil
+		return []agent.ContentBlock{
+			{Text: &agent.ContentBlockText{Text: text}},
+		}, true, nil
 	case '[':
 		var blocks []map[string]json.RawMessage
 		if err := json.Unmarshal(trimmed, &blocks); err != nil {
@@ -1651,7 +1665,9 @@ func toolResultContent(
 			if json.Unmarshal(block["text"], &text) != nil || text == nil {
 				return nil, false, claudeProtocolError("tool_result_text_invalid")
 			}
-			content = append(content, agent.TextBlock{Text: *text})
+			content = append(content, agent.ContentBlock{
+				Text: &agent.ContentBlockText{Text: *text},
+			})
 		}
 		return content, true, nil
 	default:

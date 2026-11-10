@@ -113,7 +113,7 @@ func TestValidInteractionRequests(t *testing.T) {
 			Options: []agent.PermissionOption{
 				{OptionID: "allow", Name: "Allow", Kind: agent.PermissionAllowOnce},
 			},
-			Content: []agent.ContentBlock{agent.TextBlock{Text: "ls"}},
+			Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ls"}}},
 		},
 		{
 			Kind:            agent.InteractionForm,

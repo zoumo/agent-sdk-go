@@ -28,84 +28,88 @@ func TestInputValidationRejectsEmptyAndInvalidContent(t *testing.T) {
 	}{
 		{name: "empty"},
 		{
-			name:  "nil block",
-			input: agent.Input{Content: []agent.ContentBlock{nil}},
+			name:  "missing branch",
+			input: agent.Input{Content: []agent.ContentBlock{{}}},
 		},
 		{
 			name: "invalid image Base64",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.ImageBlock{Data: "not-base64", MIMEType: "image/png"},
+				{Image: &agent.ContentBlockImage{Data: "not-base64", MIMEType: "image/png"}},
 			}},
 		},
 		{
 			name: "resource without body",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.ResourceBlock{Resource: agent.EmbeddedResource{URI: "file:///tmp/a"}},
+				{Resource: &agent.ContentBlockResource{
+					Resource: agent.EmbeddedResource{URI: "file:///tmp/a"},
+				}},
 			}},
 		},
 		{
 			name: "resource with both bodies",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.ResourceBlock{Resource: agent.EmbeddedResource{
-					URI:  "file:///tmp/a",
-					Text: &text,
-					Blob: &blob,
+				{Resource: &agent.ContentBlockResource{
+					Resource: agent.EmbeddedResource{
+						URI:  "file:///tmp/a",
+						Text: &text,
+						Blob: &blob,
+					},
 				}},
 			}},
 		},
 		{
 			name: "negative resource link size",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.ResourceLinkBlock{
+				{ResourceLink: &agent.ContentBlockResourceLink{
 					URI:  "file:///tmp/a",
 					Name: "a",
 					Size: &negativeSize,
-				},
+				}},
 			}},
 		},
 		{
 			name: "annotation priority outside range",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.TextBlock{
+				{Text: &agent.ContentBlockText{
 					Text:        "hello",
 					Annotations: &agent.Annotations{Priority: &invalidPriority},
-				},
+				}},
 			}},
 		},
 		{
 			name: "annotation priority is NaN",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.TextBlock{
+				{Text: &agent.ContentBlockText{
 					Text:        "hello",
 					Annotations: &agent.Annotations{Priority: &nanPriority},
-				},
+				}},
 			}},
 		},
 		{
 			name: "annotation priority is infinite",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.TextBlock{
+				{Text: &agent.ContentBlockText{
 					Text:        "hello",
 					Annotations: &agent.Annotations{Priority: &infPriority},
-				},
+				}},
 			}},
 		},
 		{
 			name: "annotation last modified cannot encode",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.TextBlock{
+				{Text: &agent.ContentBlockText{
 					Text:        "hello",
 					Annotations: &agent.Annotations{LastModified: &invalidLastModified},
-				},
+				}},
 			}},
 		},
 		{
 			name: "unknown annotation audience",
 			input: agent.Input{Content: []agent.ContentBlock{
-				agent.TextBlock{
+				{Text: &agent.ContentBlockText{
 					Text:        emptyText,
 					Annotations: &agent.Annotations{Audience: []string{"system"}},
-				},
+				}},
 			}},
 		},
 	}
@@ -116,6 +120,40 @@ func TestInputValidationRejectsEmptyAndInvalidContent(t *testing.T) {
 
 			require.Error(t, err)
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+		})
+	}
+}
+
+func TestContentBlockRequiresExactlyOneBranch(t *testing.T) {
+	tests := []struct {
+		name   string
+		block  agent.ContentBlock
+		reason string
+	}{
+		{
+			name:   "no branch",
+			reason: "nil_content_block",
+		},
+		{
+			name: "multiple branches",
+			block: agent.ContentBlock{
+				Text:  &agent.ContentBlockText{Text: "hello"},
+				Image: &agent.ContentBlockImage{Data: "aGVsbG8=", MIMEType: "image/png"},
+			},
+			reason: "multiple_content_blocks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.block.Validate()
+			require.Error(t, err)
+			var classified *agent.Error
+			require.ErrorAs(t, err, &classified)
+			assert.Equal(t, tt.reason, classified.Reason)
+
+			_, err = json.Marshal(tt.block)
+			require.Error(t, err)
 		})
 	}
 }
@@ -131,38 +169,38 @@ func TestInputAndContentBlocksRoundTripJSON(t *testing.T) {
 	lastModified := time.Date(2026, 11, 7, 8, 30, 0, 0, time.UTC)
 
 	original := agent.Input{Content: []agent.ContentBlock{
-		agent.TextBlock{
+		{Text: &agent.ContentBlockText{
 			Text: "hello",
 			Annotations: &agent.Annotations{
 				Audience:     []string{"user", "assistant"},
 				Priority:     &priority,
 				LastModified: &lastModified,
 			},
-		},
-		agent.ImageBlock{
+		}},
+		{Image: &agent.ContentBlockImage{
 			Data:     "aGVsbG8=",
 			MIMEType: "image/png",
 			URI:      &uri,
-		},
-		agent.AudioBlock{
+		}},
+		{Audio: &agent.ContentBlockAudio{
 			Data:     "aGVsbG8=",
 			MIMEType: "audio/wav",
-		},
-		agent.ResourceBlock{
+		}},
+		{Resource: &agent.ContentBlockResource{
 			Resource: agent.EmbeddedResource{
 				URI:      "file:///tmp/example.txt",
 				MIMEType: &mimeType,
 				Text:     &text,
 			},
-		},
-		agent.ResourceLinkBlock{
+		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
 			URI:         "file:///tmp/example.txt",
 			Name:        "example.txt",
 			MIMEType:    &mimeType,
 			Title:       &title,
 			Description: &description,
 			Size:        &size,
-		},
+		}},
 	}}
 	require.NoError(t, original.Validate())
 
@@ -265,4 +303,55 @@ func TestInputJSONRejectsMissingOrNullRequiredContentFields(t *testing.T) {
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 		})
 	}
+}
+
+func TestInputJSONRejectsFieldsFromOtherContentBranches(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "text with image branch",
+			raw:  `{"content":[{"type":"text","text":"hello","image":{"data":"aGVsbG8=","mimeType":"image/png"}}]}`,
+		},
+		{
+			name: "image with text branch",
+			raw:  `{"content":[{"type":"image","data":"aGVsbG8=","mimeType":"image/png","text":"hello"}]}`,
+		},
+		{
+			name: "audio with image uri",
+			raw:  `{"content":[{"type":"audio","data":"aGVsbG8=","mimeType":"audio/wav","uri":"file:///tmp/a.wav"}]}`,
+		},
+		{
+			name: "resource with resource link name",
+			raw:  `{"content":[{"type":"resource","resource":{"uri":"file:///tmp/a","text":"hello"},"name":"a"}]}`,
+		},
+		{
+			name: "resource link with resource branch",
+			raw:  `{"content":[{"type":"resource_link","uri":"file:///tmp/a","name":"a","resource":{"uri":"file:///tmp/a","text":"hello"}}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var input agent.Input
+
+			err := json.Unmarshal([]byte(tt.raw), &input)
+
+			require.Error(t, err)
+			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+		})
+	}
+}
+
+func TestContentBlockJSONDecodeDoesNotMutateOnFailure(t *testing.T) {
+	block := agent.ContentBlock{Text: &agent.ContentBlockText{Text: "unchanged"}}
+
+	err := json.Unmarshal(
+		[]byte(`{"type":"image","data":"not-base64","mimeType":"image/png"}`),
+		&block,
+	)
+
+	require.Error(t, err)
+	assert.Equal(t, agent.ContentBlock{Text: &agent.ContentBlockText{Text: "unchanged"}}, block)
 }

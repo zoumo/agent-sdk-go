@@ -534,15 +534,8 @@ func textInput(input agent.Input) (codex.Input, error) {
 		return codex.Input{}, err
 	}
 	parts := make([]codextypes.UserInput, 0, len(input.Content))
-	for _, raw := range input.Content {
-		var block agent.TextBlock
-		switch typed := raw.(type) {
-		case agent.TextBlock:
-			block = typed
-		case *agent.TextBlock:
-			// Input validation above rejects nil text pointers.
-			block = *typed
-		default:
+	for _, block := range input.Content {
+		if block.Text == nil {
 			return codex.Input{}, adapterError(
 				agent.ErrorUnsupported,
 				"content_block_unsupported",
@@ -550,7 +543,7 @@ func textInput(input agent.Input) (codex.Input, error) {
 				nil,
 			)
 		}
-		if block.Annotations != nil {
+		if block.Text.Annotations != nil {
 			return codex.Input{}, adapterError(
 				agent.ErrorUnsupported,
 				"text_annotations_unsupported",
@@ -559,7 +552,7 @@ func textInput(input agent.Input) (codex.Input, error) {
 			)
 		}
 		parts = append(parts, codextypes.UserInput{
-			Text: &codextypes.TextUserInput{Text: block.Text},
+			Text: &codextypes.TextUserInput{Text: block.Text.Text},
 		})
 	}
 	return codex.Input{Input: parts}, nil

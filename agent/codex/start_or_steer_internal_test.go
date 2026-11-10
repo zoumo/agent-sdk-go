@@ -33,7 +33,7 @@ func TestStartOrSteerRefusesLocalConcurrentOrUnknownWrite(t *testing.T) {
 			test.setup(s)
 
 			receipt, err := s.StartOrSteer(context.Background(), agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "retained"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "retained"}}},
 			})
 			require.NoError(t, err)
 			assert.Equal(t, agent.InputNotApplied, receipt.Result)
@@ -49,7 +49,7 @@ func TestStartOrSteerRefusesLocalConcurrentOrUnknownWrite(t *testing.T) {
 func TestStartOrSteerClosedSessionRemainsAnError(t *testing.T) {
 	s := &session{closed: true}
 	_, err := s.StartOrSteer(context.Background(), agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "closed"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "closed"}}},
 	})
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))

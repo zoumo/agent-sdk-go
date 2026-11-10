@@ -915,7 +915,7 @@ func openInteractionSessionWithStatus(
 func submitInteractionTurn(t *testing.T, ctx context.Context, session agent.Session) {
 	t.Helper()
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 }

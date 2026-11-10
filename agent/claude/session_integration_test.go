@@ -42,7 +42,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	assert.Equal(t, "native-loop", session.ID())
 
 	receipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
@@ -53,7 +53,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
 
 	second, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "follow-up"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "follow-up"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedBestEffort, second.Result)
@@ -71,7 +71,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 11, 7, 12, 34, 56, 789_000_000, time.UTC), message.Time)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "message-1:0",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "hello from Claude"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello from Claude"}}},
 	}, message.Payload)
 	require.NoError(t, message.Validate())
 
@@ -270,7 +270,9 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 
 	// Hold the scripted disconnect until Open has returned; otherwise an early
 	// transport failure can legitimately win the initialization race.
-	_, _ = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "disconnect"}}})
+	_, _ = session.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "disconnect"}}},
+	})
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
@@ -305,7 +307,7 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, _ = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "disconnect"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "disconnect"}}},
 	})
 	select {
 	case <-session.Done():

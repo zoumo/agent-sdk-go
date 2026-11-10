@@ -134,7 +134,7 @@ func (s *session) permissionInteraction(
 		ToolCallID: metadata.ToolUseID,
 		Title:      title,
 		Content: []agent.ContentBlock{
-			agent.TextBlock{Text: string(request.Params())},
+			{Text: &agent.ContentBlockText{Text: string(request.Params())}},
 		},
 		Options: []agent.PermissionOption{
 			{

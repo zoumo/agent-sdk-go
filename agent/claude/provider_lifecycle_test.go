@@ -2,6 +2,7 @@ package agentclaude_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -124,6 +125,68 @@ func TestProviderStopRejectsInFlightOpen(t *testing.T) {
 	require.NoError(t, result.err)
 	closeSessionOnCleanup(t, result.session)
 	require.NoError(t, result.session.Close(ctx))
+	require.NoError(t, provider.Stop(ctx))
+}
+
+func TestProviderStopRejectsInFlightResume(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	configDir := newResumeConfigDir(t)
+	transcript := writeResumeTranscript(
+		t,
+		configDir,
+		"project",
+		claudeResumePeerSessionID,
+		cwd,
+	)
+	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
+		CWD:            cwd,
+		TranscriptPath: transcript,
+	})
+	provider := newResumeProvider(
+		t,
+		peer.CLIPath,
+		peer.Env,
+		configDir,
+		10*time.Second,
+	)
+
+	resumeCtx, cancelResume := context.WithCancel(ctx)
+	defer cancelResume()
+	type resumeResult struct {
+		session agent.Session
+		err     error
+	}
+	resumed := make(chan resumeResult, 1)
+	go func() {
+		session, err := provider.Resume(resumeCtx, agent.ResumeOptions{
+			SessionID:   claudeResumePeerSessionID,
+			OpenOptions: agent.OpenOptions{Cwd: cwd},
+		})
+		resumed <- resumeResult{session: session, err: err}
+	}()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(peer.SessionMark)
+		return err == nil
+	}, 3*time.Second, 10*time.Millisecond, "native Resume did not start")
+
+	stopErr := provider.Stop(ctx)
+	require.Error(t, stopErr)
+	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(stopErr))
+	var classified *agent.Error
+	require.ErrorAs(t, stopErr, &classified)
+	assert.Equal(t, "provider_has_open_sessions", classified.Reason)
+
+	cancelResume()
+	var result resumeResult
+	select {
+	case result = <-resumed:
+	case <-ctx.Done():
+		require.NoError(t, ctx.Err())
+	}
+	require.Error(t, result.err)
+	assert.Nil(t, result.session)
 	require.NoError(t, provider.Stop(ctx))
 }
 

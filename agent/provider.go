@@ -6,8 +6,9 @@ import "context"
 // native connection across sessions or create native resources per session.
 type Provider interface {
 	// Start acquires provider-scoped resources and enters the started state.
-	// Repeated calls return the same capabilities without creating another
-	// owner. After a successful Stop, Start cannot be called again.
+	// It returns the base capabilities supplied by the adapter; the lifecycle
+	// freezes a copy and returns copies from repeated calls without creating
+	// another owner. After an admitted Stop, Start cannot be called again.
 	Start(ctx context.Context) (Capabilities, error)
 
 	// Open creates a new native main session after its real identity is known.
@@ -20,9 +21,10 @@ type Provider interface {
 	Resume(ctx context.Context, options ResumeOptions) (Session, error)
 
 	// Stop releases only resources owned by this provider. It rejects the call
-	// while any session remains open. A successful stop is terminal: Start,
-	// Open, and Resume cannot run afterward. Repeating Stop after all sessions
-	// are closed returns the same successful result.
+	// while any Open or Resume is in flight or any session remains open. Once
+	// admitted, Stop is terminal even if release fails: it releases at most
+	// once, caches the release result, and prevents later Start, Open, or Resume.
+	// Repeating Stop returns the same cached result.
 	Stop(ctx context.Context) error
 }
 

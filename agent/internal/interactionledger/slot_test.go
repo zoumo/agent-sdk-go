@@ -57,7 +57,7 @@ func TestSlotSettlementPrecedence(t *testing.T) {
 				require.True(t, slot.CompleteSent(agent.InteractionCompleted))
 			},
 			wantOutcome: agent.InteractionCompleted,
-			wantReason:  "answer_cancelled",
+			wantReason:  "answer_canceled",
 		},
 		{
 			name:        "fallback",
@@ -74,7 +74,7 @@ func TestSlotSettlementPrecedence(t *testing.T) {
 			result := slot.Resolve(interactionledger.Result{
 				Outcome: agent.InteractionExpired,
 				Reason:  "turn_completed",
-			}, "answer_cancelled")
+			}, "answer_canceled")
 
 			assert.Equal(t, test.wantOutcome, result.Outcome)
 			assert.Equal(t, test.wantReason, result.Reason)
@@ -141,14 +141,12 @@ func TestSlotConcurrentClaimAdmitsExactlyOneAnswer(t *testing.T) {
 	start := make(chan struct{})
 	var wait sync.WaitGroup
 	for range workers {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			<-start
 			if slot.Claim() {
 				admitted.Add(1)
 			}
-		}()
+		})
 	}
 	close(start)
 	wait.Wait()
@@ -167,15 +165,13 @@ func TestSlotConcurrentResolutionIsStable(t *testing.T) {
 	start := make(chan struct{})
 	var wait sync.WaitGroup
 	for range workers {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			<-start
 			results <- slot.Resolve(interactionledger.Result{
 				Outcome: agent.InteractionExpired,
 				Reason:  "turn_completed",
-			}, "answer_cancelled")
-		}()
+			}, "answer_canceled")
+		})
 	}
 	close(start)
 	wait.Wait()
@@ -183,7 +179,7 @@ func TestSlotConcurrentResolutionIsStable(t *testing.T) {
 
 	want := interactionledger.Result{
 		Outcome: agent.InteractionCancelled,
-		Reason:  "answer_cancelled",
+		Reason:  "answer_canceled",
 	}
 	for result := range results {
 		assert.Equal(t, want, result)

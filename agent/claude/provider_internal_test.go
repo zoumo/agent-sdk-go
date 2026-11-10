@@ -215,7 +215,7 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
-			name:        "cancelled",
+			name:        "canceled",
 			cause:       claude.ErrPermissionCancelled,
 			err:         notSentAnswerError(),
 			wantOutcome: agent.InteractionCancelled,
@@ -252,7 +252,7 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
-			name:        "cancelled answer without cause",
+			name:        "canceled answer without cause",
 			err:         claude.ErrPermissionCancelled,
 			wantOutcome: agent.InteractionCancelled,
 			wantReason:  "native_request_ended",

@@ -27,23 +27,3 @@ type Provider interface {
 	// Repeating Stop returns the same cached result.
 	Stop(ctx context.Context) error
 }
-
-// InitialInputProvider supports providers that need an initial input before
-// native session identity can be confirmed.
-type InitialInputProvider interface {
-	// ValidateInitialInput validates without opening a session or writing to
-	// the native protocol.
-	ValidateInitialInput(input Input) error
-
-	OpenWithInput(
-		ctx context.Context,
-		options OpenOptions,
-		input Input,
-	) (Session, error)
-
-	ResumeWithInput(
-		ctx context.Context,
-		options ResumeOptions,
-		input Input,
-	) (Session, error)
-}

@@ -213,7 +213,7 @@ func newTestProviderWithWrappers(
 	run, err := peerSession.NewRun(runCtx, mocktest.RunOptions{NativeArgs: args})
 	require.NoError(t, err)
 	require.Equal(t, args, run.Start.NativeArgs)
-	reader, writer := io.ReadCloser(run.Reader), io.WriteCloser(run.Writer)
+	reader, writer := run.Reader, run.Writer
 	if wrappers.reader != nil {
 		reader = wrappers.reader(reader)
 	}

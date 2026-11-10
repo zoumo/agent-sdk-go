@@ -1004,6 +1004,9 @@ type URLAnswer struct {
     Outcome URLOutcome
 }
 
+func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error)
+func ValidateAnswer(kind InteractionKind, answer Answer) error
+
 type InteractionOutcome string
 
 const (
@@ -1024,6 +1027,18 @@ const (
   adapter 将字符串数组以 `", "` 连接成字符串后再写回原生。原生数组答案仍拒绝，
   不能把统一层的兼容编码当成原生数组支持。
 - `url` 只表达外部流程入口；URL 的完成仍由原生事实结算。
+
+`agent.MatchAnswer(kind, answer)` 接受三种 answer 的值或非 nil 指针，成功时
+统一返回 `PermissionAnswer`、`FormAnswer` 或 `URLAnswer` 值。它校验 kind
+匹配、outcome 及对应字段组合：permission 的 selected 必须有 `OptionID`，
+cancelled 不得有；form 的 accept 必须有可 JSON 编码的非 nil `Content`，
+decline/cancel 不得有；URL 只接受 accept/decline/cancel。`ValidateAnswer`
+委托 `MatchAnswer`，丢弃规范化值并返回同一错误。
+
+失败返回 nil answer 和 `invalid_argument` 错误：nil/typed-nil 使用
+`missing_answer`，kind 不匹配使用 `answer_kind_mismatch`，不支持的包装类型使用
+`unsupported_answer`；outcome 和字段错误保留对应的具体 reason。该操作不写原生
+请求、不消耗回答权限；原生选项成员资格与 form schema 兼容性仍由 adapter 校验。
 
 原生 `IncomingRequest`、`AnswerHandle` 和 permission handle 只存在于 adapter
 私有 registry。统一事件只交付 `InteractionRef`。该引用绑定 Session、adapter

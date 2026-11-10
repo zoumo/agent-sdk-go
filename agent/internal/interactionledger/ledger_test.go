@@ -2,7 +2,7 @@ package interactionledger_test
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -52,9 +52,7 @@ func TestLedgerAllocatesOpaqueUniqueReferencesAndMonotonicSequence(t *testing.T)
 		seen[ref] = struct{}{}
 	}
 
-	sort.Slice(sequences, func(left, right int) bool {
-		return sequences[left] < sequences[right]
-	})
+	slices.Sort(sequences)
 	for index, sequence := range sequences {
 		assert.Equal(t, uint64(index+1), sequence)
 	}

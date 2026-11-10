@@ -315,13 +315,13 @@ func TestSessionDiscoveryBudgetDoesNotMaskAbsentSidecar(t *testing.T) {
 	require.NoError(t, err)
 
 	p, err := s.ListSubagents(context.Background(), SubagentQuery{MaxBytes: main.Size()})
-	require.ErrorIs(t, err, ErrDiscoveryCoverage)
-	require.ErrorIs(t, err, ErrResourceLimit)
+	assert.ErrorIs(t, err, ErrDiscoveryCoverage)
+	assert.ErrorIs(t, err, ErrResourceLimit)
 	require.Len(t, p.Records, 1)
-	require.Equal(t, "old", p.Records[0].AgentID)
-	require.Equal(t, main.Size(), p.Coverage.Bytes)
+	assert.Equal(t, "old", p.Records[0].AgentID)
+	assert.Equal(t, main.Size(), p.Coverage.Bytes)
 	require.Len(t, p.Coverage.Issues, 1)
-	require.Equal(t, "transcript-metadata-incomplete", p.Coverage.Issues[0].Reason)
+	assert.Equal(t, "transcript-metadata-incomplete", p.Coverage.Issues[0].Reason)
 }
 
 func TestSessionDiscoveryAccessFailuresKeepDiscoveredIdentity(t *testing.T) {

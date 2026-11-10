@@ -136,7 +136,13 @@ codex/types <-- codex          claude/types <-- claude
                    |                              |
              agent/codex                    agent/claude
                    \                              /
-                    +--> agent/internal/lifecycle <--+
+                    +-------------+--------------+
+                                  |
+             +--------------------+--------------------+
+             |                                         |
+agent/internal/lifecycle         agent/internal/interactionledger
+             |                                         |
+             +--------------------+--------------------+
                                   |
                                 agent
                              ^
@@ -150,9 +156,10 @@ codex/types <-- codex          claude/types <-- claude
 目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图只
 说明本设计的调用方向：统一 `agent` 是上层实时合同，原生 SDK 不反向依赖它；
 两个 adapter 只适配各自 provider，并共同使用 `agent/internal/lifecycle` 持有
-Provider 生命周期状态；该模块只依赖标准库和公开 `agent` 合同，不导入原生 SDK。
-Provider 的原生资源与 Session 仍由各 adapter 拥有。MASS Runtime adapter 可以
-消费统一层，而 MASS Service、Store 和 transport 仍只依赖 MASS 自己的合同。
+Provider 生命周期状态、使用 `agent/internal/interactionledger` 保存统一回答
+准入状态；这些模块不导入原生 SDK。Provider 的原生资源、Session 和回答句柄仍
+由各 adapter 拥有。MASS Runtime adapter 可以消费统一层，而 MASS Service、Store
+和 transport 仍只依赖 MASS 自己的合同。
 MASS 的配置、资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
 
 ## 为什么不整体搬迁 MASS Runtime
@@ -1026,6 +1033,14 @@ const (
 并发回答在单个交互内串行接纳，至多一个回答进入原生提交。事件可以先于 answer
 回执到达。发送结果未知时不恢复回答权限，不自动重答。当前 adapter 不宣告
 `url`，除非以后有可验证的原生实现。
+
+共享 `interactionledger` 每 Session 一份，只分配不透明 `InteractionRef`、单调
+注册顺序并保存 pending、answering、sent、settled 等统一权威阶段。它负责一次
+claim、answer 完成等待、确定 `NotSent` 后的回滚，以及 terminal result、sent
+outcome 与 fallback 的结算顺序。等待不得持有 adapter 锁。slot 不保存原生
+request、raw frame、request ID、handle、reply callback 或 ref→adapter 查询；
+adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造回复的位置。因此
+共享 slot 只协调回答准入，不转移原生回答权限，也不形成第二套句柄 registry。
 
 ## 事件流与统一事件
 
@@ -2086,6 +2101,9 @@ linkage 和无法归属的交互行为保持不变。
   adapter 都通过该模块覆盖 Start 单次获取、in-flight Open/Resume 拒绝 Stop、
   失败 Open 自动结算、终止性 Stop 与 release 错误缓存，且不保留重复生命周期
   状态、计数器、Session 集合或私有 reserve/complete helper。
+- `agent/internal/interactionledger` 只保存统一权威状态；其测试覆盖唯一引用、
+  单调注册顺序、一次 claim、NotSent 回滚、完成等待和结算优先级。adapter 的
+  私有 registry 仍独占原生 request、handle、reply construction 和查询。
 - Provider 基础 Capabilities 由 adapter 供给并由生命周期冻结；Session 级能力
   只能窄化，不修改 Provider 级快照。Claude Start 不启动进程，每个 Session
   仍独占并关闭自己的原生 CLI 进程。

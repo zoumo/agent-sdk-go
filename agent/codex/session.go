@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -51,6 +52,7 @@ type session struct {
 	executionObservationSeq uint64
 	interactions            map[agent.InteractionRef]*pendingInteraction
 	requestRefs             map[string]agent.InteractionRef
+	interactionLedger       *interactionledger.Ledger
 	done                    chan struct{}
 	err                     error
 
@@ -70,16 +72,17 @@ func newSession(
 	execution agent.ExecutionOptionsReport,
 ) *session {
 	created := &session{
-		provider:        provider,
-		native:          native,
-		features:        features,
-		execution:       execution,
-		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
-		requestRefs:     make(map[string]agent.InteractionRef),
-		parents:         make(map[string]string),
-		toolIdentities:  make(map[toolIdentityKey]toolIdentity),
-		done:            make(chan struct{}),
-		observationDone: make(chan struct{}),
+		provider:          provider,
+		native:            native,
+		features:          features,
+		execution:         execution,
+		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
+		requestRefs:       make(map[string]agent.InteractionRef),
+		interactionLedger: interactionledger.New("codex-"),
+		parents:           make(map[string]string),
+		toolIdentities:    make(map[toolIdentityKey]toolIdentity),
+		done:              make(chan struct{}),
+		observationDone:   make(chan struct{}),
 	}
 	go created.observe()
 	return created

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 )
 
 func TestClaudePermissionAnswerOutcomes(t *testing.T) {
@@ -892,10 +893,37 @@ func openClaudeInteractionSession(
 	frames ...string,
 ) (agent.Session, agent.EventStream) {
 	t.Helper()
+	return openClaudeInteractionSessionWithHook(
+		t,
+		ctx,
+		cwd,
+		wantStatus,
+		features,
+		nil,
+		frames...,
+	)
+}
+
+func openClaudeInteractionSessionWithHook(
+	t *testing.T,
+	ctx context.Context,
+	cwd string,
+	wantStatus string,
+	features agent.Features,
+	hook claudeTestStreamHook,
+	frames ...string,
+) (agent.Session, agent.EventStream) {
+	t.Helper()
 	all := append([]string(nil), mockClaudeInit...)
 	all = append(all, frames...)
 	peerSession := prepareClaudePeer(t, wantStatus, all...)
-	provider := newTestClaudeProvider(t, peerSession)
+	provider := newTestClaudeProviderWithStreamHook(
+		t,
+		agentclaude.Config{},
+		nil,
+		hook,
+		peerSession,
+	)
 	t.Cleanup(func() {
 		assert.NoError(t, provider.Stop(context.Background()))
 	})

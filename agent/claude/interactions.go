@@ -394,7 +394,7 @@ func (s *session) Answer(
 		)
 	}
 	if cause := context.Cause(interaction.request.Context()); cause != nil {
-		outcome, reason := answerTerminalOutcome(interaction, cause)
+		outcome, reason := answerTerminalOutcome(interaction.request.Context(), cause)
 		interaction.terminalOutcome = outcome
 		interaction.terminalReason = reason
 		s.deleteInteractionLocked(interaction)
@@ -471,7 +471,7 @@ func (s *session) Answer(
 		}
 	}
 	outcome, reason := answerTerminalOutcome(
-		interaction,
+		interaction.request.Context(),
 		answerErr,
 	)
 	interaction.terminalOutcome = outcome
@@ -511,10 +511,10 @@ func (s *session) Answer(
 }
 
 func answerTerminalOutcome(
-	interaction *pendingInteraction,
+	requestContext context.Context,
 	err error,
 ) (agent.InteractionOutcome, string) {
-	cause := context.Cause(interaction.request.Context())
+	cause := context.Cause(requestContext)
 	switch {
 	case errors.Is(cause, claude.ErrUnknownOutcome),
 		errors.Is(err, claude.ErrUnknownOutcome):

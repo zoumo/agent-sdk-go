@@ -409,8 +409,7 @@ callback 的 Session ID、cwd 或 transcript 不匹配，重复的有效 callbac
 init 与 callback 互相矛盾，或探测超时后仍无可用身份证据，均失败关闭。身份
 确认并返回 Session 后，迟到的匹配 callback 仍须应答一次；迟到 callback 或
 迟到 init 的重复或矛盾证据通过 Session `Done`/`Err` 终止交互，不创建替代
-Session，也不自动重试恢复。`ResumeWithInput` 同样适用本门禁；身份失败后的
-关闭不声称已经提交的输入未发送。
+Session，也不自动重试恢复。
 
 ### MCP 配置
 
@@ -683,34 +682,6 @@ control ack 没有可靠的同次完整状态；成功更新后保持 `Effective
 它们既不加入 `ExecutionOptions`，也不加入 `ExecutionOption`。统一 adapter
 不做同名映射，也不依据模型或 effort 推导其值。调用方需要这些原生能力时使用
 对应原生 SDK，不能把它们塞入共享执行选项。
-
-### 可显式带入初始输入
-
-初始输入是操作，不是配置字段。需要先提交输入才能确认原生身份的 provider
-通过可选接口提供：
-
-```go
-type InitialInputProvider interface {
-    // 只校验，不打开 Session、不写原生协议、不读取恢复材料。
-    ValidateInitialInput(input Input) error
-
-    OpenWithInput(
-        ctx context.Context,
-        options OpenOptions,
-        input Input,
-    ) (Session, error)
-
-    ResumeWithInput(
-        ctx context.Context,
-        options ResumeOptions,
-        input Input,
-    ) (Session, error)
-}
-```
-
-输入必须在副作用前校验。提交后即使身份确认或清理失败，也不能声称输入未发送，
-不能自动重发；失败结果使用 `outcome_unknown` 表达。恢复不能用隐藏 prompt 或
-重新提交旧输入代替。
 
 ### 能力与功能
 
@@ -1728,8 +1699,8 @@ provider-specific 转换，但不生成 `agent.Event`。
 | MASS 操作 | SDK 调用 | MASS 保留的职责 |
 |---|---|---|
 | `Driver.Start` | `Provider.Start` | Runtime 配置、运行绑定、共享资源责任 |
-| `OpenSession` | `Provider.Open` 或 `OpenWithInput` | Address、Source、恢复材料、事件队列 |
-| `ResumeSession` | `Provider.Resume` 或 `ResumeWithInput` | 恢复前 metadata/文件身份、init 或私有探针确认、恢复后复核、旧运行隔离 |
+| `OpenSession` | `Provider.Open` | Address、Source、恢复材料、事件队列 |
+| `ResumeSession` | `Provider.Resume` | 恢复前 metadata/文件身份、init 或私有探针确认、恢复后复核、旧运行隔离 |
 | `SendPrompt` | `Session.StartOrSteer` | Session/运行归属、Service 回执和持久化 |
 | `AnswerInteraction` | `Session.Answer` | 当前运行和 Session 校验；原生句柄仍只在 adapter |
 | `Cancel` | `Session.Interrupt` | 是否允许关闭/归档、Service 取消回执 |

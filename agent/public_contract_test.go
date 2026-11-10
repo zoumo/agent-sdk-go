@@ -29,26 +29,6 @@ func (contractProvider) Stop(context.Context) error {
 	return nil
 }
 
-func (contractProvider) ValidateInitialInput(agent.Input) error {
-	return nil
-}
-
-func (contractProvider) OpenWithInput(
-	context.Context,
-	agent.OpenOptions,
-	agent.Input,
-) (agent.Session, error) {
-	return nil, nil
-}
-
-func (contractProvider) ResumeWithInput(
-	context.Context,
-	agent.ResumeOptions,
-	agent.Input,
-) (agent.Session, error) {
-	return nil, nil
-}
-
 type contractSession struct{}
 
 func (contractSession) ID() string {
@@ -168,7 +148,6 @@ func (contractStream) Next(context.Context) (agent.Event, error) {
 
 func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	var provider agent.Provider = contractProvider{}
-	var initial agent.InitialInputProvider = contractProvider{}
 	var session agent.Session = contractSession{}
 	var stream agent.EventStream = contractStream{}
 	var archiver agent.Archiver = contractSession{}
@@ -177,7 +156,6 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	var executionController agent.ExecutionOptionsController = contractExecutionController{}
 
 	require.NotNil(t, provider)
-	require.NotNil(t, initial)
 	require.NotNil(t, session)
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)

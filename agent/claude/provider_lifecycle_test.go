@@ -31,6 +31,7 @@ func TestProviderLifecycleIsIdempotentAndTerminal(t *testing.T) {
 
 	capabilities, err := provider.Start(ctx)
 	require.NoError(t, err)
+	require.NoError(t, capabilities.Validate())
 	assert.True(t, capabilities.Supports(agent.CapabilityTextInput))
 	assert.True(t, capabilities.Supports(agent.CapabilityPermission))
 	assert.True(t, capabilities.Supports(agent.CapabilityForm))

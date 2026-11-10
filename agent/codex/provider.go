@@ -159,9 +159,10 @@ func (p *Provider) Open(
 		Client:     client,
 		MCPServers: mcpServers,
 		Thread: codextypes.ThreadStartParams{
-			Config: config,
-			Cwd:    codextypes.Some(options.Cwd),
-			Model:  optionalString(options.Execution.Model),
+			Config:                config,
+			Cwd:                   codextypes.Some(options.Cwd),
+			DeveloperInstructions: developerInstructions(options.AdditionalSystemPrompt),
+			Model:                 optionalString(options.Execution.Model),
 		},
 	})
 	return p.completeOpen(native, err, openingStart, features, options.Execution)
@@ -192,8 +193,11 @@ func (p *Provider) Resume(
 		Client:     client,
 		MCPServers: mcpServers,
 		Resume: &codextypes.ThreadResumeParams{
-			Config:       config,
-			Cwd:          codextypes.Some(options.Cwd),
+			Config: config,
+			Cwd:    codextypes.Some(options.Cwd),
+			DeveloperInstructions: developerInstructions(
+				options.AdditionalSystemPrompt,
+			),
 			ExcludeTurns: codextypes.Some(true),
 			Model:        optionalString(options.Execution.Model),
 			ThreadID:     options.SessionID,
@@ -302,17 +306,16 @@ func threadConfig(
 	return codextypes.Some(config), nil
 }
 
+func developerInstructions(value string) codextypes.Optional[string] {
+	if value == "" {
+		return codextypes.Optional[string]{}
+	}
+	return codextypes.Some(value)
+}
+
 func validateOpenOptions(options agent.OpenOptions) error {
 	if err := options.Validate(); err != nil {
 		return err
-	}
-	if options.SystemPrompt != "" {
-		return adapterError(
-			agent.ErrorUnsupported,
-			"system_prompt_unsupported",
-			"Codex system prompts are not supported by this adapter",
-			nil,
-		)
 	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(

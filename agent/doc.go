@@ -65,6 +65,11 @@
 // The repository README section "External MCP servers" describes the composition
 // and provider-specific limits.
 //
+// OpenOptions.AdditionalSystemPrompt adds optional caller text for that Open or
+// Resume call only; empty requests no addition. It is per-operation
+// configuration, not Session state. The complete field contract is defined in
+// harness/modules/unified-agent/design.md#additional-system-prompt.
+//
 // The unified contract has only explicit stdio and MCP Streamable HTTP transports.
 // It has no SSE, MCPConfigMode, StrictMCPConfig, SDKMCPServers, or ambient-clear
 // control. Provider-specific field restrictions are rejected before native side

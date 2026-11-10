@@ -36,7 +36,8 @@ var (
 	_ types.MCPServer          = MCPServer{}
 	_ Options                  = Options{
 		CLIPath: "fixture", WorkDir: ".", Model: "m", ResumeID: "s", Tools: []string{"Read"}, DisallowedTools: []string{"AskUserQuestion"},
-		MCPServers: []MCPServer{{Name: "fixture", Transport: MCPTransportStdio, Command: "fixture-mcp"}}, StrictMCPConfig: true, Env: []string{},
+		AppendSystemPrompt: "literal append prompt",
+		MCPServers:         []MCPServer{{Name: "fixture", Transport: MCPTransportStdio, Command: "fixture-mcp"}}, StrictMCPConfig: true, Env: []string{},
 		InitializeTimeout: time.Second, ShutdownTimeout: time.Second,
 		Limits: Limits{
 			EventBuffer: 1, FrameBytes: 1024, PendingControls: 1, ControlBuffer: 1,
@@ -48,6 +49,7 @@ var (
 func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 	config := types.Options{
 		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", Tools: []string{"Bash", "Read"}, DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
+		AppendSystemPrompt: "multi-line\nliteral append prompt --leading-dash ünïcødé",
 		MCPServers: []types.MCPServer{{
 			Name: "remote", Transport: types.MCPTransportHTTP, URL: "https://example.invalid/mcp",
 			Headers: map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},

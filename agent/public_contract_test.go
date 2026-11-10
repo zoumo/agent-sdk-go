@@ -243,6 +243,26 @@ func TestPublicMCPContract(t *testing.T) {
 	}
 }
 
+func TestPublicAdditionalSystemPromptContract(t *testing.T) {
+	optionsType := reflect.TypeFor[agent.OpenOptions]()
+	field, found := optionsType.FieldByName("AdditionalSystemPrompt")
+	require.True(t, found)
+	assert.Equal(t, reflect.String, field.Type.Kind())
+
+	_, found = optionsType.FieldByName("SystemPrompt")
+	assert.False(t, found, "unified OpenOptions must not retain the old field")
+
+	options := agent.OpenOptions{
+		Cwd:                    "/synthetic/workspace",
+		AdditionalSystemPrompt: "multi-line\nliteral --leading-dash ünïcødé",
+	}
+	resume := agent.ResumeOptions{
+		SessionID:   "session-1",
+		OpenOptions: options,
+	}
+	assert.Equal(t, options.AdditionalSystemPrompt, resume.AdditionalSystemPrompt)
+}
+
 func TestAdapterExecutionOptionRuntimeContracts(t *testing.T) {
 	var runtime agent.ExecutionOptionsRuntime = contractExecutionRuntime{}
 	change := agent.ExecutionOptionChange{

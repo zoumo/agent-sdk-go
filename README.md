@@ -112,6 +112,21 @@ unified history, `LoadSession`, replay, or root convenience client. MASS resourc
 identity, history import, persistence, and multi-session aggregation also remain
 outside this module.
 
+### Additional system prompt
+
+`agent.OpenOptions.AdditionalSystemPrompt` adds optional caller text after
+provider defaults for one `Open` or `Resume` call; it never replaces built-in
+instructions. The complete validation, provider mapping, resume and disclosure
+contract is in the
+[authoritative unified-agent design](harness/modules/unified-agent/design.md#additional-system-prompt).
+
+```go
+options := agent.OpenOptions{
+    Cwd:                    "/absolute/workspace",
+    AdditionalSystemPrompt: "Follow the repository conventions.\nNever rewrite generated files.",
+}
+```
+
 ### External MCP servers
 
 The authoritative developer contract is

@@ -110,6 +110,12 @@ ErrUnsupported before the apply write. Effort never maps to
 `set_max_thinking_tokens` and does not restart the process. A configuration
 acknowledgment does not prove the active model, effort or children changed.
 
+`AppendSystemPrompt` adds caller text after the CLI's own system instructions
+without replacing them. A nonempty value becomes one literal
+`--append-system-prompt=<text>` argv element; empty omits the option. The
+complete validation, transport-disclosure and resume contract is in the
+[authoritative unified-agent design](../harness/modules/unified-agent/design.md#additional-system-prompt).
+
 `PermissionMode` and the corresponding `PermissionMode*` constants enumerate
 `default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk` and `auto`.
 `SetPermissionMode` rejects empty or unknown values before writing, and

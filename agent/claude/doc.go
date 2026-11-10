@@ -34,11 +34,15 @@
 // success. Internally it retains the submission as a possible interaction and
 // interrupt target until native idle; that candidate does not claim the input
 // was scheduled. Native state observations establish active work. System
-// prompts, additional directories, URL interactions, multi-block input, and
-// native frames or answer extensions without an exact mapping are not
-// advertised. TodoWrite, TaskCreate, and TaskUpdate remain ordinary tool calls
-// with their native input; they do not also produce a provider-neutral plan
-// event. AskUserQuestion accepts string
+// prompts cannot be replaced or changed after startup. A nonempty unified
+// AdditionalSystemPrompt maps to native AppendSystemPrompt and exactly one
+// --append-system-prompt=<text> argv element; empty omits it, and Resume requires
+// the value supplied for that call. The complete field contract is defined in
+// harness/modules/unified-agent/design.md#additional-system-prompt. Additional
+// directories, URL interactions, multi-block input, and native frames or answer
+// extensions without an exact mapping are not advertised. TodoWrite, TaskCreate,
+// and TaskUpdate remain ordinary tool calls with their native input; they do not
+// also produce a provider-neutral plan event. AskUserQuestion accepts string
 // answers and, for multi-select questions, string arrays. Multi-select arrays
 // are joined with ", " before the native write; native array answers are not
 // supported.

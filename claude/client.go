@@ -38,6 +38,12 @@ type Options struct {
 	Model   string
 	// Effort passes the native creation-only --effort value literally. Empty omits it.
 	Effort string
+	// AppendSystemPrompt appends text after the CLI's own system instructions
+	// through one native --append-system-prompt=<text> argv element. It does
+	// not replace provider defaults, and empty omits the option. The text must
+	// be valid UTF-8 and contain no NUL. Argument vectors are observable
+	// transport data, not secret storage.
+	AppendSystemPrompt string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
 	// MCPServers declares external stdio, HTTP or SSE MCP servers. The SDK
@@ -83,11 +89,14 @@ func (o *Options) defaults() error {
 		return fmt.Errorf("claude: child detail policy %q: %w", o.ChildDetailPolicy, ErrInvalidInput)
 	}
 	if err := validateInputEncoding(struct {
-		Model, Effort string
-		Tools         []string
-		MCPServers    []MCPServer
-	}{o.Model, o.Effort, o.Tools, o.MCPServers}); err != nil {
+		Model, Effort, AppendSystemPrompt string
+		Tools                             []string
+		MCPServers                        []MCPServer
+	}{Model: o.Model, Effort: o.Effort, AppendSystemPrompt: o.AppendSystemPrompt, Tools: o.Tools, MCPServers: o.MCPServers}); err != nil {
 		return dispatchFailure("open", err)
+	}
+	if strings.ContainsRune(o.AppendSystemPrompt, '\x00') {
+		return dispatchFailure("open", fmt.Errorf("%w: append system prompt contains NUL", ErrInvalidInput))
 	}
 	if err := validateBuiltinTools(o.Tools); err != nil {
 		return dispatchFailure("open", err)
@@ -1039,6 +1048,9 @@ func interactionArgs(options Options) ([]string, error) {
 	}
 	if options.Effort != "" {
 		args = append(args, "--effort="+options.Effort)
+	}
+	if options.AppendSystemPrompt != "" {
+		args = append(args, "--append-system-prompt="+options.AppendSystemPrompt)
 	}
 	if len(options.Tools) > 0 {
 		args = append(args, "--tools="+strings.Join(options.Tools, ","))

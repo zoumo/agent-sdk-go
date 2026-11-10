@@ -32,7 +32,11 @@
 //
 // The provider declares text input and permission capabilities. It declares form
 // support only when the native experimental API is enabled, and a session removes
-// form support when AgentQuestions is disabled. System prompts and additional
+// form support when AgentQuestions is disabled. A nonempty unified
+// AdditionalSystemPrompt maps to developerInstructions on thread/start and
+// thread/resume; an empty value omits that field, and baseInstructions is never
+// set. The complete field contract is defined in
+// harness/modules/unified-agent/design.md#additional-system-prompt. Additional
 // directories are rejected before opening a session. URL, image, audio, resource,
 // and resource-link interactions or inputs are not advertised.
 // Model and reasoning-effort execution options use native thread start/resume

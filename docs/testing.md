@@ -157,6 +157,18 @@ The adapter checks use synthetic app-server and in-process native peers and asse
 only the generated native configuration. They do not establish real MCP
 connectivity, authentication, tool discovery, or execution.
 
+The additional-system-prompt contract uses the same offline synthetic boundary:
+
+```sh
+go test -run 'AdditionalSystemPrompt' ./agent ./agent/codex ./agent/claude
+go test ./agent ./agent/codex ./agent/claude ./claude/...
+```
+
+These checks cover empty omission, exact Codex request and Claude argv mapping,
+literal Unicode and line endings, Resume replacement of the newly supplied value,
+and invalid UTF-8/NUL rejection before native side effects. They launch no real
+Agent or model.
+
 `NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
 app-server trace and Claude temporary saved storage. Native focused tests retain
 transport, live coexistence, cancellation, unknown, resource and integrity checks.

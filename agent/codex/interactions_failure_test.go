@@ -76,26 +76,26 @@ func TestOutcomeUnknownConsumesInteractionAuthority(t *testing.T) {
 	defer cancel()
 	frames := interactionSessionFrames(
 		commandApprovalRequest("approval-1"),
-		`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"approval-1"}}`,
 		`>{"id":"approval-1","result":{"decision":"accept"}}`,
+		`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"approval-1"}}`,
 	)
 	frames = append(frames, codexCloseFrames(94, "root-a")...)
 
 	var gate *gatedFrameReader
-	var writer *blockingStreamWriter
+	var writer *matchingAnswerWriter
 	session, stream := openControlledInteractionSessionWithStatus(
 		t,
 		ctx,
 		frames,
-		"failed",
-		true,
+		"passed",
+		false,
 		testStreamWrappers{
 			reader: func(reader io.ReadCloser) io.ReadCloser {
 				gate = newGatedFrameReader(reader, []byte("serverRequest/resolved"))
 				return gate
 			},
 			writer: func(inner io.WriteCloser) io.WriteCloser {
-				writer = newBlockingStreamWriter(inner)
+				writer = newMatchingAnswerWriter(inner, []byte(`{"id":"approval-1","result":{"decision":"accept"}}`))
 				return writer
 			},
 		},
@@ -108,7 +108,6 @@ func TestOutcomeUnknownConsumesInteractionAuthority(t *testing.T) {
 	require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
 	requested := nextInteractionRequested(t, ctx, stream)
 
-	writer.arm()
 	type answerResult struct {
 		receipt agent.InteractionReceipt
 		err     error
@@ -160,10 +159,7 @@ func TestOutcomeUnknownConsumesInteractionAuthority(t *testing.T) {
 	assert.Equal(t, agent.InteractionReceipt{}, retryReceipt)
 
 	writer.releaseOnce()
-	closeErr := session.Close(ctx)
-	require.Error(t, closeErr)
-	assert.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(closeErr))
-	assert.Equal(t, "close_outcome_unknown", errorReason(t, closeErr))
+	require.NoError(t, session.Close(ctx))
 	_, err := stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 }
@@ -483,6 +479,40 @@ func TestPendingInteractionClosesForTerminalNativeThreadStatus(t *testing.T) {
 	require.NotNil(t, payload.PreviousState)
 	assert.Equal(t, agent.StateRequiresAction, *payload.PreviousState)
 	assert.Equal(t, "systemError", payload.StopReason)
+}
+
+// matchingAnswerWriter holds the successful Write return for one canonical
+// answer frame after delivering its bytes. Other writes cannot take its gate.
+// The test waits for the resolved answer result and closure before releasing it,
+// proving native resolution preceded the successful transport write return.
+type matchingAnswerWriter struct {
+	io.WriteCloser
+	target  []byte
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newMatchingAnswerWriter(writer io.WriteCloser, target []byte) *matchingAnswerWriter {
+	return &matchingAnswerWriter{
+		WriteCloser: writer,
+		target:      target,
+		entered:     make(chan struct{}),
+		release:     make(chan struct{}),
+	}
+}
+
+func (w *matchingAnswerWriter) releaseOnce() {
+	w.once.Do(func() { close(w.release) })
+}
+
+func (w *matchingAnswerWriter) Write(data []byte) (int, error) {
+	n, err := w.WriteCloser.Write(data)
+	if bytes.Equal(bytes.TrimSpace(data), w.target) && err == nil && n == len(data) {
+		close(w.entered)
+		<-w.release
+	}
+	return n, err
 }
 
 type blockingStreamWriter struct {

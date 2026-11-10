@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
@@ -83,6 +84,125 @@ func TestClaudeNotSentAnswerRollsBackAndRetriesSameReference(t *testing.T) {
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
 	assert.Equal(t, "session_closed", closed.Reason)
+	_, err = stream.Next(ctx)
+	require.ErrorIs(t, err, io.EOF)
+}
+
+// The answer context remains live. Its first Err check occurs in native
+// reserveAnswer, after the public adapter has claimed the interaction slot.
+// Holding that check lets native cancellation happen before write authorization.
+type claudeAnswerAdmissionGate struct {
+	context.Context
+	entered     chan struct{}
+	releaseCh   chan struct{}
+	once        sync.Once
+	releaseOnce sync.Once
+}
+
+func (g *claudeAnswerAdmissionGate) Err() error {
+	g.once.Do(func() {
+		close(g.entered)
+		<-g.releaseCh
+	})
+	return g.Context.Err()
+}
+
+func (g *claudeAnswerAdmissionGate) release() {
+	g.releaseOnce.Do(func() { close(g.releaseCh) })
+}
+
+func TestClaudeNotSentWithCanceledNativeRequestConsumesAuthority(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	readGate := newClaudeTestReadGate(`"request_id":"permission-native-cancel"`)
+	defer readGate.release()
+	frames := []string{
+		claudeSessionInitFrame(t, "native-not-sent-cancel", cwd),
+		claudeStartOrSteerFrame(t, "run"),
+		claudeStateFrame("native-not-sent-cancel", "running", "2026-11-11T09:05:00Z"),
+		claudePermissionRequestFrame("permission-native-cancel", "Read", "read-tool", `{"file_path":"a.txt"}`),
+		`<{"type":"control_cancel_request","request_id":"permission-native-cancel"}`,
+		claudeStartOrSteerFrame(t, "keep-open"),
+	}
+	session, stream := openClaudeInteractionSessionWithHook(t, ctx, cwd, "passed", agent.Features{},
+		func(transport claude.StreamTransport) claude.StreamTransport {
+			readGate.attach(transport.Reader)
+			transport.Reader = readGate
+			return transport
+		}, frames...)
+	_, err := session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}}})
+	require.NoError(t, err)
+	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
+	require.Equal(t, agent.StateRequiresAction, nextStateValue(t, ctx, stream))
+	requested := nextClaudeInteractionRequested(t, ctx, stream)
+	nativeContext, snapshot := agentclaude.ObserveInteractionForTest(session, requested.Interaction)
+	require.NoError(t, nativeContext.Err())
+	answer := agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow-once"}
+	gate := &claudeAnswerAdmissionGate{Context: ctx, entered: make(chan struct{}), releaseCh: make(chan struct{})}
+	defer gate.release()
+	type answerResult struct {
+		receipt agent.InteractionReceipt
+		err     error
+	}
+	result := make(chan answerResult, 1)
+	go func() {
+		receipt, answerErr := session.Answer(gate, requested.Interaction, answer)
+		result <- answerResult{receipt: receipt, err: answerErr}
+	}()
+	waitClaudeTestSignal(t, ctx, gate.entered, "admitted native reply")
+	state, live := snapshot()
+	require.Equal(t, "answering", state)
+	require.True(t, live)
+
+	readGate.release()
+	waitClaudeTestSignal(t, ctx, nativeContext.Done(), "native request cancellation")
+	require.ErrorIs(t, context.Cause(nativeContext), claude.ErrPermissionCancelled)
+	require.NoError(t, gate.Context.Err(), "the Answer caller context must remain live")
+	// Cancellation cannot publish closure until the admitted reply has settled.
+	wait, cancelWait := context.WithTimeout(ctx, 50*time.Millisecond)
+	_, err = stream.Next(wait)
+	cancelWait()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	state, _ = snapshot()
+	require.Equal(t, "answering", state)
+
+	gate.release()
+	var answered answerResult
+	select {
+	case answered = <-result:
+	case <-ctx.Done():
+		require.FailNow(t, "admitted answer did not settle", ctx.Err())
+	}
+	require.Error(t, answered.err)
+	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(answered.err))
+	requireAgentErrorReason(t, answered.err, "native_request_ended")
+	require.ErrorIs(t, answered.err, claude.ErrPermissionCancelled)
+	var dispatch *claude.DispatchError
+	require.ErrorAs(t, answered.err, &dispatch)
+	assert.Equal(t, claude.NotSent, dispatch.State)
+	require.Equal(t, requested.Interaction, answered.receipt.Interaction)
+	require.NotNil(t, answered.receipt.Acceptance.Sent)
+	assert.False(t, *answered.receipt.Acceptance.Sent)
+	assert.Nil(t, answered.receipt.Acceptance.NativeAccepted)
+	assert.Nil(t, answered.receipt.Acceptance.NativeRecorded)
+	state, live = snapshot()
+	assert.Equal(t, "settled", state)
+	assert.False(t, live)
+
+	closed := nextClaudeInteractionClosed(t, ctx, stream)
+	assert.Equal(t, requested.Interaction, closed.Interaction)
+	assert.Equal(t, agent.InteractionCancelled, closed.Outcome)
+	assert.Equal(t, "native_request_ended", closed.Reason)
+	retry, err := session.Answer(ctx, requested.Interaction, answer)
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+	requireAgentErrorReason(t, err, "invalid_interaction_ref")
+	assert.Equal(t, agent.InteractionReceipt{}, retry)
+
+	_, err = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}}})
+	require.NoError(t, err)
+	require.NoError(t, session.Close(ctx))
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 }

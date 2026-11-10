@@ -150,30 +150,30 @@ func TestAdditionalSystemPromptValidationDoesNotExposeSentinel(t *testing.T) {
 	}
 }
 
-func TestExecutionOptionsHaveOnlyModelAndReasoningEffort(t *testing.T) {
-	optionType := reflect.TypeFor[agent.ExecutionOptions]()
+func TestSessionConfigHasOnlyModelAndReasoningEffort(t *testing.T) {
+	configType := reflect.TypeFor[agent.SessionConfig]()
 
-	require.Equal(t, 2, optionType.NumField())
-	assert.Equal(t, "Model", optionType.Field(0).Name)
-	assert.Equal(t, reflect.TypeFor[string](), optionType.Field(0).Type)
-	assert.Equal(t, "ReasoningEffort", optionType.Field(1).Name)
-	assert.Equal(t, reflect.TypeFor[string](), optionType.Field(1).Type)
+	require.Equal(t, 2, configType.NumField())
+	assert.Equal(t, "Model", configType.Field(0).Name)
+	assert.Equal(t, reflect.TypeFor[string](), configType.Field(0).Type)
+	assert.Equal(t, "ReasoningEffort", configType.Field(1).Name)
+	assert.Equal(t, reflect.TypeFor[string](), configType.Field(1).Type)
 }
 
-func TestResumeOptionsInheritOpenExecutionOptions(t *testing.T) {
-	execution := agent.ExecutionOptions{
+func TestResumeOptionsInheritOpenSessionConfig(t *testing.T) {
+	config := agent.SessionConfig{
 		Model:           "native-model",
 		ReasoningEffort: "native-effort",
 	}
 	opened := agent.OpenOptions{
-		Cwd:       t.TempDir(),
-		Execution: execution,
+		Cwd:    t.TempDir(),
+		Config: config,
 	}
 	resumed := agent.ResumeOptions{
 		SessionID:   "session-1",
 		OpenOptions: opened,
 	}
 
-	assert.Equal(t, execution, opened.Execution)
-	assert.Equal(t, execution, resumed.Execution)
+	assert.Equal(t, config, opened.Config)
+	assert.Equal(t, config, resumed.Config)
 }

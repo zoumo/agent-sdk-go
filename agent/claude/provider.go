@@ -160,7 +160,7 @@ func (p *Provider) openNativeSession(
 		resumeID,
 		options.Features,
 		mcpServers,
-		options.Execution,
+		options.Config,
 	)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
 	if resume != nil {
@@ -244,7 +244,6 @@ func (p *Provider) openNativeSession(
 		init,
 		sessionIdentity(init, resume),
 		options.Features,
-		initialExecutionOptionsState(init, options.Execution),
 		buffered,
 		guard,
 	)
@@ -317,15 +316,15 @@ func (p *Provider) nativeOptions(
 	resumeID string,
 	features agent.Features,
 	mcpServers []claude.MCPServer,
-	execution agent.ExecutionOptions,
+	sessionConfig agent.SessionConfig,
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
 		MCPServers:        mcpServers,
-		Model:             execution.Model,
-		Effort:            execution.ReasoningEffort,
+		Model:             sessionConfig.Model,
+		Effort:            sessionConfig.ReasoningEffort,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,

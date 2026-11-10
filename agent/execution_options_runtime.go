@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"unicode/utf8"
 )
 
 // ExecutionOptionsRuntime supplies one adapter session's native
@@ -119,14 +118,7 @@ func validateExecutionOptionChange(change ExecutionOptionChange) error {
 			Message: "execution option value must be nonempty",
 		}
 	}
-	if !utf8.ValidString(change.Value) {
-		return &Error{
-			Code:    ErrorInvalidArgument,
-			Reason:  "execution_option_invalid_utf8",
-			Message: "execution option value must be valid UTF-8",
-		}
-	}
-	return nil
+	return validateExecutionOptionEncoding(change.Option, change.Value)
 }
 
 func executionOptionsAccepted() Acceptance {

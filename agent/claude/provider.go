@@ -67,6 +67,9 @@ func (p *Provider) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
 ) (agent.Session, error) {
+	if err := options.Validate(); err != nil {
+		return nil, err
+	}
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
@@ -339,9 +342,6 @@ func (p *Provider) nativeOptions(
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
-	if err := options.Validate(); err != nil {
-		return err
-	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,

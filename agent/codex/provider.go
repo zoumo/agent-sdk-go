@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
-	"unicode/utf8"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/lifecycle"
@@ -109,6 +108,9 @@ func (p *Provider) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
 ) (agent.Session, error) {
+	if err := options.Validate(); err != nil {
+		return nil, err
+	}
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
@@ -292,23 +294,11 @@ func developerInstructions(value string) codextypes.Optional[string] {
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
-	if err := options.Validate(); err != nil {
-		return err
-	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,
 			"additional_dirs_unsupported",
 			"Codex additional directories are not supported by this adapter",
-			nil,
-		)
-	}
-	if !utf8.ValidString(options.Execution.Model) ||
-		!utf8.ValidString(options.Execution.ReasoningEffort) {
-		return adapterError(
-			agent.ErrorInvalidArgument,
-			"execution_options_invalid_utf8",
-			"Codex execution options must be valid UTF-8",
 			nil,
 		)
 	}

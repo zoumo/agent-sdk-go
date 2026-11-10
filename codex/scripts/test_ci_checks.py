@@ -41,8 +41,14 @@ class WorkflowCoverage(unittest.TestCase):
         offline = self.workflow_jobs()["offline"]
         self.assertIn("sudo apt-get install -y ripgrep", offline)
         self.assertIn("brew install ripgrep", offline)
+        self.assertIn(
+            "      - name: Install pinned golangci-lint\n"
+            "        if: runner.os == 'Linux'\n",
+            offline,
+        )
         self.assertIn("golangci-lint@v2.12.2", offline)
         self.assertIn("python3 codex/scripts/check_whitespace.py", offline)
+        self.assertIn('if [[ "${RUNNER_OS}" == "Linux" ]]; then', offline)
         self.assertIn("make fmt-check", offline)
         self.assertIn("make lint", offline)
         self.assertIn("bash scripts/check-offline.sh parallel", offline)

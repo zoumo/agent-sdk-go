@@ -51,6 +51,36 @@ func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
 	runRecordedContinuation(t, false)
 }
 
+func TestRecordedEffortPreflightMatchesSetEffort(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0o700))
+	plan, err := json.Marshal(map[string]string{"Project": root, "Config": root, "DriverProfile": "structured-input"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), plan, 0o600))
+	rows := []string{
+		`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null}}`,
+		`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}`,
+		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"first"}}`,
+		`<{"type":"system","subtype":"init","session_id":"root","claude_code_version":"2.1.258"}`,
+		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"first"}`,
+		`<{"type":"system","subtype":"session_state_changed","session_id":"root","state":"idle"}`,
+		`>{"type":"control_request","request_id":"get","request":{"subtype":"get_settings"}}`,
+		`<{"type":"control_response","response":{"subtype":"success","request_id":"get","response":{"applied":{"effort":"low","ultracode":false}}}}`,
+		`>{"type":"control_request","request_id":"apply","request":{"subtype":"apply_flag_settings","settings":{"effortLevel":"high","ultracode":false}}}`,
+		`<{"type":"control_response","response":{"subtype":"success","request_id":"apply"}}`,
+		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"second"}}`,
+		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"second"}`,
+	}
+	capture := recordedCapture(t, rows)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "raw", "raw.jsonl"), []byte(capture), 0o600))
+	session, err := mocktest.Prepare(t.TempDir(), "claude", []byte(capture), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { verifyMockSession(t, session, "passed") })
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, AcceptFlow(ctx, session, root, preparedHost(t, session), claude.ChildDetailPreserve, io.Discard))
+}
+
 func runRecordedContinuation(t *testing.T, mcp bool) {
 	t.Helper()
 	root := t.TempDir()
@@ -72,6 +102,20 @@ func runRecordedContinuation(t *testing.T, mcp bool) {
 		`<{"type":"system","subtype":"session_state_changed","session_id":"root","state":"idle"}`,
 		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"second"}}`,
 		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"second"}`)
+	capture := recordedCapture(t, rows)
+	source := filepath.Join(root, "raw", "raw.jsonl")
+	require.NoError(t, os.WriteFile(source, []byte(capture), 0o600))
+	session, err := mocktest.Prepare(t.TempDir(), "claude", []byte(capture), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { verifyMockSession(t, session, "passed") })
+	host := preparedHost(t, session)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, AcceptFlow(ctx, session, root, host, claude.ChildDetailPreserve, io.Discard))
+}
+
+func recordedCapture(t *testing.T, rows []string) string {
+	t.Helper()
 	var capture strings.Builder
 	for i, row := range rows {
 		direction := "s2c"
@@ -80,15 +124,7 @@ func runRecordedContinuation(t *testing.T, mcp bool) {
 		}
 		fmt.Fprintf(&capture, `{"ordinal":%d,"direction":%q,"channel":"protocol","epoch":1,"elapsedMs":0,"wire":%s}`+"\n", i+1, direction, row[1:])
 	}
-	source := filepath.Join(root, "raw", "raw.jsonl")
-	require.NoError(t, os.WriteFile(source, []byte(capture.String()), 0o600))
-	session, err := mocktest.Prepare(t.TempDir(), "claude", []byte(capture.String()), mocktest.Options{})
-	require.NoError(t, err)
-	t.Cleanup(func() { verifyMockSession(t, session, "passed") })
-	host := preparedHost(t, session)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, AcceptFlow(ctx, session, root, host, claude.ChildDetailPreserve, io.Discard))
+	return capture.String()
 }
 
 func preparedHost(t *testing.T, session *mocktest.Session) Host {

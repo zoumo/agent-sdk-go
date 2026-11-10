@@ -255,10 +255,14 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 	}
 	submitted, terminals := 0, 0
 	observedRoot := ""
+	skipOrdinal := map[int]bool{}
 	for _, v := range frames {
 		var w control
 		if err := json.Unmarshal(v.Wire, &w); err != nil {
 			return err
+		}
+		if skipOrdinal[v.Ordinal] {
+			continue
 		}
 		if v.Direction == "s2c" {
 			if w.Type == "control_response" {
@@ -320,11 +324,61 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 			if err := json.Unmarshal(w.Request, &request); err != nil {
 				return err
 			}
+			operation := request.Subtype
+			responseID := w.RequestID
+			recordedRequest := w.Request
 			var e error
 			var receipt claude.ConfigurationReceipt
 			switch request.Subtype {
 			case "initialize":
 				continue
+			case "get_settings":
+				if !sameJSON(w.Request, []byte(`{"subtype":"get_settings"}`)) {
+					return errors.New("effort preflight request differs")
+				}
+				var applyOrdinal int
+				var applyWire control
+				var applyRequest struct {
+					Subtype  string          `json:"subtype"`
+					Settings json.RawMessage `json:"settings"`
+				}
+				for _, candidate := range frames {
+					if candidate.Ordinal <= v.Ordinal || candidate.Direction != "c2s" {
+						continue
+					}
+					var wire control
+					if err := json.Unmarshal(candidate.Wire, &wire); err != nil {
+						return err
+					}
+					if wire.Type == "user" {
+						break
+					}
+					if wire.Type != "control_request" {
+						continue
+					}
+					if err := json.Unmarshal(wire.Request, &applyRequest); err != nil {
+						return err
+					}
+					if applyRequest.Subtype == "apply_flag_settings" {
+						applyOrdinal = candidate.Ordinal
+						applyWire = wire
+						break
+					}
+				}
+				if applyOrdinal == 0 {
+					return errors.New("effort preflight has no apply_flag_settings follow-up")
+				}
+				var change struct {
+					EffortLevel *string `json:"effortLevel"`
+				}
+				if err := json.Unmarshal(applyRequest.Settings, &change); err != nil {
+					return err
+				}
+				receipt, e = s.SetEffort(ctx, claude.EffortChange{Level: change.EffortLevel})
+				operation = "apply_flag_settings"
+				responseID = applyWire.RequestID
+				recordedRequest = applyWire.Request
+				skipOrdinal[applyOrdinal] = true
 			case "set_model":
 				receipt, e = s.SetModel(ctx, claude.ModelChange{Model: request.Model})
 			case "set_max_thinking_tokens":
@@ -342,7 +396,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 				if r.Direction == "s2c" {
 					var candidate control
 					_ = json.Unmarshal(r.Wire, &candidate)
-					if candidate.Type == "control_response" && candidate.Response.RequestID == w.RequestID {
+					if candidate.Type == "control_response" && candidate.Response.RequestID == responseID {
 						expected = candidate
 						break
 					}
@@ -351,14 +405,14 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 			if expected.Response.Subtype == "error" {
 				var native *claude.ControlError
 				if e == nil || !errors.As(e, &native) {
-					return fmt.Errorf("%s did not reproduce native rejection: %w", request.Subtype, e)
+					return fmt.Errorf("%s did not reproduce native rejection: %w", operation, e)
 				}
 				continue
 			}
 			if e != nil {
 				return e
 			}
-			if request.Subtype != "interrupt" && (!receipt.Accepted || !sameJSON(receipt.Requested, w.Request)) {
+			if request.Subtype != "interrupt" && (!receipt.Accepted || !sameJSON(receipt.Requested, recordedRequest)) {
 				return errors.New("configuration request/acknowledgement differs")
 			}
 		case "control_response":

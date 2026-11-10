@@ -136,8 +136,9 @@ codex/types <-- codex          claude/types <-- claude
                    |                              |
              agent/codex                    agent/claude
                    \                              /
-                    \                            /
-                          agent
+                    +--> agent/internal/lifecycle <--+
+                                  |
+                                agent
                              ^
                              |
              MASS runtime/codex  runtime/claude
@@ -148,9 +149,11 @@ codex/types <-- codex          claude/types <-- claude
 
 目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图只
 说明本设计的调用方向：统一 `agent` 是上层实时合同，原生 SDK 不反向依赖它；
-两个 adapter 只适配各自 provider；MASS Runtime adapter 可以消费统一层，而
-MASS Service、Store 和 transport 仍只依赖 MASS 自己的合同。MASS 的配置、
-资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
+两个 adapter 只适配各自 provider，并共同使用 `agent/internal/lifecycle` 持有
+Provider 生命周期状态；该模块只依赖标准库和公开 `agent` 合同，不导入原生 SDK。
+Provider 的原生资源与 Session 仍由各 adapter 拥有。MASS Runtime adapter 可以
+消费统一层，而 MASS Service、Store 和 transport 仍只依赖 MASS 自己的合同。
+MASS 的配置、资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
 
 ## 为什么不整体搬迁 MASS Runtime
 
@@ -198,7 +201,8 @@ package agent
 
 type Provider interface {
     // Start 取得本 Provider 拥有的运行资源并进入 started 状态。
-    // 重复调用返回同一能力集合，不创建第二个资源所有者。
+    // 返回 adapter 供给的基础能力；生命周期冻结副本，重复调用不创建
+    // 第二个资源所有者，也不改变冻结的能力集合。
     Start(ctx context.Context) (Capabilities, error)
 
     // Open 创建新的原生主 Session，并在真实身份确认后返回。
@@ -208,7 +212,8 @@ type Provider interface {
     Resume(ctx context.Context, options ResumeOptions) (Session, error)
 
     // Stop 只释放本 Provider 拥有的资源。
-    // 仍有未关闭 Session 时必须拒绝停止。
+    // 有 Open/Resume 正在进行或仍有未关闭 Session 时必须拒绝；不能等待后
+    // 暗自停止。首次被接纳的 Stop 是终止性的，release 失败也缓存结果。
     Stop(ctx context.Context) error
 }
 ```
@@ -268,8 +273,17 @@ type EffectiveFeatures struct {
 - `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
   external MCP 列表；adapter 不再解释来源或执行第二种合并策略。
 - Provider 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
-- `Open` 和 `Resume` 要求 Provider 已启动；停止成功后不能重新 `Start`，也不能
-  继续 `Open` 或 `Resume`。没有未关闭 Session 时，重复 `Stop` 返回成功。
+- Provider 的基础 `Capabilities` 由 adapter 在构造时供给，生命周期模块复制并
+  冻结；`Start` 每次返回副本。Session 的有效能力和功能降级仍由 adapter 按
+  Session 选项计算，不更新 Provider 基础能力。
+- `Start` 的单次原生资源获取与 `Stop` 串行；获取失败后 Provider 保持未启动并可
+  重试，Stop 被接纳后不能重新 `Start`。
+- 进行中的 `Open` 和 `Resume` 计入 in-flight 操作，`Stop` 必须拒绝而不是等待。
+  Open 的 callback 失败时，adapter 必须先完成原生清理，再由共享生命周期自动
+  撤销 opening；之后 Provider 仍可 Stop，也可继续使用到 Stop。
+- 首次被接纳的 `Stop` 是终止性的：release 至多执行一次，release 错误被缓存，
+  后续 `Stop` 返回同一结果；即使 release 失败，`Start`、`Open` 和 `Resume`
+  也不能再运行。没有未关闭 Session 时重复 Stop 返回缓存结果。
 
 ### Additional system prompt
 
@@ -2097,6 +2111,13 @@ linkage 和无法归属的交互行为保持不变。
 
 - 统一核心只依赖标准库，且不导入 `codex`、`claude` 或 MASS。
 - 两个 adapter 互不导入，原生包不导入统一层。
+- `agent/internal/lifecycle` 的依赖门禁只允许标准库和公开 `agent` 合同；两个
+  adapter 都通过该模块覆盖 Start 单次获取、in-flight Open/Resume 拒绝 Stop、
+  失败 Open 自动结算、终止性 Stop 与 release 错误缓存，且不保留重复生命周期
+  状态、计数器、Session 集合或私有 reserve/complete helper。
+- Provider 基础 Capabilities 由 adapter 供给并由生命周期冻结；Session 级能力
+  只能窄化，不修改 Provider 级快照。Claude Start 不启动进程，每个 Session
+  仍独占并关闭自己的原生 CLI 进程。
 - Provider、Session、EventStream、Input、Answer 和可选能力有公开接口编译测试。
 - `ExecutionOptions` 的空值省略、非空字面值传递和 `ResumeOptions` 继承规则有
   公开合同测试；不实现可选 reporter 的自定义 Session 仍可满足基础接口。

@@ -25,6 +25,19 @@ done
 # either native package, MASS, or a third-party production dependency.
 agent_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent | sed '/^$/d')
 test "$agent_deps" = "github.com/zoumo/agent-sdk-go/agent"
+# The shared Provider lifecycle may use only the public agent contract in
+# addition to the standard library. It cannot reach either native SDK or types.
+lifecycle_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/lifecycle | sed '/^$/d')
+while IFS= read -r dependency; do
+  case "$dependency" in
+    github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/agent/internal/lifecycle) ;;
+    *)
+      echo "unexpected agent/internal/lifecycle dependency: $dependency" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$lifecycle_deps"
 # Each adapter may use standard library packages, its own native SDK, the
 # provider-neutral core, and reviewed SDK-internal mechanics. It must not reach
 # the other adapter or the other native SDK.
@@ -36,6 +49,7 @@ for adapter in codex claude; do
         case "$dependency" in
           github.com/zoumo/agent-sdk-go/agent|\
           github.com/zoumo/agent-sdk-go/agent/"$adapter"|\
+          github.com/zoumo/agent-sdk-go/agent/internal/lifecycle|\
           github.com/zoumo/agent-sdk-go/"$adapter"|\
           github.com/zoumo/agent-sdk-go/"$adapter"/types|\
           github.com/zoumo/agent-sdk-go/internal/queue|\

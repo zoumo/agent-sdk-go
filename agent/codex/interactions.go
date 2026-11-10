@@ -534,11 +534,12 @@ func (s *session) answerInteraction(
 	if err := interaction.request.Handle().Err(); err != nil {
 		return s.finishTerminalInteractionAndUnlock(interaction, err)
 	}
-	if err := agent.ValidateAnswer(interaction.kind, answer); err != nil {
+	matched, err := agent.MatchAnswer(interaction.kind, answer)
+	if err != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, err
 	}
-	reply, validationErr := interactionReply(interaction, answer)
+	reply, validationErr := interactionReply(interaction, matched)
 	if validationErr != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, validationErr
@@ -642,7 +643,7 @@ func interactionReply(
 	interaction *pendingInteraction,
 	answer agent.Answer,
 ) (func(context.Context) error, error) {
-	switch concrete := concreteAnswerValue(answer).(type) {
+	switch concrete := answer.(type) {
 	case agent.PermissionAnswer:
 		if concrete.Outcome == agent.PermissionCancelled {
 			if interaction.cancel == nil {
@@ -1270,19 +1271,6 @@ func requestMethod(received codex.Received) string {
 		return received.Request.Method()
 	}
 	return ""
-}
-
-func concreteAnswerValue(answer agent.Answer) any {
-	switch value := answer.(type) {
-	case *agent.PermissionAnswer:
-		return *value
-	case *agent.FormAnswer:
-		return *value
-	case *agent.URLAnswer:
-		return *value
-	default:
-		return answer
-	}
 }
 
 func terminalInteractionOutcome(err error) (agent.InteractionOutcome, string) {

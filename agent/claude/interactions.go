@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -425,11 +424,12 @@ func (s *session) Answer(
 			},
 			interactionAnswerError(reason, cause)
 	}
-	if err := agent.ValidateAnswer(interaction.kind, answer); err != nil {
+	matched, err := agent.MatchAnswer(interaction.kind, answer)
+	if err != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, err
 	}
-	reply, outcome, validationErr := interactionReply(interaction, answer)
+	reply, outcome, validationErr := interactionReply(interaction, matched)
 	if validationErr != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, validationErr
@@ -540,11 +540,7 @@ func interactionReply(
 	interaction *pendingInteraction,
 	answer agent.Answer,
 ) (func(context.Context) error, agent.InteractionOutcome, error) {
-	concrete, err := concreteAnswer(answer)
-	if err != nil {
-		return nil, "", err
-	}
-	switch value := concrete.(type) {
+	switch value := answer.(type) {
 	case agent.PermissionAnswer:
 		if value.Outcome == agent.PermissionCancelled {
 			return func(ctx context.Context) error {
@@ -733,39 +729,6 @@ func singleSelectArrayError() error {
 		"array form answers require a multi-select question",
 		nil,
 	)
-}
-
-func concreteAnswer(answer agent.Answer) (agent.Answer, error) {
-	if answer == nil {
-		return nil, adapterError(
-			agent.ErrorInvalidArgument,
-			"missing_answer",
-			"answer is required",
-			nil,
-		)
-	}
-	value := reflect.ValueOf(answer)
-	if value.Kind() != reflect.Pointer {
-		return answer, nil
-	}
-	if value.IsNil() {
-		return nil, adapterError(
-			agent.ErrorInvalidArgument,
-			"missing_answer",
-			"answer is required",
-			nil,
-		)
-	}
-	concrete, ok := value.Elem().Interface().(agent.Answer)
-	if !ok {
-		return nil, adapterError(
-			agent.ErrorInvalidArgument,
-			"unsupported_answer",
-			"answer kind is not supported",
-			nil,
-		)
-	}
-	return concrete, nil
 }
 
 func (s *session) deleteInteractionLocked(interaction *pendingInteraction) {

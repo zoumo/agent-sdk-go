@@ -102,9 +102,6 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 	case "thread/tokenUsage/updated":
 		return s.tokenUsageUpdated(received)
 	case "thread/settings/updated":
-		if notification, ok := event.Data.(*codextypes.ThreadSettingsUpdatedNotification); ok {
-			s.recordObservedExecutionSettings(notification)
-		}
 		return s.notificationGap(
 			received,
 			"config_options_unsupported",

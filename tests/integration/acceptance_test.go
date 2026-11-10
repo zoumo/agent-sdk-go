@@ -3094,22 +3094,6 @@ func assertAgentExecutionAccepted(t *testing.T, acceptance agent.Acceptance) {
 	assert.True(t, *acceptance.NativeAccepted)
 }
 
-func requireAgentExecutionValue(
-	t *testing.T,
-	requested string,
-	effective *string,
-	value agent.ExecutionValue,
-) {
-	t.Helper()
-	assert.Equal(t, requested, value.Requested)
-	if effective == nil {
-		assert.Nil(t, value.Effective)
-		return
-	}
-	require.NotNil(t, value.Effective)
-	assert.Equal(t, *effective, *value.Effective)
-}
-
 // closeAgentExecutionSession releases a session and verifies its local
 // termination. An unknown-outcome peer exits without completing the native
 // close handshake, so the session must report unavailable after peer
@@ -3165,13 +3149,6 @@ func awaitAgentExecutionIdle(
 	}
 }
 
-func agentExecutionInitialEffort(providerName string) *string {
-	if providerName == "claude" {
-		return nil
-	}
-	return new("observed-effort")
-}
-
 func submitAgentExecutionInput(
 	t *testing.T,
 	ctx context.Context,
@@ -3216,7 +3193,7 @@ type agentExecutionFrameAt struct {
 
 func agentExecutionTracePath(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "execution-options-trace.jsonl")
+	path := filepath.Join(t.TempDir(), "session-config-trace.jsonl")
 	t.Setenv("AGENT_EXECUTION_TRACE", path)
 	return path
 }
@@ -3352,12 +3329,12 @@ func assertAgentExecutionCodexRuntimeTrace(
 	var effortParams, modelParams map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(settings[0].frame.Params, &effortParams))
 	requireAgentExecutionString(t, effortParams, "threadId", agentExecutionSessionID)
-	requireAgentExecutionString(t, effortParams, "effort", "next/effort")
+	requireAgentExecutionString(t, effortParams, "effort", " next/effort ")
 	assert.NotContains(t, effortParams, "model")
 
 	require.NoError(t, json.Unmarshal(settings[1].frame.Params, &modelParams))
 	requireAgentExecutionString(t, modelParams, "threadId", agentExecutionSessionID)
-	requireAgentExecutionString(t, modelParams, "model", "next/model")
+	requireAgentExecutionString(t, modelParams, "model", " next/model ")
 	assert.NotContains(t, modelParams, "effort")
 }
 
@@ -3402,10 +3379,10 @@ func assertAgentExecutionClaudeRuntimeTrace(
 		Ultracode   *bool  `json:"ultracode"`
 	}
 	require.NoError(t, json.Unmarshal(efforts[0].frame.Request.Settings, &settings))
-	assert.Equal(t, "next/effort", settings.EffortLevel)
+	assert.Equal(t, " next/effort ", settings.EffortLevel)
 	require.NotNil(t, settings.Ultracode)
 	assert.False(t, *settings.Ultracode)
-	assert.Equal(t, "next/model", models[0].frame.Request.Model)
+	assert.Equal(t, " next/model ", models[0].frame.Request.Model)
 
 	require.Less(t, users[0].index, efforts[0].index)
 	require.Less(t, getSettings[0].index, efforts[0].index)
@@ -3515,7 +3492,7 @@ func requireAgentExecutionString(
 ) {
 	t.Helper()
 	raw, ok := values[key]
-	require.True(t, ok, "missing execution option field %s", key)
+	require.True(t, ok, "missing session config field %s", key)
 	var got string
 	require.NoError(t, json.Unmarshal(raw, &got))
 	assert.Equal(t, want, got)

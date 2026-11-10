@@ -131,18 +131,13 @@ func (p *Provider) Open(
 				Config:                config,
 				Cwd:                   codextypes.Some(options.Cwd),
 				DeveloperInstructions: developerInstructions(options.AdditionalSystemPrompt),
-				Model:                 optionalString(options.Execution.Model),
+				Model:                 optionalString(options.Config.Model),
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingStart), err)
 		}
-		created = newSession(
-			p,
-			native,
-			features,
-			initialExecutionOptionsReport(native, options.Execution, openingStart),
-		)
+		created = newSession(p, native, features)
 		return created, nil
 	})
 	if err != nil {
@@ -183,19 +178,14 @@ func (p *Provider) Resume(
 					options.AdditionalSystemPrompt,
 				),
 				ExcludeTurns: codextypes.Some(true),
-				Model:        optionalString(options.Execution.Model),
+				Model:        optionalString(options.Config.Model),
 				ThreadID:     options.SessionID,
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingResume), err)
 		}
-		created = newSession(
-			p,
-			native,
-			features,
-			initialExecutionOptionsReport(native, options.Execution, openingResume),
-		)
+		created = newSession(p, native, features)
 		return created, nil
 	})
 	if err != nil {
@@ -253,12 +243,12 @@ func (p *Provider) openingConfiguration(
 	error,
 ) {
 	features := effectiveFeatures(options.Features, p.formsSupported)
-	config, err := threadConfig(features, options.Execution.ReasoningEffort)
+	config, err := threadConfig(features, options.Config.ReasoningEffort)
 	if err != nil {
 		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"execution_options_not_encodable",
-			"encode Codex execution options",
+			"session_config_not_encodable",
+			"encode Codex session configuration",
 			err,
 		)
 	}
@@ -267,14 +257,14 @@ func (p *Provider) openingConfiguration(
 
 func threadConfig(
 	features agent.EffectiveFeatures,
-	executionEffort string,
+	reasoningEffort string,
 ) (codextypes.Optional[map[string]json.RawMessage], error) {
 	config := make(map[string]json.RawMessage, 2)
 	if !features.AgentQuestions {
 		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
 	}
-	if executionEffort != "" {
-		encoded, err := json.Marshal(executionEffort)
+	if reasoningEffort != "" {
+		encoded, err := json.Marshal(reasoningEffort)
 		if err != nil {
 			return codextypes.Optional[map[string]json.RawMessage]{}, err
 		}

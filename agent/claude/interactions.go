@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 const (
@@ -18,30 +18,17 @@ const (
 	permissionRejectOnce = "reject-once"
 )
 
-type interactionPhase uint8
-
-const (
-	interactionPending interactionPhase = iota
-	interactionAnswering
-	interactionAnswered
-)
-
 type pendingInteraction struct {
-	ref             agent.InteractionRef
-	kind            agent.InteractionKind
-	requestID       string
-	request         claude.IncomingRequest
-	received        claude.Received
-	questions       map[string]claude.Question
-	questionInput   claude.AskUserQuestionInput
-	phase           interactionPhase
-	answerOutcome   agent.InteractionOutcome
-	answerAccepted  bool
-	terminalOutcome agent.InteractionOutcome
-	terminalReason  string
-	answerDone      chan struct{}
-	sequence        uint64
-	startedAt       time.Time
+	ref           agent.InteractionRef
+	kind          agent.InteractionKind
+	requestID     string
+	request       claude.IncomingRequest
+	received      claude.Received
+	questions     map[string]claude.Question
+	questionInput claude.AskUserQuestionInput
+	slot          interactionledger.Slot
+	sequence      uint64
+	startedAt     time.Time
 }
 
 func (s *session) convertRequest(received claude.Received) ([]agent.Event, error) {
@@ -125,7 +112,6 @@ func (s *session) permissionInteraction(
 		requestID: request.ID(),
 		request:   request,
 		received:  received,
-		phase:     interactionPending,
 		startedAt: nativeEventTime(request.Raw()),
 	}
 	unified := agent.InteractionRequest{
@@ -184,7 +170,6 @@ func (s *session) questionInteraction(
 		received:      received,
 		questions:     questions,
 		questionInput: input,
-		phase:         interactionPending,
 		startedAt:     nativeEventTime(request.Raw()),
 	}
 	unified := agent.InteractionRequest{
@@ -258,17 +243,6 @@ func (s *session) registerInteraction(
 	interaction *pendingInteraction,
 	request agent.InteractionRequest,
 ) ([]agent.Event, error) {
-	ref, err := uuidv4.New()
-	if err != nil {
-		return nil, adapterError(
-			agent.ErrorUnavailable,
-			"interaction_ref_failed",
-			"create interaction reference",
-			err,
-		)
-	}
-	interaction.ref = agent.InteractionRef("claude-" + ref)
-
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -293,6 +267,19 @@ func (s *session) registerInteraction(
 			},
 		)
 	}
+	ref, sequence, err := s.interactionLedger.Allocate()
+	if err != nil {
+		s.mu.Unlock()
+		return nil, adapterError(
+			agent.ErrorUnavailable,
+			"interaction_ref_failed",
+			"create interaction reference",
+			err,
+		)
+	}
+	interaction.ref = ref
+	interaction.sequence = sequence
+
 	var stateEvent *agent.Event
 	if s.state == nil || *s.state != agent.StateRequiresAction {
 		var previous *agent.SessionState
@@ -335,7 +322,6 @@ func (s *session) registerInteraction(
 		s.mu.Unlock()
 		return nil, requestErr
 	}
-	interaction.sequence = s.nextInteractionSequenceLocked()
 	s.interactions[interaction.ref] = interaction
 	s.interactionRefs[interaction.requestID] = interaction.ref
 	s.mu.Unlock()
@@ -343,11 +329,6 @@ func (s *session) registerInteraction(
 		return []agent.Event{requestedEvent}, nil
 	}
 	return []agent.Event{*stateEvent, requestedEvent}, nil
-}
-
-func (s *session) nextInteractionSequenceLocked() uint64 {
-	s.interactionSequence++
-	return s.interactionSequence
 }
 
 func (s *session) Answer(
@@ -384,7 +365,7 @@ func (s *session) Answer(
 			nil,
 		)
 	}
-	if interaction.phase != interactionPending {
+	if interaction.slot.State() != interactionledger.Pending {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorFailedPrecondition,
@@ -395,8 +376,7 @@ func (s *session) Answer(
 	}
 	if cause := context.Cause(interaction.request.Context()); cause != nil {
 		outcome, reason := answerTerminalOutcome(interaction.request.Context(), cause)
-		interaction.terminalOutcome = outcome
-		interaction.terminalReason = reason
+		interaction.slot.CompleteTerminal(outcome, reason)
 		s.deleteInteractionLocked(interaction)
 		s.mu.Unlock()
 		events, eventErr := s.closedInteractionEvents(
@@ -434,9 +414,15 @@ func (s *session) Answer(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, validationErr
 	}
-	done := make(chan struct{})
-	interaction.answerDone = done
-	interaction.phase = interactionAnswering
+	if !interaction.slot.Claim() {
+		s.mu.Unlock()
+		return agent.InteractionReceipt{}, adapterError(
+			agent.ErrorFailedPrecondition,
+			"interaction_not_pending",
+			"interaction is no longer pending",
+			nil,
+		)
+	}
 	s.mu.Unlock()
 
 	answerErr := reply(ctx)
@@ -444,11 +430,8 @@ func (s *session) Answer(
 	s.mu.Lock()
 	owned := s.interactions[ref] == interaction
 	if answerErr == nil {
-		interaction.phase = interactionAnswered
-		interaction.answerOutcome = outcome
-		interaction.answerAccepted = true
+		interaction.slot.CompleteSent(outcome)
 		s.mu.Unlock()
-		close(done)
 		sent := true
 		return agent.InteractionReceipt{
 			Interaction: ref,
@@ -457,11 +440,8 @@ func (s *session) Answer(
 	}
 	if answerNotSent(answerErr) {
 		if context.Cause(interaction.request.Context()) == nil {
-			if owned {
-				interaction.phase = interactionPending
-			}
+			interaction.slot.ReleaseNotSent()
 			s.mu.Unlock()
-			close(done)
 			sent := false
 			return agent.InteractionReceipt{
 					Interaction: ref,
@@ -474,13 +454,11 @@ func (s *session) Answer(
 		interaction.request.Context(),
 		answerErr,
 	)
-	interaction.terminalOutcome = outcome
-	interaction.terminalReason = reason
+	interaction.slot.CompleteTerminal(outcome, reason)
 	if owned {
 		s.deleteInteractionLocked(interaction)
 	}
 	s.mu.Unlock()
-	close(done)
 
 	if owned {
 		settled, settleErr := s.closedInteractionEvents(
@@ -808,20 +786,18 @@ func (s *session) closedInteractionEvents(
 	})
 	events := make([]agent.Event, 0, len(interactions))
 	for _, interaction := range interactions {
-		s.waitInteractionAnswer(interaction)
-		s.mu.Lock()
-		outcome, reason := interactionClosureLocked(
-			interaction,
-			fallbackOutcome,
-			fallbackReason,
+		result := interaction.slot.Resolve(
+			interactionledger.Result{
+				Outcome: fallbackOutcome,
+				Reason:  fallbackReason,
+			},
 			answeredReason,
 		)
-		s.mu.Unlock()
 		event, err := s.interactionClosedEvent(
 			interaction.received,
 			interaction,
-			outcome,
-			reason,
+			result.Outcome,
+			result.Reason,
 			at,
 		)
 		if err != nil {
@@ -830,30 +806,6 @@ func (s *session) closedInteractionEvents(
 		events = append(events, event)
 	}
 	return events, nil
-}
-
-func (s *session) waitInteractionAnswer(interaction *pendingInteraction) {
-	s.mu.Lock()
-	done := interaction.answerDone
-	s.mu.Unlock()
-	if done != nil {
-		<-done
-	}
-}
-
-func interactionClosureLocked(
-	interaction *pendingInteraction,
-	fallbackOutcome agent.InteractionOutcome,
-	fallbackReason string,
-	answeredReason string,
-) (agent.InteractionOutcome, string) {
-	if interaction.terminalReason != "" {
-		return interaction.terminalOutcome, interaction.terminalReason
-	}
-	if interaction.phase == interactionAnswered && interaction.answerAccepted {
-		return interaction.answerOutcome, answeredReason
-	}
-	return fallbackOutcome, fallbackReason
 }
 
 func (s *session) cancelInteraction(

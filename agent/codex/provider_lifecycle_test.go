@@ -184,6 +184,26 @@ func newTestProviderWithInitialize(
 	initialize codextypes.InitializeParams,
 ) *agentcodex.Provider {
 	t.Helper()
+	return newTestProviderWithWrappers(
+		t,
+		peerSession,
+		initialize,
+		testStreamWrappers{},
+	)
+}
+
+type testStreamWrappers struct {
+	reader func(io.ReadCloser) io.ReadCloser
+	writer func(io.WriteCloser) io.WriteCloser
+}
+
+func newTestProviderWithWrappers(
+	t *testing.T,
+	peerSession *mocktest.Session,
+	initialize codextypes.InitializeParams,
+	wrappers testStreamWrappers,
+) *agentcodex.Provider {
+	t.Helper()
 	runCtx, cancelRun := context.WithTimeout(
 		context.WithoutCancel(t.Context()),
 		30*time.Second,
@@ -193,6 +213,13 @@ func newTestProviderWithInitialize(
 	run, err := peerSession.NewRun(runCtx, mocktest.RunOptions{NativeArgs: args})
 	require.NoError(t, err)
 	require.Equal(t, args, run.Start.NativeArgs)
+	reader, writer := io.ReadCloser(run.Reader), io.WriteCloser(run.Writer)
+	if wrappers.reader != nil {
+		reader = wrappers.reader(reader)
+	}
+	if wrappers.writer != nil {
+		writer = wrappers.writer(writer)
+	}
 	var completion <-chan error
 	provider := agentcodex.NewWithStream(agentcodex.Config{Stdio: codex.StdioOptions{
 		Args:       run.Start.NativeArgs,
@@ -200,8 +227,8 @@ func newTestProviderWithInitialize(
 		Dir:        run.Start.ProtocolCwd,
 		Initialize: initialize,
 	}}, codex.StreamTransport{
-		Reader: run.Reader,
-		Writer: run.Writer,
+		Reader: reader,
+		Writer: writer,
 		Stderr: run.Stderr,
 		Wait:   run.WaitError,
 	}, func(client *codex.Client) {

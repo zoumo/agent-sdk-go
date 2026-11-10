@@ -23,8 +23,9 @@ and dependency boundaries.
 - The `agent` core production code must use only the standard library. It must not
   import either native SDK, MASS or recording/replay code. Provider adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
-  mechanics (`internal/queue` and `internal/uuidv4`), but adapters must not import
-  each other or the other native SDK, and native packages must not import `agent`.
+  mechanics (`agent/internal/lifecycle`, `internal/queue` and
+  `internal/uuidv4`), but adapters must not import each other or the other native
+  SDK, and native packages must not import `agent`.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**
@@ -34,6 +35,11 @@ and dependency boundaries.
   `internal/lineage` accepts confirmed relationship facts; it does not parse
   native events, infer creation, send protocol messages or grant answer authority.
   Its precise contract and resource bounds live in [lineage](modules/native-session/design.md#lineage-shared-relationship-rules).
+- `agent/internal/lifecycle` owns the shared Provider lifecycle state and may
+  import only the standard library and the public `agent` contract. It must not
+  import either native SDK or native `types`, an adapter, MASS, recording/replay
+  code, tools or tests. Go internal visibility restricts it to packages under
+  `agent`.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib

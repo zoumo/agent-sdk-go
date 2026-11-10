@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope"
 	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 type claudeUsageState struct {
@@ -1348,19 +1348,6 @@ func (s *session) newEvent(
 	eventTime time.Time,
 	extras map[string]any,
 ) (agent.Event, error) {
-	eventID, err := uuidv4.New()
-	if err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_id_failed",
-			"create unified event identity",
-			err,
-		)
-	}
-	if eventTime.IsZero() {
-		eventTime = time.Now().UTC()
-	}
-
 	raw := received.Raw
 	eventType := ""
 	subtype := ""
@@ -1413,25 +1400,12 @@ func (s *session) newEvent(
 		}
 	}
 
-	event := agent.Event{
-		EventID:   eventID,
-		SessionID: s.ID(),
-		Time:      eventTime,
-		ItemID:    itemID,
-		Payload:   payload,
-		Meta: map[string]any{
-			"claude": claudeMeta,
-		},
-	}
-	if err := event.Validate(); err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_invalid",
-			"convert native Claude event",
-			err,
-		)
-	}
-	return event, nil
+	return (eventenvelope.Envelope{SessionID: s.ID()}).Event(
+		itemID,
+		payload,
+		eventTime,
+		map[string]any{"claude": claudeMeta},
+	)
 }
 
 func nativeEventTime(raw json.RawMessage) time.Time {

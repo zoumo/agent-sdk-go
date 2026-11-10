@@ -27,7 +27,7 @@ forwarding packages.
 | Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
 | Use one live API for both | [Unified agent core](agent/doc.go), [offline session example](agent/provider_example_test.go), [offline MCP example](agent/mcp_example_test.go) |
 | Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
-| Test, record or inspect evidence | [Offline validation](docs/testing.md), [SDK simulation](tests/simulation/drivers/README.md), [external test tool](https://github.com/zoumo/agent-sdk-testify) |
+| Test, record or inspect evidence | [Offline validation](docs/testing.md), [SDK simulation](tests/simulation/drivers/README.md), [pinned test library](https://github.com/zoumo/agent-sdk-testify) |
 | Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
 | Check licensing | [Licenses and native attribution](NOTICE) |
 
@@ -232,7 +232,7 @@ Go **1.26** or newer is required. The root `mise.toml` is optional for local
 tool management. Formatting and linting use the root Makefile:
 
 ```sh
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 go mod download
 make fmt
 make lint
@@ -245,7 +245,12 @@ pushed module and dependencies over the network, then compiles public imports,
 examples and documentation snippets without invoking a real CLI or model.
 Simulation catalog availability and source inspection do not establish successful
 real recordings. Code integration tests use explicitly synthetic input.
-The offline entry also requires an explicit separately built external tool and the
-fixed reviewed corpus in its embedded mock catalog; absent recordings fail the
-simulation gate. Material adoption and catalog maintenance belong to the
-[external tool](https://github.com/zoumo/agent-sdk-testify).
+The offline entry links the exact pinned testify module and its embedded fixed
+corpus; absent required recordings fail the simulation gate. Material adoption
+and catalog maintenance belong to the
+[pinned test library](https://github.com/zoumo/agent-sdk-testify). The test-only pin is
+`github.com/zoumo/agent-sdk-testify v0.0.0-20261109044915-b606272c88c1`
+with checksum `h1:PGGn9abQro2aCssr/tElOCkSHEg6wwNpXEhD5pPn8Ac=`.
+It is linked only by test and simulation hosts; production SDK packages do not
+import it. The complete boundary is in
+[Go library mode](harness/modules/agent-sdk-testify/library-mode.md).

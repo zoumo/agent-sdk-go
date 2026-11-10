@@ -61,12 +61,26 @@ func TestStartOrSteerRefusesConcurrentOrUnknownWrite(t *testing.T) {
 
 func TestKnownNativeStateClearsUnknownWrite(t *testing.T) {
 	session := &session{submitUnknown: true}
+	session.updateState(agent.StateRunning)
+	assert.True(t, session.submitUnknown)
+
 	session.updateState(agent.StateIdle)
 	assert.False(t, session.submitUnknown)
 
 	session.submitUnknown = true
 	session.markUnknownState()
 	assert.True(t, session.submitUnknown)
+}
+
+func TestUnknownWriteRemainsLatchedAfterRunningState(t *testing.T) {
+	session := &session{}
+	stateVersion := session.stateVersion
+
+	session.updateState(agent.StateRunning)
+	session.finishInputWrite(true, stateVersion)
+
+	assert.True(t, session.submitUnknown)
+	assert.True(t, session.workActive)
 }
 
 func TestRelationshipObservationBecomesDiagnosticGap(t *testing.T) {

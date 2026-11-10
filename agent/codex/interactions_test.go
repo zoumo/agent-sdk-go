@@ -889,7 +889,14 @@ func openInteractionSessionWithStatus(
 	t.Helper()
 	peerSession := prepareCodexPeerWithStatus(t, wantReportStatus, frames...)
 	provider := newTestProvider(t, peerSession)
-	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	t.Cleanup(func() {
+		err := provider.Stop(context.Background())
+		if wantReportStatus == "passed" {
+			assert.NoError(t, err)
+		} else {
+			assert.Error(t, err, "a failed replay must remain visible through the provider")
+		}
+	})
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{

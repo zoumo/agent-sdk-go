@@ -115,6 +115,92 @@ func ExampleProvider() {
 	// codex and claude adapters implement agent.Provider
 }
 
+// ExampleExecutionOptionsController shows the request, acceptance and effective
+// value boundaries. Empty fields omit an option; nonempty strings in this
+// synthetic provider remain literal. Native adapters target later work in the
+// main session; they do not wait or interrupt, and work already executing may
+// or may not observe the change according to native behavior.
+//
+// A successful update means the provider accepted the request. Effective values
+// change only when the provider supplies an explicit native observation.
+func ExampleExecutionOptionsController() {
+	ctx := context.Background()
+	provider := newExampleProvider("codex")
+	_, err := provider.Start(ctx)
+	mustExample(err)
+	defer func() { mustExample(provider.Stop(context.Background())) }()
+
+	omitted, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
+	mustExample(err)
+	omittedReport := omitted.(agent.ExecutionOptionsReporter).EffectiveExecutionOptions()
+	fmt.Printf(
+		"omitted model_requested=%q effort_requested=%q model_effective_known=%t\n",
+		omittedReport.Model.Requested,
+		omittedReport.ReasoningEffort.Requested,
+		omittedReport.Model.Effective != nil,
+	)
+	mustExample(omitted.Close(ctx))
+
+	session, err := provider.Open(ctx, agent.OpenOptions{
+		Cwd: "/synthetic",
+		Execution: agent.ExecutionOptions{
+			Model:           " Caller/Model v2 ",
+			ReasoningEffort: " Native/High ",
+		},
+	})
+	mustExample(err)
+	controller, ok := session.(agent.ExecutionOptionsController)
+	if !ok {
+		panic("example session does not implement execution options control")
+	}
+	initial := controller.EffectiveExecutionOptions()
+	fmt.Printf(
+		"open model_requested=%q model_effective_known=%t effort_requested=%q effort_effective_known=%t\n",
+		initial.Model.Requested,
+		initial.Model.Effective != nil,
+		initial.ReasoningEffort.Requested,
+		initial.ReasoningEffort.Effective != nil,
+	)
+
+	modelReceipt, err := controller.SetExecutionOption(
+		ctx,
+		agent.ExecutionOptionChange{
+			Option: agent.ExecutionOptionModel,
+			Value:  "next/model",
+		},
+	)
+	mustExample(err)
+	fmt.Printf(
+		"model requested=%q model_effective_known=%t effort_requested=%q effort_effective_known=%t\n",
+		modelReceipt.Report.Model.Requested,
+		modelReceipt.Report.Model.Effective != nil,
+		modelReceipt.Report.ReasoningEffort.Requested,
+		modelReceipt.Report.ReasoningEffort.Effective != nil,
+	)
+
+	effortReceipt, err := controller.SetExecutionOption(
+		ctx,
+		agent.ExecutionOptionChange{
+			Option: agent.ExecutionOptionReasoningEffort,
+			Value:  "next/effort",
+		},
+	)
+	mustExample(err)
+	fmt.Printf(
+		"effort requested=%q model_requested=%q effort_effective_known=%t\n",
+		effortReceipt.Report.ReasoningEffort.Requested,
+		effortReceipt.Report.Model.Requested,
+		effortReceipt.Report.ReasoningEffort.Effective != nil,
+	)
+	mustExample(session.Close(ctx))
+
+	// Output:
+	// omitted model_requested="" effort_requested="" model_effective_known=false
+	// open model_requested=" Caller/Model v2 " model_effective_known=false effort_requested=" Native/High " effort_effective_known=false
+	// model requested="next/model" model_effective_known=false effort_requested=" Native/High " effort_effective_known=false
+	// effort requested="next/effort" model_requested="next/model" effort_effective_known=false
+}
+
 type exampleProvider struct {
 	name     string
 	mu       sync.Mutex
@@ -147,7 +233,7 @@ func (p *exampleProvider) Open(
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
-	return p.newSession(p.name + "-session")
+	return p.newSession(p.name+"-session", options.Execution)
 }
 
 func (p *exampleProvider) Resume(
@@ -157,7 +243,7 @@ func (p *exampleProvider) Resume(
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
-	return p.newSession(options.SessionID)
+	return p.newSession(options.SessionID, options.Execution)
 }
 
 func (p *exampleProvider) Stop(context.Context) error {
@@ -167,31 +253,38 @@ func (p *exampleProvider) Stop(context.Context) error {
 	return nil
 }
 
-func (p *exampleProvider) newSession(id string) (agent.Session, error) {
+func (p *exampleProvider) newSession(
+	id string,
+	execution agent.ExecutionOptions,
+) (agent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.started || p.stopped {
 		return nil, errors.New("provider is not active")
 	}
-	created := newExampleSession(p.name, id)
+	created := newExampleSession(p.name, id, execution)
 	p.sessions[id] = created
 	return created, nil
 }
 
 type exampleSession struct {
-	provider string
-	id       string
-	events   []agent.Event
-	next     int
-	claimed  bool
-	answered bool
-	mu       sync.Mutex
-	closed   bool
-	done     chan struct{}
-	close    sync.Once
+	provider  string
+	id        string
+	events    []agent.Event
+	next      int
+	claimed   bool
+	answered  bool
+	execution agent.ExecutionOptionsReport
+	mu        sync.Mutex
+	closed    bool
+	done      chan struct{}
+	close     sync.Once
 }
 
-func newExampleSession(provider, id string) *exampleSession {
+func newExampleSession(
+	provider, id string,
+	requested agent.ExecutionOptions,
+) *exampleSession {
 	interaction := agent.InteractionRef(provider + "/interaction-1")
 	idle := agent.StateIdle
 	request := agent.InteractionRequest{
@@ -204,10 +297,19 @@ func newExampleSession(provider, id string) *exampleSession {
 			Kind:     agent.PermissionAllowOnce,
 		}},
 	}
+	report := agent.ExecutionOptionsReport{
+		Model: agent.ExecutionValue{
+			Requested: requested.Model,
+		},
+		ReasoningEffort: agent.ExecutionValue{
+			Requested: requested.ReasoningEffort,
+		},
+	}
 	return &exampleSession{
-		provider: provider,
-		id:       id,
-		done:     make(chan struct{}),
+		provider:  provider,
+		id:        id,
+		done:      make(chan struct{}),
+		execution: report,
 		events: []agent.Event{
 			exampleEvent(id, 1, "user-1", agent.UserMessage{
 				MessageID: "user-1",
@@ -245,6 +347,49 @@ func (s *exampleSession) Capabilities() agent.Capabilities {
 
 func (s *exampleSession) EffectiveFeatures() agent.EffectiveFeatures {
 	return agent.EffectiveFeatures{AgentQuestions: false}
+}
+
+func (s *exampleSession) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cloneExampleExecutionReport(s.execution)
+}
+
+func (s *exampleSession) SetExecutionOption(
+	ctx context.Context,
+	change agent.ExecutionOptionChange,
+) (agent.ExecutionOptionsReceipt, error) {
+	if err := ctx.Err(); err != nil {
+		return agent.ExecutionOptionsReceipt{}, err
+	}
+	if change.Value == "" {
+		return agent.ExecutionOptionsReceipt{}, errors.New("execution option value is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return agent.ExecutionOptionsReceipt{}, errors.New("session closed")
+	}
+	switch change.Option {
+	case agent.ExecutionOptionModel:
+		s.execution.Model.Requested = change.Value
+		s.execution.Model.Effective = nil
+		s.execution.ReasoningEffort.Effective = nil
+	case agent.ExecutionOptionReasoningEffort:
+		s.execution.ReasoningEffort.Requested = change.Value
+		s.execution.ReasoningEffort.Effective = nil
+	default:
+		return agent.ExecutionOptionsReceipt{}, errors.New("execution option is unsupported")
+	}
+	sent, accepted := true, true
+	return agent.ExecutionOptionsReceipt{
+		Change: change,
+		Acceptance: agent.Acceptance{
+			Sent:           &sent,
+			NativeAccepted: &accepted,
+		},
+		Report: cloneExampleExecutionReport(s.execution),
+	}, nil
 }
 
 func (s *exampleSession) Events() (agent.EventStream, error) {
@@ -374,6 +519,21 @@ func exampleMessageText(content []agent.ContentBlock) string {
 	}
 	text, _ := content[0].(agent.TextBlock)
 	return text.Text
+}
+
+func cloneExampleExecutionReport(
+	report agent.ExecutionOptionsReport,
+) agent.ExecutionOptionsReport {
+	cloned := report
+	if report.Model.Effective != nil {
+		value := *report.Model.Effective
+		cloned.Model.Effective = &value
+	}
+	if report.ReasoningEffort.Effective != nil {
+		value := *report.ReasoningEffort.Effective
+		cloned.ReasoningEffort.Effective = &value
+	}
+	return cloned
 }
 
 func mustExample(err error) {

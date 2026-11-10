@@ -2,9 +2,7 @@ package agentclaude_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,10 +13,10 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/claude"
 )
 
-func TestProviderOpenPassesFinalMCPListToClaudeArgv(t *testing.T) {
+func TestProviderOpenPassesFinalMCPListToClaudeOptions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
@@ -28,13 +26,15 @@ func TestProviderOpenPassesFinalMCPListToClaudeArgv(t *testing.T) {
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
-	launcher, env := launchClaudeMockWithoutUnsupportedArgs(t, peerSession)
-	capture := filepath.Join(t.TempDir(), "argv.json")
-	env = append(env, claudeTestArgvCaptureEnv+"="+capture)
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: launcher,
-		Env:     env,
-	})
+	var observed []claude.SessionOptions
+	provider := newTestClaudeProviderWithObserver(
+		t,
+		agentclaude.Config{},
+		func(options claude.SessionOptions) {
+			observed = append(observed, options)
+		},
+		peerSession,
+	)
 	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -67,7 +67,9 @@ func TestProviderOpenPassesFinalMCPListToClaudeArgv(t *testing.T) {
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 
-	argv := readClaudeArgv(t, capture)
+	require.Len(t, observed, 1)
+	argv, err := claude.NativeArgs(observed[0])
+	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"mcpServers": {
 			"local": {
@@ -90,12 +92,15 @@ func TestProviderOpenPassesFinalMCPListToClaudeArgv(t *testing.T) {
 	assert.NotContains(t, strings.Join(argv, "\n"), `"type":"sse"`)
 	assert.NotContains(t, strings.Join(argv, "\n"), `"type":"sdk"`)
 
+	before := claudeMCPConfig(t, argv)
 	servers[0].Command = "mutated"
 	args[0] = "--mutated"
 	envValues["LOCAL_TOKEN"] = "mutated"
 	headers["Authorization"] = "mutated"
 	servers[1].Name = "mutated"
-	require.Equal(t, argv, readClaudeArgv(t, capture))
+	after, err := claude.NativeArgs(observed[0])
+	require.NoError(t, err)
+	require.JSONEq(t, before, claudeMCPConfig(t, after))
 }
 
 func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
@@ -107,20 +112,42 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 		`<{"type":"system","subtype":"init","session_id":"mcp-open","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 	)
-	resumeFrames := append([]string(nil), mockClaudeInit...)
-	resumeFrames = append(resumeFrames,
-		`<{"type":"system","subtype":"init","session_id":"mcp-resume","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-	)
 	openPeer := prepareClaudePeer(t, "passed", openFrames...)
-	resumePeer := prepareClaudePeer(t, "passed", resumeFrames...)
-	launcher, captures := captureSequencedClaudeLauncher(t, openPeer, resumePeer)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
-	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
+	var observed []claude.SessionOptions
+	openProvider := newTestClaudeProviderWithObserver(
+		t,
+		agentclaude.Config{},
+		func(options claude.SessionOptions) {
+			observed = append(observed, options)
+		},
+		openPeer,
+	)
+	configDir := newResumeConfigDir(t)
+	writeResumeTranscript(
+		t,
+		configDir,
+		"project",
+		claudeResumePeerSessionID,
+		cwd,
+	)
+	resumeArgv := filepath.Join(t.TempDir(), "resume-argv.json")
+	resumePeer := newClaudeResumePeer(t, claudeResumePeerScenario{
+		CWD:      cwd,
+		Frames:   []string{resumeInitFrame(t, claudeResumePeerSessionID, cwd)},
+		ArgvPath: resumeArgv,
+	})
+	resumeProvider := agentclaude.New(agentclaude.Config{
+		CLIPath:   resumePeer.CLIPath,
+		Env:       resumePeer.Env,
+		ConfigDir: configDir,
+	})
+	t.Cleanup(func() {
+		require.NoError(t, resumeProvider.Stop(context.Background()))
+	})
 
-	_, err := provider.Start(ctx)
+	_, err := openProvider.Start(ctx)
 	require.NoError(t, err)
-	first, err := provider.Open(ctx, agent.OpenOptions{
+	first, err := openProvider.Open(ctx, agent.OpenOptions{
 		Cwd: cwd,
 		MCPServers: []agent.MCPServer{{
 			Name:      "open-only",
@@ -130,12 +157,17 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, first.Close(ctx))
+	require.Len(t, observed, 1)
+	openArgv, err := claude.NativeArgs(observed[0])
+	require.NoError(t, err)
 	require.JSONEq(t, `{"mcpServers":{"open-only":{
 		"type":"stdio","command":"fixture-mcp"
-	}}}`, claudeMCPConfig(t, readClaudeArgv(t, captures[0])))
+	}}}`, claudeMCPConfig(t, openArgv))
 
-	second, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID: "mcp-resume",
+	_, err = resumeProvider.Start(ctx)
+	require.NoError(t, err)
+	second, err := resumeProvider.Resume(ctx, agent.ResumeOptions{
+		SessionID: claudeResumePeerSessionID,
 		OpenOptions: agent.OpenOptions{
 			Cwd: cwd,
 			MCPServers: []agent.MCPServer{{
@@ -149,7 +181,7 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	closeSessionOnCleanup(t, second)
 	require.JSONEq(t, `{"mcpServers":{"resume-only":{
 		"type":"http","url":"https://example.invalid/resume"
-	}}}`, claudeMCPConfig(t, readClaudeArgv(t, captures[1])))
+	}}}`, claudeMCPConfig(t, readClaudeArgv(t, resumeArgv)))
 }
 
 func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {
@@ -162,13 +194,15 @@ func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
-	launcher, env := launchClaudeMockWithoutUnsupportedArgs(t, peerSession)
-	capture := filepath.Join(t.TempDir(), "argv.json")
-	env = append(env, claudeTestArgvCaptureEnv+"="+capture)
-	provider := agentclaude.New(agentclaude.Config{
-		CLIPath: launcher,
-		Env:     env,
-	})
+	var observed []claude.SessionOptions
+	provider := newTestClaudeProviderWithObserver(
+		t,
+		agentclaude.Config{},
+		func(options claude.SessionOptions) {
+			observed = append(observed, options)
+		},
+		peerSession,
+	)
 	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -180,7 +214,10 @@ func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 
-	for _, arg := range readClaudeArgv(t, capture) {
+	require.Len(t, observed, 1)
+	argv, err := claude.NativeArgs(observed[0])
+	require.NoError(t, err)
+	for _, arg := range argv {
 		assert.False(t, strings.HasPrefix(arg, "--mcp-config"))
 	}
 }
@@ -243,15 +280,14 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 			t.Run(tt.name+"/"+operation, func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				cwd := t.TempDir()
-				capture := filepath.Join(cwd, "rejected-argv")
-				launcher := filepath.Join(cwd, "must-not-start")
-				script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " +
-					shellQuote(capture) + "\nexit 69\n"
-				require.NoError(t, os.WriteFile(launcher, []byte(script), 0o700))
-				provider := agentclaude.New(agentclaude.Config{
-					CLIPath: launcher,
-				})
+				calls := 0
+				provider := newTestClaudeProviderWithObserver(
+					t,
+					agentclaude.Config{},
+					func(claude.SessionOptions) {
+						calls++
+					},
+				)
 				_, err := provider.Start(ctx)
 				require.NoError(t, err)
 				t.Cleanup(func() {
@@ -259,7 +295,7 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 				})
 
 				options := agent.OpenOptions{
-					Cwd:        cwd,
+					Cwd:        t.TempDir(),
 					MCPServers: []agent.MCPServer{tt.server},
 				}
 				if operation == "open" {
@@ -270,8 +306,7 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 						OpenOptions: options,
 					})
 				}
-				_, statErr := os.Stat(capture)
-				assert.ErrorIs(t, statErr, os.ErrNotExist)
+				assert.Equal(t, 0, calls)
 				require.Error(t, err)
 				require.Equal(t, tt.wantCode, agent.CodeOf(err))
 				var classified *agent.Error
@@ -285,43 +320,6 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 			})
 		}
 	}
-}
-
-func captureSequencedClaudeLauncher(
-	t *testing.T,
-	peers ...*mocktest.Session,
-) (string, []string) {
-	t.Helper()
-	executable, err := os.Executable()
-	require.NoError(t, err)
-	captureDir := t.TempDir()
-	captures := make([]string, len(peers))
-	launches := make([]claudeSequencedLaunch, len(peers))
-	for index, peer := range peers {
-		launcher, err := peer.Launcher("main")
-		require.NoError(t, err)
-		captures[index] = filepath.Join(captureDir, fmt.Sprintf("argv-%d.json", index))
-		env := append([]string(nil), peer.Env...)
-		env = append(
-			env,
-			claudeTestLauncherEnv+"="+launcher,
-			claudeTestArgvCaptureEnv+"="+captures[index],
-		)
-		launches[index] = claudeSequencedLaunch{
-			command: executable,
-			env:     env,
-		}
-	}
-	return sequencedClaudeCommands(t, launches...), captures
-}
-
-func readClaudeArgv(t *testing.T, path string) []string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var argv []string
-	require.NoError(t, json.Unmarshal(data, &argv))
-	return argv
 }
 
 func claudeMCPConfig(t *testing.T, argv []string) string {

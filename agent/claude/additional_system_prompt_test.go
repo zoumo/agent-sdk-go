@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +15,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/claude"
 )
 
 func TestProviderMapsAdditionalSystemPromptToClaudeOpenAndResume(t *testing.T) {
@@ -29,8 +27,17 @@ func TestProviderMapsAdditionalSystemPromptToClaudeOpenAndResume(t *testing.T) {
 		prompt    string
 		sessionID string
 	}{
-		{name: "open", prompt: openPrompt, sessionID: "prompt-open"},
-		{name: "resume", resume: true, prompt: resumePrompt, sessionID: "prompt-resume"},
+		{
+			name:      "open",
+			prompt:    openPrompt,
+			sessionID: "33333333-3333-4333-8333-333333333333",
+		},
+		{
+			name:      "resume",
+			resume:    true,
+			prompt:    resumePrompt,
+			sessionID: "44444444-4444-4444-8444-444444444444",
+		},
 	}
 
 	for _, tt := range tests {
@@ -38,35 +45,41 @@ func TestProviderMapsAdditionalSystemPromptToClaudeOpenAndResume(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			cwd := t.TempDir()
-
-			frames := claudeAdditionalPromptInitFrames(t, cwd, tt.sessionID)
-			peer := prepareClaudePeer(t, "passed", frames...)
-			launcher, captures := captureSequencedClaudeLauncher(t, peer)
-			provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
-			t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
-
-			_, err := provider.Start(ctx)
-			require.NoError(t, err)
-			var session agent.Session
-			if tt.resume {
-				session, err = provider.Resume(ctx, agent.ResumeOptions{
-					SessionID: tt.sessionID,
-					OpenOptions: agent.OpenOptions{
-						Cwd:                    cwd,
-						AdditionalSystemPrompt: tt.prompt,
-					},
-				})
-			} else {
-				session, err = provider.Open(ctx, agent.OpenOptions{
-					Cwd:                    cwd,
-					AdditionalSystemPrompt: tt.prompt,
-				})
+			options := agent.OpenOptions{
+				Cwd:                    cwd,
+				AdditionalSystemPrompt: tt.prompt,
 			}
-			require.NoError(t, err)
+
+			var session agent.Session
+			var argv []string
+			var err error
+			if tt.resume {
+				provider, capture := startClaudeResumeExecutionProvider(
+					t,
+					ctx,
+					cwd,
+					tt.sessionID,
+					resumeInitFrame(t, tt.sessionID, cwd),
+				)
+				session, err = provider.Resume(ctx, agent.ResumeOptions{
+					SessionID:   tt.sessionID,
+					OpenOptions: options,
+				})
+				require.NoError(t, err)
+				argv = readClaudeArgv(t, capture)
+			} else {
+				provider, capture := startClaudeExecutionProvider(
+					t,
+					ctx,
+					claudeAdditionalPromptInitFrames(t, cwd, tt.sessionID)...,
+				)
+				session, err = provider.Open(ctx, options)
+				require.NoError(t, err)
+				argv = capture.argv(t)
+			}
 			closeSessionOnCleanup(t, session)
 			require.NoError(t, session.Close(ctx))
 
-			argv := readClaudeArgv(t, captures[0])
 			assert.Equal(t, []string{"--append-system-prompt=" + tt.prompt},
 				claudeAdditionalPromptArguments(argv))
 			assertNoSystemPromptReplacement(t, argv)
@@ -78,39 +91,42 @@ func TestProviderOmitsEmptyAdditionalSystemPromptOnClaudeOpenAndResume(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
+	options := agent.OpenOptions{Cwd: cwd}
 
-	openFrames := append([]string(nil), mockClaudeInit...)
-	openFrames = append(openFrames,
-		`<{"type":"system","subtype":"init","session_id":"prompt-open-empty","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+	openProvider, openCapture := startClaudeExecutionProvider(
+		t,
+		ctx,
+		claudeAdditionalPromptInitFrames(
+			t,
+			cwd,
+			"55555555-5555-4555-8555-555555555555",
+		)...,
 	)
-	resumeFrames := append([]string(nil), mockClaudeInit...)
-	resumeFrames = append(resumeFrames,
-		`<{"type":"system","subtype":"init","session_id":"prompt-resume-empty","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
-	)
-	openPeer := prepareClaudePeer(t, "passed", openFrames...)
-	resumePeer := prepareClaudePeer(t, "passed", resumeFrames...)
-	launcher, captures := captureSequencedClaudeLauncher(t, openPeer, resumePeer)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
-	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
-
-	_, err := provider.Start(ctx)
-	require.NoError(t, err)
-	opened, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	opened, err := openProvider.Open(ctx, options)
 	require.NoError(t, err)
 	require.NoError(t, opened.Close(ctx))
-	openArgv := readClaudeArgv(t, captures[0])
+	openArgv := openCapture.argv(t)
 	assert.Empty(t, claudeAdditionalPromptArguments(openArgv))
 	assertNoSystemPromptReplacement(t, openArgv)
 
-	resumed, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID:   "prompt-resume-empty",
-		OpenOptions: agent.OpenOptions{Cwd: cwd},
+	resumeProvider, resumeCapture := startClaudeResumeExecutionProvider(
+		t,
+		ctx,
+		cwd,
+		"66666666-6666-4666-8666-666666666666",
+		resumeInitFrame(
+			t,
+			"66666666-6666-4666-8666-666666666666",
+			cwd,
+		),
+	)
+	resumed, err := resumeProvider.Resume(ctx, agent.ResumeOptions{
+		SessionID:   "66666666-6666-4666-8666-666666666666",
+		OpenOptions: options,
 	})
 	require.NoError(t, err)
 	require.NoError(t, resumed.Close(ctx))
-	resumeArgv := readClaudeArgv(t, captures[1])
+	resumeArgv := readClaudeArgv(t, resumeCapture)
 	assert.Empty(t, claudeAdditionalPromptArguments(resumeArgv))
 	assertNoSystemPromptReplacement(t, resumeArgv)
 }
@@ -119,14 +135,16 @@ func TestProviderRejectsInvalidAdditionalSystemPromptBeforeClaudeLaunch(t *testi
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	marker := filepath.Join(cwd, "must-not-launch")
-	launcher := filepath.Join(cwd, "capture-launch")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(marker) + "\nexit 69\n"
-	require.NoError(t, os.WriteFile(launcher, []byte(script), 0o700))
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
+	launched := 0
+	provider := newTestClaudeProviderWithObserver(
+		t,
+		agentclaude.Config{},
+		func(claude.SessionOptions) {
+			launched++
+		},
+	)
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
 
 	for _, invalid := range []struct {
 		name       string
@@ -150,22 +168,22 @@ func TestProviderRejectsInvalidAdditionalSystemPromptBeforeClaudeLaunch(t *testi
 					Cwd:                    cwd,
 					AdditionalSystemPrompt: invalid.value,
 				}
+				var operationErr error
 				if operation == "open" {
-					_, err = provider.Open(ctx, options)
+					_, operationErr = provider.Open(ctx, options)
 				} else {
-					_, err = provider.Resume(ctx, agent.ResumeOptions{
+					_, operationErr = provider.Resume(ctx, agent.ResumeOptions{
 						SessionID:   "prompt-existing",
 						OpenOptions: options,
 					})
 				}
-				_, statErr := os.Stat(marker)
-				assert.ErrorIs(t, statErr, os.ErrNotExist)
-				require.Error(t, err)
-				assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+				require.Error(t, operationErr)
+				assert.Zero(t, launched)
+				assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(operationErr))
 				var classified *agent.Error
-				require.ErrorAs(t, err, &classified)
+				require.ErrorAs(t, operationErr, &classified)
 				assert.Equal(t, invalid.wantReason, classified.Reason)
-				assert.NotContains(t, err.Error(), "additional-prompt-secret-t02")
+				assert.NotContains(t, operationErr.Error(), "additional-prompt-secret-t02")
 			})
 		}
 	}
@@ -191,40 +209,67 @@ func TestProviderDoesNotExposeAdditionalSystemPromptOnNativeFailure(t *testing.T
 			logs := captureDefaultLogs(t)
 			t.Cleanup(func() { assert.NotContains(t, logs.String(), sentinel) })
 			cwd := t.TempDir()
-
-			var frames []string
-			if tt.event {
-				frames = claudeAdditionalPromptInitFrames(t, cwd, "prompt-error")
-				frames = append(frames,
-					`<{"type":"assistant","session_id":"prompt-error","message":{"id":"prompt-error-message","content":[{"type":"text","text":"synthetic native event","apiBlockIndex":0}]}}`,
-				)
-			} else {
-				frames = []string{
-					mockClaudeInit[0],
-					`<{"type":"control_response","response":{"subtype":"error","request_id":"init","error":"synthetic initialization rejection"}}`,
-				}
-			}
-
-			peer := prepareClaudePeer(t, "passed", frames...)
-			launcher, _ := captureSequencedClaudeLauncher(t, peer)
-			provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
-			t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
-
-			_, err := provider.Start(ctx)
-			require.NoError(t, err)
+			sessionID := "77777777-7777-4777-8777-777777777777"
 			options := agent.OpenOptions{
 				Cwd:                    cwd,
 				AdditionalSystemPrompt: sentinel,
 			}
+
+			var provider *agentclaude.Provider
 			var session agent.Session
-			if tt.resume {
+			var err error
+			if !tt.resume {
+				frames := claudeAdditionalPromptInitFrames(t, cwd, sessionID)
+				if tt.event {
+					frames = append(frames,
+						`<{"type":"assistant","session_id":`+jsonString(t, sessionID)+
+							`,"message":{"id":"prompt-error-message","content":[{"type":"text","text":"synthetic native event","apiBlockIndex":0}]}}`,
+					)
+				} else {
+					frames = []string{
+						mockClaudeInit[0],
+						`<{"type":"control_response","response":{"subtype":"error","request_id":"init","error":"synthetic initialization rejection"}}`,
+					}
+				}
+				provider, _ = startClaudeExecutionProvider(t, ctx, frames...)
+				session, err = provider.Open(ctx, options)
+			} else {
+				frames := []string{resumeInitFrame(t, sessionID, cwd)}
+				if tt.event {
+					frames = append(frames, resumeFrame(t, map[string]any{
+						"type":       "assistant",
+						"session_id": sessionID,
+						"message": map[string]any{
+							"id": "prompt-error-message",
+							"content": []any{
+								map[string]any{
+									"type":          "text",
+									"text":          "synthetic native event",
+									"apiBlockIndex": 0,
+								},
+							},
+						},
+					}))
+				} else {
+					frames = []string{resumeInitFrame(
+						t,
+						"99999999-9999-4999-8999-999999999999",
+						cwd,
+					)}
+				}
+				provider, _ = startClaudeResumeExecutionProvider(
+					t,
+					ctx,
+					cwd,
+					sessionID,
+					frames...,
+				)
 				session, err = provider.Resume(ctx, agent.ResumeOptions{
-					SessionID:   "prompt-error",
+					SessionID:   sessionID,
 					OpenOptions: options,
 				})
-			} else {
-				session, err = provider.Open(ctx, options)
 			}
+
 			if !tt.event {
 				require.Error(t, err)
 				assert.NotContains(t, err.Error(), sentinel)
@@ -251,34 +296,16 @@ func TestProviderDoesNotRestoreEmptyAdditionalSystemPromptOnResume(t *testing.T)
 	defer cancel()
 	cwd := t.TempDir()
 	const (
-		sessionID = "prompt-shared"
+		sessionID = "88888888-8888-4888-8888-888888888888"
 		prompt    = "resume prompt must not be restored"
 	)
 
-	peers := []*mocktest.Session{
-		prepareClaudePeer(
-			t,
-			"passed",
-			claudeAdditionalPromptInitFrames(t, cwd, sessionID)...,
-		),
-		prepareClaudePeer(
-			t,
-			"passed",
-			claudeAdditionalPromptInitFrames(t, cwd, sessionID)...,
-		),
-		prepareClaudePeer(
-			t,
-			"passed",
-			claudeAdditionalPromptInitFrames(t, cwd, sessionID)...,
-		),
-	}
-	launcher, captures := captureSequencedClaudeLauncher(t, peers...)
-	provider := agentclaude.New(agentclaude.Config{CLIPath: launcher})
-	t.Cleanup(func() { require.NoError(t, provider.Stop(context.Background())) })
-
-	_, err := provider.Start(ctx)
-	require.NoError(t, err)
-	opened, err := provider.Open(ctx, agent.OpenOptions{
+	openProvider, openCapture := startClaudeExecutionProvider(
+		t,
+		ctx,
+		claudeAdditionalPromptInitFrames(t, cwd, sessionID)...,
+	)
+	opened, err := openProvider.Open(ctx, agent.OpenOptions{
 		Cwd:                    cwd,
 		AdditionalSystemPrompt: prompt,
 	})
@@ -286,8 +313,19 @@ func TestProviderDoesNotRestoreEmptyAdditionalSystemPromptOnResume(t *testing.T)
 	closeSessionOnCleanup(t, opened)
 	require.Equal(t, sessionID, opened.ID())
 	require.NoError(t, opened.Close(ctx))
+	openArgv := openCapture.argv(t)
+	assert.Equal(t, []string{"--append-system-prompt=" + prompt},
+		claudeAdditionalPromptArguments(openArgv))
+	assertNoSystemPromptReplacement(t, openArgv)
 
 	for _, additionalPrompt := range []string{prompt, ""} {
+		provider, capture := startClaudeResumeExecutionProvider(
+			t,
+			ctx,
+			cwd,
+			sessionID,
+			resumeInitFrame(t, sessionID, cwd),
+		)
 		resumed, resumeErr := provider.Resume(ctx, agent.ResumeOptions{
 			SessionID: sessionID,
 			OpenOptions: agent.OpenOptions{
@@ -298,14 +336,12 @@ func TestProviderDoesNotRestoreEmptyAdditionalSystemPromptOnResume(t *testing.T)
 		require.NoError(t, resumeErr)
 		closeSessionOnCleanup(t, resumed)
 		require.NoError(t, resumed.Close(ctx))
-	}
 
-	for index, wantPrompt := range []string{prompt, prompt, ""} {
-		argv := readClaudeArgv(t, captures[index])
-		if wantPrompt == "" {
+		argv := readClaudeArgv(t, capture)
+		if additionalPrompt == "" {
 			assert.Empty(t, claudeAdditionalPromptArguments(argv))
 		} else {
-			assert.Equal(t, []string{"--append-system-prompt=" + wantPrompt},
+			assert.Equal(t, []string{"--append-system-prompt=" + additionalPrompt},
 				claudeAdditionalPromptArguments(argv))
 		}
 		assertNoSystemPromptReplacement(t, argv)

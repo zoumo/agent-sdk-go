@@ -21,7 +21,7 @@ the specification alone does not establish implementation or test coverage.
 |---|---|---|---|
 | 单元测试 | 函数或独立模块的行为合同 | 局部输入、受控替身 | 必需 |
 | 集成测试：专项集成 | SDK、协议、进程及工具之间的协作与异常处理 | 受控进程、临时存储、人工构造的协议与故障 | 必需 |
-| 集成测试：仿真 | 真实用户流程在当前 SDK 中的回归行为 | 来自真实 Agent 的录制、Agent mock | 必需 |
+| 集成测试：仿真 | 真实用户流程在当前 SDK 中的回归行为 | 来自真实 Agent 的录制、进程内 Agent mock | 必需 |
 | 真实 E2E | 被测 SDK 对接真实 Agent 后达成用户目标 | 真实 CLI、模型、认证和执行环境 | 按需显式执行，不是必需门禁 |
 
 常规自动化与 CI 的必需覆盖止于集成层，包含专项集成和仿真。
@@ -37,7 +37,7 @@ CI 可下载工具链和依赖；测试执行不依赖真实 Agent、模型服�
 不新增专项检查目录体系，也不把合成回执登记为真实 case 的录制证据。
 
 仿真须经被测 SDK 的公共接口执行流程，同时检查业务预期、协议匹配、
-录制完整消费和进程清理。单独将录制中的客户端帧送入 mock，只证明协议自回放，
+录制完整消费和 fixture 清理。单独将录制中的客户端帧送入 mock，只证明协议自回放，
 不能替代 SDK 仿真验收。录制缺失或目标行为未触发须报告未验证；
 必需仿真覆盖缺失时不能用跳过或自动连接真实 Agent 使门禁通过。固定索引及采用规则见
 [审核采用与门禁合同](modules/agent-sdk-testify/design.md#审核采用与固定回归门禁)。
@@ -86,21 +86,21 @@ Shared code integration scenarios run directly in `NativeIntegrationSuite`; priv
 and assertions live in `tests/integration/acceptance_test.go`. Checks using
 synthetic peers are targeted integration tests, not simulation evidence for user
 stories. Protocol peers remain in test files, and reusable recording/replay helpers follow the
-[external process boundary](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
+[in-process mock boundary](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
 
 The current driver tests use the single-request interface and supplied peers.
-Legacy Python preparation, proxy and batch execution paths are not alternate
-runners. Native business and provenance assertions remain on the current driver
-or the authoritative Go runner/external mock boundary. Child delivery comparisons use
+Native business and provenance assertions remain on the current driver or the
+authoritative SDK host and typed execution report. Child delivery comparisons use
 provider-owned assertions independent of production suppression code, and each
-preserve/suppress or remote main/probe run must have its own complete receipt.
+preserve/suppress or remote main/probe run must have its own complete report.
 
 Go SDK simulation implementations and their regression tests live under
 `tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`. Native
 `tests/replay` packages retain synthetic adapters and SDK integration assertions,
 including original request handles, event delivery, cancellation and cleanup.
 Keep adapter-specific serialization/completion checks there; maintain pure ID
-matching, handshake, EOF and envelope-validation matrices in the external tool.
+matching, handshake, EOF and envelope-validation matrices in the pinned testify
+library.
 Do not retain unused publication scanners or export helpers used only by tests.
 Moving an assertion does not change its evidence level: synthetic driver tests
 are not successful real-recording simulation evidence.
@@ -109,12 +109,14 @@ Use Go 1.26 or newer and retain offline, race, vet, generation, inventory,
 simulation source/hash validation, dependency-boundary and independent-consumer gates on
 Linux/macOS. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.
+The exact `agent-sdk-testify` module is a test-only dependency linked into test
+and simulation hosts. Its version, checksum, production-boundary rules and
+typed evidence contract are fixed by
+[Go library mode](modules/agent-sdk-testify/library-mode.md). Protocol matching
+and official verification remain owned by that module and are not reimplemented
+in SDK adapters. Recording and mock correctness cannot be established only by
+this repository's Go SDK tests.
 
-
-
-external agent-sdk-testify 的专项测试通过与调用方相同的进程接口验证录制与回放，
-并在源码目录外验证编译产物；覆盖项与依赖限制见[模块测试合同](modules/agent-sdk-testify/design.md#测试与依赖)。
-录制与 mock 的正确性不得仅由本仓库的 Go SDK 测试间接证明。
 新样本入库前须完成官方 SDK 回放与来源／内容审核；已有材料的 Go 仿真独立执行，
 Go SDK 通过不是入库条件，入库后仿真失败须保留样本并阻断 SDK 门禁；
 流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。

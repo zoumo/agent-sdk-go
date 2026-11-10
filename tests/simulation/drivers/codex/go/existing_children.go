@@ -13,11 +13,12 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // AcceptExistingChildren restores a public Session and enumerates stored
 // descendants without submitting input or projecting saved turns into Receive.
-func AcceptExistingChildren(ctx context.Context, root, executable string, args []string, rawPath string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptExistingChildren(ctx context.Context, root string, mock *mocktest.Session, rawPath string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	var plan struct {
 		Model       string
 		HistorySeed struct {
@@ -79,11 +80,12 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	if err := json.Unmarshal(requests[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: executable, Args: args, Initialize: init})
+	c, run, inputClosed, err := openStreamSession(ctx, mock, init)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, c.Close()) }()
+	var s *codex.Session
+	defer func() { err = errors.Join(err, finishStream(run, c, s, inputClosed)) }()
 	var resume types.ThreadResumeParams
 	if err := json.Unmarshal(requests[2].Params, &resume); err != nil {
 		return err
@@ -91,11 +93,10 @@ func AcceptExistingChildren(ctx context.Context, root, executable string, args [
 	if resume.ThreadID != plan.HistorySeed.SessionID || resume.Model.ValueOr("") != plan.Model {
 		return errors.New("resume selection differs from frozen seed")
 	}
-	s, err := codex.Open(ctx, codex.SessionOptions{Client: c, Resume: &resume, ChildDetailPolicy: policy})
+	s, err = codex.Open(ctx, codex.SessionOptions{Client: c, Resume: &resume, ChildDetailPolicy: policy})
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, s.Close()) }()
 	native, ok := s.ResumeResponse()
 	if !ok || native.Model != plan.Model || native.Thread.ID != plan.HistorySeed.SessionID {
 		return errors.New("go session resume response differs")

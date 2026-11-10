@@ -52,14 +52,12 @@ func TestHistorySetupConsumesBackgroundResultsBeforeNextInput(t *testing.T) {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, session, wantStatus) })
-			launcher, err := session.Launcher("main")
-			require.NoError(t, err)
 			if changedResult {
 				require.NoError(t, os.WriteFile(source, []byte(strings.Replace(capture.String(), `"result":"background"`, `"result":"wrong"`, 1)), 0o600))
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			err = AcceptSavedHistory(ctx, launcher, root, preparedHost(t, session), claude.ChildDetailPreserve, io.Discard)
+			err = AcceptSavedHistory(ctx, session, root, preparedHost(t, session), claude.ChildDetailPreserve, io.Discard)
 			if changedResult {
 				require.ErrorContains(t, err, "terminal differs")
 			} else {

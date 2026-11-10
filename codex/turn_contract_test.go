@@ -432,10 +432,14 @@ func (obs *observationSuite) TestSessionTerminalStatus() {
 		t.Run(stop, func(t *testing.T) {
 			f := obs.fixture(t, "normal", codex.Limits{EventQueue: 1})
 			s := openTurnSession(t, f.c, context.Background())
-			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-			defer cancel()
+			timeout := 50 * time.Millisecond
 			if stop == "cancel-full" {
 				require.NoError(t, f.c.Call(context.Background(), "turn-emit", nil, nil))
+				timeout = 3 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			if stop == "cancel-full" {
 				cancel()
 			}
 			_, err := s.Receive(ctx)

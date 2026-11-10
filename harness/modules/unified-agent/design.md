@@ -73,7 +73,7 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、错误值 | provider 无关的单 Session 实时合同 |
+| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`ExecutionOptionsController`、错误值 | provider 无关的单 Session 实时合同 |
 | `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Claude 增加 `AppendSystemPrompt` 启动选项 | 原生协议、查询、原始数据和 provider 语义 |
@@ -98,6 +98,8 @@ README 和包文档说明。现有原生 Session 的语义以
 统一层负责：
 
 - 同一套 Provider 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
+- 在打开、恢复及运行时更新时传递会话级 `model` 与 `reasoningEffort`，并如实
+  报告原生提供的生效证据。
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
 - 在 SDK 适配器内部保留原生工作归属、交互句柄和单次回答权限。
 - 透传由上层合成的最终 external MCP 列表，并明确 provider 字段支持差异。
@@ -109,7 +111,10 @@ README 和包文档说明。现有原生 Session 的语义以
 
 - 修改或替换原生协议、原生 `Received`、原生 Session 或既有原生 `types`
   字段；Claude 只增加本设计列出的追加 system prompt 启动选项。
-- 统一 Codex 与 Claude 的全部创建参数、模型别名、思考预算和子 Agent 查询。
+- 除本页定义的模型与 effort 字面值外，统一其他创建参数、模型别名、思考预算
+  和子 Agent 查询。
+- 统一 `sandbox`、`approvalPolicy`、`permissionsProfile` 或其他原生安全、
+  审批和权限配置；这些字段不进入共享选项。
 - 统一原生历史查询、历史分页、保存记录格式或历史 wire 模型。
 - 将保存历史投影为统一 live 事件、历史完成事件，或可重放、完整的 wire 流。
 - MASS 的 namespace、Session 名称、当前运行映射和旧运行隔离。
@@ -215,12 +220,18 @@ Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Se
 adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
+type ExecutionOptions struct {
+    Model           string
+    ReasoningEffort string
+}
+
 type OpenOptions struct {
     Cwd                    string
     AdditionalSystemPrompt string
     AdditionalDirs         []string
     Features               Features
     MCPServers             []MCPServer
+    Execution      ExecutionOptions
 }
 
 type ResumeOptions struct {
@@ -241,8 +252,10 @@ type EffectiveFeatures struct {
 规则：
 
 - `Cwd` 必须由调用方明确给出且为绝对路径；provider 不接受隐式工作目录。
-- `Resume` 必须定向并确认原原生身份；恢复响应中的保存历史不转换为实时事件，
-  也不重建旧交互权限。普通恢复只交付恢复后的新观察。
+- `Resume` 必须定向并确认原原生身份；Claude 还必须在启动前预检保存材料，
+  以 live init 或匹配的私有 `SessionStart` callback 确认身份，并在返回前复核
+  同一文件身份（见 [Claude 恢复身份](#claude-resume-identity)）。恢复响应中的
+  保存历史不转换为实时事件，也不重建旧交互权限。普通恢复只交付恢复后的新观察。
 - 原生 resume 支持排除历史时，adapter 必须显式关闭保存内容的回放；如果原生
   连接仍收到保存记录，adapter 只能把它当作恢复/查询材料，不能生成统一 live
   `Event`、当前工作状态或回答权限。
@@ -324,6 +337,66 @@ Claude 进程或发送原生请求。直接使用原生 `claude.Options` 时，�
 或持久化 Session 状态。两个 adapter 首版都必须实现上述映射；如果未来某一
 provider 不能表达该字段，必须在原生副作用前返回 `unsupported`，不能静默忽略或
 伪造已应用。
+
+<a id="claude-resume-identity"></a>
+
+### Claude 恢复身份
+
+Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Provider 使用与 Session
+相同的 `CLIPath` 和 `Env` 执行无会话副作用的版本查询；版本不能确认时，
+`Resume` 在启动 Session 进程前失败关闭。不能从 `SessionStart` lifecycle frame
+或 init 是否出现推断 CLI 版本。新建 `Open` 不使用恢复探针或该版本门禁，仍只以
+non-replay 的 live `system/init` 确认身份。
+
+Claude Provider 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
+复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生 hook 名称、matcher
+限制和 callback 应答由
+[Claude SessionStart 身份探针](../native-session/design.md#claude-sessionstart-probe)
+维护。
+
+`Resume` 在启动原生进程前完成 metadata 预检：
+
+1. 用显式绝对 `ConfigDir` 和请求的绝对 `Cwd` 调用
+   `claude.GetSessionInfo`。错误、`Info == nil`、coverage 非 `complete`、
+   Session ID 不符、stored cwd 与请求目录不是同一目录，或 transcript 不是
+   `ConfigDir` 下的普通文件时，返回确定的本地拒绝，原生 Session 进程不得启动。
+2. 保存 transcript 的绝对 `Path` 和平台文件身份（与 Go `os.SameFile` 等价）。
+   metadata 查询只证明保存材料，不证明 Session 存活、未被占用或可恢复。
+3. 保留调用方 `Initialize.Hooks` 的原生语义，追加 SDK 私有 `SessionStart`
+   matcher；每次 `Resume` 生成新的 callback ID，进程启动前完成注册。
+
+身份证据按以下顺序接受：
+
+- 主证据是 non-replay 的 live `system/init`，要求非空 `session_id` 等于目标、
+  init cwd 与请求目录为同一目录。init 先到时完成身份确认，但私有 responder
+  仍须继续存活并应答之后到达的匹配 callback，避免 CLI 等待。
+- init 没有先到时，接受匹配私有 callback ID 的 `hook_callback` control request。
+  输入必须同时满足 `hook_event_name == "SessionStart"`、`source == "resume"`、
+  目标 Session ID、同一 cwd，以及与预检结果同一文件身份的 `transcript_path`。
+  callback 先到时可以据此确认身份；迟到 init 必须与已确认的 Session ID 和 cwd
+  一致。匹配 callback 返回空 `HookJSONOutput` `{}`，至多一次作为身份证据。
+- `hook_started`、`hook_progress`、`hook_response` 即使带有
+  `SessionStart:resume`，也只是通用 lifecycle frame，不是探针命中或身份证据。
+  调用方同 source hook 的启动、完成或失败不参与探针归属。
+
+身份确认后、返回 Session 前，Provider 必须再次用同一显式 `ConfigDir` 调用
+`GetSessionInfo`，核对同一 Session ID、同一 transcript `Path` 和平台文件身份、
+同一 cwd 与完整 coverage。比较文件身份，不要求文件大小、mtime 或 bytes 不变；
+正常恢复可以追加 transcript。metadata 缺失、歧义、coverage 不完整、文件身份
+漂移或 cwd 不符时，关闭进程且不返回 Session。
+
+错误分类固定为：预检无法建立唯一目标或目录/文件前置条件时为
+`failed_precondition`；版本查询无法执行时为 `unavailable`，版本不受支持时为
+`unsupported`；探测超时且没有 init/callback 证据时为 `unavailable`；init、
+callback 或 metadata 证据互相矛盾、重复 callback 或恢复后身份漂移时为
+`native_rejected`。关闭失败是附加 cause 与清理诊断，不覆盖主错误类别。
+
+callback 的 Session ID、cwd 或 transcript 不匹配，重复的有效 callback，
+init 与 callback 互相矛盾，或探测超时后仍无可用身份证据，均失败关闭。身份
+确认并返回 Session 后，迟到的匹配 callback 仍须应答一次；迟到 callback 或
+迟到 init 的重复或矛盾证据通过 Session `Done`/`Err` 终止交互，不创建替代
+Session，也不自动重试恢复。`ResumeWithInput` 同样适用本门禁；身份失败后的
+关闭不声称已经提交的输入未发送。
 
 ### MCP 配置
 
@@ -431,6 +504,172 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
   Codex 对仍被观察或运行的 warm loaded thread 可能忽略 resume config，统一层
   不承诺运行中热替换 MCP tool set。
 
+### 会话级模型与 effort
+
+`ExecutionOptions` 的全部字段只有 `Model` 和 `ReasoningEffort`。两者都使用
+provider 原生字面值，不在统一层定义模型别名、模型目录或 effort 枚举。
+
+#### 启动与恢复
+
+- 空字符串表示不传递该选项，由 provider 使用自己的默认值或恢复语义；适配器
+  不得填造跨 provider 默认值。没有“清空为默认值”的独立请求。
+- 非空值原样传递，不 trim、不大小写转换、不做别名映射，也不把一种 provider
+  的档位翻译成另一种 provider 的档位。值是否有效由原生接口判定。
+- 选项在 `Open` 或 `Resume` 时用于建立主 Session，不是逐 turn 选项，也不
+  自动作用于子 Agent。
+- 所有 adapter 必须先在原生进程或协议写入前完成自身可判定性检查。某项无法
+  被该 provider 执行时返回 `unsupported`，不能忽略该字段后继续打开 Session。
+- 原生明确拒绝模型或 effort 时保留原生原因并返回 `native_rejected`；只有原生
+  派发结果本身无法确定时才返回 `outcome_unknown`。不得因配置失败自动换成默认
+  模型、降低 effort 或重试。
+
+`Resume` 携带非空值时请求原生恢复路径应用这些值。Codex 的原生 resume 接受
+模型和配置覆盖；Claude 以带 `--resume` 的新进程启动，因此创建参数可用于该次
+恢复。若以后某个 provider 不能接受恢复覆盖，它必须在副作用前拒绝，不能悄悄
+沿用旧值或忽略请求。
+
+#### 报告
+
+成功建立 Session 的适配器通过可选接口报告当前已知的请求值和原生生效证据：
+
+```go
+type ExecutionValue struct {
+    // Requested 是最近一次获得原生接受回执的调用方字面值；空字符串表示
+    // 未请求或没有已知的已接受请求。它不是当前生效值的断言。
+    Requested string
+
+    // Effective 只在原生接口明确给出当前状态时设置。nil 表示未知或未观察，
+    // 不表示空字符串，也不能由请求值、回执或调用成功推断。
+    Effective *string
+}
+
+type ExecutionOptionsReport struct {
+    Model           ExecutionValue
+    ReasoningEffort ExecutionValue
+}
+
+type ExecutionOptionsReporter interface {
+    // EffectiveExecutionOptions 返回本 Session 当前已知的完整执行选项状态。
+    // 它不启动原生工作，可在 Session 打开期间并发调用。
+    EffectiveExecutionOptions() ExecutionOptionsReport
+}
+```
+
+报告只能选择性地实现，基础 `Session` 不增加方法。`Requested` 与
+`Effective` 必须分开保存：原生返回规范化后的值或不同值时，两边的值都原样
+保留，不能把请求值改写成观察值。未请求但原生返回默认值时，可以只填写
+`Effective`。成功回执只能推进 `Requested`；`Effective` 必须来自原生明确状态。
+运行时更新成功后，报告必须立即反映已知的新请求，不能继续返回启动快照。
+
+#### 运行时更新
+
+支持运行时更新的 Session 实现以下可选接口：
+
+```go
+type ExecutionOption string
+
+const (
+    ExecutionOptionModel           ExecutionOption = "model"
+    ExecutionOptionReasoningEffort ExecutionOption = "reasoningEffort"
+)
+
+type ExecutionOptionChange struct {
+    Option ExecutionOption
+    Value  string
+}
+
+type ExecutionOptionsReceipt struct {
+    Change     ExecutionOptionChange
+    Acceptance Acceptance
+    Report     ExecutionOptionsReport
+}
+
+type ExecutionOptionsController interface {
+    ExecutionOptionsReporter
+
+    // SetExecutionOption 请求修改一个主 Session 执行选项。
+    // 成功回执中的 Report 是本次更新后的完整已知状态。
+    SetExecutionOption(
+        ctx context.Context,
+        change ExecutionOptionChange,
+    ) (ExecutionOptionsReceipt, error)
+}
+```
+
+该接口沿用以一个配置 ID 和一个值更新 Session 的请求形状，但不复制任意配置
+目录、布尔选项或 provider 自定义配置项。常量值是统一层 ID，不是任一
+provider 的原生 config ID；adapter 负责映射到对应原生字段。
+
+- 只接受本节定义的两个 `ExecutionOption`。未知选项和空 `Value` 在原生写入前返回
+  `invalid_argument`；运行时空字符串不是“省略”或“恢复默认”。
+- 不定义跨 provider 的 `"default"`、清空或别名语义。任何非空值都按原生字面值
+  传递；provider 是否接受由原生接口决定，不得由适配器自行替换成默认值。
+- 每次只修改一个字段，不提供“模型与 effort 同时原子更新”的请求。成功后返回
+  两项的完整报告，因为修改模型可能改变、限制或删除 effort 的有效值。
+- 同一 Session 的更新串行进入原生接口；不合并请求，不与 `Submit`、`Interrupt`
+  或 `Close` 共享隐式调度。调用方需要顺序时必须顺序调用。
+- 更新只承诺影响后续 turn。若当前仍有执行，是否立即影响该执行由原生行为
+  决定；适配器不等待 idle、不中断、不 steer、不重建进程，也不自动重试。
+- 成功回执的 `Acceptance.NativeAccepted` 只表示原生接受了控制请求。
+  `Report` 中的 `Effective` 仍只能来自原生观察，不能由回执、请求值或后续文本
+  推断。原生拒绝返回 `native_rejected`；派发结果未知返回 `outcome_unknown`。
+- 原生写入前失败的调用不改变报告；原生拒绝不推进 `Requested`；结果未知时，
+  回执可以保留已观察的 acceptance 和错误后的已知报告，调用方必须按错误处理，
+  不能把旧报告当成排他状态。
+- 成功的模型更新在缺少同次原生完整状态时，必须把 `Model.Effective` 和
+  `ReasoningEffort.Effective` 清为未知，同时保留此前的
+  `ReasoningEffort.Requested` 作为最近接受请求；旧 effort 可能已不再适用，
+  不能继续作为当前值报告。模型更新结果未知时同样清除两项的 `Effective`；
+  后续原生完整状态可以同时更新两项。
+- 成功的 effort 更新在缺少原生观察时清空 `ReasoningEffort.Effective`，但不
+  改写无关的模型状态。原生拒绝不推进 `Requested`；结果未知时必须清除可能已
+  变化的 `Effective`。
+- 重复设置同一值不是幂等成功证明，也不保证产生可观察的变更。适配器不因本地
+  相等判断跳过原生更新，不用后续 turn 的文本自报或耗时反推配置生效。
+
+运行时更新不自动作用于子 Agent，也不把成功回执转换成统一的“已生效”事件。
+本版不新增配置更新事件，`SetExecutionOption` 的结果只通过 receipt 和 reporter
+交付。provider 的后续原生状态通知可以更新 `ExecutionOptionsReporter` 的内部
+观察值；尚未映射为既有统一事件的原生通知继续按未知/gap 规则处理，不能把通知
+当成同步 ack。
+
+#### Provider 映射
+
+provider 映射如下：
+
+| 选项 | Codex `Open` / `Resume` | Codex 运行时 | Claude `Open` / `Resume` | Claude 运行时 |
+|---|---|---|---|---|
+| `Model` | 顶层 `model` 参数；从启动/恢复响应的顶层 `model` 取得生效值 | `thread/settings/update` 的 `model`；后续 `thread/settings/updated` 可提供观察值 | 原生 `--model=<value>`；从 init 的 `model` 取得生效值 | 原生 `set_model` control request |
+| `ReasoningEffort` | 配置键 `model_reasoning_effort`；从启动/恢复响应的顶层 `reasoningEffort` 取得生效值 | `thread/settings/update` 的 `effort`；后续 `thread/settings/updated` 可提供观察值 | 原生 `--effort=<value>`；init 不提供 effort，生效值保持未知 | 原生 `apply_flag_settings` 的 `effortLevel` |
+
+Codex 恢复继续显式使用 `excludeTurns: true`，配置传递不得改变恢复身份或把
+保存历史转换成 live 事件。Claude 恢复仍按原生 init 核对 Session ID 和 cwd；
+`--effort` 没有对应读取字段时，只能报告请求值，不能声称已生效。
+
+Codex 的运行时 thread settings 需要 experimental API；初始化时未启用该能力，
+必须在写入前返回 `unsupported`。`thread/settings/update` 的接受回执不是当前
+turn 已切换的证据；只有 `thread/settings/updated` 中属于本主 Session 的明确
+字段才是原生观察值。
+
+Claude 的运行时 effort 必须通过原生 `claude` 包提供的
+`apply_flag_settings` control request 实现，不能映射到
+`set_max_thinking_tokens`，也不能通过重启进程应用。Claude 的模型与 effort
+control ack 没有可靠的同次完整状态；成功更新后保持 `Effective` 未知，直到
+原生另行给出可归属的观察。模型更新可能使 effort 被删除或收紧，即使更新调用
+成功，也不得保留旧的 effort 生效值。
+
+`apply_flag_settings` 会合并 flag layer。Claude 在改变 `effortLevel` 时还会
+依据当前 `ultracode` 值保持或关闭该设置；原生 `SetEffort` 必须保留不相关且
+仍然有效的 flag settings，或在无法确认当前值时在写入前返回 `unsupported`。
+统一层不暴露、推导或修改这些额外的原生设置。
+
+#### 不支持的共享配置
+
+本版明确不支持 `sandbox`、`approvalPolicy` 和 `permissionsProfile`：
+它们既不加入 `ExecutionOptions`，也不加入 `ExecutionOption`。统一 adapter
+不做同名映射，也不依据模型或 effort 推导其值。调用方需要这些原生能力时使用
+对应原生 SDK，不能把它们塞入共享执行选项。
+
 ### 可显式带入初始输入
 
 初始输入是操作，不是配置字段。需要先提交输入才能确认原生身份的 provider
@@ -522,8 +761,10 @@ type Session interface {
 
 ### 生命周期与状态
 
-- `ID` 只能在原生真实身份确认后非空。Codex 以启动/恢复响应确认身份，Claude
-  以原生 init 确认身份；返回 Session 之前不能伪造 ID。
+- `ID` 只能在原生真实身份确认后非空。Codex 以启动/恢复响应确认身份；Claude
+  新建时以非 replay 的原生 init 确认身份，恢复时还可用匹配的私有
+  `SessionStart` callback 确认身份，单独 hook lifecycle frame 不充分。返回
+  Session 之前不能伪造 ID。
 - 每个 Session 只允许一个本地 `StartOrSteer` 写入在进行。并发调用返回
   `not_applied` 和空 `Submission`，不等待、不写第二帧，也不形成本地输入队列。
 - `StartOrSteer` 先尝试加入可接受的当前工作；没有当前工作或原生调度可接收时，
@@ -1325,6 +1566,8 @@ type ConfigurationReceipt struct {
     Acceptance Acceptance
 }
 
+// ModelController 保留既有 provider-specific 的仅模型接口。统一调用方设置
+// 模型或 effort 时使用 ExecutionOptionsController。
 type ModelController interface {
     // model 必须是非空原生模型标识；不做跨 provider 别名映射。
     SetModel(ctx context.Context, model string) (ConfigurationReceipt, error)
@@ -1335,6 +1578,13 @@ type ModelController interface {
 默认值掩盖差异。归档、模型、思考和子 Agent 查询的 provider 专属语义不进入
 基础接口；高级调用方可以使用 adapter 具体类型及其原生入口，但不能绕过基础
 Session 的权限和关闭规则。
+
+`ExecutionOptionsController` 是模型与 effort 的统一运行时能力。一个 Session
+可以选择只实现 `ExecutionOptionsReporter`，或同时实现
+`ExecutionOptionsController`。`ModelController` 不扩展为 effort 接口；新代码
+应使用 `ExecutionOptionsController`。若同一 Session 同时实现旧
+`ModelController` 和新接口，两者必须共享同一原生状态和串行更新边界，不能
+形成两个配置所有者。
 
 第一版不定义统一的 `SubagentQuery` 或 `SubagentPage`。需要原生子 Agent 查询、
 关系证据或分页覆盖的使用方直接使用对应的原生 SDK；统一层不在两个不同查询
@@ -1465,7 +1715,7 @@ provider-specific 转换，但不生成 `agent.Event`。
 |---|---|---|
 | `Driver.Start` | `Provider.Start` | Runtime 配置、运行绑定、共享资源责任 |
 | `OpenSession` | `Provider.Open` 或 `OpenWithInput` | Address、Source、恢复材料、事件队列 |
-| `ResumeSession` | `Provider.Resume` 或 `ResumeWithInput` | 恢复身份/cwd 校验、旧运行隔离 |
+| `ResumeSession` | `Provider.Resume` 或 `ResumeWithInput` | 恢复前 metadata/文件身份、init 或私有探针确认、恢复后复核、旧运行隔离 |
 | `SendPrompt` | `Session.StartOrSteer` | Session/运行归属、Service 回执和持久化 |
 | `AnswerInteraction` | `Session.Answer` | 当前运行和 Session 校验；原生句柄仍只在 adapter |
 | `Cancel` | `Session.Interrupt` | 是否允许关闭/归档、Service 取消回执 |
@@ -1592,7 +1842,7 @@ provider-specific 查询职责：
 | Provider | metadata / 身份 | 保存内容 | 恢复后复核 |
 |---|---|---|---|
 | Codex | `ReadThread(IncludeTurns=false)` | `ListThreadTurns`（按原生 item view，必要时 `ListThreadItems`） | 再次 `ReadThread` 并重新分页核对元数据、顺序、cursor 穷尽和内容摘要 |
-| Claude | `GetSessionInfo`，以及恢复后首个 native init | `GetSessionMessages` | 再次读取完整有界消息链，并核对 coverage、原始 bytes、UUID/parent 顺序 |
+| Claude | `GetSessionInfo` 预检；恢复后 live init 或匹配的私有 `SessionStart:resume` callback | `GetSessionMessages` | 再次 `GetSessionInfo` 核对同一 ID、Path、文件身份、cwd 与完整 coverage；再读取完整有界消息链，并核对 coverage、原始 bytes、UUID/parent 顺序 |
 
 `ListThreads` 和 `ListSessions` 只用于发现候选，不证明指定 native Session
 存在、可恢复或内容完整。导入不能只凭列表结果创建本地 Session。
@@ -1754,6 +2004,8 @@ provider-specific 查询职责：
 - init 身份确认和恢复身份/cwd 校验；
 - Claude 原生 `AppendSystemPrompt` 及其 `--append-system-prompt` argv 映射；
 - `AdditionalSystemPrompt` 到原生 `AppendSystemPrompt` 的创建/恢复映射；
+- `GetSessionInfo` 恢复前预检、保留调用方 Hooks 并注册私有
+  `SessionStart` 探针、init 或 callback 身份确认，以及恢复后的文件身份复核；
 - text/thinking 的 message、block 和 linkage 身份；
 - work attribution、工具调用/结果和状态；
 - permission 和 AskUserQuestion form；
@@ -1821,8 +2073,9 @@ Codex，再接入 Claude。新实现只保留：
 
 ### 9. 切换 Claude Runtime
 
-按 Codex 相同的退出条件切换 Claude。Claude 额外要求恢复前身份、init 观察、
-block/message linkage 和无法归属的交互行为保持不变。
+按 Codex 相同的退出条件切换 Claude。Claude 额外要求恢复前 metadata 预检、
+init 或私有 `SessionStart` 探针证据、恢复后文件身份复核、block/message
+linkage 和无法归属的交互行为保持不变。
 
 退出条件：两个 provider 的实时与历史兼容测试均使用新路径通过；无法证明的
 身份和归属仍明确失败；旧路径保留到回退窗口结束。
@@ -1845,6 +2098,26 @@ block/message linkage 和无法归属的交互行为保持不变。
 - 统一核心只依赖标准库，且不导入 `codex`、`claude` 或 MASS。
 - 两个 adapter 互不导入，原生包不导入统一层。
 - Provider、Session、EventStream、Input、Answer 和可选能力有公开接口编译测试。
+- `ExecutionOptions` 的空值省略、非空字面值传递和 `ResumeOptions` 继承规则有
+  公开合同测试；不实现可选 reporter 的自定义 Session 仍可满足基础接口。
+- `ExecutionOptionsController` 只接受两个固定选项和非空值；未知选项、空值、
+  已关闭 Session 和不可动态配置的 provider 都在原生写入前返回确定错误。
+- Codex 合成测试核对 `thread/start`、`thread/resume` 的精确 `model` 与
+  `model_reasoning_effort`，并从响应区分原生观察、请求未确认和恢复覆盖。
+- Codex 运行时测试核对 `thread/settings/update` 每次只携带一个目标字段；关闭
+  experimental API 时不写入，空 ack 只产生 accepted，后续
+  `thread/settings/updated` 才产生 observed。执行期间更新不得隐含等待 idle、
+  中断、重建或重试。
+- Claude 合成测试核对 `--model=`、`--effort=` 的精确命令行参数及空值省略，
+  验证 init 的模型观察，并确认 effort 不被报成原生生效值。
+- Claude 运行时测试核对 `set_model` 与
+  `apply_flag_settings.settings.effortLevel` 的精确请求，确认 effort 不映射为
+  `set_max_thinking_tokens`；成功 ack 不产生 observed，模型更新后旧 effort
+  生效值被清除，不相关且仍有效的 flag settings 不被静默清除，且更新不触发
+  进程重启。
+- 运行时 model 与 effort 更新返回两项完整报告；模型变化后没有原生新证据时，
+  effort 保持未知。重复值、原生拒绝和结果未知分别保留其 acceptance 与
+  observed 边界，不从当前执行结果反推配置生效。
 - Codex 与 Claude 的合成协议输入逐事件比较统一输出；比较类型、payload、身份、
   Meta、顺序和未知数据范围，忽略随机 EventID。
 - 每个 Session 只允许一个消费者；重复取流失败；慢消费者不重排事件；关闭一个
@@ -1873,7 +2146,27 @@ block/message linkage 和无法归属的交互行为保持不变。
   Codex `thread/start` 与 `thread/resume` JSON、Claude
   `--append-system-prompt=` argv、`Resume` 重新提供完整文本，以及非法
   UTF-8/NUL 在原生副作用前失败；prompt sentinel 不出现在错误、事件或日志。
+- 本版统一选项中不存在 `sandbox`、`approvalPolicy` 或 `permissionsProfile`
+  映射，也不把这些原生值从其他请求字段反推出来。
 - 默认验证保持离线，不使用真实 Agent 或新增录制作为完成证据。
+
+### Claude 恢复身份验收
+
+以下使用 fake peer、合成 metadata 和 wire 断言，不把合成通过计为真实 Agent
+验证。
+
+| 场景 | 公开操作与独立预期 |
+|---|---|
+| 预检拒绝 | missing、partial、ambiguous、cwd 不符和非普通 transcript 分别在启动前返回 `failed_precondition`；fake peer 未收到原生 Session 启动或 RPC。 |
+| 匹配 resume callback | 唯一 `SessionStart:resume` callback 的 ID/event/source/session/cwd/transcript 全部匹配；返回 `{}` 一次，metadata 复核后返回目标 Session。 |
+| 仅通用 lifecycle | 只收到 `hook_started`、`hook_progress` 或 `hook_response`，即使名称为 `SessionStart:resume` 也不能完成身份；超时后以 `unavailable` 关闭且不返回 Session。 |
+| 错误探针输入 | session、cwd、transcript 分别不匹配时均以 `native_rejected` 失败关闭；错误值不能产生成功 Session 或第二次有效应答。 |
+| 重复 callback | 同一私有 ID 第二次到达时以 `native_rejected` 失败；返回前不产生 Session，返回后由稳定 `Done`/`Err` 终止，不创建替代 Session。 |
+| 用户 hook 交错 | 调用方同 source hook 的 start/progress/response、成功或失败与探针交错时，探针归属不受影响；通用 frame 不被当命中。 |
+| init 与 callback 交错 | init 先确认身份时允许返回 Session，迟到匹配 callback 仍被应答一次；callback 先确认身份时，迟到 init 必须一致；两者 ID/cwd 矛盾时以 `native_rejected` 失败关闭。 |
+| 恢复后漂移 | 身份确认后 transcript 被替换、Path 或文件身份变化、coverage 不完整或 cwd 变化时，以 `native_rejected` 关闭进程且不返回 Session。 |
+| 版本门禁 | `Resume` 的版本查询无法执行时返回 `unavailable`，结果不是已确认的 2.1.258 时返回 `unsupported`；两种情况都在启动 Session 进程前失败。 |
+| 调用方 Hooks | 调用方其他 hook 语义保留，SDK matcher 只追加；非法 Hooks、保留前缀 ID 或无法无损追加时在进程启动前拒绝。 |
 
 ## 合同影响
 

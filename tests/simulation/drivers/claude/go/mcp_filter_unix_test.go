@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestRecordedContinuationWithStartupMCP(t *testing.T) {
-	runRecordedContinuation(t, true, nil)
+	runRecordedContinuation(t, true)
 }
 
 func TestMCPSessionShimFiltersOnlySyntheticConfig(t *testing.T) {

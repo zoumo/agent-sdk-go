@@ -5,6 +5,8 @@ import (
 	"errors"
 	"maps"
 	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -34,11 +36,21 @@ const (
 type Provider struct {
 	mu       sync.Mutex
 	config   Config
+	streams  streamFactory
 	state    providerState
 	opening  int
 	sessions map[*session]struct{}
 	stopErr  error
 }
+
+type streamOpen struct {
+	Transport claude.StreamTransport
+	Workspace string
+	Env       []string
+	Started   func(*claude.Session)
+}
+
+type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, error)
 
 // New constructs a Claude provider without starting a native process.
 func New(config Config) *Provider {
@@ -101,8 +113,9 @@ func (p *Provider) Open(
 	return p.open(ctx, options, "")
 }
 
-// Resume restores an existing Claude session after native initialization
-// confirms the requested identity and working directory.
+// Resume confirms the supported CLI version and saved transcript before launch,
+// then restores the requested session after live init or its private callback
+// confirms the same identity.
 func (p *Provider) Resume(
 	ctx context.Context,
 	options agent.ResumeOptions,
@@ -113,7 +126,36 @@ func (p *Provider) Resume(
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
 		return nil, err
 	}
-	return p.open(ctx, options.OpenOptions, options.SessionID)
+	if ctx == nil {
+		return nil, adapterError(
+			agent.ErrorInvalidArgument,
+			"nil_context",
+			"resume context is required",
+			nil,
+		)
+	}
+	mcpServers, err := claudeMCPServers(options.MCPServers)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.validateResumeConfig(); err != nil {
+		return nil, err
+	}
+	if err := p.reserveOpen(); err != nil {
+		return nil, err
+	}
+	attempt, err := p.prepareResume(ctx, options)
+	if err != nil {
+		p.finishOpen()
+		return nil, err
+	}
+	return p.openReserved(
+		ctx,
+		options.OpenOptions,
+		options.SessionID,
+		attempt,
+		mcpServers,
+	)
 }
 
 func (p *Provider) open(
@@ -128,50 +170,114 @@ func (p *Provider) open(
 	if err := p.reserveOpen(); err != nil {
 		return nil, err
 	}
+	return p.openReserved(ctx, options, resumeID, nil, mcpServers)
+}
+
+func (p *Provider) openReserved(
+	ctx context.Context,
+	options agent.OpenOptions,
+	resumeID string,
+	resume *resumeAttempt,
+	mcpServers []claude.MCPServer,
+) (agent.Session, error) {
 	nativeOptions := p.nativeOptions(
 		options.Cwd,
 		resumeID,
 		options.Features,
 		mcpServers,
+		options.Execution,
 	)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
-	native, err := claude.Open(ctx, claude.SessionOptions(nativeOptions))
+	if resume != nil {
+		nativeOptions.SessionStartProbe = &resume.probe
+	}
+	var stream *streamOpen
+	if p.streams != nil {
+		opened, err := p.streams(ctx, claude.SessionOptions(nativeOptions))
+		if err != nil {
+			p.finishOpen()
+			return nil, nativeOperationError("open", err)
+		}
+		stream = &opened
+	}
+	if stream != nil {
+		if stream.Workspace != "" {
+			nativeOptions.WorkDir = stream.Workspace
+		}
+		if stream.Env != nil {
+			nativeOptions.Env = slices.Clone(stream.Env)
+		}
+	}
+	var native *claude.Session
+	var err error
+	if stream == nil {
+		native, err = claude.Open(ctx, claude.SessionOptions(nativeOptions))
+	} else {
+		native, err = claude.OpenStreams(ctx, claude.SessionOptions(nativeOptions), stream.Transport)
+	}
 	if err != nil {
 		p.finishOpen()
 		return nil, nativeOperationError("open", err)
 	}
+	if stream != nil && stream.Started != nil {
+		stream.Started(native)
+	}
 	initContext, cancelInit := waitForInitContext(ctx, p.config.InitializeTimeout)
-	init, buffered, err := waitForInit(initContext, native)
+	var (
+		init     *claudetypes.Event
+		buffered []claude.Received
+		guard    *resumeIdentityGuard
+	)
+	if resume == nil {
+		init, buffered, err = waitForInit(initContext, native)
+	} else {
+		init, buffered, guard, err = waitForResumeIdentity(
+			initContext,
+			native,
+			resume.target,
+			resume.probe.CallbackID,
+		)
+	}
 	cancelInit()
 	if err != nil {
 		p.finishOpen()
 		return nil, closeAfterOpenFailure(native, err)
 	}
-	if resumeID != "" && init.SessionID != resumeID {
-		p.finishOpen()
-		return nil, closeAfterOpenFailure(native, adapterError(
-			agent.ErrorNativeRejected,
-			"resume_identity_mismatch",
-			"Claude resumed a different native session",
-			nil,
-		))
+	if init != nil {
+		if resumeID != "" && init.SessionID != resumeID {
+			p.finishOpen()
+			return nil, closeAfterOpenFailure(native, adapterError(
+				agent.ErrorNativeRejected,
+				"resume_identity_mismatch",
+				"Claude resumed a different native session",
+				nil,
+			))
+		}
+		if !sameDirectory(init.System.CWD, options.Cwd) {
+			p.finishOpen()
+			return nil, closeAfterOpenFailure(native, adapterError(
+				agent.ErrorNativeRejected,
+				"session_cwd_mismatch",
+				"Claude init working directory does not match the requested directory",
+				nil,
+			))
+		}
 	}
-	if !sameDirectory(init.System.CWD, options.Cwd) {
-		p.finishOpen()
-		return nil, closeAfterOpenFailure(native, adapterError(
-			agent.ErrorNativeRejected,
-			"session_cwd_mismatch",
-			"Claude init working directory does not match the requested directory",
-			nil,
-		))
+	if resume != nil {
+		if err := resume.target.verifyPostcheck(ctx); err != nil {
+			p.finishOpen()
+			return nil, closeAfterOpenFailure(native, err)
+		}
 	}
 	created, err := newSession(
 		p,
 		native,
 		init,
-		init.SessionID,
+		sessionIdentity(init, resume),
 		options.Features,
+		initialExecutionOptionsState(init, options.Execution),
 		buffered,
+		guard,
 	)
 	if err != nil {
 		p.finishOpen()
@@ -180,6 +286,40 @@ func (p *Provider) open(
 	p.completeOpen(created)
 	created.start()
 	return created, nil
+}
+
+func sessionIdentity(
+	init *claudetypes.Event,
+	resume *resumeAttempt,
+) string {
+	if init != nil {
+		return init.SessionID
+	}
+	if resume != nil {
+		return resume.target.sessionID
+	}
+	return ""
+}
+
+func (p *Provider) validateResumeConfig() error {
+	switch {
+	case p.config.ConfigDir == "":
+		return adapterError(
+			agent.ErrorFailedPrecondition,
+			"resume_config_dir_required",
+			"Claude resume requires an explicit configuration directory",
+			nil,
+		)
+	case !filepath.IsAbs(p.config.ConfigDir):
+		return adapterError(
+			agent.ErrorFailedPrecondition,
+			"resume_config_dir_not_absolute",
+			"Claude resume configuration directory must be absolute",
+			nil,
+		)
+	default:
+		return nil
+	}
 }
 
 func (p *Provider) reserveOpen() error {
@@ -253,12 +393,15 @@ func (p *Provider) nativeOptions(
 	resumeID string,
 	features agent.Features,
 	mcpServers []claude.MCPServer,
+	execution agent.ExecutionOptions,
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
 		MCPServers:        mcpServers,
+		Model:             execution.Model,
+		Effort:            execution.ReasoningEffort,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,

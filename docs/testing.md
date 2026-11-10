@@ -9,38 +9,43 @@ availability and synthetic checks do not prove real recordings; see
 Run from the repository root with Go 1.26 or newer:
 
 ```sh
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 go mod download
 make fmt-check
 make lint
-export AGENT_SDK_TESTIFY_BIN=/absolute/prebuilt/agent-sdk-testify
-bash scripts/check-offline.sh
-GOMAXPROCS=2 GORACE=atexit_sleep_ms=0 bash scripts/with-agent-sdk-testify.sh go test -race -p=1 -count=1 -timeout 300s ./...
-go vet ./...
+bash scripts/check-offline.sh all
 ```
 
-Set absolute `AGENT_SDK_TESTIFY_BIN` to a separately built external binary before
-SDK tests. There is no published release pin; scripts fail explicitly when this
-override is absent. `scripts/simulation.sh build` builds only SDK runner/driver.
-The external tool owns official driver/package and material checks. Scenario,
-recording, official-driver and Python snapshots do not remain in this repository.
-SDK process tests use `prepare` and `agent mock`; simulation obtains assertion
-inputs only from `export`. Callers read the execution index and result notices,
-then remove the caller-owned session after every SDK client and peer exits. The
-migrated synthetic, single-case and 72-slot gate checks remain in
-`tests/simulation/simulate`.
+The offline entry also accepts `parallel`, `quality`, `test`, `race`, `e2e` or
+`build`. `all` runs every task in order; `parallel` runs `quality` first, then
+runs `test` and `build` concurrently, then runs `race` and `e2e` one at a time
+in the same checkout.
 
-The remaining gates check module and native dependency boundaries, the
+Test and simulation hosts link the exact test-only in-process testify module; no
+separate helper process is required. The dependency boundary and pin are fixed
+by [Go library mode](../harness/modules/agent-sdk-testify/library-mode.md).
+`scripts/simulation.sh build` builds only the SDK runner and driver. The library
+owns official driver/package and material checks. Scenario, recording,
+official-driver and Python snapshots do not remain in this repository.
+Simulation obtains assertion inputs from the typed execution report and prepared
+material. Callers read the
+execution report, then remove the caller-owned fixture after every SDK client
+and mock exits. The migrated synthetic, single-case and 72-slot gate checks
+remain in `tests/simulation/simulate`.
+
+The `quality` task checks module and native dependency boundaries, the
 standard-library-only native types and `agent` core, provider-specific adapter
 imports, the absence of reverse native/adapter/MASS imports, native inventory,
-reproducible Codex generation, unit/subprocess tests and offline examples. `GOMAXPROCS=2`,
-package scheduling `-p=1` and
-`GORACE=atexit_sleep_ms=0` bound test load. CI runs offline, race and vet checks on
-`ubuntu-24.04`, `macos-15` and `macos-26`. Every example compiles with `go test ./...`.
-The external tool owns official driver/package checks. Hosted CI builds the
-public tool at the exact source revision recorded in
-[`scripts/agent-sdk-testify-version.json`](../scripts/agent-sdk-testify-version.json)
-before running SDK tests; it does not assume a release artifact exists.
+reproducible Codex generation and committed whitespace, then runs `go vet`.
+`test` runs unit/subprocess tests and offline examples. `race` repeats the
+package suite under the race detector, `e2e` runs the fixed real-recording
+simulation gate, and `build` compiles every package and the SDK simulation
+runner/driver. `GOMAXPROCS=2`, package scheduling `-p=1` and
+`GORACE=atexit_sleep_ms=0` bound test load. CI runs all five tasks on
+`ubuntu-24.04` and `macos-26`. Every example compiles with `go test ./...`.
+The pinned testify module owns official driver/package checks. Hosted CI builds
+only the SDK-owned simulation runner and driver and links that module; it does
+not build or download a separate testify artifact.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -88,31 +93,41 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) runs offline, race and vet checks. It
-builds the external tool from the pinned source revision before running SDK tests.
-External consumer CI uses the same `ubuntu-24.04`, `macos-15` and `macos-26`
-matrix for pushed `main` commits, manual workflow runs and same-repository PRs.
+The [workflow](../.github/workflows/ci.yml) defines one offline job for each
+supported runner: `ubuntu-24.04 / required` and `macos-26 / required`. Each job
+installs Go, `ripgrep` and the pinned formatter/linter once, runs `quality`, then
+runs `test` and `build` concurrently, then runs `race` and `e2e` separately.
+Race and the required recording gate both exercise timing-sensitive subprocess
+protocols, so they do not overlap each other or package tests. The first task
+mutates generated files for its drift check, so it precedes the concurrent
+phase. The job status is the required aggregate for that platform; task output
+remains grouped in its logs. The offline tasks build only the SDK-owned
+simulation runner and driver; the in-process testify module is fetched by the
+normal Go module graph.
+External consumer CI uses the same `ubuntu-24.04` and `macos-26` matrix for
+pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure six jobs (three Offline and three External consumer).
-Fork PRs retain three Offline jobs and skip consumers because fork-only SHAs are
-not assumed retrievable from this repository. Token permissions remain contents:
-read; no pull_request_target execution is added. Configured coverage does not
-prove that any runner executed. See
+These events configure two offline platform jobs and two External consumer jobs.
+Fork PRs retain the offline jobs and skip
+consumers because fork-only SHAs are not assumed retrievable from this
+repository. Token permissions remain contents: read; no pull_request_target
+execution is added. Configured coverage does not prove that any runner executed. See
 [release readiness](#release-preparation) for the required exact-commit CI evidence.
 
 ## Code integration tests
 
 [Codex public API tests](../codex/public_api_test.go) check API signatures, import
-identity and configuration during ordinary package tests. Go mock CLI integration
+identity and configuration during ordinary package tests. Mock integration
 lives in [Codex](../codex/mock_cli_test.go) and [Claude](../claude/mock_cli_test.go)
-package tests: each SDK starts its Go mock executable as the CLI process and checks
-question/permission answers, interrupts, cancellation, disconnects and mismatches.
-Both tests also pause consumption during 2,048-event bursts, complete control and
-answer operations, then verify ordered drain after disconnection. The external
-tool checks mock command exit status and handshake completion. Shared FIFO tests cover
-cancellation, atomic batches, concurrent producers, close/abort races and reference
-release. See the [event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
+package tests: each SDK opens the in-process mock through closeable SDK streams and
+checks question/permission answers, interrupts, cancellation, disconnects and
+mismatches. Both tests also pause consumption during 2,048-event bursts, complete
+control and answer operations, then verify ordered drain after disconnection.
+Typed execution reports check strict replay, full consumption, client EOF and the
+absence of a native launch. Shared FIFO tests cover cancellation, atomic batches,
+concurrent producers, close/abort races and reference release. See the
+[event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
 
 `TestNativeIntegration` in `tests/integration` exercises both native SDK public
 interfaces through synthetic protocol peers. It retains original-handle authority,
@@ -135,11 +150,11 @@ transports without starting a CLI or connecting to a server:
 ```sh
 go test -run '^ExampleMCPServer$' ./agent
 go test -run '^TestProviderMapsFinalMCPServersToOpenAndResumeThreadConfig$' ./agent/codex
-go test -run '^TestProviderOpenPassesFinalMCPListToClaudeArgv$' ./agent/claude
+go test -run '^TestProviderOpenPassesFinalMCPListToClaudeOptions$' ./agent/claude
 ```
 
-The adapter checks use synthetic app-server and launcher peers and assert only the
-generated native configuration or argv. They do not establish real MCP
+The adapter checks use synthetic app-server and in-process native peers and assert
+only the generated native configuration. They do not establish real MCP
 connectivity, authentication, tool discovery, or execution.
 
 The additional-system-prompt contract uses the same offline synthetic boundary:
@@ -162,14 +177,17 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The catalog defines eight stories and 36 flows. Available material comes from the external tool builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
+The catalog defines eight stories and 36 flows. Available material comes from the pinned library's builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
 Go SDK simulation flow implementations and their regression tests live in
 `tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`; the drivers root
-owns the process entry and delivery checks. Native `tests/replay` packages retain
-SDK integration tests and synthetic fixture/process adapters. Pure protocol matching and official verification belong to the [external tool](https://github.com/zoumo/agent-sdk-testify).
-See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the current process boundary.
+owns the driver entry and delivery checks. Native `tests/replay` packages retain
+SDK integration tests and synthetic fixture adapters over in-process streams. Pure
+protocol matching and official verification belong to the
+[pinned testify library](https://github.com/zoumo/agent-sdk-testify).
+See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the
+library-backed fixture boundary.
 
 ## Focused checks
 
@@ -178,7 +196,7 @@ Run these from the repository root; default live gates remain disabled:
 ```sh
 python3 codex/docs/protocol/verify_inventory.py
 (cd codex && bash scripts/check_generated.sh)
-bash scripts/with-agent-sdk-testify.sh go test -count=1 ./tests/integration ./codex ./claude
+go test -count=1 ./tests/integration ./codex ./claude
 ```
 
 Codex generation uses the checked-in schema without downloading upstream sources;
@@ -196,8 +214,9 @@ No Windows runtime support is claimed.
 One version covers all four native imports. Before an authorized publication:
 
 1. Confirm the intended main SHA and both imported source histories.
-2. Require the exact SHA's three Offline and three External consumer CI jobs;
-   rerun on the resulting main commit after merge. Fork PR skips do not satisfy this gate.
+2. Require the exact SHA's two platform required checks and two External
+   consumer CI jobs, and inspect all five task logs on each platform; rerun on the
+   resulting main commit after merge. Fork PR consumer skips do not satisfy this gate.
 3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
    coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
 4. Record the exact commit, CI URLs and remaining limits in the release review.

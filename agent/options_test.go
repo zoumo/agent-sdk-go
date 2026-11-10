@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -147,4 +148,32 @@ func TestAdditionalSystemPromptValidationDoesNotExposeSentinel(t *testing.T) {
 		)
 		assert.NotContains(t, logs.String(), sentinel)
 	}
+}
+
+func TestExecutionOptionsHaveOnlyModelAndReasoningEffort(t *testing.T) {
+	optionType := reflect.TypeFor[agent.ExecutionOptions]()
+
+	require.Equal(t, 2, optionType.NumField())
+	assert.Equal(t, "Model", optionType.Field(0).Name)
+	assert.Equal(t, reflect.TypeFor[string](), optionType.Field(0).Type)
+	assert.Equal(t, "ReasoningEffort", optionType.Field(1).Name)
+	assert.Equal(t, reflect.TypeFor[string](), optionType.Field(1).Type)
+}
+
+func TestResumeOptionsInheritOpenExecutionOptions(t *testing.T) {
+	execution := agent.ExecutionOptions{
+		Model:           "native-model",
+		ReasoningEffort: "native-effort",
+	}
+	opened := agent.OpenOptions{
+		Cwd:       t.TempDir(),
+		Execution: execution,
+	}
+	resumed := agent.ResumeOptions{
+		SessionID:   "session-1",
+		OpenOptions: opened,
+	}
+
+	assert.Equal(t, execution, opened.Execution)
+	assert.Equal(t, execution, resumed.Execution)
 }

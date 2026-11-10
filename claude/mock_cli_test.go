@@ -1,4 +1,4 @@
-// SDK integration against the Go mock CLI; all scenarios are synthetic.
+// SDK integration against the in-process library mock; all scenarios are synthetic.
 package claude_test
 
 import (
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
@@ -72,11 +73,7 @@ func (s *mockCLISuite) TestInteractions() {
 				wantStatus = "failed"
 			}
 			t.Cleanup(func() { verifyMockSession(t, peerSession, wantStatus) })
-			launcher, err := peerSession.Launcher("main")
-			require.NoError(t, err)
-			client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: peerSession.Workspace, Env: peerSession.Env})
-			require.NoError(t, err)
-			defer client.Abort()
+			client, run := openMockSession(t, ctx, peerSession)
 			require.NoError(t, submitMockCLIInput(ctx, client, "hello"))
 			if mode != "permission-and-interrupt" {
 				for {
@@ -85,12 +82,11 @@ func (s *mockCLISuite) TestInteractions() {
 						require.NotErrorIs(t, err, context.DeadlineExceeded)
 						require.NoError(t, ctx.Err())
 						closeErr := client.Close()
-						var nativeErr *claude.Error
-						require.ErrorAs(t, closeErr, &nativeErr)
-						require.NotNil(t, nativeErr.ExitCode)
-						assert.Equal(t, 1, *nativeErr.ExitCode)
 						if mode == "disconnect" {
-							assert.Contains(t, nativeErr.Stderr, "scripted disconnect")
+							require.Error(t, closeErr)
+							requireStrictReplayFailure(t, ctx, run)
+						} else {
+							require.Error(t, closeErr)
 						}
 						break
 					}
@@ -117,6 +113,47 @@ func (s *mockCLISuite) TestInteractions() {
 	}
 }
 
+// Completion must retain the final server result and wait for authoritative
+// library evidence, even when full consumption races the last SDK write.
+func (s *mockCLISuite) TestNormalCompletion() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`,
+		`<{"type":"system","subtype":"init","session_id":"synthetic"}`,
+		`<{"type":"result","subtype":"success","session_id":"synthetic","is_error":false,"result":"final frame"}`,
+	)
+	fixture, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { verifyMockSession(t, fixture, "passed") })
+	client, run := openMockSession(t, ctx, fixture)
+	require.NoError(t, submitMockCLIInput(ctx, client, "hello"))
+	result := receiveStreamEvent(t, client, func(event *claude.Event) bool { return event.Result != nil })
+	require.Equal(t, "final frame", result.Event.Result.Result)
+	select {
+	case <-client.Done():
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	require.NoError(t, client.Err())
+	require.NoError(t, client.Close())
+	require.NoError(t, client.Close())
+	evidence, err := run.Wait(ctx)
+	require.NoError(t, err)
+	require.True(t, evidence.Execution.Complete)
+	require.Len(t, evidence.Execution.Connections, 1)
+	connection := evidence.Execution.Connections[0]
+	require.Equal(t, "in-process", string(connection.Transport))
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.True(t, connection.CleanupComplete)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
+}
+
 // Controls and answers must remain available during an unread event burst.
 // After disconnection, every queued event must drain in order.
 func (s *mockCLISuite) TestSlowConsumerBurst() {
@@ -133,11 +170,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	peerSession, err := mocktest.Prepare(t.TempDir(), "claude", mockCLIScenario(t, frames...), mocktest.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { verifyMockSession(t, peerSession, "failed") })
-	launcher, err := peerSession.Launcher("main")
-	require.NoError(t, err)
-	client, err := claude.Open(ctx, claude.SessionOptions{CLIPath: launcher, WorkDir: peerSession.Workspace, Env: peerSession.Env})
-	require.NoError(t, err)
-	defer client.Abort()
+	client, run := openMockSession(t, ctx, peerSession)
 	first, err := client.Receive(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "forwarding-not-confirmed", first.Observation.Reason)
@@ -175,11 +208,44 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 		require.Equal(t, seen, payload.Index)
 		seen++
 	}
-	var terminal *claude.Error
-	require.ErrorAs(t, client.Close(), &terminal)
-	require.NotNil(t, terminal.ExitCode)
-	require.Equal(t, 1, *terminal.ExitCode)
-	require.Contains(t, terminal.Stderr, "scripted disconnect")
+	require.Error(t, client.Close())
+	requireStrictReplayFailure(t, ctx, run)
+}
+
+func openMockSession(t *testing.T, ctx context.Context, peerSession *mocktest.Session) (*claude.Session, *mocktest.Run) {
+	t.Helper()
+	options := claude.SessionOptions{
+		CLIPath:           "must-not-start",
+		WorkDir:           "",
+		Env:               []string{},
+		InitializeTimeout: 2 * time.Second,
+		ShutdownTimeout:   time.Second,
+	}
+	args, err := claude.NativeArgs(options)
+	require.NoError(t, err)
+	run, err := peerSession.NewRun(ctx, mocktest.RunOptions{NativeArgs: args})
+	require.NoError(t, err)
+	options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
+	actualArgs, err := claude.NativeArgs(options)
+	require.NoError(t, err)
+	require.Equal(t, run.Start.NativeArgs, actualArgs)
+	require.Equal(t, run.Start.Config, run.Start.Env["CLAUDE_CONFIG_DIR"])
+	client, err := claude.OpenStreams(ctx, options, claude.StreamTransport{
+		Reader: run.Reader,
+		Writer: run.Writer,
+		Stderr: run.Stderr,
+		Wait:   run.WaitError,
+	})
+	if err != nil {
+		_ = run.Abort()
+		require.NoError(t, err)
+	}
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = run.CloseSDK()
+	})
+	run.CloseInputWhenComplete(client.CloseInput)
+	return client, run
 }
 
 func submitMockCLIInput(ctx context.Context, session *claude.Session, text string) error {
@@ -205,4 +271,19 @@ func verifyMockSession(t *testing.T, session *mocktest.Session, want string) {
 	require.NoError(t, err)
 	require.Equal(t, want, report.Status)
 	require.NoError(t, session.Close())
+}
+
+func requireStrictReplayFailure(t *testing.T, ctx context.Context, run *mocktest.Run) {
+	t.Helper()
+	result, err := run.Wait(ctx)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Len(t, result.Execution.Connections, 1)
+	connection := result.Execution.Connections[0]
+	require.Equal(t, agenttestify.FailureClassStrictReplay, connection.Failure)
+	require.False(t, connection.NativeLaunched)
+	require.Nil(t, connection.ExitCode)
+	require.Empty(t, connection.ProcessReceiptPath)
 }

@@ -92,12 +92,23 @@ Refusing a permission is not a sandbox or an interception guarantee for every to
 
 ## Configuration and stored records
 
-Creation Model/Thinking options are separate from dynamic SetModel/SetThinking.
-Creation Effort passes a nonempty native --effort value literally; empty omits it.
-It does not map to a dynamic thinking budget. Dynamic Model nil omits the field;
-empty non-nil strings are invalid. Thinking budget nil clears with null; zero stays
-zero. Display omission, summarized/omitted and explicit clear remain distinct.
-A configuration acknowledgment does not prove the active model or children changed.
+Creation Model/Thinking/Effort options are separate from dynamic
+SetModel/SetThinking/SetEffort. Creation Effort passes a nonempty native
+`--effort` value literally; empty omits it. It does not map to a dynamic thinking
+budget. Dynamic Model nil omits the field; empty non-nil strings are invalid.
+Thinking budget nil clears with null; zero stays zero. Display omission,
+summarized/omitted and explicit clear remain distinct.
+
+Dynamic Effort uses native `apply_flag_settings.settings.effortLevel`; nil sends
+null to clear the flag-layer override and a nonempty value is passed literally.
+Before applying, SetEffort reads `get_settings` and requires a boolean
+`applied.ultracode`. The effort update closes `ultracode` unless the requested
+level still selects it or its `xhigh` effort; otherwise Claude would silently
+replace a requested `high` or null level with xhigh. Unrelated flag settings
+remain untouched. If the current state cannot be confirmed, it returns
+ErrUnsupported before the apply write. Effort never maps to
+`set_max_thinking_tokens` and does not restart the process. A configuration
+acknowledgment does not prove the active model, effort or children changed.
 
 `AppendSystemPrompt` adds caller text after the CLI's own system instructions
 without replacing them. A nonempty value becomes one literal

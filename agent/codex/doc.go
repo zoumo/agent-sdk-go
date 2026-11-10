@@ -39,13 +39,22 @@
 // harness/modules/unified-agent/design.md#additional-system-prompt. Additional
 // directories are rejected before opening a session. URL, image, audio, resource,
 // and resource-link interactions or inputs are not advertised.
+// Model and reasoning-effort execution options use native thread start/resume
+// values and thread settings updates. An empty option is omitted and a
+// nonempty value is passed literally to Codex. Start and resume responses can
+// provide effective model and effort observations. Runtime updates require the
+// experimental API; a settings update receipt proves acceptance only, while a
+// settings notification for the main thread can update the reported Effective
+// values. A successful model change without a complete new observation clears
+// the previous model and effort Effective values.
 //
 // Several native facts intentionally have no unified representation. Codex does
-// not provide a selectable settings-option catalog or available-command catalog
-// through this adapter. Archive and unarchive actions are supported, but their
-// notifications have no unified payload. Native plan items, plan text deltas,
-// and turn plan updates are intentionally not emitted, while their original
-// types and notifications remain available in the native Codex package.
+// not provide an arbitrary selectable settings-option catalog or
+// available-command catalog through this adapter. Archive and unarchive actions
+// are supported, but their notifications have no unified payload. Native plan
+// items, plan text deltas, and turn plan updates are intentionally not emitted,
+// while their original types and notifications remain available in the native
+// Codex package.
 // Reasoning part boundaries are also not represented.
 //
 // Permission-profile approvals are unsupported, as are native item and

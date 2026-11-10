@@ -20,20 +20,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 )
 
 // All fixtures are local re-executions of this test binary under a replacement
 // environment and temporary HOME. No installed CLI or account is ever used.
 func TestMain(m *testing.M) {
-	if os.Getenv(transcript.PeerEnvironment) == "1" {
-		if err := transcript.Peer(os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(3)
-		}
-		os.Exit(0)
-	}
 	if mode := os.Getenv("CLAUDE_GO_FIXTURE"); mode != "" {
 		runFixture(mode)
 		os.Exit(0)
@@ -102,6 +93,10 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if mode == "session_start_probe" || mode == "session_start_probe_wrong" || mode == "session_start_probe_duplicate" {
+		runSessionStartProbeFixture(reader, init, mode)
+		return
+	}
 	if mode == "tree" {
 		runTreeFixture(reader)
 		return

@@ -18,11 +18,10 @@ case "${1:---help}" in
    rmdir "$simulation_output"
    set -- --gate --output "$simulation_output" "$@"
   fi
-  exec bash "$simulation_source/scripts/with-agent-sdk-testify.sh" "$simulation_build/sdk-simulate" --driver "$simulation_build/sdk-driver" "$@"
+  exec "$simulation_build/sdk-simulate" --driver "$simulation_build/sdk-driver" "$@"
   ;;
  --help|-h)
   echo "Usage: scripts/simulation.sh build | simulate --provider codex|claude --case ID --output ABS | gate [--jobs N]"
-  echo "Set absolute AGENT_SDK_TESTIFY_BIN for local integration; no published release is pinned yet."
   ;;
  *) echo "record/verify/material management belongs to agent-sdk-testify; SDK supports build, simulate, gate" >&2;exit 2 ;;
 esac

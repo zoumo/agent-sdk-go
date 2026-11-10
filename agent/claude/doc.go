@@ -3,9 +3,10 @@
 //
 // Provider Start only makes the provider lifecycle ready; each Session owns its
 // native Claude CLI process. Open waits for a live native init before returning
-// the real session identity, and Resume additionally verifies the requested
-// session ID and working directory. Saved replay material is not converted into
-// live events.
+// the real session identity. Resume first confirms the reviewed CLI version and
+// the requested saved transcript under Config.ConfigDir, then accepts matching
+// live init or its private SessionStart callback as the resumed identity.
+// Saved replay material is not converted into live events.
 //
 // The adapter maps Claude user and assistant text and thinking, message and
 // content-block deltas, tool calls and results, session state, usage, available
@@ -64,6 +65,14 @@
 // stable reason and native metadata rather than a guessed normal event.
 // Conversion gaps are non-fatal; a native decoder/protocol failure terminates
 // the stream after its diagnostic gap.
+//
+// Model and reasoning-effort execution options use literal Claude CLI arguments
+// on open and resume; empty values are omitted. Claude init can provide an
+// explicit effective model, but it has no effort observation, so a requested
+// effort remains unverified. Runtime model and effort updates use native control
+// requests. Their acknowledgments prove acceptance only and do not populate an
+// Effective value. A model update clears any previous model Effective value and
+// invalidates any previous effort Effective evidence.
 //
 // This package has no unified history or NativeClient escape hatch. Native
 // package-level session, metadata, message, and subagent queries remain the

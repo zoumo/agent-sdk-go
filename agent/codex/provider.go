@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"slices"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
@@ -21,10 +23,18 @@ const (
 	providerStopped
 )
 
+type openingMode string
+
+const (
+	openingStart  openingMode = "open"
+	openingResume openingMode = "resume"
+)
+
 // Provider owns one Codex app-server connection shared by all of its sessions.
 type Provider struct {
 	mu             sync.Mutex
 	config         codex.StdioOptions
+	streams        streamFactory
 	formsSupported bool
 	state          providerState
 	client         *codex.Client
@@ -32,6 +42,13 @@ type Provider struct {
 	opening        int
 	sessions       map[*session]struct{}
 }
+
+type streamStart struct {
+	Transport codex.StreamTransport
+	Started   func(*codex.Client)
+}
+
+type streamFactory func(context.Context) (streamStart, error)
 
 // New constructs a Codex provider. No process or connection is created until
 // Start succeeds.
@@ -59,7 +76,26 @@ func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
 			nil,
 		)
 	}
-	client, err := codex.NewStdio(ctx, p.config)
+	var client *codex.Client
+	var err error
+	if p.streams == nil {
+		client, err = codex.NewStdio(ctx, p.config)
+	} else {
+		var stream streamStart
+		stream, err = p.streams(ctx)
+		if err == nil {
+			client, err = codex.NewStreams(ctx, codex.StreamOptions{
+				Args:       slices.Clone(p.config.Args),
+				Env:        slices.Clone(p.config.Env),
+				Dir:        p.config.Dir,
+				Initialize: p.config.Initialize,
+				Limits:     p.config.Limits,
+			}, stream.Transport)
+		}
+		if err == nil && stream.Started != nil {
+			stream.Started(client)
+		}
+	}
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
@@ -111,21 +147,25 @@ func (p *Provider) Open(
 		return nil, err
 	}
 	mcpServers := nativeMCPServers(options.MCPServers)
+	features, config, err := p.openingConfiguration(options)
+	if err != nil {
+		return nil, err
+	}
 	client, err := p.reserveOpen()
 	if err != nil {
 		return nil, err
 	}
-	features := effectiveFeatures(options.Features, p.formsSupported)
 	native, err := codex.Open(ctx, codex.SessionOptions{
 		Client:     client,
 		MCPServers: mcpServers,
 		Thread: codextypes.ThreadStartParams{
-			Config:                threadConfig(features),
+			Config:                config,
 			Cwd:                   codextypes.Some(options.Cwd),
 			DeveloperInstructions: developerInstructions(options.AdditionalSystemPrompt),
+			Model:                 optionalString(options.Execution.Model),
 		},
 	})
-	return p.completeOpen(native, err, "open", features)
+	return p.completeOpen(native, err, openingStart, features, options.Execution)
 }
 
 // Resume restores an existing native main session. Saved turns in the native
@@ -141,25 +181,29 @@ func (p *Provider) Resume(
 		return nil, err
 	}
 	mcpServers := nativeMCPServers(options.MCPServers)
+	features, config, err := p.openingConfiguration(options.OpenOptions)
+	if err != nil {
+		return nil, err
+	}
 	client, err := p.reserveOpen()
 	if err != nil {
 		return nil, err
 	}
-	features := effectiveFeatures(options.Features, p.formsSupported)
 	native, err := codex.Open(ctx, codex.SessionOptions{
 		Client:     client,
 		MCPServers: mcpServers,
 		Resume: &codextypes.ThreadResumeParams{
-			Config: threadConfig(features),
+			Config: config,
 			Cwd:    codextypes.Some(options.Cwd),
 			DeveloperInstructions: developerInstructions(
 				options.AdditionalSystemPrompt,
 			),
 			ExcludeTurns: codextypes.Some(true),
+			Model:        optionalString(options.Execution.Model),
 			ThreadID:     options.SessionID,
 		},
 	})
-	return p.completeOpen(native, err, "resume", features)
+	return p.completeOpen(native, err, openingResume, features, options.Execution)
 }
 
 // NativeClient returns the provider-owned native connection while the provider
@@ -221,15 +265,45 @@ func effectiveFeatures(
 	}
 }
 
+func (p *Provider) openingConfiguration(
+	options agent.OpenOptions,
+) (
+	agent.EffectiveFeatures,
+	codextypes.Optional[map[string]json.RawMessage],
+	error,
+) {
+	features := effectiveFeatures(options.Features, p.formsSupported)
+	config, err := threadConfig(features, options.Execution.ReasoningEffort)
+	if err != nil {
+		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(
+			agent.ErrorInvalidArgument,
+			"execution_options_not_encodable",
+			"encode Codex execution options",
+			err,
+		)
+	}
+	return features, config, nil
+}
+
 func threadConfig(
 	features agent.EffectiveFeatures,
-) codextypes.Optional[map[string]json.RawMessage] {
-	if features.AgentQuestions {
-		return codextypes.Optional[map[string]json.RawMessage]{}
+	executionEffort string,
+) (codextypes.Optional[map[string]json.RawMessage], error) {
+	config := make(map[string]json.RawMessage, 2)
+	if !features.AgentQuestions {
+		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
 	}
-	return codextypes.Some(map[string]json.RawMessage{
-		"tools.experimental_request_user_input.enabled": json.RawMessage("false"),
-	})
+	if executionEffort != "" {
+		encoded, err := json.Marshal(executionEffort)
+		if err != nil {
+			return codextypes.Optional[map[string]json.RawMessage]{}, err
+		}
+		config["model_reasoning_effort"] = encoded
+	}
+	if len(config) == 0 {
+		return codextypes.Optional[map[string]json.RawMessage]{}, nil
+	}
+	return codextypes.Some(config), nil
 }
 
 func developerInstructions(value string) codextypes.Optional[string] {
@@ -248,6 +322,15 @@ func validateOpenOptions(options agent.OpenOptions) error {
 			agent.ErrorUnsupported,
 			"additional_dirs_unsupported",
 			"Codex additional directories are not supported by this adapter",
+			nil,
+		)
+	}
+	if !utf8.ValidString(options.Execution.Model) ||
+		!utf8.ValidString(options.Execution.ReasoningEffort) {
+		return adapterError(
+			agent.ErrorInvalidArgument,
+			"execution_options_invalid_utf8",
+			"Codex execution options must be valid UTF-8",
 			nil,
 		)
 	}
@@ -281,16 +364,26 @@ func (p *Provider) reserveOpen() (*codex.Client, error) {
 func (p *Provider) completeOpen(
 	native *codex.Session,
 	openErr error,
-	operation string,
+	mode openingMode,
 	features agent.EffectiveFeatures,
+	execution agent.ExecutionOptions,
 ) (agent.Session, error) {
+	var executionReport agent.ExecutionOptionsReport
+	if openErr == nil {
+		executionReport = initialExecutionOptionsReport(native, execution, mode)
+	}
 	p.mu.Lock()
 	p.opening--
 	if openErr != nil {
 		p.mu.Unlock()
-		return nil, nativeOperationError(operation, openErr)
+		return nil, nativeOperationError(string(mode), openErr)
 	}
-	created := newSession(p, native, features)
+	created := newSession(
+		p,
+		native,
+		features,
+		executionReport,
+	)
 	if p.sessions == nil {
 		p.sessions = make(map[*session]struct{})
 	}

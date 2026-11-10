@@ -11,13 +11,14 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // AcceptSavedHistory runs captured setup through Session and saved queries through
 // typed Client methods. The caller verifies provenance; the Go mock owns matching.
 // It supports history and sequential continuation only, and fails closed on other
 // operations. It never writes recorded client frames directly to the transport.
-func AcceptSavedHistory(ctx context.Context, executable string, args []string, recordingPath string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
+func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, recordingPath string, policy codex.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	f, err := os.Open(recordingPath)
 	if err != nil {
 		return err
@@ -56,20 +57,17 @@ func AcceptSavedHistory(ctx context.Context, executable string, args []string, r
 	if err := json.Unmarshal(requests[0].Params, &init); err != nil {
 		return err
 	}
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{
-		Executable: executable,
-		Args:       args,
-		Initialize: init,
-	})
+	c, run, inputClosed, err := openStreamSession(ctx, mock, init)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, c.Close()) }()
+	var s *codex.Session
+	defer func() { err = errors.Join(err, finishStream(run, c, s, inputClosed)) }()
 	var start types.ThreadStartParams
 	if err := json.Unmarshal(requests[2].Params, &start); err != nil {
 		return err
 	}
-	s, err := codex.Open(ctx, codex.SessionOptions{Client: c, Thread: start, ChildDetailPolicy: policy})
+	s, err = codex.Open(ctx, codex.SessionOptions{Client: c, Thread: start, ChildDetailPolicy: policy})
 	if err != nil {
 		return err
 	}

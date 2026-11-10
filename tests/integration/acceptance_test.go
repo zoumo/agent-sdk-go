@@ -19,12 +19,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
 	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
 	clt "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/codex"
 	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
 	ct "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
 // nativeObservation is a detached test fact extracted by a native adapter. Raw keeps
@@ -148,7 +150,7 @@ func codexTargetOptions(t *testing.T, scenario string) (codex.StdioOptions, stri
 	exe, e := os.Executable()
 	require.NoError(t, e)
 	path := filepath.Join(t.TempDir(), "wire.jsonl")
-	return codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "session-integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}}, path
+	return codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "session-integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}}, path
 }
 
 func claudeTargetOptions(t *testing.T, scenario string) (claude.SessionOptions, string) {
@@ -159,7 +161,7 @@ func claudeTargetOptions(t *testing.T, scenario string) (claude.SessionOptions, 
 	dir, e = filepath.EvalSymlinks(dir)
 	require.NoError(t, e)
 	path := filepath.Join(dir, "wire.jsonl")
-	return claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "CLAUDE_CONFIG_DIR=" + filepath.Join(dir, "config"), "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}}, path
+	return claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_CONFIG_DIR=" + filepath.Join(dir, "config"), "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "SDK_INTEGRATION_TRACE=" + path, "GORACE=atexit_sleep_ms=0"}}, path
 }
 
 func codexUntil(t *testing.T, s *codex.Session, method string) []codex.Received {
@@ -962,13 +964,13 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		_ = s.Interrupt(ctx, claude.InterruptOptions{})
 		wait(t, ctx, s.Done())
 		cause := s.Err()
-		require.Error(t, cause)
+		require.ErrorIs(t, cause, claude.ErrUnexpectedEOF)
 		require.Error(t, requests[0].Approve(ctx, claude.ApprovalOptions{}))
 		drained := 0
 		for {
 			r, err := s.Receive(ctx)
 			if err != nil {
-				require.ErrorIs(t, err, cause)
+				require.ErrorIs(t, err, claude.ErrUnexpectedEOF)
 				break
 			}
 			if r.Event != nil && fixtureKind(r.Raw) == "fixture_burst" {
@@ -982,18 +984,19 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 		}
 		assert.Equal(t, 32, drained)
 		_ = s.Close()
-		assert.Equal(t, cause, s.Err())
+		// Process cleanup may wrap the original EOF after Done closes.
+		assert.ErrorIs(t, s.Err(), claude.ErrUnexpectedEOF)
 	case "session-close":
 		_, e = s.Submit(ctx, claude.Input{Text: "disconnect"})
 		require.NoError(t, e)
 		wait(t, ctx, s.Done())
 		cause := s.Err()
-		require.Error(t, cause)
+		require.ErrorIs(t, cause, claude.ErrUnexpectedEOF)
 		drained := 0
 		for {
 			r, err := s.Receive(ctx)
 			if err != nil {
-				require.ErrorIs(t, err, cause)
+				require.ErrorIs(t, err, claude.ErrUnexpectedEOF)
 				break
 			}
 			if r.Event != nil {
@@ -1918,7 +1921,7 @@ func codexIndependentHistory(t *testing.T) {
 	ctx := deadline(t)
 	exe, err := os.Executable()
 	must(t, err)
-	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=history-query", "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "history-scenario", Version: "synthetic"}}})
+	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=history-query", "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "history-scenario", Version: "synthetic"}}})
 	must(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 	page, err := c.ListThreads(ctx, ct.ThreadListParams{})
@@ -2141,22 +2144,17 @@ func acceptFaultBarrier(t *testing.T, l *net.TCPListener, want byte) net.Conn {
 // Independently authored task-failure frames exercise drain and error semantics.
 // The withheld consumer and barrier make application timing deterministic.
 func checkTaskFailureDrain(t *testing.T) {
-	barrier := faultBarrier(t)
-	exe, err := os.Executable()
+	fixture, err := transcript.Prepare(t.TempDir(), bytes.NewReader(transcript.TaskFailureWire))
 	require.NoError(t, err)
-	dir := t.TempDir()
-	session, err := claude.Open(deadline(t), claude.SessionOptions{
-		CLIPath: exe, WorkDir: dir,
-		Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "PATH=", "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=task-failure-drain", "SDK_INTEGRATION_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"},
-	})
+	session, run := openEmbeddedClaude(t, fixture)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Abort() })
 	prompt := transcript.TaskFailurePrompt
 	_, err = session.Submit(deadline(t), claude.Input{Text: prompt})
 	require.NoError(t, err)
-	// Completion means every captured frame was matched/emitted. Receive has not
-	// been called; Close must still finish the strict peer's client-EOF check.
-	completion := acceptFaultBarrier(t, barrier, 'd')
+	// Embedded replay reports full consumption before its final client-EOF
+	// check. Withhold Receive until all synthetic server frames are emitted.
+	wait(t, deadline(t), run.FullConsumption())
 	var got []json.RawMessage
 	var failed, idle bool
 	for {
@@ -2188,7 +2186,7 @@ func checkTaskFailureDrain(t *testing.T) {
 			expected = append(expected, f.Data)
 		}
 	}
-	checkReplayResult(t, completion)
+	checkEmbeddedResult(t, run)
 	require.Len(t, got, len(expected), "every synthetic native frame must be consumed")
 	for i := range expected {
 		assert.Equal(t, string(expected[i]), string(got[i]), "original frame %d", i)
@@ -2202,17 +2200,15 @@ func checkTaskFailureDrain(t *testing.T) {
 }
 
 func checkQuestionDrain(t *testing.T) {
-	barrier := faultBarrier(t)
 	frames, err := recording.QuestionFrames()
 	require.NoError(t, err)
 	init, thread, turn, err := recording.Params(frames)
 	require.NoError(t, err)
-	exe, err := os.Executable()
+	data, err := json.Marshal(map[string]any{"version": 1, "provenance": "synthetic", "frames": frames})
 	require.NoError(t, err)
-	c, err := codex.NewStdio(deadline(t), codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + t.TempDir(), "PATH=", "SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=question-drain", "SDK_INTEGRATION_BARRIER=" + barrier.Addr().String(), "GORACE=atexit_sleep_ms=0"}, Initialize: init})
+	fixture, err := mocktest.Prepare(t.TempDir(), "codex", data, mocktest.Options{Handshakes: "answer-and-assert"})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Close() })
-	completion := acceptFaultBarrier(t, barrier, 's')
+	c, run := openEmbeddedCodex(t, fixture, init)
 	session, err := codex.Open(deadline(t), codex.SessionOptions{Client: c, Thread: thread})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Abort() })
@@ -2273,7 +2269,7 @@ func checkQuestionDrain(t *testing.T) {
 			expected = append(expected, f.Wire)
 		}
 	}
-	checkReplayResult(t, completion)
+	checkEmbeddedResult(t, run)
 	require.Len(t, got, len(expected))
 	for i := range expected {
 		assert.JSONEq(t, string(expected[i]), string(got[i]), "original ordinal sequence %d", i)
@@ -2374,89 +2370,6 @@ func checkClaudeFaultClosePendingRequest(t *testing.T) {
 		require.Error(t, pending.Deny(ctx, claude.DenialOptions{}))
 		require.Error(t, pending.Deny(ctx, claude.DenialOptions{}))
 		assert.Equal(t, epoch, countAnswers(t, path, "claude"))
-	}
-}
-
-func checkReplayResult(t *testing.T, c net.Conn) {
-	t.Helper()
-	var result struct {
-		Error string `json:"error"`
-	}
-	require.NoError(t, json.NewDecoder(c).Decode(&result), "peer must report after the final strict EOF check")
-	require.Empty(t, result.Error, "strict replay must return success after consuming client EOF")
-}
-
-// Verify the result channel exposes final EOF errors that SDK-local Close may
-// mask. Run both matchers against the same independently authored synthetic inputs.
-func checkReplayFinalResult(t *testing.T, provider string) {
-	t.Helper()
-	var input bytes.Buffer
-	var run func(io.Reader) error
-	if provider == "codex" {
-		frames, err := recording.QuestionFrames()
-		require.NoError(t, err)
-		for _, f := range frames {
-			if f.Direction != "c2s" {
-				continue
-			}
-			input.Write(f.Wire)
-			input.WriteByte('\n')
-			var wire struct {
-				Method string
-				ID     json.RawMessage
-			}
-			require.NoError(t, json.Unmarshal(f.Wire, &wire))
-			if wire.Method == "" && len(wire.ID) > 0 {
-				input.WriteString("{\"id\":1000,\"method\":\"replay/answer\"}\n")
-			}
-		}
-		input.WriteString("{\"id\":1001,\"method\":\"replay/assert\"}\n")
-		run = func(r io.Reader) error { return recording.Peer(r, io.Discard, frames) }
-	} else {
-		for line := range bytes.SplitSeq(bytes.TrimSpace(transcript.TaskFailureWire), []byte{'\n'}) {
-			var f transcript.Frame
-			require.NoError(t, json.Unmarshal(line, &f))
-			if f.Direction == "client" {
-				input.Write(f.Data)
-				input.WriteByte('\n')
-			}
-		}
-		run = func(r io.Reader) error {
-			return transcript.Replay(r, io.Discard, bytes.NewReader(transcript.TaskFailureWire), nil)
-		}
-	}
-	for _, extra := range []bool{false, true} {
-		name := "strict-eof"
-		if extra {
-			name = "extra-frame-after-completion"
-		}
-		t.Run(name, func(t *testing.T) {
-			c, peer := net.Pipe()
-			defer c.Close()
-			defer peer.Close()
-			d, ok := deadline(t).Deadline()
-			require.True(t, ok)
-			require.NoError(t, c.SetDeadline(d))
-			require.NoError(t, peer.SetDeadline(d))
-			wire := input.String()
-			if extra {
-				wire += "{}\n"
-			}
-			done := make(chan error, 1)
-			go func() { done <- reportReplayResult(peer, run(strings.NewReader(wire))) }()
-			var result struct {
-				Error string `json:"error"`
-			}
-			require.NoError(t, json.NewDecoder(c).Decode(&result))
-			err := <-done
-			if extra {
-				require.ErrorContains(t, err, "extra client byte after scenario")
-				require.Contains(t, result.Error, "extra client byte after scenario")
-			} else {
-				require.NoError(t, err)
-				require.Empty(t, result.Error)
-			}
-		})
 	}
 }
 
@@ -2777,7 +2690,7 @@ func openClaudeDetail(s *NativeIntegrationSuite, policy claude.ChildDetailPolicy
 	require.NoError(t, err)
 	dir := t.TempDir()
 	trace := filepath.Join(dir, "trace.jsonl")
-	o := claude.SessionOptions{CLIPath: exe, WorkDir: dir, ResumeID: resume, ChildDetailPolicy: policy, Env: []string{"AGENT_SDK_TESTIFY_BIN=" + os.Getenv("AGENT_SDK_TESTIFY_BIN"), "HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=child-detail", "SDK_INTEGRATION_TRACE=" + trace, "GORACE=atexit_sleep_ms=0"}}
+	o := claude.SessionOptions{CLIPath: exe, WorkDir: dir, ResumeID: resume, ChildDetailPolicy: policy, Env: []string{"HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=child-detail", "SDK_INTEGRATION_TRACE=" + trace, "GORACE=atexit_sleep_ms=0"}}
 	session, err := claude.Open(deadline(t), o)
 	require.NoError(t, err)
 	o.ChildDetailPolicy = claude.ChildDetailSuppress // construction fixes a value copy
@@ -3070,4 +2983,540 @@ func checkClaudeDetailLifecycle(s *NativeIntegrationSuite) {
 		require.Equal(t, "task:b", got[8].Source.AssociationID)
 		require.Nil(t, got[8].Parent)
 	}
+}
+
+func checkEmbeddedResult(t *testing.T, run *mocktest.Run) {
+	t.Helper()
+	result, err := run.Wait(deadline(t))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Execution)
+	report := result.Execution
+	assert.Equal(t, run.Start.ExecutionID, report.ExecutionID)
+	assert.EqualValues(t, "passed", report.Status)
+	assert.True(t, report.Complete)
+	require.Len(t, report.Connections, 1)
+	connection := report.Connections[0]
+	assert.True(t, connection.FullConsumption)
+	assert.True(t, connection.ClientEOF)
+	assert.True(t, connection.CleanupComplete)
+	assert.False(t, connection.NativeLaunched)
+	assert.Nil(t, connection.ExitCode)
+	assert.Empty(t, connection.ProcessReceiptPath)
+}
+
+// Exercise final strict EOF evidence at the SDK/bridge seam. Extra input after
+// full consumption must remain a typed replay failure visible to the SDK.
+func checkReplayFinalResult(t *testing.T, provider string) {
+	for _, extra := range []bool{false, true} {
+		name := "strict-eof"
+		if extra {
+			name = "extra-frame-after-completion"
+		}
+		t.Run(name, func(t *testing.T) {
+			var fixture *mocktest.Session
+			var args []string
+			var err error
+			if provider == "codex" {
+				data := []byte(`{"version":1,"provenance":"synthetic","frames":[
+     {"ordinal":1,"direction":"c2s","epoch":1,"channel":"protocol","wire":{"id":1,"method":"initialize","params":{"clientInfo":{"name":"integration","version":"1"}}}},
+     {"ordinal":2,"direction":"s2c","epoch":1,"channel":"protocol","wire":{"id":1,"result":{"userAgent":"synthetic","codexHome":"/fixture/home","platformFamily":"unix","platformOs":"linux"}}},
+     {"ordinal":3,"direction":"c2s","epoch":1,"channel":"protocol","wire":{"method":"initialized"}}
+    ]}`)
+				fixture, err = mocktest.Prepare(t.TempDir(), provider, data, mocktest.Options{})
+			} else {
+				// Only initialize is needed to reach this transport boundary.
+				rows := bytes.Split(bytes.TrimSpace(transcript.TaskFailureWire), []byte{'\n'})
+				fixture, err = transcript.Prepare(t.TempDir(), bytes.NewReader(bytes.Join(rows[:2], []byte{'\n'})))
+				require.NoError(t, err)
+				args, err = claude.NativeArgs(claude.SessionOptions{Env: []string{}})
+			}
+			require.NoError(t, err)
+			run := embeddedRun(t, fixture, args)
+			var closeInput, closeSDK func() error
+			var sdkErr func() error
+			var sdkDone <-chan struct{}
+			if provider == "codex" {
+				client, err := codex.NewStreams(deadline(t), codex.StreamOptions{
+					Args: run.Start.NativeArgs, Dir: run.Start.ProtocolCwd, Env: run.Environment(),
+					Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "integration", Version: "1"}},
+				}, codex.StreamTransport{Reader: run.Reader, Writer: run.Writer, Stderr: run.Stderr, Wait: run.WaitError})
+				require.NoError(t, err)
+				closeInput, closeSDK, sdkErr = client.CloseInput, client.Close, client.Err
+				sdkDone = client.Done()
+			} else {
+				session, err := claude.OpenStreams(deadline(t), claude.SessionOptions{
+					WorkDir: run.Start.Workspace, Env: run.Environment(),
+				}, claude.StreamTransport{Reader: run.Reader, Writer: run.Writer, Stderr: run.Stderr, Wait: run.WaitError})
+				require.NoError(t, err)
+				closeInput, closeSDK, sdkErr = session.CloseInput, session.Close, session.Err
+				sdkDone = session.Done()
+			}
+			t.Cleanup(func() { _ = closeSDK() })
+			wait(t, deadline(t), run.FullConsumption())
+			if extra {
+				_, err = run.Writer.Write([]byte("{}\n"))
+				require.NoError(t, err)
+			}
+			require.NoError(t, closeInput())
+			if !extra {
+				checkEmbeddedResult(t, run)
+				wait(t, deadline(t), sdkDone)
+				require.NoError(t, closeSDK())
+				assert.NoError(t, sdkErr())
+				return
+			}
+			result, err := run.Wait(deadline(t))
+			require.ErrorContains(t, err, "extra client byte after scenario")
+			require.NotNil(t, result)
+			require.NotNil(t, result.Execution)
+			assert.EqualValues(t, "failed", result.Execution.Status)
+			require.Len(t, result.Execution.Connections, 1)
+			connection := result.Execution.Connections[0]
+			assert.True(t, connection.FullConsumption)
+			assert.True(t, connection.CleanupComplete)
+			assert.False(t, connection.NativeLaunched)
+			assert.Nil(t, connection.ExitCode)
+			assert.Empty(t, connection.ProcessReceiptPath)
+			wait(t, deadline(t), sdkDone)
+			// SDK Close joins the authoritative failed wait rather than hiding it.
+			require.Error(t, closeSDK())
+			assert.Error(t, sdkErr())
+		})
+	}
+}
+
+func assertAgentExecutionAccepted(t *testing.T, acceptance agent.Acceptance) {
+	t.Helper()
+	require.NotNil(t, acceptance.Sent)
+	require.NotNil(t, acceptance.NativeAccepted)
+	assert.True(t, *acceptance.Sent)
+	assert.True(t, *acceptance.NativeAccepted)
+}
+
+func requireAgentExecutionValue(
+	t *testing.T,
+	requested string,
+	effective *string,
+	value agent.ExecutionValue,
+) {
+	t.Helper()
+	assert.Equal(t, requested, value.Requested)
+	if effective == nil {
+		assert.Nil(t, value.Effective)
+		return
+	}
+	require.NotNil(t, value.Effective)
+	assert.Equal(t, *effective, *value.Effective)
+}
+
+// closeAgentExecutionSession releases a session and verifies its local
+// termination. An unknown-outcome peer exits without completing the native
+// close handshake, so the session must report unavailable after peer
+// termination. Claude's native close also reports unavailable; Codex reports a
+// clean close while retaining the unavailable session error.
+func closeAgentExecutionSession(
+	t *testing.T,
+	session agent.Session,
+	expectPeerExit bool,
+	wantCloseError bool,
+) {
+	t.Helper()
+	if expectPeerExit {
+		select {
+		case <-session.Done():
+		case <-time.After(5 * time.Second):
+			t.Error("session did not terminate after the native peer exit")
+		}
+	}
+	err := session.Close(context.Background())
+	if expectPeerExit {
+		require.Error(t, session.Err())
+		assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(session.Err()))
+	} else {
+		assert.NoError(t, session.Err())
+	}
+	if wantCloseError {
+		assert.Error(t, err)
+		assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+	} else {
+		assert.NoError(t, err)
+	}
+	select {
+	case <-session.Done():
+	default:
+		t.Error("session did not terminate after close")
+	}
+}
+
+func awaitAgentExecutionIdle(
+	t *testing.T,
+	ctx context.Context,
+	stream agent.EventStream,
+) {
+	t.Helper()
+	for {
+		event, err := stream.Next(ctx)
+		require.NoError(t, err)
+		payload, ok := event.Payload.(agent.StateUpdatePayload)
+		if ok && payload.State != nil && *payload.State == agent.StateIdle {
+			return
+		}
+	}
+}
+
+func agentExecutionInitialEffort(providerName string) *string {
+	if providerName == "claude" {
+		return nil
+	}
+	return new("observed-effort")
+}
+
+func submitAgentExecutionInput(
+	t *testing.T,
+	ctx context.Context,
+	session agent.Session,
+	stream agent.EventStream,
+	text string,
+) {
+	t.Helper()
+	receipt, err := session.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{agent.TextBlock{Text: text}},
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, receipt.Submission)
+	require.NotNil(t, receipt.Acceptance.Sent)
+	assert.True(t, *receipt.Acceptance.Sent)
+	awaitAgentExecutionIdle(t, ctx, stream)
+}
+
+type agentExecutionTraceEntry struct {
+	Kind string          `json:"kind"`
+	Body json.RawMessage `json:"body"`
+}
+
+type agentExecutionTraceFrame struct {
+	Method  string          `json:"method"`
+	Type    string          `json:"type"`
+	Params  json.RawMessage `json:"params"`
+	Request struct {
+		Subtype  string          `json:"subtype"`
+		Model    string          `json:"model"`
+		Settings json.RawMessage `json:"settings"`
+	} `json:"request"`
+	Message struct {
+		Content json.RawMessage `json:"content"`
+	} `json:"message"`
+}
+
+type agentExecutionFrameAt struct {
+	index int
+	frame agentExecutionTraceFrame
+}
+
+func agentExecutionTracePath(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "execution-options-trace.jsonl")
+	t.Setenv("AGENT_EXECUTION_TRACE", path)
+	return path
+}
+
+func readAgentExecutionTrace(
+	t *testing.T,
+	path string,
+) []agentExecutionTraceEntry {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var entries []agentExecutionTraceEntry
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry agentExecutionTraceEntry
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		entries = append(entries, entry)
+	}
+	require.NotEmpty(t, entries)
+	return entries
+}
+
+func agentExecutionTraceArgv(
+	t *testing.T,
+	entries []agentExecutionTraceEntry,
+) []string {
+	t.Helper()
+	var argvs [][]string
+	for _, entry := range entries {
+		if entry.Kind != "argv" {
+			continue
+		}
+		var argv []string
+		require.NoError(t, json.Unmarshal(entry.Body, &argv))
+		argvs = append(argvs, argv)
+	}
+	require.Len(t, argvs, 1, "agent execution trace must contain one process argv")
+	return argvs[0]
+}
+
+func agentExecutionTraceFrames(
+	t *testing.T,
+	entries []agentExecutionTraceEntry,
+) []agentExecutionFrameAt {
+	t.Helper()
+	frames := make([]agentExecutionFrameAt, 0, len(entries))
+	for index, entry := range entries {
+		if entry.Kind != "frame" {
+			continue
+		}
+		var frame agentExecutionTraceFrame
+		require.NoError(t, json.Unmarshal(entry.Body, &frame))
+		frames = append(frames, agentExecutionFrameAt{index: index, frame: frame})
+	}
+	return frames
+}
+
+func agentExecutionFramesMatching(
+	frames []agentExecutionFrameAt,
+	match func(agentExecutionTraceFrame) bool,
+) []agentExecutionFrameAt {
+	var matched []agentExecutionFrameAt
+	for _, frame := range frames {
+		if match(frame.frame) {
+			matched = append(matched, frame)
+		}
+	}
+	return matched
+}
+
+func assertAgentExecutionRuntimeTrace(t *testing.T, providerName, path string) {
+	t.Helper()
+	entries := readAgentExecutionTrace(t, path)
+	_ = agentExecutionTraceArgv(t, entries)
+	frames := agentExecutionTraceFrames(t, entries)
+	switch providerName {
+	case "codex":
+		assertAgentExecutionCodexRuntimeTrace(t, frames)
+	case "claude":
+		assertAgentExecutionClaudeRuntimeTrace(t, entries, frames)
+	default:
+		require.FailNow(t, "unknown provider", providerName)
+	}
+}
+
+func assertAgentExecutionCodexRuntimeTrace(
+	t *testing.T,
+	frames []agentExecutionFrameAt,
+) {
+	t.Helper()
+	initializes := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Method == "initialize"
+	})
+	require.Len(t, initializes, 1)
+	starts := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Method == "thread/start"
+	})
+	require.Len(t, starts, 1)
+	assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Method == "thread/resume"
+	}))
+	var startParams struct {
+		Model  string                     `json:"model"`
+		Config map[string]json.RawMessage `json:"config"`
+	}
+	require.NoError(t, json.Unmarshal(starts[0].frame.Params, &startParams))
+	assert.Equal(t, " Caller/Model v2 ", startParams.Model)
+	var startEffort string
+	require.NoError(t, json.Unmarshal(
+		startParams.Config["model_reasoning_effort"],
+		&startEffort,
+	))
+	assert.Equal(t, " Native/High ", startEffort)
+
+	turns := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Method == "turn/start"
+	})
+	settings := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Method == "thread/settings/update"
+	})
+	require.Len(t, turns, 3)
+	require.Len(t, settings, 2)
+	requireAgentExecutionTurnText(t, turns[0].frame.Params, "before/update")
+	requireAgentExecutionTurnText(t, turns[1].frame.Params, "after/effort")
+	requireAgentExecutionTurnText(t, turns[2].frame.Params, "after/model")
+	require.Less(t, turns[0].index, settings[0].index)
+	require.Less(t, settings[0].index, turns[1].index)
+	require.Less(t, turns[1].index, settings[1].index)
+	require.Less(t, settings[1].index, turns[2].index)
+
+	var effortParams, modelParams map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(settings[0].frame.Params, &effortParams))
+	requireAgentExecutionString(t, effortParams, "threadId", agentExecutionSessionID)
+	requireAgentExecutionString(t, effortParams, "effort", "next/effort")
+	assert.NotContains(t, effortParams, "model")
+
+	require.NoError(t, json.Unmarshal(settings[1].frame.Params, &modelParams))
+	requireAgentExecutionString(t, modelParams, "threadId", agentExecutionSessionID)
+	requireAgentExecutionString(t, modelParams, "model", "next/model")
+	assert.NotContains(t, modelParams, "effort")
+}
+
+func assertAgentExecutionClaudeRuntimeTrace(
+	t *testing.T,
+	entries []agentExecutionTraceEntry,
+	frames []agentExecutionFrameAt,
+) {
+	t.Helper()
+	argv := agentExecutionTraceArgv(t, entries)
+	assert.Contains(t, argv, "--model= Caller/Model v2 ")
+	assert.Contains(t, argv, "--effort= Native/High ")
+
+	initializes := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Type == "control_request" && frame.Request.Subtype == "initialize"
+	})
+	require.Len(t, initializes, 1)
+
+	users := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Type == "user"
+	})
+	require.Len(t, users, 3)
+	requireAgentExecutionClaudeText(t, users[0].frame, "before/update")
+	requireAgentExecutionClaudeText(t, users[1].frame, "after/effort")
+	requireAgentExecutionClaudeText(t, users[2].frame, "after/model")
+
+	efforts := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Type == "control_request" &&
+			frame.Request.Subtype == "apply_flag_settings"
+	})
+	require.Len(t, efforts, 1)
+	models := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Type == "control_request" && frame.Request.Subtype == "set_model"
+	})
+	require.Len(t, models, 1)
+	getSettings := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+		return frame.Type == "control_request" && frame.Request.Subtype == "get_settings"
+	})
+	require.Len(t, getSettings, 1)
+	var settings struct {
+		EffortLevel string `json:"effortLevel"`
+		Ultracode   *bool  `json:"ultracode"`
+	}
+	require.NoError(t, json.Unmarshal(efforts[0].frame.Request.Settings, &settings))
+	assert.Equal(t, "next/effort", settings.EffortLevel)
+	require.NotNil(t, settings.Ultracode)
+	assert.False(t, *settings.Ultracode)
+	assert.Equal(t, "next/model", models[0].frame.Request.Model)
+
+	require.Less(t, users[0].index, efforts[0].index)
+	require.Less(t, getSettings[0].index, efforts[0].index)
+	require.Less(t, efforts[0].index, users[1].index)
+	require.Less(t, users[1].index, models[0].index)
+	require.Less(t, models[0].index, users[2].index)
+}
+
+func assertAgentExecutionResumeTrace(t *testing.T, providerName, path string) {
+	t.Helper()
+	entries := readAgentExecutionTrace(t, path)
+	_ = agentExecutionTraceArgv(t, entries)
+	frames := agentExecutionTraceFrames(t, entries)
+	switch providerName {
+	case "codex":
+		resumes := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/resume"
+		})
+		require.Len(t, resumes, 1)
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/start"
+		}))
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/settings/update"
+		}))
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "turn/start"
+		}))
+		initializes := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "initialize"
+		})
+		require.Len(t, initializes, 1)
+		var params struct {
+			ExcludeTurns *bool                      `json:"excludeTurns"`
+			ThreadID     string                     `json:"threadId"`
+			Model        string                     `json:"model"`
+			Config       map[string]json.RawMessage `json:"config"`
+		}
+		require.NoError(t, json.Unmarshal(resumes[0].frame.Params, &params))
+		require.NotNil(t, params.ExcludeTurns)
+		assert.True(t, *params.ExcludeTurns)
+		assert.Equal(t, agentExecutionSessionID, params.ThreadID)
+		assert.Equal(t, " Resume/Model ", params.Model)
+		var effort string
+		require.NoError(t, json.Unmarshal(
+			params.Config["model_reasoning_effort"],
+			&effort,
+		))
+		assert.Equal(t, " Native/Resume ", effort)
+	case "claude":
+		argv := agentExecutionTraceArgv(t, entries)
+		assert.Len(t, agentExecutionFramesMatching(
+			frames,
+			func(frame agentExecutionTraceFrame) bool {
+				return frame.Type == "control_request" && frame.Request.Subtype == "initialize"
+			},
+		), 1)
+		assert.Contains(t, argv, "--resume="+agentExecutionSessionID)
+		assert.Contains(t, argv, "--model= Resume/Model ")
+		assert.Contains(t, argv, "--effort= Native/Resume ")
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "user"
+		}))
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "control_request" &&
+				(frame.Request.Subtype == "get_settings" ||
+					frame.Request.Subtype == "set_model" ||
+					frame.Request.Subtype == "apply_flag_settings")
+		}))
+	default:
+		require.FailNow(t, "unknown provider", providerName)
+	}
+}
+
+func requireAgentExecutionTurnText(
+	t *testing.T,
+	params json.RawMessage,
+	want string,
+) {
+	t.Helper()
+	var value struct {
+		Input []struct {
+			Text string `json:"text"`
+		} `json:"input"`
+	}
+	require.NoError(t, json.Unmarshal(params, &value))
+	require.Len(t, value.Input, 1)
+	assert.Equal(t, want, value.Input[0].Text)
+}
+
+func requireAgentExecutionClaudeText(
+	t *testing.T,
+	frame agentExecutionTraceFrame,
+	want string,
+) {
+	t.Helper()
+	var text string
+	require.NoError(t, json.Unmarshal(frame.Message.Content, &text))
+	assert.Equal(t, want, text)
+}
+
+func requireAgentExecutionString(
+	t *testing.T,
+	values map[string]json.RawMessage,
+	key string,
+	want string,
+) {
+	t.Helper()
+	raw, ok := values[key]
+	require.True(t, ok, "missing execution option field %s", key)
+	var got string
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, want, got)
 }

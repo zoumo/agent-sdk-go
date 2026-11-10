@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
-	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -68,18 +66,12 @@ func TestProviderPreservesExplicitExperimentalAPIFalse(t *testing.T) {
 		`<{"id":93,"result":{"status":"unsubscribed"}}`,
 	)
 	disabled := false
-	provider := agentcodex.New(agentcodex.Config{Stdio: codex.StdioOptions{
-		Executable: mustCommand(t, peerSession),
-		Args:       mustCommandArgs(t, peerSession),
-		Env:        peerSession.Env,
-		Dir:        peerSession.Workspace,
-		Initialize: codextypes.InitializeParams{
-			ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
-			Capabilities: codextypes.Some(codextypes.InitializeCapabilities{
-				ExperimentalAPI: codextypes.Some(disabled),
-			}),
-		},
-	}})
+	provider := newTestProviderWithInitialize(t, peerSession, codextypes.InitializeParams{
+		ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
+		Capabilities: codextypes.Some(codextypes.InitializeCapabilities{
+			ExperimentalAPI: codextypes.Some(disabled),
+		}),
+	})
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	capabilities, err := provider.Start(ctx)

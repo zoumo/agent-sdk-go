@@ -11,6 +11,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	claudesim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
 	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
 )
@@ -33,7 +34,7 @@ func main() {
 	}
 }
 
-func accept(ctx context.Context, provider, root, raw string, peer driverPeer, policy, observations string) error {
+func accept(ctx context.Context, provider, root, raw string, peer driverPeer, mock *mocktest.Session, policy, observations string) error {
 	out, err := os.OpenFile(observations, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
@@ -51,7 +52,7 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, po
 	case "codex":
 		switch plan.DriverProfile {
 		case "existing-children":
-			err = codexsim.AcceptExistingChildren(ctx, root, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptExistingChildren(ctx, root, mock, raw, codex.ChildDetailPolicy(policy), out)
 		case "remote-close":
 			if peer.Remote == nil {
 				return errors.New("remote endpoint is required")
@@ -63,21 +64,18 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, po
 			}
 			err = codexsim.AcceptRemoteClose(ctx, root, main.URL, main.BearerToken, probe.URL, probe.BearerToken)
 		case "history", "continuation":
-			err = codexsim.AcceptSavedHistory(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptSavedHistory(ctx, mock, raw, codex.ChildDetailPolicy(policy), out)
 		default:
-			err = codexsim.AcceptFlow(ctx, peer.Command, peer.Args, raw, codex.ChildDetailPolicy(policy), out)
+			err = codexsim.AcceptFlow(ctx, mock, raw, codex.ChildDetailPolicy(policy), out)
 		}
 	case "claude":
-		if len(peer.Args) != 0 {
-			return errors.New("claude requires a runner-prepared executable launcher")
-		}
 		switch plan.DriverProfile {
 		case "existing-children":
-			err = claudesim.AcceptExistingChildren(ctx, peer.Command, root)
+			err = claudesim.AcceptExistingChildren(ctx, mock, root)
 		case "history":
-			err = claudesim.AcceptSavedHistory(ctx, peer.Command, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
+			err = claudesim.AcceptSavedHistory(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		default:
-			err = claudesim.AcceptFlow(ctx, peer.Command, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
+			err = claudesim.AcceptFlow(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		}
 	default:
 		err = errors.New("unsupported provider")

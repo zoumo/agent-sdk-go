@@ -82,7 +82,7 @@ func (p *Provider) acquireClient(ctx context.Context) (*codex.Client, error) {
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			"provider_start_failed",
+			ErrorReasonProviderStartFailed,
 			"start Codex app-server",
 			err,
 		)
@@ -259,7 +259,7 @@ func (p *Provider) openingConfiguration(
 	if err != nil {
 		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"execution_options_not_encodable",
+			ErrorReasonExecutionOptionsNotEncodable,
 			"encode Codex execution options",
 			err,
 		)
@@ -299,7 +299,7 @@ func validateOpenOptions(options agent.OpenOptions) error {
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,
-			"additional_dirs_unsupported",
+			agent.ErrorReasonAdditionalDirsUnsupported,
 			"Codex additional directories are not supported by this adapter",
 			nil,
 		)

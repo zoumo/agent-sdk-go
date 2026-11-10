@@ -239,7 +239,7 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 				Cwd:       "/synthetic/" + sentinel,
 			},
 			wantCode:   agent.ErrorUnsupported,
-			wantReason: "mcp_server_0_cwd_unsupported",
+			wantReason: agentclaude.ErrorReasonMCPServerFieldUnsupported(0, "cwd"),
 		},
 		{
 			name: "HTTP environment headers",
@@ -250,7 +250,7 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 				EnvHeaders: map[string]string{"Authorization": sentinel},
 			},
 			wantCode:   agent.ErrorUnsupported,
-			wantReason: "mcp_server_0_env_headers_unsupported",
+			wantReason: agentclaude.ErrorReasonMCPServerFieldUnsupported(0, "env_headers"),
 		},
 		{
 			name: "HTTP bearer environment variable",
@@ -261,7 +261,7 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 				BearerTokenEnvVar: sentinel,
 			},
 			wantCode:   agent.ErrorUnsupported,
-			wantReason: "mcp_server_0_bearer_token_env_var_unsupported",
+			wantReason: agentclaude.ErrorReasonMCPServerFieldUnsupported(0, "bearer_token_env_var"),
 		},
 		{
 			name: "unknown transport",

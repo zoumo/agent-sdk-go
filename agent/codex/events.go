@@ -31,7 +31,7 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 	if event.DecodeError != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			"event_decode_failed",
+			ErrorReasonEventDecodeFailed,
 			"decode native Codex event",
 			event.DecodeError,
 		)
@@ -864,7 +864,7 @@ func unixMilliOrNow(value int64) time.Time {
 func invalidNativeEvent(method string) error {
 	return adapterError(
 		agent.ErrorUnavailable,
-		"invalid_native_event",
+		ErrorReasonInvalidNativeEvent,
 		"invalid native Codex event: "+method,
 		nil,
 	)

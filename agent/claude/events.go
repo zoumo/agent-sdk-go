@@ -571,7 +571,7 @@ func (s *session) assistantBlockKey(
 	index, coordinate := blockCoordinate(block)
 	switch coordinate {
 	case coordinateInvalid:
-		return claudeBlockKey{}, claudeProtocolError("assistant_block_coordinate_invalid")
+		return claudeBlockKey{}, claudeProtocolError(ErrorReasonAssistantBlockCoordinateInvalid)
 	case coordinateMissing:
 		if visibleCount == 1 && eventIndexState == coordinateValid {
 			index = eventIndex
@@ -580,11 +580,11 @@ func (s *session) assistantBlockKey(
 	}
 	if coordinate == coordinateMissing {
 		if visibleCount != 1 {
-			return claudeBlockKey{}, claudeProtocolError("assistant_block_coordinate_missing")
+			return claudeBlockKey{}, claudeProtocolError(ErrorReasonAssistantBlockCoordinateMissing)
 		}
 		unique, ok := s.uniqueBlock(parent, response, kind)
 		if !ok {
-			return claudeBlockKey{}, claudeProtocolError("assistant_block_coordinate_missing")
+			return claudeBlockKey{}, claudeProtocolError(ErrorReasonAssistantBlockCoordinateMissing)
 		}
 		index = unique
 	}
@@ -1659,11 +1659,11 @@ func toolResultContent(
 		content := make([]agent.ContentBlock, 0, len(blocks))
 		for _, block := range blocks {
 			if rawString(block, "type") != "text" {
-				return nil, false, claudeProtocolError("tool_result_content_unsupported")
+				return nil, false, claudeProtocolError(ErrorReasonToolResultContentUnsupported)
 			}
 			var text *string
 			if json.Unmarshal(block["text"], &text) != nil || text == nil {
-				return nil, false, claudeProtocolError("tool_result_text_invalid")
+				return nil, false, claudeProtocolError(ErrorReasonToolResultTextInvalid)
 			}
 			content = append(content, agent.ContentBlock{
 				Text: &agent.ContentBlockText{Text: *text},
@@ -1671,7 +1671,7 @@ func toolResultContent(
 		}
 		return content, true, nil
 	default:
-		return nil, false, claudeProtocolError("tool_result_content_unsupported")
+		return nil, false, claudeProtocolError(ErrorReasonToolResultContentUnsupported)
 	}
 }
 

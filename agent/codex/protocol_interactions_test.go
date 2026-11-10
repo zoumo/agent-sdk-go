@@ -58,7 +58,7 @@ func TestDuplicateNativeRequestDoesNotRetargetAuthority(t *testing.T) {
 	closed := nextInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 }
@@ -85,7 +85,7 @@ func TestTerminalNativeRequestFailureClosesPendingInteraction(t *testing.T) {
 
 	var classified *agent.Error
 	require.ErrorAs(t, err, &classified)
-	assert.Equal(t, "session_terminated", classified.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionTerminated, classified.Reason)
 	require.Equal(t, err, session.Err())
 	assert.NoError(t, session.Close(ctx))
 }

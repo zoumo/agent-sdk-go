@@ -201,7 +201,7 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 			}
 			if err := validateJSONValue(value.Content); err != nil {
 				return invalidArgument(
-					"invalid_form_answer",
+					ErrorReasonInvalidFormAnswer,
 					"form answer content is not JSON encodable",
 				)
 			}
@@ -213,7 +213,7 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 				)
 			}
 		default:
-			return invalidArgument("invalid_form_outcome", "form answer outcome is not supported")
+			return invalidArgument(ErrorReasonInvalidFormOutcome, "form answer outcome is not supported")
 		}
 	case URLAnswer:
 		switch value.Outcome {
@@ -222,25 +222,25 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 			return invalidArgument("invalid_url_outcome", "URL answer outcome is not supported")
 		}
 	default:
-		return invalidArgument("unsupported_answer", "answer kind is not supported")
+		return invalidArgument(ErrorReasonUnsupportedAnswer, "answer kind is not supported")
 	}
 	return nil
 }
 
 func concreteAnswer(answer Answer) (Answer, error) {
 	if answer == nil {
-		return nil, invalidArgument("missing_answer", "answer is required")
+		return nil, invalidArgument(ErrorReasonMissingAnswer, "answer is required")
 	}
 	value := reflect.ValueOf(answer)
 	if value.Kind() != reflect.Pointer {
 		return answer, nil
 	}
 	if value.IsNil() {
-		return nil, invalidArgument("missing_answer", "answer is required")
+		return nil, invalidArgument(ErrorReasonMissingAnswer, "answer is required")
 	}
 	concrete, ok := value.Elem().Interface().(Answer)
 	if !ok {
-		return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
+		return nil, invalidArgument(ErrorReasonUnsupportedAnswer, "answer kind is not supported")
 	}
 	return concrete, nil
 }

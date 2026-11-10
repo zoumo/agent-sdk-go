@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
 )
 
 type testSession interface {
@@ -74,7 +75,7 @@ func TestPermissionAnswerPreservesAuthorityUntilNativeClose(t *testing.T) {
 	closed := nextInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 }
@@ -109,7 +110,7 @@ func TestFileChangeApprovalUsesNativeOfferedDecision(t *testing.T) {
 	require.NoError(t, session.Close(ctx))
 	closed := nextInteractionClosed(t, ctx, stream)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 }
 
 func TestDisabledAgentQuestionsRejectsNativeForm(t *testing.T) {
@@ -137,7 +138,7 @@ func TestDisabledAgentQuestionsRejectsNativeForm(t *testing.T) {
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
 	gap := nextEvent(t, ctx, stream)
 	require.Equal(t, agent.EventSessionError, gap.Type())
-	assert.Equal(t, "agent_questions_disabled", sessionErrorReason(t, gap))
+	assert.Equal(t, agent.ErrorReasonAgentQuestionsDisabled, sessionErrorReason(t, gap))
 	assert.Equal(t, true, eventCodexMeta(t, gap)["requestRejected"])
 
 	_, err := session.Answer(ctx, agent.InteractionRef("forged"), agent.FormAnswer{
@@ -448,13 +449,13 @@ func TestFormAnswerValidationAndUnsupportedOutcomes(t *testing.T) {
 			name:   "decline",
 			answer: agent.FormAnswer{Outcome: agent.FormDecline},
 			code:   agent.ErrorUnsupported,
-			reason: "form_outcome_unsupported",
+			reason: agentcodex.ErrorReasonFormOutcomeUnsupported,
 		},
 		{
 			name:   "cancel",
 			answer: agent.FormAnswer{Outcome: agent.FormCancel},
 			code:   agent.ErrorUnsupported,
-			reason: "form_outcome_unsupported",
+			reason: agentcodex.ErrorReasonFormOutcomeUnsupported,
 		},
 	}
 	for _, test := range tests {
@@ -564,7 +565,7 @@ func TestInteractionClosesFromNativeLifecycle(t *testing.T) {
 			name:        "session_close_pending",
 			closeFirst:  true,
 			wantOutcome: agent.InteractionCancelled,
-			wantReason:  "session_closed",
+			wantReason:  agent.ErrorReasonSessionClosed,
 			report:      "failed",
 		},
 		{
@@ -573,7 +574,7 @@ func TestInteractionClosesFromNativeLifecycle(t *testing.T) {
 			closeFirst:  true,
 			answered:    true,
 			wantOutcome: agent.InteractionAnswered,
-			wantReason:  "session_closed",
+			wantReason:  agent.ErrorReasonSessionClosed,
 			report:      "passed",
 		},
 	}

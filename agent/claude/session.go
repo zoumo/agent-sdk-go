@@ -94,7 +94,7 @@ func newSession(
 		if err := created.pushEvents(events); err != nil {
 			return nil, adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver buffered Claude event",
 				err,
 			)
@@ -108,7 +108,7 @@ func newSession(
 		if err := created.pushEvents(events); err != nil {
 			return nil, adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver initial Claude commands",
 				err,
 			)
@@ -145,7 +145,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.closed && s.explicitClose {
 		return nil, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -153,7 +153,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.eventsClaimed {
 		return nil, adapterError(
 			agent.ErrorFailedPrecondition,
-			"events_already_claimed",
+			agent.ErrorReasonEventsAlreadyClaimed,
 			"the session event stream has already been claimed",
 			nil,
 		)
@@ -176,7 +176,7 @@ func (s *session) StartOrSteer(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -215,7 +215,7 @@ func (s *session) StartOrSteer(
 		s.finishInputWrite(true, stateVersion)
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
-			"start_or_steer_acceptance_missing",
+			ErrorReasonStartOrSteerAcceptanceMissing,
 			"Claude start-or-steer returned without write evidence",
 			nil,
 		)
@@ -253,7 +253,7 @@ func (s *session) newSubmissionID(stateVersion uint64) (string, error) {
 		s.finishInputWrite(false, stateVersion)
 		return "", adapterError(
 			agent.ErrorUnavailable,
-			"submission_id_failed",
+			ErrorReasonSubmissionIDFailed,
 			"create unified submission identity",
 			err,
 		)
@@ -284,7 +284,7 @@ func (s *session) Interrupt(
 		s.mu.Unlock()
 		return agent.InterruptReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -397,7 +397,7 @@ func (s *session) receiveUntilTerminal() error {
 					if pushErr := s.pushEvents(events); pushErr != nil {
 						return adapterError(
 							agent.ErrorUnavailable,
-							"event_delivery_failed",
+							agent.ErrorReasonEventDeliveryFailed,
 							"deliver Claude decode diagnostic",
 							pushErr,
 						)
@@ -423,7 +423,7 @@ func (s *session) receiveUntilTerminal() error {
 		if pushErr := s.pushEvents(events); pushErr != nil {
 			return adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver unified Claude event",
 				pushErr,
 			)
@@ -496,7 +496,7 @@ func textInput(input agent.Input) (string, error) {
 	if len(input.Content) != 1 {
 		return "", adapterError(
 			agent.ErrorUnsupported,
-			"multiple_content_blocks_unsupported",
+			ErrorReasonMultipleContentBlocksUnsupported,
 			"Claude text input supports exactly one content block",
 			nil,
 		)
@@ -505,7 +505,7 @@ func textInput(input agent.Input) (string, error) {
 	if block.Text == nil {
 		return "", adapterError(
 			agent.ErrorUnsupported,
-			"content_block_unsupported",
+			agent.ErrorReasonContentBlockUnsupported,
 			"Claude input supports text blocks only",
 			nil,
 		)
@@ -513,7 +513,7 @@ func textInput(input agent.Input) (string, error) {
 	if block.Text.Annotations != nil {
 		return "", adapterError(
 			agent.ErrorUnsupported,
-			"text_annotations_unsupported",
+			agent.ErrorReasonTextAnnotationsUnsupported,
 			"Claude input does not support text annotations",
 			nil,
 		)

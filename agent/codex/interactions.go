@@ -62,7 +62,7 @@ func (s *session) convertRequest(received codex.Received) ([]agent.Event, error)
 	if err := request.Handle().Err(); err != nil {
 		return s.notificationGap(
 			received,
-			"native_request_ended",
+			agent.ErrorReasonNativeRequestEnded,
 			"Codex native request ended before it could be exposed",
 		)
 	}
@@ -349,7 +349,7 @@ func (s *session) registerInteraction(
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			"interaction_ref_failed",
+			agent.ErrorReasonInteractionRefFailed,
 			"create interaction reference",
 			err,
 		)
@@ -498,7 +498,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -508,7 +508,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_interaction_ref",
+			agent.ErrorReasonInvalidInteractionRef,
 			"interaction reference is not live in this session",
 			nil,
 		)
@@ -517,7 +517,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorUnsupported,
-			"agent_questions_disabled",
+			agent.ErrorReasonAgentQuestionsDisabled,
 			"Codex user-input requests are disabled for this session",
 			nil,
 		)
@@ -526,7 +526,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorFailedPrecondition,
-			"interaction_not_pending",
+			agent.ErrorReasonInteractionNotPending,
 			"interaction is no longer pending",
 			nil,
 		)
@@ -579,7 +579,7 @@ func (s *session) answerInteraction(
 			s.pushInteractionSettlement(
 				interaction,
 				agent.InteractionFailed,
-				"answer_outcome_unknown",
+				agent.ErrorReasonAnswerOutcomeUnknown,
 				statePayload,
 			)
 			return agent.InteractionReceipt{Interaction: ref}, nativeOperationError("answer", answerErr)
@@ -596,7 +596,7 @@ func (s *session) answerInteraction(
 		}
 		outcome, reason := terminalInteractionOutcome(answerErr)
 		if outcome == "" {
-			outcome, reason = agent.InteractionExpired, "native_request_ended"
+			outcome, reason = agent.InteractionExpired, agent.ErrorReasonNativeRequestEnded
 		}
 		s.removeInteractionLocked(interaction)
 		statePayload := s.interactionsSettledLocked()
@@ -648,7 +648,7 @@ func interactionReply(
 			if interaction.cancel == nil {
 				return nil, adapterError(
 					agent.ErrorUnsupported,
-					"permission_cancel_unsupported",
+					ErrorReasonPermissionCancelUnsupported,
 					"this Codex permission request has no proven cancellation",
 					nil,
 				)
@@ -659,7 +659,7 @@ func interactionReply(
 		if reply == nil {
 			return nil, adapterError(
 				agent.ErrorInvalidArgument,
-				"permission_option_not_offered",
+				agent.ErrorReasonPermissionOptionNotOffered,
 				"permission option was not offered by the native request",
 				nil,
 			)
@@ -669,7 +669,7 @@ func interactionReply(
 		if concrete.Outcome != agent.FormAccept {
 			return nil, adapterError(
 				agent.ErrorUnsupported,
-				"form_outcome_unsupported",
+				ErrorReasonFormOutcomeUnsupported,
 				"Codex user-input decline and cancellation are not proven",
 				nil,
 			)
@@ -684,7 +684,7 @@ func interactionReply(
 	default:
 		return nil, adapterError(
 			agent.ErrorUnsupported,
-			"answer_kind_unsupported",
+			agent.ErrorReasonAnswerKindUnsupported,
 			"answer kind is not supported for this Codex interaction",
 			nil,
 		)
@@ -699,7 +699,7 @@ func formResponse(
 	if _, present := content["answers"]; len(content) != 1 || !present {
 		return response, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer must contain only a native answers object",
 			nil,
 		)
@@ -708,7 +708,7 @@ func formResponse(
 	if err != nil {
 		return response, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer cannot be encoded",
 			err,
 		)
@@ -716,7 +716,7 @@ func formResponse(
 	if err := json.Unmarshal(raw, &response); err != nil || response.Answers == nil {
 		return codextypes.ToolRequestUserInputResponse{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer does not match the native response shape",
 			err,
 		)
@@ -724,7 +724,7 @@ func formResponse(
 	if len(response.UnknownFields) != 0 {
 		return codextypes.ToolRequestUserInputResponse{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer contains unsupported response fields",
 			nil,
 		)
@@ -733,7 +733,7 @@ func formResponse(
 		if _, known := interaction.questions[questionID]; !known {
 			return codextypes.ToolRequestUserInputResponse{}, adapterError(
 				agent.ErrorInvalidArgument,
-				"unknown_form_question",
+				agent.ErrorReasonUnknownFormQuestion,
 				"form answer uses a question ID not present in the native request",
 				nil,
 			)
@@ -741,7 +741,7 @@ func formResponse(
 		if len(answer.UnknownFields) != 0 {
 			return codextypes.ToolRequestUserInputResponse{}, adapterError(
 				agent.ErrorInvalidArgument,
-				"invalid_form_answer",
+				agent.ErrorReasonInvalidFormAnswer,
 				"form answer contains unsupported question fields",
 				nil,
 			)
@@ -749,7 +749,7 @@ func formResponse(
 		if answer.Answers == nil {
 			return codextypes.ToolRequestUserInputResponse{}, adapterError(
 				agent.ErrorInvalidArgument,
-				"invalid_form_answer",
+				agent.ErrorReasonInvalidFormAnswer,
 				"form answers must be string arrays",
 				nil,
 			)
@@ -932,7 +932,7 @@ func (s *session) settlement(
 		return agent.InteractionAnswered, fallbackReason
 	}
 	if answerOutcomeUnknown(answerErr) {
-		return agent.InteractionFailed, "answer_outcome_unknown"
+		return agent.InteractionFailed, agent.ErrorReasonAnswerOutcomeUnknown
 	}
 	return fallback, fallbackReason
 }

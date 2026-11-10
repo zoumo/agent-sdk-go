@@ -39,7 +39,7 @@ func claudeMCPServers(servers []agent.MCPServer) ([]claude.MCPServer, error) {
 func unsupportedClaudeMCPField(index int, field string) error {
 	return adapterError(
 		agent.ErrorUnsupported,
-		fmt.Sprintf("mcp_server_%d_%s_unsupported", index, field),
+		ErrorReasonMCPServerFieldUnsupported(index, field),
 		fmt.Sprintf("Claude MCP server %d field %s is not supported", index, field),
 		nil,
 	)

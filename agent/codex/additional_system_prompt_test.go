@@ -135,12 +135,12 @@ func TestProviderRejectsInvalidAdditionalSystemPromptBeforeThreadRPC(t *testing.
 		{
 			name:       "invalid UTF-8",
 			value:      "additional-prompt-secret-t02-" + string([]byte{0xff}),
-			wantReason: "additional_system_prompt_invalid_utf8",
+			wantReason: agent.ErrorReasonAdditionalSystemPromptInvalidUTF8,
 		},
 		{
 			name:       "NUL",
 			value:      "additional-prompt-secret-t02\x00tail",
-			wantReason: "additional_system_prompt_contains_nul",
+			wantReason: agent.ErrorReasonAdditionalSystemPromptContainsNUL,
 		},
 	} {
 		for _, operation := range []string{"open", "resume"} {

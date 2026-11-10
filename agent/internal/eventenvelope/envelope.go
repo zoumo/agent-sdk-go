@@ -34,7 +34,7 @@ func (e Envelope) event(
 	eventID, err := newID()
 	if err != nil {
 		return agent.Event{}, envelopeError(
-			"event_id_failed",
+			agent.ErrorReasonEventIDFailed,
 			"create unified event identity",
 			err,
 		)
@@ -53,7 +53,7 @@ func (e Envelope) event(
 	}
 	if err := event.Validate(); err != nil {
 		return agent.Event{}, envelopeError(
-			"event_invalid",
+			agent.ErrorReasonEventInvalid,
 			"build unified event",
 			err,
 		)

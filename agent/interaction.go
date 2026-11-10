@@ -159,15 +159,19 @@ type URLAnswer struct {
 
 func (URLAnswer) answerKind() InteractionKind { return InteractionURL }
 
-// ValidateAnswer checks that answer matches the live request kind and that its
-// outcome has the fields required by that branch.
-func ValidateAnswer(kind InteractionKind, answer Answer) error {
+// MatchAnswer returns answer as one of the concrete answer values after
+// checking that it matches the live request kind and that its outcome has the
+// fields required by that branch.
+func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error) {
 	concrete, err := concreteAnswer(answer)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if concrete.answerKind() != kind {
-		return invalidArgument("answer_kind_mismatch", "answer does not match interaction kind")
+		return nil, invalidArgument(
+			"answer_kind_mismatch",
+			"answer does not match interaction kind",
+		)
 	}
 
 	switch value := concrete.(type) {
@@ -175,20 +179,20 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 		switch value.Outcome {
 		case PermissionSelected:
 			if value.OptionID == "" {
-				return invalidArgument(
+				return nil, invalidArgument(
 					"missing_permission_option_id",
 					"selected permission answer requires an option ID",
 				)
 			}
 		case PermissionCancelled:
 			if value.OptionID != "" {
-				return invalidArgument(
+				return nil, invalidArgument(
 					"unexpected_permission_option_id",
 					"canceled permission answer must not select an option",
 				)
 			}
 		default:
-			return invalidArgument(
+			return nil, invalidArgument(
 				"invalid_permission_outcome",
 				"permission answer outcome is not supported",
 			)
@@ -197,34 +201,50 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 		switch value.Outcome {
 		case FormAccept:
 			if value.Content == nil {
-				return invalidArgument("missing_form_answer", "accepted form answer requires content")
+				return nil, invalidArgument(
+					"missing_form_answer",
+					"accepted form answer requires content",
+				)
 			}
 			if err := validateJSONValue(value.Content); err != nil {
-				return invalidArgument(
+				return nil, invalidArgument(
 					"invalid_form_answer",
 					"form answer content is not JSON encodable",
 				)
 			}
 		case FormDecline, FormCancel:
 			if value.Content != nil {
-				return invalidArgument(
+				return nil, invalidArgument(
 					"unexpected_form_answer",
 					"declined or canceled form answer must not contain content",
 				)
 			}
 		default:
-			return invalidArgument("invalid_form_outcome", "form answer outcome is not supported")
+			return nil, invalidArgument(
+				"invalid_form_outcome",
+				"form answer outcome is not supported",
+			)
 		}
 	case URLAnswer:
 		switch value.Outcome {
 		case URLAccept, URLDecline, URLCancel:
 		default:
-			return invalidArgument("invalid_url_outcome", "URL answer outcome is not supported")
+			return nil, invalidArgument(
+				"invalid_url_outcome",
+				"URL answer outcome is not supported",
+			)
 		}
 	default:
-		return invalidArgument("unsupported_answer", "answer kind is not supported")
+		return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
 	}
-	return nil
+	return concrete, nil
+}
+
+// ValidateAnswer checks that answer matches the live request kind and that its
+// outcome has the fields required by that branch.
+func ValidateAnswer(kind InteractionKind, answer Answer) error {
+	_, err := MatchAnswer(kind, answer)
+	return err
 }
 
 func concreteAnswer(answer Answer) (Answer, error) {

@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/lifecycle"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 )
@@ -23,24 +23,12 @@ const (
 	maxInitBufferedBytes  = 4 << 20
 )
 
-type providerState uint8
-
-const (
-	providerNew providerState = iota
-	providerStarted
-	providerStopped
-)
-
 // Provider owns the lifecycle of the Claude sessions it creates. Each Claude
 // session owns its native CLI process.
 type Provider struct {
-	mu       sync.Mutex
-	config   Config
-	streams  streamFactory
-	state    providerState
-	opening  int
-	sessions map[*session]struct{}
-	stopErr  error
+	config    Config
+	streams   streamFactory
+	lifecycle *lifecycle.Lifecycle[struct{}, *session]
 }
 
 type streamOpen struct {
@@ -54,51 +42,23 @@ type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, err
 
 // New constructs a Claude provider without starting a native process.
 func New(config Config) *Provider {
-	return &Provider{config: cloneConfig(config)}
+	provider := &Provider{config: cloneConfig(config)}
+	provider.lifecycle = lifecycle.New[struct{}, *session](
+		providerCapabilities(),
+		nil,
+		nil,
+	)
+	return provider
 }
 
 // Start marks this provider ready to open sessions.
-func (p *Provider) Start(context.Context) (agent.Capabilities, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	switch p.state {
-	case providerStarted:
-		return providerCapabilities(), nil
-	case providerStopped:
-		return nil, adapterError(
-			agent.ErrorClosed,
-			"provider_stopped",
-			"provider has been stopped",
-			nil,
-		)
-	default:
-		p.state = providerStarted
-		return providerCapabilities(), nil
-	}
+func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
+	return p.lifecycle.Start(ctx)
 }
 
-// Stop rejects shutdown while any session is opening or open. It is terminal
-// and idempotent.
-func (p *Provider) Stop(context.Context) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	switch p.state {
-	case providerStopped:
-		return p.stopErr
-	case providerNew:
-		p.state = providerStopped
-		return nil
-	}
-	if p.opening != 0 || len(p.sessions) != 0 {
-		return adapterError(
-			agent.ErrorFailedPrecondition,
-			"provider_has_open_sessions",
-			"provider cannot stop while sessions are open",
-			nil,
-		)
-	}
-	p.state = providerStopped
-	return p.stopErr
+// Stop rejects shutdown while any session is opening or open.
+func (p *Provider) Stop(ctx context.Context) error {
+	return p.lifecycle.Stop(ctx)
 }
 
 // Open creates a new Claude session after native initialization confirms its
@@ -110,7 +70,13 @@ func (p *Provider) Open(
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
-	return p.open(ctx, options, "")
+	mcpServers, err := claudeMCPServers(options.MCPServers)
+	if err != nil {
+		return nil, err
+	}
+	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
+		return p.openNativeSession(ctx, options, "", nil, mcpServers)
+	})
 }
 
 // Resume confirms the supported CLI version and saved transcript before launch,
@@ -141,45 +107,51 @@ func (p *Provider) Resume(
 	if err := p.validateResumeConfig(); err != nil {
 		return nil, err
 	}
-	if err := p.reserveOpen(); err != nil {
-		return nil, err
-	}
-	attempt, err := p.prepareResume(ctx, options)
-	if err != nil {
-		p.finishOpen()
-		return nil, err
-	}
-	return p.openReserved(
-		ctx,
-		options.OpenOptions,
-		options.SessionID,
-		attempt,
-		mcpServers,
-	)
+	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
+		attempt, err := p.prepareResume(ctx, options)
+		if err != nil {
+			return nil, err
+		}
+		return p.openNativeSession(
+			ctx,
+			options.OpenOptions,
+			options.SessionID,
+			attempt,
+			mcpServers,
+		)
+	})
 }
 
-func (p *Provider) open(
+func (p *Provider) openLifecycle(
 	ctx context.Context,
-	options agent.OpenOptions,
-	resumeID string,
+	open func(context.Context) (*session, error),
 ) (agent.Session, error) {
-	mcpServers, err := claudeMCPServers(options.MCPServers)
+	var created *session
+	err := p.lifecycle.Open(ctx, func(
+		ctx context.Context,
+		_ struct{},
+	) (*session, error) {
+		opened, err := open(ctx)
+		if err != nil {
+			return nil, err
+		}
+		created = opened
+		return opened, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err := p.reserveOpen(); err != nil {
-		return nil, err
-	}
-	return p.openReserved(ctx, options, resumeID, nil, mcpServers)
+	created.start()
+	return created, nil
 }
 
-func (p *Provider) openReserved(
+func (p *Provider) openNativeSession(
 	ctx context.Context,
 	options agent.OpenOptions,
 	resumeID string,
 	resume *resumeAttempt,
 	mcpServers []claude.MCPServer,
-) (agent.Session, error) {
+) (*session, error) {
 	nativeOptions := p.nativeOptions(
 		options.Cwd,
 		resumeID,
@@ -195,7 +167,6 @@ func (p *Provider) openReserved(
 	if p.streams != nil {
 		opened, err := p.streams(ctx, claude.SessionOptions(nativeOptions))
 		if err != nil {
-			p.finishOpen()
 			return nil, nativeOperationError("open", err)
 		}
 		stream = &opened
@@ -216,7 +187,6 @@ func (p *Provider) openReserved(
 		native, err = claude.OpenStreams(ctx, claude.SessionOptions(nativeOptions), stream.Transport)
 	}
 	if err != nil {
-		p.finishOpen()
 		return nil, nativeOperationError("open", err)
 	}
 	if stream != nil && stream.Started != nil {
@@ -240,12 +210,10 @@ func (p *Provider) openReserved(
 	}
 	cancelInit()
 	if err != nil {
-		p.finishOpen()
 		return nil, closeAfterOpenFailure(native, err)
 	}
 	if init != nil {
 		if resumeID != "" && init.SessionID != resumeID {
-			p.finishOpen()
 			return nil, closeAfterOpenFailure(native, adapterError(
 				agent.ErrorNativeRejected,
 				"resume_identity_mismatch",
@@ -254,7 +222,6 @@ func (p *Provider) openReserved(
 			))
 		}
 		if !sameDirectory(init.System.CWD, options.Cwd) {
-			p.finishOpen()
 			return nil, closeAfterOpenFailure(native, adapterError(
 				agent.ErrorNativeRejected,
 				"session_cwd_mismatch",
@@ -265,7 +232,6 @@ func (p *Provider) openReserved(
 	}
 	if resume != nil {
 		if err := resume.target.verifyPostcheck(ctx); err != nil {
-			p.finishOpen()
 			return nil, closeAfterOpenFailure(native, err)
 		}
 	}
@@ -280,11 +246,8 @@ func (p *Provider) openReserved(
 		guard,
 	)
 	if err != nil {
-		p.finishOpen()
 		return nil, closeAfterOpenFailure(native, err)
 	}
-	p.completeOpen(created)
-	created.start()
 	return created, nil
 }
 
@@ -322,50 +285,8 @@ func (p *Provider) validateResumeConfig() error {
 	}
 }
 
-func (p *Provider) reserveOpen() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	switch p.state {
-	case providerStarted:
-		p.opening++
-		return nil
-	case providerStopped:
-		return adapterError(
-			agent.ErrorClosed,
-			"provider_stopped",
-			"provider has been stopped",
-			nil,
-		)
-	default:
-		return adapterError(
-			agent.ErrorFailedPrecondition,
-			"provider_not_started",
-			"provider must be started before opening a session",
-			nil,
-		)
-	}
-}
-
-func (p *Provider) finishOpen() {
-	p.mu.Lock()
-	p.opening--
-	p.mu.Unlock()
-}
-
-func (p *Provider) completeOpen(created *session) {
-	p.mu.Lock()
-	p.opening--
-	if p.sessions == nil {
-		p.sessions = make(map[*session]struct{})
-	}
-	p.sessions[created] = struct{}{}
-	p.mu.Unlock()
-}
-
 func (p *Provider) sessionClosed(closed *session) {
-	p.mu.Lock()
-	delete(p.sessions, closed)
-	p.mu.Unlock()
+	p.lifecycle.SessionClosed(closed)
 }
 
 func providerCapabilities() agent.Capabilities {

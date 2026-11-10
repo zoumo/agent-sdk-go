@@ -226,7 +226,6 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 	first := &fakeSession{id: 1}
 	second := &fakeSession{id: 2}
 	for _, session := range []*fakeSession{first, second} {
-		session := session
 		err := provider.Open(
 			context.Background(),
 			func(_ context.Context, active *fakeResource) (*fakeSession, error) {
@@ -343,6 +342,131 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 	provider.SessionClosed(opened)
 	require.NoError(t, provider.Stop(context.Background()))
 	assert.Equal(t, int32(1), releaseCalls.Load())
+}
+
+func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	releaseFailure := errors.New("synthetic release failure")
+	releaseEntered := make(chan struct{})
+	releaseReturned := make(chan struct{})
+	var releaseEntryOnce, releaseReturnOnce sync.Once
+	finishRelease := func() {
+		releaseReturnOnce.Do(func() {
+			close(releaseReturned)
+		})
+	}
+	defer finishRelease()
+
+	var releaseCalls atomic.Int32
+	provider := lifecycle.New[*fakeResource, *fakeSession](
+		agent.Capabilities{agent.CapabilityTextInput: true},
+		func(context.Context) (*fakeResource, error) {
+			return &fakeResource{}, nil
+		},
+		func(context.Context, *fakeResource) error {
+			releaseCalls.Add(1)
+			releaseEntryOnce.Do(func() {
+				close(releaseEntered)
+			})
+			<-releaseReturned
+			return releaseFailure
+		},
+	)
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+
+	stopResult := make(chan error, 1)
+	go func() {
+		stopResult <- provider.Stop(ctx)
+	}()
+	receiveWithin(t, releaseEntered, "release callback entry")
+	assert.Equal(t, int32(1), releaseCalls.Load())
+
+	type startResult struct {
+		capabilities agent.Capabilities
+		err          error
+	}
+	startEntered := make(chan struct{})
+	starts := make(chan startResult, 1)
+	go func() {
+		close(startEntered)
+		capabilities, startErr := provider.Start(ctx)
+		starts <- startResult{capabilities: capabilities, err: startErr}
+	}()
+	receiveWithin(t, startEntered, "later Start entry")
+
+	openEntered := make(chan struct{})
+	var openCallbacks atomic.Int32
+	opens := make(chan error, 1)
+	go func() {
+		close(openEntered)
+		opens <- provider.Open(
+			ctx,
+			func(context.Context, *fakeResource) (*fakeSession, error) {
+				openCallbacks.Add(1)
+				return &fakeSession{}, nil
+			},
+		)
+	}()
+	receiveWithin(t, openEntered, "later Open entry")
+
+	repeatedStopEntered := make(chan struct{})
+	repeatedStops := make(chan error, 1)
+	go func() {
+		close(repeatedStopEntered)
+		repeatedStops <- provider.Stop(ctx)
+	}()
+	receiveWithin(t, repeatedStopEntered, "repeated Stop entry")
+
+	select {
+	case result := <-starts:
+		require.FailNowf(t, "Start crossed an admitted Stop", "result: %+v", result)
+	case openErr := <-opens:
+		require.FailNowf(t, "Open crossed an admitted Stop", "error: %v", openErr)
+	case repeatedStopErr := <-repeatedStops:
+		require.FailNowf(t, "repeated Stop returned early", "error: %v", repeatedStopErr)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	finishRelease()
+
+	firstStopErr := receiveWithin(t, stopResult, "admitted Stop completion")
+	require.ErrorIs(t, firstStopErr, releaseFailure)
+	start := receiveWithin(t, starts, "later Start result")
+	assert.Nil(t, start.capabilities)
+	requireLifecycleError(
+		t,
+		start.err,
+		agent.ErrorClosed,
+		"provider_stopped",
+	)
+	requireLifecycleError(
+		t,
+		receiveWithin(t, opens, "later Open result"),
+		agent.ErrorClosed,
+		"provider_stopped",
+	)
+	assert.Zero(t, openCallbacks.Load())
+
+	repeatedStopErr := receiveWithin(t, repeatedStops, "repeated Stop result")
+	require.ErrorIs(t, repeatedStopErr, releaseFailure)
+	require.Same(t, firstStopErr, repeatedStopErr)
+	require.Same(t, firstStopErr, provider.Stop(ctx))
+	assert.Equal(t, int32(1), releaseCalls.Load())
+
+	_, err = provider.Start(ctx)
+	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	err = provider.Open(
+		ctx,
+		func(context.Context, *fakeResource) (*fakeSession, error) {
+			openCallbacks.Add(1)
+			return &fakeSession{}, nil
+		},
+	)
+	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	assert.Zero(t, openCallbacks.Load())
 }
 
 func TestConcurrentStartAcquiresOnce(t *testing.T) {

@@ -23,9 +23,9 @@ and dependency boundaries.
 - The `agent` core production code must use only the standard library. It must not
   import either native SDK, MASS or recording/replay code. Provider adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
-  mechanics (`agent/internal/lifecycle`, `internal/queue` and
-  `internal/uuidv4`), but adapters must not import each other or the other native
-  SDK, and native packages must not import `agent`.
+  mechanics (`agent/internal/eventenvelope`, `agent/internal/lifecycle`,
+  `internal/queue` and `internal/uuidv4`), but adapters must not import each other
+  or the other native SDK, and native packages must not import `agent`.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**
@@ -46,6 +46,10 @@ and dependency boundaries.
   packages must not enter SDK production dependency trees. Native types remain
   standard-library-only.
   FIFO ownership and resource semantics live in [event delivery](modules/native-session/design.md#delivery-event-delivery).
+- `agent/internal/eventenvelope` shares only unified event-envelope construction:
+  identity, fallback time, validation and error classification. It may depend on
+  the standard library, `agent` and `internal/uuidv4`; provider-specific payload
+  conversion and Meta/raw extraction stay in each adapter.
 - Native parsing, unknown data, aliases, execution identities, transport and
   process lifecycle stay with each native SDK. Session state ownership and
   internal coordination live in the [Session module design](modules/native-session/design.md).

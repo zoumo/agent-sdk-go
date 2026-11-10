@@ -30,13 +30,14 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu   sync.Mutex
-	mu            sync.Mutex
-	eventsClaimed bool
-	closed        bool
-	explicitClose bool
-	submitting    bool
-	submitUnknown bool
+	executionMu      sync.Mutex
+	mu               sync.Mutex
+	eventsClaimed    bool
+	closed           bool
+	explicitClose    bool
+	providerReleased bool
+	submitting       bool
+	submitUnknown    bool
 	// workEpoch prevents a late submit failure from rearming unknown state after
 	// the observer has already accepted native turn evidence.
 	workEpoch    uint64
@@ -61,6 +62,9 @@ type session struct {
 	observationDone chan struct{}
 	closeOnce       sync.Once
 	closeErr        error
+
+	nativeCleanupOnce sync.Once
+	nativeCleanupErr  error
 }
 
 func newSession(
@@ -81,8 +85,11 @@ func newSession(
 		done:            make(chan struct{}),
 		observationDone: make(chan struct{}),
 	}
-	go created.observe()
 	return created
+}
+
+func (s *session) start() {
+	go s.observe()
 }
 
 func (s *session) ID() string { return s.native.ThreadID() }
@@ -353,10 +360,7 @@ func (s *session) SetModel(
 func (s *session) Close(context.Context) error {
 	s.closeOnce.Do(func() {
 		invalidated := s.closeForOperations(true)
-		s.closeErr = s.native.Close()
-		if s.closeErr != nil {
-			s.closeErr = nativeOperationError("close", s.closeErr)
-		}
+		s.closeErr = s.cleanupNative()
 		<-s.observationDone
 		events := s.closedInteractionEvents(
 			invalidated,
@@ -367,7 +371,7 @@ func (s *session) Close(context.Context) error {
 		_ = s.pushEvents(events)
 		s.terminate(s.native.Err())
 		_ = s.events.Close(sessionTerminationError(s.native.Err()))
-		s.provider.sessionClosed(s)
+		s.releaseProviderSession(false)
 	})
 	return s.closeErr
 }
@@ -467,8 +471,10 @@ func (s *session) endObservation(cause error, reason string) {
 		time.Now().UTC(),
 	)
 	_ = s.pushEvents(events)
-	s.terminate(cause)
+	_ = s.cleanupNative()
 	s.closeObservedQueue(cause)
+	s.releaseProviderSession(true)
+	s.terminate(cause)
 }
 
 func (s *session) closeObservedQueue(cause error) {
@@ -478,6 +484,25 @@ func (s *session) closeObservedQueue(cause error) {
 	if !explicit {
 		_ = s.events.Close(cause)
 	}
+}
+
+func (s *session) cleanupNative() error {
+	s.nativeCleanupOnce.Do(func() {
+		if err := s.native.Close(); err != nil {
+			s.nativeCleanupErr = nativeOperationError("close", err)
+		}
+	})
+	return s.nativeCleanupErr
+}
+
+func (s *session) releaseProviderSession(requireImplicit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.providerReleased || (requireImplicit && s.explicitClose) {
+		return
+	}
+	s.providerReleased = true
+	s.provider.sessionClosed(s)
 }
 
 func (s *session) terminate(cause error) {

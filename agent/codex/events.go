@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 func (s *session) convertReceived(received codex.Received) ([]agent.Event, error) {
@@ -789,24 +789,12 @@ func (s *session) newEvent(
 	eventTime time.Time,
 	extras map[string]any,
 ) (agent.Event, error) {
-	eventID, err := uuidv4.New()
-	if err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_id_failed",
-			"create unified event identity",
-			err,
-		)
-	}
 	if method == "" {
 		method = requestMethod(received)
 	}
 	raw := received.Raw
 	if len(raw) == 0 && received.Event != nil {
 		raw = received.Event.Raw
-	}
-	if eventTime.IsZero() {
-		eventTime = time.Now().UTC()
 	}
 	codexMeta := map[string]any{
 		"method": method,
@@ -838,25 +826,12 @@ func (s *session) newEvent(
 		}
 		codexMeta[key] = value
 	}
-	event := agent.Event{
-		EventID:   eventID,
-		SessionID: sessionID,
-		Time:      eventTime,
-		ItemID:    itemID,
-		Payload:   payload,
-		Meta: map[string]any{
-			"codex": codexMeta,
-		},
-	}
-	if err := event.Validate(); err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_invalid",
-			"convert native Codex event",
-			err,
-		)
-	}
-	return event, nil
+	return (eventenvelope.Envelope{SessionID: sessionID}).Event(
+		itemID,
+		payload,
+		eventTime,
+		map[string]any{"codex": codexMeta},
+	)
 }
 
 func optionalSeconds(value codextypes.Optional[int64]) time.Time {

@@ -148,6 +148,7 @@ func (p *Provider) Open(
 	if err != nil {
 		return nil, err
 	}
+	created.start()
 	return created, nil
 }
 
@@ -201,6 +202,7 @@ func (p *Provider) Resume(
 	if err != nil {
 		return nil, err
 	}
+	created.start()
 	return created, nil
 }
 

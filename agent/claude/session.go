@@ -35,6 +35,7 @@ type session struct {
 	eventsClaimed       bool
 	closed              bool
 	explicitClose       bool
+	providerReleased    bool
 	submitting          bool
 	submitUnknown       bool
 	workActive          bool
@@ -58,6 +59,9 @@ type session struct {
 	observationDone chan struct{}
 	closeOnce       sync.Once
 	closeErr        error
+
+	nativeCleanupOnce sync.Once
+	nativeCleanupErr  error
 }
 
 func newSession(
@@ -302,17 +306,14 @@ func (s *session) Interrupt(
 func (s *session) Close(context.Context) error {
 	s.closeOnce.Do(func() {
 		invalidated := s.closeForOperations(true)
-		s.closeErr = s.native.Close()
-		if s.closeErr != nil {
-			s.closeErr = nativeOperationError("close", s.closeErr)
-		}
+		s.closeErr = s.cleanupNative()
 		<-s.observationDone
 		events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
 		_ = s.pushEvents(events)
 		cause := sessionTerminationError(s.native.Err())
 		s.terminate(cause)
 		_ = s.events.Close(cause)
-		s.provider.sessionClosed(s)
+		s.releaseProviderSession(false)
 	})
 	return s.closeErr
 }
@@ -350,17 +351,34 @@ func (s *session) observe() {
 	invalidated := s.closeForOperations(false)
 	events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
 	_ = s.pushEvents(events)
-	if cause != nil {
-		_ = s.native.Close()
-	}
-	s.terminate(cause)
+	_ = s.cleanupNative()
 	s.mu.Lock()
 	explicit := s.explicitClose
 	s.mu.Unlock()
 	if !explicit {
 		_ = s.events.Close(sessionTerminationError(cause))
-		s.provider.sessionClosed(s)
 	}
+	s.releaseProviderSession(true)
+	s.terminate(cause)
+}
+
+func (s *session) cleanupNative() error {
+	s.nativeCleanupOnce.Do(func() {
+		if err := s.native.Close(); err != nil {
+			s.nativeCleanupErr = nativeOperationError("close", err)
+		}
+	})
+	return s.nativeCleanupErr
+}
+
+func (s *session) releaseProviderSession(requireImplicit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.providerReleased || (requireImplicit && s.explicitClose) {
+		return
+	}
+	s.providerReleased = true
+	s.provider.sessionClosed(s)
 }
 
 func (s *session) receiveUntilTerminal() error {

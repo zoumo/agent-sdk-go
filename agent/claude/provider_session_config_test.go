@@ -76,23 +76,34 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 	})
 }
 
-func TestClaudeOpenAndResumeOmitEmptySessionConfig(t *testing.T) {
+func TestClaudeOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 	tests := []struct {
-		name      string
-		resume    bool
-		sessionID string
-		wantArgs  []string
+		name     string
+		resume   bool
+		config   agent.SessionConfig
+		wantArgs []string
 	}{
 		{
-			name:      "open",
-			sessionID: "native-open",
-			wantArgs:  claudeExpectedArgs(),
+			name:     "open model only",
+			config:   agent.SessionConfig{Model: "model-only"},
+			wantArgs: claudeExpectedArgs("--model=model-only"),
 		},
 		{
-			name:      "resume",
-			resume:    true,
-			sessionID: claudeResumePeerSessionID,
-			wantArgs:  claudeExpectedArgs("--resume=" + claudeResumePeerSessionID),
+			name:     "open effort only",
+			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			wantArgs: claudeExpectedArgs("--effort=effort-only"),
+		},
+		{
+			name:     "resume model only",
+			resume:   true,
+			config:   agent.SessionConfig{Model: "model-only"},
+			wantArgs: claudeExpectedArgs("--model=model-only", "--resume="+claudeResumePeerSessionID),
+		},
+		{
+			name:     "resume effort only",
+			resume:   true,
+			config:   agent.SessionConfig{ReasoningEffort: "effort-only"},
+			wantArgs: claudeExpectedArgs("--effort=effort-only", "--resume="+claudeResumePeerSessionID),
 		},
 	}
 
@@ -100,44 +111,44 @@ func TestClaudeOpenAndResumeOmitEmptySessionConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			cwd := t.TempDir()
-			initJSON := `{"type":"system","subtype":"init","session_id":` +
-				jsonString(t, test.sessionID) + `,"cwd":` + jsonString(t, cwd) +
-				`,"claude_code_version":"2.1.258","model":"default/model"}`
-			var provider *agentclaude.Provider
-			var capturedArgv func(*testing.T) []string
-			if test.resume {
-				var argvPath string
-				provider, argvPath = startClaudeResumeExecutionProvider(
-					t,
-					ctx,
-					cwd,
-					test.sessionID,
-					initJSON,
-				)
-				capturedArgv = func(t *testing.T) []string {
-					return readClaudeArgv(t, argvPath)
-				}
-			} else {
-				frames := append([]string(nil), mockClaudeInit...)
-				frames = append(frames, "<"+initJSON)
-				var capture *claudeExecutionCapture
-				provider, capture = startClaudeExecutionProvider(t, ctx, frames...)
-				capturedArgv = capture.argv
-			}
+			capturedArgv := startClaudeSessionConfigForArgv(
+				t,
+				ctx,
+				test.resume,
+				test.config,
+			)
+			assert.Equal(t, test.wantArgs, capturedArgv(t))
+		})
+	}
+}
 
-			var session agent.Session
-			var err error
-			if test.resume {
-				session, err = provider.Resume(ctx, agent.ResumeOptions{
-					SessionID:   test.sessionID,
-					OpenOptions: agent.OpenOptions{Cwd: cwd},
-				})
-			} else {
-				session, err = provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
-			}
-			require.NoError(t, err)
-			closeSessionOnCleanup(t, session)
+func TestClaudeOpenAndResumeOmitEmptySessionConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		resume   bool
+		wantArgs []string
+	}{
+		{
+			name:     "open",
+			wantArgs: claudeExpectedArgs(),
+		},
+		{
+			name:     "resume",
+			resume:   true,
+			wantArgs: claudeExpectedArgs("--resume=" + claudeResumePeerSessionID),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			capturedArgv := startClaudeSessionConfigForArgv(
+				t,
+				ctx,
+				test.resume,
+				agent.SessionConfig{},
+			)
 			assert.Equal(t, test.wantArgs, capturedArgv(t))
 		})
 	}
@@ -303,7 +314,7 @@ func TestClaudeSetConfigRejectsInvalidAndClosedBeforeNativeWrite(t *testing.T) {
 }
 
 func TestClaudeSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) {
-	t.Run("native rejection", func(t *testing.T) {
+	t.Run("native rejection then success", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		cwd := t.TempDir()
@@ -314,6 +325,8 @@ func TestClaudeSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) 
 				`"model":"initial/model"}`,
 			`>{"type":"control_request","request_id":"go_1","request":{"subtype":"set_model","model":"rejected/model"}}`,
 			`<{"type":"control_response","response":{"subtype":"error","request_id":"go_1","error":"unsupported model"}}`,
+			`>{"type":"control_request","request_id":"go_2","request":{"subtype":"set_model","model":"accepted/model"}}`,
+			`<{"type":"control_response","response":{"subtype":"success","request_id":"go_2","response":{}}}`,
 		)
 		provider, _ := startClaudeExecutionProvider(t, ctx, frames...)
 		session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
@@ -329,6 +342,18 @@ func TestClaudeSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) 
 		require.NotNil(t, receipt.Acceptance.NativeAccepted)
 		assert.True(t, *receipt.Acceptance.Sent)
 		assert.False(t, *receipt.Acceptance.NativeAccepted)
+
+		recoveryChange := agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: "accepted/model",
+		}
+		recoveryReceipt, err := session.(agent.ConfigController).SetConfig(
+			ctx,
+			recoveryChange,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, recoveryChange, recoveryReceipt.Change)
+		requireAccepted(t, recoveryReceipt.Acceptance)
 	})
 
 	t.Run("outcome unknown", func(t *testing.T) {
@@ -427,6 +452,65 @@ func requireAccepted(t *testing.T, acceptance agent.Acceptance) {
 	require.NotNil(t, acceptance.NativeAccepted)
 	assert.True(t, *acceptance.Sent)
 	assert.True(t, *acceptance.NativeAccepted)
+}
+
+func startClaudeSessionConfigForArgv(
+	t *testing.T,
+	ctx context.Context,
+	resume bool,
+	config agent.SessionConfig,
+) func(*testing.T) []string {
+	t.Helper()
+	cwd := t.TempDir()
+	sessionID := "native-open"
+	if resume {
+		sessionID = claudeResumePeerSessionID
+	}
+	initJSON := `{"type":"system","subtype":"init","session_id":` +
+		jsonString(t, sessionID) + `,"cwd":` + jsonString(t, cwd) +
+		`,"claude_code_version":"2.1.258","model":"default/model"}`
+
+	var provider *agentclaude.Provider
+	var capturedArgv func(*testing.T) []string
+	if resume {
+		var argvPath string
+		provider, argvPath = startClaudeResumeExecutionProvider(
+			t,
+			ctx,
+			cwd,
+			sessionID,
+			initJSON,
+		)
+		capturedArgv = func(t *testing.T) []string {
+			return readClaudeArgv(t, argvPath)
+		}
+	} else {
+		frames := append([]string(nil), mockClaudeInit...)
+		frames = append(frames, "<"+initJSON)
+		var capture *claudeExecutionCapture
+		provider, capture = startClaudeExecutionProvider(t, ctx, frames...)
+		capturedArgv = capture.argv
+	}
+
+	var session agent.Session
+	var err error
+	if resume {
+		session, err = provider.Resume(ctx, agent.ResumeOptions{
+			SessionID: sessionID,
+			OpenOptions: agent.OpenOptions{
+				Cwd:    cwd,
+				Config: config,
+			},
+		})
+	} else {
+		session, err = provider.Open(ctx, agent.OpenOptions{
+			Cwd:    cwd,
+			Config: config,
+		})
+	}
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	return capturedArgv
 }
 
 func startClaudeExecutionProvider(

@@ -412,6 +412,11 @@ func TestClaudeEffortPreflightFailureIsNotSent(t *testing.T) {
 	receipt, err := session.(agent.ConfigController).SetConfig(ctx, change)
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+	// The read-only get_settings request was sent but lost its response. Its
+	// native outcome is unknown; the effort mutation itself was never sent.
+	var nativeErr *claude.Error
+	require.ErrorAs(t, err, &nativeErr)
+	assert.True(t, nativeErr.OutcomeUnknown)
 	assert.Equal(t, change, receipt.Change)
 	require.NotNil(t, receipt.Acceptance.Sent)
 	assert.False(t, *receipt.Acceptance.Sent)

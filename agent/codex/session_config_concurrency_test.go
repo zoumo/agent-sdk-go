@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func TestSetConfigConcurrentCallsSettleTheirOwnChanges(t *testing.T) {
 			if result.change.Value == "rejected/model" {
 				require.Error(t, result.err)
 				assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(result.err))
-				assert.Equal(t, agent.Acceptance{Sent: boolPointer(true), NativeAccepted: boolPointer(false)}, result.receipt.Acceptance)
+				assert.Equal(t, agent.Acceptance{Sent: new(true), NativeAccepted: new(false)}, result.receipt.Acceptance)
 			} else {
 				require.NoError(t, result.err)
 				assertAccepted(t, result.receipt.Acceptance)
@@ -98,9 +99,9 @@ func TestSetConfigCloseRaceSettlesWithConsistentAcceptance(t *testing.T) {
 		assert.Equal(t, change, result.receipt.Change)
 		switch agent.CodeOf(result.err) {
 		case agent.ErrorOutcomeUnknown:
-			assert.Equal(t, agent.Acceptance{Sent: boolPointer(true)}, result.receipt.Acceptance)
+			assert.Equal(t, agent.Acceptance{Sent: new(true)}, result.receipt.Acceptance)
 		case agent.ErrorClosed:
-			assert.Equal(t, agent.Acceptance{Sent: boolPointer(false)}, result.receipt.Acceptance)
+			assert.Equal(t, agent.Acceptance{Sent: new(false)}, result.receipt.Acceptance)
 		default:
 			t.Errorf("unexpected close-race classification: %v", result.err)
 		}
@@ -117,11 +118,9 @@ func TestSetConfigCloseRaceSettlesWithConsistentAcceptance(t *testing.T) {
 	receipt, err := session.(agent.ConfigController).SetConfig(ctx, change)
 	require.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
 	assert.Equal(t, change, receipt.Change)
-	assert.Equal(t, agent.Acceptance{Sent: boolPointer(false)}, receipt.Acceptance)
+	assert.Equal(t, agent.Acceptance{Sent: new(false)}, receipt.Acceptance)
 	assert.Empty(t, requests)
 }
-
-func boolPointer(value bool) *bool { return &value }
 
 // This synthetic peer accepts arbitrary request order. In the concurrent case
 // it holds both model calls, then replies in reverse arrival order; in the close
@@ -184,8 +183,8 @@ func openCodexConfigConcurrencyPeer(t *testing.T, ctx context.Context, hold bool
 					if len(models) < 2 {
 						continue
 					}
-					for index := len(models) - 1; index >= 0; index-- {
-						if err = send(models[index].ID, `{}`, models[index].Change.Value == "rejected/model"); err != nil {
+					for _, model := range slices.Backward(models) {
+						if err = send(model.ID, `{}`, model.Change.Value == "rejected/model"); err != nil {
 							break
 						}
 					}

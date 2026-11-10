@@ -61,8 +61,14 @@ func configAcceptance(err error) agent.Acceptance {
 		sent = false
 		return agent.Acceptance{Sent: &sent}
 	case codex.Responded:
-		accepted := false
-		return agent.Acceptance{Sent: &sent, NativeAccepted: &accepted}
+		// A malformed success result also has Responded dispatch evidence;
+		// only an explicit RPC error establishes native rejection.
+		var rpcErr *codex.RPCError
+		if errors.As(err, &rpcErr) {
+			accepted := false
+			return agent.Acceptance{Sent: &sent, NativeAccepted: &accepted}
+		}
+		return agent.Acceptance{Sent: &sent}
 	default:
 		return agent.Acceptance{Sent: &sent}
 	}

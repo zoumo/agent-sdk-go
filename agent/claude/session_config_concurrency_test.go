@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"testing"
 	"time"
 
@@ -49,7 +50,7 @@ func TestClaudeSetConfigConcurrentCallsSettleTheirOwnChanges(t *testing.T) {
 			if result.change.Value == "rejected/model" {
 				require.Error(t, result.err)
 				assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(result.err))
-				assert.Equal(t, agent.Acceptance{Sent: boolPointer(true), NativeAccepted: boolPointer(false)}, result.receipt.Acceptance)
+				assert.Equal(t, agent.Acceptance{Sent: new(true), NativeAccepted: new(false)}, result.receipt.Acceptance)
 			} else {
 				require.NoError(t, result.err)
 				requireAccepted(t, result.receipt.Acceptance)
@@ -99,13 +100,13 @@ func TestClaudeSetConfigCloseRaceSettlesWithConsistentAcceptance(t *testing.T) {
 		assert.Equal(t, change, result.receipt.Change)
 		switch agent.CodeOf(result.err) {
 		case agent.ErrorOutcomeUnknown:
-			assert.Equal(t, agent.Acceptance{Sent: boolPointer(true)}, result.receipt.Acceptance)
+			assert.Equal(t, agent.Acceptance{Sent: new(true)}, result.receipt.Acceptance)
 		case agent.ErrorClosed:
 			var dispatch *claude.DispatchError
 			if errors.As(result.err, &dispatch) {
-				assert.Equal(t, agent.Acceptance{Sent: boolPointer(dispatch.State != claude.NotSent)}, result.receipt.Acceptance)
+				assert.Equal(t, agent.Acceptance{Sent: new(dispatch.State != claude.NotSent)}, result.receipt.Acceptance)
 			} else {
-				assert.Equal(t, agent.Acceptance{Sent: boolPointer(false)}, result.receipt.Acceptance)
+				assert.Equal(t, agent.Acceptance{Sent: new(false)}, result.receipt.Acceptance)
 			}
 		default:
 			t.Errorf("unexpected close-race classification: %v", result.err)
@@ -123,11 +124,9 @@ func TestClaudeSetConfigCloseRaceSettlesWithConsistentAcceptance(t *testing.T) {
 	receipt, err := session.(agent.ConfigController).SetConfig(ctx, change)
 	require.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
 	assert.Equal(t, change, receipt.Change)
-	assert.Equal(t, agent.Acceptance{Sent: boolPointer(false)}, receipt.Acceptance)
+	assert.Equal(t, agent.Acceptance{Sent: new(false)}, receipt.Acceptance)
 	assert.Empty(t, requests)
 }
-
-func boolPointer(value bool) *bool { return &value }
 
 // A synthetic protocol peer keeps model calls pending together and answers in
 // reverse arrival order. Effort still goes through native settings preflight.
@@ -180,8 +179,8 @@ func openClaudeConfigConcurrencyPeer(t *testing.T, ctx context.Context, hold boo
 				if len(models) < 2 {
 					continue
 				}
-				for index := len(models) - 1; index >= 0; index-- {
-					if err = send(models[index].ID, `{}`, models[index].Model == "rejected/model"); err != nil {
+				for _, model := range slices.Backward(models) {
+					if err = send(model.ID, `{}`, model.Model == "rejected/model"); err != nil {
 						break
 					}
 				}

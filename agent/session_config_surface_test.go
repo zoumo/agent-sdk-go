@@ -103,8 +103,8 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 		structure, ok := object.Type().Underlying().(*types.Struct)
 		require.True(t, ok)
 		var fields []string
-		for index := range structure.NumFields() {
-			fields = append(fields, structure.Field(index).Name())
+		for field := range structure.Fields() {
+			fields = append(fields, field.Name())
 		}
 		assert.Equal(t, want, fields, name)
 	}

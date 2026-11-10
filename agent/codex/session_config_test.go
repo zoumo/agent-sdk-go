@@ -1,8 +1,11 @@
 package agentcodex_test
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -10,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
+	"github.com/zoumo/agent-sdk-go/codex"
 )
 
 func TestOpenAndResumePassLiteralSessionConfig(t *testing.T) {
@@ -174,26 +179,95 @@ func TestOpenAndResumeOmitEmptySessionConfig(t *testing.T) {
 }
 
 func TestOpenRejectsInvalidSessionConfigBeforeNativeRequest(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	peerSession := prepareCodexPeer(t, mockCodexInit...)
-	provider := newTestProvider(t, peerSession)
-	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	reader, output := io.Pipe()
+	input, writer := io.Pipe()
+	requests := make(chan string, 8)
+	peerDone := make(chan error, 1)
+	// Keep the peer connected after initialization so an accidental native
+	// start/resume cannot hide behind a completed fixture or closed transport.
+	go func() {
+		defer output.Close()
+		scanner := bufio.NewScanner(input)
+		for scanner.Scan() {
+			var frame struct {
+				ID     json.RawMessage
+				Method string
+			}
+			if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
+				peerDone <- err
+				return
+			}
+			var err error
+			switch frame.Method {
+			case "initialize":
+				_, err = fmt.Fprintf(output, "{\"id\":%s,\"result\":{\"userAgent\":\"synthetic\",\"codexHome\":\"/synthetic\",\"platformFamily\":\"unix\",\"platformOs\":\"linux\"}}\n", frame.ID)
+			case "initialized":
+				continue
+			default:
+				requests <- frame.Method
+				_, err = fmt.Fprintf(output, "{\"id\":%s,\"error\":{\"code\":-32602,\"message\":\"unexpected native request\"}}\n", frame.ID)
+			}
+			if err != nil {
+				peerDone <- err
+				return
+			}
+		}
+		peerDone <- scanner.Err()
+	}()
+	provider := agentcodex.NewWithStream(agentcodex.Config{}, codex.StreamTransport{Reader: reader, Writer: writer}, nil)
+	t.Cleanup(func() {
+		assert.NoError(t, provider.Stop(context.Background()))
+		_ = writer.Close()
+		_ = output.Close()
+		select {
+		case err := <-peerDone:
+			assert.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Error("synthetic peer did not stop")
+		}
+		_ = input.Close()
+		assert.Empty(t, requests, "invalid config must not reach native thread/start or thread/resume")
+	})
 
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
-	session, err := provider.Open(ctx, agent.OpenOptions{
-		Cwd: "/synthetic",
-		Config: agent.SessionConfig{
-			Model: string([]byte{0xff}),
-		},
-	})
-	require.Error(t, err)
-	assert.Nil(t, session)
-	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
-	var classified *agent.Error
-	require.ErrorAs(t, err, &classified)
-	assert.Equal(t, "config_value_invalid_utf8", classified.Reason)
+	for _, test := range []struct {
+		name    string
+		config  agent.SessionConfig
+		reason  string
+		message string
+	}{
+		{"model invalid UTF-8", agent.SessionConfig{Model: string([]byte{0xff})}, "config_value_invalid_utf8", "model must be valid UTF-8"},
+		{"model NUL", agent.SessionConfig{Model: "model\x00tail"}, "config_value_contains_nul", "model must not contain NUL"},
+		{"effort invalid UTF-8", agent.SessionConfig{ReasoningEffort: string([]byte{0xff})}, "config_value_invalid_utf8", "reasoning effort must be valid UTF-8"},
+		{"effort NUL", agent.SessionConfig{ReasoningEffort: "effort\x00tail"}, "config_value_contains_nul", "reasoning effort must not contain NUL"},
+	} {
+		for _, operation := range []string{"open", "resume"} {
+			t.Run(test.name+"/"+operation, func(t *testing.T) {
+				options := agent.OpenOptions{Cwd: "/synthetic", Config: test.config}
+				var session agent.Session
+				var err error
+				if operation == "open" {
+					session, err = provider.Open(ctx, options)
+				} else {
+					session, err = provider.Resume(ctx, agent.ResumeOptions{
+						SessionID: "root-resume", OpenOptions: options,
+					})
+				}
+				require.Error(t, err)
+				assert.Nil(t, session)
+				assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+				var classified *agent.Error
+				require.ErrorAs(t, err, &classified)
+				assert.Equal(t, test.reason, classified.Reason)
+				assert.Equal(t, test.message, classified.Message)
+				assert.EqualError(t, err, "invalid_argument: "+test.message)
+				assert.Empty(t, requests, "validation must precede native thread requests")
+			})
+		}
+	}
 }
 
 func TestOpenPreservesNativeSessionConfigRejection(t *testing.T) {
@@ -413,6 +487,46 @@ func TestSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) {
 		assert.True(t, *receipt.Acceptance.Sent)
 		assert.Nil(t, receipt.Acceptance.NativeAccepted)
 	})
+}
+
+func TestSetConfigMalformedSuccessDoesNotImplyNativeRejection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`>{"id":93,"method":"thread/settings/update","params":{"model":"next/model","threadId":"root-a"}}`,
+		`<{"id":93,"result":[]}`,
+		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"status":"unsubscribed"}}`,
+	)
+	peerSession := prepareCodexPeer(t, frames...)
+	provider := newTestProvider(t, peerSession)
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+
+	change := agent.ConfigChange{ID: agent.ConfigModel, Value: "next/model"}
+	receipt, err := session.(agent.ConfigController).SetConfig(ctx, change)
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+	assert.Equal(t, change, receipt.Change)
+	assert.Equal(t, agent.Acceptance{Sent: new(true)}, receipt.Acceptance)
+	var classified *agent.Error
+	require.ErrorAs(t, err, &classified)
+	assert.Equal(t, "set_config_failed", classified.Reason)
+	var callErr *codex.CallError
+	require.ErrorAs(t, err, &callErr)
+	assert.Equal(t, "thread/settings/update", callErr.Method)
+	assert.Equal(t, codex.Responded, callErr.Dispatch)
+	assert.ErrorIs(t, err, codex.ErrProtocol)
+	assert.EqualError(t, callErr.Cause, "codex: protocol error: decode thread/settings/update result: protocol: expected JSON object")
+	var rpcErr *codex.RPCError
+	assert.NotErrorAs(t, err, &rpcErr)
 }
 
 func TestSetConfigRepeatsIdenticalRequests(t *testing.T) {

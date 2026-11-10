@@ -26,46 +26,6 @@ type eventJSONWire struct {
 	Meta      map[string]any  `json:"_meta"`
 }
 
-type messagePayloadWire struct {
-	MessageID string            `json:"messageId"`
-	Content   []json.RawMessage `json:"content"`
-	Phase     string            `json:"phase"`
-}
-
-type toolCallPayloadWire struct {
-	ID                  string            `json:"id"`
-	Kind                ToolKind          `json:"kind"`
-	ToolName            string            `json:"toolName"`
-	Provider            ToolProvider      `json:"provider"`
-	Title               string            `json:"title"`
-	Phase               string            `json:"phase"`
-	InputRepresentation string            `json:"inputRepresentation"`
-	RawInput            any               `json:"rawInput"`
-	RawOutput           *any              `json:"rawOutput"`
-	Content             []json.RawMessage `json:"content"`
-	ExitCode            *int32            `json:"exitCode"`
-	DurationMs          *float64          `json:"durationMs"`
-	Output              *ToolOutput       `json:"output"`
-	Status              string            `json:"status"`
-}
-
-type toolResultPayloadWire struct {
-	ID                  string            `json:"id"`
-	Kind                ToolKind          `json:"kind"`
-	ToolName            string            `json:"toolName"`
-	Provider            ToolProvider      `json:"provider"`
-	Title               string            `json:"title"`
-	Phase               string            `json:"phase"`
-	InputRepresentation string            `json:"inputRepresentation"`
-	RawInput            *any              `json:"rawInput"`
-	RawOutput           *any              `json:"rawOutput"`
-	Content             []json.RawMessage `json:"content"`
-	ExitCode            *int32            `json:"exitCode"`
-	DurationMs          *float64          `json:"durationMs"`
-	Output              *ToolOutput       `json:"output"`
-	Status              string            `json:"status"`
-}
-
 func (e Event) MarshalJSON() ([]byte, error) {
 	if err := e.Validate(); err != nil {
 		return nil, err
@@ -136,22 +96,23 @@ func unmarshalPayload(eventType EventType, data []byte) (Payload, error) {
 		payload, err := unmarshalMessagePayload(data)
 		return ThinkingChunk(payload), err
 	case EventAgentToolCall:
-		return unmarshalToolCallPayload(data)
+		var payload ToolCallPayload
+		if err := decodeStrictJSON(data, &payload); err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case EventAgentToolResult:
-		return unmarshalToolResultPayload(data)
+		var payload ToolResultPayload
+		if err := decodeStrictJSON(data, &payload); err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case EventAgentToolCallChunk:
-		var wire struct {
-			ID      string            `json:"id"`
-			Content []json.RawMessage `json:"content"`
-		}
-		if err := decodeStrictJSON(data, &wire); err != nil {
+		var payload ToolChunkPayload
+		if err := decodeStrictJSON(data, &payload); err != nil {
 			return nil, err
 		}
-		content, err := unmarshalContentBlocks(wire.Content)
-		if err != nil {
-			return nil, err
-		}
-		return ToolChunkPayload{ID: wire.ID, Content: content}, nil
+		return payload, nil
 	case EventSessionStateUpdate:
 		if err := requireJSONMemberPresence(data, "state", "previousState"); err != nil {
 			return nil, err
@@ -212,109 +173,11 @@ func unmarshalPayload(eventType EventType, data []byte) (Payload, error) {
 }
 
 func unmarshalMessagePayload(data []byte) (MessagePayload, error) {
-	var wire messagePayloadWire
-	if err := decodeStrictJSON(data, &wire); err != nil {
+	var payload MessagePayload
+	if err := decodeStrictJSON(data, &payload); err != nil {
 		return MessagePayload{}, err
 	}
-	content, err := unmarshalContentBlocks(wire.Content)
-	if err != nil {
-		return MessagePayload{}, err
-	}
-	return MessagePayload{
-		MessageID: wire.MessageID,
-		Content:   content,
-		Phase:     wire.Phase,
-	}, nil
-}
-
-func unmarshalToolCallPayload(data []byte) (Payload, error) {
-	if err := requireJSONMemberPresence(data, "rawInput"); err != nil {
-		return nil, err
-	}
-	if err := requireJSONMembers(data, "kind", "toolName", "provider"); err != nil {
-		return nil, err
-	}
-	var wire toolCallPayloadWire
-	if err := decodeStrictJSON(data, &wire); err != nil {
-		return nil, err
-	}
-	content, err := unmarshalContentBlocks(wire.Content)
-	if err != nil {
-		return nil, err
-	}
-	rawOutput, err := optionalDynamicJSONMember(data, "rawOutput")
-	if err != nil {
-		return nil, err
-	}
-	return ToolCallPayload{
-		ID:                  wire.ID,
-		Kind:                wire.Kind,
-		ToolName:            wire.ToolName,
-		Provider:            wire.Provider,
-		Title:               wire.Title,
-		Phase:               wire.Phase,
-		InputRepresentation: wire.InputRepresentation,
-		RawInput:            wire.RawInput,
-		RawOutput:           rawOutput,
-		Content:             content,
-		ExitCode:            wire.ExitCode,
-		DurationMs:          wire.DurationMs,
-		Output:              wire.Output,
-		Status:              wire.Status,
-	}, nil
-}
-
-func unmarshalToolResultPayload(data []byte) (Payload, error) {
-	if err := requireJSONMembers(data, "kind", "toolName", "provider"); err != nil {
-		return nil, err
-	}
-	var wire toolResultPayloadWire
-	if err := decodeStrictJSON(data, &wire); err != nil {
-		return nil, err
-	}
-	content, err := unmarshalContentBlocks(wire.Content)
-	if err != nil {
-		return nil, err
-	}
-	rawInput, err := optionalDynamicJSONMember(data, "rawInput")
-	if err != nil {
-		return nil, err
-	}
-	rawOutput, err := optionalDynamicJSONMember(data, "rawOutput")
-	if err != nil {
-		return nil, err
-	}
-	return ToolResultPayload{
-		ID:                  wire.ID,
-		Kind:                wire.Kind,
-		ToolName:            wire.ToolName,
-		Provider:            wire.Provider,
-		Title:               wire.Title,
-		Phase:               wire.Phase,
-		InputRepresentation: wire.InputRepresentation,
-		RawInput:            rawInput,
-		RawOutput:           rawOutput,
-		Content:             content,
-		ExitCode:            wire.ExitCode,
-		DurationMs:          wire.DurationMs,
-		Output:              wire.Output,
-		Status:              wire.Status,
-	}, nil
-}
-
-func unmarshalContentBlocks(raw []json.RawMessage) ([]ContentBlock, error) {
-	if raw == nil {
-		return nil, nil
-	}
-	content := make([]ContentBlock, len(raw))
-	for index, block := range raw {
-		decoded, err := unmarshalContentBlock(block)
-		if err != nil {
-			return nil, err
-		}
-		content[index] = decoded
-	}
-	return content, nil
+	return payload, nil
 }
 
 func optionalDynamicJSONMember(data []byte, name string) (*any, error) {

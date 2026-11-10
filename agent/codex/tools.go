@@ -200,7 +200,9 @@ func commandTool(item *codextypes.CommandExecutionThreadItem) unifiedToolItem {
 	}
 	if value, present := item.AggregatedOutput.Get(); present {
 		tool.rawOutput = anyValuePointer(value)
-		tool.content = []agent.ContentBlock{agent.TextBlock{Text: value}}
+		tool.content = []agent.ContentBlock{
+			{Text: &agent.ContentBlockText{Text: value}},
+		}
 		tool.output = providedToolOutput()
 	}
 	return tool

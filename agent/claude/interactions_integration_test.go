@@ -86,7 +86,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			)
 
 			submitted, err := session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 			})
 			require.NoError(t, err)
 			assert.Equal(t, agent.InputAppliedBestEffort, submitted.Result)
@@ -123,9 +123,9 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				requested.Request.Options[1].Kind,
 			)
 			require.Len(t, requested.Request.Content, 1)
-			raw, ok := requested.Request.Content[0].(agent.TextBlock)
-			require.True(t, ok)
-			assert.Contains(t, raw.Text, `"file_path":"a.txt"`)
+			text := requested.Request.Content[0].Text
+			require.NotNil(t, text)
+			assert.Contains(t, text.Text, `"file_path":"a.txt"`)
 
 			receipt, err := session.Answer(ctx, requested.Interaction, test.answer)
 			require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 
 			_, err = session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}},
 			})
 			require.NoError(t, err)
 			require.NoError(t, session.Close(ctx))
@@ -191,7 +191,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -212,7 +212,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
 
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}},
 	})
 	require.NoError(t, err)
 	require.NoError(t, session.Close(ctx))
@@ -256,7 +256,7 @@ func TestClaudeConcurrentAnswersHaveSingleAdmission(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -358,7 +358,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	firstStream, err := first.Events()
 	require.NoError(t, err)
 	_, err = first.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, firstStream))
@@ -369,7 +369,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	secondStream, err := second.Events()
 	require.NoError(t, err)
 	_, err = second.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run-second"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run-second"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, secondStream))
@@ -479,7 +479,7 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 			)
 
 			_, err := session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 			})
 			require.NoError(t, err)
 			require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -556,7 +556,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -681,7 +681,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 	assert.False(t, session.EffectiveFeatures().AgentQuestions)
 	assert.False(t, session.Capabilities().Supports(agent.CapabilityForm))
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -758,7 +758,7 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			)
 
 			_, err := session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 			})
 			require.NoError(t, err)
 			running := nextClaudeStateUpdate(t, ctx, stream)
@@ -825,7 +825,7 @@ func TestClaudeInterruptTargetsActiveSubmissionAndClearsOnIdle(t *testing.T) {
 	)
 
 	submitted, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.InputAppliedBestEffort, submitted.Result)
@@ -867,7 +867,7 @@ func TestClaudeInterruptAfterWriteReportsUnknownOutcome(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))

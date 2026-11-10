@@ -920,7 +920,7 @@ func TestControllerUpdatesWhileTurnIsActiveWithoutWaitingOrInterrupting(t *testi
 	}
 	require.True(t, completed, "the active turn must be able to complete after the update")
 	nextReceipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "after-update"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "after-update"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "turn-b", nextReceipt.Submission)

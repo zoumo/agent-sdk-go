@@ -56,10 +56,12 @@ func TestClosingOneSessionLeavesAnotherHealthyAndRetainsEarlyEvents(t *testing.T
 	early, err := secondStream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessageChunk, early.Type())
-	assert.Equal(t, "early", early.Payload.(agent.MessageChunk).Content[0].(agent.TextBlock).Text)
+	earlyText := early.Payload.(agent.MessageChunk).Content[0].Text
+	require.NotNil(t, earlyText)
+	assert.Equal(t, "early", earlyText.Text)
 
 	_, err = second.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "second"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "second"}}},
 	})
 	require.NoError(t, err)
 	for _, want := range []agent.EventType{

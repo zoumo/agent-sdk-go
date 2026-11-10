@@ -266,7 +266,7 @@ func validPermissionOptionKind(kind PermissionOptionKind) bool {
 
 func validateOptionalContent(content []ContentBlock) error {
 	for _, block := range content {
-		if err := validateContentBlock(block); err != nil {
+		if err := block.Validate(); err != nil {
 			return err
 		}
 	}

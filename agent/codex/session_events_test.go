@@ -53,7 +53,7 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 	}
 
 	receipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedNewWork, receipt.Result)
@@ -63,7 +63,7 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 	assert.True(t, *receipt.Acceptance.Sent)
 	assert.True(t, *receipt.Acceptance.NativeAccepted)
 	overlap, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "overlap"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "overlap"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedCurrentWork, overlap.Result)
@@ -88,7 +88,7 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 	assert.Equal(t, "item-a", events[1].ItemID)
 	assert.Equal(t, agent.MessageChunk{
 		MessageID: "item-a",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello"}}},
 	}, events[1].Payload)
 	assert.Contains(t, rawCodexEvent(t, events[1]), `"future":null`)
 
@@ -96,7 +96,7 @@ func TestSessionSubmitsTextAndDeliversMinimalOrderedEvents(t *testing.T) {
 	assert.Equal(t, "item-a", events[2].ItemID)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "item-a",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello"}}},
 		Phase:     "final_answer",
 	}, events[2].Payload)
 	assert.Equal(t, time.UnixMilli(1700000000123).UTC(), events[2].Time)

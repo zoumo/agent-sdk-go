@@ -293,5 +293,7 @@ func openStartOrSteerSessionWithPeer(
 }
 
 func textInput(text string) agent.Input {
-	return agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: text}}}
+	return agent.Input{
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: text}}},
+	}
 }

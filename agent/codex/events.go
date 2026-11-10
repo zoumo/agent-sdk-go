@@ -449,7 +449,9 @@ func (s *session) agentMessageDelta(received codex.Received) ([]agent.Event, err
 		data.ItemID,
 		agent.MessageChunk{
 			MessageID: data.ItemID,
-			Content:   []agent.ContentBlock{agent.TextBlock{Text: data.Delta}},
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: data.Delta}},
+			},
 		},
 		time.Now().UTC(),
 		nil,
@@ -474,7 +476,9 @@ func (s *session) reasoningDelta(received codex.Received) ([]agent.Event, error)
 		data.ItemID,
 		agent.ThinkingChunk{
 			MessageID: data.ItemID,
-			Content:   []agent.ContentBlock{agent.TextBlock{Text: data.Delta}},
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: data.Delta}},
+			},
 		},
 		time.Now().UTC(),
 		nil,
@@ -498,8 +502,10 @@ func (s *session) toolOutputDelta(received codex.Received) ([]agent.Event, error
 		received.Event.Method,
 		data.ItemID,
 		agent.ToolChunkPayload{
-			ID:      data.ItemID,
-			Content: []agent.ContentBlock{agent.TextBlock{Text: data.Delta}},
+			ID: data.ItemID,
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: data.Delta}},
+			},
 		},
 		time.Now().UTC(),
 		nil,
@@ -560,7 +566,9 @@ func (s *session) userMessage(
 		if input.Text == nil || len(input.Unknown) != 0 {
 			return s.itemGap(received, codextypes.ThreadItem{UserMessage: item})
 		}
-		content = append(content, agent.TextBlock{Text: input.Text.Text})
+		content = append(content, agent.ContentBlock{
+			Text: &agent.ContentBlockText{Text: input.Text.Text},
+		})
 	}
 	event, err := s.newEvent(
 		received,
@@ -594,8 +602,10 @@ func (s *session) agentMessage(
 		item.ID,
 		agent.AgentMessage{
 			MessageID: item.ID,
-			Content:   []agent.ContentBlock{agent.TextBlock{Text: item.Text}},
-			Phase:     phase,
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: item.Text}},
+			},
+			Phase: phase,
 		},
 		unixMilliOrNow(completedAtMs),
 		nil,
@@ -623,7 +633,9 @@ func (s *session) reasoningMessage(
 	}
 	content := make([]agent.ContentBlock, 0, len(parts))
 	for _, text := range parts {
-		content = append(content, agent.TextBlock{Text: text})
+		content = append(content, agent.ContentBlock{
+			Text: &agent.ContentBlockText{Text: text},
+		})
 	}
 	event, err := s.newEvent(
 		received,

@@ -501,13 +501,8 @@ func textInput(input agent.Input) (string, error) {
 			nil,
 		)
 	}
-	var block agent.TextBlock
-	switch typed := input.Content[0].(type) {
-	case agent.TextBlock:
-		block = typed
-	case *agent.TextBlock:
-		block = *typed
-	default:
+	block := input.Content[0]
+	if block.Text == nil {
 		return "", adapterError(
 			agent.ErrorUnsupported,
 			"content_block_unsupported",
@@ -515,7 +510,7 @@ func textInput(input agent.Input) (string, error) {
 			nil,
 		)
 	}
-	if block.Annotations != nil {
+	if block.Text.Annotations != nil {
 		return "", adapterError(
 			agent.ErrorUnsupported,
 			"text_annotations_unsupported",
@@ -523,7 +518,7 @@ func textInput(input agent.Input) (string, error) {
 			nil,
 		)
 	}
-	return block.Text, nil
+	return block.Text.Text, nil
 }
 
 func effectiveFeatures(features agent.Features) agent.EffectiveFeatures {

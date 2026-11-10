@@ -3266,6 +3266,83 @@ func agentExecutionFramesMatching(
 	return matched
 }
 
+func awaitAgentExecutionState(
+	t *testing.T,
+	ctx context.Context,
+	stream agent.EventStream,
+	want agent.SessionState,
+) {
+	t.Helper()
+	for {
+		event, err := stream.Next(ctx)
+		require.NoError(t, err)
+		payload, ok := event.Payload.(agent.StateUpdatePayload)
+		if !ok || payload.State == nil {
+			continue
+		}
+		if *payload.State == want {
+			return
+		}
+	}
+}
+
+func assertAgentExecutionActiveConfigTrace(
+	t *testing.T,
+	providerName string,
+	path string,
+) {
+	t.Helper()
+	entries := readAgentExecutionTrace(t, path)
+	_ = agentExecutionTraceArgv(t, entries)
+	frames := agentExecutionTraceFrames(t, entries)
+	switch providerName {
+	case "codex":
+		starts := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/start"
+		})
+		turns := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "turn/start"
+		})
+		settings := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "thread/settings/update"
+		})
+		require.Len(t, starts, 1)
+		require.Len(t, turns, 2)
+		require.Len(t, settings, 1)
+		requireAgentExecutionTurnText(t, turns[0].frame.Params, "active/before")
+		requireAgentExecutionTurnText(t, turns[1].frame.Params, "active/after")
+		require.Less(t, turns[0].index, settings[0].index)
+		require.Less(t, settings[0].index, turns[1].index)
+		var params map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(settings[0].frame.Params, &params))
+		requireAgentExecutionString(t, params, "model", "active/model")
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Method == "turn/interrupt"
+		}))
+	case "claude":
+		users := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "user"
+		})
+		models := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "control_request" &&
+				frame.Request.Subtype == "set_model"
+		})
+		require.Len(t, users, 2)
+		require.Len(t, models, 1)
+		requireAgentExecutionClaudeText(t, users[0].frame, "active/before")
+		requireAgentExecutionClaudeText(t, users[1].frame, "active/after")
+		require.Less(t, users[0].index, models[0].index)
+		require.Less(t, models[0].index, users[1].index)
+		assert.Equal(t, "active/model", models[0].frame.Request.Model)
+		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "control_request" &&
+				frame.Request.Subtype == "interrupt"
+		}))
+	default:
+		require.FailNow(t, "unknown provider", providerName)
+	}
+}
+
 func assertAgentExecutionRuntimeTrace(t *testing.T, providerName, path string) {
 	t.Helper()
 	entries := readAgentExecutionTrace(t, path)

@@ -50,14 +50,14 @@ func validateExecutionOptionEncoding(
 	if !utf8.ValidString(value) {
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "execution_option_invalid_utf8",
+			Reason:  ErrorReasonExecutionOptionInvalidUTF8,
 			Message: name + " must be valid UTF-8",
 		}
 	}
 	if strings.ContainsRune(value, '\x00') {
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "execution_option_contains_nul",
+			Reason:  ErrorReasonExecutionOptionContainsNUL,
 			Message: name + " must not contain NUL",
 		}
 	}

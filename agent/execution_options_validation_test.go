@@ -64,7 +64,7 @@ func TestExecutionOptionsValidateMatchesRuntimeUpdateRules(t *testing.T) {
 			name:   "empty",
 			change: agent.ExecutionOptionChange{Option: agent.ExecutionOptionModel},
 			updateErr: executionOptionValidationError{
-				reason:  "execution_option_empty_value",
+				reason:  agent.ErrorReasonExecutionOptionEmptyValue,
 				message: "execution option value must be nonempty",
 			},
 		},
@@ -98,11 +98,11 @@ func TestExecutionOptionsValidateMatchesRuntimeUpdateRules(t *testing.T) {
 				Value:  executionOptionSentinel + string([]byte{0xff}),
 			},
 			openError: executionOptionValidationError{
-				reason:  "execution_option_invalid_utf8",
+				reason:  agent.ErrorReasonExecutionOptionInvalidUTF8,
 				message: "model must be valid UTF-8",
 			},
 			updateErr: executionOptionValidationError{
-				reason:  "execution_option_invalid_utf8",
+				reason:  agent.ErrorReasonExecutionOptionInvalidUTF8,
 				message: "model must be valid UTF-8",
 			},
 		},
@@ -116,11 +116,11 @@ func TestExecutionOptionsValidateMatchesRuntimeUpdateRules(t *testing.T) {
 				Value:  executionOptionSentinel + string([]byte{0xff}),
 			},
 			openError: executionOptionValidationError{
-				reason:  "execution_option_invalid_utf8",
+				reason:  agent.ErrorReasonExecutionOptionInvalidUTF8,
 				message: "reasoning effort must be valid UTF-8",
 			},
 			updateErr: executionOptionValidationError{
-				reason:  "execution_option_invalid_utf8",
+				reason:  agent.ErrorReasonExecutionOptionInvalidUTF8,
 				message: "reasoning effort must be valid UTF-8",
 			},
 		},
@@ -134,11 +134,11 @@ func TestExecutionOptionsValidateMatchesRuntimeUpdateRules(t *testing.T) {
 				Value:  executionOptionSentinel + "\x00tail",
 			},
 			openError: executionOptionValidationError{
-				reason:  "execution_option_contains_nul",
+				reason:  agent.ErrorReasonExecutionOptionContainsNUL,
 				message: "model must not contain NUL",
 			},
 			updateErr: executionOptionValidationError{
-				reason:  "execution_option_contains_nul",
+				reason:  agent.ErrorReasonExecutionOptionContainsNUL,
 				message: "model must not contain NUL",
 			},
 		},
@@ -152,11 +152,11 @@ func TestExecutionOptionsValidateMatchesRuntimeUpdateRules(t *testing.T) {
 				Value:  executionOptionSentinel + "\x00tail",
 			},
 			openError: executionOptionValidationError{
-				reason:  "execution_option_contains_nul",
+				reason:  agent.ErrorReasonExecutionOptionContainsNUL,
 				message: "reasoning effort must not contain NUL",
 			},
 			updateErr: executionOptionValidationError{
-				reason:  "execution_option_contains_nul",
+				reason:  agent.ErrorReasonExecutionOptionContainsNUL,
 				message: "reasoning effort must not contain NUL",
 			},
 		},
@@ -206,7 +206,7 @@ func TestExecutionOptionsValidateUsesStableFieldOrder(t *testing.T) {
 				Model: executionOptionSentinel + "\x00" + string([]byte{0xff}),
 			},
 			want: executionOptionValidationError{
-				reason:  "execution_option_invalid_utf8",
+				reason:  agent.ErrorReasonExecutionOptionInvalidUTF8,
 				message: "model must be valid UTF-8",
 			},
 		},
@@ -217,7 +217,7 @@ func TestExecutionOptionsValidateUsesStableFieldOrder(t *testing.T) {
 				ReasoningEffort: executionOptionSentinel + string([]byte{0xff}),
 			},
 			want: executionOptionValidationError{
-				reason:  "execution_option_contains_nul",
+				reason:  agent.ErrorReasonExecutionOptionContainsNUL,
 				message: "model must not contain NUL",
 			},
 		},

@@ -110,7 +110,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 			name:    "missing answers",
 			content: map[string]any{},
 			code:    agent.ErrorInvalidArgument,
-			reason:  "invalid_form_answer",
+			reason:  agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "unknown question",
@@ -118,7 +118,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Other?": "json",
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "unknown_form_question",
+			reason: agent.ErrorReasonUnknownFormQuestion,
 		},
 		{
 			name: "array for single select",
@@ -126,7 +126,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Which format?": []any{"json", "yaml"},
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "non-string multi select label",
@@ -134,7 +134,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Which sections?": []any{"intro", json.Number("1")},
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "non string answer",
@@ -142,7 +142,7 @@ func TestFormAnswersValidatesNativeQuestionShapes(t *testing.T) {
 				"Which format?": json.Number("1"),
 			}},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 	}
 	for _, test := range tests {
@@ -195,7 +195,7 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			cause:       claude.ErrUnknownOutcome,
 			err:         notSentAnswerError(),
 			wantOutcome: agent.InteractionFailed,
-			wantReason:  "answer_outcome_unknown",
+			wantReason:  agent.ErrorReasonAnswerOutcomeUnknown,
 			wantCode:    agent.ErrorOutcomeUnknown,
 		},
 		{
@@ -203,7 +203,7 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			cause:       claude.ErrPermissionUsed,
 			err:         notSentAnswerError(),
 			wantOutcome: agent.InteractionExpired,
-			wantReason:  "native_request_ended",
+			wantReason:  agent.ErrorReasonNativeRequestEnded,
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
@@ -211,7 +211,7 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			cause:       claude.ErrPermissionStale,
 			err:         notSentAnswerError(),
 			wantOutcome: agent.InteractionExpired,
-			wantReason:  "native_request_ended",
+			wantReason:  agent.ErrorReasonNativeRequestEnded,
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
@@ -219,7 +219,7 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			cause:       claude.ErrPermissionCancelled,
 			err:         notSentAnswerError(),
 			wantOutcome: agent.InteractionCancelled,
-			wantReason:  "native_request_ended",
+			wantReason:  agent.ErrorReasonNativeRequestEnded,
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
@@ -227,49 +227,49 @@ func TestAnswerTerminalOutcomePreservesTerminalMapping(t *testing.T) {
 			cause:       claude.ErrClosed,
 			err:         notSentAnswerError(),
 			wantOutcome: agent.InteractionCancelled,
-			wantReason:  "session_closed",
+			wantReason:  agent.ErrorReasonSessionClosed,
 			wantCode:    agent.ErrorClosed,
 		},
 		{
 			name:        "unknown answer without cause",
 			err:         claude.ErrUnknownOutcome,
 			wantOutcome: agent.InteractionFailed,
-			wantReason:  "answer_outcome_unknown",
+			wantReason:  agent.ErrorReasonAnswerOutcomeUnknown,
 			wantCode:    agent.ErrorOutcomeUnknown,
 		},
 		{
 			name:        "used answer without cause",
 			err:         claude.ErrPermissionUsed,
 			wantOutcome: agent.InteractionExpired,
-			wantReason:  "native_request_ended",
+			wantReason:  agent.ErrorReasonNativeRequestEnded,
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
 			name:        "stale answer without cause",
 			err:         claude.ErrPermissionStale,
 			wantOutcome: agent.InteractionExpired,
-			wantReason:  "native_request_ended",
+			wantReason:  agent.ErrorReasonNativeRequestEnded,
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
 			name:        "canceled answer without cause",
 			err:         claude.ErrPermissionCancelled,
 			wantOutcome: agent.InteractionCancelled,
-			wantReason:  "native_request_ended",
+			wantReason:  agent.ErrorReasonNativeRequestEnded,
 			wantCode:    agent.ErrorFailedPrecondition,
 		},
 		{
 			name:        "closed answer without cause",
 			err:         claude.ErrClosed,
 			wantOutcome: agent.InteractionCancelled,
-			wantReason:  "session_closed",
+			wantReason:  agent.ErrorReasonSessionClosed,
 			wantCode:    agent.ErrorClosed,
 		},
 		{
 			name:        "unknown outranks joined cancellation",
 			err:         errors.Join(claude.ErrPermissionCancelled, claude.ErrUnknownOutcome),
 			wantOutcome: agent.InteractionFailed,
-			wantReason:  "answer_outcome_unknown",
+			wantReason:  agent.ErrorReasonAnswerOutcomeUnknown,
 			wantCode:    agent.ErrorOutcomeUnknown,
 		},
 	}

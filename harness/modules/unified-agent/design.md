@@ -219,8 +219,8 @@ type Provider interface {
     Resume(ctx context.Context, options ResumeOptions) (Session, error)
 
     // Stop 只释放本 Provider 拥有的资源。
-    // 有 Open/Resume 正在进行或仍有未关闭 Session 时必须拒绝；不能等待后
-    // 暗自停止。首次被接纳的 Stop 是终止性的，release 失败也缓存结果。
+    // 有 Open/Resume 正在进行，或仍有活跃/正在清理的 Session 时必须拒绝；
+    // 不能等待后暗自停止。首次被接纳的 Stop 是终止性的，release 失败也缓存结果。
     Stop(ctx context.Context) error
 }
 ```
@@ -288,6 +288,11 @@ type EffectiveFeatures struct {
 - 进行中的 `Open` 和 `Resume` 计入 in-flight 操作，`Stop` 必须拒绝而不是等待。
   Open 的 callback 失败时，adapter 必须先完成原生清理，再由共享生命周期自动
   撤销 opening；之后 Provider 仍可 Stop，也可继续使用到 Stop。
+- Provider 的 Session registry 持有活跃或正在清理的 lease。没有显式 `Close`
+  时，原生观察终止必须先完成 native cleanup 并恰好释放一次 lease，之后才关闭
+  `Done`；已经接纳的事件仍可排空，不再阻止 `Provider.Stop`。显式 `Close` 已
+  开始时，`Stop` 仍拒绝，直到该清理路径释放 lease。自然终止后的 `Session.Close`
+  只复用同一 cleanup 结果，不重复 native cleanup 或 Provider release。
 - 首次被接纳的 `Stop` 是终止性的：release 至多执行一次，release 错误被缓存，
   后续 `Stop` 返回同一结果；即使 release 失败，`Start`、`Open` 和 `Resume`
   也不能再运行。没有未关闭 Session 时重复 Stop 返回缓存结果。
@@ -865,23 +870,27 @@ type Input struct {
     Content []ContentBlock
 }
 
-type ContentBlock interface {
-    contentBlock()
+type ContentBlock struct {
+    Text         *ContentBlockText
+    Image        *ContentBlockImage
+    Audio        *ContentBlockAudio
+    ResourceLink *ContentBlockResourceLink
+    Resource     *ContentBlockResource
 }
 
-type TextBlock struct {
+type ContentBlockText struct {
     Text        string
     Annotations *Annotations
 }
 
-type ImageBlock struct {
+type ContentBlockImage struct {
     Data        string
     MIMEType    string
     URI         *string
     Annotations *Annotations
 }
 
-type AudioBlock struct {
+type ContentBlockAudio struct {
     Data        string
     MIMEType    string
     Annotations *Annotations
@@ -894,12 +903,12 @@ type EmbeddedResource struct {
     Blob     *string
 }
 
-type ResourceBlock struct {
+type ContentBlockResource struct {
     Resource    EmbeddedResource
     Annotations *Annotations
 }
 
-type ResourceLinkBlock struct {
+type ContentBlockResourceLink struct {
     URI         string
     Name        string
     MIMEType    *string
@@ -916,7 +925,9 @@ type Annotations struct {
 }
 ```
 
-内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。数组顺序
+内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。
+`ContentBlock` 的五个指针分支必须且只能有一个非 nil；JSON 继续使用原有 `type`
+判别字段和对应分支字段。数组顺序
 是内容顺序；`image`、`audio` 的 `Data` 和资源的 `Blob` 是不带 data URI 前缀的
 Base64 原文。`resource` 必须且只能在 `Text`、`Blob` 中提供一种正文。
 

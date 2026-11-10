@@ -31,13 +31,14 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu   sync.Mutex
-	mu            sync.Mutex
-	eventsClaimed bool
-	closed        bool
-	explicitClose bool
-	submitting    bool
-	submitUnknown bool
+	executionMu      sync.Mutex
+	mu               sync.Mutex
+	eventsClaimed    bool
+	closed           bool
+	explicitClose    bool
+	providerReleased bool
+	submitting       bool
+	submitUnknown    bool
 	// workEpoch prevents a late submit failure from rearming unknown state after
 	// the observer has already accepted native turn evidence.
 	workEpoch    uint64
@@ -63,6 +64,9 @@ type session struct {
 	observationDone chan struct{}
 	closeOnce       sync.Once
 	closeErr        error
+
+	nativeCleanupOnce sync.Once
+	nativeCleanupErr  error
 }
 
 func newSession(
@@ -84,8 +88,11 @@ func newSession(
 		done:              make(chan struct{}),
 		observationDone:   make(chan struct{}),
 	}
-	go created.observe()
 	return created
+}
+
+func (s *session) start() {
+	go s.observe()
 }
 
 func (s *session) ID() string { return s.native.ThreadID() }
@@ -115,7 +122,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.closed && s.explicitClose {
 		return nil, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -123,7 +130,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.eventsClaimed {
 		return nil, adapterError(
 			agent.ErrorFailedPrecondition,
-			"events_already_claimed",
+			agent.ErrorReasonEventsAlreadyClaimed,
 			"the session event stream has already been claimed",
 			nil,
 		)
@@ -146,7 +153,7 @@ func (s *session) StartOrSteer(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -181,7 +188,7 @@ func (s *session) StartOrSteer(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
-			"start_or_steer_identity_missing",
+			ErrorReasonStartOrSteerIdentityMissing,
 			"Codex accepted the input without returning a turn identity",
 			nil,
 		)
@@ -299,7 +306,7 @@ func (s *session) Interrupt(
 		s.mu.Unlock()
 		return agent.InterruptReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -356,21 +363,18 @@ func (s *session) SetModel(
 func (s *session) Close(context.Context) error {
 	s.closeOnce.Do(func() {
 		invalidated := s.closeForOperations(true)
-		s.closeErr = s.native.Close()
-		if s.closeErr != nil {
-			s.closeErr = nativeOperationError("close", s.closeErr)
-		}
+		s.closeErr = s.cleanupNative()
 		<-s.observationDone
 		events := s.closedInteractionEvents(
 			invalidated,
 			agent.InteractionCancelled,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			time.Now().UTC(),
 		)
 		_ = s.pushEvents(events)
 		s.terminate(s.native.Err())
 		_ = s.events.Close(sessionTerminationError(s.native.Err()))
-		s.provider.sessionClosed(s)
+		s.releaseProviderSession(false)
 	})
 	return s.closeErr
 }
@@ -389,7 +393,7 @@ func (s *session) requireOpen() error {
 	if s.closed {
 		return adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -417,7 +421,7 @@ func (s *session) observe() {
 		if err := s.pushEvents(events); err != nil {
 			s.failObservation(adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver unified Codex event",
 				err,
 			))
@@ -470,8 +474,10 @@ func (s *session) endObservation(cause error, reason string) {
 		time.Now().UTC(),
 	)
 	_ = s.pushEvents(events)
-	s.terminate(cause)
+	_ = s.cleanupNative()
 	s.closeObservedQueue(cause)
+	s.releaseProviderSession(true)
+	s.terminate(cause)
 }
 
 func (s *session) closeObservedQueue(cause error) {
@@ -481,6 +487,25 @@ func (s *session) closeObservedQueue(cause error) {
 	if !explicit {
 		_ = s.events.Close(cause)
 	}
+}
+
+func (s *session) cleanupNative() error {
+	s.nativeCleanupOnce.Do(func() {
+		if err := s.native.Close(); err != nil {
+			s.nativeCleanupErr = nativeOperationError("close", err)
+		}
+	})
+	return s.nativeCleanupErr
+}
+
+func (s *session) releaseProviderSession(requireImplicit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.providerReleased || (requireImplicit && s.explicitClose) {
+		return
+	}
+	s.providerReleased = true
+	s.provider.sessionClosed(s)
 }
 
 func (s *session) terminate(cause error) {
@@ -512,32 +537,25 @@ func textInput(input agent.Input) (codex.Input, error) {
 		return codex.Input{}, err
 	}
 	parts := make([]codextypes.UserInput, 0, len(input.Content))
-	for _, raw := range input.Content {
-		var block agent.TextBlock
-		switch typed := raw.(type) {
-		case agent.TextBlock:
-			block = typed
-		case *agent.TextBlock:
-			// Input validation above rejects nil text pointers.
-			block = *typed
-		default:
+	for _, block := range input.Content {
+		if block.Text == nil {
 			return codex.Input{}, adapterError(
 				agent.ErrorUnsupported,
-				"content_block_unsupported",
+				agent.ErrorReasonContentBlockUnsupported,
 				"Codex input supports text blocks only",
 				nil,
 			)
 		}
-		if block.Annotations != nil {
+		if block.Text.Annotations != nil {
 			return codex.Input{}, adapterError(
 				agent.ErrorUnsupported,
-				"text_annotations_unsupported",
+				agent.ErrorReasonTextAnnotationsUnsupported,
 				"Codex input does not support text annotations",
 				nil,
 			)
 		}
 		parts = append(parts, codextypes.UserInput{
-			Text: &codextypes.TextUserInput{Text: block.Text},
+			Text: &codextypes.TextUserInput{Text: block.Text.Text},
 		})
 	}
 	return codex.Input{Input: parts}, nil
@@ -552,7 +570,7 @@ func sessionTerminationError(cause error) error {
 	}
 	return adapterError(
 		agent.ErrorUnavailable,
-		"session_terminated",
+		agent.ErrorReasonSessionTerminated,
 		"Codex session terminated",
 		cause,
 	)
@@ -572,7 +590,7 @@ func nativeOperationError(operation string, err error) error {
 		case codex.OutcomeUnknown:
 			return adapterError(
 				agent.ErrorOutcomeUnknown,
-				operation+"_outcome_unknown",
+				agent.ErrorReasonForCode(operation, agent.ErrorOutcomeUnknown),
 				operation+" result is unknown; do not retry",
 				err,
 			)
@@ -580,7 +598,7 @@ func nativeOperationError(operation string, err error) error {
 			if code := nativeCauseCode(answerErr.Cause); code != "" {
 				return adapterError(
 					code,
-					operation+"_"+string(code),
+					agent.ErrorReasonForCode(operation, code),
 					operation+" failed",
 					err,
 				)
@@ -593,7 +611,7 @@ func nativeOperationError(operation string, err error) error {
 		if callErr.Dispatch == codex.OutcomeUnknown {
 			return adapterError(
 				agent.ErrorOutcomeUnknown,
-				operation+"_outcome_unknown",
+				agent.ErrorReasonForCode(operation, agent.ErrorOutcomeUnknown),
 				operation+" result is unknown; do not retry",
 				err,
 			)
@@ -601,7 +619,7 @@ func nativeOperationError(operation string, err error) error {
 		if code := nativeCauseCode(callErr.Cause); code != "" {
 			return adapterError(
 				code,
-				operation+"_"+string(code),
+				agent.ErrorReasonForCode(operation, code),
 				operation+" failed",
 				err,
 			)
@@ -612,17 +630,17 @@ func nativeOperationError(operation string, err error) error {
 	if errors.As(err, &rpcErr) {
 		return adapterError(
 			agent.ErrorNativeRejected,
-			operation+"_native_rejected",
+			agent.ErrorReasonForCode(operation, agent.ErrorNativeRejected),
 			operation+" was rejected by Codex",
 			err,
 		)
 	}
 	if code := nativeCauseCode(err); code != "" {
-		return adapterError(code, operation+"_"+string(code), operation+" failed", err)
+		return adapterError(code, agent.ErrorReasonForCode(operation, code), operation+" failed", err)
 	}
 	return adapterError(
 		agent.ErrorUnavailable,
-		operation+"_failed",
+		agent.ErrorReasonForOperation(operation, agent.ErrorReasonSuffixFailed),
 		operation+" failed",
 		err,
 	)

@@ -84,7 +84,7 @@ func SetExecutionModel(
 	if model == "" {
 		return ConfigurationReceipt{}, &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "missing_model",
+			Reason:  ErrorReasonMissingModel,
 			Message: "model must be nonempty",
 		}
 	}
@@ -107,14 +107,14 @@ func validateExecutionOptionChange(change ExecutionOptionChange) error {
 	default:
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "execution_option_unknown",
+			Reason:  ErrorReasonExecutionOptionUnknown,
 			Message: "execution option is not supported",
 		}
 	}
 	if change.Value == "" {
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "execution_option_empty_value",
+			Reason:  ErrorReasonExecutionOptionEmptyValue,
 			Message: "execution option value must be nonempty",
 		}
 	}

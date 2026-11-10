@@ -74,11 +74,9 @@ func (r *InteractionRequest) UnmarshalJSON(data []byte) error {
 	if wire.Content != nil {
 		content = make([]ContentBlock, len(wire.Content))
 		for index, raw := range wire.Content {
-			block, err := unmarshalContentBlock(raw)
-			if err != nil {
+			if err := content[index].UnmarshalJSON(raw); err != nil {
 				return invalidArgument("invalid_interaction_content", err.Error())
 			}
-			content[index] = block
 		}
 	}
 	*r = InteractionRequest{

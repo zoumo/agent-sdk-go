@@ -19,9 +19,9 @@ func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
 		settled <- interaction.slot.Resolve(
 			interactionledger.Result{
 				Outcome: agent.InteractionCancelled,
-				Reason:  "session_closed",
+				Reason:  agent.ErrorReasonSessionClosed,
 			},
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 		)
 	}()
 
@@ -37,7 +37,7 @@ func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
 	case got := <-settled:
 		assert.Equal(t, interactionledger.Result{
 			Outcome: agent.InteractionAnswered,
-			Reason:  "session_closed",
+			Reason:  agent.ErrorReasonSessionClosed,
 		}, got)
 	case <-time.After(time.Second):
 		require.FailNow(t, "settlement did not resume")
@@ -71,11 +71,11 @@ func TestInteractionSettlementPreservesUnknownAnswerOutcome(t *testing.T) {
 				require.True(t, slot.Claim())
 				require.True(t, slot.CompleteTerminal(
 					agent.InteractionFailed,
-					"answer_outcome_unknown",
+					agent.ErrorReasonAnswerOutcomeUnknown,
 				))
 			},
 			wantOutcome: agent.InteractionFailed,
-			wantReason:  "answer_outcome_unknown",
+			wantReason:  agent.ErrorReasonAnswerOutcomeUnknown,
 		},
 	}
 	for _, test := range tests {

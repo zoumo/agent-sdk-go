@@ -40,7 +40,7 @@ func (s *session) lane(parent string) (*claudeLane, error) {
 	lane := s.lanes[parent]
 	if lane == nil {
 		if len(s.lanes) >= maxClaudeLiveState {
-			return nil, liveStateExhausted("live_block_lane_capacity")
+			return nil, liveStateExhausted(ErrorReasonLiveBlockLaneCapacity)
 		}
 		lane = &claudeLane{}
 		s.lanes[parent] = lane
@@ -83,7 +83,7 @@ func (s *session) trackedBlock(key claudeBlockKey, kind string) (*claudeBlock, e
 	block := s.blocks[key]
 	if block == nil {
 		if len(s.blocks) >= maxClaudeLiveState {
-			return nil, liveStateExhausted("live_block_capacity")
+			return nil, liveStateExhausted(ErrorReasonLiveBlockCapacity)
 		}
 		block = &claudeBlock{}
 		s.blocks[key] = block
@@ -115,7 +115,7 @@ func (s *session) noteBlockStart(
 	}
 	if kind == "tool_use" {
 		if block.toolUseID != "" && block.toolUseID != toolUseID {
-			return claudeProtocolError("conflicting_tool_block_identity")
+			return claudeProtocolError(ErrorReasonConflictingToolBlockIdentity)
 		}
 		block.toolUseID = toolUseID
 		block.toolName = toolName
@@ -183,7 +183,7 @@ func (s *session) observeToolCall(id string, identity claudeToolIdentity) error 
 		return nil
 	}
 	if len(s.calls) >= maxClaudeLiveState {
-		return liveStateExhausted("tool_call_capacity")
+		return liveStateExhausted(ErrorReasonToolCallCapacity)
 	}
 	s.calls[id] = claudeCall{identity: identity}
 	return nil

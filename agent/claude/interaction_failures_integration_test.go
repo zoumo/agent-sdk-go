@@ -47,7 +47,7 @@ func TestClaudeNotSentAnswerRollsBackAndRetriesSameReference(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -73,7 +73,7 @@ func TestClaudeNotSentAnswerRollsBackAndRetriesSameReference(t *testing.T) {
 	assert.True(t, *retried.Acceptance.Sent)
 
 	keepOpen, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}},
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, keepOpen.Submission)
@@ -131,7 +131,7 @@ func TestClaudeNotSentWithCanceledNativeRequestConsumesAuthority(t *testing.T) {
 			transport.Reader = readGate
 			return transport
 		}, frames...)
-	_, err := session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}}})
+	_, err := session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}}})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
 	require.Equal(t, agent.StateRequiresAction, nextStateValue(t, ctx, stream))
@@ -200,7 +200,7 @@ func TestClaudeNotSentWithCanceledNativeRequestConsumesAuthority(t *testing.T) {
 	requireAgentErrorReason(t, err, "invalid_interaction_ref")
 	assert.Equal(t, agent.InteractionReceipt{}, retry)
 
-	_, err = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}}})
+	_, err = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}}})
 	require.NoError(t, err)
 	require.NoError(t, session.Close(ctx))
 	_, err = stream.Next(ctx)
@@ -250,7 +250,7 @@ func TestClaudeOutcomeUnknownSettlesFailedAndRemovesAuthority(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -322,7 +322,7 @@ func TestClaudeCloseWaitsForInFlightAnswerSettlement(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -428,7 +428,7 @@ func TestClaudeNativeStateChangeWaitsForInFlightAnswerSettlement(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -473,7 +473,7 @@ func TestClaudeNativeStateChangeWaitsForInFlightAnswerSettlement(t *testing.T) {
 	require.Equal(t, agent.StateIdle, nextStateValue(t, ctx, stream))
 
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}},
 	})
 	require.NoError(t, err)
 	require.NoError(t, session.Close(ctx))
@@ -512,7 +512,7 @@ func TestClaudeMultipleInteractionsCloseInRegistrationOrder(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))

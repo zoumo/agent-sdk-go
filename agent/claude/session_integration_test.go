@@ -42,7 +42,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	assert.Equal(t, "native-loop", session.ID())
 
 	receipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "hello"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
@@ -53,7 +53,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
 
 	second, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "follow-up"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "follow-up"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedBestEffort, second.Result)
@@ -71,7 +71,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 11, 7, 12, 34, 56, 789_000_000, time.UTC), message.Time)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "message-1:0",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "hello from Claude"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello from Claude"}}},
 	}, message.Payload)
 	require.NoError(t, message.Validate())
 
@@ -270,7 +270,9 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 
 	// Hold the scripted disconnect until Open has returned; otherwise an early
 	// transport failure can legitimately win the initialization race.
-	_, _ = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: "disconnect"}}})
+	_, _ = session.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "disconnect"}}},
+	})
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
@@ -281,6 +283,46 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	require.NoError(t, err)
 	_, err = stream.Next(ctx)
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+}
+
+func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		`<{"type":"system","subtype":"init","session_id":"native-natural","cwd":`+
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+		`<{"type":"assistant","session_id":"native-natural","message":{"id":"kept-message","content":[{"type":"text","text":"kept","apiBlockIndex":0}]}}`,
+		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"disconnect"}}`,
+		"!",
+	)
+	peerSession := prepareClaudePeer(t, "failed", frames...)
+	provider := newTestClaudeProvider(t, peerSession)
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	stream, err := session.Events()
+	require.NoError(t, err)
+	_, _ = session.StartOrSteer(ctx, agent.Input{
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "disconnect"}}},
+	})
+	select {
+	case <-session.Done():
+	case <-ctx.Done():
+		require.NoError(t, ctx.Err())
+	}
+
+	event, err := stream.Next(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, agent.EventAgentMessage, event.Type())
+	_, err = stream.Next(ctx)
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+
+	require.NoError(t, provider.Stop(ctx))
 }
 
 func TestAnswerRejectsUnknownRefAndInterruptHasNoActiveWork(t *testing.T) {

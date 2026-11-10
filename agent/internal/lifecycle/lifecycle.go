@@ -169,7 +169,7 @@ func (l *Lifecycle[R, I]) Stop(ctx context.Context) error {
 func providerStoppedError() error {
 	return &agent.Error{
 		Code:    agent.ErrorClosed,
-		Reason:  "provider_stopped",
+		Reason:  agent.ErrorReasonProviderStopped,
 		Message: "provider has been stopped",
 	}
 }
@@ -177,7 +177,7 @@ func providerStoppedError() error {
 func providerNotStartedError() error {
 	return &agent.Error{
 		Code:    agent.ErrorFailedPrecondition,
-		Reason:  "provider_not_started",
+		Reason:  agent.ErrorReasonProviderNotStarted,
 		Message: "provider must be started before opening a session",
 	}
 }
@@ -185,7 +185,7 @@ func providerNotStartedError() error {
 func providerHasOpenSessionsError() error {
 	return &agent.Error{
 		Code:    agent.ErrorFailedPrecondition,
-		Reason:  "provider_has_open_sessions",
+		Reason:  agent.ErrorReasonProviderHasOpenSessions,
 		Message: "provider cannot stop while sessions are open",
 	}
 }

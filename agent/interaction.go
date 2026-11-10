@@ -208,7 +208,7 @@ func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error) {
 			}
 			if err := validateJSONValue(value.Content); err != nil {
 				return nil, invalidArgument(
-					"invalid_form_answer",
+					ErrorReasonInvalidFormAnswer,
 					"form answer content is not JSON encodable",
 				)
 			}
@@ -221,7 +221,7 @@ func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error) {
 			}
 		default:
 			return nil, invalidArgument(
-				"invalid_form_outcome",
+				ErrorReasonInvalidFormOutcome,
 				"form answer outcome is not supported",
 			)
 		}
@@ -235,7 +235,7 @@ func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error) {
 			)
 		}
 	default:
-		return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
+		return nil, invalidArgument(ErrorReasonUnsupportedAnswer, "answer kind is not supported")
 	}
 	return concrete, nil
 }
@@ -249,7 +249,7 @@ func ValidateAnswer(kind InteractionKind, answer Answer) error {
 
 func concreteAnswer(answer Answer) (Answer, error) {
 	if answer == nil {
-		return nil, invalidArgument("missing_answer", "answer is required")
+		return nil, invalidArgument(ErrorReasonMissingAnswer, "answer is required")
 	}
 	switch value := answer.(type) {
 	case PermissionAnswer, FormAnswer, URLAnswer:
@@ -271,10 +271,10 @@ func concreteAnswer(answer Answer) (Answer, error) {
 		// Reject wrappers without invoking a method on caller-owned values.
 		reflected := reflect.ValueOf(answer)
 		if reflected.Kind() != reflect.Pointer || !reflected.IsNil() {
-			return nil, invalidArgument("unsupported_answer", "answer kind is not supported")
+			return nil, invalidArgument(ErrorReasonUnsupportedAnswer, "answer kind is not supported")
 		}
 	}
-	return nil, invalidArgument("missing_answer", "answer is required")
+	return nil, invalidArgument(ErrorReasonMissingAnswer, "answer is required")
 }
 
 type InteractionOutcome string
@@ -298,7 +298,7 @@ func validPermissionOptionKind(kind PermissionOptionKind) bool {
 
 func validateOptionalContent(content []ContentBlock) error {
 	for _, block := range content {
-		if err := validateContentBlock(block); err != nil {
+		if err := block.Validate(); err != nil {
 			return err
 		}
 	}

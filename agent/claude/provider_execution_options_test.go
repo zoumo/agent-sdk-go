@@ -278,14 +278,14 @@ func TestClaudeProviderRejectsInvalidExecutionOptionsBeforeNativeLaunch(
 			execution: agent.ExecutionOptions{
 				Model: sentinel + string([]byte{0xff}),
 			},
-			wantReason: "execution_option_invalid_utf8",
+			wantReason: agent.ErrorReasonExecutionOptionInvalidUTF8,
 		},
 		{
 			name: "NUL",
 			execution: agent.ExecutionOptions{
 				ReasoningEffort: sentinel + "\x00tail",
 			},
-			wantReason: "execution_option_contains_nul",
+			wantReason: agent.ErrorReasonExecutionOptionContainsNUL,
 		},
 	}
 

@@ -238,12 +238,12 @@ func TestProviderRejectsInvalidUTF8BeforeNativeRequest(t *testing.T) {
 		{
 			name:       "model",
 			execution:  agent.ExecutionOptions{Model: string([]byte{0xff})},
-			wantReason: "execution_option_invalid_utf8",
+			wantReason: agent.ErrorReasonExecutionOptionInvalidUTF8,
 		},
 		{
 			name:       "reasoning effort",
 			execution:  agent.ExecutionOptions{ReasoningEffort: string([]byte{0xff})},
-			wantReason: "execution_option_invalid_utf8",
+			wantReason: agent.ErrorReasonExecutionOptionInvalidUTF8,
 		},
 	}
 
@@ -920,7 +920,7 @@ func TestControllerUpdatesWhileTurnIsActiveWithoutWaitingOrInterrupting(t *testi
 	}
 	require.True(t, completed, "the active turn must be able to complete after the update")
 	nextReceipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "after-update"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "after-update"}}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "turn-b", nextReceipt.Submission)

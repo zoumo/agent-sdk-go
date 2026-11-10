@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 func (s *session) convertReceived(received codex.Received) ([]agent.Event, error) {
@@ -31,7 +31,7 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 	if event.DecodeError != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			"event_decode_failed",
+			ErrorReasonEventDecodeFailed,
 			"decode native Codex event",
 			event.DecodeError,
 		)
@@ -449,7 +449,9 @@ func (s *session) agentMessageDelta(received codex.Received) ([]agent.Event, err
 		data.ItemID,
 		agent.MessageChunk{
 			MessageID: data.ItemID,
-			Content:   []agent.ContentBlock{agent.TextBlock{Text: data.Delta}},
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: data.Delta}},
+			},
 		},
 		time.Now().UTC(),
 		nil,
@@ -474,7 +476,9 @@ func (s *session) reasoningDelta(received codex.Received) ([]agent.Event, error)
 		data.ItemID,
 		agent.ThinkingChunk{
 			MessageID: data.ItemID,
-			Content:   []agent.ContentBlock{agent.TextBlock{Text: data.Delta}},
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: data.Delta}},
+			},
 		},
 		time.Now().UTC(),
 		nil,
@@ -498,8 +502,10 @@ func (s *session) toolOutputDelta(received codex.Received) ([]agent.Event, error
 		received.Event.Method,
 		data.ItemID,
 		agent.ToolChunkPayload{
-			ID:      data.ItemID,
-			Content: []agent.ContentBlock{agent.TextBlock{Text: data.Delta}},
+			ID: data.ItemID,
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: data.Delta}},
+			},
 		},
 		time.Now().UTC(),
 		nil,
@@ -560,7 +566,9 @@ func (s *session) userMessage(
 		if input.Text == nil || len(input.Unknown) != 0 {
 			return s.itemGap(received, codextypes.ThreadItem{UserMessage: item})
 		}
-		content = append(content, agent.TextBlock{Text: input.Text.Text})
+		content = append(content, agent.ContentBlock{
+			Text: &agent.ContentBlockText{Text: input.Text.Text},
+		})
 	}
 	event, err := s.newEvent(
 		received,
@@ -594,8 +602,10 @@ func (s *session) agentMessage(
 		item.ID,
 		agent.AgentMessage{
 			MessageID: item.ID,
-			Content:   []agent.ContentBlock{agent.TextBlock{Text: item.Text}},
-			Phase:     phase,
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: item.Text}},
+			},
+			Phase: phase,
 		},
 		unixMilliOrNow(completedAtMs),
 		nil,
@@ -623,7 +633,9 @@ func (s *session) reasoningMessage(
 	}
 	content := make([]agent.ContentBlock, 0, len(parts))
 	for _, text := range parts {
-		content = append(content, agent.TextBlock{Text: text})
+		content = append(content, agent.ContentBlock{
+			Text: &agent.ContentBlockText{Text: text},
+		})
 	}
 	event, err := s.newEvent(
 		received,
@@ -789,24 +801,12 @@ func (s *session) newEvent(
 	eventTime time.Time,
 	extras map[string]any,
 ) (agent.Event, error) {
-	eventID, err := uuidv4.New()
-	if err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_id_failed",
-			"create unified event identity",
-			err,
-		)
-	}
 	if method == "" {
 		method = requestMethod(received)
 	}
 	raw := received.Raw
 	if len(raw) == 0 && received.Event != nil {
 		raw = received.Event.Raw
-	}
-	if eventTime.IsZero() {
-		eventTime = time.Now().UTC()
 	}
 	codexMeta := map[string]any{
 		"method": method,
@@ -838,25 +838,12 @@ func (s *session) newEvent(
 		}
 		codexMeta[key] = value
 	}
-	event := agent.Event{
-		EventID:   eventID,
-		SessionID: sessionID,
-		Time:      eventTime,
-		ItemID:    itemID,
-		Payload:   payload,
-		Meta: map[string]any{
-			"codex": codexMeta,
-		},
-	}
-	if err := event.Validate(); err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_invalid",
-			"convert native Codex event",
-			err,
-		)
-	}
-	return event, nil
+	return (eventenvelope.Envelope{SessionID: sessionID}).Event(
+		itemID,
+		payload,
+		eventTime,
+		map[string]any{"codex": codexMeta},
+	)
 }
 
 func optionalSeconds(value codextypes.Optional[int64]) time.Time {
@@ -877,7 +864,7 @@ func unixMilliOrNow(value int64) time.Time {
 func invalidNativeEvent(method string) error {
 	return adapterError(
 		agent.ErrorUnavailable,
-		"invalid_native_event",
+		ErrorReasonInvalidNativeEvent,
 		"invalid native Codex event: "+method,
 		nil,
 	)

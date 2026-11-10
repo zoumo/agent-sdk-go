@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope"
 	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 type claudeUsageState struct {
@@ -299,7 +299,9 @@ func (s *session) streamDelta(
 			key.itemID(),
 			agent.MessageChunk{
 				MessageID: key.itemID(),
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: frame.Delta.Text}},
+				Content: []agent.ContentBlock{
+					{Text: &agent.ContentBlockText{Text: frame.Delta.Text}},
+				},
 			},
 			nativeEventTime(received.Raw),
 			meta,
@@ -314,7 +316,9 @@ func (s *session) streamDelta(
 			key.itemID(),
 			agent.ThinkingChunk{
 				MessageID: key.itemID(),
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: frame.Delta.Thinking}},
+				Content: []agent.ContentBlock{
+					{Text: &agent.ContentBlockText{Text: frame.Delta.Thinking}},
+				},
 			},
 			nativeEventTime(received.Raw),
 			meta,
@@ -338,7 +342,7 @@ func (s *session) streamDelta(
 			agent.ToolChunkPayload{
 				ID: block.toolUseID,
 				Content: []agent.ContentBlock{
-					agent.TextBlock{Text: frame.Delta.PartialJSON},
+					{Text: &agent.ContentBlockText{Text: frame.Delta.PartialJSON}},
 				},
 			},
 			nativeEventTime(received.Raw),
@@ -494,12 +498,16 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 			}
 			var payload agent.Payload = agent.AgentMessage{
 				MessageID: key.itemID(),
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: text}},
+				Content: []agent.ContentBlock{
+					{Text: &agent.ContentBlockText{Text: text}},
+				},
 			}
 			if kind == "thinking" {
 				payload = agent.AgentThinking{
 					MessageID: key.itemID(),
-					Content:   []agent.ContentBlock{agent.TextBlock{Text: text}},
+					Content: []agent.ContentBlock{
+						{Text: &agent.ContentBlockText{Text: text}},
+					},
 				}
 			}
 			event, eventErr := s.newEvent(
@@ -563,7 +571,7 @@ func (s *session) assistantBlockKey(
 	index, coordinate := blockCoordinate(block)
 	switch coordinate {
 	case coordinateInvalid:
-		return claudeBlockKey{}, claudeProtocolError("assistant_block_coordinate_invalid")
+		return claudeBlockKey{}, claudeProtocolError(ErrorReasonAssistantBlockCoordinateInvalid)
 	case coordinateMissing:
 		if visibleCount == 1 && eventIndexState == coordinateValid {
 			index = eventIndex
@@ -572,11 +580,11 @@ func (s *session) assistantBlockKey(
 	}
 	if coordinate == coordinateMissing {
 		if visibleCount != 1 {
-			return claudeBlockKey{}, claudeProtocolError("assistant_block_coordinate_missing")
+			return claudeBlockKey{}, claudeProtocolError(ErrorReasonAssistantBlockCoordinateMissing)
 		}
 		unique, ok := s.uniqueBlock(parent, response, kind)
 		if !ok {
-			return claudeBlockKey{}, claudeProtocolError("assistant_block_coordinate_missing")
+			return claudeBlockKey{}, claudeProtocolError(ErrorReasonAssistantBlockCoordinateMissing)
 		}
 		index = unique
 	}
@@ -660,7 +668,9 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 		return s.userMessageEvent(
 			received,
 			message,
-			[]agent.ContentBlock{agent.TextBlock{Text: *message.Content.Text}},
+			[]agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: *message.Content.Text}},
+			},
 		)
 	}
 	if len(message.Content.Blocks) == 0 {
@@ -735,7 +745,9 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			}
 			textContent = append(
 				textContent,
-				agent.TextBlock{Text: block.Text.Text},
+				agent.ContentBlock{
+					Text: &agent.ContentBlockText{Text: block.Text.Text},
+				},
 			)
 		case "tool_result":
 			if err := flushText(); err != nil {
@@ -1348,19 +1360,6 @@ func (s *session) newEvent(
 	eventTime time.Time,
 	extras map[string]any,
 ) (agent.Event, error) {
-	eventID, err := uuidv4.New()
-	if err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_id_failed",
-			"create unified event identity",
-			err,
-		)
-	}
-	if eventTime.IsZero() {
-		eventTime = time.Now().UTC()
-	}
-
 	raw := received.Raw
 	eventType := ""
 	subtype := ""
@@ -1413,25 +1412,12 @@ func (s *session) newEvent(
 		}
 	}
 
-	event := agent.Event{
-		EventID:   eventID,
-		SessionID: s.ID(),
-		Time:      eventTime,
-		ItemID:    itemID,
-		Payload:   payload,
-		Meta: map[string]any{
-			"claude": claudeMeta,
-		},
-	}
-	if err := event.Validate(); err != nil {
-		return agent.Event{}, adapterError(
-			agent.ErrorUnavailable,
-			"event_invalid",
-			"convert native Claude event",
-			err,
-		)
-	}
-	return event, nil
+	return (eventenvelope.Envelope{SessionID: s.ID()}).Event(
+		itemID,
+		payload,
+		eventTime,
+		map[string]any{"claude": claudeMeta},
+	)
 }
 
 func nativeEventTime(raw json.RawMessage) time.Time {
@@ -1662,7 +1648,9 @@ func toolResultContent(
 		if err := json.Unmarshal(trimmed, &text); err != nil {
 			return nil, false, err
 		}
-		return []agent.ContentBlock{agent.TextBlock{Text: text}}, true, nil
+		return []agent.ContentBlock{
+			{Text: &agent.ContentBlockText{Text: text}},
+		}, true, nil
 	case '[':
 		var blocks []map[string]json.RawMessage
 		if err := json.Unmarshal(trimmed, &blocks); err != nil {
@@ -1671,17 +1659,19 @@ func toolResultContent(
 		content := make([]agent.ContentBlock, 0, len(blocks))
 		for _, block := range blocks {
 			if rawString(block, "type") != "text" {
-				return nil, false, claudeProtocolError("tool_result_content_unsupported")
+				return nil, false, claudeProtocolError(ErrorReasonToolResultContentUnsupported)
 			}
 			var text *string
 			if json.Unmarshal(block["text"], &text) != nil || text == nil {
-				return nil, false, claudeProtocolError("tool_result_text_invalid")
+				return nil, false, claudeProtocolError(ErrorReasonToolResultTextInvalid)
 			}
-			content = append(content, agent.TextBlock{Text: *text})
+			content = append(content, agent.ContentBlock{
+				Text: &agent.ContentBlockText{Text: *text},
+			})
 		}
 		return content, true, nil
 	default:
-		return nil, false, claudeProtocolError("tool_result_content_unsupported")
+		return nil, false, claudeProtocolError(ErrorReasonToolResultContentUnsupported)
 	}
 }
 

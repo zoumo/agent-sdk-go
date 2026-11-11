@@ -259,6 +259,15 @@ func newTestClaudeProviderWithStreamHook(
 						t.Error("input completion watcher did not finish")
 					}
 				})
+				if options.Initialize == nil ||
+					options.Initialize.ForwardSubagentText != nil && *options.Initialize.ForwardSubagentText {
+					record, err := session.Receive(ctx)
+					if assert.NoError(t, err) && assert.NotNil(t, record.Observation) {
+						assert.Equal(t, claude.ReceivedObservation, record.Kind)
+						assert.Equal(t, "forwarding-not-confirmed", record.Observation.Reason)
+						assert.Equal(t, "initialize-forwardSubagentText-is-a-request", record.Observation.Evidence)
+					}
+				}
 			},
 		}, nil
 	})

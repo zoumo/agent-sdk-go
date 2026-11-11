@@ -111,9 +111,8 @@ func newSession(o Options) (*Session, error) {
 		for _, record := range admission.confirmRoot(o.SessionID) {
 			_ = s.fifo.Push(record, 0)
 		}
-	} else {
-		// The assigned-root path already establishes its identity before input.
-		// Do not manufacture a relationship diagnostic for that internal setup.
+	}
+	if o.Initialize == nil || o.Initialize.ForwardSubagentText != nil && *o.Initialize.ForwardSubagentText {
 		_ = s.fifo.Push(liveObservation("forwarding-not-confirmed", "initialize-forwardSubagentText-is-a-request", SubagentIdentity{}, nil), 0)
 	}
 	return s, nil

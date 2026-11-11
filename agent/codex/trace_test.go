@@ -2,6 +2,7 @@ package agentcodex_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -52,12 +53,18 @@ func (r *traceRecorder) End(err error) {
 }
 
 func TestTraceStartOrSteerSynthetic(t *testing.T) {
+	child := agent.TraceContext{Traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-b9c7c989f97918e1-01", Tracestate: "vendor=child"}
 	parent := agent.TraceContext{Traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", Tracestate: "vendor=parent"}
 	for _, test := range []struct {
+		childSpan, invalidSpan                                              bool
 		name, panicAt                                                       string
 		invalidParent, noParent, nilSpan, missingIdentity, nativeNotApplied bool
 	}{
 		{name: "valid parent"},
+		{name: "span carrier wins", childSpan: true},
+		{name: "span without parent", childSpan: true, noParent: true},
+		{name: "invalid span falls back", invalidSpan: true},
+		{name: "invalid span and parent", invalidSpan: true, invalidParent: true},
 		{name: "invalid parent", invalidParent: true},
 		{name: "active context parent", noParent: true},
 		{name: "nil span", nilSpan: true},
@@ -78,15 +85,28 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			if test.nativeNotApplied {
 				response = `<{"id":93,"error":{"code":-32603,"message":"no active turn to steer"}}`
 			}
+			request := `>{"id":93,"method":"turn/start","params":{"input":[{"text":"hello","type":"text"}],"threadId":"root-a"}`
+			if test.childSpan {
+				request += `,"trace":{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-b9c7c989f97918e1-01","tracestate":"vendor=child"}`
+			} else if !test.invalidParent && !test.noParent {
+				request += `,"trace":{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01","tracestate":"vendor=parent"}`
+			}
+			request += `}`
 			frames = append(frames,
 				`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
 				`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
-				`>{"id":93,"method":"turn/start","params":{"input":[{"text":"hello","type":"text"}],"threadId":"root-a"}}`,
+				request,
 				response,
 				`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
 				`<{"id":94,"result":{"status":"unsubscribed"}}`,
 			)
 			recorder := &traceRecorder{panicAt: test.panicAt, nilSpan: test.nilSpan}
+			if test.childSpan {
+				recorder.carrier = child
+			}
+			if test.invalidSpan {
+				recorder.carrier = agent.TraceContext{Traceparent: "invalid"}
+			}
 			provider := newTestProviderWithWrappers(t, prepareCodexPeer(t, frames...), codextypes.InitializeParams{
 				ClientInfo:   codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
 				Capabilities: codextypes.Some(codextypes.InitializeCapabilities{ExperimentalAPI: codextypes.Some(true)}),
@@ -97,6 +117,8 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
 			require.NoError(t, err)
 			closeSessionOnCleanup(t, session)
+			assert.True(t, session.Capabilities().Supports(agent.CapabilityPromptTrace))
+			require.NoError(t, session.Capabilities().Validate())
 			// Invalid input is rejected before telemetry and native dispatch.
 			_, err = session.StartOrSteer(ctx, agent.Input{})
 			require.Error(t, err)
@@ -145,5 +167,54 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
 			assert.Equal(t, 1, recorder.starts)
 		})
+	}
+}
+
+// Reusing a native turn ID proves only the adapter's per-call carrier mapping,
+// not provider-side active-turn trace ownership.
+func TestPromptTraceConsecutiveCodexSynthetic(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	parent := agent.TraceContext{Traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", Tracestate: "vendor=first"}
+	other := agent.TraceContext{Traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-b9c7c989f97918e1-01"}
+	calls := []struct {
+		ctx   context.Context
+		trace string
+	}{
+		{agent.WithTraceContext(ctx, parent), `,"trace":{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01","tracestate":"vendor=first"}`},
+		{ctx, ""},
+		{agent.WithTraceContext(ctx, other), `,"trace":{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-b9c7c989f97918e1-01"}`},
+		{agent.WithTraceContext(ctx, agent.TraceContext{Traceparent: "invalid"}), ""},
+		{agent.WithTraceContext(ctx, agent.TraceContext{Tracestate: "vendor=only"}), ""},
+		{agent.WithTraceContext(ctx, agent.TraceContext{Traceparent: parent.Traceparent, Tracestate: "vendor=one,vendor=two"}), ""},
+		{ctx, ""},
+	}
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+	)
+	for i, call := range calls {
+		id := 93 + i
+		frames = append(frames,
+			fmt.Sprintf(`>{"id":%d,"method":"turn/start","params":{"input":[{"text":"hello","type":"text"}],"threadId":"root-a"}%s}`, id, call.trace),
+			fmt.Sprintf(`<{"id":%d,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`, id),
+		)
+	}
+	id := 93 + len(calls)
+	frames = append(frames,
+		fmt.Sprintf(`>{"id":%d,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`, id),
+		fmt.Sprintf(`<{"id":%d,"result":{"status":"unsubscribed"}}`, id),
+	)
+	session := openStartOrSteerSession(t, ctx, frames...)
+	for i, call := range calls {
+		receipt, err := session.StartOrSteer(call.ctx, textInput("hello"))
+		require.NoError(t, err)
+		if i == 0 {
+			assert.Equal(t, agent.InputAppliedNewWork, receipt.Result)
+		} else {
+			assert.Equal(t, agent.InputAppliedCurrentWork, receipt.Result)
+		}
+		assert.Equal(t, "turn-a", receipt.Submission)
 	}
 }

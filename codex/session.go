@@ -181,7 +181,7 @@ func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
 	}
 	p := input.native(s.root)
 	var response types.TurnStartResponse
-	err := s.client.callOwned(ctx, "turn/start", p, &response, false, nil, s)
+	err := s.client.callOwnedWithTrace(ctx, "turn/start", p, &response, false, nil, s, submissionTrace(ctx))
 	return Submission{Response: response}, err
 }
 

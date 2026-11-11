@@ -209,8 +209,9 @@ func (p *Provider) NativeClient() (*codex.Client, error) {
 
 func providerCapabilities(formsSupported bool) agent.Capabilities {
 	capabilities := agent.Capabilities{
-		agent.CapabilityTextInput:  true,
-		agent.CapabilityPermission: true,
+		agent.CapabilityTextInput:   true,
+		agent.CapabilityPermission:  true,
+		agent.CapabilityPromptTrace: true,
 	}
 	if formsSupported {
 		capabilities[agent.CapabilityForm] = true

@@ -157,6 +157,16 @@ func (s *session) StartOrSteer(
 	trace := submissiontrace.Start(ctx, s.provider.tracer)
 	defer func() { trace.End(err) }()
 
+	if ctx != nil {
+		carrier := codex.TraceContext{}
+		if trace.Carrier != nil {
+			carrier.Traceparent = codextypes.Some(trace.Carrier.Traceparent)
+			if trace.Carrier.Tracestate != "" {
+				carrier.Tracestate = codextypes.Some(trace.Carrier.Tracestate)
+			}
+		}
+		ctx = codex.WithTraceContext(ctx, carrier)
+	}
 	submission, submitErr := s.native.Submit(ctx, nativeInput)
 
 	s.mu.Lock()

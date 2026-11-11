@@ -7483,13 +7483,21 @@
     },
     {
       "name": "request-trace-context",
-      "support": "unsupported",
+      "support": "supported",
       "source_path": "codex-rs/app-server-protocol/src/rpc.rs",
       "source_line": 51,
-      "description": "Optional top-level trace field exists upstream; no caller-facing request trace option in this slice.",
+      "description": "Session.Submit alone reads codex.WithTraceContext and writes a valid W3C carrier to the turn/start request envelope. Invalid or incomplete carriers are omitted without rejecting input. Raw Client.Call, StartThread and ResumeThread remain trace-free; provider span attribution and explicit turn/steer propagation are not certified.",
       "evidence": {
-        "unit": [],
-        "mock": [],
+        "unit": [
+          "TestW3cTraceContextRoundTrip",
+          "TestTraceContextHelpers"
+        ],
+        "mock": [
+          "TestSessionSubmitTraceEnvelope",
+          "TestRawCallsIgnorePromptTraceContext",
+          "TestTraceStartOrSteerSynthetic",
+          "TestPromptTraceConsecutiveCodexSynthetic"
+        ],
         "race": [],
         "live": []
       }

@@ -124,6 +124,30 @@ func TestRelationshipObservationBecomesDiagnosticGap(t *testing.T) {
 	}
 }
 
+func TestForwardingNotConfirmedRemainsDiagnosticGap(t *testing.T) {
+	session := &session{id: "native-session"}
+	events, err := session.convertReceived(claude.Received{
+		Kind: claude.ReceivedObservation,
+		Observation: &claude.Observation{
+			Reason:   "forwarding-not-confirmed",
+			Evidence: "native-subagent-forwarding",
+			Source: claude.SubagentIdentity{
+				SessionID: "native-session",
+				TaskID:    "task-1",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	payload, ok := events[0].Payload.(agent.SessionErrorPayload)
+	require.True(t, ok)
+	assert.Equal(t, "native_relationship_gap", payload.Reason)
+	meta := requireClaudeEventMeta(t, events[0])
+	assert.Equal(t, "forwarding-not-confirmed", meta["observationReason"])
+	assert.Equal(t, "native-subagent-forwarding", meta["evidence"])
+	assert.Equal(t, "task-1", meta["source"].(map[string]any)["taskId"])
+}
+
 func TestUserMessageTextBlocksRemainOneContentArray(t *testing.T) {
 	session := &session{id: "native-session"}
 	events, err := session.userEvent(claude.Received{

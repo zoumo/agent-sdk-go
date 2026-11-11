@@ -45,35 +45,67 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 	require.NotNil(t, receipt.Acceptance.Sent)
 	require.True(t, *receipt.Acceptance.Sent)
 	require.Nil(t, receipt.Acceptance.NativeAccepted)
-	seenAnswer := false
-	for !seenAnswer {
+	seenInit, seenAnswer := false, false
+	for {
 		event, err := stream.Next(ctx)
 		require.NoError(t, err)
 		require.Equal(t, initialID, event.SessionID)
+		nativeType, nativeSubtype, raw := claudeNativeEventEvidence(t, event)
+		if nativeType == "system" && nativeSubtype == "init" {
+			var init struct {
+				SessionID         string `json:"session_id"`
+				ClaudeCodeVersion string `json:"claude_code_version"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &init))
+			require.Equal(t, initialID, init.SessionID)
+			require.NotEmpty(t, init.ClaudeCodeVersion)
+			seenInit = true
+			t.Logf("unified init matched session_id=%s claude_code_version=%s", init.SessionID, init.ClaudeCodeVersion)
+		}
 		if event.Type() == agent.EventAgentMessage {
-			meta, ok := event.Meta["claude"].(map[string]any)
-			require.True(t, ok)
 			var native struct {
 				SessionID string `json:"session_id"`
 			}
-			raw, ok := meta["raw"].(json.RawMessage)
-			require.True(t, ok)
 			require.NoError(t, json.Unmarshal(raw, &native))
 			require.Equal(t, initialID, native.SessionID)
 			seenAnswer = true
 		}
+		if nativeType == "result" {
+			var result struct {
+				SessionID string `json:"session_id"`
+				Subtype   string `json:"subtype"`
+				IsError   bool   `json:"is_error"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &result))
+			require.Equal(t, initialID, result.SessionID)
+			require.Equal(t, "success", result.Subtype)
+			require.False(t, result.IsError)
+			t.Logf("unified result matched session_id=%s subtype=%s is_error=%t", result.SessionID, result.Subtype, result.IsError)
+			require.True(t, seenInit, "successful result arrived without a matching native init")
+			require.True(t, seenAnswer, "successful result arrived without a matching assistant message")
+			break
+		}
 		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok {
 			require.Equal(t, "native_event_unsupported", payload.Reason)
-			meta, ok := event.Meta["claude"].(map[string]any)
-			require.True(t, ok)
-			t.Logf("unified mapping gap: type=%v subtype=%v", meta["type"], meta["subtype"])
+			t.Logf("unified mapping gap: type=%s subtype=%s", nativeType, nativeSubtype)
 		}
 	}
 	require.NoError(t, session.Close(ctx))
 	require.NoError(t, session.Err())
 	require.Equal(t, initialID, session.ID())
 	require.NoError(t, provider.Stop(ctx))
-	t.Log("one unified input produced a matching native assistant identity; Close and Stop succeeded")
+	t.Log("one unified input produced matching init, assistant and success result; Close and Stop succeeded")
+}
+
+func claudeNativeEventEvidence(t *testing.T, event agent.Event) (string, string, json.RawMessage) {
+	t.Helper()
+	meta, ok := event.Meta["claude"].(map[string]any)
+	require.True(t, ok)
+	raw, ok := meta["raw"].(json.RawMessage)
+	require.True(t, ok)
+	eventType, _ := meta["type"].(string)
+	subtype, _ := meta["subtype"].(string)
+	return eventType, subtype, raw
 }
 
 func TestNativeAssignedSessionIdentityAcrossFirstTurn(t *testing.T) {

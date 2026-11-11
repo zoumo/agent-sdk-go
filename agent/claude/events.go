@@ -855,7 +855,7 @@ func (s *session) observationGap(
 			nil,
 		)
 	}
-	if confirmedRelationship(observation.Reason) || observation.Reason == "forwarding-not-confirmed" {
+	if confirmedRelationship(observation.Reason) {
 		return nil, nil
 	}
 	extras := map[string]any{

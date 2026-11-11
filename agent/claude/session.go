@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
+	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -16,11 +18,9 @@ import (
 )
 
 var (
-	_ agent.Session                    = (*session)(nil)
-	_ agent.ModelController            = (*session)(nil)
-	_ agent.EventStream                = (*eventStream)(nil)
-	_ agent.ExecutionOptionsReporter   = (*session)(nil)
-	_ agent.ExecutionOptionsController = (*session)(nil)
+	_ agent.Session          = (*session)(nil)
+	_ agent.ConfigController = (*session)(nil)
+	_ agent.EventStream      = (*eventStream)(nil)
 )
 
 type session struct {
@@ -30,26 +30,24 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu         sync.Mutex
-	mu                  sync.Mutex
-	eventsClaimed       bool
-	closed              bool
-	explicitClose       bool
-	providerReleased    bool
-	submitting          bool
-	submitUnknown       bool
-	workActive          bool
-	activeSubmit        string
-	state               *agent.SessionState
-	stateVersion        uint64
-	executionOptions    executionOptionsState
-	interactions        map[agent.InteractionRef]*pendingInteraction
-	interactionRefs     map[string]agent.InteractionRef
-	interactionSequence uint64
-	done                chan struct{}
-	doneClosed          bool
-	err                 error
-	resume              *resumeIdentityGuard
+	mu                sync.Mutex
+	eventsClaimed     bool
+	closed            bool
+	explicitClose     bool
+	providerReleased  bool
+	submitting        bool
+	submitUnknown     bool
+	workActive        bool
+	activeSubmit      string
+	state             *agent.SessionState
+	stateVersion      uint64
+	interactions      map[agent.InteractionRef]*pendingInteraction
+	interactionRefs   map[string]agent.InteractionRef
+	interactionLedger *interactionledger.Ledger
+	done              chan struct{}
+	doneClosed        bool
+	err               error
+	resume            *resumeIdentityGuard
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
@@ -70,21 +68,20 @@ func newSession(
 	init *claudetypes.Event,
 	sessionID string,
 	features agent.Features,
-	executionOptions executionOptionsState,
 	buffered []claude.Received,
 	resume *resumeIdentityGuard,
 ) (*session, error) {
 	created := &session{
-		provider:         provider,
-		native:           native,
-		id:               sessionID,
-		features:         effectiveFeatures(features),
-		executionOptions: executionOptions,
-		interactions:     make(map[agent.InteractionRef]*pendingInteraction),
-		interactionRefs:  make(map[string]agent.InteractionRef),
-		done:             make(chan struct{}),
-		observationDone:  make(chan struct{}),
-		resume:           resume,
+		provider:          provider,
+		native:            native,
+		id:                sessionID,
+		features:          effectiveFeatures(features),
+		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
+		interactionRefs:   make(map[string]agent.InteractionRef),
+		interactionLedger: interactionledger.New("claude-"),
+		done:              make(chan struct{}),
+		observationDone:   make(chan struct{}),
+		resume:            resume,
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
@@ -131,12 +128,6 @@ func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
 }
 
-func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.executionOptions.report()
-}
-
 func (s *session) Events() (agent.EventStream, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -165,10 +156,13 @@ func (s *session) Events() (agent.EventStream, error) {
 func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
-) (agent.InputReceipt, error) {
+) (receipt agent.InputReceipt, err error) {
 	text, err := textInput(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
+	}
+	if ctx == nil {
+		return agent.InputReceipt{}, nativeOperationError("start_or_steer", queue.ErrNilContext)
 	}
 
 	s.mu.Lock()
@@ -189,6 +183,9 @@ func (s *session) StartOrSteer(
 	s.submitting = true
 	s.mu.Unlock()
 
+	trace := submissiontrace.Start(ctx, s.provider.config.Tracer)
+	defer func() { trace.End(err) }()
+
 	submissionID, err := s.newSubmissionID(stateVersion)
 	if err != nil {
 		return agent.InputReceipt{}, err
@@ -196,6 +193,14 @@ func (s *session) StartOrSteer(
 
 	priority := "next"
 	shouldQuery := true
+	var carrier claude.TraceContext
+	if trace.Carrier != nil {
+		carrier = claude.TraceContext{
+			Traceparent: trace.Carrier.Traceparent,
+			Tracestate:  trace.Carrier.Tracestate,
+		}
+	}
+	ctx = claude.WithTraceContext(ctx, carrier)
 	nativeSubmission, submitErr := s.native.Submit(ctx, claude.Input{
 		User: &claudetypes.UserInput{
 			Message: claudetypes.InputMessage{

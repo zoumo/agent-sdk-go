@@ -20,12 +20,22 @@ and dependency boundaries.
   Do not add old-path forwarding packages or a shared native answer state machine.
   Common approval operations follow the [SDK behavior contract](sdk/architecture.md),
   preserving original native answer handles and provider-specific options.
-- The `agent` core production code must use only the standard library. It must not
+- The `agent` core production code must use only the standard library and the
+  SDK-internal carrier validator described below. It must not
   import either native SDK, MASS or recording/replay code. Provider adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
-  mechanics (`agent/internal/eventenvelope`, `agent/internal/lifecycle`,
-  `internal/queue` and `internal/uuidv4`), but adapters must not import each other
-  or the other native SDK, and native packages must not import `agent`.
+  mechanics (`agent/internal/lifecycle`, `agent/internal/eventenvelope`,
+  `agent/internal/interactionledger`, `agent/internal/submissiontrace`,
+  `internal/queue` and `internal/uuidv4`), but adapters must not import each
+  other or the other native SDK, and native packages must not import `agent`.
+- `internal/tracecontext` shares only standard-library W3C carrier validation
+  between `agent`, `claude` and `codex`; public types and context keys remain
+  package-owned and independent.
+- Trace values, context helpers and the `agent.Tracer` seam are part of the
+  standard-library-only core. OpenTelemetry or another telemetry SDK can
+  implement `Tracer` and adapt `TraceContext` outside this repository, but must
+  not become a production dependency of `agent`, `codex`, `claude` or either
+  native `types` package.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**
@@ -40,6 +50,17 @@ and dependency boundaries.
   import either native SDK or native `types`, an adapter, MASS, recording/replay
   code, tools or tests. Go internal visibility restricts it to packages under
   `agent`.
+- `agent/internal/interactionledger` owns only Session-scoped opaque interaction
+  references, registration order and provider-neutral authority slots. A slot
+  may record pending, answering, sent or settled authority and settlement
+  results, but never a native request, raw frame, request identifier, handle,
+  reply callback or reference-to-adapter lookup. Each adapter's private registry
+  remains the only route from a reference to native answer authority.
+- `agent/internal/submissiontrace` owns only the best-effort local span lifecycle
+  for one admitted unified submission. It may import the standard library and
+  public `agent` contract; it must not import a native SDK, adapter, MASS or
+  tracing implementation. Provider-specific carrier conversion and wire mapping
+  remain with each adapter.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib

@@ -23,15 +23,15 @@ import (
 )
 
 const (
-	agentExecutionSessionID  = "44444444-4444-4444-8444-444444444444"
-	agentExecutionSuccess    = "agent-execution-success"
-	agentExecutionResume     = "agent-execution-resume"
-	agentExecutionReject     = "agent-execution-reject"
-	agentExecutionUnknown    = "agent-execution-unknown"
-	agentExecutionConcurrent = "agent-execution-concurrent"
+	agentExecutionSessionID = "44444444-4444-4444-8444-444444444444"
+	agentExecutionSuccess   = "agent-session-config-success"
+	agentExecutionActive    = "agent-session-config-active"
+	agentExecutionResume    = "agent-session-config-resume"
+	agentExecutionReject    = "agent-session-config-reject"
+	agentExecutionUnknown   = "agent-session-config-unknown"
 )
 
-func (s *NativeIntegrationSuite) TestAgentExecutionOptionsRuntimeEvidenceAcrossProviders() {
+func (s *NativeIntegrationSuite) TestAgentSessionConfigRuntimeAcrossProviders() {
 	t := s.T()
 	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
 		tracePath := agentExecutionTracePath(t)
@@ -40,114 +40,103 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsRuntimeEvidenceAcrossP
 			ctx,
 			providerName,
 			agentExecutionSuccess,
-			agent.ExecutionOptions{
-				Model:           " Caller/Model v2 ",
-				ReasoningEffort: " Native/High ",
+			agent.SessionConfig{
+				Model:  " Caller/Model v2 ",
+				Effort: " Native/High ",
 			},
 		)
-		controller, ok := session.(agent.ExecutionOptionsController)
+		controller, ok := session.(agent.ConfigController)
 		require.True(t, ok)
-
-		initial := controller.EffectiveExecutionOptions()
-		requireAgentExecutionValue(
-			t,
-			" Caller/Model v2 ",
-			new("observed/model"),
-			initial.Model,
-		)
-		requireAgentExecutionValue(
-			t,
-			" Native/High ",
-			agentExecutionInitialEffort(providerName),
-			initial.ReasoningEffort,
-		)
 
 		stream, err := session.Events()
 		require.NoError(t, err)
 		submitAgentExecutionInput(t, ctx, session, stream, "before/update")
 
-		effortReceipt, err := controller.SetExecutionOption(
-			ctx,
-			agent.ExecutionOptionChange{
-				Option: agent.ExecutionOptionReasoningEffort,
-				Value:  "next/effort",
-			},
-		)
+		effortChange := agent.ConfigChange{
+			ID:    agent.ConfigEffort,
+			Value: " next/effort ",
+		}
+		effortReceipt, err := controller.SetConfig(ctx, effortChange)
 		require.NoError(t, err)
+		assert.Equal(t, effortChange, effortReceipt.Change)
 		assertAgentExecutionAccepted(t, effortReceipt.Acceptance)
-		requireAgentExecutionValue(
-			t,
-			" Caller/Model v2 ",
-			new("observed/model"),
-			effortReceipt.Report.Model,
-		)
-		requireAgentExecutionValue(
-			t,
-			"next/effort",
-			nil,
-			effortReceipt.Report.ReasoningEffort,
-		)
-		assert.Equal(t, effortReceipt.Report, controller.EffectiveExecutionOptions())
 
 		submitAgentExecutionInput(t, ctx, session, stream, "after/effort")
-		observedBeforeModel := controller.EffectiveExecutionOptions()
-		requireAgentExecutionValue(
-			t,
-			" Caller/Model v2 ",
-			new("observed/model"),
-			observedBeforeModel.Model,
-		)
-		// Claude exposes no separate effort observation; Codex confirms the
-		// requested effort before the model update can invalidate it.
-		var wantObservedEffort *string
-		if providerName == "codex" {
-			wantObservedEffort = new("next/effort")
-		}
-		requireAgentExecutionValue(
-			t,
-			"next/effort",
-			wantObservedEffort,
-			observedBeforeModel.ReasoningEffort,
-		)
 
-		modelReceipt, err := controller.SetExecutionOption(
-			ctx,
-			agent.ExecutionOptionChange{
-				Option: agent.ExecutionOptionModel,
-				Value:  "next/model",
-			},
-		)
+		modelChange := agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: " next/model ",
+		}
+		modelReceipt, err := controller.SetConfig(ctx, modelChange)
 		require.NoError(t, err)
-		assert.Equal(t, agent.ExecutionOptionModel, modelReceipt.Change.Option)
-		assert.Equal(t, "next/model", modelReceipt.Change.Value)
+		assert.Equal(t, modelChange, modelReceipt.Change)
 		assertAgentExecutionAccepted(t, modelReceipt.Acceptance)
-		requireAgentExecutionValue(t, "next/model", nil, modelReceipt.Report.Model)
-		requireAgentExecutionValue(t, "next/effort", nil, modelReceipt.Report.ReasoningEffort)
-		assert.Equal(t, modelReceipt.Report, controller.EffectiveExecutionOptions())
 
 		submitAgentExecutionInput(t, ctx, session, stream, "after/model")
 		assertAgentExecutionRuntimeTrace(t, providerName, tracePath)
 
 		require.NoError(t, session.Close(ctx))
-		afterClose := controller.EffectiveExecutionOptions()
-		assert.Equal(t, modelReceipt.Report, afterClose)
-		closedReceipt, err := controller.SetExecutionOption(
-			ctx,
-			agent.ExecutionOptionChange{
-				Option: agent.ExecutionOptionModel,
-				Value:  "after/close",
-			},
-		)
+		closedChange := agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: " after/close ",
+		}
+		closedReceipt, err := controller.SetConfig(ctx, closedChange)
 		require.Error(t, err)
 		assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
+		assert.Equal(t, closedChange, closedReceipt.Change)
 		require.NotNil(t, closedReceipt.Acceptance.Sent)
 		assert.False(t, *closedReceipt.Acceptance.Sent)
 		assert.Nil(t, closedReceipt.Acceptance.NativeAccepted)
-		assert.Equal(t, afterClose, closedReceipt.Report)
 	})
 }
 
-func (s *NativeIntegrationSuite) TestAgentExecutionOptionsResumeAcrossProviders() {
+func (s *NativeIntegrationSuite) TestAgentSessionConfigUpdatesActiveWorkAcrossProviders() {
+	t := s.T()
+	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
+		tracePath := agentExecutionTracePath(t)
+		session := openAgentExecutionSession(
+			t,
+			ctx,
+			providerName,
+			agentExecutionActive,
+			agent.SessionConfig{
+				Model:  "initial/model",
+				Effort: "initial-effort",
+			},
+		)
+		controller, ok := session.(agent.ConfigController)
+		require.True(t, ok)
+		stream, err := session.Events()
+		require.NoError(t, err)
+		initialID := session.ID()
+
+		submitted, err := session.StartOrSteer(ctx, agent.Input{
+			Content: []agent.ContentBlock{
+				{Text: &agent.ContentBlockText{Text: "active/before"}},
+			},
+		})
+		require.NoError(t, err)
+		assert.NotEmpty(t, submitted.Submission)
+		awaitAgentExecutionState(t, ctx, stream, agent.StateRunning)
+
+		change := agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: "active/model",
+		}
+		receipt, err := controller.SetConfig(ctx, change)
+		require.NoError(t, err)
+		assert.Equal(t, change, receipt.Change)
+		assertAgentExecutionAccepted(t, receipt.Acceptance)
+
+		awaitAgentExecutionIdle(t, ctx, stream)
+		submitAgentExecutionInput(t, ctx, session, stream, "active/after")
+		assert.Equal(t, initialID, session.ID())
+		assertAgentExecutionActiveConfigTrace(t, providerName, tracePath)
+		require.NoError(t, session.Close(ctx))
+	})
+}
+
+func (s *NativeIntegrationSuite) TestAgentSessionConfigResumeAcrossProviders() {
 	t := s.T()
 	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
 		tracePath := agentExecutionTracePath(t)
@@ -170,9 +159,9 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsResumeAcrossProviders(
 			SessionID: agentExecutionSessionID,
 			OpenOptions: agent.OpenOptions{
 				Cwd: cwd,
-				Execution: agent.ExecutionOptions{
-					Model:           " Resume/Model ",
-					ReasoningEffort: " Native/Resume ",
+				Config: agent.SessionConfig{
+					Model:  " Resume/Model ",
+					Effort: " Native/Resume ",
 				},
 			},
 		})
@@ -181,28 +170,13 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsResumeAcrossProviders(
 			closeAgentExecutionSession(t, session, false, false)
 		})
 
-		reporter, ok := session.(agent.ExecutionOptionsReporter)
-		require.True(t, ok)
-		report := reporter.EffectiveExecutionOptions()
-		requireAgentExecutionValue(
-			t,
-			" Resume/Model ",
-			new("observed/model"),
-			report.Model,
-		)
-		requireAgentExecutionValue(
-			t,
-			" Native/Resume ",
-			agentExecutionInitialEffort(providerName),
-			report.ReasoningEffort,
-		)
 		assert.Equal(t, agentExecutionSessionID, session.ID())
 		assertAgentExecutionResumeTrace(t, providerName, tracePath)
 		require.NoError(t, session.Close(ctx))
 	})
 }
 
-func (s *NativeIntegrationSuite) TestAgentExecutionOptionsNativeRejectionAcrossProviders() {
+func (s *NativeIntegrationSuite) TestAgentSessionConfigNativeRejectionAcrossProviders() {
 	t := s.T()
 	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
 		session := openAgentExecutionSession(
@@ -210,55 +184,56 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsNativeRejectionAcrossP
 			ctx,
 			providerName,
 			agentExecutionReject,
-			agent.ExecutionOptions{
-				Model:           "initial/model",
-				ReasoningEffort: "initial-effort",
+			agent.SessionConfig{
+				Model:  "initial/model",
+				Effort: "initial-effort",
 			},
 		)
-		controller, ok := session.(agent.ExecutionOptionsController)
+		controller, ok := session.(agent.ConfigController)
 		require.True(t, ok)
-		before := controller.EffectiveExecutionOptions()
 
-		assertRejected := func(option agent.ExecutionOption, value string) {
-			receipt, err := controller.SetExecutionOption(
-				ctx,
-				agent.ExecutionOptionChange{Option: option, Value: value},
-			)
+		assertRejected := func(change agent.ConfigChange) {
+			receipt, err := controller.SetConfig(ctx, change)
 			require.Error(t, err)
 			assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
+			assert.Equal(t, change, receipt.Change)
 			require.NotNil(t, receipt.Acceptance.Sent)
 			require.NotNil(t, receipt.Acceptance.NativeAccepted)
 			assert.True(t, *receipt.Acceptance.Sent)
 			assert.False(t, *receipt.Acceptance.NativeAccepted)
-			assert.Equal(t, before, receipt.Report)
-			assert.Equal(t, before, controller.EffectiveExecutionOptions())
 		}
-		assertRejected(agent.ExecutionOptionReasoningEffort, "rejected/effort")
-		assertRejected(agent.ExecutionOptionModel, "rejected/model")
+		assertRejected(agent.ConfigChange{
+			ID:    agent.ConfigEffort,
+			Value: " rejected/effort ",
+		})
+		assertRejected(agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: " rejected/model ",
+		})
 		require.NoError(t, session.Close(ctx))
 	})
 }
 
-func (s *NativeIntegrationSuite) TestAgentExecutionOptionsUnknownOutcomeAcrossProviders() {
+func (s *NativeIntegrationSuite) TestAgentSessionConfigUnknownOutcomeAcrossProviders() {
 	t := s.T()
 	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
 		tests := []struct {
-			name               string
-			option             agent.ExecutionOption
-			value              string
-			wantModelEffective *string
+			name   string
+			change agent.ConfigChange
 		}{
 			{
-				name:               "model",
-				option:             agent.ExecutionOptionModel,
-				value:              "uncertain/model",
-				wantModelEffective: nil,
+				name: "model",
+				change: agent.ConfigChange{
+					ID:    agent.ConfigModel,
+					Value: " uncertain/model ",
+				},
 			},
 			{
-				name:               "effort",
-				option:             agent.ExecutionOptionReasoningEffort,
-				value:              "uncertain/effort",
-				wantModelEffective: new("observed/model"),
+				name: "effort",
+				change: agent.ConfigChange{
+					ID:    agent.ConfigEffort,
+					Value: " uncertain/effort ",
+				},
 			},
 		}
 		for _, test := range tests {
@@ -268,39 +243,21 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsUnknownOutcomeAcrossPr
 					ctx,
 					providerName,
 					agentExecutionUnknown,
-					agent.ExecutionOptions{
-						Model:           "initial/model",
-						ReasoningEffort: "initial-effort",
+					agent.SessionConfig{
+						Model:  "initial/model",
+						Effort: "initial-effort",
 					},
 				)
-				controller, ok := session.(agent.ExecutionOptionsController)
+				controller, ok := session.(agent.ConfigController)
 				require.True(t, ok)
 
-				receipt, err := controller.SetExecutionOption(
-					ctx,
-					agent.ExecutionOptionChange{
-						Option: test.option,
-						Value:  test.value,
-					},
-				)
+				receipt, err := controller.SetConfig(ctx, test.change)
 				require.Error(t, err)
 				assert.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(err))
+				assert.Equal(t, test.change, receipt.Change)
 				require.NotNil(t, receipt.Acceptance.Sent)
 				assert.True(t, *receipt.Acceptance.Sent)
 				assert.Nil(t, receipt.Acceptance.NativeAccepted)
-				requireAgentExecutionValue(
-					t,
-					"initial/model",
-					test.wantModelEffective,
-					receipt.Report.Model,
-				)
-				requireAgentExecutionValue(
-					t,
-					"initial-effort",
-					nil,
-					receipt.Report.ReasoningEffort,
-				)
-				assert.Equal(t, receipt.Report, controller.EffectiveExecutionOptions())
 				closeAgentExecutionSession(
 					t,
 					session,
@@ -309,95 +266,6 @@ func (s *NativeIntegrationSuite) TestAgentExecutionOptionsUnknownOutcomeAcrossPr
 				)
 			})
 		}
-	})
-}
-
-func (s *NativeIntegrationSuite) TestAgentExecutionOptionsSerializeConcurrentUpdatesAcrossProviders() {
-	t := s.T()
-	forEachAgentExecutionProvider(t, func(t *testing.T, providerName string, ctx context.Context) {
-		signalPath := t.TempDir() + "/request-seen"
-		releasePath := t.TempDir() + "/release-response"
-		t.Setenv("AGENT_EXECUTION_SIGNAL", signalPath)
-		t.Setenv("AGENT_EXECUTION_RELEASE", releasePath)
-		session := openAgentExecutionSession(
-			t,
-			ctx,
-			providerName,
-			agentExecutionConcurrent,
-			agent.ExecutionOptions{Model: "initial/model"},
-		)
-		t.Cleanup(func() {
-			if err := os.WriteFile(releasePath, []byte("release\n"), 0o600); err != nil {
-				t.Errorf("release agent execution peer: %v", err)
-			}
-		})
-		controller, ok := session.(agent.ExecutionOptionsController)
-		require.True(t, ok)
-
-		type updateResult struct {
-			name    string
-			receipt agent.ExecutionOptionsReceipt
-			err     error
-		}
-		results := make(chan updateResult, 2)
-		go func() {
-			receipt, err := controller.SetExecutionOption(
-				ctx,
-				agent.ExecutionOptionChange{
-					Option: agent.ExecutionOptionModel,
-					Value:  "slow/model",
-				},
-			)
-			results <- updateResult{name: "slow", receipt: receipt, err: err}
-		}()
-		require.Eventually(t, func() bool {
-			_, err := os.Stat(signalPath)
-			return err == nil
-		}, 5*time.Second, 5*time.Millisecond, "first update did not reach the peer")
-
-		fastCtx, cancelFast := context.WithTimeout(ctx, 50*time.Millisecond)
-		defer cancelFast()
-		releaseDone := make(chan error, 1)
-		go func() {
-			<-fastCtx.Done()
-			releaseDone <- os.WriteFile(releasePath, []byte("release\n"), 0o600)
-		}()
-		// The peer signal above proves the first update is in flight. The
-		// second update cannot reach the native write path while the first
-		// response is held; Sent=false distinguishes serialization from a
-		// parallel dispatch that only timed out waiting for an ack.
-		fastReceipt, fastErr := controller.SetExecutionOption(
-			fastCtx,
-			agent.ExecutionOptionChange{
-				Option: agent.ExecutionOptionReasoningEffort,
-				Value:  "fast-effort",
-			},
-		)
-		require.NoError(t, <-releaseDone)
-		slow := <-results
-		require.NoError(t, slow.err)
-		assertAgentExecutionAccepted(t, slow.receipt.Acceptance)
-		requireAgentExecutionValue(t, "slow/model", nil, slow.receipt.Report.Model)
-		require.Error(t, fastErr)
-		require.NotNil(t, fastReceipt.Acceptance.Sent)
-		assert.False(t, *fastReceipt.Acceptance.Sent)
-
-		nextReceipt, err := controller.SetExecutionOption(
-			ctx,
-			agent.ExecutionOptionChange{
-				Option: agent.ExecutionOptionReasoningEffort,
-				Value:  "after/serialization",
-			},
-		)
-		require.NoError(t, err)
-		assertAgentExecutionAccepted(t, nextReceipt.Acceptance)
-		requireAgentExecutionValue(t, "slow/model", nil, nextReceipt.Report.Model)
-		requireAgentExecutionValue(
-			t,
-			"after/serialization",
-			nil,
-			nextReceipt.Report.ReasoningEffort,
-		)
 	})
 }
 
@@ -421,10 +289,10 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 		return err
 	}
 	if scenario != agentExecutionSuccess &&
+		scenario != agentExecutionActive &&
 		scenario != agentExecutionResume &&
 		scenario != agentExecutionReject &&
-		scenario != agentExecutionUnknown &&
-		scenario != agentExecutionConcurrent {
+		scenario != agentExecutionUnknown {
 		return fmt.Errorf("unsupported agent execution peer scenario %s/%s", provider, scenario)
 	}
 	sessionID := agentExecutionSessionID
@@ -455,9 +323,10 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	encoder := json.NewEncoder(os.Stdout)
-	heldConcurrentUpdate := false
 	codexTurnCount := 0
-	pendingEffortObservation := ""
+	codexActiveTurn := ""
+	claudeTurnCount := 0
+	claudeActiveTurn := false
 	for scanner.Scan() {
 		raw := append(json.RawMessage(nil), scanner.Bytes()...)
 		var frame struct {
@@ -526,12 +395,6 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 					return err
 				}
 			case "thread/settings/update":
-				if scenario == agentExecutionConcurrent && !heldConcurrentUpdate {
-					heldConcurrentUpdate = true
-					if err := holdAgentExecutionUpdate(); err != nil {
-						return err
-					}
-				}
 				if scenario == agentExecutionUnknown {
 					return nil
 				}
@@ -553,17 +416,22 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 				}); err != nil {
 					return err
 				}
-				if scenario == agentExecutionSuccess {
-					var params struct {
-						Effort *string `json:"effort"`
-						Model  *string `json:"model"`
-					}
-					if err := json.Unmarshal(frame.Params, &params); err != nil {
+				if scenario == agentExecutionActive && codexActiveTurn != "" {
+					if err := encoder.Encode(map[string]any{
+						"method": "turn/completed",
+						"params": map[string]any{
+							"threadId": sessionID,
+							"turn": map[string]any{
+								"id":     codexActiveTurn,
+								"status": "completed",
+								"items":  []any{},
+								"error":  nil,
+							},
+						},
+					}); err != nil {
 						return err
 					}
-					if params.Effort != nil && params.Model == nil {
-						pendingEffortObservation = *params.Effort
-					}
+					codexActiveTurn = ""
 				}
 			case "thread/unsubscribe":
 				if err := encoder.Encode(map[string]any{
@@ -575,30 +443,6 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 			case "turn/start":
 				codexTurnCount++
 				turnID := fmt.Sprintf("turn-after-update-%d", codexTurnCount)
-				if pendingEffortObservation != "" {
-					if err := encoder.Encode(map[string]any{
-						"method": "thread/settings/updated",
-						"params": map[string]any{
-							"threadId": sessionID,
-							"threadSettings": map[string]any{
-								"cwd":               cwd,
-								"approvalPolicy":    "never",
-								"approvalsReviewer": "user",
-								"sandboxPolicy":     map[string]any{"type": "readOnly"},
-								"model":             "observed/model",
-								"modelProvider":     "synthetic",
-								"collaborationMode": map[string]any{
-									"mode":     "default",
-									"settings": map[string]any{"model": "observed/model"},
-								},
-								"effort": pendingEffortObservation,
-							},
-						},
-					}); err != nil {
-						return err
-					}
-					pendingEffortObservation = ""
-				}
 				if err := encoder.Encode(map[string]any{
 					"id": frame.ID,
 					"result": map[string]any{
@@ -626,6 +470,10 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 				}); err != nil {
 					return err
 				}
+				if scenario == agentExecutionActive && codexTurnCount == 1 {
+					codexActiveTurn = turnID
+					continue
+				}
 				if err := encoder.Encode(map[string]any{
 					"method": "turn/completed",
 					"params": map[string]any{
@@ -645,6 +493,7 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 			}
 		case "claude":
 			if frame.Type == "user" {
+				claudeTurnCount++
 				at := time.Now().UTC().Format(time.RFC3339Nano)
 				if err := encoder.Encode(map[string]any{
 					"type":       "system",
@@ -654,6 +503,10 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 					"timestamp":  at,
 				}); err != nil {
 					return err
+				}
+				if scenario == agentExecutionActive && claudeTurnCount == 1 {
+					claudeActiveTurn = true
+					continue
 				}
 				if err := encoder.Encode(map[string]any{
 					"type":            "result",
@@ -715,14 +568,6 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 					frame.Request.Subtype == "apply_flag_settings") {
 				return nil
 			}
-			if scenario == agentExecutionConcurrent &&
-				!heldConcurrentUpdate &&
-				frame.Request.Subtype == "set_model" {
-				heldConcurrentUpdate = true
-				if err := holdAgentExecutionUpdate(); err != nil {
-					return err
-				}
-			}
 			if err := encoder.Encode(map[string]any{
 				"type": "control_response",
 				"response": map[string]any{
@@ -744,6 +589,37 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 				}); err != nil {
 					return err
 				}
+			}
+			if scenario == agentExecutionActive &&
+				claudeActiveTurn &&
+				(frame.Request.Subtype == "set_model" ||
+					frame.Request.Subtype == "apply_flag_settings") {
+				at := time.Now().UTC().Format(time.RFC3339Nano)
+				if err := encoder.Encode(map[string]any{
+					"type":            "result",
+					"subtype":         "success",
+					"session_id":      sessionID,
+					"is_error":        false,
+					"result":          "synthetic execution completed",
+					"num_turns":       1,
+					"duration_ms":     1,
+					"duration_api_ms": 1,
+					"total_cost_usd":  0,
+					"usage":           map[string]any{},
+					"timestamp":       at,
+				}); err != nil {
+					return err
+				}
+				if err := encoder.Encode(map[string]any{
+					"type":       "system",
+					"subtype":    "session_state_changed",
+					"session_id": sessionID,
+					"state":      "idle",
+					"timestamp":  at,
+				}); err != nil {
+					return err
+				}
+				claudeActiveTurn = false
 			}
 		default:
 			return fmt.Errorf("unknown agent execution provider %q", provider)
@@ -783,30 +659,6 @@ func (t *agentExecutionTracer) Close() error {
 	return t.file.Close()
 }
 
-func holdAgentExecutionUpdate() error {
-	signalPath := os.Getenv("AGENT_EXECUTION_SIGNAL")
-	releasePath := os.Getenv("AGENT_EXECUTION_RELEASE")
-	if signalPath == "" || releasePath == "" {
-		return errors.New("agent execution update gate is not configured")
-	}
-	if err := os.WriteFile(signalPath, []byte("request\n"), 0o600); err != nil {
-		return err
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	for !agentExecutionFileExists(releasePath) {
-		if time.Now().After(deadline) {
-			return errors.New("timed out waiting for the agent execution update release")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return nil
-}
-
-func agentExecutionFileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 func agentExecutionCodexResult(sessionID, cwd string) map[string]any {
 	return map[string]any{
 		"thread": map[string]any{
@@ -839,7 +691,7 @@ func openAgentExecutionSession(
 	ctx context.Context,
 	providerName string,
 	scenario string,
-	execution agent.ExecutionOptions,
+	config agent.SessionConfig,
 ) agent.Session {
 	t.Helper()
 	provider := newAgentExecutionProvider(t, providerName, scenario, "")
@@ -847,8 +699,8 @@ func openAgentExecutionSession(
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{
-		Cwd:       t.TempDir(),
-		Execution: execution,
+		Cwd:    t.TempDir(),
+		Config: config,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -885,7 +737,7 @@ func newAgentExecutionProvider(
 			Dir:        t.TempDir(),
 			Initialize: codextypes.InitializeParams{
 				ClientInfo: codextypes.ClientInfo{
-					Name:    "agent-execution-integration",
+					Name:    "agent-session-config-integration",
 					Version: "synthetic",
 				},
 			},

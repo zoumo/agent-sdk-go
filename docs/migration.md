@@ -41,6 +41,19 @@ and [event delivery](../harness/modules/native-session/design.md#delivery-event-
 | Claude NewClient + Send + callback worker pool | Open + native Submit + Receive; process interaction private; application owns decision UI |
 | Ancestor-first held events and occurrence/UUID dedup | Native arrival order and duplicates remain; optional parent knowledge follows evidence |
 
+### Unified Agent session configuration
+
+For the optional `agent` layer, replace `OpenOptions.Execution` with
+`OpenOptions.Config`, whose type is `SessionConfig`. Set its `Model` and
+`Effort` fields when opening or resuming a session; empty fields omit
+the option. Replace unified `ModelController` and execution-option setters with
+the optional `ConfigController.SetConfig(ctx, ConfigChange{ID, Value})` method.
+`ConfigID` supports only `ConfigModel` (`model`) and `ConfigEffort` (`effort`).
+Runtime values must be nonempty and are passed literally. `ConfigReceipt`
+reports the requested change and dispatch/native acceptance, without a current
+or effective configuration report. These unpublished APIs were replaced without
+compatibility aliases. Native provider configuration methods remain available.
+
 ### Input and requests
 
 Codex Input no longer requires ThreadID; Submit retains the native turn/start

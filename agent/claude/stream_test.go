@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
@@ -48,4 +50,24 @@ func TestifyNativeArgs(options claude.SessionOptions) ([]string, error) {
 		}
 	}
 	return declaration, nil
+}
+
+// ObserveInteractionForTest captures read-only evidence for an admitted answer,
+// including its native request lifetime even after authority leaves the registry.
+func ObserveInteractionForTest(public agent.Session, ref agent.InteractionRef) (context.Context, func() (string, bool)) {
+	s := public.(*session)
+	s.mu.Lock()
+	interaction := s.interactions[ref]
+	s.mu.Unlock()
+	return interaction.request.Context(), func() (string, bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		states := map[interactionledger.State]string{
+			interactionledger.Pending:   "pending",
+			interactionledger.Answering: "answering",
+			interactionledger.Sent:      "sent",
+			interactionledger.Settled:   "settled",
+		}
+		return states[interaction.slot.State()], s.interactions[ref] == interaction
+	}
 }

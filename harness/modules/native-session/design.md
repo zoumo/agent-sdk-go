@@ -41,7 +41,7 @@ status: stable
 
 ### Session 与交付值
 
-两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams，或以 Resume 指针选择原生 ThreadResumeParams（两者互斥）；Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking/effort，以及显式声明的 SDK MCP server 名称。已有连接不再是正常调用必须拼装的订阅对象。所有权在原生派发之前保留，失败明确报告。
+两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams，或以 Resume 指针选择原生 ThreadResumeParams（两者互斥）；它还可以携带仅影响 shell/unified-exec 子进程的 `ShellEnv`。Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking/effort、完整进程 `Env`，以及显式声明的 SDK MCP server 名称。已有连接不再是正常调用必须拼装的订阅对象。所有权在原生派发之前保留，失败明确报告。
 
 Claude 的 `Initialize` 及其中的调用方原生 `Hooks` 保留原有 JSON 语义；恢复时
 SDK 只追加自己的 `SessionStart` 身份探针，不改写或替换调用方其他 hook。新建
@@ -107,7 +107,8 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 | 值 | Codex | Claude |
 |---|---|---|
 | Input | 原生 `[]types.UserInput` 与 turn/start 可用执行选项；不含可改写的主 ThreadID。 | `Input{Text}` 或 `Input{User: *types.UserInput}`，后者携带原生 InputMessage 与关联/扩展；支持 text、image、document、tool_result，其他块明确拒绝。image source 支持 base64/url，document source 支持 base64/url/text/content；工具结果/文档的嵌套内容同样校验支持范围。根 envelope 由 Session 固定，不从输出 decoder 推导发送许可。 |
-| Submission | 保留原生 TurnStartResponse（包括 turn 身份）；成功表示 RPC 确认，不表示 turn 完成。 | 成功仅表示完整本地写入，没有虚构 CLI 接受回执或 Turn。 |
+| Trace context | `Session.Submit` 从 context 读取 `types.W3cTraceContext`，有效时只写入 JSON-RPC request envelope 顶层 `trace`，不写入 `turn/start.params`。 | `Session.Submit` 从 context 读取 `claude.TraceContext`，尽力在写入 user frame 前通过同一常驻 CLI 的 `apply_flag_settings.settings.env` 切换 `TRACEPARENT`/`TRACESTATE`；不重启进程，control response 拒绝或超时不影响健康 transport 上的输入接纳。 |
+| Submission | 保留原生 TurnStartResponse（包括 turn 身份）；成功表示 RPC 确认，不表示 turn 完成。 | 成功表示 user frame 本地写入完成；trace control 的 transport 写入失败遵循既有写入错误合同，完整 control 写入后的拒绝或等待超时不参与成功判定。没有虚构 CLI turn 接受回执或 Turn。 |
 | ModelChange | SetModel 直接接受原生模型标识字符串。 | `Model *string`：nil 省略 model，恢复原生默认；非 nil 非空标识逐字发送；不发送 model:null，不将空字符串或跨提供方别名等同默认。 |
 | ThinkingChange | 原生 ReasoningEffort 与 ReasoningSummary 值，分别用 thread/settings/update 的 effort 和 summary；两字段独立保留省略/null，不增加跨提供方档位或将展示配置转换成预算。 | `MaxThinkingTokens *int` 的 nil 发送 null 清除，非 nil 保留 0/整数；`ThinkingDisplay *string` 的 nil 省略，值为 summarized/omitted，`ClearDisplay` 单独发送 null 清除；创建时原生 thinking enabled/adaptive/disabled 独立表达，不将创建模式隐式转换成动态预算。 |
 | EffortChange | — | `Level *string` 通过 apply_flag_settings 的 `effortLevel` 设置；nil 发送 null 清除 flag-layer override，非 nil 非空值逐字发送，空值拒绝。请求必须保留不相关且仍有效的 flag settings；无法确认时在写入前拒绝。该请求不改变 max_thinking_tokens，也不转换成 thinking budget。 |
@@ -116,27 +117,145 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 
 Submit 使用原生 start 语义，不依据本地 Busy 推断 start/steer。若保留 Codex steer 扩展，必须显式选择并携带 expectedTurnId；不能自动切换。文本便捷调用只构造 Input 并调用同一 Submit。未知输入变体保留原文不等于确认可发送；已知未接入内容明确拒绝，不能转成提示词或丢字段。
 
+Codex 原生包提供 context carrier helper：
+
+```go
+func WithTraceContext(ctx context.Context, trace types.W3cTraceContext) context.Context
+func TraceContextFromContext(ctx context.Context) (types.W3cTraceContext, bool)
+```
+
+`WithTraceContext` 使用私有 context key 保存值；重复调用以后一次为准。
+`TraceContextFromContext` 只读取当前值，不把读取成功解释为 carrier 已通过
+校验。carrier 不作为 `Input` 字段，也不进入原生用户消息或请求 params。
+
+`Session.Submit` 在写入前读取并复制该 context value，尽力校验 `Traceparent`
+和可选的 `Tracestate`。无效或不完整的 carrier 视为没有 prompt trace，省略
+envelope `trace` 并继续提交；trace 是观测元数据，不改变输入结果。有效
+carrier 仅用于该次 request/envelope；不修改 Session 主身份、后续输入或进程
+环境。`Client.Call`、`StartThread` 和 `ResumeThread` 不读取该 context value，
+也不新增 trace 参数。
+
+Claude 原生包提供独立于 `agent` 的同类 helper：
+
+```go
+type TraceContext struct {
+    Traceparent string
+    Tracestate  string
+}
+
+func WithTraceContext(ctx context.Context, trace TraceContext) context.Context
+func TraceContextFromContext(ctx context.Context) (TraceContext, bool)
+```
+
+`Session.Submit` 在原生写入前读取并复制 carrier，按
+[prompt trace 合同](../unified-agent/design.md#prompt-trace)尽力校验 W3C 值。
+无效 carrier 视为没有 prompt trace，不返回错误，也不阻止 user frame。存在
+有效 prompt trace，或此前 prompt 留下未恢复的 trace override 时，它先取得与
+`SetEffort` 共用的 settings/input 串行 gate；目标值已确定且与当前状态相同时
+可跳过 control request，否则发送：
+
+```json
+{
+  "type": "control_request",
+  "request_id": "go_7",
+  "request": {
+    "subtype": "apply_flag_settings",
+    "settings": {
+      "env": {
+        "TRACEPARENT": "00-...-...-01",
+        "TRACESTATE": "vendor=value"
+      }
+    }
+  }
+}
+```
+
+两个变量总是同时写；缺失值使用空字符串清除旧值。无 prompt trace 但此前覆盖
+过时，恢复 `Open` 时从有效进程环境捕获的 startup baseline；baseline 缺失时
+写两个空字符串。无 prompt trace 且无旧覆盖时不发额外 control request。该请求
+不能清除 `effortLevel`、`ultracode` 或其他无关 flag settings。
+
+`apply_flag_settings` 是提交入口的一次 best-effort 尝试。等待 control response
+不是 prompt 出队确认。完整写出 control frame 后，control response 的拒绝、
+等待超时或未知响应仅使 trace 状态未知；只要 transport 和调用 context 仍可用，
+`Session.Submit` 就在同一 gate 内继续写 user frame，下一次 prompt 重写完整目标值。
+control 写入阻塞时使用既有取消机制关闭 transport，释放写入和 settings gate；
+部分写、短写或其他 transport 写入失败终止交互并报告原生 write 错误和未知结果，
+不再追加 user frame，也不返回 `Written=true`。apply 成功而 input 写失败时沿用
+既有写入错误语义，不自动重发。
+
+`Submit` 和 `SetEffort` 获取 settings/input gate 时使用调用 context；等待期间
+被取消的调用在写入前返回该取消错误，不进入 pending 队列。nil context 在取得
+gate 前返回既有 nil-context 错误，不改变 trace 或写入状态；统一 adapter 的
+nil `StartOrSteer` 在 admission 和 span 创建前返回同一错误类别。
+
+SDK 不维护 prompt 队列，不等待 prompt 开始或整个 turn，也不因同一 Session
+另有 prompt 正在执行而拒绝带 trace 的提交。Claude CLI 可以把已写入的输入留在
+自己的内部队列中，并在稍后取走 prompt 时读取进程级 trace env；因此后一次写入
+的 env 可能作用于更早尚未取走的 prompt。该归属误差明确接受，不需要 pending
+ID、replay 或 dequeue acknowledgment。设置 env 成功也不证明具体 CLI 版本已
+导出正确关联的 provider span。
+
 SetModel、SetThinking 与 SetEffort 只改变主会话原生支持范围，不排队等待空闲、不中断、不重建、不递归修改子 Agent。Codex 的 model/effort 影响后续 turns；Claude 原生 ack 不建立跨执行的生效屏障。所有成功返回都不把 requested 写成 observed。原生拒绝保留原错误及关联，已知不支持在发送前明确拒绝。
 
 <a id="interface-codex-会话配置"></a>
 
 ### Codex 会话配置
 
-Codex `SessionOptions.Features`、`Tools` 和 `MCPServers` 只在 `Open` 固定，
-分别生成 `features.*`、`tools.*.enabled` 和 `mcp_servers.<name>` native config，
-并合并到本次 thread/start 或 thread/resume。未声明的 Feature/Tool key 不覆盖
-原配置；MCP server 必须具有非空、UTF-8 合法、无点号且唯一的 name，并严格
-选择 command（stdio）或 URL（streamable HTTP）之一。stdio 与 HTTP 只接受各自
-字段组，不接受未声明的 tool filter、OAuth、timeout 或 approval 字段。
+Codex `SessionOptions.Features`、`Tools`、`MCPServers` 和 `ShellEnv` 只在
+`Open` 固定，分别生成 `features.*`、`tools.*.enabled`、
+`mcp_servers.<name>` 和 `shell_environment_policy.set` native config，并合并到
+本次 thread/start 或 thread/resume。未声明的 Feature/Tool key 不覆盖原配置；
+MCP server 必须具有非空、UTF-8 合法、无点号且唯一的 name，并严格选择
+command（stdio）或 URL（streamable HTTP）之一。stdio 与 HTTP 只接受各自字段
+组，不接受未声明的 tool filter、OAuth、timeout 或 approval 字段。
+
+新增的 `SessionOptions.ShellEnv` 只提供 additive set，不支持删除或空值
+unset。key 必须非空、合法 UTF-8、不含 NUL 或 `=`，并按 ASCII 大小写不敏感
+方式唯一；value 必须合法 UTF-8 且不含 NUL。错误不包含 value。
+空 value 表示设置空值，不表示删除。
+校验和冲突报告按排序后的 key 遍历，保证同一 map 的错误选择与消息稳定。
+`ShellEnv` 不是 secret store；value 会进入 native config 并由 app-server 处理。
+SDK 不把它写入错误、事件或 SDK 日志，但不能阻止 provider 自身的配置诊断或
+日志记录该值。
+它不修改调用方 Thread/Resume config，也不代表 app-server、Codex 保留控制变量、
+MCP server 或其他任意子进程继承。`shell_environment_policy` 的 ambient
+`include_only` 仍可在 `set` 后过滤变量；SDK 不改写调用方 policy。Codex 会在
+构造 shell 环境后继续注入身份、应用 `include_only` 并清理受限变量，因此以下
+key 必须在 RPC 前拒绝，不能报告一个实际不会生效的值。该列表是固定版本与
+已知后续版本身份/控制名称的并集，避免升级后把调用方值静默覆盖或清理：
+
+```text
+CODEX_SESSION_ID
+CODEX_THREAD_ID
+CODEX_TOOL_CALL_ID
+CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN
+NODE_REPL_AUTH_TOKEN
+CODEX_GUARDIAN_DECISIONS_API_KEY
+OPENAI_FEDERATION_RULE_ID
+OPENAI_IDENTITY_TOKEN_FILE
+OPENAI_WORKLOAD_IDENTITY_CONTEXT
+```
+
+保留名称按 ASCII 大小写不敏感匹配，与 Codex 在 Windows 环境和受限变量清理中
+的比较方式一致。
+
+身份/控制变量由 Codex 拥有或写入，受限启动上下文由 Codex 清理；它们均不由
+Session 调用方覆盖。native config 使用扁平 dotted path：
+
+```json
+{"shell_environment_policy.set": {"FOO": "bar"}}
+```
 
 合并不得修改调用方配置。生成的 raw path 与调用方 `Config` 的精确、祖先或后代
-路径冲突时，必须在 thread RPC 前返回 invalid-input；错误可包含字段和路径名，
-不得包含 header、token、env 或其他配置值。低层 `StartThread`/`ResumeThread`
-不隐式应用这些便利字段，也不写用户 config。Codex 没有 Claude 等价的 strict
-MCP 选项；thread config 会与 ambient 配置按字段递归 merge。本次声明只保证
-添加或覆盖所声明的字段，不保证整体替换同名 ambient server，也不能删除其未
-声明字段。同名项可能保留不同 transport 的字段并由 Codex 拒绝；需要确定 server
-集合时，调用方必须使用隔离的 `CODEX_HOME` 或外层执行环境。
+路径冲突时，必须在 thread RPC 前返回包装本包 `ErrInvalidInput` 的错误；错误
+可包含字段和路径名，不得包含 header、token、env 或其他配置值。低层
+`StartThread`/`ResumeThread` 不隐式应用这些便利字段，也不写用户 config。
+Codex 没有 Claude 等价的 strict MCP 选项；thread config 会与 ambient 配置按
+字段递归 merge。本次声明只保证添加或覆盖所声明的字段，不保证整体替换同名
+ambient server，也不能删除其未声明字段。同名项可能保留不同 transport 的字段
+并由 Codex 拒绝；需要确定 server 集合时，调用方必须使用隔离的 `CODEX_HOME`
+或外层执行环境。
 
 `thread/resume` 对仍被观察或运行的 loaded thread 可能忽略 config overrides；
 恢复成功不表示 MCP tool set 已重建，SDK 不承诺运行中热替换。
@@ -154,6 +273,105 @@ Claude 外部 server 没有 stdio cwd、env header 或 bearer token 环境变量
 这些是原生 Claude 能力。统一 Agent 层只采用 stdio 与 Streamable HTTP，不暴露
 旧式 SSE 或 `StrictMCPConfig`；其 Runtime/Session 合成规则见
 [统一 Agent MCP 配置](../unified-agent/design.md#mcp-configuration)。
+
+<a id="interface-进程环境与-prompt-trace"></a>
+
+### 进程环境与 prompt trace
+
+原生进程环境、Session `ShellEnv` 与 prompt trace 是三个独立合同：
+
+| 合同 | Codex | Claude |
+|---|---|---|
+| 子进程完整环境 | Provider `StdioOptions.Env`；nil 继承，非 nil 整体替换 | Session `SessionOptions.Env`；nil 继承，非 nil 整体替换 |
+| Session shell-only 环境 | `SessionOptions.ShellEnv` 映射 `shell_environment_policy.set` | 不支持；没有稳定 shell-only 入口，非空值必须拒绝 |
+| Prompt trace | `Session.Submit` 从 context 读取 carrier，映射 request envelope 顶层 `trace` | `Session.Submit` 从 context 读取 carrier，在同一常驻 CLI 上于 user frame 前切换 settings `env`；启动 baseline 用于恢复 |
+
+表中 Prompt trace 只描述 SDK 的映射入口。原生 Codex 的 steer trace 复用、
+原生 Claude settings env 的进程级扩散，以及 provider 最终如何创建或关联 span，
+都属于 Provider 原生行为，不是本包新增或保证的语义。Synthetic 测试只验证
+carrier 编码、调用顺序和 best-effort 边界，不伪造这些原生结果。
+
+`Env` 是完整环境声明而不是 overlay。调用方只追加变量时必须显式复制
+`os.Environ()` 后加入目标值；SDK 不在 nil 时注入 `os.Environ()`，也不在非 nil
+时自动合并 ambient 变量。`Env` 可含认证秘密，SDK 不记录其值。process-free 的
+`StreamOptions.Env` / `OpenStreams` 只保存协议快照，不启动或修改子进程环境，
+不提供 env 注入。
+
+Codex Provider/app-server 是一个共享进程，其 `Env` 对所有 Session 相同；Session
+`ShellEnv` 才能在共享 app-server 上为不同 thread 提供 shell 级覆盖。Claude
+每个 Session 拥有自己的 CLI 进程，原生 `claude.SessionOptions.Env` 因此可在
+每个 Session 选择不同完整进程环境。
+
+统一层可以为 Claude Session 提供 additive `ProcessEnv`，但原生接口不需要新增
+同名或 `EnvOverlay` 字段：adapter 以 `Config.Env` 或 `os.Environ()` 为基底，
+合成完整 `[]string` 后写入现有 `SessionOptions.Env`。统一层仍把 Claude
+`ShellEnv` 视为 unsupported，不能因为 Session 恰好自有进程就把更宽作用域改名
+为 shell-only。详细 overlay 规则见
+[统一 Agent 环境配置](../unified-agent/design.md#environment-configuration)。
+
+Codex 原生包新增手写的 `types.W3cTraceContext`，保留 pinned `rpc.rs` 的 W3C
+原文和 native optional 语义。该 envelope 类型不属于当前生成 schema 闭包：
+
+```go
+type W3cTraceContext struct {
+    Traceparent Optional[string] `json:"traceparent" protocol:"nullable"`
+    Tracestate  Optional[string] `json:"tracestate" protocol:"nullable"`
+}
+```
+
+`Session.Submit` 只把合法 carrier 编码成 envelope `trace`：`Traceparent` 必须是
+非空且合法的 `Some`；`Tracestate` 的 absent 或 null 规范化为不发送，非空
+`Some` 必须是合法值。无效或不完整的 carrier 整个省略，不发送空对象、空字符串
+或非法值，也不影响 prompt 提交。
+
+`Session.Submit` 通过 `codex.WithTraceContext` 接收 context carrier，并把它
+写到 JSON-RPC request envelope：
+
+```json
+{
+  "id": 7,
+  "method": "turn/start",
+  "params": {"threadId": "...", "input": []},
+  "trace": {"traceparent": "00-...-...-01", "tracestate": "vendor=value"}
+}
+```
+
+`trace` 不能放进 params、user content 或 turn/item identity。app-server 用 envelope
+trace 建立 request span 并让该提交的内部工作继承；没有 envelope trace 时可以
+按 provider 行为回退到进程启动时的 `TRACEPARENT`。Codex SDK 不替调用方设置
+该进程变量，也不保证一次 prompt 的 trace 自动进入 Codex Bash/MCP 子进程。
+
+本包对 Codex 的 trace 合同止于把单次 `Session.Submit` 的 carrier 写入 request
+envelope；之后的 span 归属由原生 app-server/Core 决定。原生 Codex 把
+`turn/start` 判为 steer 时不创建新的 turn 执行 span，而是继续使用原 turn 的
+trace；新 carrier 最多父化本次 request 和输入接纳路径。服务端可把既有
+`turn.id` 记录到该 request span，但不会替换 active turn 的 trace，也不会回溯
+重挂已经产生的 span。`TurnInput` 入队后不携带 carrier，后续 turn 工作保持
+turn 建立时的 trace。这些是 Provider 原生行为，不是本包新增或保证的语义；
+SDK 不模拟该状态机，也不重定向 active turn 的 trace。因此 prompt trace 不是
+turn-level retarget；需要相同 trace 的多次输入必须由调用方复用 carrier。显式
+`turn/steer` 请求不承诺该传播，也不属于 `Session.Submit` 的 envelope trace
+合同。
+
+`types.W3cTraceContext` 的 W3C 语法规则以
+[prompt trace 合同](../unified-agent/design.md#prompt-trace)为准。native 层在
+提交前提取并复制有效 carrier；低层 `StartThread`、`ResumeThread` 和
+`Client.Call` 等通用 request 不新增公开 trace 参数，也不能隐式传播 prompt
+trace。只有 `Session.Submit` 通过私有的 trace-aware call path 写 request
+envelope。
+
+Claude 原生包使用 CLI stream-json/control 协议，不使用 ACP。本包的 Claude
+支持直接来自原生长连接 control 协议，和 ACP adapter 状态相互独立。
+
+固定 trace 可在启动前通过 `SessionOptions.Env`（或统一层的 `ProcessEnv`）
+提供；prompt trace 使用同一常驻进程的 settings env，并在下一条无 trace prompt
+恢复该启动 baseline。两者都不重启 CLI。SDK 的合同止于尽力设置 settings env
+并保持本地 apply/user frame 顺序；CLI 之后如何使用该环境属于 Provider 原生
+行为：trace env 写入后，当前 turn 的后续新工具、工具启动的新子进程或随后
+prompt 都可能读取当前值；已经启动的进程不保证更新。SDK 不按工具调用快照或
+恢复，也不保证 prompt/turn 隔离。原生包只承诺 best-effort control response
+和本地写入顺序；transport 写入失败遵循正常失败合同，不保证具体 CLI 版本
+已导出正确关联的 provider span。
 
 <a id="interface-真实-incomingrequest"></a>
 

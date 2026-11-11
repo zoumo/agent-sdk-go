@@ -161,3 +161,25 @@ Official npm 0.3.310 declarations/runtime were inspected separately; the archive
 SHA-512 was fo+sr+9Ks73P001f6XKRQlyzfIBAJMgXArLUkH5Tu98NikRDZeGtFQVj23d5/hj2ijpFgzffrr4fHywY9qUkoQ==.
 Go's explicit scope, bounded reads, strict corruption errors and change detection
 are deliberate differences; no official SDK executes inside the query backend.
+
+## Prompt trace research provenance
+
+The environment/trace design review on 2026-11-10 distinguished the following
+sources. These are historical source observations and reported behavior, not a
+fresh upstream status check, a new recording, or live validation of this Go SDK.
+
+| Source | Reviewed scope and limit |
+| --- | --- |
+| [ACP v2 extensibility](https://agentclientprotocol.com/protocol/extensibility) | `session/prompt.params._meta` reserves top-level `traceparent`, `tracestate` and `baggage` in their W3C formats. Protocol support alone does not prove adapter forwarding. This mutable documentation page has no source-byte pin. |
+| [claude-agent-acp 0.104.1 source](https://github.com/agentclientprotocol/claude-agent-acp/tree/f5d79167a649737bdeb1ce3b55ad449a34bb9d47) | At this commit, `session/new._meta.claudeCode.options.env` is merged into startup env; `session/prompt` does not read or forward the reserved trace metadata. This pin does not claim current upstream behavior. |
+| [Community PR #910](https://github.com/agentclientprotocol/claude-agent-acp/pull/910) | Open and unmerged at review. The proposal uses the running Query's `applyFlagSettings({env:{TRACEPARENT,TRACESTATE}})` before each prompt, explicitly clearing missing values. It keeps the same warm CLI process. Its strict attribution approach waits for the previous prompt and closes the session when settings results are unknown. Review of this proposal does not establish merged adapter support; its claimed CLI/OTLP checks were not independently reproduced here. |
+| [Official Agent SDK TypeScript reference](https://platform.claude.com/docs/en/agent-sdk/typescript) and [npm 0.3.322](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk/v/0.3.322) | The reviewed SDK launches a child CLI; `query()` env supplies the complete process environment, and a supplied env replaces ambient env. Settings env affects the CLI process. The Go SDK retains `os/exec` nil inheritance versus non-nil replacement; unified `ProcessEnv` adds an overlay to the selected process baseline. No 0.3.322 archive hash was recorded in this research, and no package implementation is redistributed. |
+| Official SDK trace documentation, reviewed with the TypeScript reference | Automatic trace injection is described at `query()` child-process startup using `TRACEPARENT`/`TRACESTATE`; CLI tools such as Bash/PowerShell may receive fixed process values. Startup injection does not prove per-prompt isolation on a reused CLI. No independent provider span-linkage check was run here. |
+| [Claude Code issue #99607](https://github.com/anthropics/claude-code/issues/99607) | The report claims that from CLI 2.1.257 headless turns stop emitting `claude_code.interaction` and ignore inbound `TRACEPARENT`. The separately pinned CLI 2.1.258 baseline above falls within the reported range. This is a reported regression, not a reproduction or a claim about every later CLI release. |
+
+The Go SDK's native stream-json path uses `apply_flag_settings.settings.env`,
+already used for runtime effort, independently of ACP and that community PR.
+Synthetic tests prove local control/user-frame ordering, baseline restoration,
+and transport-failure handling only. A settings success response proves CLI
+acceptance of the settings request; it does not prove provider span creation,
+provider parent linkage, shell/MCP inheritance, or prompt/turn env isolation.

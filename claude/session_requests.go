@@ -85,8 +85,5 @@ func (s *Session) acceptRequest(e Event, p *PermissionRequest) error {
 	if s.closed {
 		return ErrClosed
 	}
-	r := &IncomingRequest{permission: p, method: e.Control.Subtype, raw: bytes.Clone(e.Raw)}
-	// Authority comes from the sole owned interaction, never relationship aliases
-	// or unknown agent/session extensions in the request.
-	return s.fifo.Push(Received{Kind: ReceivedRequest, Request: r, Raw: r.Raw(), Params: r.Params(), Source: SubagentIdentity{SessionID: s.root}, Origin: "live"}, int64(len(e.Raw)))
+	return s.deliver([]Received{s.admission.request(e, p)}, nil)
 }

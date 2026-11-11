@@ -363,3 +363,88 @@ func TestSessionUnsupportedVersionPreservesFactsWithoutRelationshipClaims(t *tes
 		})
 	}
 }
+
+// Assert the complete public stream, including derived evidence and requests;
+// checking native frames alone would miss a split or reordered frame batch.
+func TestSessionAdmissionKeepsFrameBatchesAndRequestsOrdered(t *testing.T) {
+	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
+		t.Run(string(policy), func(t *testing.T) {
+			s := openSessionFixture(t, func(o *SessionOptions) { o.ChildDetailPolicy = policy })
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			initial, err := s.Receive(ctx)
+			require.NoError(t, err)
+			require.NotNil(t, initial.Observation)
+			require.Equal(t, "forwarding-not-confirmed", initial.Observation.Reason)
+
+			// A real request needs no observed root or relationship evidence.
+			early := sessionPermission(t, s, "before-root", "Read", `{}`)
+			require.NoError(t, early.Approve(ctx, ApprovalOptions{}))
+			_, observed := s.SessionID()
+			require.False(t, observed)
+
+			init := `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`
+			task := `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`
+			detail := ` {"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"before parent"}]}} `
+			request := `{"type":"control_request","request_id":"after-child","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`
+			owner := `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn","name":"Agent","input":{}}]}}`
+			terminal := `{"type":"system","subtype":"task_notification","session_id":"s","task_id":"a","status":"completed"}`
+			for _, frame := range []string{init, task, detail, request, owner, terminal} {
+				submitFrame(t, s, frame)
+			}
+			require.NoError(t, s.Interrupt(ctx, InterruptOptions{}))
+
+			type expected struct {
+				kind        ReceivedKind
+				raw, reason string
+			}
+			want := []expected{
+				{kind: ReceivedNative, raw: init},
+				{kind: ReceivedNative, raw: task},
+				{kind: ReceivedObservation, reason: "member-confirmed"},
+			}
+			if policy == ChildDetailPreserve {
+				want = append(want, expected{kind: ReceivedNative, raw: detail})
+			}
+			want = append(want,
+				expected{kind: ReceivedRequest, raw: request},
+				expected{kind: ReceivedNative, raw: owner},
+				expected{kind: ReceivedObservation, reason: "parent-confirmed"},
+				expected{kind: ReceivedNative, raw: terminal},
+				expected{kind: ReceivedObservation, reason: "parent-confirmed"},
+			)
+			for i, w := range want {
+				r, err := s.Receive(ctx)
+				require.NoError(t, err)
+				require.Equal(t, w.kind, r.Kind, "record %d", i)
+				require.Equal(t, w.raw, string(r.Raw), "record %d", i)
+				switch w.kind {
+				case ReceivedNative:
+					require.NotNil(t, r.Event)
+				case ReceivedObservation:
+					require.NotNil(t, r.Observation)
+					require.Equal(t, w.reason, r.Observation.Reason)
+				case ReceivedRequest:
+					require.NotNil(t, r.Request)
+					require.Equal(t, "s", r.Source.SessionID)
+					require.NoError(t, r.Request.Approve(ctx, ApprovalOptions{}))
+				}
+				if w.raw == detail || w.raw == terminal {
+					require.Equal(t, "task:a", r.Source.AssociationID)
+					if w.raw == detail {
+						require.Nil(t, r.Parent)
+					} else {
+						require.NotNil(t, r.Parent)
+						require.Equal(t, "s", r.Parent.SessionID)
+					}
+				}
+			}
+			require.NoError(t, s.Close())
+			_, err = s.Receive(ctx)
+			require.ErrorIs(t, err, io.EOF)
+			id, observed := s.SessionID()
+			require.True(t, observed)
+			require.Equal(t, "s", id)
+		})
+	}
+}

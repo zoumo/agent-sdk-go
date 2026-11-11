@@ -1,10 +1,12 @@
 package codex_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -410,4 +412,108 @@ func TestRemoteNativeResolutionDuringAnswerWrite(t *testing.T) {
 			require.ErrorIs(t, r.Handle().Err(), codex.ErrRequestResolved, "later write completion must not regrant authority")
 		})
 	}
+}
+
+// A response can settle a call while its WebSocket message is still blocked in
+// the writer. The call context is then done, but it must not cancel that write.
+func TestRemoteResponseBeforeWriteReturnSurvivesCancellation(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tls=%v", secure), func(t *testing.T) {
+			prefixSeen := make(chan struct{})
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+			_, options := securityServer(t, secure, func(ctx context.Context, ws *websocket.Conn, _ *http.Request) error {
+				ws.SetReadLimit(32 << 20)
+				_, reader, err := ws.Reader(ctx)
+				if err != nil {
+					return err
+				}
+				prefix := make([]byte, 128)
+				if _, err = io.ReadFull(reader, prefix); err != nil {
+					return err
+				}
+				id, err := remotePrefixID(prefix)
+				if err != nil {
+					return err
+				}
+				writeErr := ws.Write(ctx, websocket.MessageText, securityResponse(id, `"early"`))
+				if writeErr != nil {
+					return writeErr
+				}
+				close(prefixSeen)
+				<-release
+				if _, err = io.ReadAll(reader); err != nil {
+					return err
+				}
+				barrier, err := securityRead(ctx, ws)
+				if err != nil {
+					return err
+				}
+				if barrier.Method != "synthetic/barrier" {
+					return fmt.Errorf("expected barrier, got %q", barrier.Method)
+				}
+				return ws.Write(ctx, websocket.MessageText, securityResponse(barrier.ID, `"connected"`))
+			})
+			options.Limits.MaxFrameBytes = 32 << 20
+			options.Limits.WriteTimeout = 10 * time.Second
+			c := securityOpen(t, options)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			result := make(chan error, 1)
+			go func() {
+				var value string
+				err := c.Call(ctx, "synthetic/early", strings.Repeat("x", 16<<20), &value)
+				if err == nil && value != "early" {
+					err = fmt.Errorf("unexpected result %q", value)
+				}
+				result <- err
+			}()
+			select {
+			case <-prefixSeen:
+			case <-time.After(5 * time.Second):
+				require.FailNow(t, "remote peer never observed the blocked message")
+			}
+			select {
+			case err := <-result:
+				require.NoError(t, err)
+			case <-time.After(5 * time.Second):
+				require.FailNow(t, "response did not settle the call before Write returned")
+			}
+			cancel()
+			select {
+			case <-c.Done():
+				require.FailNow(t, "successful call cancellation closed the WebSocket", "err=%v", c.Err())
+			case <-time.After(100 * time.Millisecond):
+			}
+			require.NoError(t, c.Err())
+
+			releaseOnce.Do(func() { close(release) })
+			var barrier string
+			require.NoError(t, c.Call(context.Background(), "synthetic/barrier", nil, &barrier))
+			require.Equal(t, "connected", barrier)
+		})
+	}
+}
+
+func remotePrefixID(prefix []byte) (json.RawMessage, error) {
+	const key = `"id":`
+	start := bytes.Index(prefix, []byte(key))
+	if start < 0 {
+		return nil, errors.New("message prefix has no request ID")
+	}
+	start += len(key)
+	end := start
+	for end < len(prefix) && (prefix[end] == '-' || prefix[end] >= '0' && prefix[end] <= '9') {
+		end++
+	}
+	if end == start {
+		return nil, errors.New("message prefix has no numeric request ID")
+	}
+	id := append(json.RawMessage(nil), prefix[start:end]...)
+	if !json.Valid(id) {
+		return nil, errors.New("message prefix has an invalid request ID")
+	}
+	return id, nil
 }

@@ -29,6 +29,7 @@ func testSessionDelayedRequestWithControlledTime(t *testing.T, policy ChildDetai
 		require.NoError(t, err)
 		defer reader.Close()
 		c.stdin = writer
+		c.frames = newStdioFrameTransport(nil, writer, DefaultLimits().MaxFrameBytes)
 		writerDone := make(chan struct{})
 		go func() { defer close(writerDone); c.writeLoop() }()
 		defer func() { c.fail(ErrClosed); <-writerDone }()
@@ -80,6 +81,7 @@ func TestSessionReceiveContinuesAcrossSuccessfulTurns(t *testing.T) {
 		require.NoError(t, err)
 		defer reader.Close()
 		c.stdin = writer
+		c.frames = newStdioFrameTransport(nil, writer, DefaultLimits().MaxFrameBytes)
 		writerDone := make(chan struct{})
 		go func() { defer close(writerDone); c.writeLoop() }()
 		defer func() { c.fail(ErrClosed); <-writerDone }()

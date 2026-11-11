@@ -37,6 +37,7 @@ func NewStreams(ctx context.Context, options StreamOptions, transport StreamTran
 	c.streamWriter = transport.Writer
 	c.streamStderr = transport.Stderr
 	c.streamWait = transport.Wait
+	c.frames = newStreamFrameTransport(transport.Reader, transport.Writer, limits.MaxFrameBytes, c.inputIsClosed)
 	c.workers.Go(func() { defer close(c.readDone); c.readLoop() })
 	c.workers.Go(c.writeLoop)
 	if transport.Stderr != nil {

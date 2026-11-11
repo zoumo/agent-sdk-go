@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -327,6 +328,39 @@ func TestStreamClientHalfCloseInterruptsBlockedWrite(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestStreamClientShortWriteTerminatesWithoutRetry(t *testing.T) {
+	peer := newStreamPeer()
+	writer := &shortWriteCloser{WriteCloser: peer.transport.Writer, attempted: make(chan struct{}, 1)}
+	peer.transport.Writer = writer
+	peerDone := make(chan error, 1)
+	go func() {
+		if err := serveCodexHandshake(peer); err != nil {
+			peerDone <- err
+			return
+		}
+		<-writer.attempted
+		peerDone <- peer.writer.Close()
+	}()
+
+	client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+	}, peer.transport)
+	require.NoError(t, err)
+	peer.wait <- nil
+	writer.short.Store(true)
+
+	err = client.Call(context.Background(), "short-write", nil, nil)
+	callError(t, err, codex.OutcomeUnknown, io.ErrShortWrite)
+	select {
+	case <-client.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("short write did not terminate the stream client")
+	}
+	require.EqualValues(t, 1, writer.calls.Load(), "short write was retried")
+	require.NoError(t, <-peerDone)
+	require.ErrorIs(t, client.Close(), io.ErrShortWrite)
+}
+
 func TestStreamClientCloseIsBoundedWhilePeerWaits(t *testing.T) {
 	peer := newStreamPeer()
 	peerDone := make(chan error, 1)
@@ -412,6 +446,25 @@ func (w *observedWriteCloser) Write(value []byte) (int, error) {
 	default:
 	}
 	return w.WriteCloser.Write(value)
+}
+
+type shortWriteCloser struct {
+	io.WriteCloser
+	short     atomic.Bool
+	calls     atomic.Int32
+	attempted chan struct{}
+}
+
+func (w *shortWriteCloser) Write(value []byte) (int, error) {
+	if !w.short.Load() {
+		return w.WriteCloser.Write(value)
+	}
+	w.calls.Add(1)
+	select {
+	case w.attempted <- struct{}{}:
+	default:
+	}
+	return 0, nil
 }
 
 func TestStreamClientShutdownDeadlineStartsAtHalfClose(t *testing.T) {

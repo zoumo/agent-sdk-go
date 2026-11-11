@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -30,26 +31,26 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu         sync.Mutex
-	mu                  sync.Mutex
-	eventsClaimed       bool
-	closed              bool
-	explicitClose       bool
-	providerReleased    bool
-	submitting          bool
-	submitUnknown       bool
-	workActive          bool
-	activeSubmit        string
-	state               *agent.SessionState
-	stateVersion        uint64
-	executionOptions    executionOptionsState
-	interactions        map[agent.InteractionRef]*pendingInteraction
-	interactionRefs     map[string]agent.InteractionRef
-	interactionSequence uint64
-	done                chan struct{}
-	doneClosed          bool
-	err                 error
-	resume              *resumeIdentityGuard
+	executionMu       sync.Mutex
+	mu                sync.Mutex
+	eventsClaimed     bool
+	closed            bool
+	explicitClose     bool
+	providerReleased  bool
+	submitting        bool
+	submitUnknown     bool
+	workActive        bool
+	activeSubmit      string
+	state             *agent.SessionState
+	stateVersion      uint64
+	executionOptions  executionOptionsState
+	interactions      map[agent.InteractionRef]*pendingInteraction
+	interactionRefs   map[string]agent.InteractionRef
+	interactionLedger *interactionledger.Ledger
+	done              chan struct{}
+	doneClosed        bool
+	err               error
+	resume            *resumeIdentityGuard
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
@@ -75,16 +76,17 @@ func newSession(
 	resume *resumeIdentityGuard,
 ) (*session, error) {
 	created := &session{
-		provider:         provider,
-		native:           native,
-		id:               sessionID,
-		features:         effectiveFeatures(features),
-		executionOptions: executionOptions,
-		interactions:     make(map[agent.InteractionRef]*pendingInteraction),
-		interactionRefs:  make(map[string]agent.InteractionRef),
-		done:             make(chan struct{}),
-		observationDone:  make(chan struct{}),
-		resume:           resume,
+		provider:          provider,
+		native:            native,
+		id:                sessionID,
+		features:          effectiveFeatures(features),
+		executionOptions:  executionOptions,
+		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
+		interactionRefs:   make(map[string]agent.InteractionRef),
+		interactionLedger: interactionledger.New("claude-"),
+		done:              make(chan struct{}),
+		observationDone:   make(chan struct{}),
+		resume:            resume,
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)

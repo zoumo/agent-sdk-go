@@ -32,11 +32,11 @@ func NewStreams(ctx context.Context, options StreamOptions, transport StreamTran
 		return nil, err
 	}
 	c := newClient(limits)
-	c.streams = newStreamFrameTransport(transport.Reader, transport.Writer, transport.Stderr, transport.Wait, limits.MaxFrameBytes)
-	c.frames = c.streams
+	frames := newStreamFrameTransport(transport.Reader, transport.Writer, transport.Stderr, transport.Wait, limits.MaxFrameBytes)
+	c.transport = frames
 	c.workers.Go(func() { defer close(c.readDone); c.readLoop() })
 	c.workers.Go(c.writeLoop)
-	if c.streams.HasStderr() {
+	if frames.StderrReader() != nil {
 		c.workers.Go(c.drainStderr)
 	}
 	go c.cleanup()

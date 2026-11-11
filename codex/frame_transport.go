@@ -20,6 +20,31 @@ type frameTransport interface {
 	WriteFrame(context.Context, []byte) error
 }
 
+// connectionTransport owns one connection's endpoint lifecycle. Client keeps
+// admission, correlation and terminal cause selection; adapters expose only
+// endpoint facts and perform graceful shutdown or forced abort.
+type connectionTransport interface {
+	frameTransport
+	StreamInput() streamInput
+	StderrReader() io.Reader
+	Shutdown(done, readDone <-chan struct{}, timeout time.Duration) transportShutdown
+	Abort()
+}
+
+// streamInput is the optional half-close capability of caller-provided streams.
+// stdio and WebSocket transports return nil instead of pretending to be streams.
+type streamInput interface {
+	CloseInput() error
+	InputHalfClosed() bool
+}
+
+type transportShutdown struct {
+	waitErr      error
+	readComplete bool
+	readEOF      bool
+	closeErr     error
+}
+
 var errStreamReaderClosed = errors.New("codex: stream reader closed locally")
 
 type lineFrameReader struct {
@@ -75,26 +100,6 @@ func writeLineFrame(_ context.Context, writer io.Writer, payload []byte) error {
 	return err
 }
 
-type stdioFrameTransport struct {
-	reader *lineFrameReader
-	writer io.Writer
-}
-
-func newStdioFrameTransport(reader io.Reader, writer io.Writer, maxFrameBytes int) *stdioFrameTransport {
-	return &stdioFrameTransport{
-		reader: newLineFrameReader(reader, maxFrameBytes),
-		writer: writer,
-	}
-}
-
-func (t *stdioFrameTransport) ReadFrame() ([]byte, error) {
-	return t.reader.ReadFrame()
-}
-
-func (t *stdioFrameTransport) WriteFrame(ctx context.Context, payload []byte) error {
-	return writeLineFrame(ctx, t.writer, payload)
-}
-
 type streamFrameTransport struct {
 	reader     *lineFrameReader
 	readCloser io.ReadCloser
@@ -148,6 +153,26 @@ func (t *streamFrameTransport) WriteFrame(ctx context.Context, payload []byte) e
 	return err
 }
 
+func (t *streamFrameTransport) StreamInput() streamInput { return t }
+
+func (t *streamFrameTransport) StderrReader() io.Reader { return t.stderr }
+
+func (t *streamFrameTransport) Abort() { _ = t.CloseInput() }
+
+func (t *streamFrameTransport) Shutdown(done, readDone <-chan struct{}, timeout time.Duration) transportShutdown {
+	select {
+	case <-t.InputHalfClosedSignal():
+	case <-done:
+	case <-readDone:
+	}
+	completion := t.Complete(readDone, timeout)
+	return transportShutdown{
+		waitErr:      completion.waitErr,
+		readComplete: completion.readComplete,
+		readEOF:      completion.readEOF,
+	}
+}
+
 func (t *streamFrameTransport) CloseInput() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -171,14 +196,6 @@ func (t *streamFrameTransport) InputHalfClosed() bool {
 
 func (t *streamFrameTransport) InputHalfClosedSignal() <-chan struct{} {
 	return t.inputHalfClosedSignal
-}
-
-func (t *streamFrameTransport) StderrReader() io.Reader {
-	return t.stderr
-}
-
-func (t *streamFrameTransport) HasStderr() bool {
-	return t.stderr != nil
 }
 
 func (t *streamFrameTransport) ReadEOF() bool {
@@ -234,8 +251,9 @@ type streamCompletion struct {
 }
 
 type websocketFrameTransport struct {
-	conn *websocket.Conn
-	max  int
+	conn      *websocket.Conn
+	max       int
+	closeOnce sync.Once
 }
 
 func newWebsocketFrameTransport(conn *websocket.Conn, maxFrameBytes int) *websocketFrameTransport {
@@ -282,4 +300,22 @@ func (t *websocketFrameTransport) WriteFrame(ctx context.Context, payload []byte
 		return fmt.Errorf("%w: write: %w", ErrRemoteTransport, io.EOF)
 	}
 	return nil
+}
+
+func (t *websocketFrameTransport) StreamInput() streamInput { return nil }
+
+func (t *websocketFrameTransport) StderrReader() io.Reader { return nil }
+
+func (t *websocketFrameTransport) Abort() { t.close() }
+
+func (t *websocketFrameTransport) Shutdown(done, _ <-chan struct{}, _ time.Duration) transportShutdown {
+	<-done
+	t.close()
+	return transportShutdown{}
+}
+
+func (t *websocketFrameTransport) close() {
+	t.closeOnce.Do(func() {
+		_ = t.conn.CloseNow()
+	})
 }

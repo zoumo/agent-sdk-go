@@ -51,16 +51,17 @@ func objectFields(raw []byte) (map[string]json.RawMessage, error) {
 
 func (c *Client) readLoop() {
 	for {
-		frame, err := c.frames.ReadFrame()
+		frame, err := c.transport.ReadFrame()
 		if err != nil {
 			if errors.Is(err, errStreamReaderClosed) {
 				return
 			}
-			if c.streams != nil && errors.Is(err, io.EOF) {
+			input := c.transport.StreamInput()
+			if input != nil && errors.Is(err, io.EOF) {
 				c.mu.Lock()
 				closing := c.closing
 				c.mu.Unlock()
-				if c.streamsInputHalfClosed() || closing {
+				if input.InputHalfClosed() || closing {
 					return
 				}
 				c.fail(fmt.Errorf("%w: peer closed before SDK input", ErrUnexpectedEOF))

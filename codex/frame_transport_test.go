@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -98,6 +99,30 @@ type recordingWriter struct {
 	calls [][]byte
 	short bool
 }
+
+type pipeTestTransport struct {
+	writer io.Writer
+}
+
+func newPipeTestTransport(writer io.Writer) *pipeTestTransport {
+	return &pipeTestTransport{writer: writer}
+}
+
+func (t *pipeTestTransport) ReadFrame() ([]byte, error) { return nil, io.EOF }
+
+func (t *pipeTestTransport) WriteFrame(ctx context.Context, payload []byte) error {
+	return writeLineFrame(ctx, t.writer, payload)
+}
+
+func (t *pipeTestTransport) StreamInput() streamInput { return nil }
+
+func (t *pipeTestTransport) StderrReader() io.Reader { return nil }
+
+func (t *pipeTestTransport) Shutdown(_, _ <-chan struct{}, _ time.Duration) transportShutdown {
+	return transportShutdown{}
+}
+
+func (t *pipeTestTransport) Abort() {}
 
 func (w *recordingWriter) Write(p []byte) (int, error) {
 	w.calls = append(w.calls, append([]byte(nil), p...))

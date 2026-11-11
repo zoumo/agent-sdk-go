@@ -146,6 +146,9 @@ func TestFakeChild(t *testing.T) {
 			send(m.ID, `{"thread":`+threadJSON+`,"future":{"unarchive":true}}`)
 		case "echo":
 			send(m.ID, string(m.Params))
+		case "respond-exit":
+			send(m.ID, `"final"`)
+			os.Exit(0)
 		case "rpc-error":
 			fmt.Fprintf(os.Stdout, "{\"id\":%s,\"error\":{\"code\":-32001,\"message\":\"failed after work\",\"data\":{\"large\":9007199254740993}}}\n", m.ID)
 		case "collision":
@@ -193,6 +196,9 @@ func TestFakeChild(t *testing.T) {
 			os.Exit(84)
 		}
 	}
+	if mode == "graceful-eof" {
+		_ = os.WriteFile(os.Getenv("CODEX_SDK_TRACE")+".eof", []byte("clean-exit"), 0o600)
+	}
 	os.Exit(0)
 }
 
@@ -228,7 +234,8 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	require.NoError(t, err)
 	dir := t.TempDir()
 	f := fixture{trace: filepath.Join(dir, "trace.jsonl"), pid: filepath.Join(dir, "pid")}
-	env := append(os.Environ(), "CODEX_SDK_HELPER="+mode, "CODEX_SDK_TRACE="+f.trace, "CODEX_SDK_PID="+f.pid)
+	env := replaceEnv(os.Environ(), "GORACE", "atexit_sleep_ms=0")
+	env = append(env, "CODEX_SDK_HELPER="+mode, "CODEX_SDK_TRACE="+f.trace, "CODEX_SDK_PID="+f.pid)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	init := types.InitializeParams{ClientInfo: types.ClientInfo{Name: "contract-test", Version: "1"}}
@@ -237,6 +244,17 @@ func openFake(t *testing.T, mode string, limits codex.Limits) (fixture, error) {
 	}
 	f.c, err = codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{"-test.run=^TestFakeChild$"}, Env: env, Initialize: init, Limits: limits})
 	return f, err
+}
+
+func replaceEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := env[:0]
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			out = append(out, entry)
+		}
+	}
+	return append(out, prefix+value)
 }
 
 func trace(t *testing.T, path string) []fakeEnvelope {
@@ -494,6 +512,27 @@ func TestCloseKillsOnlyOwnedChild(t *testing.T) {
 	start := time.Now()
 	_ = f.c.Close()
 	require.LessOrEqual(t, time.Since(start), time.Second, "Close exceeded bound")
+	assertReaped(t, f.pid)
+}
+
+func TestStdioFinalResponseBeforeChildExit(t *testing.T) {
+	f := startFake(t, "normal", codex.Limits{ShutdownTimeout: 500 * time.Millisecond})
+	var result string
+	require.NoError(t, f.c.Call(context.Background(), "respond-exit", nil, &result))
+	require.Equal(t, "final", result)
+	select {
+	case <-f.c.Done():
+	case <-time.After(time.Second):
+		require.FailNow(t, "owned child exit did not settle the connection")
+	}
+}
+
+func TestStdioGracefulCloseAllowsEOFExit(t *testing.T) {
+	f := startFake(t, "graceful-eof", codex.Limits{ShutdownTimeout: 500 * time.Millisecond})
+	require.NoError(t, f.c.Close())
+	eof, err := os.ReadFile(f.trace + ".eof")
+	require.NoError(t, err, "graceful shutdown killed the child before stdin EOF")
+	require.Equal(t, "clean-exit", string(eof))
 	assertReaped(t, f.pid)
 }
 

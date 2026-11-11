@@ -1737,8 +1737,8 @@
     {
       "kind": "client_request",
       "method": "thread/inject_items",
-      "support": "unsupported",
-      "scope": "No SDK wrapper or receive API; a raw call does not establish method support.",
+      "support": "supported",
+      "scope": "Session.Inject sends nonempty raw Responses API items to its owned main thread without starting a user turn. RPC acceptance does not prove model consumption or durable recording. Server availability is determined by the native response.",
       "source_variant": "ThreadInjectItems",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 876,
@@ -1747,7 +1747,9 @@
       "in_stable_schema": true,
       "evidence": {
         "unit": [],
-        "mock": [],
+        "mock": [
+          "context-inject-mock"
+        ],
         "race": [],
         "live": []
       },

@@ -24,6 +24,8 @@
     "v2/ThreadArchiveResponse",
     "v2/ThreadUnarchiveParams",
     "v2/ThreadUnarchiveResponse",
+    "v2/ThreadInjectItemsParams",
+    "v2/ThreadInjectItemsResponse",
     "v2/TurnStartParams",
     "v2/TurnStartResponse",
     "v2/TurnInterruptParams",
@@ -4740,6 +4742,30 @@
     },
     "v2/ThreadId": {
       "type": "string"
+    },
+    "v2/ThreadInjectItemsParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "items": {
+          "description": "Raw Responses API items to append to the thread's model-visible history.",
+          "items": true,
+          "type": "array"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "items",
+        "threadId"
+      ],
+      "title": "ThreadInjectItemsParams",
+      "type": "object"
+    },
+    "v2/ThreadInjectItemsResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ThreadInjectItemsResponse",
+      "type": "object"
     },
     "v2/ThreadItem": {
       "oneOf": [

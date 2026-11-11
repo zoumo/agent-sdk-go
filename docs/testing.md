@@ -169,6 +169,19 @@ literal Unicode and line endings, Resume replacement of the newly supplied value
 and invalid UTF-8/NUL rejection before native side effects. They launch no real
 Agent or model.
 
+Context injection has dedicated offline protocol checks:
+
+```sh
+go test ./agent ./agent/codex ./agent/claude ./codex ./codex/types -run Inject -count=1
+```
+
+They cover exact context-only envelopes, idle/active input routing, unchanged
+interrupt targets, version/native rejection, local admission, cancellation,
+close and unknown Codex outcomes. These synthetic checks do not establish
+real-provider consumption. Official recordings and their strict replay remain
+owned by `agent-sdk-testify`; a new recording must be adopted and exercised
+through the public Go SDK before it constitutes SDK simulation evidence.
+
 `NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
 app-server trace and Claude temporary saved storage. Native focused tests retain
 transport, live coexistence, cancellation, unknown, resource and integrity checks.

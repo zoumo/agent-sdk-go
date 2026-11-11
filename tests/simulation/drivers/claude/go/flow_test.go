@@ -70,6 +70,8 @@ func TestRecordedEffortPreflightMatchesSetEffort(t *testing.T) {
 		`<{"type":"control_response","response":{"subtype":"success","request_id":"apply"}}`,
 		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"second"}}`,
 		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"second"}`,
+		`>{"type":"control_request","request_id":"query","request":{"subtype":"get_settings"}}`,
+		`<{"type":"control_response","response":{"subtype":"success","request_id":"query","response":{"future":9007199254740993,"applied":{"effort":"high"}}}}`,
 	}
 	capture := recordedCapture(t, rows)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "raw", "raw.jsonl"), []byte(capture), 0o600))

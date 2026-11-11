@@ -289,6 +289,17 @@ invalidates owned handles and cleans up without waiting for consumers. `Done`
 reports interaction termination independently of unread events. Drain to EOF or
 the stable terminal error, or explicitly `Abort` to discard abandoned backlog.
 
+## Context injection
+
+`Session.Inject(ctx, []json.RawMessage{item})` sends raw Responses API items to
+the owned main thread through `thread/inject_items`. Use this for context that
+should not request a model response. The server validates the item semantics;
+empty input or malformed JSON fails locally. No `turn/start`, steer or interrupt
+is sent as a fallback. Native dispatch errors retain `CallError` and `RPCError`
+evidence. Source/version limits and the distinction between RPC acceptance,
+recording and consumption are documented in the
+[protocol sources](docs/protocol/README.md#generated-material).
+
 ## Archive and unarchive
 
 `Session.Archive(ctx)` and `Session.Unarchive(ctx)` send native

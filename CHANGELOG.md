@@ -2,6 +2,12 @@
 
 ## v0.1.0-rc.1 — planned, unreleased
 
+- Adds optional `agent.Injector` for context-only input through Codex
+  `thread/inject_items` and Claude `shouldQuery=false`, with acceptance evidence
+  separate from model consumption and no prompt fallback.
+- Adds native Claude `Session.GetSettings` for read-only control queries and
+  lets SDK simulation consume the queries used by context-injection recordings.
+
 - Replaces the unpublished unified `ExecutionOptions` and `ModelController`
   APIs with `SessionConfig` and the single `ConfigController.SetConfig` setter.
   The session field is `SessionConfig.Effort` and the effort config ID is

@@ -102,6 +102,13 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
 }
 ```
 
+To append context without requesting a model response, assert the optional
+`agent.Injector` interface and call `Inject(ctx, input)`. Both adapters implement
+it; unsupported native versions return `agent.ErrorUnsupported` without a prompt
+fallback. The receipt describes acceptance, not model consumption. See the
+[inject contract](harness/modules/unified-agent/design.md#context-inject) for
+content, lifecycle, concurrency and version limits.
+
 Use `provider.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
 options})` to restore an existing native session; the returned `agent.Session`
 has the same API. Resume restores execution and never converts saved content into

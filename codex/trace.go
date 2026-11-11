@@ -80,7 +80,7 @@ func traceASCII(value string, whitespace bool) bool {
 
 func traceHex(value string) bool {
 	for i := range len(value) {
-		if !(value[i] >= '0' && value[i] <= '9' || value[i] >= 'a' && value[i] <= 'f') {
+		if (value[i] < '0' || value[i] > '9') && (value[i] < 'a' || value[i] > 'f') {
 			return false
 		}
 	}
@@ -126,13 +126,13 @@ func traceKey(key string) bool {
 	return traceKeyPart(key, 256, false)
 }
 
-func traceKeyPart(part string, max int, digitStart bool) bool {
-	if len(part) == 0 || len(part) > max {
+func traceKeyPart(part string, maxBytes int, digitStart bool) bool {
+	if len(part) == 0 || len(part) > maxBytes {
 		return false
 	}
 	alpha := func(c byte) bool { return c >= 'a' && c <= 'z' }
 	digit := func(c byte) bool { return c >= '0' && c <= '9' }
-	if !alpha(part[0]) && !(digitStart && digit(part[0])) {
+	if !alpha(part[0]) && (!digitStart || !digit(part[0])) {
 		return false
 	}
 	for i := range len(part) {

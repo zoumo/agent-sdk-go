@@ -24,7 +24,7 @@ and dependency boundaries.
   import either native SDK, MASS or recording/replay code. Provider adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
   mechanics (`agent/internal/lifecycle`, `agent/internal/eventenvelope`,
-  `agent/internal/interactionledger`,
+  `agent/internal/interactionledger`, `agent/internal/submissiontrace`,
   `internal/queue` and `internal/uuidv4`), but adapters must not import each
   other or the other native SDK, and native packages must not import `agent`.
 - Trace values, context helpers and the `agent.Tracer` seam are part of the
@@ -52,6 +52,11 @@ and dependency boundaries.
   results, but never a native request, raw frame, request identifier, handle,
   reply callback or reference-to-adapter lookup. Each adapter's private registry
   remains the only route from a reference to native answer authority.
+- `agent/internal/submissiontrace` owns only the best-effort local span lifecycle
+  for one admitted unified submission. It may import the standard library and
+  public `agent` contract; it must not import a native SDK, adapter, MASS or
+  tracing implementation. Provider-specific carrier conversion and wire mapping
+  remain with each adapter.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib

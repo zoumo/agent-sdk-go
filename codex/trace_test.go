@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -18,10 +20,10 @@ import (
 const traceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 func TestTraceContextHelpers(t *testing.T) {
-	_, ok := codex.TraceContextFromContext(nil)
-	assert.False(t, ok)
-	_, ok = codex.TraceContextFromContext(context.Background())
-	assert.False(t, ok)
+	for _, ctx := range []context.Context{nil, context.Background()} {
+		_, ok := codex.TraceContextFromContext(ctx)
+		assert.False(t, ok)
+	}
 	original := codex.TraceContext{Traceparent: types.Some(traceParent)}
 	ctx := codex.WithTraceContext(context.Background(), original)
 	derived, cancel := context.WithCancel(ctx)
@@ -51,7 +53,7 @@ func newTracePeer(t *testing.T) (*codex.Client, <-chan map[string]json.RawMessag
 			for {
 				frame, err := readCodexFrame(reader)
 				if err != nil {
-					if err == io.EOF {
+					if errors.Is(err, io.EOF) {
 						return nil
 					}
 					return err

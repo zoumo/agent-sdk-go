@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
@@ -59,7 +60,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	receipt, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "inspect"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "inspect"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
@@ -75,7 +76,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, "response-1:0", thinkingChunk.ItemID)
 	assert.Equal(t, agent.ThinkingChunk{
 		MessageID: "response-1:0",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "Let me inspect."}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "Let me inspect."}}},
 	}, thinkingChunk.Payload)
 	assertBlockMeta(t, thinkingChunk, "response-1", 0)
 
@@ -85,7 +86,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 11, 7, 13, 0, 1, 0, time.UTC), thinking.Time)
 	assert.Equal(t, agent.AgentThinking{
 		MessageID: "response-1:0",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "Let me inspect."}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "Let me inspect."}}},
 	}, thinking.Payload)
 	assertBlockMeta(t, thinking, "response-1", 0)
 
@@ -94,7 +95,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, "response-1:1", messageChunk.ItemID)
 	assert.Equal(t, agent.MessageChunk{
 		MessageID: "response-1:1",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "I will read the file."}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "I will read the file."}}},
 	}, messageChunk.Payload)
 	assertBlockMeta(t, messageChunk, "response-1", 1)
 
@@ -104,7 +105,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 11, 7, 13, 0, 2, 0, time.UTC), message.Time)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "response-1:1",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "I will read the file."}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "I will read the file."}}},
 	}, message.Payload)
 	assertBlockMeta(t, message, "response-1", 1)
 
@@ -113,7 +114,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, "tool-1", toolChunkOne.ItemID)
 	assert.Equal(t, agent.ToolChunkPayload{
 		ID:      "tool-1",
-		Content: []agent.ContentBlock{agent.TextBlock{Text: `{"path":"a.txt"`}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: `{"path":"a.txt"`}}},
 	}, toolChunkOne.Payload)
 	assertBlockMeta(t, toolChunkOne, "response-1", 2)
 
@@ -121,7 +122,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, agent.EventAgentToolCallChunk, toolChunkTwo.Type())
 	assert.Equal(t, agent.ToolChunkPayload{
 		ID:      "tool-1",
-		Content: []agent.ContentBlock{agent.TextBlock{Text: `,"precise":9007199254740993}`}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: `,"precise":9007199254740993}`}}},
 	}, toolChunkTwo.Payload)
 
 	toolCall := nextEvent(t, ctx, stream)
@@ -152,7 +153,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, "Read", resultPayload.ToolName)
 	assert.Equal(t, agent.ToolProviderAgent, resultPayload.Provider)
 	assert.Equal(t, "completed", resultPayload.Status)
-	assert.Equal(t, []agent.ContentBlock{agent.TextBlock{Text: "file contents"}}, resultPayload.Content)
+	assert.Equal(t, []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "file contents"}}}, resultPayload.Content)
 	require.NotNil(t, resultPayload.RawOutput)
 	rawOutput, ok := (*resultPayload.RawOutput).(map[string]any)
 	require.True(t, ok)
@@ -298,7 +299,7 @@ func TestClaudeToolIdentityMapping(t *testing.T) {
 		assert.Equal(t, test.name, result.ToolName)
 		assert.Equal(t, test.provider, result.Provider)
 		assert.Equal(t, []agent.ContentBlock{
-			agent.TextBlock{Text: "result-" + test.name},
+			{Text: &agent.ContentBlockText{Text: "result-" + test.name}},
 		}, result.Content)
 		if test.failed {
 			assert.Equal(t, "failed", result.Status)
@@ -382,9 +383,9 @@ func TestClaudeAssistantBlockIdentityGapsWithoutGuessing(t *testing.T) {
 	require.NoError(t, err)
 
 	first := nextEvent(t, ctx, stream)
-	assertGap(t, first, "assistant_block_coordinate_missing")
+	assertGap(t, first, agentclaude.ErrorReasonAssistantBlockCoordinateMissing)
 	second := nextEvent(t, ctx, stream)
-	assertGap(t, second, "assistant_block_coordinate_missing")
+	assertGap(t, second, agentclaude.ErrorReasonAssistantBlockCoordinateMissing)
 	orphan := nextEvent(t, ctx, stream)
 	assertGap(t, orphan, "tool_result_without_call")
 }
@@ -420,7 +421,7 @@ func TestClaudeUserTextPreservesNativeMessageIdentity(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 11, 7, 13, 9, 0, 0, time.UTC), message.Time)
 	assert.Equal(t, agent.UserMessage{
 		MessageID: "user-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "child prompt"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "child prompt"}}},
 	}, message.Payload)
 	meta := requireClaudeMeta(t, message)
 	assert.Equal(t, "event-uuid", meta["uuid"])
@@ -547,7 +548,7 @@ func TestClaudeAssistantFrameReusesStreamedResponseIdentity(t *testing.T) {
 	assert.Equal(t, "response-fallback:0", message.ItemID)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "response-fallback:0",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "fallback"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "fallback"}}},
 	}, message.Payload)
 	assertBlockMeta(t, message, "response-fallback", 0)
 }
@@ -616,7 +617,7 @@ func TestClaudeWrongAssistantBlockTypeBecomesDecodeGapBeforeNativeTermination(t 
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "trigger malformed decode"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "trigger malformed decode"}}},
 	})
 	require.NoError(t, err)
 

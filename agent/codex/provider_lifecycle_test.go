@@ -32,6 +32,7 @@ func TestProviderStartOwnsOneConnectionAndStopIsTerminal(t *testing.T) {
 
 	capabilities, err := provider.Start(ctx)
 	require.NoError(t, err)
+	require.NoError(t, capabilities.Validate())
 	assert.True(t, capabilities.Supports(agent.CapabilityTextInput))
 	assert.True(t, capabilities.Supports(agent.CapabilityPermission))
 	assert.True(t, capabilities.Supports(agent.CapabilityForm))
@@ -77,6 +78,7 @@ func TestProviderOpenHasOneEventStreamAndCloseKeepsProviderHealthy(t *testing.T)
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 	assert.Equal(t, "root-a", session.ID())
+	require.NoError(t, session.Capabilities().Validate())
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityTextInput))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityPermission))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
@@ -134,6 +136,44 @@ func TestProviderStopRejectsOpenSession(t *testing.T) {
 	require.NoError(t, provider.Stop(ctx))
 }
 
+func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`<{"method":"item/agentMessage/delta","params":{"threadId":"root-a","turnId":"turn-a","itemId":"item-a","delta":"kept"}}`,
+		`<{"method":"item/agentMessage/delta","params":{"threadId":"root-a","turnId":"turn-a","itemId":"item-a"}}`,
+		`>{"id":93,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":93,"result":{"status":"unsubscribed"}}`,
+	)
+	peerSession := prepareCodexPeer(t, frames...)
+	provider := newTestProvider(t, peerSession)
+
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
+	require.NoError(t, err)
+	stream, err := session.Events()
+	require.NoError(t, err)
+	select {
+	case <-session.Done():
+	case <-ctx.Done():
+		require.NoError(t, ctx.Err())
+	}
+
+	event, err := stream.Next(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, agent.EventAgentMessageChunk, event.Type())
+	_, err = stream.Next(ctx)
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+
+	require.NoError(t, provider.Stop(ctx))
+	require.NoError(t, session.Close(ctx))
+}
+
 func codexThreadStartResult(threadID string) string {
 	return `{
 		"thread": {
@@ -184,6 +224,26 @@ func newTestProviderWithInitialize(
 	initialize codextypes.InitializeParams,
 ) *agentcodex.Provider {
 	t.Helper()
+	return newTestProviderWithWrappers(
+		t,
+		peerSession,
+		initialize,
+		testStreamWrappers{},
+	)
+}
+
+type testStreamWrappers struct {
+	reader func(io.ReadCloser) io.ReadCloser
+	writer func(io.WriteCloser) io.WriteCloser
+}
+
+func newTestProviderWithWrappers(
+	t *testing.T,
+	peerSession *mocktest.Session,
+	initialize codextypes.InitializeParams,
+	wrappers testStreamWrappers,
+) *agentcodex.Provider {
+	t.Helper()
 	runCtx, cancelRun := context.WithTimeout(
 		context.WithoutCancel(t.Context()),
 		30*time.Second,
@@ -193,6 +253,13 @@ func newTestProviderWithInitialize(
 	run, err := peerSession.NewRun(runCtx, mocktest.RunOptions{NativeArgs: args})
 	require.NoError(t, err)
 	require.Equal(t, args, run.Start.NativeArgs)
+	reader, writer := run.Reader, run.Writer
+	if wrappers.reader != nil {
+		reader = wrappers.reader(reader)
+	}
+	if wrappers.writer != nil {
+		writer = wrappers.writer(writer)
+	}
 	var completion <-chan error
 	provider := agentcodex.NewWithStream(agentcodex.Config{Stdio: codex.StdioOptions{
 		Args:       run.Start.NativeArgs,
@@ -200,8 +267,8 @@ func newTestProviderWithInitialize(
 		Dir:        run.Start.ProtocolCwd,
 		Initialize: initialize,
 	}}, codex.StreamTransport{
-		Reader: run.Reader,
-		Writer: run.Writer,
+		Reader: reader,
+		Writer: writer,
 		Stderr: run.Stderr,
 		Wait:   run.WaitError,
 	}, func(client *codex.Client) {

@@ -189,9 +189,11 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 	infDuration := math.Inf(1)
 	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	invalidMessage := validMessage
-	invalidMessage.Content = []agent.ContentBlock{agent.ImageBlock{
-		Data:     "not-base64",
-		MIMEType: "image/png",
+	invalidMessage.Content = []agent.ContentBlock{{
+		Image: &agent.ContentBlockImage{
+			Data:     "not-base64",
+			MIMEType: "image/png",
+		},
 	}}
 	invalidState := agent.SessionState("closing")
 
@@ -352,8 +354,8 @@ func TestEventRoundTripsJSONWithPayloadTypeAndMeta(t *testing.T) {
 	original := validEvent("item-1", agent.AgentMessage{
 		MessageID: "message-1",
 		Content: []agent.ContentBlock{
-			agent.TextBlock{Text: "hello"},
-			agent.ImageBlock{Data: "aGVsbG8=", MIMEType: "image/png"},
+			{Text: &agent.ContentBlockText{Text: "hello"}},
+			{Image: &agent.ContentBlockImage{Data: "aGVsbG8=", MIMEType: "image/png"}},
 		},
 		Phase: "final",
 	})
@@ -602,6 +604,63 @@ func TestToolPayloadJSONPreservesExplicitNullAndEmptyContent(t *testing.T) {
 			var decoded agent.Event
 			require.NoError(t, json.Unmarshal(encoded, &decoded))
 			tt.check(t, decoded.Payload)
+		})
+	}
+}
+
+func TestToolPayloadContentAcceptsEveryContentBlock(t *testing.T) {
+	content := []agent.ContentBlock{
+		{Text: &agent.ContentBlockText{Text: "hello"}},
+		{Image: &agent.ContentBlockImage{Data: "aGVsbG8=", MIMEType: "image/png"}},
+		{Audio: &agent.ContentBlockAudio{Data: "aGVsbG8=", MIMEType: "audio/wav"}},
+		{Resource: &agent.ContentBlockResource{Resource: agent.EmbeddedResource{
+			URI:  "file:///tmp/example.txt",
+			Text: new("embedded"),
+		}}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI:  "file:///tmp/example.txt",
+			Name: "example.txt",
+			Size: ptr[int64](42),
+		}},
+	}
+	payloads := []struct {
+		name  string
+		value agent.Payload
+	}{
+		{
+			name: "tool call",
+			value: agent.ToolCallPayload{
+				ID:       "tool-1",
+				Kind:     agent.ToolKindRead,
+				ToolName: "read_file",
+				Provider: agent.ToolProviderAgent,
+				RawInput: map[string]any{"precise": json.Number("9007199254740993")},
+				Content:  content,
+				Status:   "in_progress",
+			},
+		},
+		{
+			name: "tool result",
+			value: agent.ToolResultPayload{
+				ID:       "tool-1",
+				Kind:     agent.ToolKindRead,
+				ToolName: "read_file",
+				Provider: agent.ToolProviderAgent,
+				Content:  content,
+				Status:   "completed",
+			},
+		},
+	}
+
+	for _, tt := range payloads {
+		t.Run(tt.name, func(t *testing.T) {
+			original := validEvent("tool-1", tt.value)
+			encoded, err := json.Marshal(original)
+			require.NoError(t, err)
+
+			var decoded agent.Event
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			assert.Equal(t, original.Payload, decoded.Payload)
 		})
 	}
 }
@@ -937,7 +996,7 @@ func TestEventJSONRejectsInvalidToolIdentity(t *testing.T) {
 }
 
 func textContent(text string) []agent.ContentBlock {
-	return []agent.ContentBlock{agent.TextBlock{Text: text}}
+	return []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: text}}}
 }
 
 func validEvent(itemID string, payload agent.Payload) agent.Event {

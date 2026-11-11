@@ -291,5 +291,7 @@ func claudeStartOrSteerFrame(t *testing.T, text string) string {
 }
 
 func claudeTextInput(text string) agent.Input {
-	return agent.Input{Content: []agent.ContentBlock{agent.TextBlock{Text: text}}}
+	return agent.Input{
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: text}}},
+	}
 }

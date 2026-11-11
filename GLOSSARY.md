@@ -10,10 +10,11 @@
 跨多次输入和执行持续存在的原生交互上下文。一次执行结果是会话内的事实，不是会话本身。
 _Avoid_: 任务、单次执行、Turn（指整个 Session 时）
 
-**Execution options（执行选项）**:
-Session 级、可由多个 provider 共同解释的模型与推理 effort 配置。它们可以在打开、
-恢复或运行时请求修改；请求、被原生接受和实际生效是不同事实。
-_Avoid_: 全部 Session 配置、权限设置、跨 provider 思考预算
+**Session configuration（会话配置）**:
+统一层可在打开、恢复或运行时传递的主 Session 模型与推理 effort。打开和恢复
+使用 `SessionConfig`；运行时使用一个 `ConfigChange`，配置 ID 只有 `model`
+和 `effort`。
+_Avoid_: 全部原生 Session 配置、权限设置、跨 provider 思考预算
 
 **Process environment（Provider 进程环境）**:
 构造 Provider 时选择的 Codex app-server 或 Claude CLI 基础子进程环境。nil 继承
@@ -65,13 +66,10 @@ _Avoid_: 通用 per-prompt env、整个 turn 的 trace、跨 provider trace 隔�
 provider 为 steer、工具调用或 turn 创建了新的 span。
 _Avoid_: 执行 span、turn 完成 span、provider 内部 span
 
-**Requested execution value（已接受请求值）**:
-执行选项最近一次获得原生接受回执的调用方字面值。它不表示当前原生状态。
-_Avoid_: 生效值、当前值
-
-**Effective execution value（原生生效值）**:
-由原生接口明确给出、当前归属于主 Session 的执行选项值。缺少观察时保持未知。
-_Avoid_: 请求值、由回执推断的值
+**Config acceptance（配置接受回执）**:
+`ConfigReceipt` 记录的派发与原生接受阶段。成功只表示原生接受了控制请求，
+不表示配置当前已生效；统一层不缓存或推断当前配置状态。
+_Avoid_: 生效值、当前值、完整配置快照
 
 **Main conversation（主会话）**:
 本次打开或恢复的原生会话，也是普通输入的默认目标。

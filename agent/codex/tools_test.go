@@ -39,7 +39,7 @@ func TestSessionConvertsSupportedCodexToolVariants(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "tools"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "tools"}}},
 	})
 	require.NoError(t, err)
 

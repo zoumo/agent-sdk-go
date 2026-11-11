@@ -82,7 +82,7 @@ func (p *Provider) acquireClient(ctx context.Context) (*codex.Client, error) {
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			"provider_start_failed",
+			ErrorReasonProviderStartFailed,
 			"start Codex app-server",
 			err,
 		)
@@ -131,23 +131,19 @@ func (p *Provider) Open(
 				Config:                config,
 				Cwd:                   codextypes.Some(options.Cwd),
 				DeveloperInstructions: developerInstructions(options.AdditionalSystemPrompt),
-				Model:                 optionalString(options.Execution.Model),
+				Model:                 optionalString(options.Config.Model),
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingStart), err)
 		}
-		created = newSession(
-			p,
-			native,
-			features,
-			initialExecutionOptionsReport(native, options.Execution, openingStart),
-		)
+		created = newSession(p, native, features)
 		return created, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	created.start()
 	return created, nil
 }
 
@@ -183,24 +179,20 @@ func (p *Provider) Resume(
 					options.AdditionalSystemPrompt,
 				),
 				ExcludeTurns: codextypes.Some(true),
-				Model:        optionalString(options.Execution.Model),
+				Model:        optionalString(options.Config.Model),
 				ThreadID:     options.SessionID,
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingResume), err)
 		}
-		created = newSession(
-			p,
-			native,
-			features,
-			initialExecutionOptionsReport(native, options.Execution, openingResume),
-		)
+		created = newSession(p, native, features)
 		return created, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	created.start()
 	return created, nil
 }
 
@@ -253,12 +245,12 @@ func (p *Provider) openingConfiguration(
 	error,
 ) {
 	features := effectiveFeatures(options.Features, p.formsSupported)
-	config, err := threadConfig(features, options.Execution.ReasoningEffort)
+	config, err := threadConfig(features, options.Config.Effort)
 	if err != nil {
 		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"execution_options_not_encodable",
-			"encode Codex execution options",
+			ErrorReasonSessionConfigNotEncodable,
+			"encode Codex session configuration",
 			err,
 		)
 	}
@@ -267,14 +259,14 @@ func (p *Provider) openingConfiguration(
 
 func threadConfig(
 	features agent.EffectiveFeatures,
-	executionEffort string,
+	effort string,
 ) (codextypes.Optional[map[string]json.RawMessage], error) {
 	config := make(map[string]json.RawMessage, 2)
 	if !features.AgentQuestions {
 		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
 	}
-	if executionEffort != "" {
-		encoded, err := json.Marshal(executionEffort)
+	if effort != "" {
+		encoded, err := json.Marshal(effort)
 		if err != nil {
 			return codextypes.Optional[map[string]json.RawMessage]{}, err
 		}
@@ -297,7 +289,7 @@ func validateOpenOptions(options agent.OpenOptions) error {
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,
-			"additional_dirs_unsupported",
+			agent.ErrorReasonAdditionalDirsUnsupported,
 			"Codex additional directories are not supported by this adapter",
 			nil,
 		)

@@ -24,7 +24,7 @@ type OpenOptions struct {
 	// complete list because the SDK does not persist it.
 	MCPServers []MCPServer
 
-	Execution ExecutionOptions
+	Config SessionConfig
 }
 
 // Validate checks the provider-neutral creation options before native side
@@ -38,20 +38,20 @@ func (o OpenOptions) Validate() error {
 	}
 	if !utf8.ValidString(o.AdditionalSystemPrompt) {
 		return invalidArgument(
-			"additional_system_prompt_invalid_utf8",
+			ErrorReasonAdditionalSystemPromptInvalidUTF8,
 			"additional system prompt must be valid UTF-8",
 		)
 	}
 	if strings.ContainsRune(o.AdditionalSystemPrompt, '\x00') {
 		return invalidArgument(
-			"additional_system_prompt_contains_nul",
+			ErrorReasonAdditionalSystemPromptContainsNUL,
 			"additional system prompt must not contain NUL",
 		)
 	}
 	if err := validateMCPServers(o.MCPServers); err != nil {
 		return err
 	}
-	return o.Execution.Validate()
+	return o.Config.Validate()
 }
 
 // ResumeOptions identifies an existing native main session to resume.

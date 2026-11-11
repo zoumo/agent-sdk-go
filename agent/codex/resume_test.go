@@ -57,7 +57,7 @@ func TestResumeDoesNotReplaySavedHistoryAndNativeClientUsesSameConnection(t *tes
 	assert.Equal(t, agent.EventAgentMessageChunk, event.Type())
 	assert.Equal(t, agent.MessageChunk{
 		MessageID: "live-item",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "live"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "live"}}},
 	}, event.Payload)
 
 	require.NoError(t, session.Close(ctx))

@@ -2,6 +2,10 @@
 
 ## v0.1.0-rc.1 — planned, unreleased
 
+- Replaces the unpublished unified `ExecutionOptions` and `ModelController`
+  APIs with `SessionConfig` and the single `ConfigController.SetConfig` setter.
+  The session field is `SessionConfig.Effort` and the effort config ID is
+  `effort`; no compatibility aliases are retained.
 - Consolidates the native Codex and Claude Go SDKs into the single
   `github.com/zoumo/agent-sdk-go` module, preserving their source commit ancestry,
   author information, licenses, attribution and recording provenance.

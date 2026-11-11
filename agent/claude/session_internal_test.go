@@ -46,7 +46,7 @@ func TestStartOrSteerRefusesConcurrentOrUnknownWrite(t *testing.T) {
 			test.setup(session)
 
 			receipt, err := session.StartOrSteer(context.Background(), agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "retained"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "retained"}}},
 			})
 			require.NoError(t, err)
 			assert.Equal(t, agent.InputNotApplied, receipt.Result)
@@ -162,8 +162,8 @@ func TestUserMessageTextBlocksRemainOneContentArray(t *testing.T) {
 	assert.Equal(t, agent.UserMessage{
 		MessageID: "user-message",
 		Content: []agent.ContentBlock{
-			agent.TextBlock{Text: "child prompt"},
-			agent.TextBlock{Text: "additional context"},
+			{Text: &agent.ContentBlockText{Text: "child prompt"}},
+			{Text: &agent.ContentBlockText{Text: "additional context"}},
 		},
 	}, events[0].Payload)
 	meta := requireClaudeEventMeta(t, events[0])

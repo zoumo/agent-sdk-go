@@ -45,6 +45,8 @@ type Truncation struct {
 // ToolCallPayload records an observed provider-native tool call. ToolName and
 // Provider form the required identity; Kind is a required action category.
 // Status is a provider-specific lifecycle projection.
+//
+//nolint:recvcheck // JSON decoding mutates payloads; reads and encoding accept values.
 type ToolCallPayload struct {
 	ID                  string         `json:"id"`
 	Kind                ToolKind       `json:"kind"`
@@ -69,11 +71,34 @@ func (p ToolCallPayload) MarshalJSON() ([]byte, error) {
 	return marshalToolContent(payload(p), p.Content)
 }
 
+func (p *ToolCallPayload) UnmarshalJSON(data []byte) error {
+	if err := requireJSONMemberPresence(data, "rawInput"); err != nil {
+		return err
+	}
+	if err := requireJSONMembers(data, "kind", "toolName", "provider"); err != nil {
+		return err
+	}
+	type payload ToolCallPayload
+	var decoded payload
+	if err := decodeStrictJSON(data, &decoded); err != nil {
+		return err
+	}
+	rawOutput, err := optionalDynamicJSONMember(data, "rawOutput")
+	if err != nil {
+		return err
+	}
+	decoded.RawOutput = rawOutput
+	*p = ToolCallPayload(decoded)
+	return nil
+}
+
 // ToolResultPayload records an observed provider-native tool result. Its
 // provider and tool name must equal the call identity remembered by the adapter,
 // and its kind must equal the call classification. The core validates this
 // event independently rather than reconstructing missing fields from another
 // event.
+//
+//nolint:recvcheck // JSON decoding mutates payloads; reads and encoding accept values.
 type ToolResultPayload struct {
 	ID                  string         `json:"id"`
 	Kind                ToolKind       `json:"kind"`
@@ -96,6 +121,29 @@ func (ToolResultPayload) eventType() EventType { return EventAgentToolResult }
 func (p ToolResultPayload) MarshalJSON() ([]byte, error) {
 	type payload ToolResultPayload
 	return marshalToolContent(payload(p), p.Content)
+}
+
+func (p *ToolResultPayload) UnmarshalJSON(data []byte) error {
+	if err := requireJSONMembers(data, "kind", "toolName", "provider"); err != nil {
+		return err
+	}
+	type payload ToolResultPayload
+	var decoded payload
+	if err := decodeStrictJSON(data, &decoded); err != nil {
+		return err
+	}
+	rawInput, err := optionalDynamicJSONMember(data, "rawInput")
+	if err != nil {
+		return err
+	}
+	rawOutput, err := optionalDynamicJSONMember(data, "rawOutput")
+	if err != nil {
+		return err
+	}
+	decoded.RawInput = rawInput
+	decoded.RawOutput = rawOutput
+	*p = ToolResultPayload(decoded)
+	return nil
 }
 
 // ToolChunkPayload is partial tool input. It intentionally carries only the

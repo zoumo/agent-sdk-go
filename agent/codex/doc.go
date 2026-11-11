@@ -39,14 +39,15 @@
 // harness/modules/unified-agent/design.md#additional-system-prompt. Additional
 // directories are rejected before opening a session. URL, image, audio, resource,
 // and resource-link interactions or inputs are not advertised.
-// Model and reasoning-effort execution options use native thread start/resume
-// values and thread settings updates. An empty option is omitted and a
-// nonempty value is passed literally to Codex. Start and resume responses can
-// provide effective model and effort observations. Runtime updates require the
-// experimental API; a settings update receipt proves acceptance only, while a
-// settings notification for the main thread can update the reported Effective
-// values. A successful model change without a complete new observation clears
-// the previous model and effort Effective values.
+// Open and Resume use SessionConfig. Empty model and reasoning-effort values are
+// omitted; nonempty values are passed literally to native thread start or
+// resume. Runtime configuration uses the optional ConfigController.SetConfig
+// path, mapping model and effort to native SetModel and SetThinking. Runtime
+// updates require the experimental API and affect provider-determined later
+// work; they do not wait for idle, interrupt, steer, or rebuild the session. A
+// successful receipt means only that Codex accepted the request. The unified
+// layer does not cache, infer, or report an observed current configuration from
+// acknowledgements or settings notifications.
 //
 // Several native facts intentionally have no unified representation. Codex does
 // not provide an arbitrary selectable settings-option catalog or

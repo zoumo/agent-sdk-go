@@ -32,7 +32,7 @@ func ExampleProvider() {
 		stream, err := session.Events()
 		mustExample(err)
 		receipt, err := session.StartOrSteer(ctx, agent.Input{
-			Content: []agent.ContentBlock{agent.TextBlock{Text: "Explain the change"}},
+			Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "Explain the change"}}},
 		})
 		mustExample(err)
 		fmt.Printf("%s start_or_steer=%s\n", providerName, receipt.Submission)
@@ -115,90 +115,65 @@ func ExampleProvider() {
 	// codex and claude adapters implement agent.Provider
 }
 
-// ExampleExecutionOptionsController shows the request, acceptance and effective
-// value boundaries. Empty fields omit an option; nonempty strings in this
-// synthetic provider remain literal. Native adapters target later work in the
-// main session; they do not wait or interrupt, and work already executing may
-// or may not observe the change according to native behavior.
-//
-// A successful update means the provider accepted the request. Effective values
-// change only when the provider supplies an explicit native observation.
-func ExampleExecutionOptionsController() {
+// ExampleConfigController shows the single runtime configuration entry point.
+// A receipt reports the exact change and native acceptance, not a current or
+// effective configuration snapshot.
+func ExampleConfigController() {
 	ctx := context.Background()
 	provider := newExampleProvider("codex")
 	_, err := provider.Start(ctx)
 	mustExample(err)
 	defer func() { mustExample(provider.Stop(context.Background())) }()
 
-	omitted, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
-	mustExample(err)
-	omittedReport := omitted.(agent.ExecutionOptionsReporter).EffectiveExecutionOptions()
-	fmt.Printf(
-		"omitted model_requested=%q effort_requested=%q model_effective_known=%t\n",
-		omittedReport.Model.Requested,
-		omittedReport.ReasoningEffort.Requested,
-		omittedReport.Model.Effective != nil,
-	)
-	mustExample(omitted.Close(ctx))
-
 	session, err := provider.Open(ctx, agent.OpenOptions{
 		Cwd: "/synthetic",
-		Execution: agent.ExecutionOptions{
-			Model:           " Caller/Model v2 ",
-			ReasoningEffort: " Native/High ",
+		Config: agent.SessionConfig{
+			Model:  " Caller/Model v2 ",
+			Effort: " Native/High ",
 		},
 	})
 	mustExample(err)
-	controller, ok := session.(agent.ExecutionOptionsController)
+	controller, ok := session.(agent.ConfigController)
 	if !ok {
-		panic("example session does not implement execution options control")
+		panic("example session does not implement configuration control")
 	}
-	initial := controller.EffectiveExecutionOptions()
-	fmt.Printf(
-		"open model_requested=%q model_effective_known=%t effort_requested=%q effort_effective_known=%t\n",
-		initial.Model.Requested,
-		initial.Model.Effective != nil,
-		initial.ReasoningEffort.Requested,
-		initial.ReasoningEffort.Effective != nil,
-	)
 
-	modelReceipt, err := controller.SetExecutionOption(
+	modelReceipt, err := controller.SetConfig(
 		ctx,
-		agent.ExecutionOptionChange{
-			Option: agent.ExecutionOptionModel,
-			Value:  "next/model",
+		agent.ConfigChange{
+			ID:    agent.ConfigModel,
+			Value: "next/model",
 		},
 	)
 	mustExample(err)
 	fmt.Printf(
-		"model requested=%q model_effective_known=%t effort_requested=%q effort_effective_known=%t\n",
-		modelReceipt.Report.Model.Requested,
-		modelReceipt.Report.Model.Effective != nil,
-		modelReceipt.Report.ReasoningEffort.Requested,
-		modelReceipt.Report.ReasoningEffort.Effective != nil,
+		"model id=%s value=%q sent=%t accepted=%t\n",
+		modelReceipt.Change.ID,
+		modelReceipt.Change.Value,
+		*modelReceipt.Acceptance.Sent,
+		*modelReceipt.Acceptance.NativeAccepted,
 	)
 
-	effortReceipt, err := controller.SetExecutionOption(
+	effortReceipt, err := controller.SetConfig(
 		ctx,
-		agent.ExecutionOptionChange{
-			Option: agent.ExecutionOptionReasoningEffort,
-			Value:  "next/effort",
+		agent.ConfigChange{
+			ID:    agent.ConfigEffort,
+			Value: "next/effort",
 		},
 	)
 	mustExample(err)
 	fmt.Printf(
-		"effort requested=%q model_requested=%q effort_effective_known=%t\n",
-		effortReceipt.Report.ReasoningEffort.Requested,
-		effortReceipt.Report.Model.Requested,
-		effortReceipt.Report.ReasoningEffort.Effective != nil,
+		"effort id=%s value=%q sent=%t accepted=%t\n",
+		effortReceipt.Change.ID,
+		effortReceipt.Change.Value,
+		*effortReceipt.Acceptance.Sent,
+		*effortReceipt.Acceptance.NativeAccepted,
 	)
 	mustExample(session.Close(ctx))
 
 	// Output:
-	// omitted model_requested="" effort_requested="" model_effective_known=false
-	// open model_requested=" Caller/Model v2 " model_effective_known=false effort_requested=" Native/High " effort_effective_known=false
-	// model requested="next/model" model_effective_known=false effort_requested=" Native/High " effort_effective_known=false
-	// effort requested="next/effort" model_requested="next/model" effort_effective_known=false
+	// model id=model value="next/model" sent=true accepted=true
+	// effort id=effort value="next/effort" sent=true accepted=true
 }
 
 type exampleProvider struct {
@@ -233,7 +208,7 @@ func (p *exampleProvider) Open(
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
-	return p.newSession(p.name+"-session", options.Execution)
+	return p.newSession(p.name + "-session")
 }
 
 func (p *exampleProvider) Resume(
@@ -243,7 +218,7 @@ func (p *exampleProvider) Resume(
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
-	return p.newSession(options.SessionID, options.Execution)
+	return p.newSession(options.SessionID)
 }
 
 func (p *exampleProvider) Stop(context.Context) error {
@@ -255,35 +230,32 @@ func (p *exampleProvider) Stop(context.Context) error {
 
 func (p *exampleProvider) newSession(
 	id string,
-	execution agent.ExecutionOptions,
 ) (agent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.started || p.stopped {
 		return nil, errors.New("provider is not active")
 	}
-	created := newExampleSession(p.name, id, execution)
+	created := newExampleSession(p.name, id)
 	p.sessions[id] = created
 	return created, nil
 }
 
 type exampleSession struct {
-	provider  string
-	id        string
-	events    []agent.Event
-	next      int
-	claimed   bool
-	answered  bool
-	execution agent.ExecutionOptionsReport
-	mu        sync.Mutex
-	closed    bool
-	done      chan struct{}
-	close     sync.Once
+	provider string
+	id       string
+	events   []agent.Event
+	next     int
+	claimed  bool
+	answered bool
+	mu       sync.Mutex
+	closed   bool
+	done     chan struct{}
+	close    sync.Once
 }
 
 func newExampleSession(
 	provider, id string,
-	requested agent.ExecutionOptions,
 ) *exampleSession {
 	interaction := agent.InteractionRef(provider + "/interaction-1")
 	idle := agent.StateIdle
@@ -297,23 +269,14 @@ func newExampleSession(
 			Kind:     agent.PermissionAllowOnce,
 		}},
 	}
-	report := agent.ExecutionOptionsReport{
-		Model: agent.ExecutionValue{
-			Requested: requested.Model,
-		},
-		ReasoningEffort: agent.ExecutionValue{
-			Requested: requested.ReasoningEffort,
-		},
-	}
 	return &exampleSession{
-		provider:  provider,
-		id:        id,
-		done:      make(chan struct{}),
-		execution: report,
+		provider: provider,
+		id:       id,
+		done:     make(chan struct{}),
 		events: []agent.Event{
 			exampleEvent(id, 1, "user-1", agent.UserMessage{
 				MessageID: "user-1",
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: "Explain the change"}},
+				Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "Explain the change"}}},
 			}),
 			exampleEvent(id, 2, "", agent.InteractionRequestedPayload{
 				Interaction: interaction,
@@ -328,7 +291,7 @@ func newExampleSession(
 			exampleEvent(id, 4, "agent-1", agent.AgentMessage{
 				MessageID: "agent-1",
 				Content: []agent.ContentBlock{
-					agent.TextBlock{Text: "Offline reply for " + provider},
+					{Text: &agent.ContentBlockText{Text: "Offline reply for " + provider}},
 				},
 			}),
 			exampleEvent(id, 5, "", agent.StateUpdatePayload{State: &idle}),
@@ -349,47 +312,47 @@ func (s *exampleSession) EffectiveFeatures() agent.EffectiveFeatures {
 	return agent.EffectiveFeatures{AgentQuestions: false}
 }
 
-func (s *exampleSession) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return cloneExampleExecutionReport(s.execution)
-}
-
-func (s *exampleSession) SetExecutionOption(
+func (s *exampleSession) SetConfig(
 	ctx context.Context,
-	change agent.ExecutionOptionChange,
-) (agent.ExecutionOptionsReceipt, error) {
-	if err := ctx.Err(); err != nil {
-		return agent.ExecutionOptionsReceipt{}, err
-	}
-	if change.Value == "" {
-		return agent.ExecutionOptionsReceipt{}, errors.New("execution option value is empty")
+	change agent.ConfigChange,
+) (agent.ConfigReceipt, error) {
+	receipt := exampleConfigNotSent(change)
+	if err := change.Validate(); err != nil {
+		return receipt, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return agent.ExecutionOptionsReceipt{}, errors.New("session closed")
+		return receipt, &agent.Error{
+			Code:    agent.ErrorClosed,
+			Reason:  "session_closed",
+			Message: "session is closed",
+		}
 	}
-	switch change.Option {
-	case agent.ExecutionOptionModel:
-		s.execution.Model.Requested = change.Value
-		s.execution.Model.Effective = nil
-		s.execution.ReasoningEffort.Effective = nil
-	case agent.ExecutionOptionReasoningEffort:
-		s.execution.ReasoningEffort.Requested = change.Value
-		s.execution.ReasoningEffort.Effective = nil
-	default:
-		return agent.ExecutionOptionsReceipt{}, errors.New("execution option is unsupported")
+	if err := ctx.Err(); err != nil {
+		return receipt, &agent.Error{
+			Code:    agent.ErrorUnavailable,
+			Reason:  "set_config_not_sent",
+			Message: "session configuration was not sent",
+			Cause:   err,
+		}
 	}
 	sent, accepted := true, true
-	return agent.ExecutionOptionsReceipt{
+	return agent.ConfigReceipt{
 		Change: change,
 		Acceptance: agent.Acceptance{
 			Sent:           &sent,
 			NativeAccepted: &accepted,
 		},
-		Report: cloneExampleExecutionReport(s.execution),
 	}, nil
+}
+
+func exampleConfigNotSent(change agent.ConfigChange) agent.ConfigReceipt {
+	sent := false
+	return agent.ConfigReceipt{
+		Change:     change,
+		Acceptance: agent.Acceptance{Sent: &sent},
+	}
 }
 
 func (s *exampleSession) Events() (agent.EventStream, error) {
@@ -517,23 +480,10 @@ func exampleMessageText(content []agent.ContentBlock) string {
 	if len(content) != 1 {
 		return ""
 	}
-	text, _ := content[0].(agent.TextBlock)
-	return text.Text
-}
-
-func cloneExampleExecutionReport(
-	report agent.ExecutionOptionsReport,
-) agent.ExecutionOptionsReport {
-	cloned := report
-	if report.Model.Effective != nil {
-		value := *report.Model.Effective
-		cloned.Model.Effective = &value
+	if content[0].Text == nil {
+		return ""
 	}
-	if report.ReasoningEffort.Effective != nil {
-		value := *report.ReasoningEffort.Effective
-		cloned.ReasoningEffort.Effective = &value
-	}
-	return cloned
+	return content[0].Text.Text
 }
 
 func mustExample(err error) {

@@ -16,7 +16,8 @@
       "command": "GOWORK=off go test ./codex ./codex/types ./agent/codex ./agent -run '^(TestW3cTraceContextRoundTrip|TestTraceContextHelpers|TestSessionSubmitTraceEnvelope|TestRawCallsIgnorePromptTraceContext|TestTraceStartOrSteerSynthetic|TestPromptTraceConsecutiveCodexSynthetic|TestCapabilities.*|TestStartOrSteer.*|TestSessionOpenSubmitReceiveAndDrain|TestInvalidOptionsAndClosedCall)$' -count=1 -timeout=300s",
       "test_files": ["types/trace_context_test.go"],
       "coverage": "W3cTraceContext absent/null/value and unknown-field JSON round trips. Synthetic model evidence only; no provider or live validation.",
-      "sdk_revision_note": "Evidence and tests are committed together; final ticket branch HEAD and exact check results are reported in the delivery callback.",
+      "tested_sdk_commit": "0825c777362cb096db0d404c83d21bc6923b9ad8",
+      "sdk_revision_note": "Final source/test tree passed at the recorded commit; subsequent changes are documentation-only.",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {
@@ -26,7 +27,8 @@
       "command": "GOWORK=off go test ./codex ./codex/types ./agent/codex ./agent -run '^(TestW3cTraceContextRoundTrip|TestTraceContextHelpers|TestSessionSubmitTraceEnvelope|TestRawCallsIgnorePromptTraceContext|TestTraceStartOrSteerSynthetic|TestPromptTraceConsecutiveCodexSynthetic|TestCapabilities.*|TestStartOrSteer.*|TestSessionOpenSubmitReceiveAndDrain|TestInvalidOptionsAndClosedCall)$' -count=1 -timeout=300s",
       "test_files": ["trace_test.go"],
       "coverage": "Native context helper inheritance, replacement and unvalidated carrier lookup. Unit evidence only; no provider or live validation.",
-      "sdk_revision_note": "Evidence and tests are committed together; final ticket branch HEAD and exact check results are reported in the delivery callback.",
+      "tested_sdk_commit": "0825c777362cb096db0d404c83d21bc6923b9ad8",
+      "sdk_revision_note": "Final source/test tree passed at the recorded commit; subsequent changes are documentation-only.",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {
@@ -36,7 +38,8 @@
       "command": "GOWORK=off go test ./codex ./codex/types ./agent/codex ./agent -run '^(TestW3cTraceContextRoundTrip|TestTraceContextHelpers|TestSessionSubmitTraceEnvelope|TestRawCallsIgnorePromptTraceContext|TestTraceStartOrSteerSynthetic|TestPromptTraceConsecutiveCodexSynthetic|TestCapabilities.*|TestStartOrSteer.*|TestSessionOpenSubmitReceiveAndDrain|TestInvalidOptionsAndClosedCall)$' -count=1 -timeout=300s",
       "test_files": ["trace_test.go"],
       "coverage": "Synthetic in-process peer checks Session.Submit envelope trace outside turn/start params, per-call omission, invalid or incomplete carrier rejection from the envelope, and known-field snapshots. No provider span linkage, shell environment or live validation.",
-      "sdk_revision_note": "Evidence and tests are committed together; final ticket branch HEAD and exact check results are reported in the delivery callback.",
+      "tested_sdk_commit": "0825c777362cb096db0d404c83d21bc6923b9ad8",
+      "sdk_revision_note": "Final source/test tree passed at the recorded commit; subsequent changes are documentation-only.",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {
@@ -46,7 +49,8 @@
       "command": "GOWORK=off go test ./codex ./codex/types ./agent/codex ./agent -run '^(TestW3cTraceContextRoundTrip|TestTraceContextHelpers|TestSessionSubmitTraceEnvelope|TestRawCallsIgnorePromptTraceContext|TestTraceStartOrSteerSynthetic|TestPromptTraceConsecutiveCodexSynthetic|TestCapabilities.*|TestStartOrSteer.*|TestSessionOpenSubmitReceiveAndDrain|TestInvalidOptionsAndClosedCall)$' -count=1 -timeout=300s",
       "test_files": ["trace_test.go"],
       "coverage": "Synthetic peer checks raw Client.Call, StartThread and ResumeThread ignore prompt context and remain trace-free. No provider or live validation.",
-      "sdk_revision_note": "Evidence and tests are committed together; final ticket branch HEAD and exact check results are reported in the delivery callback.",
+      "tested_sdk_commit": "0825c777362cb096db0d404c83d21bc6923b9ad8",
+      "sdk_revision_note": "Final source/test tree passed at the recorded commit; subsequent changes are documentation-only.",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {
@@ -56,7 +60,8 @@
       "command": "GOWORK=off go test ./codex ./codex/types ./agent/codex ./agent -run '^(TestW3cTraceContextRoundTrip|TestTraceContextHelpers|TestSessionSubmitTraceEnvelope|TestRawCallsIgnorePromptTraceContext|TestTraceStartOrSteerSynthetic|TestPromptTraceConsecutiveCodexSynthetic|TestCapabilities.*|TestStartOrSteer.*|TestSessionOpenSubmitReceiveAndDrain|TestInvalidOptionsAndClosedCall)$' -count=1 -timeout=300s",
       "test_files": ["../agent/codex/trace_test.go"],
       "coverage": "Unified Codex synthetic submission checks context-to-native carrier mapping, selected span carrier precedence, local span lifetime and telemetry panic isolation. No real agent, provider span linkage or live validation.",
-      "sdk_revision_note": "Evidence and tests are committed together; final ticket branch HEAD and exact check results are reported in the delivery callback.",
+      "tested_sdk_commit": "0825c777362cb096db0d404c83d21bc6923b9ad8",
+      "sdk_revision_note": "Final source/test tree passed at the recorded commit; subsequent changes are documentation-only.",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {
@@ -66,7 +71,8 @@
       "command": "GOWORK=off go test ./codex ./codex/types ./agent/codex ./agent -run '^(TestW3cTraceContextRoundTrip|TestTraceContextHelpers|TestSessionSubmitTraceEnvelope|TestRawCallsIgnorePromptTraceContext|TestTraceStartOrSteerSynthetic|TestPromptTraceConsecutiveCodexSynthetic|TestCapabilities.*|TestStartOrSteer.*|TestSessionOpenSubmitReceiveAndDrain|TestInvalidOptionsAndClosedCall)$' -count=1 -timeout=300s",
       "test_files": ["../agent/codex/trace_test.go"],
       "coverage": "Consecutive synthetic unified submissions keep request-envelope carriers independent and omit absent or invalid trace; no SDK carrier caching. This does not certify provider steer attribution, shell-tool environment or live behavior.",
-      "sdk_revision_note": "Evidence and tests are committed together; final ticket branch HEAD and exact check results are reported in the delivery callback.",
+      "tested_sdk_commit": "0825c777362cb096db0d404c83d21bc6923b9ad8",
+      "sdk_revision_note": "Final source/test tree passed at the recorded commit; subsequent changes are documentation-only.",
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {

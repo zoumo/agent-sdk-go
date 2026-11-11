@@ -70,6 +70,7 @@ type Client struct {
 	closing            bool
 	remote             *websocket.Conn
 	remoteToken        string
+	frames             frameTransport
 	queue              chan outbound
 	pending            map[ID]*pendingCall
 	reverse            map[ID]*requestState
@@ -149,6 +150,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	errW.Close()
 	c := newClient(limits)
 	c.cmd, c.stdin, c.stdout, c.stderr = cmd, inW, outR, errR
+	c.frames = newStdioFrameTransport(outR, inW, limits.MaxFrameBytes)
 	go func() {
 		waitErr := cmd.Wait()
 		close(c.reaped)
@@ -466,7 +468,7 @@ func (c *Client) writeLoop() {
 					c.fail(ErrWriteTimeout)
 				}
 			})
-			err := c.writeFrame(m.ctx, m.frame)
+			err := c.frames.WriteFrame(m.ctx, m.frame)
 			finished.Store(true)
 			timer.Stop()
 			if err != nil && c.streamMode && c.inputIsClosed() {

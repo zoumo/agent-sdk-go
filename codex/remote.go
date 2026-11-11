@@ -5,14 +5,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/coder/websocket"
 )
@@ -129,6 +127,7 @@ func NewRemote(ctx context.Context, options RemoteOptions) (*Client, error) {
 	c := newClient(limits)
 	c.remote = conn
 	c.remoteToken = options.BearerToken
+	c.frames = newWebsocketFrameTransport(conn, limits.MaxFrameBytes)
 	c.workers.Add(2)
 	go func() { defer c.workers.Done(); defer close(c.readDone); c.readLoop() }()
 	go func() { defer c.workers.Done(); c.writeLoop() }()
@@ -159,73 +158,4 @@ func loopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
-}
-
-func (c *Client) writeFrame(ctx context.Context, frame []byte) error {
-	if c.remote != nil {
-		// The shared writer owns cancellation and dispatch classification. A call
-		// may receive its response before Write returns; its deferred context
-		// cancellation must not tear down an otherwise successful connection.
-		if err := c.remote.Write(context.Background(), websocket.MessageText, frame); err != nil {
-			// Close reasons and library errors may contain peer-controlled text,
-			// including reflected headers. Expose only safe classification.
-			if ctx.Err() != nil {
-				return fmt.Errorf("%w: write: %w", ErrRemoteTransport, ctx.Err())
-			}
-			return fmt.Errorf("%w: write: %w", ErrRemoteTransport, io.EOF)
-		}
-		return nil
-	}
-	if c.streamMode {
-		if c.inputIsClosed() {
-			return ErrInputClosed
-		}
-		frame = append(frame, '\n')
-		n, err := c.streamWriter.Write(frame)
-		if err == nil && n != len(frame) {
-			err = io.ErrShortWrite
-		}
-		return err
-	}
-	frame = append(frame, '\n')
-	n, err := c.stdin.Write(frame)
-	if err == nil && n != len(frame) {
-		err = io.ErrShortWrite
-	}
-	return err
-}
-
-func (c *Client) readRemote() {
-	for {
-		kind, raw, err := c.remote.Read(context.Background())
-		if err != nil {
-			var networkError net.Error
-			var closeError websocket.CloseError
-			switch {
-			case errors.As(err, &closeError) && !utf8.ValidString(closeError.Reason):
-				c.fail(fmt.Errorf("%w: invalid WebSocket close reason", ErrProtocol))
-			case errors.Is(err, websocket.ErrMessageTooBig):
-				c.fail(fmt.Errorf("%w: %w", ErrProtocol, ErrFrameTooLarge))
-			case websocket.CloseStatus(err) == websocket.StatusProtocolError || websocket.CloseStatus(err) == websocket.StatusInvalidFramePayloadData:
-				c.fail(fmt.Errorf("%w: invalid WebSocket frame", ErrProtocol))
-			case websocket.CloseStatus(err) >= 0, errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed), errors.As(err, &networkError):
-				c.fail(fmt.Errorf("%w: read: %w", ErrRemoteTransport, io.EOF))
-			default:
-				c.fail(fmt.Errorf("%w: invalid WebSocket framing", ErrProtocol))
-			}
-			return
-		}
-		if len(raw) > c.limits.MaxFrameBytes {
-			c.fail(fmt.Errorf("%w: %w", ErrProtocol, ErrFrameTooLarge))
-			return
-		}
-		if kind != websocket.MessageText {
-			c.fail(fmt.Errorf("%w: expected WebSocket text message", ErrProtocol))
-			return
-		}
-		if err := c.routeFrame(raw); err != nil {
-			c.fail(err)
-			return
-		}
-	}
 }

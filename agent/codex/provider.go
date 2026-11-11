@@ -129,6 +129,7 @@ func (p *Provider) Open(
 		native, err := codex.Open(ctx, codex.SessionOptions{
 			Client:     client,
 			MCPServers: mcpServers,
+			ShellEnv:   maps.Clone(options.ShellEnv),
 			Thread: codextypes.ThreadStartParams{
 				Config:                config,
 				Cwd:                   codextypes.Some(options.Cwd),
@@ -174,6 +175,7 @@ func (p *Provider) Resume(
 		native, err := codex.Open(ctx, codex.SessionOptions{
 			Client:     client,
 			MCPServers: mcpServers,
+			ShellEnv:   maps.Clone(options.ShellEnv),
 			Resume: &codextypes.ThreadResumeParams{
 				Config: config,
 				Cwd:    codextypes.Some(options.Cwd),
@@ -209,6 +211,7 @@ func (p *Provider) NativeClient() (*codex.Client, error) {
 
 func providerCapabilities(formsSupported bool) agent.Capabilities {
 	capabilities := agent.Capabilities{
+		agent.CapabilityShellEnv:   true,
 		agent.CapabilityTextInput:  true,
 		agent.CapabilityPermission: true,
 	}
@@ -288,6 +291,14 @@ func developerInstructions(value string) codextypes.Optional[string] {
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
+	if len(options.ProcessEnv) != 0 {
+		return adapterError(
+			agent.ErrorUnsupported,
+			agent.ErrorReasonProcessEnvUnsupported,
+			"Codex Session process environment is not supported",
+			nil,
+		)
+	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,

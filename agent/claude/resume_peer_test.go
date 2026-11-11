@@ -35,6 +35,9 @@ type claudeResumePeerScenario struct {
 	ObservationPath string   `json:"observationPath,omitempty"`
 	SessionMarker   string   `json:"sessionMarker,omitempty"`
 	ArgvPath        string   `json:"argvPath,omitempty"`
+	EnvironmentKeys []string `json:"environmentKeys,omitempty"`
+	VersionEnvPath  string   `json:"versionEnvPath,omitempty"`
+	SessionEnvPath  string   `json:"sessionEnvPath,omitempty"`
 }
 
 type claudeResumePeerObservation struct {
@@ -92,6 +95,9 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		return 61
 	}
 	if len(args) == 1 && args[0] == "--version" {
+		if err := writeClaudePeerEnvironment(scenario.VersionEnvPath, scenario.EnvironmentKeys); err != nil {
+			return 73
+		}
 		if scenario.VersionExit {
 			return 70
 		}
@@ -101,6 +107,9 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		}
 		_, _ = fmt.Fprint(os.Stdout, output)
 		return 0
+	}
+	if err := writeClaudePeerEnvironment(scenario.SessionEnvPath, scenario.EnvironmentKeys); err != nil {
+		return 74
 	}
 	if scenario.ArgvPath != "" {
 		data, err := json.Marshal(args)
@@ -258,4 +267,22 @@ func mustMarshalJSON(value any) json.RawMessage {
 		return nil
 	}
 	return data
+}
+
+// Capture only explicitly selected synthetic keys, never the ambient environment.
+func writeClaudePeerEnvironment(path string, keys []string) error {
+	if path == "" {
+		return nil
+	}
+	env := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := os.LookupEnv(key); ok {
+			env[key] = value
+		}
+	}
+	data, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }

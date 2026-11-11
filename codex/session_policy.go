@@ -29,7 +29,7 @@ const (
 )
 
 func applySessionPolicyConfig(options *SessionOptions) error {
-	if len(options.Features) == 0 && len(options.Tools) == 0 && len(options.MCPServers) == 0 {
+	if len(options.Features) == 0 && len(options.Tools) == 0 && len(options.MCPServers) == 0 && len(options.ShellEnv) == 0 {
 		return nil
 	}
 	generated, err := generatedSessionConfig(options)
@@ -65,6 +65,21 @@ func generatedSessionConfig(options *SessionOptions) (map[string]json.RawMessage
 	if err := addMCPServerConfig(generated, options.MCPServers); err != nil {
 		return nil, err
 	}
+	if len(options.ShellEnv) != 0 {
+		if err := validateEnvironment(options.ShellEnv); err != nil {
+			return nil, fmt.Errorf("%w: ShellEnv: %s", ErrInvalidInput, err)
+		}
+		for _, key := range slices.Sorted(maps.Keys(options.ShellEnv)) {
+			if reservedShellEnvKey(key) {
+				return nil, fmt.Errorf("%w: ShellEnv key %q is owned by Codex", ErrInvalidInput, key)
+			}
+		}
+		encoded, err := json.Marshal(options.ShellEnv)
+		if err != nil {
+			return nil, fmt.Errorf("%w: encode ShellEnv", ErrInvalidInput)
+		}
+		generated["shell_environment_policy.set"] = encoded
+	}
 	return generated, nil
 }
 
@@ -97,4 +112,15 @@ func dottedPathsConflict(a, b string) bool {
 		}
 	}
 	return true
+}
+
+func reservedShellEnvKey(key string) bool {
+	switch foldEnvironmentKey(key) {
+	case "codex_session_id", "codex_thread_id", "codex_tool_call_id",
+		"codex_exec_server_noise_auth_token", "node_repl_auth_token",
+		"codex_guardian_decisions_api_key", "openai_federation_rule_id",
+		"openai_identity_token_file", "openai_workload_identity_context":
+		return true
+	}
+	return false
 }

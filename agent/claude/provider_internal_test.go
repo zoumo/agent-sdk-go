@@ -56,7 +56,7 @@ func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
 		"resume-id",
 		agent.Features{},
 		nil,
-		agent.ExecutionOptions{},
+		agent.SessionConfig{},
 	)
 	assert.Equal(t, "claude-fixture", options.CLIPath)
 	assert.Equal(t, "/workspace", options.WorkDir)
@@ -80,7 +80,7 @@ func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
 			"",
 			agent.Features{AgentQuestions: &enabled},
 			nil,
-			agent.ExecutionOptions{},
+			agent.SessionConfig{},
 		).DisallowedTools,
 	)
 	assert.Equal(t,
@@ -90,7 +90,7 @@ func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
 			"",
 			agent.Features{AgentQuestions: &disabled},
 			nil,
-			agent.ExecutionOptions{},
+			agent.SessionConfig{},
 		).DisallowedTools,
 	)
 }

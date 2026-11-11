@@ -24,7 +24,7 @@ type OpenOptions struct {
 	// complete list because the SDK does not persist it.
 	MCPServers []MCPServer
 
-	Execution ExecutionOptions
+	Config SessionConfig
 }
 
 // Validate checks the provider-neutral creation options before native side
@@ -51,7 +51,7 @@ func (o OpenOptions) Validate() error {
 	if err := validateMCPServers(o.MCPServers); err != nil {
 		return err
 	}
-	return o.Execution.Validate()
+	return o.Config.Validate()
 }
 
 // ResumeOptions identifies an existing native main session to resume.

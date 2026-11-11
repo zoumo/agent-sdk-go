@@ -17,11 +17,9 @@ import (
 )
 
 var (
-	_ agent.Session                    = (*session)(nil)
-	_ agent.ModelController            = (*session)(nil)
-	_ agent.EventStream                = (*eventStream)(nil)
-	_ agent.ExecutionOptionsReporter   = (*session)(nil)
-	_ agent.ExecutionOptionsController = (*session)(nil)
+	_ agent.Session          = (*session)(nil)
+	_ agent.ConfigController = (*session)(nil)
+	_ agent.EventStream      = (*eventStream)(nil)
 )
 
 type session struct {
@@ -31,7 +29,6 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu       sync.Mutex
 	mu                sync.Mutex
 	eventsClaimed     bool
 	closed            bool
@@ -43,7 +40,6 @@ type session struct {
 	activeSubmit      string
 	state             *agent.SessionState
 	stateVersion      uint64
-	executionOptions  executionOptionsState
 	interactions      map[agent.InteractionRef]*pendingInteraction
 	interactionRefs   map[string]agent.InteractionRef
 	interactionLedger *interactionledger.Ledger
@@ -71,7 +67,6 @@ func newSession(
 	init *claudetypes.Event,
 	sessionID string,
 	features agent.Features,
-	executionOptions executionOptionsState,
 	buffered []claude.Received,
 	resume *resumeIdentityGuard,
 ) (*session, error) {
@@ -80,7 +75,6 @@ func newSession(
 		native:            native,
 		id:                sessionID,
 		features:          effectiveFeatures(features),
-		executionOptions:  executionOptions,
 		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
 		interactionRefs:   make(map[string]agent.InteractionRef),
 		interactionLedger: interactionledger.New("claude-"),
@@ -131,12 +125,6 @@ func (s *session) Capabilities() agent.Capabilities {
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
-}
-
-func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.executionOptions.report()
 }
 
 func (s *session) Events() (agent.EventStream, error) {

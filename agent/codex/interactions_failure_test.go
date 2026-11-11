@@ -379,7 +379,10 @@ func TestPreAnswerLifecyclePreservesTerminalMapping(t *testing.T) {
 			require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
 			requested := nextInteractionRequested(t, ctx, stream)
 			if test.syncModel != "" {
-				_, err := session.SetModel(ctx, test.syncModel)
+				_, err := session.SetConfig(ctx, agent.ConfigChange{
+					ID:    agent.ConfigModel,
+					Value: test.syncModel,
+				})
 				require.NoError(t, err)
 			}
 

@@ -17,12 +17,10 @@ import (
 )
 
 var (
-	_ agent.Session                    = (*session)(nil)
-	_ agent.Archiver                   = (*session)(nil)
-	_ agent.ModelController            = (*session)(nil)
-	_ agent.EventStream                = (*eventStream)(nil)
-	_ agent.ExecutionOptionsReporter   = (*session)(nil)
-	_ agent.ExecutionOptionsController = (*session)(nil)
+	_ agent.Session          = (*session)(nil)
+	_ agent.Archiver         = (*session)(nil)
+	_ agent.ConfigController = (*session)(nil)
+	_ agent.EventStream      = (*eventStream)(nil)
 )
 
 type session struct {
@@ -31,7 +29,6 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu      sync.Mutex
 	mu               sync.Mutex
 	eventsClaimed    bool
 	closed           bool
@@ -47,15 +44,12 @@ type session struct {
 	idleTurn     string
 	lastFinished string
 	state        *agent.SessionState
-	execution    agent.ExecutionOptionsReport
-	// executionObservationSeq prevents an ACK from erasing settings observed
-	// while the native update was in flight.
-	executionObservationSeq uint64
-	interactions            map[agent.InteractionRef]*pendingInteraction
-	requestRefs             map[string]agent.InteractionRef
-	interactionLedger       *interactionledger.Ledger
-	done                    chan struct{}
-	err                     error
+
+	interactions      map[agent.InteractionRef]*pendingInteraction
+	requestRefs       map[string]agent.InteractionRef
+	interactionLedger *interactionledger.Ledger
+	done              chan struct{}
+	err               error
 
 	parentMu sync.RWMutex
 	parents  map[string]string
@@ -73,13 +67,11 @@ func newSession(
 	provider *Provider,
 	native *codex.Session,
 	features agent.EffectiveFeatures,
-	execution agent.ExecutionOptionsReport,
 ) *session {
 	created := &session{
 		provider:          provider,
 		native:            native,
 		features:          features,
-		execution:         execution,
 		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
 		requestRefs:       make(map[string]agent.InteractionRef),
 		interactionLedger: interactionledger.New("codex-"),
@@ -106,12 +98,6 @@ func (s *session) Capabilities() agent.Capabilities {
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
-}
-
-func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return cloneExecutionOptionsReport(s.execution)
 }
 
 func (s *session) Events() (agent.EventStream, error) {
@@ -351,13 +337,6 @@ func (s *session) Unarchive(ctx context.Context) (agent.ActionReceipt, error) {
 		Sent:           &sent,
 		NativeAccepted: &accepted,
 	}}, nil
-}
-
-func (s *session) SetModel(
-	ctx context.Context,
-	model string,
-) (agent.ConfigurationReceipt, error) {
-	return agent.SetExecutionModel(ctx, model, executionOptionsRuntime{session: s})
 }
 
 func (s *session) Close(context.Context) error {

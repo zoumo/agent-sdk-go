@@ -15,7 +15,7 @@ func TestStableErrorReasons(t *testing.T) {
 		want string
 	}{
 		{"event decode failed", agentcodex.ErrorReasonEventDecodeFailed, "event_decode_failed"},
-		{"execution options not encodable", agentcodex.ErrorReasonExecutionOptionsNotEncodable, "execution_options_not_encodable"},
+		{"session config not encodable", agentcodex.ErrorReasonSessionConfigNotEncodable, "session_config_not_encodable"},
 		{"form outcome unsupported", agentcodex.ErrorReasonFormOutcomeUnsupported, "form_outcome_unsupported"},
 		{"invalid native event", agentcodex.ErrorReasonInvalidNativeEvent, "invalid_native_event"},
 		{"permission cancel unsupported", agentcodex.ErrorReasonPermissionCancelUnsupported, "permission_cancel_unsupported"},

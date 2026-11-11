@@ -64,6 +64,8 @@ var acceptanceCases = []acceptanceCase{
 	{ID: "SDK-CASE-034"},
 	{ID: "SDK-CASE-035"},
 	{ID: "SDK-CASE-036"},
+	{ID: "SDK-CASE-037"},
+	{ID: "SDK-CASE-038", Optional: true},
 }
 
 type coverageSlot struct {
@@ -83,8 +85,8 @@ func (c acceptanceCase) requirement(provider string) string {
 }
 
 func acceptanceSlots() ([]coverageSlot, error) {
-	if len(acceptanceCases) != 36 {
-		return nil, fmt.Errorf("acceptance matrix has %d cases; want 36", len(acceptanceCases))
+	if len(acceptanceCases) != 38 {
+		return nil, fmt.Errorf("acceptance matrix has %d cases; want 38", len(acceptanceCases))
 	}
 	seen := make(map[string]bool, len(acceptanceCases))
 	for _, c := range acceptanceCases {
@@ -93,7 +95,7 @@ func acceptanceSlots() ([]coverageSlot, error) {
 		}
 		seen[c.ID] = true
 	}
-	slots := make([]coverageSlot, 0, 72)
+	slots := make([]coverageSlot, 0, 76)
 	for _, provider := range []string{"codex", "claude"} {
 		for _, c := range acceptanceCases {
 			slots = append(slots, coverageSlot{
@@ -120,8 +122,8 @@ func acceptanceSlots() ([]coverageSlot, error) {
 			return nil, fmt.Errorf("acceptance matrix has invalid requirement %q", slot.Requirement)
 		}
 	}
-	if len(slots) != 72 || required != 63 || optional != 9 {
-		return nil, fmt.Errorf("acceptance matrix has %d slots (%d required, %d optional); want 72 (63, 9)",
+	if len(slots) != 76 || required != 65 || optional != 11 {
+		return nil, fmt.Errorf("acceptance matrix has %d slots (%d required, %d optional); want 76 (65, 11)",
 			len(slots), required, optional)
 	}
 	return slots, nil
@@ -320,7 +322,7 @@ func selectExternalRecording(path string, slots []coverageSlot) (*externalSelect
 			}, nil
 		}
 	}
-	return nil, fmt.Errorf("external recording %s/%s is absent from the 72-slot matrix", plan.Provider, plan.CaseID)
+	return nil, fmt.Errorf("external recording %s/%s is absent from the 76-slot matrix", plan.Provider, plan.CaseID)
 }
 
 func evaluateSlot(ctx context.Context, tool toolIdentity, o options, slot coverageSlot, external *externalSelection) coverageRow {

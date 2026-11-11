@@ -124,7 +124,7 @@ Cleanup uses a separate bounded context and removes every successful prepared
 fixture, including after export/projection failure, business failure and
 cancellation. Missing, corrupt or mismatched evidence fails closed.
 
-Complete coverage has 36 cases across both providers, represented as 72
+Complete coverage has 38 cases across both providers, represented as 76
 provider/case slots. Source verification, required/optional policy and current
 SDK simulation status remain separate. Required gaps fail; optional business
 gaps remain visible; source corruption fails regardless of policy.
@@ -141,7 +141,7 @@ required material is missing.
 
 The exact dependency and in-process transport acceptance are defined in
 [Go library mode](library-mode.md). Simulation acceptance adds the provenance
-and coverage rules above: the offline gate preserves all 36 cases and 72 slots,
+and coverage rules above: the offline gate preserves all 38 cases and 76 slots,
 fails missing required material, and keeps optional gaps visible. It also
 rejects retired process-oriented implementation and documentation surfaces.
 

@@ -1044,6 +1044,45 @@ type InterruptReceipt struct {
 输入操作的取舍和未采用方案见
 [ADR 0003](../../adr/0003-unified-start-or-steer.md)。
 
+<a id="context-inject"></a>
+
+### 仅注入上下文
+
+```go
+type Injector interface {
+    Inject(ctx context.Context, input Input) (InjectReceipt, error)
+}
+
+type InjectReceipt struct {
+    Acceptance Acceptance
+}
+```
+
+- `Injector` 是 Session 的可选接口。它把用户上下文追加到本 Session，不请求
+  新的模型响应；不调用启动、steer 或 interrupt，不建立平台输入队列，不等待
+  idle，也不自动重试。不支持时返回 `unsupported`，不得降级成普通 prompt。
+- 输入在原生写入前完成校验和复制。初版沿用各 adapter 的文本限制：Codex
+  接受有序文本块，Claude 接受单个文本块；均拒绝 annotations 及非文本内容。
+  注入内容是 user context，不提升为 system 或 developer 指令。
+- `Inject` 与 `StartOrSteer` 共用本地写入准入；已有输入正在写入，或前次
+  `StartOrSteer` 结果未知时，`Inject` 返回 `failed_precondition` 和
+  `Sent=false`，不写入。`Inject` 在途时的 `StartOrSteer` 仍返回
+  `not_applied`。需要确定顺序的调用方须串行调用。
+- closing/closed Session 拒绝新注入。成功注入不创建 work identity，不更新
+  active work、交互归属、中断候选或 Session state；已经运行的工作保持原生语义。
+- 回执只表达当次观察到的接受阶段，不表示消费时机、持久性、幂等性或恢复后仍可见。
+  本地拒绝填 `Sent=false`；Codex 原生明确拒绝填 `Sent=true`、
+  `NativeAccepted=false`；未知写入返回 `outcome_unknown`，调用方不可假定未应用
+  并直接重试。注入失败不创建运行候选，也不把未知消费状态伪装成工作状态。
+
+| Provider | 原生操作与版本边界 | 成功回执与消费边界 |
+|---|---|---|
+| Codex | `thread/inject_items`，将文本编码为 Responses API 的 user message / `input_text`。固定 0.162.1 schema 已声明该方法；0.166.0 来源说明追加历史且不启动 user turn。以实际 RPC 为准，method-not-found 映射为 `unsupported`，不猜测 server user-agent 版本。 | `Sent=true`、`NativeAccepted=true`；不填 `NativeRecorded`。idle 时留待后续模型请求；running 时由原生 pending input 机制决定消费时机，不保证某个 tool call 或模型步骤之前可见。 |
+| Claude | user envelope 的 `shouldQuery=false`，不附加 query priority。依据官方 TypeScript 0.3.258 类型合同，要求原生 live init 确认稳定 CLI 2.x 且版本不低于 2.1.258；缺少版本、旧版本、预发布版和其他 major 均返回 `unsupported`。仅以 callback 确认身份且尚无 live init 的恢复 Session 也不启用。 | 成功只填 `Sent=true`；官方类型描述为 transcript append，并入后续会 query 的 user message。写入成功不证明 CLI 接受、记录或消费，也不保证运行中当前 turn 消费。 |
+
+原生来源、具体测试命令与录制证据分别维护在对应 SDK 的来源说明和测试入口；
+来源合同、合成协议测试、真实录制仿真与 Go SDK 真实 E2E 是独立证据。
+
 ## 输入与内容块
 
 ```go

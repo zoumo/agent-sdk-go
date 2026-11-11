@@ -110,6 +110,10 @@ ErrUnsupported before the apply write. Effort never maps to
 `set_max_thinking_tokens` and does not restart the process. A configuration
 acknowledgment does not prove the active model, effort or children changed.
 
+`Session.GetSettings(ctx)` exposes the native read-only query when callers need
+its raw response body. Its limits are defined in the
+[native input and configuration contract](../harness/modules/native-session/design.md#interface-原生输入与配置).
+
 `AppendSystemPrompt` adds caller text after the CLI's own system instructions
 without replacing them. A nonempty value becomes one literal
 `--append-system-prompt=<text>` argv element; empty omits the option. The

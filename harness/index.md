@@ -12,7 +12,7 @@ okf_version: "0.2"
 | 模块、依赖、代码布局与编码 | [开发规范](architecture.md) |
 | 测试层级、隔离与验收 | [测试规范](testing.md) |
 | 共同能力与设计取舍 | [SDK 架构](sdk/architecture.md) |
-| 用户目标与 36 条验收流程 | [共同验收](sdk/validation-cases.md) |
+| 用户目标与 38 条验收流程 | [共同验收](sdk/validation-cases.md) |
 | Session 接口、权限、事件、关系与子详细交付 | [Session 合同](modules/native-session/design.md) |
 | 官方 SDK 之上的可选统一 Agent Core、Session 与事件流 | [统一 Agent 设计](modules/unified-agent/design.md) |
 | Claude mixed user content 的决定 | [ADR 0001](adr/0001-claude-mixed-user-content.md) |

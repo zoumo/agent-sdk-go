@@ -14,7 +14,9 @@ import (
 // working directories and resume identities come from the unified operation.
 type Config struct {
 	CLIPath string
-	Env     []string
+	// Env is the complete base environment: nil inherits at Open/Resume; a
+	// non-nil slice replaces ambient variables, including an empty slice.
+	Env []string
 	// Tracer optionally creates a local span for each admitted StartOrSteer.
 	Tracer agent.Tracer
 	// ConfigDir is the explicit absolute Claude local-storage root used by

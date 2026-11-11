@@ -15,6 +15,8 @@ const (
 	CapabilityPermission        = "permission"
 	CapabilityForm              = "form"
 	CapabilityURL               = "url"
+	CapabilityProcessEnv        = "processEnv"
+	CapabilityShellEnv          = "shellEnv"
 	CapabilityPromptTrace       = "promptTrace"
 )
 
@@ -29,6 +31,8 @@ var capabilityNames = [...]string{
 	CapabilityPermission,
 	CapabilityForm,
 	CapabilityURL,
+	CapabilityProcessEnv,
+	CapabilityShellEnv,
 	CapabilityPromptTrace,
 }
 

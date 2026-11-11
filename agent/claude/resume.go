@@ -75,7 +75,7 @@ func (p *Provider) prepareResume(
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			"resume_probe_id_failed",
+			ErrorReasonResumeProbeIDFailed,
 			"create Claude resume probe identity",
 			err,
 		)
@@ -107,7 +107,7 @@ func (p *Provider) requireResumeVersion(ctx context.Context, cwd string) error {
 	if err := command.Run(); err != nil {
 		return adapterError(
 			agent.ErrorUnavailable,
-			"resume_version_query_failed",
+			ErrorReasonResumeVersionQueryFailed,
 			"query Claude version before resume",
 			err,
 		)
@@ -115,7 +115,7 @@ func (p *Provider) requireResumeVersion(ctx context.Context, cwd string) error {
 	if output.truncated {
 		return adapterError(
 			agent.ErrorUnsupported,
-			"resume_version_unconfirmed",
+			ErrorReasonResumeVersionUnconfirmed,
 			"Claude version output exceeded its review bound",
 			nil,
 		)
@@ -124,7 +124,7 @@ func (p *Provider) requireResumeVersion(ctx context.Context, cwd string) error {
 	if len(versions) == 0 {
 		return adapterError(
 			agent.ErrorUnsupported,
-			"resume_version_unconfirmed",
+			ErrorReasonResumeVersionUnconfirmed,
 			"Claude version could not be confirmed",
 			nil,
 		)
@@ -133,7 +133,7 @@ func (p *Provider) requireResumeVersion(ctx context.Context, cwd string) error {
 		if version != claudeResumeVersion {
 			return adapterError(
 				agent.ErrorUnsupported,
-				"resume_version_unsupported",
+				ErrorReasonResumeVersionUnsupported,
 				"Claude resume requires CLI "+claudeResumeVersion,
 				nil,
 			)
@@ -200,21 +200,21 @@ func (p *Provider) preflightResume(
 	)
 	if err != nil {
 		return nil, resumePreflightError(
-			"resume_preflight_query_failed",
+			ErrorReasonResumePreflightQueryFailed,
 			"Claude saved-session metadata could not be verified",
 			err,
 		)
 	}
 	if result.Info == nil {
 		return nil, resumePreflightError(
-			"resume_preflight_missing",
+			ErrorReasonResumePreflightMissing,
 			"Claude saved session was not found",
 			nil,
 		)
 	}
 	if result.Coverage.Status != "complete" {
 		return nil, resumePreflightError(
-			"resume_preflight_incomplete",
+			ErrorReasonResumePreflightIncomplete,
 			"Claude saved-session metadata coverage is incomplete",
 			nil,
 		)
@@ -222,14 +222,14 @@ func (p *Provider) preflightResume(
 	info := result.Info
 	if info.SessionID != options.SessionID {
 		return nil, resumePreflightError(
-			"resume_preflight_identity_mismatch",
+			ErrorReasonResumePreflightIdentityMismatch,
 			"Claude saved-session identity does not match the requested session",
 			nil,
 		)
 	}
 	if info.Cwd == nil || !sameDirectory(*info.Cwd, options.Cwd) {
 		return nil, resumePreflightError(
-			"resume_preflight_cwd_mismatch",
+			ErrorReasonResumePreflightCwdMismatch,
 			"Claude saved-session working directory does not match the request",
 			nil,
 		)
@@ -240,7 +240,7 @@ func (p *Provider) preflightResume(
 	)
 	if err != nil {
 		return nil, resumePreflightError(
-			"resume_preflight_file_invalid",
+			ErrorReasonResumePreflightFileInvalid,
 			"Claude saved transcript is not a regular file under the configured directory",
 			err,
 		)
@@ -282,7 +282,7 @@ func (t *resumeTarget) verifyPostcheck(ctx context.Context) error {
 	result, err := queryResumeInfo(ctx, t.configDir, t.sessionID)
 	if err != nil {
 		return resumePostcheckError(
-			"resume_postcheck_query_failed",
+			ErrorReasonResumePostcheckQueryFailed,
 			"Claude saved-session metadata changed after identity confirmation",
 			err,
 		)
@@ -294,7 +294,7 @@ func (t *resumeTarget) verifyPostcheck(ctx context.Context) error {
 		result.Info.Cwd == nil ||
 		!sameDirectory(*result.Info.Cwd, t.cwd) {
 		return resumePostcheckError(
-			"resume_postcheck_mismatch",
+			ErrorReasonResumePostcheckMismatch,
 			"Claude saved-session metadata no longer matches the confirmed identity",
 			nil,
 		)
@@ -307,7 +307,7 @@ func (t *resumeTarget) verifyPostcheck(ctx context.Context) error {
 		canonicalPath != t.canonicalPath ||
 		!os.SameFile(t.info, currentInfo) {
 		return resumePostcheckError(
-			"resume_postcheck_file_changed",
+			ErrorReasonResumePostcheckFileChanged,
 			"Claude saved transcript changed after identity confirmation",
 			err,
 		)
@@ -386,10 +386,10 @@ func waitForResumeIdentity(
 	for {
 		received, err := native.Receive(ctx)
 		if err != nil {
-			reason := "resume_identity_wait_failed"
+			reason := ErrorReasonResumeIdentityWaitFailed
 			message := "wait for Claude resume identity"
 			if ctx.Err() != nil {
-				reason = "resume_identity_timeout"
+				reason = ErrorReasonResumeIdentityTimeout
 				message = "Claude did not confirm resume identity before the timeout"
 				err = ctx.Err()
 			}
@@ -446,7 +446,7 @@ func (t *resumeTarget) verifyInit(event *claude.Event) error {
 	if event.IsReplay != nil && *event.IsReplay {
 		return adapterError(
 			agent.ErrorNativeRejected,
-			"resume_init_replayed",
+			ErrorReasonResumeInitReplayed,
 			"Claude returned replay material instead of a live init",
 			nil,
 		)
@@ -456,7 +456,7 @@ func (t *resumeTarget) verifyInit(event *claude.Event) error {
 		!sameDirectory(event.System.CWD, t.cwd) {
 		return adapterError(
 			agent.ErrorNativeRejected,
-			"resume_identity_conflict",
+			ErrorReasonResumeIdentityConflict,
 			"Claude init identity conflicts with the saved-session target",
 			nil,
 		)
@@ -492,7 +492,7 @@ func (t *resumeTarget) verifyCallback(
 		!t.transcriptMatches(input.TranscriptPath) {
 		return true, adapterError(
 			agent.ErrorNativeRejected,
-			"resume_callback_identity_mismatch",
+			ErrorReasonResumeCallbackIdentityMismatch,
 			"Claude SessionStart callback does not match the saved-session target",
 			nil,
 		)
@@ -544,7 +544,7 @@ func (g *resumeIdentityGuard) inspect(
 		if g.callbackWasIdentity || g.lateCallbackSeen {
 			return true, adapterError(
 				agent.ErrorNativeRejected,
-				"resume_callback_duplicate",
+				ErrorReasonResumeCallbackDuplicate,
 				"Claude SessionStart identity callback arrived more than once",
 				nil,
 			)
@@ -571,7 +571,7 @@ func (g *resumeIdentityGuard) inspect(
 func resumeDuplicateInit() error {
 	return adapterError(
 		agent.ErrorNativeRejected,
-		"resume_init_duplicate",
+		ErrorReasonResumeInitDuplicate,
 		"Claude resume emitted init identity more than once",
 		nil,
 	)

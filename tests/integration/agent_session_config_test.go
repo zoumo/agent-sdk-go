@@ -112,7 +112,7 @@ func (s *NativeIntegrationSuite) TestAgentSessionConfigUpdatesActiveWorkAcrossPr
 
 		submitted, err := session.StartOrSteer(ctx, agent.Input{
 			Content: []agent.ContentBlock{
-				agent.TextBlock{Text: "active/before"},
+				{Text: &agent.ContentBlockText{Text: "active/before"}},
 			},
 		})
 		require.NoError(t, err)

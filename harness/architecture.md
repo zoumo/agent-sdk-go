@@ -23,9 +23,10 @@ and dependency boundaries.
 - The `agent` core production code must use only the standard library. It must not
   import either native SDK, MASS or recording/replay code. Provider adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
-  mechanics (`agent/internal/lifecycle`, `internal/queue` and
-  `internal/uuidv4`), but adapters must not import each other or the other native
-  SDK, and native packages must not import `agent`.
+  mechanics (`agent/internal/lifecycle`, `agent/internal/eventenvelope`,
+  `agent/internal/interactionledger`,
+  `internal/queue` and `internal/uuidv4`), but adapters must not import each
+  other or the other native SDK, and native packages must not import `agent`.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**
@@ -40,12 +41,22 @@ and dependency boundaries.
   import either native SDK or native `types`, an adapter, MASS, recording/replay
   code, tools or tests. Go internal visibility restricts it to packages under
   `agent`.
+- `agent/internal/interactionledger` owns only Session-scoped opaque interaction
+  references, registration order and provider-neutral authority slots. A slot
+  may record pending, answering, sent or settled authority and settlement
+  results, but never a native request, raw frame, request identifier, handle,
+  reply callback or reference-to-adapter lookup. Each adapter's private registry
+  remains the only route from a reference to native answer authority.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib
   packages must not enter SDK production dependency trees. Native types remain
   standard-library-only.
   FIFO ownership and resource semantics live in [event delivery](modules/native-session/design.md#delivery-event-delivery).
+- `agent/internal/eventenvelope` shares only unified event-envelope construction:
+  identity, fallback time, validation and error classification. It may depend on
+  the standard library, `agent` and `internal/uuidv4`; provider-specific payload
+  conversion and Meta/raw extraction stay in each adapter.
 - Native parsing, unknown data, aliases, execution identities, transport and
   process lifecycle stay with each native SDK. Session state ownership and
   internal coordination live in the [Session module design](modules/native-session/design.md).

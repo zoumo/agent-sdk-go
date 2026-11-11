@@ -1,7 +1,6 @@
 package agentcodex
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -9,28 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 )
 
 func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
-	s := &session{}
-	answerDone := make(chan struct{})
-	interaction := &pendingInteraction{
-		phase:      interactionAnswering,
-		answerDone: answerDone,
-	}
-	type result struct {
-		outcome agent.InteractionOutcome
-		reason  string
-	}
-	settled := make(chan result, 1)
+	interaction := &pendingInteraction{}
+	require.True(t, interaction.slot.Claim())
+	settled := make(chan interactionledger.Result, 1)
 	go func() {
-		outcome, reason := s.settlement(
-			interaction,
-			agent.InteractionCancelled,
-			"session_closed",
+		settled <- interaction.slot.Resolve(
+			interactionledger.Result{
+				Outcome: agent.InteractionCancelled,
+				Reason:  agent.ErrorReasonSessionClosed,
+			},
+			agent.ErrorReasonSessionClosed,
 		)
-		settled <- result{outcome: outcome, reason: reason}
 	}()
 
 	select {
@@ -39,16 +31,14 @@ func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
 	case <-time.After(20 * time.Millisecond):
 	}
 
-	s.mu.Lock()
-	interaction.answered = true
-	close(answerDone)
-	interaction.answerDone = nil
-	s.mu.Unlock()
+	require.True(t, interaction.slot.CompleteSent(agent.InteractionAnswered))
 
 	select {
 	case got := <-settled:
-		assert.Equal(t, agent.InteractionAnswered, got.outcome)
-		assert.Equal(t, "session_closed", got.reason)
+		assert.Equal(t, interactionledger.Result{
+			Outcome: agent.InteractionAnswered,
+			Reason:  agent.ErrorReasonSessionClosed,
+		}, got)
 	case <-time.After(time.Second):
 		require.FailNow(t, "settlement did not resume")
 	}
@@ -57,7 +47,7 @@ func TestInteractionSettlementWaitsForAdmittedAnswer(t *testing.T) {
 func TestInteractionSettlementPreservesUnknownAnswerOutcome(t *testing.T) {
 	tests := []struct {
 		name        string
-		answerErr   error
+		prepare     func(*interactionledger.Slot)
 		wantOutcome agent.InteractionOutcome
 		wantReason  string
 	}{
@@ -68,33 +58,41 @@ func TestInteractionSettlementPreservesUnknownAnswerOutcome(t *testing.T) {
 		},
 		{
 			name: "not-sent",
-			answerErr: &codex.AnswerError{
-				Dispatch: codex.NotSent,
-				Cause:    codex.ErrRequestResolved,
+			prepare: func(slot *interactionledger.Slot) {
+				require.True(t, slot.Claim())
+				require.True(t, slot.ReleaseNotSent())
 			},
 			wantOutcome: agent.InteractionExpired,
 			wantReason:  "turn_completed",
 		},
 		{
 			name: "outcome-unknown",
-			answerErr: &codex.AnswerError{
-				Dispatch: codex.OutcomeUnknown,
-				Cause:    errors.New("synthetic write failure"),
+			prepare: func(slot *interactionledger.Slot) {
+				require.True(t, slot.Claim())
+				require.True(t, slot.CompleteTerminal(
+					agent.InteractionFailed,
+					agent.ErrorReasonAnswerOutcomeUnknown,
+				))
 			},
 			wantOutcome: agent.InteractionFailed,
-			wantReason:  "answer_outcome_unknown",
+			wantReason:  agent.ErrorReasonAnswerOutcomeUnknown,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := &session{}
-			outcome, reason := s.settlement(
-				&pendingInteraction{answerErr: test.answerErr},
-				agent.InteractionExpired,
+			interaction := &pendingInteraction{}
+			if test.prepare != nil {
+				test.prepare(&interaction.slot)
+			}
+			result := interaction.slot.Resolve(
+				interactionledger.Result{
+					Outcome: agent.InteractionExpired,
+					Reason:  "turn_completed",
+				},
 				"turn_completed",
 			)
-			assert.Equal(t, test.wantOutcome, outcome)
-			assert.Equal(t, test.wantReason, reason)
+			assert.Equal(t, test.wantOutcome, result.Outcome)
+			assert.Equal(t, test.wantReason, result.Reason)
 		})
 	}
 }

@@ -77,7 +77,7 @@ func (i Input) Validate() error {
 		return invalidArgument("empty_input", "input must contain at least one content block")
 	}
 	for index, block := range i.Content {
-		if err := validateContentBlock(block); err != nil {
+		if err := block.Validate(); err != nil {
 			return invalidArgument(
 				"invalid_content_block",
 				"content block "+strconv.Itoa(index)+" is invalid: "+err.Error(),
@@ -87,8 +87,53 @@ func (i Input) Validate() error {
 	return nil
 }
 
+// Validate checks that exactly one content branch is present and valid.
+func (b ContentBlock) Validate() error {
+	branches := 0
+	if b.Text != nil {
+		branches++
+	}
+	if b.Image != nil {
+		branches++
+	}
+	if b.Audio != nil {
+		branches++
+	}
+	if b.ResourceLink != nil {
+		branches++
+	}
+	if b.Resource != nil {
+		branches++
+	}
+	switch branches {
+	case 0:
+		return invalidArgument("nil_content_block", "content block is nil")
+	case 1:
+	default:
+		return invalidArgument(
+			"multiple_content_blocks",
+			"content block must have exactly one branch",
+		)
+	}
+
+	switch {
+	case b.Text != nil:
+		return b.Text.Validate()
+	case b.Image != nil:
+		return b.Image.Validate()
+	case b.Audio != nil:
+		return b.Audio.Validate()
+	case b.ResourceLink != nil:
+		return b.ResourceLink.Validate()
+	case b.Resource != nil:
+		return b.Resource.Validate()
+	default:
+		panic("validated content block has no branch")
+	}
+}
+
 // Validate checks the text block's annotations and string encoding.
-func (b TextBlock) Validate() error {
+func (b ContentBlockText) Validate() error {
 	if !utf8.ValidString(b.Text) {
 		return invalidArgument("invalid_text", "text is not valid UTF-8")
 	}
@@ -96,7 +141,7 @@ func (b TextBlock) Validate() error {
 }
 
 // Validate checks required media fields, Base64 data, and annotations.
-func (b ImageBlock) Validate() error {
+func (b ContentBlockImage) Validate() error {
 	if b.MIMEType == "" || !utf8.ValidString(b.MIMEType) {
 		return invalidArgument("missing_mime_type", "image MIME type is required")
 	}
@@ -110,7 +155,7 @@ func (b ImageBlock) Validate() error {
 }
 
 // Validate checks required media fields, Base64 data, and annotations.
-func (b AudioBlock) Validate() error {
+func (b ContentBlockAudio) Validate() error {
 	if b.MIMEType == "" || !utf8.ValidString(b.MIMEType) {
 		return invalidArgument("missing_mime_type", "audio MIME type is required")
 	}
@@ -144,7 +189,7 @@ func (r EmbeddedResource) Validate() error {
 }
 
 // Validate checks the embedded resource and annotations.
-func (b ResourceBlock) Validate() error {
+func (b ContentBlockResource) Validate() error {
 	if err := b.Resource.Validate(); err != nil {
 		return err
 	}
@@ -152,7 +197,7 @@ func (b ResourceBlock) Validate() error {
 }
 
 // Validate checks required link fields, nonnegative size, and annotations.
-func (b ResourceLinkBlock) Validate() error {
+func (b ContentBlockResourceLink) Validate() error {
 	if b.URI == "" || !utf8.ValidString(b.URI) {
 		return invalidArgument("missing_resource_uri", "resource link URI is required")
 	}
@@ -174,7 +219,27 @@ func (b ResourceLinkBlock) Validate() error {
 	return validateAnnotations(b.Annotations)
 }
 
-func (b TextBlock) MarshalJSON() ([]byte, error) {
+func (b ContentBlock) MarshalJSON() ([]byte, error) {
+	if err := b.Validate(); err != nil {
+		return nil, err
+	}
+	switch {
+	case b.Text != nil:
+		return json.Marshal(b.Text)
+	case b.Image != nil:
+		return json.Marshal(b.Image)
+	case b.Audio != nil:
+		return json.Marshal(b.Audio)
+	case b.ResourceLink != nil:
+		return json.Marshal(b.ResourceLink)
+	case b.Resource != nil:
+		return json.Marshal(b.Resource)
+	default:
+		panic("validated content block has no branch")
+	}
+}
+
+func (b ContentBlockText) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
@@ -185,7 +250,7 @@ func (b TextBlock) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (b ImageBlock) MarshalJSON() ([]byte, error) {
+func (b ContentBlockImage) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
@@ -198,7 +263,7 @@ func (b ImageBlock) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (b AudioBlock) MarshalJSON() ([]byte, error) {
+func (b ContentBlockAudio) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
@@ -210,7 +275,7 @@ func (b AudioBlock) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (b ResourceBlock) MarshalJSON() ([]byte, error) {
+func (b ContentBlockResource) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
@@ -226,7 +291,7 @@ func (b ResourceBlock) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (b ResourceLinkBlock) MarshalJSON() ([]byte, error) {
+func (b ContentBlockResourceLink) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
@@ -260,7 +325,8 @@ func (i *Input) UnmarshalJSON(data []byte) error {
 	}
 	content := make([]ContentBlock, len(wire.Content))
 	for index, raw := range wire.Content {
-		block, err := unmarshalContentBlock(raw)
+		var block ContentBlock
+		err := block.UnmarshalJSON(raw)
 		if err != nil {
 			return invalidArgument(
 				"invalid_content_block",
@@ -273,102 +339,61 @@ func (i *Input) UnmarshalJSON(data []byte) error {
 	return i.Validate()
 }
 
-func validateContentBlock(block ContentBlock) error {
-	switch value := block.(type) {
-	case TextBlock:
-		return value.Validate()
-	case *TextBlock:
-		if value == nil {
-			return invalidArgument("nil_content_block", "content block is nil")
-		}
-		return value.Validate()
-	case ImageBlock:
-		return value.Validate()
-	case *ImageBlock:
-		if value == nil {
-			return invalidArgument("nil_content_block", "content block is nil")
-		}
-		return value.Validate()
-	case AudioBlock:
-		return value.Validate()
-	case *AudioBlock:
-		if value == nil {
-			return invalidArgument("nil_content_block", "content block is nil")
-		}
-		return value.Validate()
-	case ResourceBlock:
-		return value.Validate()
-	case *ResourceBlock:
-		if value == nil {
-			return invalidArgument("nil_content_block", "content block is nil")
-		}
-		return value.Validate()
-	case ResourceLinkBlock:
-		return value.Validate()
-	case *ResourceLinkBlock:
-		if value == nil {
-			return invalidArgument("nil_content_block", "content block is nil")
-		}
-		return value.Validate()
-	default:
-		return invalidArgument("unsupported_content_block", "content block kind is not supported")
-	}
-}
-
-func unmarshalContentBlock(data []byte) (ContentBlock, error) {
+func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 	var envelope struct {
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return nil, err
+		return err
 	}
 
+	var decoded ContentBlock
 	switch envelope.Type {
 	case contentTypeText:
 		var wire textBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
-			return nil, err
+			return err
 		}
 		if err := requireJSONMembers(data, "text"); err != nil {
-			return nil, err
+			return err
 		}
-		block := TextBlock{Text: wire.Text, Annotations: annotationsFromJSON(wire.Annotations)}
-		return block, block.Validate()
+		decoded.Text = &ContentBlockText{
+			Text:        wire.Text,
+			Annotations: annotationsFromJSON(wire.Annotations),
+		}
 	case contentTypeImage:
 		var wire imageBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
-			return nil, err
+			return err
 		}
 		if err := requireJSONMembers(data, "data", "mimeType"); err != nil {
-			return nil, err
+			return err
 		}
-		block := ImageBlock{
+		decoded.Image = &ContentBlockImage{
 			Data:        wire.Data,
 			MIMEType:    wire.MIMEType,
 			URI:         wire.URI,
 			Annotations: annotationsFromJSON(wire.Annotations),
 		}
-		return block, block.Validate()
 	case contentTypeAudio:
 		var wire audioBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
-			return nil, err
+			return err
 		}
 		if err := requireJSONMembers(data, "data", "mimeType"); err != nil {
-			return nil, err
+			return err
 		}
-		block := AudioBlock{
+		decoded.Audio = &ContentBlockAudio{
 			Data:        wire.Data,
 			MIMEType:    wire.MIMEType,
 			Annotations: annotationsFromJSON(wire.Annotations),
 		}
-		return block, block.Validate()
 	case contentTypeResource:
 		var wire resourceBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
-			return nil, err
+			return err
 		}
-		block := ResourceBlock{
+		decoded.Resource = &ContentBlockResource{
 			Resource: EmbeddedResource{
 				URI:      wire.Resource.URI,
 				MIMEType: wire.Resource.MIMEType,
@@ -377,13 +402,12 @@ func unmarshalContentBlock(data []byte) (ContentBlock, error) {
 			},
 			Annotations: annotationsFromJSON(wire.Annotations),
 		}
-		return block, block.Validate()
 	case contentTypeResourceLink:
 		var wire resourceLinkBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
-			return nil, err
+			return err
 		}
-		block := ResourceLinkBlock{
+		decoded.ResourceLink = &ContentBlockResourceLink{
 			URI:         wire.URI,
 			Name:        wire.Name,
 			MIMEType:    wire.MIMEType,
@@ -392,10 +416,14 @@ func unmarshalContentBlock(data []byte) (ContentBlock, error) {
 			Size:        wire.Size,
 			Annotations: annotationsFromJSON(wire.Annotations),
 		}
-		return block, block.Validate()
 	default:
-		return nil, errors.New("unsupported content type")
+		return errors.New("unsupported content type")
 	}
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*b = decoded
+	return nil
 }
 
 func validateAnnotations(annotations *Annotations) error {

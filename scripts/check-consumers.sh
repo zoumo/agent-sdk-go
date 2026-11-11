@@ -23,7 +23,7 @@ module consumer.invalid/agent-sdk-check
 
 go 1.26
 MOD
-GOPROXY=direct go mod download -json "github.com/zoumo/agent-sdk-go@$revision" > "$consumer_dir/module.json"
+go mod download -json "github.com/zoumo/agent-sdk-go@$revision" > "$consumer_dir/module.json"
 module_dir=$(python3 - "$consumer_dir/module.json" "$revision" "$GOMODCACHE" <<'PY'
 import json, pathlib, sys
 module = json.loads(pathlib.Path(sys.argv[1]).read_text())

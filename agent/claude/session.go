@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -28,23 +29,24 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	mu                  sync.Mutex
-	eventsClaimed       bool
-	closed              bool
-	explicitClose       bool
-	submitting          bool
-	submitUnknown       bool
-	workActive          bool
-	activeSubmit        string
-	state               *agent.SessionState
-	stateVersion        uint64
-	interactions        map[agent.InteractionRef]*pendingInteraction
-	interactionRefs     map[string]agent.InteractionRef
-	interactionSequence uint64
-	done                chan struct{}
-	doneClosed          bool
-	err                 error
-	resume              *resumeIdentityGuard
+	mu                sync.Mutex
+	eventsClaimed     bool
+	closed            bool
+	explicitClose     bool
+	providerReleased  bool
+	submitting        bool
+	submitUnknown     bool
+	workActive        bool
+	activeSubmit      string
+	state             *agent.SessionState
+	stateVersion      uint64
+	interactions      map[agent.InteractionRef]*pendingInteraction
+	interactionRefs   map[string]agent.InteractionRef
+	interactionLedger *interactionledger.Ledger
+	done              chan struct{}
+	doneClosed        bool
+	err               error
+	resume            *resumeIdentityGuard
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
@@ -54,6 +56,9 @@ type session struct {
 	observationDone chan struct{}
 	closeOnce       sync.Once
 	closeErr        error
+
+	nativeCleanupOnce sync.Once
+	nativeCleanupErr  error
 }
 
 func newSession(
@@ -66,15 +71,16 @@ func newSession(
 	resume *resumeIdentityGuard,
 ) (*session, error) {
 	created := &session{
-		provider:        provider,
-		native:          native,
-		id:              sessionID,
-		features:        effectiveFeatures(features),
-		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
-		interactionRefs: make(map[string]agent.InteractionRef),
-		done:            make(chan struct{}),
-		observationDone: make(chan struct{}),
-		resume:          resume,
+		provider:          provider,
+		native:            native,
+		id:                sessionID,
+		features:          effectiveFeatures(features),
+		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
+		interactionRefs:   make(map[string]agent.InteractionRef),
+		interactionLedger: interactionledger.New("claude-"),
+		done:              make(chan struct{}),
+		observationDone:   make(chan struct{}),
+		resume:            resume,
 	}
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
@@ -84,7 +90,7 @@ func newSession(
 		if err := created.pushEvents(events); err != nil {
 			return nil, adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver buffered Claude event",
 				err,
 			)
@@ -98,7 +104,7 @@ func newSession(
 		if err := created.pushEvents(events); err != nil {
 			return nil, adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver initial Claude commands",
 				err,
 			)
@@ -129,7 +135,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.closed && s.explicitClose {
 		return nil, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -137,7 +143,7 @@ func (s *session) Events() (agent.EventStream, error) {
 	if s.eventsClaimed {
 		return nil, adapterError(
 			agent.ErrorFailedPrecondition,
-			"events_already_claimed",
+			agent.ErrorReasonEventsAlreadyClaimed,
 			"the session event stream has already been claimed",
 			nil,
 		)
@@ -160,7 +166,7 @@ func (s *session) StartOrSteer(
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -199,7 +205,7 @@ func (s *session) StartOrSteer(
 		s.finishInputWrite(true, stateVersion)
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
-			"start_or_steer_acceptance_missing",
+			ErrorReasonStartOrSteerAcceptanceMissing,
 			"Claude start-or-steer returned without write evidence",
 			nil,
 		)
@@ -237,7 +243,7 @@ func (s *session) newSubmissionID(stateVersion uint64) (string, error) {
 		s.finishInputWrite(false, stateVersion)
 		return "", adapterError(
 			agent.ErrorUnavailable,
-			"submission_id_failed",
+			ErrorReasonSubmissionIDFailed,
 			"create unified submission identity",
 			err,
 		)
@@ -268,7 +274,7 @@ func (s *session) Interrupt(
 		s.mu.Unlock()
 		return agent.InterruptReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -290,17 +296,14 @@ func (s *session) Interrupt(
 func (s *session) Close(context.Context) error {
 	s.closeOnce.Do(func() {
 		invalidated := s.closeForOperations(true)
-		s.closeErr = s.native.Close()
-		if s.closeErr != nil {
-			s.closeErr = nativeOperationError("close", s.closeErr)
-		}
+		s.closeErr = s.cleanupNative()
 		<-s.observationDone
 		events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
 		_ = s.pushEvents(events)
 		cause := sessionTerminationError(s.native.Err())
 		s.terminate(cause)
 		_ = s.events.Close(cause)
-		s.provider.sessionClosed(s)
+		s.releaseProviderSession(false)
 	})
 	return s.closeErr
 }
@@ -338,17 +341,34 @@ func (s *session) observe() {
 	invalidated := s.closeForOperations(false)
 	events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
 	_ = s.pushEvents(events)
-	if cause != nil {
-		_ = s.native.Close()
-	}
-	s.terminate(cause)
+	_ = s.cleanupNative()
 	s.mu.Lock()
 	explicit := s.explicitClose
 	s.mu.Unlock()
 	if !explicit {
 		_ = s.events.Close(sessionTerminationError(cause))
-		s.provider.sessionClosed(s)
 	}
+	s.releaseProviderSession(true)
+	s.terminate(cause)
+}
+
+func (s *session) cleanupNative() error {
+	s.nativeCleanupOnce.Do(func() {
+		if err := s.native.Close(); err != nil {
+			s.nativeCleanupErr = nativeOperationError("close", err)
+		}
+	})
+	return s.nativeCleanupErr
+}
+
+func (s *session) releaseProviderSession(requireImplicit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.providerReleased || (requireImplicit && s.explicitClose) {
+		return
+	}
+	s.providerReleased = true
+	s.provider.sessionClosed(s)
 }
 
 func (s *session) receiveUntilTerminal() error {
@@ -367,7 +387,7 @@ func (s *session) receiveUntilTerminal() error {
 					if pushErr := s.pushEvents(events); pushErr != nil {
 						return adapterError(
 							agent.ErrorUnavailable,
-							"event_delivery_failed",
+							agent.ErrorReasonEventDeliveryFailed,
 							"deliver Claude decode diagnostic",
 							pushErr,
 						)
@@ -393,7 +413,7 @@ func (s *session) receiveUntilTerminal() error {
 		if pushErr := s.pushEvents(events); pushErr != nil {
 			return adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver unified Claude event",
 				pushErr,
 			)
@@ -466,34 +486,29 @@ func textInput(input agent.Input) (string, error) {
 	if len(input.Content) != 1 {
 		return "", adapterError(
 			agent.ErrorUnsupported,
-			"multiple_content_blocks_unsupported",
+			ErrorReasonMultipleContentBlocksUnsupported,
 			"Claude text input supports exactly one content block",
 			nil,
 		)
 	}
-	var block agent.TextBlock
-	switch typed := input.Content[0].(type) {
-	case agent.TextBlock:
-		block = typed
-	case *agent.TextBlock:
-		block = *typed
-	default:
+	block := input.Content[0]
+	if block.Text == nil {
 		return "", adapterError(
 			agent.ErrorUnsupported,
-			"content_block_unsupported",
+			agent.ErrorReasonContentBlockUnsupported,
 			"Claude input supports text blocks only",
 			nil,
 		)
 	}
-	if block.Annotations != nil {
+	if block.Text.Annotations != nil {
 		return "", adapterError(
 			agent.ErrorUnsupported,
-			"text_annotations_unsupported",
+			agent.ErrorReasonTextAnnotationsUnsupported,
 			"Claude input does not support text annotations",
 			nil,
 		)
 	}
-	return block.Text, nil
+	return block.Text.Text, nil
 }
 
 func effectiveFeatures(features agent.Features) agent.EffectiveFeatures {

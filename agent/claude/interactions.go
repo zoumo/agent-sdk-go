@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 const (
@@ -19,30 +18,17 @@ const (
 	permissionRejectOnce = "reject-once"
 )
 
-type interactionPhase uint8
-
-const (
-	interactionPending interactionPhase = iota
-	interactionAnswering
-	interactionAnswered
-)
-
 type pendingInteraction struct {
-	ref             agent.InteractionRef
-	kind            agent.InteractionKind
-	requestID       string
-	request         claude.IncomingRequest
-	received        claude.Received
-	questions       map[string]claude.Question
-	questionInput   claude.AskUserQuestionInput
-	phase           interactionPhase
-	answerOutcome   agent.InteractionOutcome
-	answerAccepted  bool
-	terminalOutcome agent.InteractionOutcome
-	terminalReason  string
-	answerDone      chan struct{}
-	sequence        uint64
-	startedAt       time.Time
+	ref           agent.InteractionRef
+	kind          agent.InteractionKind
+	requestID     string
+	request       claude.IncomingRequest
+	received      claude.Received
+	questions     map[string]claude.Question
+	questionInput claude.AskUserQuestionInput
+	slot          interactionledger.Slot
+	sequence      uint64
+	startedAt     time.Time
 }
 
 func (s *session) convertRequest(received claude.Received) ([]agent.Event, error) {
@@ -126,7 +112,6 @@ func (s *session) permissionInteraction(
 		requestID: request.ID(),
 		request:   request,
 		received:  received,
-		phase:     interactionPending,
 		startedAt: nativeEventTime(request.Raw()),
 	}
 	unified := agent.InteractionRequest{
@@ -134,7 +119,7 @@ func (s *session) permissionInteraction(
 		ToolCallID: metadata.ToolUseID,
 		Title:      title,
 		Content: []agent.ContentBlock{
-			agent.TextBlock{Text: string(request.Params())},
+			{Text: &agent.ContentBlockText{Text: string(request.Params())}},
 		},
 		Options: []agent.PermissionOption{
 			{
@@ -160,7 +145,7 @@ func (s *session) questionInteraction(
 	if !s.features.AgentQuestions {
 		return s.rejectUnsupportedRequest(
 			received,
-			"agent_questions_disabled",
+			agent.ErrorReasonAgentQuestionsDisabled,
 			"Claude questions are disabled for this session",
 			"AskUserQuestion is disabled for this session",
 		)
@@ -185,7 +170,6 @@ func (s *session) questionInteraction(
 		received:      received,
 		questions:     questions,
 		questionInput: input,
-		phase:         interactionPending,
 		startedAt:     nativeEventTime(request.Raw()),
 	}
 	unified := agent.InteractionRequest{
@@ -259,17 +243,6 @@ func (s *session) registerInteraction(
 	interaction *pendingInteraction,
 	request agent.InteractionRequest,
 ) ([]agent.Event, error) {
-	ref, err := uuidv4.New()
-	if err != nil {
-		return nil, adapterError(
-			agent.ErrorUnavailable,
-			"interaction_ref_failed",
-			"create interaction reference",
-			err,
-		)
-	}
-	interaction.ref = agent.InteractionRef("claude-" + ref)
-
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -294,6 +267,19 @@ func (s *session) registerInteraction(
 			},
 		)
 	}
+	ref, sequence, err := s.interactionLedger.Allocate()
+	if err != nil {
+		s.mu.Unlock()
+		return nil, adapterError(
+			agent.ErrorUnavailable,
+			agent.ErrorReasonInteractionRefFailed,
+			"create interaction reference",
+			err,
+		)
+	}
+	interaction.ref = ref
+	interaction.sequence = sequence
+
 	var stateEvent *agent.Event
 	if s.state == nil || *s.state != agent.StateRequiresAction {
 		var previous *agent.SessionState
@@ -336,7 +322,6 @@ func (s *session) registerInteraction(
 		s.mu.Unlock()
 		return nil, requestErr
 	}
-	interaction.sequence = s.nextInteractionSequenceLocked()
 	s.interactions[interaction.ref] = interaction
 	s.interactionRefs[interaction.requestID] = interaction.ref
 	s.mu.Unlock()
@@ -344,11 +329,6 @@ func (s *session) registerInteraction(
 		return []agent.Event{requestedEvent}, nil
 	}
 	return []agent.Event{*stateEvent, requestedEvent}, nil
-}
-
-func (s *session) nextInteractionSequenceLocked() uint64 {
-	s.interactionSequence++
-	return s.interactionSequence
 }
 
 func (s *session) Answer(
@@ -361,7 +341,7 @@ func (s *session) Answer(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -371,7 +351,7 @@ func (s *session) Answer(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_interaction_ref",
+			agent.ErrorReasonInvalidInteractionRef,
 			"interaction reference is not live in this session",
 			nil,
 		)
@@ -380,24 +360,23 @@ func (s *session) Answer(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorUnsupported,
-			"agent_questions_disabled",
+			agent.ErrorReasonAgentQuestionsDisabled,
 			"Claude questions are disabled for this session",
 			nil,
 		)
 	}
-	if interaction.phase != interactionPending {
+	if interaction.slot.State() != interactionledger.Pending {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorFailedPrecondition,
-			"interaction_not_pending",
+			agent.ErrorReasonInteractionNotPending,
 			"interaction is no longer pending",
 			nil,
 		)
 	}
 	if cause := context.Cause(interaction.request.Context()); cause != nil {
-		outcome, reason := answerTerminalOutcome(interaction, cause)
-		interaction.terminalOutcome = outcome
-		interaction.terminalReason = reason
+		outcome, reason := answerTerminalOutcome(interaction.request.Context(), cause)
+		interaction.slot.CompleteTerminal(outcome, reason)
 		s.deleteInteractionLocked(interaction)
 		s.mu.Unlock()
 		events, eventErr := s.closedInteractionEvents(
@@ -413,7 +392,7 @@ func (s *session) Answer(
 		if pushErr := s.pushEvents(events); pushErr != nil {
 			return agent.InteractionReceipt{}, adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver Claude interaction closure",
 				pushErr,
 			)
@@ -425,18 +404,25 @@ func (s *session) Answer(
 			},
 			interactionAnswerError(reason, cause)
 	}
-	if err := agent.ValidateAnswer(interaction.kind, answer); err != nil {
+	matched, err := agent.MatchAnswer(interaction.kind, answer)
+	if err != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, err
 	}
-	reply, outcome, validationErr := interactionReply(interaction, answer)
+	reply, outcome, validationErr := interactionReply(interaction, matched)
 	if validationErr != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, validationErr
 	}
-	done := make(chan struct{})
-	interaction.answerDone = done
-	interaction.phase = interactionAnswering
+	if !interaction.slot.Claim() {
+		s.mu.Unlock()
+		return agent.InteractionReceipt{}, adapterError(
+			agent.ErrorFailedPrecondition,
+			agent.ErrorReasonInteractionNotPending,
+			"interaction is no longer pending",
+			nil,
+		)
+	}
 	s.mu.Unlock()
 
 	answerErr := reply(ctx)
@@ -444,11 +430,8 @@ func (s *session) Answer(
 	s.mu.Lock()
 	owned := s.interactions[ref] == interaction
 	if answerErr == nil {
-		interaction.phase = interactionAnswered
-		interaction.answerOutcome = outcome
-		interaction.answerAccepted = true
+		interaction.slot.CompleteSent(outcome)
 		s.mu.Unlock()
-		close(done)
 		sent := true
 		return agent.InteractionReceipt{
 			Interaction: ref,
@@ -457,11 +440,8 @@ func (s *session) Answer(
 	}
 	if answerNotSent(answerErr) {
 		if context.Cause(interaction.request.Context()) == nil {
-			if owned {
-				interaction.phase = interactionPending
-			}
+			interaction.slot.ReleaseNotSent()
 			s.mu.Unlock()
-			close(done)
 			sent := false
 			return agent.InteractionReceipt{
 					Interaction: ref,
@@ -471,16 +451,14 @@ func (s *session) Answer(
 		}
 	}
 	outcome, reason := answerTerminalOutcome(
-		interaction,
+		interaction.request.Context(),
 		answerErr,
 	)
-	interaction.terminalOutcome = outcome
-	interaction.terminalReason = reason
+	interaction.slot.CompleteTerminal(outcome, reason)
 	if owned {
 		s.deleteInteractionLocked(interaction)
 	}
 	s.mu.Unlock()
-	close(done)
 
 	if owned {
 		settled, settleErr := s.closedInteractionEvents(
@@ -496,7 +474,7 @@ func (s *session) Answer(
 		if pushErr := s.pushEvents(settled); pushErr != nil {
 			return agent.InteractionReceipt{}, adapterError(
 				agent.ErrorUnavailable,
-				"event_delivery_failed",
+				agent.ErrorReasonEventDeliveryFailed,
 				"deliver Claude interaction closure",
 				pushErr,
 			)
@@ -511,26 +489,26 @@ func (s *session) Answer(
 }
 
 func answerTerminalOutcome(
-	interaction *pendingInteraction,
+	requestContext context.Context,
 	err error,
 ) (agent.InteractionOutcome, string) {
-	cause := context.Cause(interaction.request.Context())
+	cause := context.Cause(requestContext)
 	switch {
 	case errors.Is(cause, claude.ErrUnknownOutcome),
 		errors.Is(err, claude.ErrUnknownOutcome):
-		return agent.InteractionFailed, "answer_outcome_unknown"
+		return agent.InteractionFailed, agent.ErrorReasonAnswerOutcomeUnknown
 	case errors.Is(cause, claude.ErrPermissionUsed),
 		errors.Is(cause, claude.ErrPermissionStale),
 		errors.Is(err, claude.ErrPermissionUsed),
 		errors.Is(err, claude.ErrPermissionStale):
-		return agent.InteractionExpired, "native_request_ended"
+		return agent.InteractionExpired, agent.ErrorReasonNativeRequestEnded
 	case errors.Is(cause, claude.ErrPermissionCancelled):
-		return agent.InteractionCancelled, "native_request_ended"
+		return agent.InteractionCancelled, agent.ErrorReasonNativeRequestEnded
 	case errors.Is(err, claude.ErrPermissionCancelled):
-		return agent.InteractionCancelled, "native_request_ended"
+		return agent.InteractionCancelled, agent.ErrorReasonNativeRequestEnded
 	case errors.Is(cause, claude.ErrClosed),
 		errors.Is(err, claude.ErrClosed):
-		return agent.InteractionCancelled, "session_closed"
+		return agent.InteractionCancelled, agent.ErrorReasonSessionClosed
 	default:
 		return agent.InteractionFailed, answerFailureReason(err)
 	}
@@ -540,11 +518,7 @@ func interactionReply(
 	interaction *pendingInteraction,
 	answer agent.Answer,
 ) (func(context.Context) error, agent.InteractionOutcome, error) {
-	concrete, err := concreteAnswer(answer)
-	if err != nil {
-		return nil, "", err
-	}
-	switch value := concrete.(type) {
+	switch value := answer.(type) {
 	case agent.PermissionAnswer:
 		if value.Outcome == agent.PermissionCancelled {
 			return func(ctx context.Context) error {
@@ -567,7 +541,7 @@ func interactionReply(
 		default:
 			return nil, "", adapterError(
 				agent.ErrorInvalidArgument,
-				"permission_option_not_offered",
+				agent.ErrorReasonPermissionOptionNotOffered,
 				"permission option was not offered by the native request",
 				nil,
 			)
@@ -583,7 +557,7 @@ func interactionReply(
 			if updateErr != nil {
 				return nil, "", adapterError(
 					agent.ErrorInvalidArgument,
-					"invalid_form_answer",
+					agent.ErrorReasonInvalidFormAnswer,
 					"form answer does not match the native question input",
 					updateErr,
 				)
@@ -609,7 +583,7 @@ func interactionReply(
 		default:
 			return nil, "", adapterError(
 				agent.ErrorInvalidArgument,
-				"invalid_form_outcome",
+				agent.ErrorReasonInvalidFormOutcome,
 				"form answer outcome is not supported",
 				nil,
 			)
@@ -617,7 +591,7 @@ func interactionReply(
 	default:
 		return nil, "", adapterError(
 			agent.ErrorUnsupported,
-			"answer_kind_unsupported",
+			agent.ErrorReasonAnswerKindUnsupported,
 			"answer kind is not supported for this Claude interaction",
 			nil,
 		)
@@ -632,7 +606,7 @@ func formAnswers(
 	if len(content) != 1 || !present {
 		return nil, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer must contain only a native answers object",
 			nil,
 		)
@@ -649,7 +623,7 @@ func formAnswers(
 			if !known {
 				return nil, adapterError(
 					agent.ErrorInvalidArgument,
-					"unknown_form_question",
+					agent.ErrorReasonUnknownFormQuestion,
 					"form answer uses a question not present in the native request",
 					nil,
 				)
@@ -663,7 +637,7 @@ func formAnswers(
 	default:
 		return nil, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer does not contain a native answers object",
 			nil,
 		)
@@ -672,7 +646,7 @@ func formAnswers(
 		if _, known := questions[key]; !known {
 			return nil, adapterError(
 				agent.ErrorInvalidArgument,
-				"unknown_form_question",
+				agent.ErrorReasonUnknownFormQuestion,
 				"form answer uses a question not present in the native request",
 				nil,
 			)
@@ -703,7 +677,7 @@ func claudeQuestionAnswer(
 			if !ok {
 				return claude.QuestionAnswer{}, adapterError(
 					agent.ErrorInvalidArgument,
-					"invalid_form_answer",
+					agent.ErrorReasonInvalidFormAnswer,
 					"multi-select form answers must contain only strings",
 					nil,
 				)
@@ -714,7 +688,7 @@ func claudeQuestionAnswer(
 	default:
 		return claude.QuestionAnswer{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answers must be strings or string arrays",
 			nil,
 		)
@@ -729,43 +703,10 @@ func joinedQuestionAnswer(labels []string) claude.QuestionAnswer {
 func singleSelectArrayError() error {
 	return adapterError(
 		agent.ErrorInvalidArgument,
-		"invalid_form_answer",
+		agent.ErrorReasonInvalidFormAnswer,
 		"array form answers require a multi-select question",
 		nil,
 	)
-}
-
-func concreteAnswer(answer agent.Answer) (agent.Answer, error) {
-	if answer == nil {
-		return nil, adapterError(
-			agent.ErrorInvalidArgument,
-			"missing_answer",
-			"answer is required",
-			nil,
-		)
-	}
-	value := reflect.ValueOf(answer)
-	if value.Kind() != reflect.Pointer {
-		return answer, nil
-	}
-	if value.IsNil() {
-		return nil, adapterError(
-			agent.ErrorInvalidArgument,
-			"missing_answer",
-			"answer is required",
-			nil,
-		)
-	}
-	concrete, ok := value.Elem().Interface().(agent.Answer)
-	if !ok {
-		return nil, adapterError(
-			agent.ErrorInvalidArgument,
-			"unsupported_answer",
-			"answer kind is not supported",
-			nil,
-		)
-	}
-	return concrete, nil
 }
 
 func (s *session) deleteInteractionLocked(interaction *pendingInteraction) {
@@ -827,8 +768,8 @@ func (s *session) closeInteractionEvents(
 	return s.closedInteractionEvents(
 		interactions,
 		agent.InteractionCancelled,
-		"session_closed",
-		"session_closed",
+		agent.ErrorReasonSessionClosed,
+		agent.ErrorReasonSessionClosed,
 		at,
 	)
 }
@@ -845,20 +786,18 @@ func (s *session) closedInteractionEvents(
 	})
 	events := make([]agent.Event, 0, len(interactions))
 	for _, interaction := range interactions {
-		s.waitInteractionAnswer(interaction)
-		s.mu.Lock()
-		outcome, reason := interactionClosureLocked(
-			interaction,
-			fallbackOutcome,
-			fallbackReason,
+		result := interaction.slot.Resolve(
+			interactionledger.Result{
+				Outcome: fallbackOutcome,
+				Reason:  fallbackReason,
+			},
 			answeredReason,
 		)
-		s.mu.Unlock()
 		event, err := s.interactionClosedEvent(
 			interaction.received,
 			interaction,
-			outcome,
-			reason,
+			result.Outcome,
+			result.Reason,
 			at,
 		)
 		if err != nil {
@@ -867,30 +806,6 @@ func (s *session) closedInteractionEvents(
 		events = append(events, event)
 	}
 	return events, nil
-}
-
-func (s *session) waitInteractionAnswer(interaction *pendingInteraction) {
-	s.mu.Lock()
-	done := interaction.answerDone
-	s.mu.Unlock()
-	if done != nil {
-		<-done
-	}
-}
-
-func interactionClosureLocked(
-	interaction *pendingInteraction,
-	fallbackOutcome agent.InteractionOutcome,
-	fallbackReason string,
-	answeredReason string,
-) (agent.InteractionOutcome, string) {
-	if interaction.terminalReason != "" {
-		return interaction.terminalOutcome, interaction.terminalReason
-	}
-	if interaction.phase == interactionAnswered && interaction.answerAccepted {
-		return interaction.answerOutcome, answeredReason
-	}
-	return fallbackOutcome, fallbackReason
 }
 
 func (s *session) cancelInteraction(
@@ -934,35 +849,35 @@ func answerNotSent(err error) bool {
 func answerFailureReason(err error) string {
 	switch {
 	case errors.Is(err, claude.ErrUnknownOutcome):
-		return "answer_outcome_unknown"
+		return agent.ErrorReasonAnswerOutcomeUnknown
 	case errors.Is(err, claude.ErrPermissionCancelled),
 		errors.Is(err, claude.ErrPermissionStale),
 		errors.Is(err, claude.ErrPermissionUsed):
-		return "native_request_ended"
+		return agent.ErrorReasonNativeRequestEnded
 	case errors.Is(err, claude.ErrClosed):
-		return "session_closed"
+		return agent.ErrorReasonSessionClosed
 	default:
-		return "answer_failed"
+		return ErrorReasonAnswerFailed
 	}
 }
 
 func interactionAnswerError(reason string, cause error) error {
 	switch reason {
-	case "session_closed":
+	case agent.ErrorReasonSessionClosed:
 		return adapterError(
 			agent.ErrorClosed,
 			reason,
 			"Claude session closed before the interaction could be answered",
 			cause,
 		)
-	case "answer_outcome_unknown":
+	case agent.ErrorReasonAnswerOutcomeUnknown:
 		return adapterError(
 			agent.ErrorOutcomeUnknown,
 			reason,
 			"Claude interaction answer outcome is unknown; do not retry",
 			cause,
 		)
-	case "native_request_ended":
+	case agent.ErrorReasonNativeRequestEnded:
 		return adapterError(
 			agent.ErrorFailedPrecondition,
 			reason,

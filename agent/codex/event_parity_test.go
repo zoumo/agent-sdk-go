@@ -59,7 +59,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 
@@ -98,24 +98,24 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 
 	assert.Equal(t, agent.UserMessage{
 		MessageID: "user",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "question"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "question"}}},
 	}, events[1].Payload)
 	assert.Equal(t, time.UnixMilli(1700000100123).UTC(), events[1].Time)
 	assert.Equal(t, agent.MessageChunk{
 		MessageID: "agent",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "answer"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "answer"}}},
 	}, events[2].Payload)
 	assert.Equal(t, agent.ThinkingChunk{
 		MessageID: "reason",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "summary"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "summary"}}},
 	}, events[3].Payload)
 	assert.Equal(t, agent.ToolChunkPayload{
 		ID:      "cmd",
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "out"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "out"}}},
 	}, events[6].Payload)
 	assert.Equal(t, agent.ToolChunkPayload{
 		ID:      "file",
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "patch"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "patch"}}},
 	}, events[7].Payload)
 
 	call := payloadOf[agent.ToolCallPayload](t, events[8])
@@ -138,7 +138,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	require.NotNil(t, result.Output)
 	assert.Equal(t, "provided", result.Output.Availability)
 	assert.Equal(t, "retained", result.Output.Completeness)
-	assert.Equal(t, []agent.ContentBlock{agent.TextBlock{Text: "hello\n"}}, result.Content)
+	assert.Equal(t, []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello\n"}}}, result.Content)
 	require.NotNil(t, result.RawOutput)
 	assert.Equal(t, "hello\n", *result.RawOutput)
 
@@ -151,13 +151,13 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	assert.Equal(t, agent.AgentThinking{
 		MessageID: "reason",
 		Content: []agent.ContentBlock{
-			agent.TextBlock{Text: "think-1"},
-			agent.TextBlock{Text: "think-2"},
+			{Text: &agent.ContentBlockText{Text: "think-1"}},
+			{Text: &agent.ContentBlockText{Text: "think-2"}},
 		},
 	}, events[12].Payload)
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "agent",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "answer complete"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "answer complete"}}},
 		Phase:     "final_answer",
 	}, events[13].Payload)
 	assert.Equal(t, agent.InfoUpdatePayload{Title: new("Synthetic title")}, events[14].Payload)
@@ -209,7 +209,7 @@ func TestThreadStatusChangeExpiresInteractions(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "status"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "status"}}},
 	})
 	require.NoError(t, err)
 
@@ -257,7 +257,7 @@ func TestThreadIdleBeforeTurnCompletionPreservesTerminalFact(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 
@@ -304,7 +304,7 @@ func TestSessionRejectsUnrelatedTurnAfterIdleObservation(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 
@@ -370,7 +370,7 @@ func TestSessionRejectsStaleMainTurnEvents(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 
@@ -418,7 +418,7 @@ func TestSessionPreservesChildEvidenceAndLineage(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "delegate"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "delegate"}}},
 	})
 	require.NoError(t, err)
 
@@ -445,7 +445,7 @@ func TestSessionPreservesChildEvidenceAndLineage(t *testing.T) {
 	assert.Equal(t, "root-a", eventCodexMeta(t, chunk)["parentThreadId"])
 	assert.Equal(t, agent.MessageChunk{
 		MessageID: "child-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "child "}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "child "}}},
 	}, chunk.Payload)
 
 	message := nextEvent(t, ctx, stream)
@@ -455,7 +455,7 @@ func TestSessionPreservesChildEvidenceAndLineage(t *testing.T) {
 	assert.Equal(t, "root-a", eventCodexMeta(t, message)["parentThreadId"])
 	assert.Equal(t, agent.AgentMessage{
 		MessageID: "child-message",
-		Content:   []agent.ContentBlock{agent.TextBlock{Text: "child complete"}},
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "child complete"}}},
 		Phase:     "final_answer",
 	}, message.Payload)
 

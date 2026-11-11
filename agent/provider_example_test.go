@@ -32,7 +32,7 @@ func ExampleProvider() {
 		stream, err := session.Events()
 		mustExample(err)
 		receipt, err := session.StartOrSteer(ctx, agent.Input{
-			Content: []agent.ContentBlock{agent.TextBlock{Text: "Explain the change"}},
+			Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "Explain the change"}}},
 		})
 		mustExample(err)
 		fmt.Printf("%s start_or_steer=%s\n", providerName, receipt.Submission)
@@ -276,7 +276,7 @@ func newExampleSession(
 		events: []agent.Event{
 			exampleEvent(id, 1, "user-1", agent.UserMessage{
 				MessageID: "user-1",
-				Content:   []agent.ContentBlock{agent.TextBlock{Text: "Explain the change"}},
+				Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "Explain the change"}}},
 			}),
 			exampleEvent(id, 2, "", agent.InteractionRequestedPayload{
 				Interaction: interaction,
@@ -291,7 +291,7 @@ func newExampleSession(
 			exampleEvent(id, 4, "agent-1", agent.AgentMessage{
 				MessageID: "agent-1",
 				Content: []agent.ContentBlock{
-					agent.TextBlock{Text: "Offline reply for " + provider},
+					{Text: &agent.ContentBlockText{Text: "Offline reply for " + provider}},
 				},
 			}),
 			exampleEvent(id, 5, "", agent.StateUpdatePayload{State: &idle}),
@@ -480,8 +480,10 @@ func exampleMessageText(content []agent.ContentBlock) string {
 	if len(content) != 1 {
 		return ""
 	}
-	text, _ := content[0].(agent.TextBlock)
-	return text.Text
+	if content[0].Text == nil {
+		return ""
+	}
+	return content[0].Text.Text
 }
 
 func mustExample(err error) {

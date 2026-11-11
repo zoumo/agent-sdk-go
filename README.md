@@ -53,7 +53,9 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
         return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
     }
     receipt, err := session.StartOrSteer(ctx, agent.Input{
-        Content: []agent.ContentBlock{agent.TextBlock{Text: "Explain this change."}},
+        Content: []agent.ContentBlock{
+            {Text: &agent.ContentBlockText{Text: "Explain this change."}},
+        },
     })
     if err != nil {
         return errors.Join(err, session.Close(ctx), provider.Stop(ctx))

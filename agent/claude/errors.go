@@ -34,49 +34,49 @@ func nativeOperationError(operation string, err error) error {
 	case errors.Is(err, claude.ErrInvalidInput):
 		return adapterError(
 			agent.ErrorInvalidArgument,
-			operation+"_invalid_argument",
+			agent.ErrorReasonForCode(operation, agent.ErrorInvalidArgument),
 			operation+" has invalid input",
 			err,
 		)
 	case errors.Is(err, claude.ErrUnsupported):
 		return adapterError(
 			agent.ErrorUnsupported,
-			operation+"_unsupported",
+			agent.ErrorReasonForCode(operation, agent.ErrorUnsupported),
 			operation+" is unsupported",
 			err,
 		)
 	case errors.Is(err, claude.ErrResourceLimit):
 		return adapterError(
 			agent.ErrorResourceExhausted,
-			operation+"_resource_exhausted",
+			agent.ErrorReasonForCode(operation, agent.ErrorResourceExhausted),
 			operation+" exceeded a resource limit",
 			err,
 		)
 	case errors.Is(err, claude.ErrClosed):
 		return adapterError(
 			agent.ErrorClosed,
-			operation+"_closed",
+			agent.ErrorReasonForCode(operation, agent.ErrorClosed),
 			operation+" used a closed Claude session",
 			err,
 		)
 	case errors.Is(err, claude.ErrUnknownOutcome):
 		return adapterError(
 			agent.ErrorOutcomeUnknown,
-			operation+"_outcome_unknown",
+			agent.ErrorReasonForCode(operation, agent.ErrorOutcomeUnknown),
 			operation+" result is unknown; do not retry",
 			err,
 		)
 	case errors.As(err, &controlErr):
 		return adapterError(
 			agent.ErrorNativeRejected,
-			operation+"_native_rejected",
+			agent.ErrorReasonForCode(operation, agent.ErrorNativeRejected),
 			operation+" was rejected by Claude",
 			err,
 		)
 	default:
 		return adapterError(
 			agent.ErrorUnavailable,
-			operation+"_failed",
+			agent.ErrorReasonForOperation(operation, agent.ErrorReasonSuffixFailed),
 			operation+" failed",
 			err,
 		)
@@ -89,7 +89,7 @@ func sessionTerminationError(cause error) error {
 	}
 	return adapterError(
 		agent.ErrorUnavailable,
-		"session_terminated",
+		agent.ErrorReasonSessionTerminated,
 		"Claude session terminated",
 		cause,
 	)

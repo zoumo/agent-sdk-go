@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 )
 
 func TestClaudePermissionAnswerOutcomes(t *testing.T) {
@@ -86,7 +87,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			)
 
 			submitted, err := session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 			})
 			require.NoError(t, err)
 			assert.Equal(t, agent.InputAppliedBestEffort, submitted.Result)
@@ -123,9 +124,9 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				requested.Request.Options[1].Kind,
 			)
 			require.Len(t, requested.Request.Content, 1)
-			raw, ok := requested.Request.Content[0].(agent.TextBlock)
-			require.True(t, ok)
-			assert.Contains(t, raw.Text, `"file_path":"a.txt"`)
+			text := requested.Request.Content[0].Text
+			require.NotNil(t, text)
+			assert.Contains(t, text.Text, `"file_path":"a.txt"`)
 
 			receipt, err := session.Answer(ctx, requested.Interaction, test.answer)
 			require.NoError(t, err)
@@ -152,7 +153,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 
 			_, err = session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}},
 			})
 			require.NoError(t, err)
 			require.NoError(t, session.Close(ctx))
@@ -191,7 +192,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -212,14 +213,14 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
 
 	_, err = session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "keep-open"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "keep-open"}}},
 	})
 	require.NoError(t, err)
 	require.NoError(t, session.Close(ctx))
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 
 	_, err = session.Answer(ctx, requested.Interaction, answer)
 	require.Error(t, err)
@@ -256,7 +257,7 @@ func TestClaudeConcurrentAnswersHaveSingleAdmission(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -302,7 +303,7 @@ func TestClaudeConcurrentAnswersHaveSingleAdmission(t *testing.T) {
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
 	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
-	assert.Equal(t, "session_closed", closed.Reason)
+	assert.Equal(t, agent.ErrorReasonSessionClosed, closed.Reason)
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
 }
@@ -358,7 +359,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	firstStream, err := first.Events()
 	require.NoError(t, err)
 	_, err = first.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, firstStream))
@@ -369,7 +370,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	secondStream, err := second.Events()
 	require.NoError(t, err)
 	_, err = second.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run-second"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run-second"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, secondStream))
@@ -479,7 +480,7 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 			)
 
 			_, err := session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 			})
 			require.NoError(t, err)
 			require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -556,7 +557,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -591,7 +592,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 				}},
 			},
 			code:   agent.ErrorInvalidArgument,
-			reason: "unknown_form_question",
+			reason: agent.ErrorReasonUnknownFormQuestion,
 		},
 		{
 			name: "array for single select",
@@ -602,7 +603,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 				}},
 			},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 		{
 			name: "non-string multi select label",
@@ -613,7 +614,7 @@ func TestClaudeFormRejectsMalformedAnswersBeforeWrite(t *testing.T) {
 				}},
 			},
 			code:   agent.ErrorInvalidArgument,
-			reason: "invalid_form_answer",
+			reason: agent.ErrorReasonInvalidFormAnswer,
 		},
 	}
 	for _, test := range tests {
@@ -681,7 +682,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 	assert.False(t, session.EffectiveFeatures().AgentQuestions)
 	assert.False(t, session.Capabilities().Supports(agent.CapabilityForm))
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "ask"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -690,7 +691,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 	assert.Equal(t, agent.EventSessionError, gap.Type())
 	assert.Equal(t, agent.SessionErrorPayload{
 		Message: "Claude questions are disabled for this session",
-		Reason:  "agent_questions_disabled",
+		Reason:  agent.ErrorReasonAgentQuestionsDisabled,
 	}, gap.Payload)
 	assert.Equal(t, true, requireClaudeMeta(t, gap)["requestRejected"])
 
@@ -716,7 +717,7 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 		{
 			name:       "session close",
 			closeFirst: true,
-			reason:     "session_closed",
+			reason:     agent.ErrorReasonSessionClosed,
 			report:     "failed",
 		},
 	}
@@ -758,7 +759,7 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			)
 
 			_, err := session.StartOrSteer(ctx, agent.Input{
-				Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 			})
 			require.NoError(t, err)
 			running := nextClaudeStateUpdate(t, ctx, stream)
@@ -825,7 +826,7 @@ func TestClaudeInterruptTargetsActiveSubmissionAndClearsOnIdle(t *testing.T) {
 	)
 
 	submitted, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.InputAppliedBestEffort, submitted.Result)
@@ -867,7 +868,7 @@ func TestClaudeInterruptAfterWriteReportsUnknownOutcome(t *testing.T) {
 	)
 
 	_, err := session.StartOrSteer(ctx, agent.Input{
-		Content: []agent.ContentBlock{agent.TextBlock{Text: "run"}},
+		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "run"}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
@@ -892,10 +893,37 @@ func openClaudeInteractionSession(
 	frames ...string,
 ) (agent.Session, agent.EventStream) {
 	t.Helper()
+	return openClaudeInteractionSessionWithHook(
+		t,
+		ctx,
+		cwd,
+		wantStatus,
+		features,
+		nil,
+		frames...,
+	)
+}
+
+func openClaudeInteractionSessionWithHook(
+	t *testing.T,
+	ctx context.Context,
+	cwd string,
+	wantStatus string,
+	features agent.Features,
+	hook claudeTestStreamHook,
+	frames ...string,
+) (agent.Session, agent.EventStream) {
+	t.Helper()
 	all := append([]string(nil), mockClaudeInit...)
 	all = append(all, frames...)
 	peerSession := prepareClaudePeer(t, wantStatus, all...)
-	provider := newTestClaudeProvider(t, peerSession)
+	provider := newTestClaudeProviderWithStreamHook(
+		t,
+		agentclaude.Config{},
+		nil,
+		hook,
+		peerSession,
+	)
 	t.Cleanup(func() {
 		assert.NoError(t, provider.Stop(context.Background()))
 	})

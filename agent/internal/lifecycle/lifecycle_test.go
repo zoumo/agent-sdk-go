@@ -92,14 +92,14 @@ func TestOperationsBeforeStartAreRejected(t *testing.T) {
 		t,
 		err,
 		agent.ErrorFailedPrecondition,
-		"provider_not_started",
+		agent.ErrorReasonProviderNotStarted,
 	)
 	resource, err := provider.Resource()
 	requireLifecycleError(
 		t,
 		err,
 		agent.ErrorFailedPrecondition,
-		"provider_not_started",
+		agent.ErrorReasonProviderNotStarted,
 	)
 	assert.Nil(t, resource)
 	require.NoError(t, provider.Stop(context.Background()))
@@ -129,7 +129,7 @@ func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
 		t,
 		err,
 		agent.ErrorFailedPrecondition,
-		"provider_not_started",
+		agent.ErrorReasonProviderNotStarted,
 	)
 
 	_, err = provider.Start(context.Background())
@@ -161,7 +161,7 @@ func TestStopBeforeStartIsTerminalWithoutRelease(t *testing.T) {
 	assert.Equal(t, int32(0), releaseCalls.Load())
 
 	_, err := provider.Start(context.Background())
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	err = provider.Open(
 		context.Background(),
 		func(context.Context, *fakeResource) (*fakeSession, error) {
@@ -169,10 +169,10 @@ func TestStopBeforeStartIsTerminalWithoutRelease(t *testing.T) {
 			return nil, nil
 		},
 	)
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	assert.Equal(t, int32(0), openCalls.Load())
 	_, err = provider.Resource()
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 }
 
 func TestSuccessfulStopIsTerminalAndReleasesOnce(t *testing.T) {
@@ -195,16 +195,16 @@ func TestSuccessfulStopIsTerminalAndReleasesOnce(t *testing.T) {
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
 	_, err = provider.Start(context.Background())
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	err = provider.Open(
 		context.Background(),
 		func(context.Context, *fakeResource) (*fakeSession, error) {
 			return &fakeSession{}, nil
 		},
 	)
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	resource, err := provider.Resource()
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	assert.Nil(t, resource)
 }
 
@@ -242,7 +242,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 		t,
 		provider.Stop(context.Background()),
 		agent.ErrorFailedPrecondition,
-		"provider_has_open_sessions",
+		agent.ErrorReasonProviderHasOpenSessions,
 	)
 	provider.SessionClosed(first)
 	provider.SessionClosed(first)
@@ -250,7 +250,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 		t,
 		provider.Stop(context.Background()),
 		agent.ErrorFailedPrecondition,
-		"provider_has_open_sessions",
+		agent.ErrorReasonProviderHasOpenSessions,
 	)
 	provider.SessionClosed(second)
 	require.NoError(t, provider.Stop(context.Background()))
@@ -327,7 +327,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 		t,
 		stopErr,
 		agent.ErrorFailedPrecondition,
-		"provider_has_open_sessions",
+		agent.ErrorReasonProviderHasOpenSessions,
 	)
 	assert.Equal(t, int32(0), releaseCalls.Load())
 
@@ -337,7 +337,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 		t,
 		provider.Stop(context.Background()),
 		agent.ErrorFailedPrecondition,
-		"provider_has_open_sessions",
+		agent.ErrorReasonProviderHasOpenSessions,
 	)
 	provider.SessionClosed(opened)
 	require.NoError(t, provider.Stop(context.Background()))
@@ -440,13 +440,13 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 		t,
 		start.err,
 		agent.ErrorClosed,
-		"provider_stopped",
+		agent.ErrorReasonProviderStopped,
 	)
 	requireLifecycleError(
 		t,
 		receiveWithin(t, opens, "later Open result"),
 		agent.ErrorClosed,
-		"provider_stopped",
+		agent.ErrorReasonProviderStopped,
 	)
 	assert.Zero(t, openCallbacks.Load())
 
@@ -457,7 +457,7 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
 	_, err = provider.Start(ctx)
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	err = provider.Open(
 		ctx,
 		func(context.Context, *fakeResource) (*fakeSession, error) {
@@ -465,7 +465,7 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 			return &fakeSession{}, nil
 		},
 	)
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	assert.Zero(t, openCallbacks.Load())
 }
 
@@ -538,9 +538,9 @@ func TestReleaseFailureIsTerminalAndCached(t *testing.T) {
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
 	_, err = provider.Start(context.Background())
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	resource, err := provider.Resource()
-	requireLifecycleError(t, err, agent.ErrorClosed, "provider_stopped")
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
 	assert.Nil(t, resource)
 }
 

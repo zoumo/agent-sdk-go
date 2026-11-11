@@ -43,6 +43,7 @@ func TestOpenConfirmsInitAndCloseKeepsProviderHealthy(t *testing.T) {
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 	assert.Equal(t, "native-open", session.ID())
+	require.NoError(t, session.Capabilities().Validate())
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityTextInput))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityPermission))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))

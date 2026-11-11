@@ -45,7 +45,11 @@ status: stable
 
 Claude 的 `Initialize` 及其中的调用方原生 `Hooks` 保留原有 JSON 语义；恢复时
 SDK 只追加自己的 `SessionStart` 身份探针，不改写或替换调用方其他 hook。新建
-Session 仍只以 non-replay 的 live `system/init` 确认身份。
+Session 可通过 `SessionOptions.SessionID` 选择官方 `--session-id` 指定 UUID，
+该选项与 `ResumeID` 互斥。initialize 成功后 Open 即可固定该主身份，不等待
+`system/init`。initialize ACK 不回显该 ID。后续原生主消息必须匹配指定身份；
+`system/init` 必须非 replay、只出现一次，且 cwd 与请求目录为同一目录。
+未指定 `SessionID` 的调用仍从原生消息观察主身份。
 
 Codex `SessionOptions.Resume *types.ThreadResumeParams` 显式选择已有 thread，要求非空 ThreadID 和空 Thread 创建参数。Open 在派发前保留该身份的所有权及观察队列，接纳恢复应答前后的实时原生事实；仅在恢复应答确认同一身份后返回 Session。旧隔离记录不重新入队。恢复失败不重试、不创建替代 thread；已可能派发的恢复执行一次有界解除附着，失败保留不确定释放屏障，自有连接同时关闭回收。共享连接的其他 Session 不被关闭。
 
@@ -92,7 +96,7 @@ Done 表示交互终止，Err 保留首个终止原因；Close 返回资源回�
 
 Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际收到的原生启动响应副本，保留 model、sandbox 和未知字段。该只读查询不发送协议消息，不产生消费者或回答权限。
 
-主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。主身份的 requested 与 observed 状态分别保留；Claude 新建时只能由 non-replay 的 live init 固定 observed ID，恢复时也可由匹配的私有 `SessionStart` callback 固定；单独 hook lifecycle frame 不充分；尚未确认原生根身份时不伪造 observed ID。
+主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。Claude 新建时可由官方 `--session-id` 指定 UUID，并在 initialize 成功后固定；后续原生主消息与 init 会核对指定身份。恢复时由 live init 或匹配的私有 `SessionStart` callback 确认身份；单独 hook lifecycle frame 不充分；尚未确认原生根身份时不伪造 observed ID。
 
 <a id="interface-独立历史查询"></a>
 

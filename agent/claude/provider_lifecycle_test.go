@@ -195,12 +195,10 @@ func TestOpenFailureSettlesLifecycleAndProviderCanOpenAgain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	wrongCwd := t.TempDir()
-	firstFrames := append([]string(nil), mockClaudeInit...)
-	firstFrames = append(firstFrames,
-		`<{"type":"system","subtype":"init","session_id":"native-wrong-cwd","cwd":`+
-			jsonString(t, wrongCwd)+`,"claude_code_version":"2.1.258"}`,
-	)
+	firstFrames := []string{
+		mockClaudeInit[0],
+		`<{"type":"control_response","response":{"subtype":"error","request_id":"init","error":"initialize rejected"}}`,
+	}
 	secondFrames := append([]string(nil), mockClaudeInit...)
 	secondFrames = append(secondFrames,
 		`<{"type":"system","subtype":"init","session_id":"native-retry","cwd":`+
@@ -220,7 +218,7 @@ func TestOpenFailureSettlesLifecycleAndProviderCanOpenAgain(t *testing.T) {
 	assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
 	var classified *agent.Error
 	require.ErrorAs(t, err, &classified)
-	assert.Equal(t, agentclaude.ErrorReasonSessionCWDMismatch, classified.Reason)
+	assert.Equal(t, agent.ErrorReasonForCode("open", agent.ErrorNativeRejected), classified.Reason)
 
 	session, err = provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.NoError(t, err)

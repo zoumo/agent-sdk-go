@@ -38,12 +38,18 @@ type claudeResumePeerScenario struct {
 	EnvironmentKeys []string `json:"environmentKeys,omitempty"`
 	VersionEnvPath  string   `json:"versionEnvPath,omitempty"`
 	SessionEnvPath  string   `json:"sessionEnvPath,omitempty"`
+	WaitForUser     bool     `json:"waitForUser,omitempty"`
+	BeforeInput     []string `json:"beforeInput,omitempty"`
+	InitializeError bool     `json:"initializeError,omitempty"`
+	InitializeDelay int      `json:"initializeDelay,omitempty"`
 }
 
 type claudeResumePeerObservation struct {
 	CallbackID string            `json:"callbackId"`
 	Hooks      json.RawMessage   `json:"hooks"`
 	Responses  []json.RawMessage `json:"responses"`
+	UserFrames []json.RawMessage `json:"userFrames"`
+	SessionID  string            `json:"sessionId"`
 }
 
 type claudeResumePeer struct {
@@ -123,6 +129,13 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	if err := os.WriteFile(scenario.SessionMarker, []byte("started\n"), 0o600); err != nil {
 		return 62
 	}
+	assignedID := ""
+	for _, arg := range args {
+		if value, ok := strings.CutPrefix(arg, "--session-id="); ok {
+			assignedID = value
+			scenario.SessionID = value
+		}
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 	initialize, err := reader.ReadBytes('\n')
@@ -148,35 +161,63 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 			}
 		}
 	}
-	if callbackID == "" {
+	if callbackID == "" && assignedID == "" {
 		return 65
 	}
 	observation := &claudeResumePeerObservation{
 		CallbackID: callbackID,
 		Hooks:      mustMarshalJSON(request.Request.Hooks),
+		SessionID:  scenario.SessionID,
 	}
 	writeClaudeResumeObservation(scenario.ObservationPath, observation)
 	if err := applyClaudeResumeMutation(&scenario); err != nil {
 		return 66
 	}
+	if scenario.InitializeDelay > 0 {
+		time.Sleep(time.Duration(scenario.InitializeDelay) * time.Millisecond)
+	}
 	response := fmt.Sprintf(
 		`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{}}}`,
 		request.RequestID,
 	)
+	if scenario.InitializeError {
+		response = fmt.Sprintf(
+			`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"initialize rejected"}}`,
+			request.RequestID,
+		)
+	}
 	if _, err := fmt.Fprintln(os.Stdout, response); err != nil {
 		return 67
 	}
-	for index, frame := range scenario.Frames {
-		if index < len(scenario.FrameDelays) && scenario.FrameDelays[index] > 0 {
-			time.Sleep(time.Duration(scenario.FrameDelays[index]) * time.Millisecond)
-		}
+	emit := func(frame string) error {
 		frame = strings.NewReplacer(
 			claudeResumePeerCallbackID, callbackID,
 			claudeResumePeerSessionIDID, scenario.SessionID,
 			claudeResumePeerCwdID, scenario.CWD,
 			claudeResumePeerTranscriptID, scenario.TranscriptPath,
 		).Replace(frame)
-		if _, err := fmt.Fprintln(os.Stdout, frame); err != nil {
+		_, err := fmt.Fprintln(os.Stdout, frame)
+		return err
+	}
+	for _, frame := range scenario.BeforeInput {
+		if emit(frame) != nil {
+			return 68
+		}
+	}
+	if scenario.WaitForUser {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			writeClaudeResumeObservation(scenario.ObservationPath, observation)
+			return 0
+		}
+		observation.UserFrames = append(observation.UserFrames, append(json.RawMessage(nil), line...))
+		writeClaudeResumeObservation(scenario.ObservationPath, observation)
+	}
+	for index, frame := range scenario.Frames {
+		if index < len(scenario.FrameDelays) && scenario.FrameDelays[index] > 0 {
+			time.Sleep(time.Duration(scenario.FrameDelays[index]) * time.Millisecond)
+		}
+		if emit(frame) != nil {
 			return 68
 		}
 	}
@@ -195,6 +236,10 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 					observation.Responses,
 					append(json.RawMessage(nil), line...),
 				)
+				writeClaudeResumeObservation(scenario.ObservationPath, observation)
+			}
+			if wire.Type == "user" {
+				observation.UserFrames = append(observation.UserFrames, append(json.RawMessage(nil), line...))
 				writeClaudeResumeObservation(scenario.ObservationPath, observation)
 			}
 		}

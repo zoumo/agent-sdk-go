@@ -200,6 +200,9 @@ func openClaudeConfigConcurrencyPeer(t *testing.T, ctx context.Context, hold boo
 	provider := agentclaude.NewWithStream(agentclaude.Config{}, func(context.Context, claude.SessionOptions) (agentclaude.TestStreamOpen, error) {
 		return agentclaude.TestStreamOpen{Transport: claude.StreamTransport{Reader: reader, Writer: writer}}, nil
 	})
+	agentclaude.SetSessionIDGeneratorForTest(provider, func() (string, error) {
+		return "config-concurrency", nil
+	})
 	t.Cleanup(func() {
 		_ = provider.Stop(context.Background())
 		_ = writer.Close()

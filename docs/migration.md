@@ -90,6 +90,17 @@ events. Historical data cannot create answer authority.
 
 ### Resources and close
 
+Claude unified `Open` now assigns a UUID through official `--session-id` and
+returns after initialize succeeds. `Session.ID()` is nonempty and stable before
+the first input. Initialize does not echo the ID; later native main messages
+are checked against the assignment. A replayed or duplicate init, a different
+main-session identity, or an init cwd conflict terminates the Session with
+`native_rejected`. Available commands arrive with the later init notification.
+No user turn, refresh API or local identity file is needed. Native callers can
+opt into the same behavior with `claude.Options.SessionID`, which is mutually
+exclusive with `ResumeID`. Resume retains its saved-session preflight and live
+identity confirmation.
+
 Close cleans up interaction and invalidates handles; accepted records remain
 drainable. Abort explicitly discards unread records. Done reports termination,
 Err retains its first cause, and Close reports cleanup errors separately.

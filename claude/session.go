@@ -68,8 +68,9 @@ type Session struct {
 	cause         error
 }
 
-// Open starts one owned native process and fixes the observed main identity
-// from received evidence. The context bounds startup, not Session lifetime.
+// Open starts one owned native process and completes initialize. SessionID
+// assigns the main identity before input; otherwise received evidence establishes
+// it. The context bounds startup, not Session lifetime.
 func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 	if ctx == nil {
 		return nil, queue.ErrNilContext
@@ -106,6 +107,11 @@ func newSession(o Options) (*Session, error) {
 		return nil, err
 	}
 	s.admission = admission
+	if o.SessionID != "" {
+		for _, record := range admission.confirmRoot(o.SessionID) {
+			_ = s.fifo.Push(record, 0)
+		}
+	}
 	_ = s.fifo.Push(liveObservation("forwarding-not-confirmed", "initialize-forwardSubagentText-is-a-request", SubagentIdentity{}, nil), 0)
 	return s, nil
 }

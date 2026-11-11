@@ -39,6 +39,7 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		assert.Equal(t, claudeExpectedArgs(
 			"--model= Caller/Model ",
 			"--effort= Native/High ",
+			"--session-id="+session.ID(),
 		), capture.argv(t))
 	})
 
@@ -86,12 +87,12 @@ func TestClaudeOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 		{
 			name:     "open model only",
 			config:   agent.SessionConfig{Model: "model-only"},
-			wantArgs: claudeExpectedArgs("--model=model-only"),
+			wantArgs: claudeExpectedArgs("--model=model-only", "--session-id=native-open"),
 		},
 		{
 			name:     "open effort only",
 			config:   agent.SessionConfig{Effort: "effort-only"},
-			wantArgs: claudeExpectedArgs("--effort=effort-only"),
+			wantArgs: claudeExpectedArgs("--effort=effort-only", "--session-id=native-open"),
 		},
 		{
 			name:     "resume model only",
@@ -130,7 +131,7 @@ func TestClaudeOpenAndResumeOmitEmptySessionConfig(t *testing.T) {
 	}{
 		{
 			name:     "open",
-			wantArgs: claudeExpectedArgs(),
+			wantArgs: claudeExpectedArgs("--session-id=native-open"),
 		},
 		{
 			name:     "resume",

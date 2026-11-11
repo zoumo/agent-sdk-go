@@ -13,6 +13,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 var _ agent.Core = (*Core)(nil)
@@ -26,9 +27,10 @@ const (
 // Core owns the lifecycle of the Claude sessions it creates. Each Claude
 // session owns its native CLI process.
 type Core struct {
-	config  Config
-	streams streamFactory
-	leases  *corelease.Core[struct{}, *session]
+	config       Config
+	streams      streamFactory
+	newSessionID func() (string, error)
+	leases       *corelease.Core[struct{}, *session]
 }
 
 type streamOpen struct {
@@ -42,7 +44,7 @@ type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, err
 
 // New constructs a Claude Core without starting a native process.
 func New(config Config) *Core {
-	core := &Core{config: cloneConfig(config)}
+	core := &Core{config: cloneConfig(config), newSessionID: uuidv4.New}
 	core.leases = corelease.New[struct{}, *session](
 		providerCapabilities(),
 		nil,
@@ -61,8 +63,8 @@ func (p *Core) Stop(ctx context.Context) error {
 	return p.leases.Stop(ctx)
 }
 
-// Open creates a new Claude session after native initialization confirms its
-// real identity.
+// Open creates a new Claude session with a caller-assigned native identity after
+// initialize succeeds. It does not wait for the later system/init notification.
 func (p *Core) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
@@ -79,7 +81,16 @@ func (p *Core) Open(
 	}
 	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
-		return p.openNativeSession(ctx, options, "", nil, mcpServers, env)
+		sessionID, err := p.newSessionID()
+		if err != nil || sessionID == "" {
+			return nil, adapterError(
+				agent.ErrorUnavailable,
+				ErrorReasonSessionIDFailed,
+				"create Claude native session identity",
+				err,
+			)
+		}
+		return p.openNativeSession(ctx, options, "", sessionID, nil, mcpServers, env)
 	})
 }
 
@@ -121,6 +132,7 @@ func (p *Core) Resume(
 			ctx,
 			options.OpenOptions,
 			options.SessionID,
+			"",
 			attempt,
 			mcpServers,
 			env,
@@ -149,6 +161,7 @@ func (p *Core) openNativeSession(
 	ctx context.Context,
 	options agent.OpenOptions,
 	resumeID string,
+	sessionID string,
 	resume *resumeAttempt,
 	mcpServers []claude.MCPServer,
 	env []string,
@@ -160,6 +173,7 @@ func (p *Core) openNativeSession(
 		mcpServers,
 		options.Config,
 	)
+	nativeOptions.SessionID = sessionID
 	nativeOptions.Env = slices.Clone(env)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
 	if resume != nil {
@@ -194,23 +208,21 @@ func (p *Core) openNativeSession(
 	if stream != nil && stream.Started != nil {
 		stream.Started(native)
 	}
-	initContext, cancelInit := waitForInitContext(ctx, p.config.InitializeTimeout)
 	var (
 		init     *claudetypes.Event
 		buffered []claude.Received
 		guard    *resumeIdentityGuard
 	)
-	if resume == nil {
-		init, buffered, err = waitForInit(initContext, native)
-	} else {
+	if resume != nil {
+		initContext, cancelInit := waitForInitContext(ctx, p.config.InitializeTimeout)
 		init, buffered, guard, err = waitForResumeIdentity(
 			initContext,
 			native,
 			resume.target,
 			resume.probe.CallbackID,
 		)
+		cancelInit()
 	}
-	cancelInit()
 	if err != nil {
 		return nil, closeAfterOpenFailure(native, err)
 	}
@@ -237,11 +249,15 @@ func (p *Core) openNativeSession(
 			return nil, closeAfterOpenFailure(native, err)
 		}
 	}
+	identity := sessionID
+	if resume != nil {
+		identity = resume.target.sessionID
+	}
 	created, err := newSession(
 		p,
 		native,
 		init,
-		sessionIdentity(init, resume),
+		identity,
 		options.Features,
 		buffered,
 		guard,
@@ -250,19 +266,6 @@ func (p *Core) openNativeSession(
 		return nil, closeAfterOpenFailure(native, err)
 	}
 	return created, nil
-}
-
-func sessionIdentity(
-	init *claudetypes.Event,
-	resume *resumeAttempt,
-) string {
-	if init != nil {
-		return init.SessionID
-	}
-	if resume != nil {
-		return resume.target.sessionID
-	}
-	return ""
 }
 
 func (p *Core) validateResumeConfig() error {
@@ -359,55 +362,6 @@ func validateOpenOptions(options agent.OpenOptions) error {
 		)
 	}
 	return nil
-}
-
-func waitForInit(
-	ctx context.Context,
-	native *claude.Session,
-) (*claudetypes.Event, []claude.Received, error) {
-	var buffered initBuffer
-	for {
-		received, err := native.Receive(ctx)
-		if err != nil {
-			return nil, nil, adapterError(
-				agent.ErrorUnavailable,
-				ErrorReasonInitializeWaitFailed,
-				"wait for Claude init",
-				err,
-			)
-		}
-		if received.Event == nil {
-			if received.Request != nil {
-				if err := buffered.add(received); err != nil {
-					return nil, nil, err
-				}
-			}
-			continue
-		}
-		if received.Event.System != nil && received.Event.Subtype == "init" {
-			if received.Event.SessionID == "" {
-				return nil, nil, adapterError(
-					agent.ErrorUnavailable,
-					ErrorReasonInitializeIdentityMissing,
-					"Claude init has no session identity",
-					nil,
-				)
-			}
-			if received.Event.IsReplay != nil && *received.Event.IsReplay {
-				return nil, nil, adapterError(
-					agent.ErrorNativeRejected,
-					ErrorReasonInitializeReplayed,
-					"Claude returned replay material instead of a live init",
-					nil,
-				)
-			}
-			event := *received.Event
-			return &event, buffered.events, nil
-		}
-		if err := buffered.add(received); err != nil {
-			return nil, nil, err
-		}
-	}
 }
 
 func waitForInitContext(

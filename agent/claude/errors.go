@@ -28,6 +28,10 @@ func nativeOperationError(operation string, err error) error {
 	if agent.CodeOf(err) != "" {
 		return err
 	}
+	var identity *claude.SessionIdentityError
+	if errors.As(err, &identity) {
+		return sessionTerminationError(err)
+	}
 
 	var controlErr *claude.ControlError
 	switch {
@@ -86,6 +90,24 @@ func nativeOperationError(operation string, err error) error {
 func sessionTerminationError(cause error) error {
 	if cause == nil || agent.CodeOf(cause) != "" {
 		return cause
+	}
+	var identity *claude.SessionIdentityError
+	if errors.As(cause, &identity) {
+		reason := ErrorReasonSessionIdentityMismatch
+		switch identity.Reason {
+		case "initialize_replayed":
+			reason = ErrorReasonInitializeReplayed
+		case "initialize_duplicate":
+			reason = ErrorReasonInitializeDuplicate
+		case "session_cwd_mismatch":
+			reason = ErrorReasonSessionCWDMismatch
+		}
+		return adapterError(
+			agent.ErrorNativeRejected,
+			reason,
+			"Claude assigned-session identity was rejected",
+			cause,
+		)
 	}
 	return adapterError(
 		agent.ErrorUnavailable,

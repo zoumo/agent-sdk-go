@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 )
 
 func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
@@ -236,6 +237,9 @@ func TestCloseDrainsAcceptedEarlyEventThenReturnsEOF(t *testing.T) {
 	stream, err := session.Events()
 	require.NoError(t, err)
 
+	require.Eventually(t, func() bool {
+		return agentclaude.InjectSupportedForTest(session)
+	}, 3*time.Second, time.Millisecond)
 	require.NoError(t, session.Close(ctx))
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)

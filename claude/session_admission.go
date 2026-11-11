@@ -4,6 +4,7 @@ package claude
 
 import (
 	"bytes"
+	"os"
 	"sync"
 	"time"
 
@@ -17,6 +18,9 @@ import (
 type liveAdmission struct {
 	mu               *sync.Mutex
 	root             string
+	assigned         bool
+	cwd              string
+	initSeen         bool
 	nativeVersion    string
 	members          map[string]SubagentIdentity
 	parents          *lineage.Graph[string]
@@ -40,12 +44,17 @@ func newLiveAdmission(o Options, mu *sync.Mutex) (*liveAdmission, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &liveAdmission{
+	admission := &liveAdmission{
 		mu: mu, detailPolicy: o.ChildDetailPolicy, limits: limits,
+		assigned: o.SessionID != "", cwd: o.WorkDir,
 		members: make(map[string]SubagentIdentity), parents: graph,
 		tools: make(map[string]string), childTools: make(map[string]string),
 		seeds: append([]SubagentHistory(nil), o.Subagents.History...),
-	}, nil
+	}
+	if admission.cwd == "" {
+		admission.cwd, _ = os.Getwd()
+	}
+	return admission, nil
 }
 
 func (a *liveAdmission) sessionID() string { return a.root }
@@ -77,26 +86,13 @@ func (a *liveAdmission) event(e Event) ([]Received, error) {
 	var observations []Received
 	knownEnvelope := isTreeRootEvent(e) || e.RateLimit != nil || e.Reset != nil
 	rootFrame := knownEnvelope && (e.AgentID == nil || *e.AgentID == "") && (e.ParentToolUseID == nil || *e.ParentToolUseID == "")
+	if a.assigned {
+		if err := a.checkAssignedIdentity(e, rootFrame); err != nil {
+			return nil, err
+		}
+	}
 	if a.root == "" && rootFrame && e.SessionID != "" {
-		a.root = e.SessionID
-		_ = a.parents.Root("")
-		for _, seed := range a.seeds {
-			if seed.SessionID != a.root {
-				continue
-			}
-			key := "task:" + seed.TaskID
-			a.members[key] = SubagentIdentity{SessionID: a.root, TaskID: seed.TaskID, AssociationID: key}
-		}
-		for _, seed := range a.seeds {
-			if seed.SessionID != a.root || seed.ParentTaskID == "" {
-				continue
-			}
-			key := "task:" + seed.TaskID
-			r := a.confirmParent(key, "task:"+seed.ParentTaskID, a.members[key])
-			r.Observation.Evidence = "caller-verified-history"
-			observations = append(observations, r)
-		}
-		a.seeds = nil
+		observations = append(observations, a.confirmRoot(e.SessionID)...)
 	}
 	if e.SessionID != "" && a.root != "" && e.SessionID != a.root {
 		a.isolate(e, "different-session")
@@ -215,6 +211,52 @@ func (a *liveAdmission) event(e Event) ([]Received, error) {
 		records = append(records, Received{Kind: ReceivedNative, Event: &e, Raw: e.Raw, Source: source, Parent: a.parent(key), Origin: "live"})
 	}
 	return append(records, observations...), nil
+}
+
+func (a *liveAdmission) confirmRoot(sessionID string) []Received {
+	a.root = sessionID
+	_ = a.parents.Root("")
+	var observations []Received
+	for _, seed := range a.seeds {
+		if seed.SessionID == a.root {
+			key := "task:" + seed.TaskID
+			a.members[key] = SubagentIdentity{SessionID: a.root, TaskID: seed.TaskID, AssociationID: key}
+		}
+	}
+	for _, seed := range a.seeds {
+		if seed.SessionID != a.root || seed.ParentTaskID == "" {
+			continue
+		}
+		key := "task:" + seed.TaskID
+		record := a.confirmParent(key, "task:"+seed.ParentTaskID, a.members[key])
+		record.Observation.Evidence = "caller-verified-history"
+		observations = append(observations, record)
+	}
+	a.seeds = nil
+	return observations
+}
+
+func (a *liveAdmission) checkAssignedIdentity(event Event, rootFrame bool) error {
+	isInit := event.System != nil && event.Subtype == "init"
+	if (rootFrame || isInit) && event.SessionID != a.root {
+		return &SessionIdentityError{Reason: "session_identity_mismatch"}
+	}
+	if !isInit {
+		return nil
+	}
+	if event.IsReplay != nil && *event.IsReplay {
+		return &SessionIdentityError{Reason: "initialize_replayed"}
+	}
+	if a.initSeen {
+		return &SessionIdentityError{Reason: "initialize_duplicate"}
+	}
+	left, leftErr := os.Stat(event.System.CWD)
+	right, rightErr := os.Stat(a.cwd)
+	if leftErr != nil || rightErr != nil || !left.IsDir() || !right.IsDir() || !os.SameFile(left, right) {
+		return &SessionIdentityError{Reason: "session_cwd_mismatch"}
+	}
+	a.initSeen = true
+	return nil
 }
 
 func (a *liveAdmission) confirmParent(child, parent string, source SubagentIdentity) Received {

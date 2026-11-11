@@ -24,6 +24,8 @@ var mockClaudeInit = []string{
 	`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}`,
 }
 
+var claudePeerSessionIDs sync.Map
+
 func TestOpenConfirmsInitAndCloseKeepsProviderHealthy(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -127,31 +129,27 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 	require.NoError(t, second.Close(ctx))
 }
 
-func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
+func TestOpenReturnsAssignedIdentityWithoutSystemInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
 	peerSession := prepareClaudePeerWithReplayTimeout(
 		t,
 		"passed",
-		// The peer must stay open long enough to observe Close's stdin EOF
-		// after the provider's separate startup budget expires.
 		30*time.Second,
 		mockClaudeInit...,
 	)
 	provider := newTestClaudeProviderWithConfig(t, agentclaude.Config{
-		// This budget also bounds the native initialize control handshake.
-		// Keep it above embedded replay initialization variance under race so the
-		// timeout proves that the separate system/init frame never arrived.
 		InitializeTimeout: 10 * time.Second,
 	}, peerSession)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
-	_, err = provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
-	require.Error(t, err)
-	assert.Equalf(t, agent.ErrorUnavailable, agent.CodeOf(err), "Open error: %v", err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	assert.NotEmpty(t, session.ID())
+	require.NoError(t, session.Close(ctx))
 }
 
 func newTestClaudeProvider(
@@ -227,6 +225,7 @@ func newTestClaudeProviderWithStreamHook(
 			_, _ = run.Wait(waitCtx)
 			cancelRun()
 		})
+		requestedWorkspace := options.WorkDir
 		options.WorkDir, options.Env = run.Start.Workspace, run.Environment()
 		actualArgs, err := agentclaude.TestifyNativeArgs(options)
 		if err != nil || !slices.Equal(actualArgs, run.Start.NativeArgs) {
@@ -245,7 +244,7 @@ func newTestClaudeProviderWithStreamHook(
 		}
 		return agentclaude.TestStreamOpen{
 			Transport: transport,
-			Workspace: run.Start.Workspace,
+			Workspace: requestedWorkspace,
 			Env:       run.Environment(),
 			Started: func(session *claude.Session) {
 				completion := run.CloseInputWhenComplete(session.CloseInput)
@@ -262,6 +261,16 @@ func newTestClaudeProviderWithStreamHook(
 				})
 			},
 		}, nil
+	})
+	agentclaude.SetSessionIDGeneratorForTest(provider, func() (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if next < len(peers) {
+			if sessionID, ok := claudePeerSessionIDs.Load(peers[next]); ok {
+				return sessionID.(string), nil
+			}
+		}
+		return "11111111-1111-4111-8111-111111111111", nil
 	})
 	t.Cleanup(func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -331,7 +340,23 @@ func prepareClaudePeerWithTiming(
 	require.NoError(t, err)
 	peerSession, err := mocktest.Prepare(t.TempDir(), "claude", data, mocktest.Options{})
 	require.NoError(t, err)
+	for _, frame := range frames {
+		if frame[0] != '<' {
+			continue
+		}
+		var identity struct {
+			SessionID       string `json:"session_id"`
+			ParentToolUseID string `json:"parent_tool_use_id"`
+			AgentID         string `json:"agent_id"`
+		}
+		if json.Unmarshal([]byte(frame[1:]), &identity) == nil && identity.SessionID != "" &&
+			identity.ParentToolUseID == "" && identity.AgentID == "" {
+			claudePeerSessionIDs.Store(peerSession, identity.SessionID)
+			break
+		}
+	}
 	t.Cleanup(func() {
+		claudePeerSessionIDs.Delete(peerSession)
 		report, reportErr := peerSession.Report()
 		require.NoError(t, reportErr)
 		require.NotNil(t, report)
@@ -351,6 +376,7 @@ func jsonString(t *testing.T, value string) string {
 func closeSessionOnCleanup(t *testing.T, session agent.Session) {
 	t.Helper()
 	t.Cleanup(func() {
-		assert.NoError(t, session.Close(context.Background()))
+		err := session.Close(context.Background())
+		assert.NoErrorf(t, err, "native cause: %v", errors.Unwrap(err))
 	})
 }

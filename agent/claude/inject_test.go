@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 )
 
 func TestInjectWritesContextWithoutCreatingInterruptTarget(t *testing.T) {
@@ -29,6 +30,9 @@ func TestInjectWritesContextWithoutCreatingInterruptTarget(t *testing.T) {
 		`<{"type":"control_response","response":{"subtype":"success","request_id":"go_1","response":{}}}`,
 	}
 	session, stream := openClaudeInteractionSession(t, ctx, cwd, "passed", agent.Features{}, frames...)
+	require.Eventually(t, func() bool {
+		return agentclaude.InjectSupportedForTest(session)
+	}, 3*time.Second, time.Millisecond)
 	injector, ok := session.(agent.Injector)
 	require.True(t, ok)
 	receipt, err := injector.Inject(ctx, claudeTextInput("context"))
@@ -71,6 +75,9 @@ func TestInjectRejectsLocalInvalidCanceledAndClosedClaudeInput(t *testing.T) {
 	cwd := t.TempDir()
 	session, _ := openClaudeInteractionSession(t, ctx, cwd, "passed", agent.Features{},
 		claudeSessionInitFrame(t, "native-inject-invalid", cwd))
+	require.Eventually(t, func() bool {
+		return agentclaude.InjectSupportedForTest(session)
+	}, 3*time.Second, time.Millisecond)
 	injector := session.(agent.Injector)
 	receipt, err := injector.Inject(ctx, agent.Input{})
 	require.Error(t, err)

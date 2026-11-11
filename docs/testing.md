@@ -53,9 +53,11 @@ interaction/interrupt scenarios and WebSocket authentication/lifecycle. Its
 WebSocket harness requires Unix process groups for bounded server cleanup.
 It checks authentication, reconnection and client/server lifecycle through the
 SDK, Go networking and the server process handle. It does not inspect process-tree
-listener ownership or assert the absence of additional listeners. Claude currently has
-only an initialization/shutdown transport integration probe: it sends no model
-turn and does not establish complete agent E2E coverage.
+listener ownership or assert the absence of additional listeners. Claude includes
+an initialization/shutdown probe and opt-in assigned-session checks. The latter
+check unified Open before input and one model input, plus a native first turn
+whose init, assistant and success result match the UUID passed in --session-id.
+They do not establish complete agent E2E coverage.
 
 Each SDK has independent, opt-in E2E switches.
 Real CLI/agent tests are disabled through `CODEX_E2E_STDIO=0`,
@@ -64,6 +66,19 @@ and `SDK_REAL_AGENT_E2E=0`. Codex requires `CODEX_E2E_CLI` and Claude requires
 `CLAUDE_E2E_CLI` to select the executable. Each selected test requires its switch
 to equal `1` and refuses a nonempty `CI`. Offline validation and recorded replay invoke no real agent/model. Native successful subagent interoperability remains unverified;
 see each package's compatibility and recording documentation for precise evidence.
+
+Run the assigned-session model probes only with explicit opt-in:
+
+```sh
+SDK_REAL_AGENT_E2E=1 CLAUDE_E2E=1 \
+CLAUDE_E2E_CLI=/absolute/path/to/claude \
+CLAUDE_E2E_MODEL=your-model \
+go test ./claude/tests/e2e -run 'TestUnifiedOpenBeforeInput|TestNativeAssignedSessionIdentityAcrossFirstTurn' -v -count=1
+```
+
+These probes use temporary HOME/config directories and simple mode. They copy
+only the Anthropic endpoint and authentication variables from the caller's
+environment or `~/.claude/settings.json`, and never print their values.
 
 Small fixture embedding packages under each native `tests/testdata`
 contain code-owned synthetic inputs from `integration/`. Replay adapters share those bytes without

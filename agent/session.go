@@ -5,7 +5,8 @@ import "context"
 // Session owns one native main-session attachment, its interaction authority,
 // and native resources whose lifetime ends with the session.
 type Session interface {
-	// ID is a confirmed native main-session identity and is nonempty.
+	// ID is the nonempty native main-session identity fixed before Open or
+	// Resume returns. It remains unchanged for the attachment's lifetime.
 	ID() string
 
 	Capabilities() Capabilities

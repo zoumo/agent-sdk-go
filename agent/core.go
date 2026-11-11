@@ -11,7 +11,9 @@ type Core interface {
 	// another owner. After an admitted Stop, Start cannot be called again.
 	Start(ctx context.Context) (Capabilities, error)
 
-	// Open creates a new native main session after its real identity is known.
+	// Open creates a new native main session with a nonempty, stable identity.
+	// An adapter may assign that identity through an official native creation
+	// option and return after initialization, before later session notifications.
 	// The Core must have been started successfully.
 	Open(ctx context.Context, options OpenOptions) (Session, error)
 

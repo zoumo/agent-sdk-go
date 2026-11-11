@@ -81,6 +81,14 @@ func (s *session) convertEvent(received claude.Received) ([]agent.Event, error) 
 	)
 	switch {
 	case event.Type == "system" && event.Subtype == "init":
+		if event.System != nil {
+			s.mu.Lock()
+			s.injectSupported = supportsInject(event.System.ClaudeCodeVersion)
+			s.mu.Unlock()
+			if len(event.System.SlashCommands) != 0 {
+				return s.initialCommandsEvent(*event)
+			}
+		}
 		return nil, nil
 	case event.Stream != nil:
 		events, err = s.streamEvent(received)
@@ -847,7 +855,7 @@ func (s *session) observationGap(
 			nil,
 		)
 	}
-	if confirmedRelationship(observation.Reason) {
+	if confirmedRelationship(observation.Reason) || observation.Reason == "forwarding-not-confirmed" {
 		return nil, nil
 	}
 	extras := map[string]any{

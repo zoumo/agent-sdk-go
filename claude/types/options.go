@@ -85,6 +85,10 @@ type Options struct {
 	StrictMCPConfig bool
 	Thinking        *ThinkingConfig
 	Initialize      *InitializeOptions
+	// SessionID assigns a new native session through --session-id. It is passed
+	// literally and is mutually exclusive with ResumeID. Initialize does not echo
+	// this identity; later native main-session messages are checked against it.
+	SessionID string
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string

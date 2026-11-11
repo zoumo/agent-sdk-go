@@ -61,6 +61,14 @@ func newSession(
 	buffered []claude.Received,
 	resume *resumeIdentityGuard,
 ) (*session, error) {
+	if sessionID == "" {
+		return nil, adapterError(
+			agent.ErrorUnavailable,
+			ErrorReasonInitializeIdentityMissing,
+			"Claude session has no native identity",
+			nil,
+		)
+	}
 	created := &session{
 		provider:          provider,
 		native:            native,

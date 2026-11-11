@@ -304,8 +304,6 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.NoError(t, err)
-	stream, err := session.Events()
-	require.NoError(t, err)
 	_, _ = session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "disconnect"}}},
 	})
@@ -315,14 +313,16 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 		require.NoError(t, ctx.Err())
 	}
 
+	require.NoError(t, provider.Stop(ctx))
+	stream, err := session.Events()
+	require.NoError(t, err)
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, event.Type())
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
-
-	require.NoError(t, provider.Stop(ctx))
+	assert.Same(t, session.Err(), err)
 }
 
 func TestAnswerRejectsUnknownRefAndInterruptHasNoActiveWork(t *testing.T) {

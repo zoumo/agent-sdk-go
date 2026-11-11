@@ -155,22 +155,23 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
 	require.NoError(t, err)
-	stream, err := session.Events()
-	require.NoError(t, err)
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
 		require.NoError(t, ctx.Err())
 	}
 
+	require.NoError(t, provider.Stop(ctx))
+	stream, err := session.Events()
+	require.NoError(t, err)
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessageChunk, event.Type())
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+	assert.Same(t, session.Err(), err)
 
-	require.NoError(t, provider.Stop(ctx))
 	require.NoError(t, session.Close(ctx))
 }
 

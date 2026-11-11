@@ -796,6 +796,8 @@ func TestClaudeNativeCancelAndSessionCloseInvalidateInteraction(t *testing.T) {
 			_, err = stream.Next(ctx)
 			if test.closeFirst {
 				assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+				assert.Same(t, session.Err(), err)
+				requireAgentErrorReason(t, err, agent.ErrorReasonSessionTerminated)
 			} else {
 				require.ErrorIs(t, err, io.EOF)
 			}

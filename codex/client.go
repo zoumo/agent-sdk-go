@@ -20,8 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coder/websocket"
-
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -59,9 +57,9 @@ type Client struct {
 	streams            *streamFrameTransport
 	terminalClosed     bool
 	closing            bool
-	remote             *websocket.Conn
 	remoteToken        string
 	frames             frameTransport
+	transport          connectionTransport
 	queue              chan outbound
 	pending            map[ID]*pendingCall
 	reverse            map[ID]*requestState
@@ -536,8 +534,8 @@ func (c *Client) fail(cause error) {
 	c.requestHistory = nil
 	close(c.done)
 	c.mu.Unlock()
-	if c.remote != nil {
-		_ = c.remote.CloseNow()
+	if c.transport != nil {
+		c.transport.Abort()
 	} else if c.streams != nil {
 		_ = c.streams.CloseInput()
 	} else {
@@ -546,15 +544,16 @@ func (c *Client) fail(cause error) {
 }
 
 func (c *Client) cleanup() {
+	if c.transport != nil {
+		c.transport.Shutdown(c.done, c.readDone, c.limits.ShutdownTimeout)
+		c.finishCleanup()
+		return
+	}
 	if c.streams != nil {
 		c.cleanupStream()
 		return
 	}
 	<-c.done
-	if c.remote != nil {
-		c.finishCleanup()
-		return
-	}
 	deadline := time.NewTimer(c.limits.ShutdownTimeout)
 	defer deadline.Stop()
 	grace := time.NewTimer(c.limits.ShutdownTimeout / 2)

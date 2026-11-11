@@ -190,21 +190,17 @@ func GetSessionMessages(ctx context.Context, sessionID string, o SessionMessages
 // Each directory is pinned separately. In-tree symlinks are rejected, including
 // same-root symlinks; os.Root additionally confines component races to the root.
 func queryDirectory(root *os.Root, name string) (*os.Root, error) {
-	st, e := root.Lstat(name)
-	if e != nil {
-		return nil, queryAccess(name, e)
-	}
-	if !st.IsDir() {
-		return nil, queryError("unsupported", name, "not an ordinary directory", ErrUnsupported)
-	}
-	next, e := root.OpenRoot(name)
-	if e != nil {
-		return nil, queryAccess(name, e)
-	}
-	opened, e := next.Stat(".")
-	if e != nil || !os.SameFile(st, opened) {
-		next.Close()
-		return nil, queryError("changed", name, "directory changed during open", e)
+	next, err := pinQueryDirectory(root, name, nil)
+	if err != nil {
+		var changed *queryDirectoryChangedError
+		switch {
+		case errors.As(err, &changed):
+			return nil, queryError("changed", name, "directory changed during open", changed.cause)
+		case errors.Is(err, errQueryOrdinaryDirectoryRequired):
+			return nil, queryError("unsupported", name, "not an ordinary directory", ErrUnsupported)
+		default:
+			return nil, queryAccess(name, err)
+		}
 	}
 	return next, nil
 }

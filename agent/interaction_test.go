@@ -10,6 +10,10 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 )
 
+type embeddedPermissionAnswer struct {
+	agent.PermissionAnswer
+}
+
 func TestInteractionRequestValidationRejectsInvalidKindFieldCombinations(t *testing.T) {
 	schema := map[string]any{"type": "object"}
 	options := []agent.PermissionOption{
@@ -129,6 +133,223 @@ func TestValidInteractionRequests(t *testing.T) {
 
 	for _, request := range tests {
 		require.NoError(t, request.Validate())
+	}
+}
+
+type embeddedAnswer struct {
+	agent.Answer
+}
+
+func TestAnswerRejectsEmbeddedInterfaceWrappers(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		answer     agent.Answer
+		wantReason string
+	}{
+		{name: "nil embedded value", answer: embeddedAnswer{}, wantReason: "unsupported_answer"},
+		{name: "nil embedded pointer", answer: &embeddedAnswer{}, wantReason: "unsupported_answer"},
+		{
+			name:       "populated embedded value",
+			answer:     embeddedAnswer{Answer: agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow"}},
+			wantReason: "unsupported_answer",
+		},
+		{
+			name:       "populated embedded pointer",
+			answer:     &embeddedAnswer{Answer: agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow"}},
+			wantReason: "unsupported_answer",
+		},
+		{name: "typed nil wrapper", answer: (*embeddedAnswer)(nil), wantReason: "missing_answer"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				got, err := agent.MatchAnswer(agent.InteractionPermission, tt.answer)
+				assert.Nil(t, got)
+				var classified *agent.Error
+				require.ErrorAs(t, err, &classified)
+				assert.Equal(t, agent.ErrorInvalidArgument, classified.Code)
+				assert.Equal(t, tt.wantReason, classified.Reason)
+			})
+			require.NotPanics(t, func() {
+				err := agent.ValidateAnswer(agent.InteractionPermission, tt.answer)
+				var classified *agent.Error
+				require.ErrorAs(t, err, &classified)
+				assert.Equal(t, agent.ErrorInvalidArgument, classified.Code)
+				assert.Equal(t, tt.wantReason, classified.Reason)
+			})
+		})
+	}
+}
+
+func TestMatchAnswerCanonicalizesAndValidates(t *testing.T) {
+	permission := agent.PermissionAnswer{
+		Outcome:  agent.PermissionSelected,
+		OptionID: "allow",
+	}
+	form := agent.FormAnswer{
+		Outcome: agent.FormAccept,
+		Content: map[string]any{"choice": "a"},
+	}
+	url := agent.URLAnswer{Outcome: agent.URLAccept}
+
+	tests := []struct {
+		name       string
+		kind       agent.InteractionKind
+		answer     agent.Answer
+		want       agent.Answer
+		wantReason string
+	}{
+		{
+			name:   "permission value",
+			kind:   agent.InteractionPermission,
+			answer: permission,
+			want:   permission,
+		},
+		{
+			name:   "permission pointer",
+			kind:   agent.InteractionPermission,
+			answer: &permission,
+			want:   permission,
+		},
+		{
+			name:   "form value",
+			kind:   agent.InteractionForm,
+			answer: form,
+			want:   form,
+		},
+		{
+			name:   "form pointer",
+			kind:   agent.InteractionForm,
+			answer: &form,
+			want:   form,
+		},
+		{
+			name:   "URL value",
+			kind:   agent.InteractionURL,
+			answer: url,
+			want:   url,
+		},
+		{
+			name:   "URL pointer",
+			kind:   agent.InteractionURL,
+			answer: &url,
+			want:   url,
+		},
+		{
+			name:       "nil",
+			kind:       agent.InteractionPermission,
+			wantReason: "missing_answer",
+		},
+		{
+			name:       "typed nil permission",
+			kind:       agent.InteractionPermission,
+			answer:     (*agent.PermissionAnswer)(nil),
+			wantReason: "missing_answer",
+		},
+		{
+			name:       "typed nil form",
+			kind:       agent.InteractionForm,
+			answer:     (*agent.FormAnswer)(nil),
+			wantReason: "missing_answer",
+		},
+		{
+			name:       "typed nil URL",
+			kind:       agent.InteractionURL,
+			answer:     (*agent.URLAnswer)(nil),
+			wantReason: "missing_answer",
+		},
+		{
+			name:       "wrong kind",
+			kind:       agent.InteractionPermission,
+			answer:     form,
+			wantReason: "answer_kind_mismatch",
+		},
+		{
+			name:       "unsupported wrapper",
+			kind:       agent.InteractionPermission,
+			answer:     embeddedPermissionAnswer{PermissionAnswer: permission},
+			wantReason: "unsupported_answer",
+		},
+		{
+			name:       "unsupported wrapper pointer",
+			kind:       agent.InteractionPermission,
+			answer:     &embeddedPermissionAnswer{PermissionAnswer: permission},
+			wantReason: "unsupported_answer",
+		},
+		{
+			name:       "selected permission without option",
+			kind:       agent.InteractionPermission,
+			answer:     agent.PermissionAnswer{Outcome: agent.PermissionSelected},
+			wantReason: "missing_permission_option_id",
+		},
+		{
+			name: "canceled permission with option",
+			kind: agent.InteractionPermission,
+			answer: agent.PermissionAnswer{
+				Outcome:  agent.PermissionCancelled,
+				OptionID: "allow",
+			},
+			wantReason: "unexpected_permission_option_id",
+		},
+		{
+			name:       "unknown permission outcome",
+			kind:       agent.InteractionPermission,
+			answer:     agent.PermissionAnswer{Outcome: "maybe", OptionID: "allow"},
+			wantReason: "invalid_permission_outcome",
+		},
+		{
+			name:       "accepted form without content",
+			kind:       agent.InteractionForm,
+			answer:     agent.FormAnswer{Outcome: agent.FormAccept},
+			wantReason: "missing_form_answer",
+		},
+		{
+			name: "accepted form with invalid content",
+			kind: agent.InteractionForm,
+			answer: agent.FormAnswer{
+				Outcome: agent.FormAccept,
+				Content: map[string]any{"choice": func() {}},
+			},
+			wantReason: "invalid_form_answer",
+		},
+		{
+			name: "declined form with content",
+			kind: agent.InteractionForm,
+			answer: agent.FormAnswer{
+				Outcome: agent.FormDecline,
+				Content: map[string]any{"choice": "a"},
+			},
+			wantReason: "unexpected_form_answer",
+		},
+		{
+			name:       "unknown form outcome",
+			kind:       agent.InteractionForm,
+			answer:     agent.FormAnswer{Outcome: "maybe"},
+			wantReason: "invalid_form_outcome",
+		},
+		{
+			name:       "unknown URL outcome",
+			kind:       agent.InteractionURL,
+			answer:     agent.URLAnswer{Outcome: "open"},
+			wantReason: "invalid_url_outcome",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := agent.MatchAnswer(tt.kind, tt.answer)
+
+			if tt.wantReason != "" {
+				var classified *agent.Error
+				require.ErrorAs(t, err, &classified)
+				assert.Equal(t, agent.ErrorInvalidArgument, classified.Code)
+				assert.Equal(t, tt.wantReason, classified.Reason)
+				assert.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+			assert.IsType(t, tt.want, got)
+		})
 	}
 }
 

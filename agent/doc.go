@@ -12,26 +12,19 @@
 // StartOrSteer lets the adapter start new work, join acceptable current work, or
 // report that input was not applied; it never queues, waits for idle, persists,
 // or retries.
-// Sessions may optionally report or update the provider-native model and
-// reasoning effort through ExecutionOptionsReporter and
-// ExecutionOptionsController. An empty ExecutionOptions field omits that
-// option; a nonempty value is passed literally, without trimming, aliasing or
-// cross-provider conversion. The values belong to the main session and are
-// intended for provider-determined later work. A runtime update does not wait
-// for idle, interrupt an active turn, restart the process or configure child
-// sessions; native behavior determines whether work already executing observes
-// the change.
-// Successful receipts prove native acceptance. An Effective value is set only
-// from an explicit provider observation, so an accepted request can still have
-// unknown effectiveness. A successful update clears Effective evidence that it
-// may have invalidated; a model change normally invalidates both model and
-// effort evidence. These optional interfaces expose only model and reasoning
-// effort; sandbox, approval, permission-profile, ACP mode, collaboration,
-// fast-mode and custom-agent settings remain provider-specific native
-// capabilities.
-// Adapters implementing those interfaces may use ExecutionOptionsRuntime,
-// SetExecutionOption and SetExecutionModel to share controller mechanics;
-// ordinary Session implementations do not need those adapter support types.
+// OpenOptions.Config groups main-session Model and Effort values. An
+// empty field omits that value; a nonempty value is passed literally, without
+// trimming, aliasing or cross-provider conversion. Sessions may optionally
+// implement ConfigController to update one value through SetConfig using the
+// closed IDs model and effort. Runtime updates affect provider-determined later
+// work: they do not wait for idle, interrupt an active turn, restart the
+// process or configure child sessions. Callers that require ordering must
+// serialize calls.
+// A ConfigReceipt reports only the exact change and native acceptance stages.
+// It does not report requested or effective configuration state. Successful
+// native acceptance is therefore not proof that a value is currently effective.
+// Sandbox, approval, permission-profile, ACP mode, collaboration, fast-mode and
+// custom-agent settings remain provider-specific native capabilities.
 //
 // Event payloads form a closed live union with stable session and item identity.
 // Adapters preserve native order, time, raw evidence, and explicit capability

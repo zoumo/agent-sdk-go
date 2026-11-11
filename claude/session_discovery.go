@@ -150,7 +150,7 @@ func (s *Session) ListSubagents(ctx context.Context, q SubagentQuery) (SubagentP
 	}
 	p.Coverage.Limits = q
 	s.mu.Lock()
-	id, closed := s.root, s.closed
+	id, closed := s.admission.sessionID(), s.closed
 	s.mu.Unlock()
 	p.Coverage.SessionID = id
 	if closed {
@@ -272,41 +272,19 @@ func (d *discoveryReader) limit(resource string, n int) error {
 // SameFile rejects a symlink substitution between Lstat and OpenRoot; all later
 // operations use the pinned handle, not the mutable path in the config tree.
 func (d *discoveryReader) openDirectory(path string) (*os.Root, error) {
-	current, err := d.root.OpenRoot(".")
+	pinned, err := pinQueryDirectory(d.root, path, d.check)
 	if err != nil {
-		return nil, err
-	}
-	for part := range strings.SplitSeq(filepath.Clean(path), string(filepath.Separator)) {
-		if part == "." {
-			continue
-		}
-		if err = d.check(); err != nil {
-			current.Close()
+		var changed *queryDirectoryChangedError
+		switch {
+		case errors.As(err, &changed):
+			return nil, errors.New("directory changed during open")
+		case errors.Is(err, errQueryOrdinaryDirectoryRequired):
+			return nil, errors.New("not an ordinary directory")
+		default:
 			return nil, err
 		}
-		st, e := current.Lstat(part)
-		if e != nil {
-			current.Close()
-			return nil, e
-		}
-		if !st.IsDir() {
-			current.Close()
-			return nil, errors.New("not an ordinary directory")
-		}
-		next, e := current.OpenRoot(part)
-		if e != nil {
-			current.Close()
-			return nil, e
-		}
-		opened, e := next.Lstat(".")
-		current.Close()
-		if e != nil || !os.SameFile(st, opened) {
-			next.Close()
-			return nil, errors.New("directory changed during open")
-		}
-		current = next
 	}
-	return current, nil
+	return pinned, nil
 }
 
 func (d *discoveryReader) directory(path string) error {
@@ -327,38 +305,34 @@ func (d *discoveryReader) read(path string) ([]json.RawMessage, error) {
 	}
 	defer parent.Close()
 	name := filepath.Base(path)
-	st, err := parent.Lstat(name)
+	var available int64
+	opened, err := openQueryRegularFile(parent, name, nil, func() error {
+		available = min(d.q.MaxBytes-d.page.Coverage.Bytes, d.q.MaxFileBytes)
+		if available <= 0 {
+			return d.limit("metadata bytes", int(d.q.MaxBytes))
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, err
+		switch {
+		case errors.Is(err, errQueryRegularFileRequired):
+			return nil, errors.New("not an ordinary file")
+		case errors.Is(err, errQueryOpenedSourceChanged):
+			return nil, errors.New("file changed during open")
+		default:
+			return nil, err
+		}
 	}
-	if !st.Mode().IsRegular() {
-		return nil, errors.New("not an ordinary file")
-	}
-	available := min(d.q.MaxBytes-d.page.Coverage.Bytes, d.q.MaxFileBytes)
-	if available <= 0 {
-		return nil, d.limit("metadata bytes", int(d.q.MaxBytes))
-	}
-	f, err := openDiscoveryFile(parent, name)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	opened, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !opened.Mode().IsRegular() || !os.SameFile(st, opened) {
-		return nil, errors.New("file changed during open")
-	}
-	size := min(st.Size(), available)
-	data, err := io.ReadAll(io.NewSectionReader(f, 0, size))
+	defer opened.file.Close()
+	size := min(opened.pathInfo.Size(), available)
+	data, err := io.ReadAll(io.NewSectionReader(opened.file, 0, size))
 	d.page.Coverage.Bytes += int64(len(data))
 	d.page.Coverage.Files++
 	if err != nil {
 		return nil, err
 	}
 	var resultErr error
-	if size < st.Size() {
+	if size < opened.pathInfo.Size() {
 		resultErr = d.limit("metadata bytes per file/total", int(available))
 	}
 	if int64(len(data)) != size {

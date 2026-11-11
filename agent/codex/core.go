@@ -24,6 +24,7 @@ const (
 // Core owns one Codex app-server connection shared by all of its sessions.
 type Core struct {
 	config         codex.StdioOptions
+	tracer         agent.Tracer
 	streams        streamFactory
 	formsSupported bool
 	leases         *corelease.Core[*codex.Client, *session]
@@ -43,6 +44,7 @@ func New(config Config) *Core {
 	stdio.Initialize = withDefaultCapabilities(stdio.Initialize)
 	core := &Core{
 		config:         stdio,
+		tracer:         config.Tracer,
 		formsSupported: supportsAgentQuestions(stdio.Initialize),
 	}
 	core.leases = corelease.New[*codex.Client, *session](
@@ -126,22 +128,18 @@ func (p *Core) Open(
 		native, err := codex.Open(ctx, codex.SessionOptions{
 			Client:     client,
 			MCPServers: mcpServers,
+			ShellEnv:   maps.Clone(options.ShellEnv),
 			Thread: codextypes.ThreadStartParams{
 				Config:                config,
 				Cwd:                   codextypes.Some(options.Cwd),
 				DeveloperInstructions: developerInstructions(options.AdditionalSystemPrompt),
-				Model:                 optionalString(options.Execution.Model),
+				Model:                 optionalString(options.Config.Model),
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingStart), err)
 		}
-		return newSession(
-			p,
-			native,
-			features,
-			initialExecutionOptionsReport(native, options.Execution, openingStart),
-		), nil
+		return newSession(p, native, features), nil
 	})
 	if err != nil {
 		return nil, err
@@ -174,6 +172,7 @@ func (p *Core) Resume(
 		native, err := codex.Open(ctx, codex.SessionOptions{
 			Client:     client,
 			MCPServers: mcpServers,
+			ShellEnv:   maps.Clone(options.ShellEnv),
 			Resume: &codextypes.ThreadResumeParams{
 				Config: config,
 				Cwd:    codextypes.Some(options.Cwd),
@@ -181,19 +180,14 @@ func (p *Core) Resume(
 					options.AdditionalSystemPrompt,
 				),
 				ExcludeTurns: codextypes.Some(true),
-				Model:        optionalString(options.Execution.Model),
+				Model:        optionalString(options.Config.Model),
 				ThreadID:     options.SessionID,
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingResume), err)
 		}
-		return newSession(
-			p,
-			native,
-			features,
-			initialExecutionOptionsReport(native, options.Execution, openingResume),
-		), nil
+		return newSession(p, native, features), nil
 	})
 	if err != nil {
 		return nil, err
@@ -213,8 +207,10 @@ func (p *Core) NativeClient() (*codex.Client, error) {
 
 func providerCapabilities(formsSupported bool) agent.Capabilities {
 	capabilities := agent.Capabilities{
-		agent.CapabilityTextInput:  true,
-		agent.CapabilityPermission: true,
+		agent.CapabilityShellEnv:    true,
+		agent.CapabilityTextInput:   true,
+		agent.CapabilityPermission:  true,
+		agent.CapabilityPromptTrace: true,
 	}
 	if formsSupported {
 		capabilities[agent.CapabilityForm] = true
@@ -251,12 +247,12 @@ func (p *Core) openingConfiguration(
 	error,
 ) {
 	features := effectiveFeatures(options.Features, p.formsSupported)
-	config, err := threadConfig(features, options.Execution.ReasoningEffort)
+	config, err := threadConfig(features, options.Config.Effort)
 	if err != nil {
 		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(
 			agent.ErrorInvalidArgument,
-			ErrorReasonExecutionOptionsNotEncodable,
-			"encode Codex execution options",
+			ErrorReasonSessionConfigNotEncodable,
+			"encode Codex session configuration",
 			err,
 		)
 	}
@@ -265,14 +261,14 @@ func (p *Core) openingConfiguration(
 
 func threadConfig(
 	features agent.EffectiveFeatures,
-	executionEffort string,
+	effort string,
 ) (codextypes.Optional[map[string]json.RawMessage], error) {
 	config := make(map[string]json.RawMessage, 2)
 	if !features.AgentQuestions {
 		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
 	}
-	if executionEffort != "" {
-		encoded, err := json.Marshal(executionEffort)
+	if effort != "" {
+		encoded, err := json.Marshal(effort)
 		if err != nil {
 			return codextypes.Optional[map[string]json.RawMessage]{}, err
 		}
@@ -292,6 +288,14 @@ func developerInstructions(value string) codextypes.Optional[string] {
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
+	if len(options.ProcessEnv) != 0 {
+		return adapterError(
+			agent.ErrorUnsupported,
+			agent.ErrorReasonProcessEnvUnsupported,
+			"Codex Session process environment is not supported",
+			nil,
+		)
+	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,

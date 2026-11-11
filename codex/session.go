@@ -31,6 +31,9 @@ type SessionOptions struct {
 	Tools    map[Tool]bool
 	// MCPServers adds external MCP servers to this Session's native thread config.
 	MCPServers []MCPServer
+	// ShellEnv adds set-only variables to shell/unified-exec child environments.
+	// Empty values set empty strings. It does not change the app-server environment.
+	ShellEnv map[string]string
 	// ChildDetailPolicy fixes optional confirmed-child progress delivery for this Session.
 	ChildDetailPolicy ChildDetailPolicy
 	// MaxMembers bounds observation identities independently of parent knowledge.
@@ -181,7 +184,7 @@ func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
 	}
 	p := input.native(s.root)
 	var response types.TurnStartResponse
-	err := s.client.callOwned(ctx, "turn/start", p, &response, false, nil, s)
+	err := s.client.callOwnedWithTrace(ctx, "turn/start", p, &response, false, nil, s, submissionTrace(ctx))
 	return Submission{Response: response}, err
 }
 

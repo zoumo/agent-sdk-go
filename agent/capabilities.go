@@ -15,6 +15,9 @@ const (
 	CapabilityPermission        = "permission"
 	CapabilityForm              = "form"
 	CapabilityURL               = "url"
+	CapabilityProcessEnv        = "processEnv"
+	CapabilityShellEnv          = "shellEnv"
+	CapabilityPromptTrace       = "promptTrace"
 )
 
 // capabilityNames is the canonical capability surface queried by Supports and
@@ -28,6 +31,9 @@ var capabilityNames = [...]string{
 	CapabilityPermission,
 	CapabilityForm,
 	CapabilityURL,
+	CapabilityProcessEnv,
+	CapabilityShellEnv,
+	CapabilityPromptTrace,
 }
 
 var capabilitySet = func() map[string]struct{} {
@@ -85,17 +91,4 @@ type ActionReceipt struct {
 type Archiver interface {
 	Archive(ctx context.Context) (ActionReceipt, error)
 	Unarchive(ctx context.Context) (ActionReceipt, error)
-}
-
-// ConfigurationReceipt identifies a requested native model and records the
-// acceptance stages observed for the change.
-type ConfigurationReceipt struct {
-	Model      string
-	Acceptance Acceptance
-}
-
-// ModelController is implemented only by sessions that support an explicit
-// native model change.
-type ModelController interface {
-	SetModel(ctx context.Context, model string) (ConfigurationReceipt, error)
 }

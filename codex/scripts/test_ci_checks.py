@@ -41,8 +41,14 @@ class WorkflowCoverage(unittest.TestCase):
         offline = self.workflow_jobs()["offline"]
         self.assertIn("sudo apt-get install -y ripgrep", offline)
         self.assertIn("brew install ripgrep", offline)
+        self.assertIn(
+            "      - name: Install pinned golangci-lint\n"
+            "        if: runner.os == 'Linux'\n",
+            offline,
+        )
         self.assertIn("golangci-lint@v2.12.2", offline)
         self.assertIn("python3 codex/scripts/check_whitespace.py", offline)
+        self.assertIn('if [[ "${RUNNER_OS}" == "Linux" ]]; then', offline)
         self.assertIn("make fmt-check", offline)
         self.assertIn("make lint", offline)
         self.assertIn("bash scripts/check-offline.sh parallel", offline)
@@ -85,6 +91,19 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("          ref: " + revision, consumer)
         self.assertIn('bash scripts/check-consumers.sh "$SDK_CONSUMER_SHA"', consumer)
         self.assertIn('bash claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"', consumer)
+
+    def test_external_consumer_retrieves_exact_commit_through_configured_proxy(self):
+        script = (ROOT.parent / "scripts/check-consumers.sh").read_text()
+        self.assertIn(
+            'export GOPROXY="${SDK_CONSUMER_GOPROXY:-https://proxy.golang.org,direct}"',
+            script,
+        )
+        self.assertIn(
+            'go mod download -json "github.com/zoumo/agent-sdk-go@$revision"',
+            script,
+        )
+        self.assertNotIn("GOPROXY=direct", script)
+        self.assertIn("module.get('Origin', {}).get('Hash') == sys.argv[2]", script)
 
 
 class CIGates(unittest.TestCase):

@@ -86,58 +86,13 @@ func (contractSession) Unarchive(context.Context) (agent.ActionReceipt, error) {
 	return agent.ActionReceipt{}, nil
 }
 
-func (contractSession) SetModel(
+type contractConfigController struct{}
+
+func (contractConfigController) SetConfig(
 	context.Context,
-	string,
-) (agent.ConfigurationReceipt, error) {
-	return agent.ConfigurationReceipt{}, nil
-}
-
-type contractExecutionReporter struct{}
-
-func (contractExecutionReporter) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
-	return agent.ExecutionOptionsReport{}
-}
-
-type contractExecutionController struct {
-	contractExecutionReporter
-}
-
-func (contractExecutionController) SetExecutionOption(
-	context.Context,
-	agent.ExecutionOptionChange,
-) (agent.ExecutionOptionsReceipt, error) {
-	return agent.ExecutionOptionsReceipt{}, nil
-}
-
-type contractExecutionRuntime struct {
-	contractExecutionReporter
-}
-
-func (contractExecutionRuntime) Lock()   {}
-func (contractExecutionRuntime) Unlock() {}
-
-func (contractExecutionRuntime) RequireOpen() error { return nil }
-
-func (contractExecutionRuntime) Apply(
-	context.Context,
-	agent.ExecutionOptionChange,
-) error {
-	return nil
-}
-
-func (contractExecutionRuntime) ConvertError(err error) error { return err }
-
-func (contractExecutionRuntime) PrepareAccepted(
-	agent.ExecutionOptionChange,
-) func() {
-	return func() {}
-}
-
-func (contractExecutionRuntime) ClearUncertain(agent.ExecutionOption) {}
-
-func (contractExecutionRuntime) Acceptance(error) agent.Acceptance {
-	return agent.Acceptance{}
+	agent.ConfigChange,
+) (agent.ConfigReceipt, error) {
+	return agent.ConfigReceipt{}, nil
 }
 
 type contractStream struct{}
@@ -151,27 +106,21 @@ func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
 	var session agent.Session = contractSession{}
 	var stream agent.EventStream = contractStream{}
 	var archiver agent.Archiver = contractSession{}
-	var modelController agent.ModelController = contractSession{}
-	var executionReporter agent.ExecutionOptionsReporter = contractExecutionReporter{}
-	var executionController agent.ExecutionOptionsController = contractExecutionController{}
+	var configController agent.ConfigController = contractConfigController{}
 
 	require.NotNil(t, provider)
 	require.NotNil(t, session)
 	require.NotNil(t, stream)
 	require.NotNil(t, archiver)
-	require.NotNil(t, modelController)
-	require.NotNil(t, executionReporter)
-	require.NotNil(t, executionController)
+	require.NotNil(t, configController)
 
-	_, implementsReporter := any(contractSession{}).(agent.ExecutionOptionsReporter)
-	assert.False(t, implementsReporter)
-	_, implementsController := any(contractSession{}).(agent.ExecutionOptionsController)
-	assert.False(t, implementsController)
+	_, implementsConfig := any(contractSession{}).(agent.ConfigController)
+	assert.False(t, implementsConfig)
 }
 
-func TestExecutionOptionIDsAreFixed(t *testing.T) {
-	assert.Equal(t, "model", string(agent.ExecutionOptionModel))
-	assert.Equal(t, "reasoningEffort", string(agent.ExecutionOptionReasoningEffort))
+func TestConfigIDsAreFixed(t *testing.T) {
+	assert.Equal(t, "model", string(agent.ConfigModel))
+	assert.Equal(t, "effort", string(agent.ConfigEffort))
 }
 
 func TestUnifiedSessionHasOneInputOperation(t *testing.T) {
@@ -241,28 +190,14 @@ func TestPublicAdditionalSystemPromptContract(t *testing.T) {
 	assert.Equal(t, options.AdditionalSystemPrompt, resume.AdditionalSystemPrompt)
 }
 
-func TestAdapterExecutionOptionRuntimeContracts(t *testing.T) {
-	var runtime agent.ExecutionOptionsRuntime = contractExecutionRuntime{}
-	change := agent.ExecutionOptionChange{
-		Option: agent.ExecutionOptionReasoningEffort,
-		Value:  "high",
-	}
+func TestConfigReceiptHasOnlyChangeAndAcceptance(t *testing.T) {
+	receiptType := reflect.TypeFor[agent.ConfigReceipt]()
+	require.Equal(t, 2, receiptType.NumField())
+	assert.Equal(t, "Change", receiptType.Field(0).Name)
+	assert.Equal(t, "Acceptance", receiptType.Field(1).Name)
 
-	receipt, err := agent.SetExecutionOption(context.Background(), change, runtime)
-	require.NoError(t, err)
-	assert.Equal(t, change, receipt.Change)
-	require.NotNil(t, receipt.Acceptance.Sent)
-	require.NotNil(t, receipt.Acceptance.NativeAccepted)
-	assert.True(t, *receipt.Acceptance.Sent)
-	assert.True(t, *receipt.Acceptance.NativeAccepted)
-
-	modelReceipt, err := agent.SetExecutionModel(
-		context.Background(),
-		"model",
-		runtime,
-	)
-	require.NoError(t, err)
-	assert.Equal(t, "model", modelReceipt.Model)
-	require.NotNil(t, modelReceipt.Acceptance.Sent)
-	require.NotNil(t, modelReceipt.Acceptance.NativeAccepted)
+	controllerType := reflect.TypeFor[agent.ConfigController]()
+	require.Equal(t, 1, controllerType.NumMethod())
+	_, hasSetConfig := controllerType.MethodByName("SetConfig")
+	assert.True(t, hasSetConfig)
 }

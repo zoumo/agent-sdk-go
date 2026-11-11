@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -80,6 +81,37 @@ func TestStreamClientCompletesAfterInputHalfClose(t *testing.T) {
 	case <-client.Done():
 	case <-time.After(5 * time.Second):
 		t.Fatal("stream client did not finish after both directions closed")
+	}
+	require.NoError(t, client.Err())
+	require.NoError(t, client.Close())
+	require.Equal(t, uint64(1), client.Diagnostics().Notifications)
+}
+
+func TestStreamClientCloseInputPreservesCloseError(t *testing.T) {
+	peer := newStreamPeer()
+	closeErr := errors.New("synthetic writer close failure")
+	writer := &closeErrorWriter{WriteCloser: peer.transport.Writer, err: closeErr}
+	peer.transport.Writer = writer
+	peerDone := make(chan error, 1)
+	go func() {
+		peerDone <- serveCodexStream(peer, true)
+	}()
+
+	client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+	}, peer.transport)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close(); _ = peer.reader.Close(); _ = peer.writer.Close() })
+	peer.wait <- nil
+
+	require.ErrorIs(t, client.CloseInput(), closeErr)
+	require.ErrorIs(t, client.CloseInput(), closeErr)
+	require.EqualValues(t, 1, writer.calls.Load())
+	require.NoError(t, <-peerDone)
+	select {
+	case <-client.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream client did not finish after a writer close error")
 	}
 	require.NoError(t, client.Err())
 	require.NoError(t, client.Close())
@@ -181,6 +213,57 @@ func TestStreamClientRejectsUnexpectedPeerEOF(t *testing.T) {
 	}
 	require.ErrorIs(t, client.Err(), codex.ErrUnexpectedEOF)
 	require.ErrorIs(t, client.Close(), codex.ErrUnexpectedEOF)
+}
+
+func TestStreamClientRejectsUnterminatedPeerFrame(t *testing.T) {
+	for _, halfClose := range []bool{false, true} {
+		name := "before input half-close"
+		if halfClose {
+			name = "after input half-close"
+		}
+		t.Run(name, func(t *testing.T) {
+			peer := newStreamPeer()
+			peer.transport.Wait = nil
+			handshakeDone := make(chan error, 1)
+			sendFrame := make(chan struct{})
+			peerDone := make(chan error, 1)
+			go func() {
+				if err := serveCodexHandshake(peer); err != nil {
+					handshakeDone <- err
+					return
+				}
+				handshakeDone <- nil
+				<-sendFrame
+				if _, err := io.WriteString(peer.writer, "{\"method\":\"stream/prelude\"}\n{\"method\":\"stream/final\""); err != nil {
+					peerDone <- err
+					return
+				}
+				peerDone <- peer.writer.Close()
+			}()
+
+			client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+				Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+			}, peer.transport)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = client.Close(); _ = peer.reader.Close(); _ = peer.writer.Close() })
+			require.NoError(t, <-handshakeDone)
+			if halfClose {
+				require.NoError(t, client.CloseInput())
+			}
+			close(sendFrame)
+			require.NoError(t, <-peerDone)
+
+			select {
+			case <-client.Done():
+			case <-time.After(5 * time.Second):
+				t.Fatal("unterminated peer frame did not terminate the stream client")
+			}
+			require.ErrorIs(t, client.Err(), codex.ErrProtocol)
+			require.ErrorContains(t, client.Err(), "unterminated frame")
+			require.ErrorIs(t, client.Close(), codex.ErrProtocol)
+			require.Equal(t, uint64(1), client.Diagnostics().Notifications)
+		})
+	}
 }
 
 func TestStreamClientWaitFailureReplacesUnexpectedPeerEOF(t *testing.T) {
@@ -327,6 +410,39 @@ func TestStreamClientHalfCloseInterruptsBlockedWrite(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestStreamClientShortWriteTerminatesWithoutRetry(t *testing.T) {
+	peer := newStreamPeer()
+	writer := &shortWriteCloser{WriteCloser: peer.transport.Writer, attempted: make(chan struct{}, 1)}
+	peer.transport.Writer = writer
+	peerDone := make(chan error, 1)
+	go func() {
+		if err := serveCodexHandshake(peer); err != nil {
+			peerDone <- err
+			return
+		}
+		<-writer.attempted
+		peerDone <- peer.writer.Close()
+	}()
+
+	client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+	}, peer.transport)
+	require.NoError(t, err)
+	peer.wait <- nil
+	writer.short.Store(true)
+
+	err = client.Call(context.Background(), "short-write", nil, nil)
+	callError(t, err, codex.OutcomeUnknown, io.ErrShortWrite)
+	select {
+	case <-client.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("short write did not terminate the stream client")
+	}
+	require.EqualValues(t, 1, writer.calls.Load(), "short write was retried")
+	require.NoError(t, <-peerDone)
+	require.ErrorIs(t, client.Close(), io.ErrShortWrite)
+}
+
 func TestStreamClientCloseIsBoundedWhilePeerWaits(t *testing.T) {
 	peer := newStreamPeer()
 	peerDone := make(chan error, 1)
@@ -412,6 +528,39 @@ func (w *observedWriteCloser) Write(value []byte) (int, error) {
 	default:
 	}
 	return w.WriteCloser.Write(value)
+}
+
+type shortWriteCloser struct {
+	io.WriteCloser
+	short     atomic.Bool
+	calls     atomic.Int32
+	attempted chan struct{}
+}
+
+func (w *shortWriteCloser) Write(value []byte) (int, error) {
+	if !w.short.Load() {
+		return w.WriteCloser.Write(value)
+	}
+	w.calls.Add(1)
+	select {
+	case w.attempted <- struct{}{}:
+	default:
+	}
+	return 0, nil
+}
+
+type closeErrorWriter struct {
+	io.WriteCloser
+	err   error
+	calls atomic.Int32
+}
+
+func (w *closeErrorWriter) Close() error {
+	w.calls.Add(1)
+	if err := w.WriteCloser.Close(); err != nil {
+		return err
+	}
+	return w.err
 }
 
 func TestStreamClientShutdownDeadlineStartsAtHalfClose(t *testing.T) {

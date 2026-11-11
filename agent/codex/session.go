@@ -10,18 +10,18 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
+	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 var (
-	_ agent.Session                    = (*session)(nil)
-	_ agent.Archiver                   = (*session)(nil)
-	_ agent.ModelController            = (*session)(nil)
-	_ agent.EventStream                = (*eventStream)(nil)
-	_ agent.ExecutionOptionsReporter   = (*session)(nil)
-	_ agent.ExecutionOptionsController = (*session)(nil)
+	_ agent.Session          = (*session)(nil)
+	_ agent.Archiver         = (*session)(nil)
+	_ agent.ConfigController = (*session)(nil)
+	_ agent.EventStream      = (*eventStream)(nil)
 )
 
 type session struct {
@@ -30,7 +30,6 @@ type session struct {
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
 
-	executionMu      sync.Mutex
 	mu               sync.Mutex
 	eventsClaimed    bool
 	closed           bool
@@ -46,14 +45,12 @@ type session struct {
 	idleTurn     string
 	lastFinished string
 	state        *agent.SessionState
-	execution    agent.ExecutionOptionsReport
-	// executionObservationSeq prevents an ACK from erasing settings observed
-	// while the native update was in flight.
-	executionObservationSeq uint64
-	interactions            map[agent.InteractionRef]*pendingInteraction
-	requestRefs             map[string]agent.InteractionRef
-	done                    chan struct{}
-	err                     error
+
+	interactions      map[agent.InteractionRef]*pendingInteraction
+	requestRefs       map[string]agent.InteractionRef
+	interactionLedger *interactionledger.Ledger
+	done              chan struct{}
+	err               error
 
 	parentMu sync.RWMutex
 	parents  map[string]string
@@ -71,19 +68,18 @@ func newSession(
 	provider *Core,
 	native *codex.Session,
 	features agent.EffectiveFeatures,
-	execution agent.ExecutionOptionsReport,
 ) *session {
 	created := &session{
-		provider:        provider,
-		native:          native,
-		features:        features,
-		execution:       execution,
-		interactions:    make(map[agent.InteractionRef]*pendingInteraction),
-		requestRefs:     make(map[string]agent.InteractionRef),
-		parents:         make(map[string]string),
-		toolIdentities:  make(map[toolIdentityKey]toolIdentity),
-		done:            make(chan struct{}),
-		observationDone: make(chan struct{}),
+		provider:          provider,
+		native:            native,
+		features:          features,
+		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
+		requestRefs:       make(map[string]agent.InteractionRef),
+		interactionLedger: interactionledger.New("codex-"),
+		parents:           make(map[string]string),
+		toolIdentities:    make(map[toolIdentityKey]toolIdentity),
+		done:              make(chan struct{}),
+		observationDone:   make(chan struct{}),
 	}
 	return created
 }
@@ -103,12 +99,6 @@ func (s *session) Capabilities() agent.Capabilities {
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 	return s.features
-}
-
-func (s *session) EffectiveExecutionOptions() agent.ExecutionOptionsReport {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return cloneExecutionOptionsReport(s.execution)
 }
 
 func (s *session) Events() (agent.EventStream, error) {
@@ -139,7 +129,7 @@ func (s *session) Events() (agent.EventStream, error) {
 func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
-) (agent.InputReceipt, error) {
+) (receipt agent.InputReceipt, err error) {
 	nativeInput, err := textInput(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
@@ -164,6 +154,19 @@ func (s *session) StartOrSteer(
 	submitEpoch := s.workEpoch
 	s.mu.Unlock()
 
+	trace := submissiontrace.Start(ctx, s.provider.tracer)
+	defer func() { trace.End(err) }()
+
+	if ctx != nil {
+		carrier := codex.TraceContext{}
+		if trace.Carrier != nil {
+			carrier.Traceparent = codextypes.Some(trace.Carrier.Traceparent)
+			if trace.Carrier.Tracestate != "" {
+				carrier.Tracestate = codextypes.Some(trace.Carrier.Tracestate)
+			}
+		}
+		ctx = codex.WithTraceContext(ctx, carrier)
+	}
 	submission, submitErr := s.native.Submit(ctx, nativeInput)
 
 	s.mu.Lock()
@@ -348,13 +351,6 @@ func (s *session) Unarchive(ctx context.Context) (agent.ActionReceipt, error) {
 		Sent:           &sent,
 		NativeAccepted: &accepted,
 	}}, nil
-}
-
-func (s *session) SetModel(
-	ctx context.Context,
-	model string,
-) (agent.ConfigurationReceipt, error) {
-	return agent.SetExecutionModel(ctx, model, executionOptionsRuntime{session: s})
 }
 
 func (s *session) Close(context.Context) error {

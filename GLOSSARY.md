@@ -10,18 +10,66 @@
 跨多次输入和执行持续存在的原生交互上下文。一次执行结果是会话内的事实，不是会话本身。
 _Avoid_: 任务、单次执行、Turn（指整个 Session 时）
 
-**Execution options（执行选项）**:
-Session 级、可由多个 provider 共同解释的模型与推理 effort 配置。它们可以在打开、
-恢复或运行时请求修改；请求、被原生接受和实际生效是不同事实。
-_Avoid_: 全部 Session 配置、权限设置、跨 provider 思考预算
+**Session configuration（会话配置）**:
+统一层可在打开、恢复或运行时传递的主 Session 模型与推理 effort。打开和恢复
+使用 `SessionConfig`；运行时使用一个 `ConfigChange`，配置 ID 只有 `model`
+和 `effort`。
+_Avoid_: 全部原生 Session 配置、权限设置、跨 provider 思考预算
 
-**Requested execution value（已接受请求值）**:
-执行选项最近一次获得原生接受回执的调用方字面值。它不表示当前原生状态。
-_Avoid_: 生效值、当前值
+**Process environment（Provider 进程环境）**:
+构造 Provider 时选择的 Codex app-server 或 Claude CLI 基础子进程环境。nil 继承
+当前进程，非 nil 整体替换；Claude 的 Session overlay 另由 `ProcessEnv` 表达。
+_Avoid_: ShellEnv、全部 Session 配置
 
-**Effective execution value（原生生效值）**:
-由原生接口明确给出、当前归属于主 Session 的执行选项值。缺少观察时保持未知。
-_Avoid_: 请求值、由回执推断的值
+**Session process environment（Session 进程环境，`ProcessEnv`）**:
+Claude Session 自有 CLI 进程的 additive、set-only 环境 overlay；以 Provider
+进程环境为基础，在 `Open`/`Resume` 时合成。它影响该 CLI 及其子进程；Codex
+共享 app-server，不支持 Session 级 `ProcessEnv`。
+_Avoid_: ShellEnv、per-prompt env、Codex app-server 环境
+
+**Session shell environment（Session shell 环境，`ShellEnv`）**:
+Session 创建或恢复时声明的 additive、set-only 环境覆盖，只影响 provider 启动的
+shell / unified-exec 类子进程。本合同规定 Codex 支持；Claude 因没有 shell-only
+入口而明确不支持。
+_Avoid_: `ProcessEnv`、Claude settings `env`、任意子进程环境
+
+**Provider-native behavior（Provider 原生行为）**:
+由 Codex/Core 或 Claude CLI 自身定义并执行的行为。SDK 可以映射输入并接收观察
+结果，但不拥有、模拟或保证其 span 创建、turn trace 复用、进程环境继承和并发
+隔离。
+_Avoid_: SDK 合同、adapter 保证、跨 provider 一致语义
+
+**Prompt trace context（Prompt 追踪上下文）**:
+通过 Go `context` 与一次 `StartOrSteer` 关联的 W3C trace carrier。它可作为
+SDK 本地 span 的 parent；宣告 `promptTrace` 的 Session 还把它映射到 provider
+原生提交。SDK 合同包括提取并校验 carrier、映射原生提交入口、创建可选本地
+span，以及 best-effort 写入。Codex 映射到 JSON-RPC request envelope 顶层
+`trace`；Claude 在同一个常驻 CLI 上，于单条 prompt 提交前尽力通过
+`apply_flag_settings.settings.env` 设置 `TRACEPARENT`/`TRACESTATE`，并在下一条
+无 trace prompt 恢复启动环境或清空。失败、超时或 CLI 内部排队造成的 trace
+归属竞态只影响观测，不阻止 prompt。Claude 的该映射只服务于 W3C prompt trace，
+不是通用 per-prompt env API；carrier 不进入 `Input` 或持久状态。它不保证
+trace 进入 shell 或 MCP 子进程，也不保证具体 CLI 版本最终导出正确关联的
+span。原生 Codex 把输入接纳为 steer 时，不创建新的 turn 执行 span，会复用
+原 turn 的 trace；原生 Claude 的 settings env 是进程级状态，写入后当前 turn
+的后续新工具、工具启动的子进程或随后 prompt 都可能读取当前值，已经启动的
+进程不保证更新。这些是明确接受的 Provider 原生行为，不是 SDK 新增或保证的
+语义；SDK 不重定向 provider turn trace，也不提供 prompt/turn 环境隔离。
+ACP v2 在 `session/prompt._meta` 预留同类字段，但只有实现并宣告该能力的
+adapter 才形成 ACP 传播。per-prompt trace 不要求每个 prompt 启动新进程；同一
+CLI 内切换运行时 settings env 也属于 best-effort per-prompt trace。
+_Avoid_: 通用 per-prompt env、整个 turn 的 trace、跨 provider trace 隔离
+
+**SDK trace span（SDK 追踪 span）**:
+可选的 `Tracer` 为一次 `StartOrSteer` 创建的本地操作 span。它覆盖输入接纳和
+原生提交调用，不覆盖 turn 开始、执行完成、审批等待或后续事件；也不表示
+provider 为 steer、工具调用或 turn 创建了新的 span。
+_Avoid_: 执行 span、turn 完成 span、provider 内部 span
+
+**Config acceptance（配置接受回执）**:
+`ConfigReceipt` 记录的派发与原生接受阶段。成功只表示原生接受了控制请求，
+不表示配置当前已生效；统一层不缓存或推断当前配置状态。
+_Avoid_: 生效值、当前值、完整配置快照
 
 **Main conversation（主会话）**:
 本次打开或恢复的原生会话，也是普通输入的默认目标。

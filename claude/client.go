@@ -615,7 +615,9 @@ func (c *interaction) controlRequest(ctx context.Context, subtype string, reques
 	c.pending[id] = waiter
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); delete(c.pending, id); c.mu.Unlock() }()
-	if err := c.writeJSON(ctx, map[string]any{"type": "control_request", "request_id": id, "request": request}); err != nil {
+	if err := c.writeEncodedChecked(ctx, func() ([]byte, error) {
+		return json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": request})
+	}, nil); err != nil {
 		return nil, err
 	}
 	// Prefer an already-arrived response when the peer exits immediately after it.

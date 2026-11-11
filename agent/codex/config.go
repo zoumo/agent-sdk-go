@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 
+	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -12,6 +13,8 @@ import (
 // initialization. The provider owns exactly one connection created from it.
 type Config struct {
 	Stdio codex.StdioOptions
+	// Tracer optionally creates a local span for each admitted StartOrSteer.
+	Tracer agent.Tracer
 }
 
 func cloneStdioOptions(value codex.StdioOptions) codex.StdioOptions {

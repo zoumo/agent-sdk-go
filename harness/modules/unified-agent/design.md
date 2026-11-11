@@ -45,8 +45,10 @@ README 和包文档说明。现有原生 Session 的语义以
 4. MASS 的两个 Runtime adapter 变成薄的编排层：调用 SDK Provider/Session，
    把统一事件补齐为 `SessionEvent`，继续实现现有 `RuntimeDriver`。
 5. 原生 `codex`、`claude`、`codex/types` 和 `claude/types` 仍是第一等公开
-   接口。统一层不修改原生会话、原生查询或原生协议字段；本设计只为 Claude
-   原生配置增加追加 system prompt 字段，不改变原生协议。
+   接口。统一层不重定义原生会话或查询语义；本设计只增加明确列出的原生增量：
+   Claude `AppendSystemPrompt` 和 prompt trace context/settings 映射，以及
+   Codex 的 Session `ShellEnv` 配置映射、trace context helper 和 request
+   envelope 编码。现有原生 wire 字段、默认行为和其他公开 API 不变。
 6. 删除 SDK 中未公开的 history replay 实现、只服务 replay 的测试，以及
    `Event.History` / `HistorySource`。不保留 deprecated 包装，因为该能力没有
    公开启动入口，仓库也未发布稳定兼容面。
@@ -64,6 +66,26 @@ README 和包文档说明。现有原生 Session 的语义以
     创建/恢复的 `developerInstructions`，Claude 通过新增的
     `AppendSystemPrompt` 映射到 `--append-system-prompt`。首版不提供运行时
     热更新，恢复时由调用方重新提供完整文本。
+11. 环境按作用域分离。Provider 子进程环境继续由具体 adapter 的构造配置选择。
+    Claude 每个 Session 自有 CLI 进程，因此 `OpenOptions.ProcessEnv` 可做该进程
+    environment 的 additive overlay；Codex 共享 app-server，非空值明确
+    `unsupported`。`OpenOptions.ShellEnv` 仍只做 Codex shell/unified-exec 的
+    additive set；Claude 没有 shell-only 入口，非空值在进程启动前拒绝。
+12. Prompt trace 通过 Go `context.Context` 传递 W3C carrier，可选 `Tracer` 为
+    每次已接纳的 `StartOrSteer` 创建一个本地提交 span。Codex 把有效 carrier
+    放到 JSON-RPC request envelope 顶层 `trace`。Claude 在同一个常驻 CLI 上，
+    于每条 prompt 写入前通过 `apply_flag_settings.settings.env` 切换
+    `TRACEPARENT`/`TRACESTATE`，下一条无 trace prompt 恢复启动环境或清空；
+    这属于 provider 级 per-prompt trace，不重启 CLI。Trace 是 best-effort：
+    完整 control 后的拒绝、等待超时或排队 prompt 继承后一次 env 不改变健康
+    transport 上的输入结果；control 写入失败或挂起遵循正常 transport 失败合同。
+    SDK 只保证本地 settings/input 写入顺序，不等待 prompt dequeue。ACP v2
+    在 `session/prompt._meta` 的预留字段与当前 ACP adapter 实现仍各自独立。
+    Codex steer 复用原 turn trace、Claude settings env 的进程级扩散属于
+    Provider 原生行为，不是 SDK 新增或保证的语义。
+13. 统一核心不依赖 OpenTelemetry。Trace 值和接口只用标准库；OpenTelemetry
+    由调用方通过 `Tracer` adapter 接入。prompt trace 不是 shell env，不能保证
+    自动进入 Bash 或 MCP 子进程，也不能把 span 生命周期延伸为整个 turn。
 
 这里的取舍是：把“一个 Agent Session 如何操作和观察”收敛到 SDK，把“MASS
 如何命名、恢复、持久和发布一个 Session”留在 MASS。这样普通使用方只处理一套
@@ -73,10 +95,10 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`ExecutionOptionsController`、错误值 | provider 无关的单 Session 实时合同 |
+| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | provider 无关的单 Session 实时合同与环境/trace seam |
 | `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
-| 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Claude 增加 `AppendSystemPrompt` 启动选项 | 原生协议、查询、原始数据和 provider 语义 |
+| 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Codex 增加 `ShellEnv`、trace context helper 和 envelope trace 支持，Claude 增加 `AppendSystemPrompt`、trace context helper 和逐 prompt settings env 切换 | 原生协议、查询、原始数据和 provider 语义 |
 | MASS Runtime | `RuntimeDriver`、`DriverSession`、`SessionEvent`、`LoadSession` | 资源身份、多 Session 汇聚、恢复、历史导入、持久化和发布 |
 | MASS Service | Session、History、EventStore、Broadcast、SSE、HTTP/CLI | 面向 MASS 使用方的业务合同 |
 
@@ -98,19 +120,25 @@ README 和包文档说明。现有原生 Session 的语义以
 统一层负责：
 
 - 同一套 Provider 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
-- 在打开、恢复及运行时更新时传递会话级 `model` 与 `reasoningEffort`，并如实
-  报告原生提供的生效证据。
+- 在打开、恢复及运行时更新时传递会话级 `model` 与 `effort`；运行时回执只
+  区分派发和原生接受，不缓存或推断当前生效状态。
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
 - 在 SDK 适配器内部保留原生工作归属、交互句柄和单次回答权限。
 - 透传由上层合成的最终 external MCP 列表，并明确 provider 字段支持差异。
 - 通过 `AdditionalSystemPrompt` 为 `Open`/`Resume` 传递一段可选的追加 system
   prompt，并明确 provider 映射、安全边界和不持久化语义。
+- 通过具体 adapter 的构造配置选择 Codex app-server 或 Claude CLI 的进程环境。
+- 通过 `OpenOptions.ProcessEnv` 为 Claude Session 自有的 CLI 进程增加 overlay。
+- 通过 `OpenOptions.ShellEnv` 为 Codex 声明 Session 级、只影响 shell /
+  unified-exec 子进程的环境覆盖。
+- 通过 `agent.WithTraceContext` 和可选 `Tracer` 传递每次输入的 W3C trace
+  context，并由 SDK 为一次已接纳的输入提交创建可选 span。
 - 诚实表达能力与功能差异，不在 provider 之间伪造等价。
 
 统一层不负责：
 
-- 修改或替换原生协议、原生 `Received`、原生 Session 或既有原生 `types`
-  字段；Claude 只增加本设计列出的追加 system prompt 启动选项。
+- 重定义或替换原生协议、原生 `Received`、原生 Session 或既有原生 `types`
+  语义；本设计列出的原生增量除外。
 - 除本页定义的模型与 effort 字面值外，统一其他创建参数、模型别名、思考预算
   和子 Agent 查询。
 - 统一 `sandbox`、`approvalPolicy`、`permissionsProfile` 或其他原生安全、
@@ -127,6 +155,18 @@ README 和包文档说明。现有原生 Session 的语义以
   Session 运行中热更新 system prompt。
 - MCP 连接、OAuth、健康检查、tool discovery、tool 调用或
   application-hosted MCP 的 JSON-RPC 实现。
+- 在同一 Codex Provider/app-server 内为不同 Session 选择不同进程环境；需要
+  不同 app-server 进程环境时使用不同 Provider。
+- 把 Claude 的 CLI 进程环境映射为 `ShellEnv`，或把 Claude settings `env`、
+  `OpenOptions.ProcessEnv` 的进程级语义描述成 shell-only。
+- 提供 `Input.Env`、`Input.ProcessEnv` 或等价的 per-prompt 环境变量注入。
+- 把 prompt trace 泛化为任意环境变量注入、向 MCP 子进程注入，或保证 Bash
+  子进程继承 prompt trace。Claude 内部的 `TRACEPARENT`/`TRACESTATE` settings
+  env 只是 W3C trace 的 provider 映射，不建立通用 per-prompt env 能力。
+- 把 ACP v2 的 `session/prompt._meta` 预留字段当作当前 Claude ACP adapter
+  已实现的能力，或保证特定 Claude CLI 版本一定导出正确关联的 provider span。
+- 在 SDK 核心引入 OpenTelemetry API/SDK、生成伪造的 span ID，或让 SDK span
+  覆盖整个 turn 执行。
 
 ## 分层与依赖
 
@@ -136,7 +176,13 @@ codex/types <-- codex          claude/types <-- claude
                    |                              |
              agent/codex                    agent/claude
                    \                              /
-                    +--> agent/internal/lifecycle <--+
+                    +-------------+--------------+
+                                  |
+             +--------------------+--------------------+
+             |                                         |
+agent/internal/lifecycle         agent/internal/interactionledger
+             |                                         |
+             +--------------------+--------------------+
                                   |
                                 agent
                              ^
@@ -150,9 +196,10 @@ codex/types <-- codex          claude/types <-- claude
 目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图只
 说明本设计的调用方向：统一 `agent` 是上层实时合同，原生 SDK 不反向依赖它；
 两个 adapter 只适配各自 provider，并共同使用 `agent/internal/lifecycle` 持有
-Provider 生命周期状态；该模块只依赖标准库和公开 `agent` 合同，不导入原生 SDK。
-Provider 的原生资源与 Session 仍由各 adapter 拥有。MASS Runtime adapter 可以
-消费统一层，而 MASS Service、Store 和 transport 仍只依赖 MASS 自己的合同。
+Provider 生命周期状态、使用 `agent/internal/interactionledger` 保存统一回答
+准入状态；这些模块不导入原生 SDK。Provider 的原生资源、Session 和回答句柄仍
+由各 adapter 拥有。MASS Runtime adapter 可以消费统一层，而 MASS Service、Store
+和 transport 仍只依赖 MASS 自己的合同。
 MASS 的配置、资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
 
 ## 为什么不整体搬迁 MASS Runtime
@@ -190,9 +237,19 @@ agent/codex.New(Config)   -> *agentcodex.Provider, implements agent.Provider
 agent/claude.New(Config)  -> *agentclaude.Provider, implements agent.Provider
 ```
 
-`Config` 由具体 adapter 定义，可承载可执行文件、环境、初始化参数和原生连接
-选项。MASS 负责把 RuntimeConfig 解析成这些显式值，包括 Runtime MCP 默认项、
-Session 覆盖、secret 引用解析和环境继承策略；SDK 不解析 MASS 配置。
+`Config` 由具体 adapter 定义，可承载可执行文件、进程环境、初始化参数、原生
+连接选项和可选的 `agent.Tracer`。MASS 负责把 RuntimeConfig 解析成这些显式值，
+包括 Runtime MCP 默认项、Session 覆盖、secret 引用解析和环境继承策略；SDK
+不解析 MASS 配置。
+
+`agent/codex.Config` 和 `agent/claude.Config` 都增加：
+
+```go
+Tracer agent.Tracer
+```
+
+Tracer 在 Provider 构造时固定，不进入 `OpenOptions`。实现必须可并发调用、
+非阻塞且不 panic；SDK 不为 tracer 配置全局 exporter，也不等待异步导出。
 
 ### Provider 接口
 
@@ -225,18 +282,26 @@ Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Se
 adapter 在原生副作用前校验，不由共享接口伪造默认值：
 
 ```go
-type ExecutionOptions struct {
-    Model           string
-    ReasoningEffort string
+type SessionConfig struct {
+    Model  string
+    Effort string
 }
 
 type OpenOptions struct {
     Cwd                    string
     AdditionalSystemPrompt string
     AdditionalDirs         []string
+    // ProcessEnv is an additive, set-only overlay for a Session-owned CLI
+    // process. Claude supports it; Codex rejects non-empty values because its
+    // app-server is shared by all Sessions.
+    ProcessEnv             map[string]string
+    // ShellEnv applies only to provider-launched shell/unified-exec
+    // subprocesses. It is additive set-only configuration, not the provider
+    // process environment. Claude rejects non-empty values.
+    ShellEnv               map[string]string
     Features               Features
     MCPServers             []MCPServer
-    Execution      ExecutionOptions
+    Config                 SessionConfig
 }
 
 type ResumeOptions struct {
@@ -266,6 +331,11 @@ type EffectiveFeatures struct {
   `Event`、当前工作状态或回答权限。
 - `AdditionalSystemPrompt` 按下述追加合同解释；其他已知不支持或无法解释的
   字段，在原生副作用前明确拒绝。
+- `ProcessEnv` 按[环境配置](#environment-configuration)解释；只有 Session
+  自有 CLI 进程的 provider 可以接受非空值，其他 provider 必须返回
+  `unsupported`，不能映射到 app-server 或 shell 环境。
+- `ShellEnv` 按[环境配置](#environment-configuration)解释；provider 不支持
+  非空值时必须返回 `unsupported`，不能静默忽略或映射到更宽的作用域。
 - 请求关闭某项功能必须得到 false；请求开启但 adapter 不支持时，允许降级为
   false，并通过 `Session.EffectiveFeatures()` 返回。
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
@@ -357,15 +427,151 @@ Claude 进程或发送原生请求。直接使用原生 `claude.Options` 时，�
 provider 不能表达该字段，必须在原生副作用前返回 `unsupported`，不能静默忽略或
 伪造已应用。
 
+### 环境配置
+
+<a id="environment-configuration"></a>
+
+环境有四个不同作用域，不能用一个 `Env` 字段混合表达：
+
+| 作用域 | 配置位置 | 影响范围 | 生命周期 |
+|---|---|---|---|
+| Provider 进程环境 | `agent/codex.Config.Stdio.Env`、`agent/claude.Config.Env` | Codex app-server；Claude Session CLI 的基础环境 | Provider 构造时固定；nil 继承在进程启动时解析 |
+| Session 进程环境 | `OpenOptions.ProcessEnv` | Claude Session 自有 CLI 进程及其子进程 | `Open`/`Resume` 时固定 |
+| Session shell 环境 | `OpenOptions.ShellEnv` | 仅 provider 启动的 shell / unified-exec 类子进程 | `Open`/`Resume` 时固定 |
+| Prompt trace | `agent.WithTraceContext` 与 `Tracer` | SDK 将 carrier 映射到 Codex JSON-RPC request envelope 或 Claude settings `env`，并可创建本地提交 span | carrier 属于一次 `StartOrSteer`；SDK 逐次映射，不拥有 provider span/trace 生命周期 |
+
+本设计不提供 `Input.Env` 或等价的 per-prompt 环境变量注入。Codex 没有稳定的
+per-turn shell env 字段，Claude 的 user message/control request 也没有
+通用 per-prompt env 入口；Claude 的 trace-only settings env 映射不能被扩展成
+任意环境变量 API。trace carrier 不能用于补造该能力。
+
+#### Provider 进程环境
+
+进程环境不是新 Session API。Codex 使用现有 `StdioOptions.Env`（统一层为
+`agent/codex.Config.Stdio.Env`），Claude 使用现有 `Options.Env` /
+`SessionOptions.Env`（统一层为 `agent/claude.Config.Env`）。两者对真正启动的
+CLI 进程保持 Go `os/exec` 语义：nil 继承当前进程环境，非 nil 的完整 slice
+替换子进程环境。只追加变量时，调用方应显式以 `os.Environ()` 为基底构造完整
+环境；SDK 不隐式合并调用方 map。process-free 的 `StreamOptions.Env` /
+`OpenStreams` 只保存协议快照，不启动或修改任何子进程环境，不能用于 env 注入。
+
+Codex Provider 只有一个 app-server 进程，所有 Session 共享该进程环境。
+不同 Codex thread 需要不同 `ShellEnv` 时仍可共享一个 Provider；不同
+app-server 进程环境或隔离的 `CODEX_HOME` 必须使用不同 Provider。
+
+Claude 的 `agent/claude.Config.Env` 是 Provider 提供的默认完整环境，不是每个
+Session 的最终值。Claude 每个 Session 自有 CLI 进程，所以
+`OpenOptions.ProcessEnv` 可以只覆盖该 Session 的进程环境；不同 Session 可以
+使用不同 overlay，而不为每个 Session 重建 Provider。
+
+进程环境可能含认证秘密，统一错误、事件、Meta、日志和诊断不得包含其值。
+SDK 不解析 secret 引用、不读取 dotenv，也不改写调用方 slice。
+
+#### Session `ProcessEnv`
+
+`OpenOptions.ProcessEnv` 只表示 Session 所拥有 CLI 进程的 additive、set-only
+overlay：
+
+```go
+type OpenOptions struct {
+    // ...
+    ProcessEnv map[string]string
+}
+```
+
+- nil 或空 map 不改变 Provider 的进程环境配置，也不触发环境合成。
+- 非空 map 只增加或覆盖所列变量；不提供删除、空值即 unset 或恢复 ambient
+  变量的语义。空字符串是合法 value，表示把变量设置为空值。
+- Claude adapter 在 `Open`/`Resume` 中生成该 Session 的完整原生
+  `SessionOptions.Env`。合成规则是：
+
+1. `agent/claude.Config.Env` 非 nil 时复制它作为基底；包括非 nil 空 slice。
+2. `Config.Env` 为 nil 时调用一次 `os.Environ()` 并复制结果作为基底。
+3. 按排序后的 key 将 `ProcessEnv` 追加到基底，因此同名 overlay 值在该原生
+   进程环境中覆盖基底值；其他基底项及其顺序不变。
+
+合成后的环境同时用于版本查询、Claude 配置范围发现和 Session 进程启动，不得
+在一次 `Open`/`Resume` 内从不同环境快照读取。恢复身份仍由显式 `ConfigDir`
+固定，不从有效环境推断；调用方应让原生 `CLAUDE_CONFIG_DIR` 与该值指向同一
+配置树。
+- 调用时复制并校验。key 必须非空、合法 UTF-8、不含 NUL 或 `=`；value 必须
+  合法 UTF-8 且不含 NUL。key 还必须按 ASCII 大小写不敏感方式唯一，避免
+  Windows 环境语义下互相覆盖；错误只包含 key 或字段名，不包含 value。
+- 校验、冲突报告和追加顺序按排序后的 key 处理。非法值在版本查询、隔离检查、
+  原生进程启动或 RPC 前返回 `invalid_argument`。
+- `ProcessEnv` 不是 secret store。值会进入 Claude CLI 进程环境并可影响认证、
+  配置、MCP、hook 及其启动的更多子进程；SDK 错误、事件和日志不包含 value，
+  但不能阻止 provider 自身诊断或日志可见该值。
+- Codex app-server 由同一 Provider 的所有 Session 共享，没有 Session 级自有
+  CLI 进程。Codex `Open`/`Resume` 收到非空 `ProcessEnv` 时，必须在本次调用
+  产生原生副作用前返回 `unsupported`；若 Provider 尚未启动，这包括
+  app-server 进程启动前。不能改写到 `shell_environment_policy` 或 app-server
+  所在进程。
+
+支持该合同的 Claude Session 宣告 `processEnv` capability；Codex 不宣告。
+capability 说明 adapter 接受该 Session 的进程环境 overlay，不说明 provider
+自身的 settings `env`、认证逻辑或其他配置不会进一步改变最终行为。
+
+#### Session `ShellEnv`
+
+`OpenOptions.ShellEnv` 只接受 additive set 语义：
+
+```go
+type OpenOptions struct {
+    // ...
+    ShellEnv map[string]string
+}
+```
+
+- nil 或空 map 不生成原生配置，不改变现有行为。
+- 非空 map 只增加或覆盖所列变量；不提供删除、空值即 unset 或恢复 ambient
+  变量的语义。
+- 空字符串是合法 value，表示把变量设置为空值，不表示删除；删除不受支持。
+- 调用时复制并校验。key 必须非空、合法 UTF-8、不含 NUL 或 `=`；value 必须
+  合法 UTF-8 且不含 NUL。key 还必须按 ASCII 大小写不敏感方式唯一，避免
+  Windows 环境语义下互相覆盖；错误只包含 key 或字段名，不包含 value。
+- 校验和冲突报告按排序后的 key 遍历，保证同一 map 的错误选择与消息稳定。
+- `ShellEnv` 不是 secret store。值会进入 native thread config 并由 provider
+  处理；SDK 的错误、事件和日志不包含 value，但不能阻止 provider 自身的配置
+  诊断或日志可见该值。
+- Codex adapter 在创建或恢复的 raw config 中生成一个扁平 dotted path：
+
+  ```json
+  {"shell_environment_policy.set": {"FOO": "bar"}}
+  ```
+
+  它与调用方 raw config 的精确、祖先或后代路径冲突时，在
+  `thread/start`/`thread/resume` 前返回 `invalid_argument`。调用方仍可用不
+  相冲突的 `inherit`、`exclude`、`include_only` 等 policy 字段。
+- Codex 的 `populate_env` 在应用 `set` 后还会应用 ambient `include_only`，
+  并覆盖或清理保留变量。SDK 不读取或改写这些 policy 字段，因此 `ShellEnv`
+  不是“最终环境必含”保证。Codex 身份/控制变量不得由该字段设置；SDK 拒绝的
+  保留名称是固定版本与已知后续版本的并集，精确列表和 native merge 规则见
+  [Codex 会话配置](../native-session/design.md#interface-codex-会话配置)。
+- Codex 的该策略只影响它启动的 shell / unified-exec 类子进程，不修改
+  app-server 自身环境，也不保证 MCP server、hook 或其他任意子进程继承。
+- `ShellEnv` 只在 `Open`/`Resume` 时生效。Codex 已加载或运行中的 thread 可能
+  忽略 `thread/resume.config` override，且没有 per-turn shell env 更新入口；
+  SDK 不重启 thread、不伪造热更新成功。
+- Claude 没有稳定的 shell-only 环境入口。settings `env`、Provider
+  `Config.Env` 与 Session `ProcessEnv` 都会进入 Claude CLI 进程环境并可影响
+  更多子进程，不能冒充 `ShellEnv`。因此 Claude `Open`/`Resume` 收到非空
+  `ShellEnv` 时，必须在进程启动前返回 `unsupported`。
+
+支持该合同的 Codex Session 宣告 `shellEnv` capability；Claude 不宣告。
+capability 只说明输入被按 shell-only 语义解释，不说明某个变量最终可见于每条
+命令。
+
 <a id="claude-resume-identity"></a>
 
 ### Claude 恢复身份
 
 Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Provider 使用与 Session
-相同的 `CLIPath` 和 `Env` 执行无会话副作用的版本查询；版本不能确认时，
-`Resume` 在启动 Session 进程前失败关闭。不能从 `SessionStart` lifecycle frame
-或 init 是否出现推断 CLI 版本。新建 `Open` 不使用恢复探针或该版本门禁，仍只以
-non-replay 的 live `system/init` 确认身份。
+相同的 `CLIPath` 和由 `Config.Env` 与本次 `ProcessEnv` 合成的有效进程环境，
+执行无会话副作用的版本查询；版本不能确认时，`Resume` 在启动 Session 进程前
+失败关闭。不能从 `SessionStart` lifecycle frame 或 init 是否出现推断 CLI
+版本。新建 `Open` 不使用恢复探针或该版本门禁，仍只以 non-replay 的 live
+`system/init` 确认身份。
 
 Claude Provider 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
 复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生 hook 名称、matcher
@@ -524,7 +730,7 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 
 ### 会话级模型与 effort
 
-`ExecutionOptions` 的全部字段只有 `Model` 和 `ReasoningEffort`。两者都使用
+`SessionConfig` 的全部字段只有 `Model` 和 `Effort`。两者都使用
 provider 原生字面值，不在统一层定义模型别名、模型目录或 effort 枚举。
 
 #### 启动与恢复
@@ -546,71 +752,34 @@ provider 原生字面值，不在统一层定义模型别名、模型目录或 e
 恢复。若以后某个 provider 不能接受恢复覆盖，它必须在副作用前拒绝，不能悄悄
 沿用旧值或忽略请求。
 
-#### 报告
-
-成功建立 Session 的适配器通过可选接口报告当前已知的请求值和原生生效证据：
-
-```go
-type ExecutionValue struct {
-    // Requested 是最近一次获得原生接受回执的调用方字面值；空字符串表示
-    // 未请求或没有已知的已接受请求。它不是当前生效值的断言。
-    Requested string
-
-    // Effective 只在原生接口明确给出当前状态时设置。nil 表示未知或未观察，
-    // 不表示空字符串，也不能由请求值、回执或调用成功推断。
-    Effective *string
-}
-
-type ExecutionOptionsReport struct {
-    Model           ExecutionValue
-    ReasoningEffort ExecutionValue
-}
-
-type ExecutionOptionsReporter interface {
-    // EffectiveExecutionOptions 返回本 Session 当前已知的完整执行选项状态。
-    // 它不启动原生工作，可在 Session 打开期间并发调用。
-    EffectiveExecutionOptions() ExecutionOptionsReport
-}
-```
-
-报告只能选择性地实现，基础 `Session` 不增加方法。`Requested` 与
-`Effective` 必须分开保存：原生返回规范化后的值或不同值时，两边的值都原样
-保留，不能把请求值改写成观察值。未请求但原生返回默认值时，可以只填写
-`Effective`。成功回执只能推进 `Requested`；`Effective` 必须来自原生明确状态。
-运行时更新成功后，报告必须立即反映已知的新请求，不能继续返回启动快照。
-
 #### 运行时更新
 
 支持运行时更新的 Session 实现以下可选接口：
 
 ```go
-type ExecutionOption string
+type ConfigID string
 
 const (
-    ExecutionOptionModel           ExecutionOption = "model"
-    ExecutionOptionReasoningEffort ExecutionOption = "reasoningEffort"
+    ConfigModel  ConfigID = "model"
+    ConfigEffort ConfigID = "effort"
 )
 
-type ExecutionOptionChange struct {
-    Option ExecutionOption
-    Value  string
+type ConfigChange struct {
+    ID    ConfigID
+    Value string
 }
 
-type ExecutionOptionsReceipt struct {
-    Change     ExecutionOptionChange
+type ConfigReceipt struct {
+    Change     ConfigChange
     Acceptance Acceptance
-    Report     ExecutionOptionsReport
 }
 
-type ExecutionOptionsController interface {
-    ExecutionOptionsReporter
-
-    // SetExecutionOption 请求修改一个主 Session 执行选项。
-    // 成功回执中的 Report 是本次更新后的完整已知状态。
-    SetExecutionOption(
+type ConfigController interface {
+    // SetConfig 请求修改一个主 Session 配置值。
+    SetConfig(
         ctx context.Context,
-        change ExecutionOptionChange,
-    ) (ExecutionOptionsReceipt, error)
+        change ConfigChange,
+    ) (ConfigReceipt, error)
 }
 ```
 
@@ -618,63 +787,55 @@ type ExecutionOptionsController interface {
 目录、布尔选项或 provider 自定义配置项。常量值是统一层 ID，不是任一
 provider 的原生 config ID；adapter 负责映射到对应原生字段。
 
-- 只接受本节定义的两个 `ExecutionOption`。未知选项和空 `Value` 在原生写入前返回
-  `invalid_argument`；运行时空字符串不是“省略”或“恢复默认”。
+- 只接受本节定义的两个 `ConfigID`。未知 ID、空 ID、空 `Value` 和无法编码的值
+  在原生写入前返回 `invalid_argument`；运行时空字符串不是“省略”或“恢复默认”。
 - 不定义跨 provider 的 `"default"`、清空或别名语义。任何非空值都按原生字面值
   传递；provider 是否接受由原生接口决定，不得由适配器自行替换成默认值。
-- 每次只修改一个字段，不提供“模型与 effort 同时原子更新”的请求。成功后返回
-  两项的完整报告，因为修改模型可能改变、限制或删除 effort 的有效值。
-- 同一 Session 的更新串行进入原生接口；不合并请求，不与 `Submit`、`Interrupt`
-  或 `Close` 共享隐式调度。调用方需要顺序时必须顺序调用。
+- 已知但该 Session 不可用的 provider 能力在原生写入前返回 `unsupported`。
+- 每次只修改一个字段，不提供“模型与 effort 同时原子更新”的请求。统一层
+  不定义多个并发 `SetConfig` 的全局顺序；调用方需要顺序时必须自行串行调用。
+- 适配器不合并请求，也不与 `StartOrSteer`、`Interrupt` 或 `Close` 建立隐式
+  调度。
 - 更新只承诺影响后续 turn。若当前仍有执行，是否立即影响该执行由原生行为
   决定；适配器不等待 idle、不中断、不 steer、不重建进程，也不自动重试。
 - 成功回执的 `Acceptance.NativeAccepted` 只表示原生接受了控制请求。
-  `Report` 中的 `Effective` 仍只能来自原生观察，不能由回执、请求值或后续文本
-  推断。原生拒绝返回 `native_rejected`；派发结果未知返回 `outcome_unknown`。
-- 原生写入前失败的调用不改变报告；原生拒绝不推进 `Requested`；结果未知时，
-  回执可以保留已观察的 acceptance 和错误后的已知报告，调用方必须按错误处理，
-  不能把旧报告当成排他状态。
-- 成功的模型更新在缺少同次原生完整状态时，必须把 `Model.Effective` 和
-  `ReasoningEffort.Effective` 清为未知，同时保留此前的
-  `ReasoningEffort.Requested` 作为最近接受请求；旧 effort 可能已不再适用，
-  不能继续作为当前值报告。模型更新结果未知时同样清除两项的 `Effective`；
-  后续原生完整状态可以同时更新两项。
-- 成功的 effort 更新在缺少原生观察时清空 `ReasoningEffort.Effective`，但不
-  改写无关的模型状态。原生拒绝不推进 `Requested`；结果未知时必须清除可能已
-  变化的 `Effective`。
+  统一层不缓存当前配置，也不从回执、请求值、后续 turn 文本或耗时推断配置
+  是否生效。原生拒绝返回 `native_rejected`；派发结果未知返回
+  `outcome_unknown`。
+- 原生写入前失败时 `Sent` 为 false；原生拒绝时 `Sent` 为 true 且
+  `NativeAccepted` 为 false；结果未知时 `Sent` 为 true 且 `NativeAccepted`
+  保持 nil。调用方必须按错误分类处理，不能把失败或未知结果当成已生效。
 - 重复设置同一值不是幂等成功证明，也不保证产生可观察的变更。适配器不因本地
-  相等判断跳过原生更新，不用后续 turn 的文本自报或耗时反推配置生效。
+  相等判断跳过原生更新。
 
 运行时更新不自动作用于子 Agent，也不把成功回执转换成统一的“已生效”事件。
-本版不新增配置更新事件，`SetExecutionOption` 的结果只通过 receipt 和 reporter
-交付。provider 的后续原生状态通知可以更新 `ExecutionOptionsReporter` 的内部
-观察值；尚未映射为既有统一事件的原生通知继续按未知/gap 规则处理，不能把通知
-当成同步 ack。
+本版不新增配置更新事件，`SetConfig` 的结果只通过 `ConfigReceipt` 交付。
+`EventSessionConfigOptionUpdate` 保持既有 ACP-shaped 合同；当前 provider 不能
+提供完整 option catalog，因此 adapter 不合成完整快照。`thread/settings/updated`
+等原生通知无法形成完整 catalog 时继续按既有 `config_options_unsupported` gap
+交付。
 
 #### Provider 映射
 
 provider 映射如下：
 
-| 选项 | Codex `Open` / `Resume` | Codex 运行时 | Claude `Open` / `Resume` | Claude 运行时 |
+| 配置 ID | Codex `Open` / `Resume` | Codex 运行时 | Claude `Open` / `Resume` | Claude 运行时 |
 |---|---|---|---|---|
-| `Model` | 顶层 `model` 参数；从启动/恢复响应的顶层 `model` 取得生效值 | `thread/settings/update` 的 `model`；后续 `thread/settings/updated` 可提供观察值 | 原生 `--model=<value>`；从 init 的 `model` 取得生效值 | 原生 `set_model` control request |
-| `ReasoningEffort` | 配置键 `model_reasoning_effort`；从启动/恢复响应的顶层 `reasoningEffort` 取得生效值 | `thread/settings/update` 的 `effort`；后续 `thread/settings/updated` 可提供观察值 | 原生 `--effort=<value>`；init 不提供 effort，生效值保持未知 | 原生 `apply_flag_settings` 的 `effortLevel` |
+| `model` | `SessionConfig.Model` 映射到顶层 `model` 参数 | 原生 `SetModel` 映射到 `thread/settings/update` 的 `model` | `SessionConfig.Model` 映射到 `--model=<value>` | 原生 `SetModel` 映射到 `set_model` control request |
+| `effort` | `SessionConfig.Effort` 映射到配置键 `model_reasoning_effort` | 原生 `SetThinking` 映射到 `thread/settings/update` 的 `effort` | `SessionConfig.Effort` 映射到 `--effort=<value>` | 原生 `SetEffort` 映射到 `get_settings` 预检后的 `apply_flag_settings.effortLevel` |
 
 Codex 恢复继续显式使用 `excludeTurns: true`，配置传递不得改变恢复身份或把
 保存历史转换成 live 事件。Claude 恢复仍按原生 init 核对 Session ID 和 cwd；
-`--effort` 没有对应读取字段时，只能报告请求值，不能声称已生效。
+统一层不从恢复响应或 init 保存当前配置状态。
 
 Codex 的运行时 thread settings 需要 experimental API；初始化时未启用该能力，
-必须在写入前返回 `unsupported`。`thread/settings/update` 的接受回执不是当前
-turn 已切换的证据；只有 `thread/settings/updated` 中属于本主 Session 的明确
-字段才是原生观察值。
+必须在写入前返回 `unsupported`。`thread/settings/update` 的接受回执不是配置
+已生效的证据。
 
 Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 `apply_flag_settings` control request 实现，不能映射到
-`set_max_thinking_tokens`，也不能通过重启进程应用。Claude 的模型与 effort
-control ack 没有可靠的同次完整状态；成功更新后保持 `Effective` 未知，直到
-原生另行给出可归属的观察。模型更新可能使 effort 被删除或收紧，即使更新调用
-成功，也不得保留旧的 effort 生效值。
+`set_max_thinking_tokens`，也不能通过重启进程应用。模型与 effort control ack
+只表示原生接受，不建立当前配置快照。
 
 `apply_flag_settings` 会合并 flag layer。Claude 在改变 `effortLevel` 时还会
 依据当前 `ultracode` 值保持或关闭该设置；原生 `SetEffort` 必须保留不相关且
@@ -684,9 +845,9 @@ control ack 没有可靠的同次完整状态；成功更新后保持 `Effective
 #### 不支持的共享配置
 
 本版明确不支持 `sandbox`、`approvalPolicy` 和 `permissionsProfile`：
-它们既不加入 `ExecutionOptions`，也不加入 `ExecutionOption`。统一 adapter
-不做同名映射，也不依据模型或 effort 推导其值。调用方需要这些原生能力时使用
-对应原生 SDK，不能把它们塞入共享执行选项。
+它们既不加入 `SessionConfig`，也不加入 `ConfigID`。统一 adapter 不做同名
+映射，也不依据模型或 effort 推导其值。调用方需要这些原生能力时使用对应原生
+SDK，不能把它们塞入统一会话配置。
 
 ### 能力与功能
 
@@ -702,6 +863,9 @@ const (
     CapabilityPermission         = "permission"
     CapabilityForm               = "form"
     CapabilityURL                = "url"
+    CapabilityProcessEnv         = "processEnv"
+    CapabilityShellEnv           = "shellEnv"
+    CapabilityPromptTrace        = "promptTrace"
 )
 ```
 
@@ -712,8 +876,25 @@ const (
   推断。
 - `AdditionalSystemPrompt` 是 `Open`/`Resume` 输入，不是运行时能力或 feature；
   它不进入 `Capabilities`，也不能通过 `EffectiveFeatures` 表达。
-- 当前两个 provider 首版只宣告 `textInput`、`permission` 和 `form`；没有
-  经 adapter 证明的图片、音频、资源、URL 或其他能力不宣告。
+- `processEnv` 表示非空 `OpenOptions.ProcessEnv` 能被该 Session 解释为自有
+  CLI 进程环境的 additive overlay；`shellEnv` 表示非空 `ShellEnv` 能被按
+  shell-only 语义解释。两者不互相蕴含，也不表示 MCP、hook 或其他任意子进程
+  必然继承。
+- `promptTrace` 表示来自 context 的有效 carrier 或 tracer-created child
+  carrier 会被尝试送入 provider native 提交路径。传播是 best-effort：
+  carrier 无效、Claude 完整 control 后的拒绝或等待超时、并发覆盖只影响 trace
+  归属，不改变健康 transport 上的输入接纳与业务错误；实际 transport 写入失败
+  或挂起遵循正常失败和取消合同。它不表示本地 span 存在；配置了 `Tracer` 的 Session 总
+  可使用同一 context 创建本地 span，即使 `promptTrace` 为 false。该能力为
+  false 时 context carrier 不返回 `unsupported`，只是不进入 provider request。
+  它也不保证每次调用产生新的 provider span，或隔离 provider turn、进程环境
+  和后续工具；这些 provider 差异以 [Prompt trace](#prompt-trace) 为准。
+- 三个新常量必须加入 `Capabilities.Supports` 的已知能力集合；仅把 map 值设为
+  true 不足以让调用方观察到支持。
+- 两个 provider 的输入与交互基础面仍是 `textInput`、`permission` 和
+  `form`；Codex 额外宣告 `shellEnv`，Claude 额外宣告 `processEnv`，两者都
+  宣告 `promptTrace`。Codex 不宣告 `processEnv`，Claude 不宣告 `shellEnv`。
+  没有经 adapter 证明的图片、音频、资源、URL 或其他能力不宣告。
 
 ## Session
 
@@ -863,23 +1044,27 @@ type Input struct {
     Content []ContentBlock
 }
 
-type ContentBlock interface {
-    contentBlock()
+type ContentBlock struct {
+    Text         *ContentBlockText
+    Image        *ContentBlockImage
+    Audio        *ContentBlockAudio
+    ResourceLink *ContentBlockResourceLink
+    Resource     *ContentBlockResource
 }
 
-type TextBlock struct {
+type ContentBlockText struct {
     Text        string
     Annotations *Annotations
 }
 
-type ImageBlock struct {
+type ContentBlockImage struct {
     Data        string
     MIMEType    string
     URI         *string
     Annotations *Annotations
 }
 
-type AudioBlock struct {
+type ContentBlockAudio struct {
     Data        string
     MIMEType    string
     Annotations *Annotations
@@ -892,12 +1077,12 @@ type EmbeddedResource struct {
     Blob     *string
 }
 
-type ResourceBlock struct {
+type ContentBlockResource struct {
     Resource    EmbeddedResource
     Annotations *Annotations
 }
 
-type ResourceLinkBlock struct {
+type ContentBlockResourceLink struct {
     URI         string
     Name        string
     MIMEType    *string
@@ -914,13 +1099,280 @@ type Annotations struct {
 }
 ```
 
-内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。数组顺序
+内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。
+`ContentBlock` 的五个指针分支必须且只能有一个非 nil；JSON 继续使用原有 `type`
+判别字段和对应分支字段。数组顺序
 是内容顺序；`image`、`audio` 的 `Data` 和资源的 `Blob` 是不带 data URI 前缀的
 Base64 原文。`resource` 必须且只能在 `Text`、`Blob` 中提供一种正文。
 
 `Input.Content` 不能为空。调用时会复制并校验内容；已知不支持的类型在原生写入
 前拒绝，不能静默删块、改写为文本或把限制交给下游猜测。当前 MASS 迁移首版
 沿用两个 Runtime 的文本输入能力，因此 adapter 只宣告 `textInput`。
+
+## Prompt trace
+
+<a id="prompt-trace"></a>
+
+Prompt trace 是单次输入调用元数据，不是环境变量，也不是 Session 持久状态。
+它通过 `context.Context` 与 `StartOrSteer` 关联；统一层只使用 W3C Trace
+Context 原文，不解析 trace 后重建 ID，不依赖某个 OpenTelemetry SDK。
+
+SDK 合同与 Provider 原生行为分开：SDK 只提取并校验 carrier、创建可选本地
+span、把它映射到原生提交入口，并保持 best-effort。provider 是否创建 span、
+steer 是否复用原 turn trace、settings env 是否被后续工具或排队 prompt 读取，
+都由 Codex/Core 或 Claude CLI 决定；这些差异被接受，但不是 SDK 新增或保证的
+语义。
+
+```go
+package agent
+
+import "context"
+
+type TraceContext struct {
+    // Traceparent is the W3C traceparent value.
+    Traceparent string
+    // Tracestate is forwarded only together with a valid Traceparent.
+    Tracestate string
+}
+
+// Validate checks the W3C carrier without changing it.
+func (TraceContext) Validate() error
+
+// WithTraceContext attaches the per-call W3C parent. Repeated calls keep the
+// most recent value. The carrier is never encoded into Input or unified events.
+func WithTraceContext(ctx context.Context, trace TraceContext) context.Context
+
+// TraceContextFromContext returns the stored value and whether it is present;
+// a true result does not imply that the carrier is valid.
+func TraceContextFromContext(ctx context.Context) (TraceContext, bool)
+
+// Tracer creates one SDK-side span for an admitted StartOrSteer. It must be
+// safe for concurrent use and non-blocking. A panic is isolated as a telemetry
+// failure. Implementations outside this repository adapt OpenTelemetry or
+// another tracing system. Returning nil means no span is available. All SDK
+// tracing and provider propagation is best-effort.
+type Tracer interface {
+    StartSpan(
+        ctx context.Context,
+        name string,
+        parent *TraceContext,
+    ) Span
+}
+
+type Span interface {
+    // TraceContext returns the span's W3C carrier. A zero or invalid value
+    // means the SDK cannot propagate this span to a provider.
+    TraceContext() TraceContext
+    // End is called exactly once for every non-nil span before StartOrSteer
+    // returns. Its panic is isolated as a telemetry failure.
+    End(err error)
+}
+
+const SpanStartOrSteer = "agent.start_or_steer"
+```
+
+`OpenOptions` 不增加 tracer。具体 adapter 的 `Config` 增加可选
+`Tracer agent.Tracer`；Provider 构造时固定，调用方可实现按租户路由的 tracer，
+但该路由不进入统一 Session 合同。
+
+`Tracer.StartSpan` 同时收到调用 context 和可选的 W3C parent。`parent` 非 nil
+时，实现必须把它作为新建 span 的父级；nil 时才可从 `ctx` 读取自己的 active
+span。`ctx` 仍用于 tracer 自己的取消、采样和导出编排。
+
+调用方在每次提交前设置 context carrier：
+
+```go
+ctx = agent.WithTraceContext(ctx, traceCtx)
+receipt, err := session.StartOrSteer(ctx, input)
+```
+
+`TraceContext` 只作为 Go 调用元数据存在，不进入 `Input`、统一 `Event`、`Meta`
+或持久化 Session 状态。`StartOrSteer` 在调用 tracer 或写入原生帧前读取并复制
+当前 carrier，之后不再读取可变状态。
+
+- `Traceparent` 的合法形式遵循 W3C：当前接受 version `00` 的固定
+  `00-<32 lowercase hex>-<16 lowercase hex>-<2 lowercase hex>` 形式，以及
+  非 `ff` 未来版本的同一基础字段和规范允许的扩展后缀；trace ID 和 parent ID
+  不得全零。
+- `Tracestate` 为空表示省略；非空时必须是合法 W3C `tracestate`，只与有效
+  `traceparent` 一起发送，原样保留而不重排或截断。
+- 校验按字节进行；CR、LF、NUL、非 ASCII、错误分隔符、错误长度或全零 ID
+  视为无效 carrier。
+
+`WithTraceContext` 不执行 I/O，也不返回 error；调用方若需提前检查，可调用
+`Validate`。无效 carrier 在 SDK 中按“无 provider carrier”处理，不能写入原生
+request，也不能导致输入失败。Tracer 的显式 parent 同样只在载体有效时设置；
+tracer 仍可从原 context 读取自己的 active parent。
+
+每次被 Session 接纳的 `StartOrSteer` 按以下顺序处理：
+
+1. 输入接纳阶段读取 `TraceContextFromContext` 并尝试校验。无效 carrier 视为
+   没有 context parent，不改变输入接纳，也不省略 SDK 本地 span。
+2. adapter 完成 provider-specific 输入校验，并完成本地并发、关闭和未知状态
+   接纳。未接纳的调用不启动 span。
+3. 配置了 tracer 时，在本地接纳输入后、原生写入前创建一次
+   `agent.start_or_steer` span。context carrier 存在时作为显式 parent；不存在
+   时 tracer 可从同一个 `ctx` 取得自身可识别的 active parent。tracer 返回 nil
+   表示没有 SDK span。
+4. span carrier 有效时优先作为 provider trace carrier；span 缺失或 carrier
+   无效时回退到有效 context carrier。两者都不存在时用零原生 carrier 覆盖传入
+   context 中可能残留的原生 helper 值，再跳过 provider 传播。
+5. Session 宣告 `promptTrace` 时，adapter 尝试把选定的有效 carrier 送入原生
+   提交路径；未宣告时跳过 provider 传播，但上面的本地 span 仍正常结束。
+   provider control response 是 best-effort，拒绝或等待超时不能改变健康
+   transport 上的输入接纳；transport 写入失败或挂起遵循既有失败和取消合同。
+6. 对每个非 nil span，`StartOrSteer` 返回前恰好调用一次 `Span.End(err)`。
+   span 只覆盖本地接纳、可能的原生写入和调用返回，不覆盖 turn 开始、执行
+   完成、审批等待或后续事件。
+
+实现不得从 tracer/span 回调阻塞网络、等待导出或 panic；正常 telemetry 失败
+必须退化为无 span，不能改变 `StartOrSteer` 的业务结果、取消或关闭。SDK 不
+自行生成 trace/span ID；没有 tracer 时只有 context 中的 W3C carrier 会被
+传播。SDK 对 tracer/span 的调用做 panic 隔离，panic 与普通 telemetry 失败
+一样退化为无 span。
+
+不引入 OpenTelemetry 或其他 tracing SDK 作为生产依赖。`TraceContext`、
+标准库 context helper 和 `Tracer`/`Span` seam 已覆盖 W3C parent propagation
+与一次提交 span；OpenTelemetry 调用方可在仓库外部实现 adapter，从同一个
+`context.Context` 读取 active span、开始子 span，并用 W3C propagator 生成
+`TraceContext`。把 OTel 引入唯一 module 会扩大所有使用方的依赖图和版本兼容
+面，也会把 SDK 合同绑定到一种 telemetry 实现。多个上层应用若需要相同 bridge，
+应在 SDK 外部共享 adapter，而不是进入 `agent`、`codex`、`claude` 或原生
+`types` 的生产依赖。
+
+SDK 对 provider 的映射义务：
+
+| 项 | Codex | Claude |
+|---|---|---|
+| context carrier | 作为本地 span parent；Session 宣告 `promptTrace`，有效时写入原生请求 | 作为本地 span parent；Session 宣告 `promptTrace`，有效时映射到原生 `claude.TraceContext` |
+| SDK span | 配置 tracer 时为每次已接纳的 `StartOrSteer` 创建 | 同样创建，只覆盖 SDK 调用 |
+| 原生提交入口 | JSON-RPC request envelope 顶层 `trace`；不在 `turn/start.params` 内 | 同一常驻 CLI 上，在写入 user frame 前通过 `apply_flag_settings.settings.env` 设置 `TRACEPARENT`/`TRACESTATE`；不重启进程 |
+
+以下是 Provider 原生行为，只用于说明两个运行时的差异，不是 SDK 合同：
+
+| 项 | 原生 Codex | 原生 Claude |
+|---|---|---|
+| busy turn / steer | 原生 Core 把 `turn/start` 接纳为 steer 时不创建新的 turn 执行 span，继续使用原 turn 的 trace；新 carrier 不替换 active turn trace | 不适用 |
+| trace 状态范围 | 每次 request 的 envelope carrier 独立；入队输入不再携带 carrier，后续模型/工具使用 turn 建立时的 trace | settings env 是 CLI 进程级状态；快速排队的前序 prompt、当前 turn 的后续新工具或新建子进程都可能看到后一次 env；已有进程不保证更新 |
+| shell/MCP 可见性 | prompt trace 不自动变成 Bash/MCP 子进程的 trace env | 新启动的 Bash/PowerShell 或其他工具子进程可能继承当前 `TRACEPARENT`/`TRACESTATE`，是否读取由 CLI 和工具决定 |
+| provider span | SDK 不保证原生实现是否创建、复用或关联 span | 是否导出关联 span 受 CLI 版本、telemetry 配置和工具行为影响；SDK 不保证 |
+
+这些原生结果不会改变 SDK 的输入接纳或业务错误，也不能由 SDK synthetic 测试
+证明。SDK 不模拟原生 steer 状态机、不重定向 turn trace、不按工具调用快照
+隔离 env，也不把 settings 更新成功解释为 provider span 已关联。配置 `Tracer`
+时，SDK 仍为每次已接纳的 `StartOrSteer` 创建自己的
+`agent.start_or_steer` span；它不是 provider span，也不改变上述原生 trace
+归属。
+
+统一 Codex adapter 把 `agent.TraceContext` 转换为原生
+`types.W3cTraceContext`，再通过 `codex.WithTraceContext` 把 carrier 放入传给
+`codex.Session.Submit` 的 context。原生 helper 只由 `Session.Submit` 消费；
+低层 `Client.Call`、`StartThread` 和 `ResumeThread` 不增加 trace 参数，也不
+隐式读取该 context value。
+
+Codex 的 envelope `trace` 使用：
+
+```json
+{
+  "id": 7,
+  "method": "turn/start",
+  "params": {"threadId": "thread-1", "input": []},
+  "trace": {
+    "traceparent": "00-...-...-01",
+    "tracestate": "vendor=value"
+  }
+}
+```
+
+`trace` 与 `params` 平级，params 内不新增同名字段。envelope 有有效 carrier 时
+provider 使用它；没有时 app-server 可以按自身行为回退到进程 `TRACEPARENT`，
+SDK 不为每个 prompt 改写进程环境，也不把该回退作为 SDK 行为。SDK 只写入本次
+request 的 envelope carrier；不承诺它变成 Bash/MCP 子进程的 trace env。需要
+固定 shell trace 时只能另行设置 `ShellEnv`，不能得到 per-prompt 变化。
+
+原生 Codex 可能把 busy turn 上的 `turn/start` 判为 `Steered`。这是 pinned
+Codex/Core 原生行为，不是 SDK 新增或保证的语义：本次 RPC 的 envelope `trace`
+最多作为该次 request 和输入接纳路径的 parent；原生实现可把既有 `turn.id`
+记录到该 request span，但不会改写 active turn 的 trace context，也不会回溯
+重挂已经产生的 span。输入被接纳后，Core 队列中的 `TurnInput` 不带 trace
+carrier，因此该 turn 后续的模型、工具和执行工作仍使用 turn 建立时的 trace。
+SDK 不模拟这套状态机，也不承诺“新 carrier 会替换或延续 active turn trace”。
+若调用方希望同一 turn 的多条输入在观测上可关联，应复用同一 carrier，并在
+自己的观测系统中按 `turn.id` 或其他业务身份建立关联。显式低层 `turn/steer`
+不属于本设计路径；统一 adapter 只使用 `turn/start` 的原生 start-or-steer
+语义。
+
+统一 Claude adapter 把 `agent.TraceContext` 转换为原生 `claude.TraceContext`，
+再通过 `claude.WithTraceContext` 放入传给 `claude.Session.Submit` 的 context。
+原生 helper 使用自己的私有 context key，不导入 `agent`：
+
+```go
+type TraceContext struct {
+    Traceparent string
+    Tracestate  string
+}
+
+func WithTraceContext(ctx context.Context, trace TraceContext) context.Context
+func TraceContextFromContext(ctx context.Context) (TraceContext, bool)
+```
+
+`Session.Submit` 在原生写入前提取并复制 carrier，按
+[prompt trace](#prompt-trace) 的 W3C 规则尝试校验。它复用 Claude CLI 已经
+用于运行时 effort 的 `apply_flag_settings` 路径，在同一个常驻 CLI 上逐 prompt
+切换 trace；不得因 prompt trace 重启进程。`Session.Submit`、trace settings
+更新和 `SetEffort` 共用一个本地串行 gate，保证 apply 与 user frame 两个写入
+不被其他 SDK 调用插入。只有需要改变 trace 状态时，才发送 control request：
+
+1. 有效 prompt trace 的目标值是 carrier；无 prompt trace 但此前应用过覆盖时，
+   目标值是 `Open` 时从有效进程环境捕获的 startup baseline，没有 baseline
+   则两个变量都为空；无 prompt trace 且没有旧覆盖时跳过 settings 更新。
+2. 发送 `apply_flag_settings`，`settings` 只增加 `env` 字段：
+
+   ```json
+   {
+     "type": "control_request",
+     "request_id": "go_7",
+     "request": {
+       "subtype": "apply_flag_settings",
+       "settings": {
+         "env": {
+           "TRACEPARENT": "00-...-...-01",
+           "TRACESTATE": "vendor=value"
+         }
+       }
+     }
+   }
+   ```
+
+   两个变量总是同时出现。没有 `tracestate` 时写空字符串，不能用省略字段的
+   方式清除旧值。该请求不得清除不相关的 flag settings，尤其不能改写
+   `effortLevel` 或 `ultracode`。
+3. 完整写出 control frame 后的 settings response 是 best-effort。成功时记录
+   目标状态；拒绝、等待超时或未知响应时记录状态未知，只要 transport 和调用
+   context 仍可用，就继续写入 user frame。control 写入阻塞时使用既有取消机制
+   关闭 transport 并释放 gate；部分写、短写或其他 transport 写入失败终止交互，
+   返回既有 transport 错误和未知结果，不追加 user frame 或返回 `Written=true`。
+
+下一次提交在状态未知时重新写完整目标值；这是唯一的重试机制。SDK 不等待
+prompt 开始信号，不维护 pending UUID 或 dequeue acknowledgment，也不等待
+整个 turn。等待 control response 或调用 context 结束仅用于确定 apply 结果，
+不是 prompt 出队确认。若前一条 prompt 仍由 CLI 内部队列暂存且尚未取走，后
+写入的 env 可能作用于它；该 trace 归属误差被明确接受。无 prompt trace、且
+此前没有 trace override 时，不产生额外 control roundtrip。
+
+以下现象来自 Claude CLI 原生行为，不是 SDK 新增或保证的语义：settings env 是
+CLI 进程级状态，不提供 prompt/turn 隔离。trace env 写入后，当前 turn 的后续
+新工具调用、工具启动的新子进程或随后 prompt 都可能读取到当前值；已经启动的
+进程不保证更新。SDK 的合同止于在 user frame 前尽力执行 settings 写入并保持
+本地顺序；它不按工具调用快照或重写环境，也不把下一 prompt 的 baseline 恢复
+解释为收回已经传播的 trace。该跨 prompt、跨工具的影响是明确接受的 Provider
+原生行为；需要严格归属时，调用方必须使用 provider 自己保证隔离的机制，不能
+仅靠本 SDK 的 context carrier。
+
+上述能力属于 Claude 原生 stream-json/control 合同，不是 ACP 兼容层。
+ACP adapter 若接入 `_meta`，应把字段映射到同一原生 helper。SDK 不依赖
+ACP 社区实现，也不复制其严格归属状态机。设置 trace env 成功只证明 CLI 接受了
+settings 更新，不证明目标 CLI 版本导出正确关联的 provider span。
 
 ## 交互与回答权限
 
@@ -1002,6 +1454,9 @@ type URLAnswer struct {
     Outcome URLOutcome
 }
 
+func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error)
+func ValidateAnswer(kind InteractionKind, answer Answer) error
+
 type InteractionOutcome string
 
 const (
@@ -1023,6 +1478,18 @@ const (
   不能把统一层的兼容编码当成原生数组支持。
 - `url` 只表达外部流程入口；URL 的完成仍由原生事实结算。
 
+`agent.MatchAnswer(kind, answer)` 接受三种 answer 的值或非 nil 指针，成功时
+统一返回 `PermissionAnswer`、`FormAnswer` 或 `URLAnswer` 值。它校验 kind
+匹配、outcome 及对应字段组合：permission 的 selected 必须有 `OptionID`，
+cancelled 不得有；form 的 accept 必须有可 JSON 编码的非 nil `Content`，
+decline/cancel 不得有；URL 只接受 accept/decline/cancel。`ValidateAnswer`
+委托 `MatchAnswer`，丢弃规范化值并返回同一错误。
+
+失败返回 nil answer 和 `invalid_argument` 错误：nil/typed-nil 使用
+`missing_answer`，kind 不匹配使用 `answer_kind_mismatch`，不支持的包装类型使用
+`unsupported_answer`；outcome 和字段错误保留对应的具体 reason。该操作不写原生
+请求、不消耗回答权限；原生选项成员资格与 form schema 兼容性仍由 adapter 校验。
+
 原生 `IncomingRequest`、`AnswerHandle` 和 permission handle 只存在于 adapter
 私有 registry。统一事件只交付 `InteractionRef`。该引用绑定 Session、adapter
 实例、当前运行和具体工作；回答前必须再次检查原句柄仍有效。跨 Session、旧运行、
@@ -1031,6 +1498,14 @@ const (
 并发回答在单个交互内串行接纳，至多一个回答进入原生提交。事件可以先于 answer
 回执到达。发送结果未知时不恢复回答权限，不自动重答。当前 adapter 不宣告
 `url`，除非以后有可验证的原生实现。
+
+共享 `interactionledger` 每 Session 一份，只分配不透明 `InteractionRef`、单调
+注册顺序并保存 pending、answering、sent、settled 等统一权威阶段。它负责一次
+claim、answer 完成等待、确定 `NotSent` 后的回滚，以及 terminal result、sent
+outcome 与 fallback 的结算顺序。等待不得持有 adapter 锁。slot 不保存原生
+request、raw frame、request ID、handle、reply callback 或 ref→adapter 查询；
+adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造回复的位置。因此
+共享 slot 只协调回答准入，不转移原生回答权限，也不形成第二套句柄 registry。
 
 ## 事件流与统一事件
 
@@ -1550,18 +2025,6 @@ type Archiver interface {
     Archive(ctx context.Context) (ActionReceipt, error)
     Unarchive(ctx context.Context) (ActionReceipt, error)
 }
-
-type ConfigurationReceipt struct {
-    Model      string
-    Acceptance Acceptance
-}
-
-// ModelController 保留既有 provider-specific 的仅模型接口。统一调用方设置
-// 模型或 effort 时使用 ExecutionOptionsController。
-type ModelController interface {
-    // model 必须是非空原生模型标识；不做跨 provider 别名映射。
-    SetModel(ctx context.Context, model string) (ConfigurationReceipt, error)
-}
 ```
 
 不支持的能力不实现接口，或返回 `unsupported`。不得用静默 no-op、空成功或伪造
@@ -1569,12 +2032,10 @@ type ModelController interface {
 基础接口；高级调用方可以使用 adapter 具体类型及其原生入口，但不能绕过基础
 Session 的权限和关闭规则。
 
-`ExecutionOptionsController` 是模型与 effort 的统一运行时能力。一个 Session
-可以选择只实现 `ExecutionOptionsReporter`，或同时实现
-`ExecutionOptionsController`。`ModelController` 不扩展为 effort 接口；新代码
-应使用 `ExecutionOptionsController`。若同一 Session 同时实现旧
-`ModelController` 和新接口，两者必须共享同一原生状态和串行更新边界，不能
-形成两个配置所有者。
+`ConfigController` 是唯一统一的运行时配置能力；基础 Session 不要求实现。
+统一层不提供仅模型 controller 或仅模型 setter。原生 `codex`、`claude` 包中的
+`SetModel`、`SetThinking`、`SetEffort` 及其原生 `ConfigurationReceipt` 保持
+各自合同。
 
 第一版不定义统一的 `SubagentQuery` 或 `SubagentPage`。需要原生子 Agent 查询、
 关系证据或分页覆盖的使用方直接使用对应的原生 SDK；统一层不在两个不同查询
@@ -1977,6 +2438,14 @@ provider-specific 查询职责：
 
 - provider 共享连接与 Session 打开/恢复；
 - `AdditionalSystemPrompt` 到 Codex `developerInstructions` 的创建/恢复追加映射；
+- `OpenOptions.ShellEnv` 到 Codex thread config
+  `shell_environment_policy.set` 的创建/恢复映射；
+- 非空 `ProcessEnv` 在本次 Open/Resume 原生副作用前的明确拒绝；
+- 原生 `types.W3cTraceContext` 和仅由 `Session.Submit` 使用的 envelope trace
+  编码；`Client.Call`、`StartThread`、`ResumeThread` 保持无 trace 参数；
+- `agent.WithTraceContext` 到原生 `codex.WithTraceContext` 的转换，以及
+  context carrier 与 SDK-created span context 到 JSON-RPC request envelope
+  `trace` 的映射；
 - turn/item 身份和工作归属；
 - 消息、思考、工具、状态、错误和 usage 等事件；
 - command/file change 权限和 Codex user-input form；
@@ -1994,6 +2463,16 @@ provider-specific 查询职责：
 - init 身份确认和恢复身份/cwd 校验；
 - Claude 原生 `AppendSystemPrompt` 及其 `--append-system-prompt` argv 映射；
 - `AdditionalSystemPrompt` 到原生 `AppendSystemPrompt` 的创建/恢复映射；
+- `ProcessEnv` 与 `Config.Env` 合成 Session 的有效进程环境，并用于版本查询、
+  Claude 配置范围发现和 CLI 启动；
+- 非空 `ShellEnv` 在进程/native 写入前的明确拒绝；
+- `agent.TraceContext` 到原生 `claude.TraceContext` 与
+  `claude.WithTraceContext` 的转换；
+- 在同一个常驻 CLI 上，将 prompt trace 编码为输入前的
+  `apply_flag_settings.settings.env`，恢复 startup baseline，并与 `SetEffort`
+  共用 settings/input 串行 gate；settings 更新失败时继续提交 prompt 并保留
+  未知状态供下一次重写；
+- 可选 SDK `Tracer` 的本地 `agent.start_or_steer` span；
 - `GetSessionInfo` 恢复前预检、保留调用方 Hooks 并注册私有
   `SessionStart` 探针、init 或 callback 身份确认，以及恢复后的文件身份复核；
 - text/thinking 的 message、block 和 linkage 身份；
@@ -2086,35 +2565,108 @@ linkage 和无法归属的交互行为保持不变。
 ## 验收
 
 - 统一核心只依赖标准库，且不导入 `codex`、`claude` 或 MASS。
+- 统一核心没有 OpenTelemetry 或其他 telemetry 生产依赖；`Tracer` 的第三方
+  adapter 可在仓库外部实现，不能进入 SDK 生产依赖树。
 - 两个 adapter 互不导入，原生包不导入统一层。
 - `agent/internal/lifecycle` 的依赖门禁只允许标准库和公开 `agent` 合同；两个
   adapter 都通过该模块覆盖 Start 单次获取、in-flight Open/Resume 拒绝 Stop、
   失败 Open 自动结算、终止性 Stop 与 release 错误缓存，且不保留重复生命周期
   状态、计数器、Session 集合或私有 reserve/complete helper。
+- `agent/internal/interactionledger` 只保存统一权威状态；其测试覆盖唯一引用、
+  单调注册顺序、一次 claim、NotSent 回滚、完成等待和结算优先级。adapter 的
+  私有 registry 仍独占原生 request、handle、reply construction 和查询。
 - Provider 基础 Capabilities 由 adapter 供给并由生命周期冻结；Session 级能力
   只能窄化，不修改 Provider 级快照。Claude Start 不启动进程，每个 Session
   仍独占并关闭自己的原生 CLI 进程。
+- `Capabilities.Supports` 识别 `processEnv`、`shellEnv` 与 `promptTrace`；
+  未知能力仍返回 false，不能仅凭 map key 透传。
 - Provider、Session、EventStream、Input、Answer 和可选能力有公开接口编译测试。
-- `ExecutionOptions` 的空值省略、非空字面值传递和 `ResumeOptions` 继承规则有
-  公开合同测试；不实现可选 reporter 的自定义 Session 仍可满足基础接口。
-- `ExecutionOptionsController` 只接受两个固定选项和非空值；未知选项、空值、
-  已关闭 Session 和不可动态配置的 provider 都在原生写入前返回确定错误。
+- Provider 进程环境测试固定 Codex 与 Claude 的 nil 继承、非 nil 整体替换和
+  slice 复制语义，并覆盖非 nil 空 slice 与 nil 的区分；进程启动前修改调用方
+  slice 不影响实际环境。进程环境 sentinel 不出现在错误、事件或日志。
+- Claude `ProcessEnv` synthetic 测试固定 `Config.Env` 为 nil 时以一次
+  `os.Environ()` 快照为基底、非 nil 时以完整 slice（包括非 nil 空 slice）为
+  基底，并按排序 key 追加 overlay；同名项由 overlay 覆盖，空字符串保留为
+  空值，其他基底项顺序不变。两个 Session 可使用不同 overlay，调用方 map 和
+  base slice 不被修改。
+- `ProcessEnv` 的非法 key/value、非空 key 的 ASCII 大小写不敏感重复项在版本
+  查询、Claude 进程启动、Codex app-server 启动或 thread RPC 前失败；env
+  value sentinel 不出现在错误或事件中。Codex 非空值返回 `unsupported`，不能
+  落到 app-server 或 shell 配置；Claude 非空值必须出现在原生
+  `SessionOptions.Env` 中。
+- Codex `ShellEnv` synthetic 测试固定 `thread/start` 与 `thread/resume` 的精确
+  `shell_environment_policy.set`，复核空值省略、additive set、调用方 config
+  和 `ShellEnv` map 不被修改、以及路径冲突在原生 RPC 前失败；非法 key/value、
+  大小写不敏感重复 key 与列明的 Codex 保留变量被拒绝，env value sentinel
+  不出现在错误、事件或日志。
+- Claude 非空 `ShellEnv` 在 CLI 启动前返回 `unsupported`，fake peer 未收到
+  Session 启动或 RPC；不接受用进程环境或 settings `env` 冒充 shell-only。
+- Codex prompt trace synthetic 测试固定 envelope 顶层 `trace` 与
+  `turn/start.params` 的分离、无 trace 时字段省略、`agent.WithTraceContext`
+  到原生 `codex.WithTraceContext` 的转换、tracer-created child context 的
+  优先级，以及非法 W3C carrier 省略 envelope `trace` 但 prompt 仍照常提交。
+- Codex 连续提交使用不同 carrier 时，每次 `turn/start` 只编码当次 carrier；
+  SDK 不缓存前一次 carrier，也不把 steer 解释成替换 active turn trace。
+  该测试只证明 SDK 的 per-call wire 与无状态性；active turn 继续使用原 trace
+  属于 pinned app-server/Core 行为，不在 synthetic SDK 测试中伪造。
+- 原生 `codex.WithTraceContext` 只由 `Session.Submit` 消费；低层
+  `Client.Call`、`StartThread`、`ResumeThread` 不增加 trace 参数，也不读取该
+  context value。原生 `types.W3cTraceContext` 按 pinned `rpc.rs` 手写并有独立
+  往返测试，协议来源和 capability 记录把 `request-trace-context` 的已支持
+  范围限定到这一 Session prompt 路径，不声称其他 raw call 自动支持。
+- `Input` JSON 合同没有 `trace` 字段；JSON 往返不携带 context carrier，carrier
+  也不进入统一 `Event`、`Meta` 或 Session 状态。
+- Trace seam 测试使用 fake tracer 验证每次已接纳的 `StartOrSteer` 至多一个
+  `agent.start_or_steer` span、`End(err)` 恰好一次、span 在调用返回前结束；
+  tracer 返回 nil 时不调用 `End`；非 nil span 的零值 carrier 不改变输入结果
+  且仍恰好 `End` 一次；未接纳调用不创建 span。context carrier 是显式
+  parent，非法 carrier 按缺少 provider parent 处理且不改变输入结果；
+  `TraceContextFromContext` 只返回当前值，不暗含校验；派生 context 继承该
+  value，重复 `WithTraceContext` 以后一次为准。
+- Claude prompt trace synthetic 测试固定输入前的精确
+  `apply_flag_settings.settings.env`，两个 trace 变量总是同时出现，缺失值为
+  空字符串；tracer-created child context 优先于 context carrier，非法 W3C
+  carrier 只跳过 provider 传播，user frame 仍照常写入。无 prompt trace 且无
+  旧覆盖时不发送额外 control；有旧覆盖时下一条无 trace prompt 恢复 `Open`
+  时捕获的 startup baseline，baseline 缺失则写空值。该 request 不清除
+  `effortLevel`、`ultracode` 或其他无关 flag settings，也不重启 CLI。
+- Claude 完整 control 写入后的拒绝、等待超时或未知响应只使状态未知，健康
+  transport 和有效调用 context 上的 `Submit` 仍写 user frame，下一条 prompt
+  重写完整目标值。control 写入阻塞须通过取消关闭 transport；部分写、短写或
+  其他 transport 写入失败终止交互，不追加 user frame，不报告成功输入。
+  快速连续提交不同 trace 时，SDK 不等待 dequeue acknowledgment、
+  不新增 pending 队列，也不因同一 Session 有未结束 prompt 而拒绝提交；测试
+  固定本地 apply/user frame 顺序并明确允许前序排队 prompt 的 trace 竞态。
+  有效 context carrier 不返回 `unsupported`，Session 宣告 `promptTrace`。
+  显式 `Config.Env` 或 `ProcessEnv` 的 startup trace 只作为 baseline；设置
+  成功不证明特定 CLI 版本已导出关联的 provider span。测试只证明 settings 与
+  user frame 的本地顺序，不声称按 prompt/turn 隔离环境，也不证明或禁止后续
+  新工具调用继承当前 trace env；该 provider 行为由 live 验证另行取证。
+- ACP v2 `session/prompt._meta` 的预留字段不属于本包的 Claude 原生 wire
+  合同；synthetic 测试不让 `_meta` 取代原生长连接控制协议。
+- `SessionConfig` 的空值省略、非空字面值传递和 `ResumeOptions` 继承规则有
+  公开合同测试；不实现可选 `ConfigController` 的自定义 Session 仍可满足
+  基础接口。
+- `ConfigController` 只有一个 setter，配置 ID 恰好是 `model` 和 `effort`；
+  未知 ID、空值、非法编码、已关闭 Session 和不可动态配置的 provider 都在
+  原生写入前返回确定错误。
 - Codex 合成测试核对 `thread/start`、`thread/resume` 的精确 `model` 与
-  `model_reasoning_effort`，并从响应区分原生观察、请求未确认和恢复覆盖。
+  `model_reasoning_effort`，且恢复不改变身份或回放保存历史。
 - Codex 运行时测试核对 `thread/settings/update` 每次只携带一个目标字段；关闭
-  experimental API 时不写入，空 ack 只产生 accepted，后续
-  `thread/settings/updated` 才产生 observed。执行期间更新不得隐含等待 idle、
-  中断、重建或重试。
+  experimental API 时不写入，空 ack 只产生 native acceptance。执行期间更新
+  不得隐含等待 idle、中断、重建或重试。
 - Claude 合成测试核对 `--model=`、`--effort=` 的精确命令行参数及空值省略，
-  验证 init 的模型观察，并确认 effort 不被报成原生生效值。
+  恢复还须核对 `--resume=`。
 - Claude 运行时测试核对 `set_model` 与
   `apply_flag_settings.settings.effortLevel` 的精确请求，确认 effort 不映射为
-  `set_max_thinking_tokens`；成功 ack 不产生 observed，模型更新后旧 effort
-  生效值被清除，不相关且仍有效的 flag settings 不被静默清除，且更新不触发
-  进程重启。
-- 运行时 model 与 effort 更新返回两项完整报告；模型变化后没有原生新证据时，
-  effort 保持未知。重复值、原生拒绝和结果未知分别保留其 acceptance 与
-  observed 边界，不从当前执行结果反推配置生效。
+  `set_max_thinking_tokens`；不相关且仍有效的 flag settings 不被静默清除，
+  且更新不触发进程重启。
+- `ConfigReceipt` 只包含精确 `ConfigChange` 和 acceptance，不包含当前配置
+  快照；原生写入前失败、原生拒绝和结果未知分别保留 `not-sent`、`native_rejected`
+  与 `outcome_unknown` 的可区分语义；重复值仍派发并保留实际 acceptance，不因本地
+  相等判断跳过原生更新，不从当前执行结果反推配置生效。
+- `EventSessionConfigOptionUpdate` 的 ACP-shaped 合同不变；provider 无法提供
+  完整 option catalog 时不合成完整快照。
 - Codex 与 Claude 的合成协议输入逐事件比较统一输出；比较类型、payload、身份、
   Meta、顺序和未知数据范围，忽略随机 EventID。
 - 每个 Session 只允许一个消费者；重复取流失败；慢消费者不重排事件；关闭一个
@@ -2131,9 +2683,11 @@ linkage 和无法归属的交互行为保持不变。
   Meta 不被改写。
 - SDK 内部 history replay 投影已删除；原生历史查询、`Event.IsReplay`、
   `ThreadResumeParams.History`、录制回放和 simulation replay 仍可用。
-- 除 Claude 原生 `AppendSystemPrompt` 的增量字段外，原生 `codex`、`claude`
-  及其 `types` 的公开接口和默认测试不因统一层变化；该字段由
-  `OptionsFromTypes`/`Types()` 往返，并由进程启动测试固定 argv。
+- 除 Claude 原生 `AppendSystemPrompt`、trace context/settings 映射和 Codex
+  原生 `ShellEnv`、prompt trace envelope 的增量字段外，原生 `codex`、
+  `claude` 及其 `types` 的公开接口和默认测试不因统一层变化；Claude
+  `AppendSystemPrompt` 由 `OptionsFromTypes`/`Types()` 往返，并由进程启动
+  测试固定 argv。
 - 统一层只存在 stdio 和 Streamable HTTP MCP；没有 SSE transport 或
   `MCPConfigMode`。Runtime 默认项与 Session 同名项由上层合成，Session 项整体
   覆盖，且 Provider 不再二次合并。
@@ -2181,6 +2735,21 @@ linkage 和无法归属的交互行为保持不变。
   SDK 不提供 Session 内热更新，也不承诺跨 provider 精确一致的追加位置或子
   Agent 继承。`SystemPrompt` 不保留兼容别名；调用方必须显式迁移到
   `AdditionalSystemPrompt`。
+- Provider 进程环境、Claude Session `ProcessEnv`、Codex Session `ShellEnv`
+  和 prompt trace 是四个独立合同。`ProcessEnv` 只覆盖 Claude 自有 CLI 进程，
+  Codex 明确不支持；`ShellEnv` 不改变 app-server/CLI 进程环境，也不支持
+  Claude。Prompt trace 的 SDK 合同只包括 carrier 提取与校验、映射原生提交
+  入口、可选本地 span 和 best-effort 写入；它不是通用 shell/mcp 环境变量
+  API。原生 Codex 在 steer 时复用原 turn trace，以及原生 Claude 的 settings
+  env 可能被后续新工具、子进程或排队 prompt 读取，都是明确接受的 Provider
+  原生行为，不是 SDK 新增或保证的语义。SDK 不模拟、重定向或隔离这些运行时
+  状态。ACP prompt metadata 不属于本 SDK 的原生 wire 合同。
+- Trace 是可选可观测性能力：正常 tracer 失败退化为无 span，不改变 Agent
+  结果；Claude 完整 control 写入后的拒绝、等待超时或未知响应保持 best-effort，
+  下一条重写完整目标值；transport 写失败或挂起遵循既有取消和失败合同，不报告
+  成功输入。SDK 不维护 prompt 出队屏障，接受 CLI
+  内部排队导致的 trace 归属误差。SDK span 只表示一次输入提交，不表示 turn
+  完成。统一层不依赖 OpenTelemetry，也不保存 trace 到历史或 Session 状态。
 - Claude 原生包新增的 `AppendSystemPrompt` 是增量启动配置，不改变原生 wire
   协议或替换内置 system prompt 的能力。
 - README 和包文档说明统一层的使用边界与离线示例；MASS 接入、发布和真实

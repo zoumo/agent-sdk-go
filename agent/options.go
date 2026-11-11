@@ -11,6 +11,13 @@ import (
 // Provider-specific creation options belong on the concrete adapter.
 type OpenOptions struct {
 	Cwd string
+	// ProcessEnv is an additive, set-only overlay for a Claude Session CLI.
+	// Nil or empty leaves the provider environment unchanged; empty values set
+	// variables to empty strings. Other adapters reject nonempty declarations.
+	ProcessEnv map[string]string
+	// ShellEnv adds variables to Codex shell/unified-exec environments. It does
+	// not change the app-server environment. Claude rejects nonempty declarations.
+	ShellEnv map[string]string
 	// AdditionalSystemPrompt appends caller text after provider defaults for
 	// this Open or Resume operation. Empty omits provider-native prompt
 	// configuration. See harness/modules/unified-agent/design.md#additional-system-prompt
@@ -24,7 +31,7 @@ type OpenOptions struct {
 	// complete list because the SDK does not persist it.
 	MCPServers []MCPServer
 
-	Execution ExecutionOptions
+	Config SessionConfig
 }
 
 // Validate checks the provider-neutral creation options before native side
@@ -48,10 +55,20 @@ func (o OpenOptions) Validate() error {
 			"additional system prompt must not contain NUL",
 		)
 	}
+	for _, scope := range []struct {
+		name string
+		env  map[string]string
+	}{
+		{"ProcessEnv", o.ProcessEnv}, {"ShellEnv", o.ShellEnv},
+	} {
+		if err := validateEnvironment(scope.env); err != nil {
+			return invalidArgument(ErrorReasonEnvironmentInvalid, scope.name+": "+err.Error())
+		}
+	}
 	if err := validateMCPServers(o.MCPServers); err != nil {
 		return err
 	}
-	return o.Execution.Validate()
+	return o.Config.Validate()
 }
 
 // ResumeOptions identifies an existing native main session to resume.

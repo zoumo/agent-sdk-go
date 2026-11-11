@@ -63,8 +63,9 @@ type resumeCallbackRequest struct {
 func (p *Core) prepareResume(
 	ctx context.Context,
 	options agent.ResumeOptions,
+	env []string,
 ) (*resumeAttempt, error) {
-	if err := p.requireResumeVersion(ctx, options.Cwd); err != nil {
+	if err := p.requireResumeVersion(ctx, options.Cwd, env); err != nil {
 		return nil, err
 	}
 	target, err := p.preflightResume(ctx, options)
@@ -89,7 +90,7 @@ func (p *Core) prepareResume(
 	}, nil
 }
 
-func (p *Core) requireResumeVersion(ctx context.Context, cwd string) error {
+func (p *Core) requireResumeVersion(ctx context.Context, cwd string, env []string) error {
 	queryCtx, cancel := context.WithTimeout(ctx, claudeVersionQueryTimeout)
 	defer cancel()
 
@@ -101,7 +102,7 @@ func (p *Core) requireResumeVersion(ctx context.Context, cwd string) error {
 	output.limit = claudeVersionOutputLimit
 	command := exec.CommandContext(queryCtx, cliPath, "--version")
 	command.Dir = cwd
-	command.Env = p.config.Env
+	command.Env = env
 	command.Stdout = &output
 	command.WaitDelay = time.Second
 	if err := command.Run(); err != nil {

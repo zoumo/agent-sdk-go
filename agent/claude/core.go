@@ -77,8 +77,9 @@ func (p *Core) Open(
 	if err != nil {
 		return nil, err
 	}
+	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
-		return p.openNativeSession(ctx, options, "", nil, mcpServers)
+		return p.openNativeSession(ctx, options, "", nil, mcpServers, env)
 	})
 }
 
@@ -110,8 +111,9 @@ func (p *Core) Resume(
 	if err := p.validateResumeConfig(); err != nil {
 		return nil, err
 	}
+	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
-		attempt, err := p.prepareResume(ctx, options)
+		attempt, err := p.prepareResume(ctx, options, env)
 		if err != nil {
 			return nil, err
 		}
@@ -121,6 +123,7 @@ func (p *Core) Resume(
 			options.SessionID,
 			attempt,
 			mcpServers,
+			env,
 		)
 	})
 }
@@ -148,14 +151,16 @@ func (p *Core) openNativeSession(
 	resumeID string,
 	resume *resumeAttempt,
 	mcpServers []claude.MCPServer,
+	env []string,
 ) (*session, error) {
 	nativeOptions := p.nativeOptions(
 		options.Cwd,
 		resumeID,
 		options.Features,
 		mcpServers,
-		options.Execution,
+		options.Config,
 	)
+	nativeOptions.Env = slices.Clone(env)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
 	if resume != nil {
 		nativeOptions.SessionStartProbe = &resume.probe
@@ -238,7 +243,6 @@ func (p *Core) openNativeSession(
 		init,
 		sessionIdentity(init, resume),
 		options.Features,
-		initialExecutionOptionsState(init, options.Execution),
 		buffered,
 		guard,
 	)
@@ -288,9 +292,11 @@ func (p *Core) sessionClosed(closed *session) {
 
 func providerCapabilities() agent.Capabilities {
 	return agent.Capabilities{
-		agent.CapabilityTextInput:  true,
-		agent.CapabilityPermission: true,
-		agent.CapabilityForm:       true,
+		agent.CapabilityProcessEnv:  true,
+		agent.CapabilityTextInput:   true,
+		agent.CapabilityPromptTrace: true,
+		agent.CapabilityPermission:  true,
+		agent.CapabilityForm:        true,
 	}
 }
 
@@ -311,15 +317,15 @@ func (p *Core) nativeOptions(
 	resumeID string,
 	features agent.Features,
 	mcpServers []claude.MCPServer,
-	execution agent.ExecutionOptions,
+	sessionConfig agent.SessionConfig,
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
 		CLIPath:           config.CLIPath,
 		WorkDir:           workDir,
 		MCPServers:        mcpServers,
-		Model:             execution.Model,
-		Effort:            execution.ReasoningEffort,
+		Model:             sessionConfig.Model,
+		Effort:            sessionConfig.Effort,
 		Initialize:        config.Initialize,
 		ResumeID:          resumeID,
 		ChildDetailPolicy: config.ChildDetailPolicy,
@@ -336,6 +342,14 @@ func (p *Core) nativeOptions(
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
+	if len(options.ShellEnv) != 0 {
+		return adapterError(
+			agent.ErrorUnsupported,
+			agent.ErrorReasonShellEnvUnsupported,
+			"Claude Session shell environment is not supported",
+			nil,
+		)
+	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,

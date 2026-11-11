@@ -18,7 +18,7 @@ import (
 type testSession interface {
 	agent.Session
 	agent.Archiver
-	agent.ModelController
+	agent.ConfigController
 }
 
 func TestPermissionAnswerPreservesAuthorityUntilNativeClose(t *testing.T) {
@@ -651,7 +651,10 @@ func TestNativeResolutionCancelsPendingInteraction(t *testing.T) {
 	require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
 	requested := nextInteractionRequested(t, ctx, stream)
 
-	_, err := session.SetModel(ctx, "synthetic-model-2")
+	_, err := session.SetConfig(ctx, agent.ConfigChange{
+		ID:    agent.ConfigModel,
+		Value: "synthetic-model-2",
+	})
 	require.NoError(t, err)
 	closed := nextInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
@@ -810,12 +813,16 @@ func TestControlOperationsReturnNativeAcceptance(t *testing.T) {
 	require.NoError(t, err)
 	assertAccepted(t, unarchived.Acceptance)
 
-	model, err := session.SetModel(ctx, "synthetic-model-2")
+	modelChange := agent.ConfigChange{
+		ID:    agent.ConfigModel,
+		Value: "synthetic-model-2",
+	}
+	model, err := session.SetConfig(ctx, modelChange)
 	require.NoError(t, err)
-	assert.Equal(t, "synthetic-model-2", model.Model)
+	assert.Equal(t, modelChange, model.Change)
 	assertAccepted(t, model.Acceptance)
 
-	_, err = session.SetModel(ctx, "")
+	_, err = session.SetConfig(ctx, agent.ConfigChange{ID: agent.ConfigModel})
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 
@@ -829,7 +836,10 @@ func TestControlOperationsReturnNativeAcceptance(t *testing.T) {
 	_, err = session.Unarchive(ctx)
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
-	_, err = session.SetModel(ctx, "synthetic-model-3")
+	_, err = session.SetConfig(ctx, agent.ConfigChange{
+		ID:    agent.ConfigModel,
+		Value: "synthetic-model-3",
+	})
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
 	_, err = stream.Next(ctx)

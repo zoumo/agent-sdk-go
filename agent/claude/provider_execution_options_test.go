@@ -89,7 +89,7 @@ func TestClaudeOpenAndResumeOmitEmptyExecutionOptions(t *testing.T) {
 			initJSON := `{"type":"system","subtype":"init","session_id":` +
 				jsonString(t, test.sessionID) + `,"cwd":` + jsonString(t, cwd) +
 				`,"claude_code_version":"2.1.258","model":" default/model "}`
-			var provider *agentclaude.Provider
+			var provider *agentclaude.Core
 			var capturedArgv func(*testing.T) []string
 			if test.resume {
 				var capture string
@@ -731,7 +731,7 @@ func startClaudeExecutionProvider(
 	t *testing.T,
 	ctx context.Context,
 	frames ...string,
-) (*agentclaude.Provider, *claudeExecutionCapture) {
+) (*agentclaude.Core, *claudeExecutionCapture) {
 	t.Helper()
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	capture := &claudeExecutionCapture{}
@@ -774,7 +774,7 @@ func startClaudeResumeExecutionProvider(
 	ctx context.Context,
 	cwd, sessionID string,
 	frames ...string,
-) (*agentclaude.Provider, string) {
+) (*agentclaude.Core, string) {
 	t.Helper()
 	configDir := newResumeConfigDir(t)
 	transcript := writeResumeTranscript(

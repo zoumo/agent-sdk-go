@@ -1,7 +1,7 @@
-// Package lifecycle owns the provider-scoped state shared by unified Agent
+// Package corelease owns the Core-scoped state shared by unified Agent
 // adapters. It stores native resources opaquely and never invokes Session
 // methods.
-package lifecycle
+package corelease
 
 import (
 	"context"
@@ -19,10 +19,10 @@ const (
 	stateStopped
 )
 
-// Lifecycle owns one provider-scoped resource and the identities of Sessions
+// Core owns one Core-scoped resource and the identities of Sessions
 // opened from it. The adapter supplies resource acquisition, release and the
 // base capabilities.
-type Lifecycle[R any, I comparable] struct {
+type Core[R any, I comparable] struct {
 	mu           sync.Mutex
 	capabilities agent.Capabilities
 	acquire      func(context.Context) (R, error)
@@ -34,24 +34,24 @@ type Lifecycle[R any, I comparable] struct {
 	stopErr      error
 }
 
-// New constructs a Provider lifecycle. Acquire and release callbacks run while
-// lifecycle mutation is serialized and must not re-enter this module. A nil
-// acquire and release support adapters without a provider-scoped resource.
+// New constructs Core lease tracking. Acquire and release callbacks run while
+// Core mutation is serialized and must not re-enter this module. A nil
+// acquire and release support adapters without a Core-scoped resource.
 func New[R any, I comparable](
 	capabilities agent.Capabilities,
 	acquire func(context.Context) (R, error),
 	release func(context.Context, R) error,
-) *Lifecycle[R, I] {
-	return &Lifecycle[R, I]{
+) *Core[R, I] {
+	return &Core[R, I]{
 		capabilities: maps.Clone(capabilities),
 		acquire:      acquire,
 		release:      release,
 	}
 }
 
-// Start acquires the provider resource once and returns a copy of the base
+// Start acquires the Core resource once and returns a copy of the base
 // capabilities. A failed acquisition leaves the lifecycle retryable.
-func (l *Lifecycle[R, I]) Start(ctx context.Context) (agent.Capabilities, error) {
+func (l *Core[R, I]) Start(ctx context.Context) (agent.Capabilities, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -59,7 +59,7 @@ func (l *Lifecycle[R, I]) Start(ctx context.Context) (agent.Capabilities, error)
 	case stateStarted:
 		return maps.Clone(l.capabilities), nil
 	case stateStopped:
-		return nil, providerStoppedError()
+		return nil, coreStoppedError()
 	}
 
 	var (
@@ -80,19 +80,21 @@ func (l *Lifecycle[R, I]) Start(ctx context.Context) (agent.Capabilities, error)
 // Open reserves one in-flight operation, runs open outside the lifecycle lock,
 // and settles the reservation automatically. A successful callback registers
 // the returned Session identity; a failed callback registers nothing.
-func (l *Lifecycle[R, I]) Open(
+func (l *Core[R, I]) Open(
 	ctx context.Context,
 	open func(context.Context, R) (I, error),
-) error {
+) (I, error) {
 	l.mu.Lock()
 	switch l.state {
 	case stateStarted:
 	case stateStopped:
 		l.mu.Unlock()
-		return providerStoppedError()
+		var zero I
+		return zero, coreStoppedError()
 	default:
 		l.mu.Unlock()
-		return providerNotStartedError()
+		var zero I
+		return zero, coreNotStartedError()
 	}
 	l.opening++
 	resource := l.resource
@@ -104,18 +106,19 @@ func (l *Lifecycle[R, I]) Open(
 	defer l.mu.Unlock()
 	l.opening--
 	if err != nil {
-		return err
+		var zero I
+		return zero, err
 	}
 	if l.sessions == nil {
 		l.sessions = make(map[I]struct{})
 	}
 	l.sessions[identity] = struct{}{}
-	return nil
+	return identity, nil
 }
 
-// Resource returns the active provider resource. It never creates a new
+// Resource returns the active Core resource. It never creates a new
 // resource on demand.
-func (l *Lifecycle[R, I]) Resource() (R, error) {
+func (l *Core[R, I]) Resource() (R, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -124,15 +127,15 @@ func (l *Lifecycle[R, I]) Resource() (R, error) {
 		return l.resource, nil
 	case stateStopped:
 		var zero R
-		return zero, providerStoppedError()
+		return zero, coreStoppedError()
 	default:
 		var zero R
-		return zero, providerNotStartedError()
+		return zero, coreNotStartedError()
 	}
 }
 
 // SessionClosed removes a Session identity. Repeated calls are harmless.
-func (l *Lifecycle[R, I]) SessionClosed(identity I) {
+func (l *Core[R, I]) SessionClosed(identity I) {
 	l.mu.Lock()
 	delete(l.sessions, identity)
 	l.mu.Unlock()
@@ -140,7 +143,7 @@ func (l *Lifecycle[R, I]) SessionClosed(identity I) {
 
 // Stop is terminal once admitted. It rejects while an Open is in flight or any
 // Session remains registered, releases at most once, and caches the result.
-func (l *Lifecycle[R, I]) Stop(ctx context.Context) error {
+func (l *Core[R, I]) Stop(ctx context.Context) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -152,7 +155,7 @@ func (l *Lifecycle[R, I]) Stop(ctx context.Context) error {
 		return nil
 	}
 	if l.opening != 0 || len(l.sessions) != 0 {
-		return providerHasOpenSessionsError()
+		return coreHasOpenSessionsError()
 	}
 
 	l.state = stateStopped
@@ -166,26 +169,26 @@ func (l *Lifecycle[R, I]) Stop(ctx context.Context) error {
 	return l.stopErr
 }
 
-func providerStoppedError() error {
+func coreStoppedError() error {
 	return &agent.Error{
 		Code:    agent.ErrorClosed,
-		Reason:  agent.ErrorReasonProviderStopped,
-		Message: "provider has been stopped",
+		Reason:  agent.ErrorReasonCoreStopped,
+		Message: "core has been stopped",
 	}
 }
 
-func providerNotStartedError() error {
+func coreNotStartedError() error {
 	return &agent.Error{
 		Code:    agent.ErrorFailedPrecondition,
-		Reason:  agent.ErrorReasonProviderNotStarted,
-		Message: "provider must be started before opening a session",
+		Reason:  agent.ErrorReasonCoreNotStarted,
+		Message: "core must be started before opening a session",
 	}
 }
 
-func providerHasOpenSessionsError() error {
+func coreHasOpenSessionsError() error {
 	return &agent.Error{
 		Code:    agent.ErrorFailedPrecondition,
-		Reason:  agent.ErrorReasonProviderHasOpenSessions,
-		Message: "provider cannot stop while sessions are open",
+		Reason:  agent.ErrorReasonCoreHasOpenSessions,
+		Message: "core cannot stop while sessions are open",
 	}
 }

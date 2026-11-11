@@ -157,7 +157,7 @@ func TestOpenWaitsForInitWithinConfiguredTimeout(t *testing.T) {
 func newTestClaudeProvider(
 	t *testing.T,
 	peerSession *mocktest.Session,
-) *agentclaude.Provider {
+) *agentclaude.Core {
 	t.Helper()
 	return newTestClaudeProviderWithConfig(t, agentclaude.Config{}, peerSession)
 }
@@ -166,7 +166,7 @@ func newTestClaudeProviderWithConfig(
 	t *testing.T,
 	config agentclaude.Config,
 	peers ...*mocktest.Session,
-) *agentclaude.Provider {
+) *agentclaude.Core {
 	t.Helper()
 	return newTestClaudeProviderWithObserver(t, config, nil, peers...)
 }
@@ -176,7 +176,7 @@ func newTestClaudeProviderWithObserver(
 	config agentclaude.Config,
 	observe func(claude.SessionOptions),
 	peers ...*mocktest.Session,
-) *agentclaude.Provider {
+) *agentclaude.Core {
 	t.Helper()
 	return newTestClaudeProviderWithStreamHook(t, config, observe, nil, peers...)
 }
@@ -189,7 +189,7 @@ func newTestClaudeProviderWithStreamHook(
 	observe func(claude.SessionOptions),
 	hook claudeTestStreamHook,
 	peers ...*mocktest.Session,
-) *agentclaude.Provider {
+) *agentclaude.Core {
 	t.Helper()
 	var mu sync.Mutex
 	next := 0
@@ -271,7 +271,7 @@ func newTestClaudeProviderWithStreamHook(
 	return provider
 }
 
-func newTestClaudeProviderSequence(t *testing.T, peers ...*mocktest.Session) *agentclaude.Provider {
+func newTestClaudeProviderSequence(t *testing.T, peers ...*mocktest.Session) *agentclaude.Core {
 	t.Helper()
 	return newTestClaudeProviderWithConfig(t, agentclaude.Config{}, peers...)
 }

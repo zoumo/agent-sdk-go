@@ -186,7 +186,7 @@ type codexMCPResult struct {
 	err     error
 }
 
-func newCodexMCPProtocolPeerProvider(t *testing.T, gateDir string) *agentcodex.Provider {
+func newCodexMCPProtocolPeerProvider(t *testing.T, gateDir string) *agentcodex.Core {
 	t.Helper()
 	executable, err := os.Executable()
 	require.NoError(t, err)

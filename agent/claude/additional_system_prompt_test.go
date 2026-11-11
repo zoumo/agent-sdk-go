@@ -215,7 +215,7 @@ func TestProviderDoesNotExposeAdditionalSystemPromptOnNativeFailure(t *testing.T
 				AdditionalSystemPrompt: sentinel,
 			}
 
-			var provider *agentclaude.Provider
+			var provider *agentclaude.Core
 			var session agent.Session
 			var err error
 			if !tt.resume {

@@ -200,7 +200,7 @@ func codexThreadStartResult(threadID string) string {
 	}`
 }
 
-func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Provider {
+func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Core {
 	return newTestProviderWithExperimentalAPI(t, peerSession, true)
 }
 
@@ -208,7 +208,7 @@ func newTestProviderWithExperimentalAPI(
 	t *testing.T,
 	peerSession *mocktest.Session,
 	enabled bool,
-) *agentcodex.Provider {
+) *agentcodex.Core {
 	t.Helper()
 	return newTestProviderWithInitialize(t, peerSession, codextypes.InitializeParams{
 		ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
@@ -222,7 +222,7 @@ func newTestProviderWithInitialize(
 	t *testing.T,
 	peerSession *mocktest.Session,
 	initialize codextypes.InitializeParams,
-) *agentcodex.Provider {
+) *agentcodex.Core {
 	t.Helper()
 	runCtx, cancelRun := context.WithTimeout(
 		context.WithoutCancel(t.Context()),

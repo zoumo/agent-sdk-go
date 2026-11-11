@@ -24,7 +24,7 @@ func TestProviderStartFailurePreservesPublicClassification(t *testing.T) {
 	assert.ErrorIs(t, err, acquireFailure)
 	var classified *agent.Error
 	require.ErrorAs(t, err, &classified)
-	assert.Equal(t, ErrorReasonProviderStartFailed, classified.Reason)
+	assert.Equal(t, ErrorReasonCoreStartFailed, classified.Reason)
 
 	client, err := provider.NativeClient()
 	require.Error(t, err)

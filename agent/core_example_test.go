@@ -13,10 +13,10 @@ import (
 	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
 )
 
-// ExampleProvider shows one application flow over two synthetic providers.
+// ExampleCore shows one application flow over two synthetic adapters.
 // The production adapter constructors are agentcodex.New and agentclaude.New.
 // This example keeps both providers offline so it never launches a native CLI.
-func ExampleProvider() {
+func ExampleCore() {
 	ctx := context.Background()
 	for _, providerName := range []string{"codex", "claude"} {
 		provider := newExampleProvider(providerName)
@@ -85,9 +85,9 @@ func ExampleProvider() {
 		fmt.Printf("%s stop=ok\n", providerName)
 	}
 
-	var _ agent.Provider = agentcodex.New(agentcodex.Config{})
-	var _ agent.Provider = agentclaude.New(agentclaude.Config{})
-	fmt.Println("codex and claude adapters implement agent.Provider")
+	var _ agent.Core = agentcodex.New(agentcodex.Config{})
+	var _ agent.Core = agentclaude.New(agentclaude.Config{})
+	fmt.Println("codex and claude adapters implement agent.Core")
 
 	// Output:
 	// codex text_input=true
@@ -112,7 +112,7 @@ func ExampleProvider() {
 	// claude close=ok
 	// claude resume=claude-session
 	// claude stop=ok
-	// codex and claude adapters implement agent.Provider
+	// codex and claude adapters implement agent.Core
 }
 
 // ExampleExecutionOptionsController shows the request, acceptance and effective

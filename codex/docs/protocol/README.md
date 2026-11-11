@@ -58,6 +58,23 @@ SHA-256 digests are in [sources.json](sources.json). SHA-256 values describe exa
 source bytes, without whitespace normalization. The stable schema is retained as
 an inspected source, not the source of the final generated bindings.
 
+## Prompt request trace
+
+The handwritten `types.W3cTraceContext` follows the optional W3C fields in the
+pinned `app-server-protocol/src/rpc.rs`; the envelope is outside the generated
+parameter/result schema closure. `codex.WithTraceContext` stores this native
+carrier for `Session.Submit` alone. Valid carriers are encoded as top-level
+`trace` on that `turn/start` envelope, separate from `params`. Missing, null or
+invalid parents omit the entire object and input is still submitted; absent,
+null or empty tracestate is omitted.
+
+`Client.Call`, `StartThread` and `ResumeThread` do not consume the context value.
+Synthetic tests prove exact per-call wire encoding and omission, not provider
+span attribution or shell/MCP environment propagation. A busy app-server turn
+may retain its original trace when it accepts input as steer; the SDK does not
+retarget it. Explicit `turn/steer` is outside this propagation contract. No live
+prompt-trace compatibility result is claimed.
+
 ## Server request resolution
 
 The pinned [request registry](https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-protocol/src/protocol/common.rs#L1780-L1850)

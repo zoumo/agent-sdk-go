@@ -15,6 +15,9 @@ const (
 	CapabilityPermission        = "permission"
 	CapabilityForm              = "form"
 	CapabilityURL               = "url"
+	CapabilityProcessEnv        = "processEnv"
+	CapabilityShellEnv          = "shellEnv"
+	CapabilityPromptTrace       = "promptTrace"
 )
 
 // capabilityNames is the canonical capability surface queried by Supports and
@@ -28,6 +31,9 @@ var capabilityNames = [...]string{
 	CapabilityPermission,
 	CapabilityForm,
 	CapabilityURL,
+	CapabilityProcessEnv,
+	CapabilityShellEnv,
+	CapabilityPromptTrace,
 }
 
 var capabilitySet = func() map[string]struct{} {

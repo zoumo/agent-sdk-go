@@ -24,12 +24,13 @@ done
 # The optional unified contract is above both native SDKs and must not acquire
 # either native package, MASS, or a third-party production dependency.
 agent_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent | sed '/^$/d')
-test "$agent_deps" = "github.com/zoumo/agent-sdk-go/agent"
+test "$agent_deps" = $'github.com/zoumo/agent-sdk-go/internal/tracecontext\ngithub.com/zoumo/agent-sdk-go/agent'
 # The shared Provider lifecycle may use only the public agent contract in
 # addition to the standard library. It cannot reach either native SDK or types.
 lifecycle_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/lifecycle | sed '/^$/d')
 while IFS= read -r dependency; do
   case "$dependency" in
+    github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
     github.com/zoumo/agent-sdk-go/agent/internal/lifecycle) ;;
     *)
@@ -38,11 +39,25 @@ while IFS= read -r dependency; do
       ;;
   esac
 done <<< "$lifecycle_deps"
+# Submission tracing shares only the public contract and standard library.
+submissiontrace_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/submissiontrace | sed '/^$/d')
+while IFS= read -r dependency; do
+  case "$dependency" in
+    github.com/zoumo/agent-sdk-go/internal/tracecontext|\
+    github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace) ;;
+    *)
+      echo "unexpected submissiontrace dependency: $dependency" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$submissiontrace_deps"
 # The shared interaction ledger may use only the public agent contract and the
 # reviewed UUID primitive. It never reaches an adapter, native SDK, or registry.
 interactionledger_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/interactionledger | sed '/^$/d')
 while IFS= read -r dependency; do
   case "$dependency" in
+    github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
     github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
     github.com/zoumo/agent-sdk-go/internal/uuidv4) ;;
@@ -64,6 +79,7 @@ for adapter in codex claude; do
           github.com/zoumo/agent-sdk-go/agent|\
           github.com/zoumo/agent-sdk-go/agent/"$adapter"|\
           github.com/zoumo/agent-sdk-go/agent/internal/lifecycle|\
+          github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace|\
           github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
           github.com/zoumo/agent-sdk-go/"$adapter"|\
           github.com/zoumo/agent-sdk-go/"$adapter"/types|\
@@ -84,6 +100,7 @@ done
 eventenvelope_dependencies=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/eventenvelope | sed '/^$/d')
 while IFS= read -r dependency; do
   case "$dependency" in
+    github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
     github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope|\
     github.com/zoumo/agent-sdk-go/internal/uuidv4) ;;

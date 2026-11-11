@@ -19,6 +19,7 @@ func TestCapabilitiesRecognizeEveryDeclaredCapability(t *testing.T) {
 		agent.CapabilityPermission,
 		agent.CapabilityForm,
 		agent.CapabilityURL,
+		agent.CapabilityPromptTrace,
 	}
 	capabilities := make(agent.Capabilities, len(declared))
 	for _, capability := range declared {

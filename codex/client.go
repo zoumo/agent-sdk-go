@@ -271,6 +271,10 @@ func (c *Client) callAccept(ctx context.Context, method string, params, result a
 }
 
 func (c *Client) callOwned(ctx context.Context, method string, params, result any, initializing bool, accept func(json.RawMessage) error, owner *Session) error {
+	return c.callOwnedWithTrace(ctx, method, params, result, initializing, accept, owner, nil)
+}
+
+func (c *Client) callOwnedWithTrace(ctx context.Context, method string, params, result any, initializing bool, accept func(json.RawMessage) error, owner *Session, trace *types.W3cTraceContext) error {
 	fail := func(id ID, dispatch DispatchState, err error) error {
 		return c.safeError(&CallError{Method: method, ID: id, Dispatch: dispatch, Cause: err})
 	}
@@ -318,10 +322,11 @@ func (c *Client) callOwned(ctx context.Context, method string, params, result an
 	c.nextID++
 	id := IntegerID(c.nextID)
 	frame, err := json.Marshal(struct {
-		ID     ID              `json:"id"`
-		Method string          `json:"method"`
-		Params json.RawMessage `json:"params,omitempty"`
-	}{id, method, raw})
+		ID     ID                     `json:"id"`
+		Method string                 `json:"method"`
+		Params json.RawMessage        `json:"params,omitempty"`
+		Trace  *types.W3cTraceContext `json:"trace,omitempty"`
+	}{id, method, raw, trace})
 	if err != nil {
 		c.mu.Unlock()
 		return fail(id, NotSent, err)

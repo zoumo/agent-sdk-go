@@ -26,6 +26,11 @@ and dependency boundaries.
   mechanics (`agent/internal/lifecycle`, `internal/queue` and
   `internal/uuidv4`), but adapters must not import each other or the other native
   SDK, and native packages must not import `agent`.
+- Trace values, context helpers and the `agent.Tracer` seam are part of the
+  standard-library-only core. OpenTelemetry or another telemetry SDK can
+  implement `Tracer` and adapt `TraceContext` outside this repository, but must
+  not become a production dependency of `agent`, `codex`, `claude` or either
+  native `types` package.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have standard-library-only **production**

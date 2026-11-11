@@ -24,6 +24,7 @@ const (
 // Provider owns one Codex app-server connection shared by all of its sessions.
 type Provider struct {
 	config         codex.StdioOptions
+	tracer         agent.Tracer
 	streams        streamFactory
 	formsSupported bool
 	lifecycle      *lifecycle.Lifecycle[*codex.Client, *session]
@@ -43,6 +44,7 @@ func New(config Config) *Provider {
 	stdio.Initialize = withDefaultCapabilities(stdio.Initialize)
 	provider := &Provider{
 		config:         stdio,
+		tracer:         config.Tracer,
 		formsSupported: supportsAgentQuestions(stdio.Initialize),
 	}
 	provider.lifecycle = lifecycle.New[*codex.Client, *session](

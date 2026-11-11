@@ -235,6 +235,7 @@ func newTestProviderWithInitialize(
 type testStreamWrappers struct {
 	reader func(io.ReadCloser) io.ReadCloser
 	writer func(io.WriteCloser) io.WriteCloser
+	tracer agent.Tracer
 }
 
 func newTestProviderWithWrappers(
@@ -266,7 +267,7 @@ func newTestProviderWithWrappers(
 		Env:        run.Environment(),
 		Dir:        run.Start.ProtocolCwd,
 		Initialize: initialize,
-	}}, codex.StreamTransport{
+	}, Tracer: wrappers.tracer}, codex.StreamTransport{
 		Reader: reader,
 		Writer: writer,
 		Stderr: run.Stderr,

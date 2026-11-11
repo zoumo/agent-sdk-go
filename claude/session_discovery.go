@@ -150,7 +150,7 @@ func (s *Session) ListSubagents(ctx context.Context, q SubagentQuery) (SubagentP
 	}
 	p.Coverage.Limits = q
 	s.mu.Lock()
-	id, closed := s.root, s.closed
+	id, closed := s.admission.sessionID(), s.closed
 	s.mu.Unlock()
 	p.Coverage.SessionID = id
 	if closed {

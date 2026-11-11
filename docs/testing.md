@@ -16,10 +16,11 @@ make lint
 bash scripts/check-offline.sh all
 ```
 
-The offline entry also accepts `parallel`, `quality`, `test`, `race`, `e2e` or
-`build`. `all` runs every task in order; `parallel` runs `quality` first, then
-runs `test` and `build` concurrently, then runs `race` and `e2e` one at a time
-in the same checkout.
+The offline entry also accepts `parallel`, `checks`, `quality`, `test`, `race`,
+`e2e` or `build`. `all` runs every task in order; `parallel` runs `quality` first,
+then runs `test` and `build` concurrently, then runs `race` and `e2e` one at a
+time in the same checkout. `checks` runs `quality`, `test` and `build` for CI's
+narrower checks job.
 
 Test and simulation hosts link the exact test-only in-process testify module; no
 separate helper process is required. The dependency boundary and pin are fixed
@@ -93,24 +94,22 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) defines one offline job:
-`ubuntu-24.04 / required`. It installs Go and downloads the pinned
+The [workflow](../.github/workflows/ci.yml) defines four independent
+`ubuntu-24.04` jobs. `checks` installs Go and downloads the pinned
 formatter/linter's official precompiled archive, verifying its SHA-256 before
-extraction. Source scans use the Python standard library. The job runs `quality`,
-then runs `test` and `build` concurrently, then runs `race` and `e2e` separately.
-Race and the required recording gate both exercise timing-sensitive subprocess
-protocols, so they do not overlap each other or package tests. The first task
-mutates generated files for its drift check, so it precedes the concurrent
-phase. The job status is the required aggregate for that platform; task output
-remains grouped in its logs. The offline tasks build only the SDK-owned
-simulation runner and driver; the in-process testify module is fetched by the
-normal Go module graph.
-External consumer CI uses `ubuntu-24.04` for
-pushed `main` commits, manual workflow runs and same-repository PRs.
+extraction. Source scans use the Python standard library. The job checks source
+ancestry, module cleanliness and whitespace, then runs `quality`, `test` and
+`build`. Dedicated `race` and `e2e` jobs run the timing-sensitive race suite and
+fixed recording gate on separate runners, without installing the linter or
+running generation checks. Failures and logs remain isolated while the jobs run concurrently.
+The offline tasks build only the SDK-owned simulation runner and driver; the
+in-process testify module is fetched by the normal Go module graph.
+External consumer CI runs for pushed `main` commits, manual workflow runs and
+same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure one offline job and one External consumer job.
-Fork PRs retain the offline job and skip
+These events configure three validation jobs and one External consumer job.
+Fork PRs retain all validation jobs and skip
 consumers because fork-only SHAs are not assumed retrievable from this
 repository. Token permissions remain contents: read; no pull_request_target
 execution is added. Configured coverage does not prove that any runner executed. See
@@ -231,9 +230,9 @@ No Windows runtime support is claimed.
 One version covers all four native imports. Before an authorized publication:
 
 1. Confirm the intended main SHA and both imported source histories.
-2. Require the exact SHA's two platform required checks and two External
-   consumer CI jobs, and inspect all five task logs on each platform; rerun on the
-   resulting main commit after merge. Fork PR consumer skips do not satisfy this gate.
+2. Require the exact SHA's `checks`, `race` and `e2e` CI jobs and the External
+   consumer job, and inspect their logs; rerun on the resulting main commit after
+   merge. Fork PR consumer skips do not satisfy this gate.
 3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
    coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
 4. Record the exact commit, CI URLs and remaining limits in the release review.

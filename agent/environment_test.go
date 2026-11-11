@@ -17,7 +17,8 @@ func TestEnvironmentOptionsValidation(t *testing.T) {
 			env   map[string]string
 			valid bool
 		}{
-			{"nil", nil, true}, {"empty", map[string]string{}, true},
+			{"nil", nil, true},
+			{"empty", map[string]string{}, true},
 			{"literal and empty values", map[string]string{"TOKEN": "literal=$HOME=附加", "EMPTY": ""}, true},
 			{"empty key", map[string]string{"": "secret-value"}, false},
 			{"equals key", map[string]string{"A=B": "secret-value"}, false},

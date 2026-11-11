@@ -181,17 +181,28 @@ func TestPromptTraceFramesAndStartupRestore(t *testing.T) {
 	}
 }
 
+func TestPromptTraceZeroWriteTransportFailure(t *testing.T) {
+	session, frames := openPromptTracePeer(t, nil, nil, true)
+	receipt, err := session.Submit(WithTraceContext(t.Context(), TraceContext{Traceparent: promptParent}), Input{Text: "must not send"})
+	require.Error(t, err)
+	assert.False(t, receipt.Written)
+	var transportError *Error
+	require.ErrorAs(t, err, &transportError)
+	assert.Equal(t, "write", transportError.Op)
+	assert.True(t, transportError.OutcomeUnknown)
+	assert.Error(t, session.Err())
+	assert.Empty(t, frames)
+}
+
 func TestPromptTraceBestEffortRewritesUnknown(t *testing.T) {
-	for _, outcome := range []string{"reject", "timeout", "write failure"} {
+	for _, outcome := range []string{"reject", "timeout"} {
 		t.Run(outcome, func(t *testing.T) {
 			for _, restore := range []bool{false, true} {
 				t.Run(strconv.FormatBool(restore), func(t *testing.T) {
-					s, frames := openPromptTracePeer(t, nil, []string{outcome}, outcome == "write failure")
+					s, frames := openPromptTracePeer(t, nil, []string{outcome}, false)
 					trace := TraceContext{Traceparent: promptParent}
 					submitPromptTrace(t, s, &trace, "first")
-					if outcome != "write failure" {
-						assertPromptTraceApply(t, takePromptTraceFrame(t, frames), "go_2", trace)
-					}
+					assertPromptTraceApply(t, takePromptTraceFrame(t, frames), "go_2", trace)
 					assertPromptTraceUser(t, frames, "first")
 					assert.False(t, s.traceKnown)
 					target := trace

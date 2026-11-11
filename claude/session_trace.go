@@ -4,6 +4,7 @@ package claude
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 )
@@ -27,20 +28,20 @@ func startupTrace(env []string) TraceContext {
 
 // applyPromptTrace runs with settingsMu held through the following user write.
 // Unknown outcomes deliberately force a complete rewrite on the next prompt.
-func (s *Session) applyPromptTrace(ctx context.Context) {
+func (s *Session) applyPromptTrace(ctx context.Context) error {
 	if ctx == nil || ctx.Err() != nil {
-		return
+		return nil
 	}
 	target := s.traceBaseline
 	if trace, ok := TraceContextFromContext(ctx); ok && trace.Validate() == nil {
 		target = trace
 	}
 	if s.traceKnown && target == s.traceCurrent {
-		return
+		return nil
 	}
 	attempt, cancel := context.WithTimeout(ctx, promptTraceSettingsTimeout)
 	defer cancel()
-	_, err := s.client.controlRequestWithPolicy(attempt, "apply_flag_settings", map[string]any{
+	_, err := s.client.controlRequest(attempt, "apply_flag_settings", map[string]any{
 		"subtype": "apply_flag_settings",
 		"settings": map[string]any{
 			"env": map[string]string{
@@ -48,9 +49,19 @@ func (s *Session) applyPromptTrace(ctx context.Context) {
 				"TRACESTATE":  target.Tracestate,
 			},
 		},
-	}, false, true)
+	}, false)
 	s.traceKnown = err == nil
 	if s.traceKnown {
 		s.traceCurrent = target
+	}
+	var transportError *Error
+	if errors.As(err, &transportError) && transportError.Op == "write" {
+		return err
+	}
+	select {
+	case <-s.client.done:
+		return s.client.operationError()
+	default:
+		return nil
 	}
 }

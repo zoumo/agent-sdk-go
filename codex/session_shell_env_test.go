@@ -79,9 +79,13 @@ func TestSessionShellEnvRejectsBeforeProcessStart(t *testing.T) {
 
 func TestSessionShellEnvInvalidDeclarationsAreDeterministic(t *testing.T) {
 	for _, env := range []map[string]string{
-		{"": "secret-env-value"}, {"A=B": "secret-env-value"}, {"A\x00B": "secret-env-value"},
-		{string([]byte{0xff}): "secret-env-value"}, {"TOKEN": "secret-env-value\x00"},
-		{"TOKEN": "secret-env-value" + string([]byte{0xff})}, {"Path": "secret-env-value", "PATH": "other-secret"},
+		{"": "secret-env-value"},
+		{"A=B": "secret-env-value"},
+		{"A\x00B": "secret-env-value"},
+		{string([]byte{0xff}): "secret-env-value"},
+		{"TOKEN": "secret-env-value\x00"},
+		{"TOKEN": "secret-env-value" + string([]byte{0xff})},
+		{"Path": "secret-env-value", "PATH": "other-secret"},
 		{"Z": "secret-env-value\x00", "A": "secret-env-value\x00"},
 	} {
 		options := codex.SessionOptions{Stdio: &codex.StdioOptions{Executable: "/does-not-exist"}, ShellEnv: env}

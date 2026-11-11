@@ -77,8 +77,9 @@ func (p *Provider) Open(
 	if err != nil {
 		return nil, err
 	}
+	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
-		return p.openNativeSession(ctx, options, "", nil, mcpServers)
+		return p.openNativeSession(ctx, options, "", nil, mcpServers, env)
 	})
 }
 
@@ -110,8 +111,9 @@ func (p *Provider) Resume(
 	if err := p.validateResumeConfig(); err != nil {
 		return nil, err
 	}
+	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
-		attempt, err := p.prepareResume(ctx, options)
+		attempt, err := p.prepareResume(ctx, options, env)
 		if err != nil {
 			return nil, err
 		}
@@ -121,6 +123,7 @@ func (p *Provider) Resume(
 			options.SessionID,
 			attempt,
 			mcpServers,
+			env,
 		)
 	})
 }
@@ -154,6 +157,7 @@ func (p *Provider) openNativeSession(
 	resumeID string,
 	resume *resumeAttempt,
 	mcpServers []claude.MCPServer,
+	env []string,
 ) (*session, error) {
 	nativeOptions := p.nativeOptions(
 		options.Cwd,
@@ -162,6 +166,7 @@ func (p *Provider) openNativeSession(
 		mcpServers,
 		options.Config,
 	)
+	nativeOptions.Env = slices.Clone(env)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
 	if resume != nil {
 		nativeOptions.SessionStartProbe = &resume.probe
@@ -293,6 +298,7 @@ func (p *Provider) sessionClosed(closed *session) {
 
 func providerCapabilities() agent.Capabilities {
 	return agent.Capabilities{
+		agent.CapabilityProcessEnv: true,
 		agent.CapabilityTextInput:  true,
 		agent.CapabilityPermission: true,
 		agent.CapabilityForm:       true,
@@ -341,6 +347,14 @@ func (p *Provider) nativeOptions(
 }
 
 func validateOpenOptions(options agent.OpenOptions) error {
+	if len(options.ShellEnv) != 0 {
+		return adapterError(
+			agent.ErrorUnsupported,
+			agent.ErrorReasonShellEnvUnsupported,
+			"Claude Session shell environment is not supported",
+			nil,
+		)
+	}
 	if len(options.AdditionalDirs) != 0 {
 		return adapterError(
 			agent.ErrorUnsupported,

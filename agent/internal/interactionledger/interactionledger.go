@@ -1,4 +1,4 @@
-// Package interactionledger owns provider-neutral interaction authority state.
+// Package interactionledger owns adapter-neutral interaction authority state.
 // It allocates opaque references and stores no native request, handle, reply
 // callback, or reference-to-adapter lookup.
 package interactionledger
@@ -37,7 +37,7 @@ func (l *Ledger) Allocate() (agent.InteractionRef, uint64, error) {
 	return agent.InteractionRef(l.prefix + value), l.sequence, nil
 }
 
-// State is the provider-neutral authority phase of one interaction.
+// State is the adapter-neutral authority phase of one interaction.
 type State uint8
 
 const (
@@ -85,7 +85,7 @@ func (s *Slot) Claim() bool {
 	return true
 }
 
-// CompleteSent records a successfully submitted answer and its provider-neutral
+// CompleteSent records a successfully submitted answer and its adapter-neutral
 // outcome.
 func (s *Slot) CompleteSent(outcome agent.InteractionOutcome) bool {
 	s.mu.Lock()

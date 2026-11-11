@@ -95,7 +95,7 @@ type InteractionReceipt struct {
 	Acceptance  Acceptance
 }
 
-// InterruptOptions is reserved for provider-neutral interrupt options.
+// InterruptOptions is reserved for adapter-neutral interrupt options.
 type InterruptOptions struct{}
 
 // InterruptResult describes the native control outcome of an interrupt.

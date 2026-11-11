@@ -12,10 +12,16 @@
 - Exposes `codex`, `codex/types`, `claude` and `claude/types` with one version.
   Native SDKs remain independent; both types packages use only the standard
   library. Previous module import paths require explicit migration.
-- Adds the optional provider-neutral `agent` core and `agent/codex`/`agent/claude`
-  adapters for live Provider and Session operations, events, input, interactions
+- Adds the optional adapter-neutral `agent` core and `agent/codex`/`agent/claude`
+  adapters for live Agent Core and Session operations, events, input, interactions
   and classified errors. The core uses only the standard library; adapters stay
-  provider-specific, and the layer adds no history abstraction or root client.
+  adapter-specific, and the layer adds no history abstraction or root client.
+- Exposes `agent.Core`, `agentcodex.Core` and `agentclaude.Core` as the unreleased
+  Agent-level owners, without Provider aliases. Core errors use `core_*` reasons;
+  `ToolProvider` and tool payload `provider` values retain their meaning.
+  Shared internal `corelease` and `eventstream` modules coordinate admission,
+  Session leases, event delivery and cleanup ordering while native observation,
+  conversion and interaction authority remain in each adapter.
 - Makes `StartOrSteer` the unified input operation with explicit
   `applied_current_work`, `applied_new_work`, `applied_best_effort` and
   `not_applied` results. It does not queue, wait for idle, persist or retry.

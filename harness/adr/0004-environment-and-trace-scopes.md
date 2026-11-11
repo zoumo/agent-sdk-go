@@ -13,9 +13,9 @@ date: 2026-11-11
 提供环境或追踪信息。这些需求都容易被简写成“传一个 env”，但它们的生命周期
 和影响范围不同：
 
-- Provider 进程环境决定 Codex app-server 或 Claude CLI 的基础启动环境。Codex
+- Core 进程环境决定 Codex app-server 或 Claude CLI 的基础启动环境。Codex
   的所有 Session 共享 app-server；Claude 每个 Session 自有 CLI 进程，可在
-  Provider 基底上再应用自己的 Session overlay。
+  Core 基底上再应用自己的 Session overlay。
 - Codex 的 thread config 可以为 shell/unified-exec 子进程增加环境变量，但不
   修改 app-server 自身环境。
 - 原生 `SessionOptions.Env` 可以为 Claude Session 自有 CLI 进程提供独立环境；
@@ -34,7 +34,7 @@ date: 2026-11-11
   ACP 兼容与该原生 control 映射是两条路径。
 
 Codex 在 steer 时复用原 turn trace、Claude settings env 在进程内扩散，都是
-Provider 原生行为。它们解释 SDK 为什么只能做 best-effort 映射而不能承诺统一
+原生 Agent 行为。它们解释 SDK 为什么只能做 best-effort 映射而不能承诺统一
 trace 生命周期，但不是 SDK 新增或保证的语义。
 
 如果统一层用一个 `Env` 字段同时表示这些能力，调用方会在 Codex 与 Claude 上
@@ -73,7 +73,7 @@ Claude/ACP/CLI 的来源、版本与回归报告归原生 SDK 来源文档维护
 
 公开四个不同作用域，不建立自动等价：
 
-1. Provider 进程环境继续使用具体 adapter 配置：
+1. Core 进程环境继续使用具体 adapter 配置：
     `agent/codex.Config.Stdio.Env` 与 `agent/claude.Config.Env`。nil 继承当前
     进程，非 nil 整体替换。
 2. 统一 `OpenOptions.ShellEnv map[string]string` 只表示 Session 级、
@@ -112,7 +112,7 @@ Claude/ACP/CLI 的来源、版本与回归报告归原生 SDK 来源文档维护
     提交。Claude 路径不重启 CLI，也不把 ACP `_meta` 当作实现依赖；ACP 接入仍
     属于独立 adapter 能力。
 
-    以下是 Provider 原生行为，不是 SDK 新增或保证的语义：
+    以下是原生 Agent 行为，不是 SDK 新增或保证的语义：
 
     - 原生 Codex 把 busy turn 上的 `turn/start` 接纳为 steer 时，不创建新的
       turn 执行 span，继续使用原 turn 的 trace。新 carrier 最多父化该次 request
@@ -160,26 +160,26 @@ transport 上的输入结果；实际 transport 写入失败或挂起遵循正�
 
 ## 后果
 
-- 同一个 Codex Provider/app-server 可以用不同 `ShellEnv` 服务多个 thread；
-  进程环境和 `CODEX_HOME` 仍由 Provider 选择。
+- 同一个 Codex Core/app-server 可以用不同 `ShellEnv` 服务多个 thread；
+  进程环境和 `CODEX_HOME` 仍由 Core 选择。
 - Codex `Resume` 对仍 loaded 或运行中的 thread 可能忽略 config override；SDK
   只把 `ShellEnv` 作为请求传递，不证明其已热更新。需要确定 shell 环境时必须
   新建 thread，而不是依赖运行中恢复。
-- Claude 的 Provider `Config.Env` 基底不同时仍需要不同 Provider；同一基底上
+- Claude 的 Core `Config.Env` 基底不同时仍需要不同 Core；同一基底上
   的 Session 差异可以由各自 `ProcessEnv` 表达，不能用统一 `ShellEnv` 冒充。
-- 同一 Claude Provider 的多个 Session 可以用不同 `ProcessEnv`，因为每个
+- 同一 Claude Core 的多个 Session 可以用不同 `ProcessEnv`，因为每个
   Session 自有 CLI 进程；该覆盖会影响 CLI 及其子进程。
 - Codex 的 Session 级进程环境没有独立入口；`ProcessEnv` 在 Codex Session 上
-  明确不支持，进程隔离仍由 Provider 决定。
+  明确不支持，进程隔离仍由 Core 决定。
 - 原生 Codex 在 steer 时不创建新的 turn 执行 span，新 carrier 只可能标记该次
   提交，active turn 继续使用原 trace；后续 turn 模型/工具工作仍属于 turn
-  建立时的 trace。这是 Provider 原生行为，不是 SDK 合同；SDK 不补造或重定向
+  建立时的 trace。这是原生 Agent 行为，不是 SDK 合同；SDK 不补造或重定向
   provider span。
 - Claude 可在启动时通过 `Config.Env` 或该 Session 的 `ProcessEnv` 提供固定
   trace，也可用 `WithTraceContext` 让 SDK 为每条 prompt 尝试切换 settings
   env。后写入的 env 可能作用于更早已排队但尚未取走的 prompt，也可能被当前
   turn 的后续新工具或新建子进程读取；已经启动的进程不保证更新。上述现象属于
-  Provider 原生行为，不是 SDK 保证；SDK 不为避免观测误差阻塞提交，也不声称
+  原生 Agent 行为，不是 SDK 保证；SDK 不为避免观测误差阻塞提交，也不声称
   prompt/turn 隔离。具体 CLI 版本是否导出 provider span 仍受 telemetry 配置
   和公开回归影响。
 - Context trace 可用于所有 provider 的本地 span parent；两个 provider 都会将

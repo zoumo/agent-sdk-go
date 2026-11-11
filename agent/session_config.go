@@ -55,7 +55,7 @@ func validateConfigValue(
 	return nil
 }
 
-// ConfigID identifies one provider-neutral runtime session configuration value.
+// ConfigID identifies one adapter-neutral runtime session configuration value.
 type ConfigID string
 
 const (

@@ -1,5 +1,5 @@
 // Package submissiontrace owns the best-effort span lifecycle of one admitted
-// unified submission. Provider wire mapping remains in each adapter.
+// unified submission. Native wire mapping remains in each adapter.
 package submissiontrace
 
 import (

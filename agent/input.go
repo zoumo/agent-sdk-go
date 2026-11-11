@@ -2,7 +2,7 @@ package agent
 
 import "time"
 
-// Input is an ordered sequence of provider-neutral content blocks.
+// Input is an ordered sequence of adapter-neutral content blocks.
 //
 //nolint:recvcheck // JSON decoding mutates input; reads and encoding accept values.
 type Input struct {

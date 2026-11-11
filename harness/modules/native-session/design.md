@@ -282,13 +282,13 @@ Claude 外部 server 没有 stdio cwd、env header 或 bearer token 环境变量
 
 | 合同 | Codex | Claude |
 |---|---|---|
-| 子进程完整环境 | Provider `StdioOptions.Env`；nil 继承，非 nil 整体替换 | Session `SessionOptions.Env`；nil 继承，非 nil 整体替换 |
+| 子进程完整环境 | app-server `StdioOptions.Env`；nil 继承，非 nil 整体替换 | Session `SessionOptions.Env`；nil 继承，非 nil 整体替换 |
 | Session shell-only 环境 | `SessionOptions.ShellEnv` 映射 `shell_environment_policy.set` | 不支持；没有稳定 shell-only 入口，非空值必须拒绝 |
 | Prompt trace | `Session.Submit` 从 context 读取 carrier，映射 request envelope 顶层 `trace` | `Session.Submit` 从 context 读取 carrier，在同一常驻 CLI 上于 user frame 前切换 settings `env`；启动 baseline 用于恢复 |
 
 表中 Prompt trace 只描述 SDK 的映射入口。原生 Codex 的 steer trace 复用、
 原生 Claude settings env 的进程级扩散，以及 provider 最终如何创建或关联 span，
-都属于 Provider 原生行为，不是本包新增或保证的语义。Synthetic 测试只验证
+都属于原生 Agent 行为，不是本包新增或保证的语义。Synthetic 测试只验证
 carrier 编码、调用顺序和 best-effort 边界，不伪造这些原生结果。
 
 `Env` 是完整环境声明而不是 overlay。调用方只追加变量时必须显式复制
@@ -297,7 +297,7 @@ carrier 编码、调用顺序和 best-effort 边界，不伪造这些原生结�
 `StreamOptions.Env` / `OpenStreams` 只保存协议快照，不启动或修改子进程环境，
 不提供 env 注入。
 
-Codex Provider/app-server 是一个共享进程，其 `Env` 对所有 Session 相同；Session
+Codex app-server 是一个共享进程，其 `Env` 对所有 Session 相同；Session
 `ShellEnv` 才能在共享 app-server 上为不同 thread 提供 shell 级覆盖。Claude
 每个 Session 拥有自己的 CLI 进程，原生 `claude.SessionOptions.Env` 因此可在
 每个 Session 选择不同完整进程环境。
@@ -347,7 +347,7 @@ envelope；之后的 span 归属由原生 app-server/Core 决定。原生 Codex 
 trace；新 carrier 最多父化本次 request 和输入接纳路径。服务端可把既有
 `turn.id` 记录到该 request span，但不会替换 active turn 的 trace，也不会回溯
 重挂已经产生的 span。`TurnInput` 入队后不携带 carrier，后续 turn 工作保持
-turn 建立时的 trace。这些是 Provider 原生行为，不是本包新增或保证的语义；
+turn 建立时的 trace。这些是原生 Agent 行为，不是本包新增或保证的语义；
 SDK 不模拟该状态机，也不重定向 active turn 的 trace。因此 prompt trace 不是
 turn-level retarget；需要相同 trace 的多次输入必须由调用方复用 carrier。显式
 `turn/steer` 请求不承诺该传播，也不属于 `Session.Submit` 的 envelope trace
@@ -366,7 +366,7 @@ Claude 原生包使用 CLI stream-json/control 协议，不使用 ACP。本包�
 固定 trace 可在启动前通过 `SessionOptions.Env`（或统一层的 `ProcessEnv`）
 提供；prompt trace 使用同一常驻进程的 settings env，并在下一条无 trace prompt
 恢复该启动 baseline。两者都不重启 CLI。SDK 的合同止于尽力设置 settings env
-并保持本地 apply/user frame 顺序；CLI 之后如何使用该环境属于 Provider 原生
+并保持本地 apply/user frame 顺序；CLI 之后如何使用该环境属于原生 Agent
 行为：trace env 写入后，当前 turn 的后续新工具、工具启动的新子进程或随后
 prompt 都可能读取当前值；已经启动的进程不保证更新。SDK 不按工具调用快照或
 恢复，也不保证 prompt/turn 隔离。原生包只承诺 best-effort control response

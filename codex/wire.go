@@ -57,7 +57,11 @@ func (c *Client) readLoop() {
 				return
 			}
 			input := c.transport.StreamInput()
-			if input != nil && errors.Is(err, io.EOF) {
+			// Framing failures may wrap EOF. A concrete protocol failure must
+			// not be downgraded by half-close or unexpected-EOF policy.
+			if errors.Is(err, ErrProtocol) {
+				c.fail(err)
+			} else if input != nil && errors.Is(err, io.EOF) {
 				c.mu.Lock()
 				closing := c.closing
 				c.mu.Unlock()

@@ -56,16 +56,7 @@ type Client struct {
 	stdin              *os.File
 	stdout             *os.File
 	stderr             *os.File
-	streamReader       io.ReadCloser
-	streamWriter       io.WriteCloser
-	streamStderr       io.ReadCloser
-	streamWait         func(context.Context) error
-	streamMode         bool
-	inputMu            sync.Mutex
-	inputClosed        bool
-	inputCloseErr      error
-	inputClosedCh      chan struct{}
-	readEOF            bool
+	streams            *streamFrameTransport
 	terminalClosed     bool
 	closing            bool
 	remote             *websocket.Conn
@@ -174,7 +165,7 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 }
 
 func newClient(limits Limits) *Client {
-	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{}), inputClosedCh: make(chan struct{})}
+	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
 	c.ownership.client = c
 	return c
 }
@@ -301,7 +292,7 @@ func (c *Client) callOwned(ctx context.Context, method string, params, result an
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, err)
 	}
-	if c.streamMode && c.inputIsClosed() {
+	if c.streamsInputHalfClosed() {
 		c.mu.Unlock()
 		return fail(ID{}, NotSent, ErrInputClosed)
 	}
@@ -419,7 +410,7 @@ func (c *Client) writeLoop() {
 				c.mu.Unlock()
 				return
 			}
-			if c.streamMode && c.inputIsClosed() {
+			if c.streamsInputHalfClosed() {
 				if m.answer != nil {
 					m.answer.finishLocked(ErrInputClosed)
 				}
@@ -471,9 +462,6 @@ func (c *Client) writeLoop() {
 			err := c.frames.WriteFrame(m.ctx, m.frame)
 			finished.Store(true)
 			timer.Stop()
-			if err != nil && c.streamMode && c.inputIsClosed() {
-				err = ErrInputClosed
-			}
 			c.mu.Lock()
 			if m.answer != nil {
 				m.answer.writing = false
@@ -550,15 +538,15 @@ func (c *Client) fail(cause error) {
 	c.mu.Unlock()
 	if c.remote != nil {
 		_ = c.remote.CloseNow()
-	} else if c.streamMode {
-		_ = c.closeInput()
+	} else if c.streams != nil {
+		_ = c.streams.CloseInput()
 	} else {
 		_ = c.stdin.Close()
 	}
 }
 
 func (c *Client) cleanup() {
-	if c.streamMode {
+	if c.streams != nil {
 		c.cleanupStream()
 		return
 	}
@@ -603,51 +591,29 @@ func (c *Client) finishCleanup() {
 
 func (c *Client) cleanupStream() {
 	select {
-	case <-c.inputClosedCh:
+	case <-c.streams.InputHalfClosedSignal():
 	case <-c.done:
 	case <-c.readDone:
 	}
-	deadline := time.Now().Add(c.limits.ShutdownTimeout)
-	_ = c.closeInput()
-
-	var waitErr error
-	if c.streamWait != nil {
-		waitCtx, cancel := context.WithDeadline(context.Background(), deadline)
-		waitErr = c.streamWait(waitCtx)
-		cancel()
-		if waitErr != nil {
-			// Close is a request to stop this connection, not permission to hide
-			// the peer's authoritative completion failure. Replace only a generic
-			// local-close or premature-EOF cause; a specific terminal cause wins.
-			c.authoritativeStreamFailure(waitErr)
-			_ = c.streamReader.Close()
-		}
-	}
-
-	readComplete := awaitUntil(c.readDone, deadline)
-	_ = c.closeInput()
-	if !readComplete {
-		_ = c.streamReader.Close()
-		readComplete = awaitUntil(c.readDone, time.Now().Add(c.limits.ShutdownTimeout))
-	}
-	_ = c.streamReader.Close()
-	if c.streamStderr != nil {
-		_ = c.streamStderr.Close()
+	completion := c.streams.Complete(c.readDone, c.limits.ShutdownTimeout)
+	if completion.waitErr != nil {
+		// Close is a request to stop this connection, not permission to hide
+		// the peer's authoritative completion failure. Replace only a generic
+		// local-close or premature-EOF cause; a specific terminal cause wins.
+		c.authoritativeStreamFailure(completion.waitErr)
 	}
 
 	c.mu.Lock()
 	terminal := c.terminalClosed
 	closing := c.closing
-	readEOF := c.readEOF
 	c.mu.Unlock()
-	inputClosed := c.inputIsClosed()
 	switch {
 	case terminal:
-	case waitErr != nil:
-		c.fail(waitErr)
-	case !inputClosed:
+	case completion.waitErr != nil:
+		c.fail(completion.waitErr)
+	case !c.streams.InputHalfClosed():
 		c.fail(ErrShutdownTimeout)
-	case !readEOF || !readComplete:
+	case !completion.readEOF || !completion.readComplete:
 		if !closing {
 			c.fail(fmt.Errorf("%w: peer ended without an input-acknowledged EOF", ErrUnexpectedEOF))
 		}
@@ -690,38 +656,17 @@ func (c *Client) completeStream() {
 	close(c.done)
 }
 
-func (c *Client) inputIsClosed() bool {
-	c.inputMu.Lock()
-	defer c.inputMu.Unlock()
-	return c.inputClosed
-}
-
-func (c *Client) closeInput() error {
-	c.inputMu.Lock()
-	defer c.inputMu.Unlock()
-	if c.inputClosed {
-		if c.inputCloseErr != nil {
-			return c.inputCloseErr
-		}
-		return ErrInputClosed
-	}
-	c.inputClosed = true
-	if c.streamMode {
-		c.inputCloseErr = c.streamWriter.Close()
-	} else {
-		c.inputCloseErr = c.stdin.Close()
-	}
-	close(c.inputClosedCh)
-	return c.inputCloseErr
+func (c *Client) streamsInputHalfClosed() bool {
+	return c.streams != nil && c.streams.InputHalfClosed()
 }
 
 // CloseInput half-closes the SDK outbound writer while retaining the reader for
 // final peer frames. It is intended for stream transports.
 func (c *Client) CloseInput() error {
-	if !c.streamMode {
+	if c.streams == nil {
 		return ErrStreamRequired
 	}
-	return c.closeInput()
+	return c.streams.CloseInput()
 }
 
 func awaitUntil(ch <-chan struct{}, until time.Time) bool {
@@ -741,7 +686,7 @@ func awaitUntil(ch <-chan struct{}, until time.Time) bool {
 // or kills an unrelated process, process group, or remote server.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	if c.streamMode {
+	if c.streams != nil {
 		c.closing = true
 	}
 	terminal := c.terminalClosed
@@ -766,8 +711,8 @@ func saturatingAdd(a, b uint64) uint64 {
 
 func (c *Client) drainStderr() {
 	reader := io.Reader(c.stderr)
-	if c.streamMode {
-		reader = c.streamStderr
+	if c.streams != nil {
+		reader = c.streams.StderrReader()
 	}
 	buf := make([]byte, 4096)
 	for {

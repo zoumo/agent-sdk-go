@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 )
@@ -14,6 +15,8 @@ import (
 type Config struct {
 	CLIPath string
 	Env     []string
+	// Tracer optionally creates a local span for each admitted StartOrSteer.
+	Tracer agent.Tracer
 	// ConfigDir is the explicit absolute Claude local-storage root used by
 	// Resume preflight and postcheck. It is not inferred from HOME or Cwd.
 	ConfigDir         string

@@ -10,6 +10,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
+	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -155,7 +156,7 @@ func (s *session) Events() (agent.EventStream, error) {
 func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
-) (agent.InputReceipt, error) {
+) (receipt agent.InputReceipt, err error) {
 	text, err := textInput(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
@@ -178,6 +179,9 @@ func (s *session) StartOrSteer(
 	stateVersion := s.stateVersion
 	s.submitting = true
 	s.mu.Unlock()
+
+	trace := submissiontrace.Start(ctx, s.provider.config.Tracer)
+	defer func() { trace.End(err) }()
 
 	submissionID, err := s.newSubmissionID(stateVersion)
 	if err != nil {

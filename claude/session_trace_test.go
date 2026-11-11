@@ -120,6 +120,20 @@ func (w *failPromptTraceWriter) Write(p []byte) (int, error) {
 	return w.PipeWriter.Write(p)
 }
 
+type promptTraceWriteSignal struct {
+	io.WriteCloser
+	applyDone chan struct{}
+	once      sync.Once
+}
+
+func (w *promptTraceWriteSignal) Write(p []byte) (int, error) {
+	n, err := w.WriteCloser.Write(p)
+	if bytes.Contains(p, []byte(`"apply_flag_settings"`)) {
+		w.once.Do(func() { close(w.applyDone) })
+	}
+	return n, err
+}
+
 func takePromptTraceFrame(t *testing.T, frames <-chan json.RawMessage) json.RawMessage {
 	t.Helper()
 	select {
@@ -334,6 +348,11 @@ func TestPromptTraceOpenCapturesEffectiveStartupEnvironment(t *testing.T) {
 
 func TestPromptTraceCancellationKeepsSessionUsable(t *testing.T) {
 	s, frames := openPromptTracePeer(t, nil, []string{"timeout"}, false)
+	writer := &promptTraceWriteSignal{
+		WriteCloser: s.client.streamWriter,
+		applyDone:   make(chan struct{}),
+	}
+	s.client.streamWriter = writer
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	trace := TraceContext{Traceparent: promptParent}
@@ -343,6 +362,11 @@ func TestPromptTraceCancellationKeepsSessionUsable(t *testing.T) {
 		result <- err
 	}()
 	assertPromptTraceApply(t, takePromptTraceFrame(t, frames), "go_2", trace)
+	select {
+	case <-writer.applyDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("settings frame write did not complete")
+	}
 	cancel()
 	select {
 	case err := <-result:

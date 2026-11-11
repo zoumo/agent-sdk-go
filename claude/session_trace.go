@@ -26,7 +26,7 @@ func startupTrace(env []string) TraceContext {
 	return trace
 }
 
-// applyPromptTrace runs with settingsMu held through the following user write.
+// applyPromptTrace runs with the settings gate held through the following user write.
 // Unknown outcomes deliberately force a complete rewrite on the next prompt.
 func (s *Session) applyPromptTrace(ctx context.Context) error {
 	if ctx == nil || ctx.Err() != nil {

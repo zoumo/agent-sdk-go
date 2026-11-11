@@ -184,6 +184,11 @@ control 写入阻塞时使用既有取消机制关闭 transport，释放写入�
 不再追加 user frame，也不返回 `Written=true`。apply 成功而 input 写失败时沿用
 既有写入错误语义，不自动重发。
 
+`Submit` 和 `SetEffort` 获取 settings/input gate 时使用调用 context；等待期间
+被取消的调用在写入前返回该取消错误，不进入 pending 队列。nil context 在取得
+gate 前返回既有 nil-context 错误，不改变 trace 或写入状态；统一 adapter 的
+nil `StartOrSteer` 在 admission 和 span 创建前返回同一错误类别。
+
 SDK 不维护 prompt 队列，不等待 prompt 开始或整个 turn，也不因同一 Session
 另有 prompt 正在执行而拒绝带 trace 的提交。Claude CLI 可以把已写入的输入留在
 自己的内部队列中，并在稍后取走 prompt 时读取进程级 trace env；因此后一次写入

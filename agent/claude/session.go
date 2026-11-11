@@ -161,6 +161,9 @@ func (s *session) StartOrSteer(
 	if err != nil {
 		return agent.InputReceipt{}, err
 	}
+	if ctx == nil {
+		return agent.InputReceipt{}, nativeOperationError("start_or_steer", queue.ErrNilContext)
+	}
 
 	s.mu.Lock()
 	if s.closed {

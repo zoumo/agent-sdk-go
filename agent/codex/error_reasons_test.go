@@ -19,7 +19,7 @@ func TestStableErrorReasons(t *testing.T) {
 		{"form outcome unsupported", agentcodex.ErrorReasonFormOutcomeUnsupported, "form_outcome_unsupported"},
 		{"invalid native event", agentcodex.ErrorReasonInvalidNativeEvent, "invalid_native_event"},
 		{"permission cancel unsupported", agentcodex.ErrorReasonPermissionCancelUnsupported, "permission_cancel_unsupported"},
-		{"provider start failed", agentcodex.ErrorReasonProviderStartFailed, "provider_start_failed"},
+		{"core start failed", agentcodex.ErrorReasonCoreStartFailed, "core_start_failed"},
 		{"start or steer identity missing", agentcodex.ErrorReasonStartOrSteerIdentityMissing, "start_or_steer_identity_missing"},
 	}
 

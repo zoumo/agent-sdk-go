@@ -1,4 +1,4 @@
-package lifecycle_test
+package corelease_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/agent/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 )
 
 type fakeResource struct {
@@ -30,7 +30,7 @@ func TestStartAcquiresOnceAndReturnsCapabilityCopies(t *testing.T) {
 		agent.CapabilityTextInput:  true,
 		agent.CapabilityPermission: true,
 	}
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		base,
 		func(context.Context) (*fakeResource, error) {
 			acquireCalls.Add(1)
@@ -71,7 +71,7 @@ func TestStartAcquiresOnceAndReturnsCapabilityCopies(t *testing.T) {
 }
 
 func TestOperationsBeforeStartAreRejected(t *testing.T) {
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return &fakeResource{}, nil
@@ -81,7 +81,7 @@ func TestOperationsBeforeStartAreRejected(t *testing.T) {
 		},
 	)
 
-	err := provider.Open(
+	identity, err := provider.Open(
 		context.Background(),
 		func(context.Context, *fakeResource) (*fakeSession, error) {
 			t.Fatal("Open callback must not run before Start")
@@ -92,14 +92,15 @@ func TestOperationsBeforeStartAreRejected(t *testing.T) {
 		t,
 		err,
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderNotStarted,
+		agent.ErrorReasonCoreNotStarted,
 	)
+	assert.Nil(t, identity)
 	resource, err := provider.Resource()
 	requireLifecycleError(
 		t,
 		err,
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderNotStarted,
+		agent.ErrorReasonCoreNotStarted,
 	)
 	assert.Nil(t, resource)
 	require.NoError(t, provider.Stop(context.Background()))
@@ -109,7 +110,7 @@ func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
 	startFailure := errors.New("synthetic acquire failure")
 	var acquireCalls atomic.Int32
 	resource := &fakeResource{id: 2}
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			if acquireCalls.Add(1) == 1 {
@@ -129,7 +130,7 @@ func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
 		t,
 		err,
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderNotStarted,
+		agent.ErrorReasonCoreNotStarted,
 	)
 
 	_, err = provider.Start(context.Background())
@@ -144,7 +145,7 @@ func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
 func TestStopBeforeStartIsTerminalWithoutRelease(t *testing.T) {
 	var releaseCalls atomic.Int32
 	var openCalls atomic.Int32
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			t.Fatal("acquire must not run after Stop")
@@ -161,23 +162,24 @@ func TestStopBeforeStartIsTerminalWithoutRelease(t *testing.T) {
 	assert.Equal(t, int32(0), releaseCalls.Load())
 
 	_, err := provider.Start(context.Background())
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
-	err = provider.Open(
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
+	identity, err := provider.Open(
 		context.Background(),
 		func(context.Context, *fakeResource) (*fakeSession, error) {
 			openCalls.Add(1)
 			return nil, nil
 		},
 	)
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
+	assert.Nil(t, identity)
 	assert.Equal(t, int32(0), openCalls.Load())
 	_, err = provider.Resource()
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 }
 
 func TestSuccessfulStopIsTerminalAndReleasesOnce(t *testing.T) {
 	var releaseCalls atomic.Int32
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return &fakeResource{}, nil
@@ -195,23 +197,24 @@ func TestSuccessfulStopIsTerminalAndReleasesOnce(t *testing.T) {
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
 	_, err = provider.Start(context.Background())
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
-	err = provider.Open(
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
+	identity, err := provider.Open(
 		context.Background(),
 		func(context.Context, *fakeResource) (*fakeSession, error) {
 			return &fakeSession{}, nil
 		},
 	)
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
+	assert.Nil(t, identity)
 	resource, err := provider.Resource()
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	assert.Nil(t, resource)
 }
 
 func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 	resource := &fakeResource{}
 	var openCalls atomic.Int32
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return resource, nil
@@ -226,7 +229,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 	first := &fakeSession{id: 1}
 	second := &fakeSession{id: 2}
 	for _, session := range []*fakeSession{first, second} {
-		err := provider.Open(
+		identity, err := provider.Open(
 			context.Background(),
 			func(_ context.Context, active *fakeResource) (*fakeSession, error) {
 				openCalls.Add(1)
@@ -235,6 +238,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 			},
 		)
 		require.NoError(t, err)
+		assert.Same(t, session, identity)
 	}
 	assert.Equal(t, int32(2), openCalls.Load())
 
@@ -242,7 +246,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 		t,
 		provider.Stop(context.Background()),
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderHasOpenSessions,
+		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	provider.SessionClosed(first)
 	provider.SessionClosed(first)
@@ -250,7 +254,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 		t,
 		provider.Stop(context.Background()),
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderHasOpenSessions,
+		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	provider.SessionClosed(second)
 	require.NoError(t, provider.Stop(context.Background()))
@@ -258,7 +262,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 
 func TestOpenFailureSettlesInFlightReservation(t *testing.T) {
 	openFailure := errors.New("synthetic identity validation failure")
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return &fakeResource{}, nil
@@ -270,19 +274,20 @@ func TestOpenFailureSettlesInFlightReservation(t *testing.T) {
 	_, err := provider.Start(context.Background())
 	require.NoError(t, err)
 
-	err = provider.Open(
+	identity, err := provider.Open(
 		context.Background(),
 		func(context.Context, *fakeResource) (*fakeSession, error) {
-			return nil, openFailure
+			return &fakeSession{id: 3}, openFailure
 		},
 	)
 	require.ErrorIs(t, err, openFailure)
+	assert.Nil(t, identity)
 	require.NoError(t, provider.Stop(context.Background()))
 }
 
 func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 	var releaseCalls atomic.Int32
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return &fakeResource{}, nil
@@ -307,7 +312,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 	opened := &fakeSession{}
 	openResult := make(chan error, 1)
 	go func() {
-		openResult <- provider.Open(
+		_, openErr := provider.Open(
 			context.Background(),
 			func(context.Context, *fakeResource) (*fakeSession, error) {
 				close(openEntered)
@@ -315,6 +320,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 				return opened, nil
 			},
 		)
+		openResult <- openErr
 	}()
 	receiveWithin(t, openEntered, "Open callback entry")
 
@@ -327,7 +333,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 		t,
 		stopErr,
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderHasOpenSessions,
+		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	assert.Equal(t, int32(0), releaseCalls.Load())
 
@@ -337,7 +343,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 		t,
 		provider.Stop(context.Background()),
 		agent.ErrorFailedPrecondition,
-		agent.ErrorReasonProviderHasOpenSessions,
+		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	provider.SessionClosed(opened)
 	require.NoError(t, provider.Stop(context.Background()))
@@ -360,7 +366,7 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	defer finishRelease()
 
 	var releaseCalls atomic.Int32
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return &fakeResource{}, nil
@@ -402,13 +408,14 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	opens := make(chan error, 1)
 	go func() {
 		close(openEntered)
-		opens <- provider.Open(
+		_, openErr := provider.Open(
 			ctx,
 			func(context.Context, *fakeResource) (*fakeSession, error) {
 				openCallbacks.Add(1)
 				return &fakeSession{}, nil
 			},
 		)
+		opens <- openErr
 	}()
 	receiveWithin(t, openEntered, "later Open entry")
 
@@ -440,13 +447,13 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 		t,
 		start.err,
 		agent.ErrorClosed,
-		agent.ErrorReasonProviderStopped,
+		agent.ErrorReasonCoreStopped,
 	)
 	requireLifecycleError(
 		t,
 		receiveWithin(t, opens, "later Open result"),
 		agent.ErrorClosed,
-		agent.ErrorReasonProviderStopped,
+		agent.ErrorReasonCoreStopped,
 	)
 	assert.Zero(t, openCallbacks.Load())
 
@@ -457,15 +464,16 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
 	_, err = provider.Start(ctx)
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
-	err = provider.Open(
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
+	identity, err := provider.Open(
 		ctx,
 		func(context.Context, *fakeResource) (*fakeSession, error) {
 			openCallbacks.Add(1)
 			return &fakeSession{}, nil
 		},
 	)
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
+	assert.Nil(t, identity)
 	assert.Zero(t, openCallbacks.Load())
 }
 
@@ -474,7 +482,7 @@ func TestConcurrentStartAcquiresOnce(t *testing.T) {
 	acquireEntered := make(chan struct{})
 	releaseAcquire := make(chan struct{})
 	var enteredOnce sync.Once
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			acquireCalls.Add(1)
@@ -518,7 +526,7 @@ func TestConcurrentStartAcquiresOnce(t *testing.T) {
 func TestReleaseFailureIsTerminalAndCached(t *testing.T) {
 	releaseFailure := errors.New("synthetic release failure")
 	var releaseCalls atomic.Int32
-	provider := lifecycle.New[*fakeResource, *fakeSession](
+	provider := corelease.New[*fakeResource, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		func(context.Context) (*fakeResource, error) {
 			return &fakeResource{}, nil
@@ -538,14 +546,14 @@ func TestReleaseFailureIsTerminalAndCached(t *testing.T) {
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
 	_, err = provider.Start(context.Background())
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	resource, err := provider.Resource()
-	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonProviderStopped)
+	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	assert.Nil(t, resource)
 }
 
-func TestLifecycleSupportsNoProviderResource(t *testing.T) {
-	provider := lifecycle.New[struct{}, *fakeSession](
+func TestCoreSupportsNoCoreResource(t *testing.T) {
+	provider := corelease.New[struct{}, *fakeSession](
 		agent.Capabilities{agent.CapabilityTextInput: true},
 		nil,
 		nil,
@@ -558,6 +566,22 @@ func TestLifecycleSupportsNoProviderResource(t *testing.T) {
 	}, capabilities)
 	_, err = provider.Resource()
 	require.NoError(t, err)
+	opened := &fakeSession{id: 4}
+	identity, err := provider.Open(
+		context.Background(),
+		func(context.Context, struct{}) (*fakeSession, error) {
+			return opened, nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Same(t, opened, identity)
+	requireLifecycleError(
+		t,
+		provider.Stop(context.Background()),
+		agent.ErrorFailedPrecondition,
+		agent.ErrorReasonCoreHasOpenSessions,
+	)
+	provider.SessionClosed(identity)
 	require.NoError(t, provider.Stop(context.Background()))
 }
 

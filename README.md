@@ -15,7 +15,7 @@ import (
 ```
 
 The native `codex` and `claude` packages remain independent, first-class SDKs.
-The optional `agent` layer provides one live `Provider`/`Session` contract above
+The optional `agent` layer provides one live `Core`/`Session` contract above
 them. It is not a root client and does not replace native protocols, raw values,
 or history queries. `agent/codex` and `agent/claude` are separate adapters and do
 not import each other. Both native `types` packages and the `agent` core depend
@@ -25,7 +25,7 @@ forwarding packages.
 | Start here | Documentation |
 |---|---|
 | Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
-| Use one live API for both | [Unified agent core](agent/doc.go), [offline session example](agent/provider_example_test.go), [offline MCP example](agent/mcp_example_test.go) |
+| Use one live API for both | [Unified Agent Core](agent/doc.go), [offline session example](agent/core_example_test.go), [offline MCP example](agent/mcp_example_test.go) |
 | Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
 | Test, record or inspect evidence | [Offline validation](docs/testing.md), [SDK simulation](tests/simulation/drivers/README.md), [pinned test library](https://github.com/zoumo/agent-sdk-testify) |
 | Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
@@ -34,23 +34,24 @@ forwarding packages.
 ## Optional unified live layer
 
 `agentcodex.New(agentcodex.Config{...})` and
-`agentclaude.New(agentclaude.Config{...})` return concrete providers that implement
-`agent.Provider`. Start the selected provider, then use `Open` or `Resume` to get
+`agentclaude.New(agentclaude.Config{...})` return concrete `*agentcodex.Core` and
+`*agentclaude.Core` values that implement `agent.Core`. Start the selected Core,
+then use `Open` or `Resume` to get
 an `agent.Session`. `Cwd` must be absolute. A session exposes operations and one
 event stream to one consumer:
 
 ```go
-func consume(ctx context.Context, provider agent.Provider, cwd string) error {
-    if _, err := provider.Start(ctx); err != nil {
+func consume(ctx context.Context, core agent.Core, cwd string) error {
+    if _, err := core.Start(ctx); err != nil {
         return err
     }
-    session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+    session, err := core.Open(ctx, agent.OpenOptions{Cwd: cwd})
     if err != nil {
-        return errors.Join(err, provider.Stop(ctx))
+        return errors.Join(err, core.Stop(ctx))
     }
     events, err := session.Events()
     if err != nil {
-        return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+        return errors.Join(err, session.Close(ctx), core.Stop(ctx))
     }
     receipt, err := session.StartOrSteer(ctx, agent.Input{
         Content: []agent.ContentBlock{
@@ -58,13 +59,13 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
         },
     })
     if err != nil {
-        return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+        return errors.Join(err, session.Close(ctx), core.Stop(ctx))
     }
     if receipt.Result == agent.InputNotApplied {
         return errors.Join(
             errors.New("input was not applied; the caller still owns it"),
             session.Close(ctx),
-            provider.Stop(ctx),
+            core.Stop(ctx),
         )
     }
     idle := false
@@ -74,11 +75,11 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
             return errors.Join(
                 errors.New("event stream ended before idle"),
                 session.Close(ctx),
-                provider.Stop(ctx),
+                core.Stop(ctx),
             )
         }
         if err != nil {
-            return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+            return errors.Join(err, session.Close(ctx), core.Stop(ctx))
         }
         switch payload := event.Payload.(type) {
         case agent.InteractionRequestedPayload:
@@ -88,7 +89,7 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
                     OptionID: payload.Request.Options[0].OptionID,
                 })
                 if err != nil {
-                    return errors.Join(err, session.Close(ctx), provider.Stop(ctx))
+                    return errors.Join(err, session.Close(ctx), core.Stop(ctx))
                 }
             }
         case agent.StateUpdatePayload:
@@ -96,9 +97,9 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
         }
     }
     if err := session.Close(ctx); err != nil {
-        return errors.Join(err, provider.Stop(ctx))
+        return errors.Join(err, core.Stop(ctx))
     }
-    return provider.Stop(ctx)
+    return core.Stop(ctx)
 }
 ```
 
@@ -109,13 +110,13 @@ fallback. The receipt describes acceptance, not model consumption. See the
 [inject contract](harness/modules/unified-agent/design.md#context-inject) for
 content, lifecycle, concurrency and version limits.
 
-Use `provider.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
+Use `core.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
 options})` to restore an existing native session; the returned `agent.Session`
 has the same API. Resume restores execution and never converts saved content into
-live events. The provider must reject `Stop` while any session remains open.
+live events. The Core must reject `Stop` while any session remains open.
 
 History stays native: use the Codex thread/turn/item queries,
-`(*agentcodex.Provider).NativeClient()` for same-connection read-only access, or
+`(*agentcodex.Core).NativeClient()` for same-connection read-only access, or
 Claude's package-level session/message/subagent queries. There is deliberately no
 unified history, `LoadSession`, replay, or root convenience client. MASS resource
 identity, history import, persistence, and multi-session aggregation also remain
@@ -124,8 +125,8 @@ outside this module.
 ### Additional system prompt
 
 `agent.OpenOptions.AdditionalSystemPrompt` adds optional caller text after
-provider defaults for one `Open` or `Resume` call; it never replaces built-in
-instructions. The complete validation, provider mapping, resume and disclosure
+native defaults for one `Open` or `Resume` call; it never replaces built-in
+instructions. The complete validation, adapter mapping, resume and disclosure
 contract is in the
 [authoritative unified-agent design](harness/modules/unified-agent/design.md#additional-system-prompt).
 
@@ -145,7 +146,7 @@ This section is the user-facing usage summary.
 `agent.OpenOptions.MCPServers` is the complete final external MCP list for one
 `Open` or `Resume` call. The component that interprets Runtime configuration must
 compose Runtime defaults with the current Session declaration before invoking the
-provider:
+Core:
 
 1. Match `Name` case-sensitively.
 2. Keep servers found only in the Runtime defaults.
@@ -154,7 +155,7 @@ provider:
 5. Treat an empty Session list as no Session override.
 6. Do not invent a tombstone, disable marker, or per-name deletion operation.
 
-The provider receives only this final list and performs no second merge. Resume
+The Core receives only this final list and performs no second merge. Resume
 must receive the full final list again; the unified SDK does not persist or restore
 MCP configuration from a previous Session.
 
@@ -229,8 +230,8 @@ and native diagnostics. Prefer Codex `EnvHeaders`/`BearerTokenEnvVar` over liter
 credentials. A successful Open or Resume does not prove that an MCP server
 connected, authenticated, discovered tools, or executed them.
 
-`go test ./agent -run '^ExampleProvider$'` runs the provider-neutral flow twice
-with in-memory synthetic fake providers. It consumes a message, answers an
+`go test ./agent -run '^ExampleCore$'` runs the adapter-neutral flow twice
+with in-memory synthetic fake Cores. It consumes a message, answers an
 interaction, waits for idle, closes, resumes, and stops without launching a real
 CLI. This example validates the shared interface only; adapter behavior is
 covered by the `agent/codex` and `agent/claude` integration tests.

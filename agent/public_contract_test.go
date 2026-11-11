@@ -102,7 +102,7 @@ func (contractStream) Next(context.Context) (agent.Event, error) {
 }
 
 func TestPublicContractsCanBeImplementedByConsumers(t *testing.T) {
-	var provider agent.Provider = contractProvider{}
+	var provider agent.Core = contractProvider{}
 	var session agent.Session = contractSession{}
 	var stream agent.EventStream = contractStream{}
 	var archiver agent.Archiver = contractSession{}

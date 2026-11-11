@@ -1,9 +1,9 @@
 // Package agentcodex adapts the native Codex app-server SDK to the optional
-// provider-neutral agent runtime contract.
+// adapter-neutral agent runtime contract.
 //
-// A Provider owns one shared Codex connection. Sessions attach to native
+// A Core owns one shared Codex connection. Sessions attach to native
 // threads on that connection and expose one live unified event stream. Native
-// history queries remain available through the provider-specific NativeClient
+// history queries remain available through the adapter-specific NativeClient
 // escape hatch; this package defines no unified history or replay API.
 //
 // The adapter maps root-turn session state, user and agent messages, reasoning,
@@ -30,7 +30,7 @@
 // current versus new work, a recognized native refusal returns not_applied, and
 // an unknown outcome remains unsettled until native turn evidence arrives.
 //
-// The provider declares text input and permission capabilities. It declares form
+// The Core declares text input and permission capabilities. It declares form
 // support only when the native experimental API is enabled, and a session removes
 // form support when AgentQuestions is disabled. A nonempty unified
 // AdditionalSystemPrompt maps to developerInstructions on thread/start and
@@ -66,7 +66,7 @@
 // silently discarded. Saved resume history remains query-only and never becomes
 // live unified events.
 //
-// Open and Resume pass the final provider-neutral external MCP list to the native
+// Open and Resume pass the final adapter-neutral external MCP list to the native
 // thread config. Stdio maps Command, Args, Env, and Cwd; Streamable HTTP maps URL,
 // Headers, EnvHeaders, and BearerTokenEnvVar to the native header and bearer
 // environment-variable fields. Codex ambient configuration is field-level

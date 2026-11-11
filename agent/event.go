@@ -34,7 +34,7 @@ type Payload interface {
 	eventType() EventType
 }
 
-// Event is one provider-neutral live event. EventID identifies this event once;
+// Event is one adapter-neutral live event. EventID identifies this event once;
 // it is not an order or a persistent history cursor.
 //
 //nolint:recvcheck // JSON decoding mutates an event; reads and encoding accept values.

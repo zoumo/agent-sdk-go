@@ -42,9 +42,9 @@ func TestStableErrorReasons(t *testing.T) {
 		{"config value empty", agent.ErrorReasonConfigValueEmpty, "config_value_empty"},
 		{"config value invalid UTF-8", agent.ErrorReasonConfigValueInvalidUTF8, "config_value_invalid_utf8"},
 		{"config ID unknown", agent.ErrorReasonConfigIDUnknown, "config_id_unknown"},
-		{"provider has open sessions", agent.ErrorReasonProviderHasOpenSessions, "provider_has_open_sessions"},
-		{"provider not started", agent.ErrorReasonProviderNotStarted, "provider_not_started"},
-		{"provider stopped", agent.ErrorReasonProviderStopped, "provider_stopped"},
+		{"core has open sessions", agent.ErrorReasonCoreHasOpenSessions, "core_has_open_sessions"},
+		{"core not started", agent.ErrorReasonCoreNotStarted, "core_not_started"},
+		{"core stopped", agent.ErrorReasonCoreStopped, "core_stopped"},
 		{"operation failed suffix", agent.ErrorReasonForOperation("open", agent.ErrorReasonSuffixFailed), "open_failed"},
 	}
 

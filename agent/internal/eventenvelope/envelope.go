@@ -1,4 +1,4 @@
-// Package eventenvelope builds validated provider-neutral event envelopes.
+// Package eventenvelope builds validated adapter-neutral event envelopes.
 package eventenvelope
 
 import (
@@ -8,8 +8,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
-// Envelope owns the fixed provider-neutral session identity and creates event
-// envelopes without interpreting provider-specific metadata.
+// Envelope owns the fixed adapter-neutral session identity and creates event
+// envelopes without interpreting adapter-specific metadata.
 type Envelope struct {
 	SessionID string
 }

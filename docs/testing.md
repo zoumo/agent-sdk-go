@@ -34,7 +34,7 @@ and mock exits. The migrated synthetic, single-case and 76-slot gate checks
 remain in `tests/simulation/simulate`.
 
 The `quality` task checks module and native dependency boundaries, the
-standard-library-only native types and `agent` core, provider-specific adapter
+standard-library-only native types and `agent` core, adapter-specific
 imports, the absence of reverse native/adapter/MASS imports, native inventory,
 reproducible Codex generation and committed whitespace, then runs `go vet`.
 `test` runs unit/subprocess tests and offline examples. `race` repeats the
@@ -134,14 +134,17 @@ interfaces through synthetic protocol peers. It retains original-handle authorit
 unknown fields, cancellation, ordering, drain, backpressure and error classification.
 Testify suites run sequentially; worker outcomes return to the owning test goroutine.
 
-The optional unified layer has separate public-contract, lifecycle, event, interaction
-and dependency tests under `agent/`, `agent/codex/` and `agent/claude/`. Adapter
-integration tests launch only synthetic protocol peers. `ExampleProvider` runs the
-provider-neutral open/resume/start-or-steer/stream/answer/close flow twice without
+The optional unified layer has separate public-contract, Core lease, event, interaction
+and dependency tests under `agent/`, `agent/internal/corelease/`,
+`agent/internal/eventstream/`, `agent/codex/` and `agent/claude/`. Boundary gates
+check direct imports and exact production dependency allowlists for corelease
+and eventstream. Adapter
+integration tests launch only synthetic protocol peers. `ExampleCore` runs the
+adapter-neutral open/resume/start-or-steer/stream/answer/close flow twice without
 a CLI:
 
 ```sh
-go test -run '^ExampleProvider$' ./agent
+go test -run '^ExampleCore$' ./agent
 ```
 
 `ExampleMCPServer` validates the final external MCP list for both unified

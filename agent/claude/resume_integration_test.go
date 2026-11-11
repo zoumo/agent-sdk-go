@@ -868,7 +868,7 @@ func newResumeProvider(
 	env []string,
 	configDir string,
 	timeout time.Duration,
-) *agentclaude.Provider {
+) *agentclaude.Core {
 	t.Helper()
 	return newResumeProviderWithHooks(t, cliPath, env, configDir, timeout, nil)
 }
@@ -880,7 +880,7 @@ func newResumeProviderWithHooks(
 	configDir string,
 	timeout time.Duration,
 	hooks json.RawMessage,
-) *agentclaude.Provider {
+) *agentclaude.Core {
 	t.Helper()
 	config := agentclaude.Config{
 		CLIPath:           cliPath,

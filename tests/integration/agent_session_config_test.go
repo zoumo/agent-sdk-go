@@ -719,7 +719,7 @@ func newAgentExecutionProvider(
 	providerName string,
 	scenario string,
 	configDir string,
-) agent.Provider {
+) agent.Core {
 	t.Helper()
 	executable, err := os.Executable()
 	require.NoError(t, err)

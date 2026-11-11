@@ -44,7 +44,7 @@ type Truncation struct {
 
 // ToolCallPayload records an observed provider-native tool call. ToolName and
 // Provider form the required identity; Kind is a required action category.
-// Status is a provider-specific lifecycle projection.
+// Status is a native-specific lifecycle projection.
 //
 //nolint:recvcheck // JSON decoding mutates payloads; reads and encoding accept values.
 type ToolCallPayload struct {

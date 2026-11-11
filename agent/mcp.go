@@ -18,7 +18,7 @@ const (
 	MCPTransportHTTP MCPTransport = "http"
 )
 
-// MCPServer is one provider-neutral external MCP server declaration in the final
+// MCPServer is one adapter-neutral external MCP server declaration in the final
 // list prepared by the caller. OpenOptions validates the list before a provider
 // adapter forwards it without connecting to the server.
 //

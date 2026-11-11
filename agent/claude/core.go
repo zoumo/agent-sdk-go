@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/agent/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 )
 
-var _ agent.Provider = (*Provider)(nil)
+var _ agent.Core = (*Core)(nil)
 
 const (
 	defaultInitializeWait = 60 * time.Second
@@ -23,12 +23,12 @@ const (
 	maxInitBufferedBytes  = 4 << 20
 )
 
-// Provider owns the lifecycle of the Claude sessions it creates. Each Claude
+// Core owns the lifecycle of the Claude sessions it creates. Each Claude
 // session owns its native CLI process.
-type Provider struct {
-	config    Config
-	streams   streamFactory
-	lifecycle *lifecycle.Lifecycle[struct{}, *session]
+type Core struct {
+	config  Config
+	streams streamFactory
+	leases  *corelease.Core[struct{}, *session]
 }
 
 type streamOpen struct {
@@ -40,30 +40,30 @@ type streamOpen struct {
 
 type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, error)
 
-// New constructs a Claude provider without starting a native process.
-func New(config Config) *Provider {
-	provider := &Provider{config: cloneConfig(config)}
-	provider.lifecycle = lifecycle.New[struct{}, *session](
+// New constructs a Claude Core without starting a native process.
+func New(config Config) *Core {
+	core := &Core{config: cloneConfig(config)}
+	core.leases = corelease.New[struct{}, *session](
 		providerCapabilities(),
 		nil,
 		nil,
 	)
-	return provider
+	return core
 }
 
-// Start marks this provider ready to open sessions.
-func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
-	return p.lifecycle.Start(ctx)
+// Start marks this Core ready to open sessions.
+func (p *Core) Start(ctx context.Context) (agent.Capabilities, error) {
+	return p.leases.Start(ctx)
 }
 
 // Stop rejects shutdown while any session is opening or open.
-func (p *Provider) Stop(ctx context.Context) error {
-	return p.lifecycle.Stop(ctx)
+func (p *Core) Stop(ctx context.Context) error {
+	return p.leases.Stop(ctx)
 }
 
 // Open creates a new Claude session after native initialization confirms its
 // real identity.
-func (p *Provider) Open(
+func (p *Core) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
 ) (agent.Session, error) {
@@ -86,7 +86,7 @@ func (p *Provider) Open(
 // Resume confirms the supported CLI version and saved transcript before launch,
 // then restores the requested session after live init or its private callback
 // confirms the same identity.
-func (p *Provider) Resume(
+func (p *Core) Resume(
 	ctx context.Context,
 	options agent.ResumeOptions,
 ) (agent.Session, error) {
@@ -128,21 +128,15 @@ func (p *Provider) Resume(
 	})
 }
 
-func (p *Provider) openLifecycle(
+func (p *Core) openLifecycle(
 	ctx context.Context,
 	open func(context.Context) (*session, error),
 ) (agent.Session, error) {
-	var created *session
-	err := p.lifecycle.Open(ctx, func(
+	created, err := p.leases.Open(ctx, func(
 		ctx context.Context,
 		_ struct{},
 	) (*session, error) {
-		opened, err := open(ctx)
-		if err != nil {
-			return nil, err
-		}
-		created = opened
-		return opened, nil
+		return open(ctx)
 	})
 	if err != nil {
 		return nil, err
@@ -151,7 +145,7 @@ func (p *Provider) openLifecycle(
 	return created, nil
 }
 
-func (p *Provider) openNativeSession(
+func (p *Core) openNativeSession(
 	ctx context.Context,
 	options agent.OpenOptions,
 	resumeID string,
@@ -271,7 +265,7 @@ func sessionIdentity(
 	return ""
 }
 
-func (p *Provider) validateResumeConfig() error {
+func (p *Core) validateResumeConfig() error {
 	switch {
 	case p.config.ConfigDir == "":
 		return adapterError(
@@ -292,8 +286,8 @@ func (p *Provider) validateResumeConfig() error {
 	}
 }
 
-func (p *Provider) sessionClosed(closed *session) {
-	p.lifecycle.SessionClosed(closed)
+func (p *Core) sessionClosed(closed *session) {
+	p.leases.SessionClosed(closed)
 }
 
 func providerCapabilities() agent.Capabilities {
@@ -318,7 +312,7 @@ func sessionCapabilities(
 	return capabilities
 }
 
-func (p *Provider) nativeOptions(
+func (p *Core) nativeOptions(
 	workDir string,
 	resumeID string,
 	features agent.Features,

@@ -6,7 +6,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 )
 
-// ExampleMCPServer shows the final provider-neutral external MCP list accepted by
+// ExampleMCPServer shows the final adapter-neutral external MCP list accepted by
 // Open and Resume. EnvHeaders and BearerTokenEnvVar use environment-variable names
 // for Codex; the Claude adapter accepts the common stdio and HTTP URL/Headers
 // subset and rejects those two Codex-specific HTTP references.

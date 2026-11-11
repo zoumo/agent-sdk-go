@@ -1,13 +1,13 @@
 ---
 type: Module Design
-title: 统一 Agent Provider、Session 与事件流
+title: 统一 Agent Core、Session 与事件流
 description: >-
   在原生 Codex 和 Claude SDK 之上定义可选的统一会话与事件层，
   SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
 status: stable
 ---
 
-# 统一 Agent Provider、Session 与事件流
+# 统一 Agent Core、Session 与事件流
 
 本页定义 `agent-sdk-go` 在现有原生 `codex`、`claude` 及其 `types` 包之上增加
 一个可选的统一实时层，同时明确 MASS 继续保留的 Runtime 和历史合同。统一层
@@ -36,13 +36,13 @@ README 和包文档说明。现有原生 Session 的语义以
 
 1. 在 `agent-sdk-go` 增加可选的 `agent` 统一核心，以及
    `agent/codex`、`agent/claude` 两个原生适配层。
-2. 只迁移 MASS Runtime 中与具体 provider 无关的单 Session 能力：
-   Provider/Session 生命周期、原生事件转换、单 Session 工作归属、状态投影、
+2. 只迁移 MASS Runtime 中与具体 adapter 无关的单 Session 能力：
+   Core/Session 生命周期、原生事件转换、单 Session 工作归属、状态投影、
    交互引用和回答句柄。统一事件语义以 MASS 现有 `SessionEvent` 的 payload
    为基础，但去掉 MASS 专属信封字段。
 3. 不整体搬迁 MASS Runtime。MASS 的 `RuntimeDriver`、多 Session 汇聚、
    `Address`、运行来源、恢复、显式历史 load、持久化分类和 Service 边界保留。
-4. MASS 的两个 Runtime adapter 变成薄的编排层：调用 SDK Provider/Session，
+4. MASS 的两个 Runtime adapter 变成薄的编排层：调用 SDK Core/Session，
    把统一事件补齐为 `SessionEvent`，继续实现现有 `RuntimeDriver`。
 5. 原生 `codex`、`claude`、`codex/types` 和 `claude/types` 仍是第一等公开
    接口。统一层不重定义原生会话或查询语义；本设计只增加明确列出的原生增量：
@@ -66,7 +66,7 @@ README 和包文档说明。现有原生 Session 的语义以
     创建/恢复的 `developerInstructions`，Claude 通过新增的
     `AppendSystemPrompt` 映射到 `--append-system-prompt`。首版不提供运行时
     热更新，恢复时由调用方重新提供完整文本。
-11. 环境按作用域分离。Provider 子进程环境继续由具体 adapter 的构造配置选择。
+11. 环境按作用域分离。Core 子进程环境继续由具体 adapter 的构造配置选择。
     Claude 每个 Session 自有 CLI 进程，因此 `OpenOptions.ProcessEnv` 可做该进程
     environment 的 additive overlay；Codex 共享 app-server，非空值明确
     `unsupported`。`OpenOptions.ShellEnv` 仍只做 Codex shell/unified-exec 的
@@ -82,7 +82,7 @@ README 和包文档说明。现有原生 Session 的语义以
     SDK 只保证本地 settings/input 写入顺序，不等待 prompt dequeue。ACP v2
     在 `session/prompt._meta` 的预留字段与当前 ACP adapter 实现仍各自独立。
     Codex steer 复用原 turn trace、Claude settings env 的进程级扩散属于
-    Provider 原生行为，不是 SDK 新增或保证的语义。
+    原生 Agent 行为，不是 SDK 新增或保证的语义。
 13. 统一核心不依赖 OpenTelemetry。Trace 值和接口只用标准库；OpenTelemetry
     由调用方通过 `Tracer` adapter 接入。prompt trace 不是 shell env，不能保证
     自动进入 Bash 或 MCP 子进程，也不能把 span 生命周期延伸为整个 turn。
@@ -95,21 +95,21 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Provider`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | provider 无关的单 Session 实时合同与环境/trace seam |
-| `agent/codex` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
-| `agent/claude` | `New(Config)` 返回具体 `*Provider`，它实现 `agent.Provider` | Claude 原生进程、Session、事件和交互适配 |
+| `agent` | `Core`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | adapter 无关的 Agent Core、单 Session 实时合同与环境/trace seam |
+| `agent/codex` | `New(Config)` 返回具体 `*agentcodex.Core`，它实现 `agent.Core` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
+| `agent/claude` | `New(Config)` 返回具体 `*agentclaude.Core`，它实现 `agent.Core` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Codex 增加 `ShellEnv`、trace context helper 和 envelope trace 支持，Claude 增加 `AppendSystemPrompt`、trace context helper 和逐 prompt settings env 切换 | 原生协议、查询、原始数据和 provider 语义 |
 | MASS Runtime | `RuntimeDriver`、`DriverSession`、`SessionEvent`、`LoadSession` | 资源身份、多 Session 汇聚、恢复、历史导入、持久化和发布 |
 | MASS Service | Session、History、EventStore、Broadcast、SSE、HTTP/CLI | 面向 MASS 使用方的业务合同 |
 
 最终只有三种调用方式：
 
-1. 普通 SDK 使用方只依赖 `agent.Provider` 和 `agent.Session`。它看到统一的
+1. 普通 SDK 使用方只依赖 `agent.Core` 和 `agent.Session`。它看到统一的
    打开/恢复/提交/回答/中断/关闭操作和统一实时事件，不接触原生 handle。
-2. MASS 的正常运行路径通过 `RuntimeDriver` 编排 `agent.Provider` 和
+2. MASS 的正常运行路径通过 `RuntimeDriver` 编排 `agent.Core` 和
    `agent.Session`，MASS Service 仍只消费 `RuntimeDriver.Events()`。
-3. MASS 的原生历史导入通过 provider-specific 原生查询读取保存记录，再调用
-   `Provider.Resume` 恢复同一执行连接；转换出的仍是 MASS `SessionEvent`，
+3. MASS 的原生历史导入通过 native-specific 查询读取保存记录，再调用
+   `Core.Resume` 恢复同一执行连接；转换出的仍是 MASS `SessionEvent`，
    不是新的 SDK 历史类型。
 
 不存在第四种“SDK 统一历史流”。MASS 的持久历史查询只读 EventStore；原生
@@ -119,7 +119,7 @@ README 和包文档说明。现有原生 Session 的语义以
 
 统一层负责：
 
-- 同一套 Provider 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
+- 同一套 Core 启停、Session 打开、恢复、提交、回答、中断和关闭操作。
 - 在打开、恢复及运行时更新时传递会话级 `model` 与 `effort`；运行时回执只
   区分派发和原生接受，不缓存或推断当前生效状态。
 - 将 Codex 与 Claude 的原生观察转换为同一套可判别事件。
@@ -155,8 +155,8 @@ README 和包文档说明。现有原生 Session 的语义以
   Session 运行中热更新 system prompt。
 - MCP 连接、OAuth、健康检查、tool discovery、tool 调用或
   application-hosted MCP 的 JSON-RPC 实现。
-- 在同一 Codex Provider/app-server 内为不同 Session 选择不同进程环境；需要
-  不同 app-server 进程环境时使用不同 Provider。
+- 在同一 Codex Core/app-server 内为不同 Session 选择不同进程环境；需要
+  不同 app-server 进程环境时使用不同 Core。
 - 把 Claude 的 CLI 进程环境映射为 `ShellEnv`，或把 Claude settings `env`、
   `OpenOptions.ProcessEnv` 的进程级语义描述成 shell-only。
 - 提供 `Input.Env`、`Input.ProcessEnv` 或等价的 per-prompt 环境变量注入。
@@ -171,36 +171,37 @@ README 和包文档说明。现有原生 Session 的语义以
 ## 分层与依赖
 
 ```text
-codex/types <-- codex          claude/types <-- claude
-                   ^                              ^
-                   |                              |
-             agent/codex                    agent/claude
-                   \                              /
-                    +-------------+--------------+
-                                  |
-             +--------------------+--------------------+
-             |                                         |
-agent/internal/lifecycle         agent/internal/interactionledger
-             |                                         |
-             +--------------------+--------------------+
-                                  |
-                                agent
-                             ^
-                             |
-             MASS runtime/codex  runtime/claude
-                             ^
-                             |
-          MASS Service / EventStore / Broadcast / transport
+MASS Runtime adapters -> agent.Core / agent.Session
+                           ^             ^
+                           | implements  |
+                    agent/codex     agent/claude
+                        |                 |
+                        v                 v
+                      codex             claude
+                        |                 |
+                        v                 v
+                    codex/types      claude/types
+
+agent/codex, agent/claude
+    -> agent/internal/corelease         -> agent
+    -> agent/internal/eventstream       -> agent, internal/queue
+    -> agent/internal/interactionledger -> agent, internal/uuidv4
+    -> agent/internal/eventenvelope     -> agent, internal/uuidv4
+    -> agent/internal/submissiontrace   -> agent
+
+agent          -> internal/tracecontext
+internal/queue -> github.com/zoumo/golib/channx
 ```
 
-目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图只
-说明本设计的调用方向：统一 `agent` 是上层实时合同，原生 SDK 不反向依赖它；
-两个 adapter 只适配各自 provider，并共同使用 `agent/internal/lifecycle` 持有
-Provider 生命周期状态、使用 `agent/internal/interactionledger` 保存统一回答
-准入状态；这些模块不导入原生 SDK。Provider 的原生资源、Session 和回答句柄仍
-由各 adapter 拥有。MASS Runtime adapter 可以消费统一层，而 MASS Service、Store
-和 transport 仍只依赖 MASS 自己的合同。
-MASS 的配置、资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
+目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图展示
+公开合同、实现关系与生产依赖；原生 SDK 不反向依赖统一 `agent`。
+两个 adapter 只适配各自原生 SDK，共同使用 `corelease` 管理 Core 准入、共享资源
+和 Session lease，使用 `eventstream` 管理每个 Session 的事件队列、取流与清理
+顺序。两者都不拥有原生观察、转换或交互状态机。`interactionledger` 另行保存
+统一回答准入状态；adapter 私有 registry 独占原生回答句柄与结算逻辑。
+MASS Runtime adapter 可以消费统一层，而 MASS Service、Store 和 transport 仍
+只依赖 MASS 自己的合同。MASS 的配置、资源身份和恢复解释在构造 Core 前完成，
+不进入 SDK adapter。
 
 ## 为什么不整体搬迁 MASS Runtime
 
@@ -209,7 +210,7 @@ MASS Runtime 中有两层复杂度，不应一起搬进通用 SDK。
 | MASS 逻辑 | 目标归属 | 原因 |
 |---|---|---|
 | 原生协议、未知字段、原生身份 | 原生 SDK | 已由各协议拥有，不能再复制一层解析 |
-| Provider 启停与共享连接所有权 | 统一 SDK | 与具体 Agent 相关，但与 MASS 无关；Claude 的每 Session 进程随 Session 释放 |
+| Core 启停与共享连接所有权 | 统一 SDK | 与具体 Agent 相关，但与 MASS 无关；Claude 的每 Session 进程随 Session 释放 |
 | 单 Session 打开、恢复、提交、回答、中断、关闭 | 统一 SDK | 两个 provider 可以共享操作概念 |
 | Turn/响应/block 的工作归属 | provider adapter | 必须依赖各自原生证据，不能放入通用协商层 |
 | 原生事件到统一事件 | provider adapter | 这是本次要迁移的主要重复代码 |
@@ -227,14 +228,14 @@ MASS Runtime 中有两层复杂度，不应一起搬进通用 SDK。
 适配和转换，可以删掉两个 Runtime adapter 中真正重复的部分，同时不改变 MASS
 对 Service 的接口。
 
-## SDK 构造与 Provider
+## SDK 构造与 Core
 
 统一核心不提供跨 provider 的万能构造函数。具体 adapter 接受各自的显式原生
 配置，避免共享接口携带 `any` 或伪造共同字段：
 
 ```text
-agent/codex.New(Config)   -> *agentcodex.Provider, implements agent.Provider
-agent/claude.New(Config)  -> *agentclaude.Provider, implements agent.Provider
+agent/codex.New(Config)   -> *agentcodex.Core, implements agent.Core
+agent/claude.New(Config)  -> *agentclaude.Core, implements agent.Core
 ```
 
 `Config` 由具体 adapter 定义，可承载可执行文件、进程环境、初始化参数、原生
@@ -248,16 +249,16 @@ agent/claude.New(Config)  -> *agentclaude.Provider, implements agent.Provider
 Tracer agent.Tracer
 ```
 
-Tracer 在 Provider 构造时固定，不进入 `OpenOptions`。实现必须可并发调用、
+Tracer 在 Core 构造时固定，不进入 `OpenOptions`。实现必须可并发调用、
 非阻塞且不 panic；SDK 不为 tracer 配置全局 exporter，也不等待异步导出。
 
-### Provider 接口
+### Core 接口
 
 ```go
 package agent
 
-type Provider interface {
-    // Start 取得本 Provider 拥有的运行资源并进入 started 状态。
+type Core interface {
+    // Start 取得本 Core 拥有的运行资源并进入 started 状态。
     // 返回 adapter 供给的基础能力；生命周期冻结副本，重复调用不创建
     // 第二个资源所有者，也不改变冻结的能力集合。
     Start(ctx context.Context) (Capabilities, error)
@@ -268,15 +269,21 @@ type Provider interface {
     // Resume 恢复已存在的原生主 Session，不以新建代替恢复。
     Resume(ctx context.Context, options ResumeOptions) (Session, error)
 
-    // Stop 只释放本 Provider 拥有的资源。
+    // Stop 只释放本 Core 拥有的资源。
     // 有 Open/Resume 正在进行，或仍有活跃/正在清理的 Session 时必须拒绝；
     // 不能等待后暗自停止。首次被接纳的 Stop 是终止性的，release 失败也缓存结果。
     Stop(ctx context.Context) error
 }
 ```
 
-Provider 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
+Core 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
 （Claude）；后者由每个 Session 拥有并在 `Close` 中释放自己的原生进程。
+
+Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具 payload
+的 `provider` 字段和 MCP provider 不同。该统一接口尚未发布，不保留旧
+`Provider` 类型别名或兼容包装。Core 错误使用 `core_stopped`、
+`core_not_started`、`core_has_open_sessions`；Codex 资源获取失败使用
+`core_start_failed`。
 
 `Open` 与 `Resume` 的公共选项使用同一结构；provider 只能部分解释的字段由
 adapter 在原生副作用前校验，不由共享接口伪造默认值：
@@ -342,20 +349,20 @@ type EffectiveFeatures struct {
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
 - `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
   external MCP 列表；adapter 不再解释来源或执行第二种合并策略。
-- Provider 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
-- Provider 的基础 `Capabilities` 由 adapter 在构造时供给，生命周期模块复制并
+- Core 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
+- Core 的基础 `Capabilities` 由 adapter 在构造时供给，`corelease` 复制并
   冻结；`Start` 每次返回副本。Session 的有效能力和功能降级仍由 adapter 按
-  Session 选项计算，不更新 Provider 基础能力。
-- `Start` 的单次原生资源获取与 `Stop` 串行；获取失败后 Provider 保持未启动并可
+  Session 选项计算，不更新 Core 基础能力。
+- `Start` 的单次原生资源获取与 `Stop` 串行；获取失败后 Core 保持未启动并可
   重试，Stop 被接纳后不能重新 `Start`。
 - 进行中的 `Open` 和 `Resume` 计入 in-flight 操作，`Stop` 必须拒绝而不是等待。
   Open 的 callback 失败时，adapter 必须先完成原生清理，再由共享生命周期自动
-  撤销 opening；之后 Provider 仍可 Stop，也可继续使用到 Stop。
-- Provider 的 Session registry 持有活跃或正在清理的 lease。没有显式 `Close`
+  撤销 opening；之后 Core 仍可 Stop，也可继续使用到 Stop。
+- Core 的 Session registry 持有活跃或正在清理的 lease。没有显式 `Close`
   时，原生观察终止必须先完成 native cleanup 并恰好释放一次 lease，之后才关闭
-  `Done`；已经接纳的事件仍可排空，不再阻止 `Provider.Stop`。显式 `Close` 已
+  `Done`；已经接纳的事件仍可排空，不再阻止 `Core.Stop`。显式 `Close` 已
   开始时，`Stop` 仍拒绝，直到该清理路径释放 lease。自然终止后的 `Session.Close`
-  只复用同一 cleanup 结果，不重复 native cleanup 或 Provider release。
+  只复用同一 cleanup 结果，不重复 native cleanup 或 Core release。
 - 首次被接纳的 `Stop` 是终止性的：release 至多执行一次，release 错误被缓存，
   后续 `Stop` 返回同一结果；即使 release 失败，`Start`、`Open` 和 `Resume`
   也不能再运行。没有未关闭 Session 时重复 Stop 返回缓存结果。
@@ -435,7 +442,7 @@ provider 不能表达该字段，必须在原生副作用前返回 `unsupported`
 
 | 作用域 | 配置位置 | 影响范围 | 生命周期 |
 |---|---|---|---|
-| Provider 进程环境 | `agent/codex.Config.Stdio.Env`、`agent/claude.Config.Env` | Codex app-server；Claude Session CLI 的基础环境 | Provider 构造时固定；nil 继承在进程启动时解析 |
+| Core 进程环境 | `agent/codex.Config.Stdio.Env`、`agent/claude.Config.Env` | Codex app-server；Claude Session CLI 的基础环境 | Core 构造时固定；nil 继承在进程启动时解析 |
 | Session 进程环境 | `OpenOptions.ProcessEnv` | Claude Session 自有 CLI 进程及其子进程 | `Open`/`Resume` 时固定 |
 | Session shell 环境 | `OpenOptions.ShellEnv` | 仅 provider 启动的 shell / unified-exec 类子进程 | `Open`/`Resume` 时固定 |
 | Prompt trace | `agent.WithTraceContext` 与 `Tracer` | SDK 将 carrier 映射到 Codex JSON-RPC request envelope 或 Claude settings `env`，并可创建本地提交 span | carrier 属于一次 `StartOrSteer`；SDK 逐次映射，不拥有 provider span/trace 生命周期 |
@@ -445,7 +452,7 @@ per-turn shell env 字段，Claude 的 user message/control request 也没有
 通用 per-prompt env 入口；Claude 的 trace-only settings env 映射不能被扩展成
 任意环境变量 API。trace carrier 不能用于补造该能力。
 
-#### Provider 进程环境
+#### Core 进程环境
 
 进程环境不是新 Session API。Codex 使用现有 `StdioOptions.Env`（统一层为
 `agent/codex.Config.Stdio.Env`），Claude 使用现有 `Options.Env` /
@@ -455,14 +462,14 @@ CLI 进程保持 Go `os/exec` 语义：nil 继承当前进程环境，非 nil �
 环境；SDK 不隐式合并调用方 map。process-free 的 `StreamOptions.Env` /
 `OpenStreams` 只保存协议快照，不启动或修改任何子进程环境，不能用于 env 注入。
 
-Codex Provider 只有一个 app-server 进程，所有 Session 共享该进程环境。
-不同 Codex thread 需要不同 `ShellEnv` 时仍可共享一个 Provider；不同
-app-server 进程环境或隔离的 `CODEX_HOME` 必须使用不同 Provider。
+Codex Core 只有一个 app-server 进程，所有 Session 共享该进程环境。
+不同 Codex thread 需要不同 `ShellEnv` 时仍可共享一个 Core；不同
+app-server 进程环境或隔离的 `CODEX_HOME` 必须使用不同 Core。
 
-Claude 的 `agent/claude.Config.Env` 是 Provider 提供的默认完整环境，不是每个
+Claude 的 `agent/claude.Config.Env` 是 Core 提供的默认完整环境，不是每个
 Session 的最终值。Claude 每个 Session 自有 CLI 进程，所以
 `OpenOptions.ProcessEnv` 可以只覆盖该 Session 的进程环境；不同 Session 可以
-使用不同 overlay，而不为每个 Session 重建 Provider。
+使用不同 overlay，而不为每个 Session 重建 Core。
 
 进程环境可能含认证秘密，统一错误、事件、Meta、日志和诊断不得包含其值。
 SDK 不解析 secret 引用、不读取 dotenv，也不改写调用方 slice。
@@ -479,7 +486,7 @@ type OpenOptions struct {
 }
 ```
 
-- nil 或空 map 不改变 Provider 的进程环境配置，也不触发环境合成。
+- nil 或空 map 不改变 Core 的进程环境配置，也不触发环境合成。
 - 非空 map 只增加或覆盖所列变量；不提供删除、空值即 unset 或恢复 ambient
   变量的语义。空字符串是合法 value，表示把变量设置为空值。
 - Claude adapter 在 `Open`/`Resume` 中生成该 Session 的完整原生
@@ -502,9 +509,9 @@ type OpenOptions struct {
 - `ProcessEnv` 不是 secret store。值会进入 Claude CLI 进程环境并可影响认证、
   配置、MCP、hook 及其启动的更多子进程；SDK 错误、事件和日志不包含 value，
   但不能阻止 provider 自身诊断或日志可见该值。
-- Codex app-server 由同一 Provider 的所有 Session 共享，没有 Session 级自有
+- Codex app-server 由同一 Core 的所有 Session 共享，没有 Session 级自有
   CLI 进程。Codex `Open`/`Resume` 收到非空 `ProcessEnv` 时，必须在本次调用
-  产生原生副作用前返回 `unsupported`；若 Provider 尚未启动，这包括
+  产生原生副作用前返回 `unsupported`；若 Core 尚未启动，这包括
   app-server 进程启动前。不能改写到 `shell_environment_policy` 或 app-server
   所在进程。
 
@@ -553,7 +560,7 @@ type OpenOptions struct {
 - `ShellEnv` 只在 `Open`/`Resume` 时生效。Codex 已加载或运行中的 thread 可能
   忽略 `thread/resume.config` override，且没有 per-turn shell env 更新入口；
   SDK 不重启 thread、不伪造热更新成功。
-- Claude 没有稳定的 shell-only 环境入口。settings `env`、Provider
+- Claude 没有稳定的 shell-only 环境入口。settings `env`、Core
   `Config.Env` 与 Session `ProcessEnv` 都会进入 Claude CLI 进程环境并可影响
   更多子进程，不能冒充 `ShellEnv`。因此 Claude `Open`/`Resume` 收到非空
   `ShellEnv` 时，必须在进程启动前返回 `unsupported`。
@@ -566,14 +573,14 @@ capability 只说明输入被按 shell-only 语义解释，不说明某个变量
 
 ### Claude 恢复身份
 
-Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Provider 使用与 Session
+Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Core 使用与 Session
 相同的 `CLIPath` 和由 `Config.Env` 与本次 `ProcessEnv` 合成的有效进程环境，
 执行无会话副作用的版本查询；版本不能确认时，`Resume` 在启动 Session 进程前
 失败关闭。不能从 `SessionStart` lifecycle frame 或 init 是否出现推断 CLI
 版本。新建 `Open` 不使用恢复探针或该版本门禁，仍只以 non-replay 的 live
 `system/init` 确认身份。
 
-Claude Provider 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
+Claude Core 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
 复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生 hook 名称、matcher
 限制和 callback 应答由
 [Claude SessionStart 身份探针](../native-session/design.md#claude-sessionstart-probe)
@@ -604,7 +611,7 @@ Claude Provider 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；
   `SessionStart:resume`，也只是通用 lifecycle frame，不是探针命中或身份证据。
   调用方同 source hook 的启动、完成或失败不参与探针归属。
 
-身份确认后、返回 Session 前，Provider 必须再次用同一显式 `ConfigDir` 调用
+身份确认后、返回 Session 前，Core 必须再次用同一显式 `ConfigDir` 调用
 `GetSessionInfo`，核对同一 Session ID、同一 transcript `Path` 和平台文件身份、
 同一 cwd 与完整 coverage。比较文件身份，不要求文件大小、mtime 或 bytes 不变；
 正常恢复可以追加 transcript。metadata 缺失、歧义、coverage 不完整、文件身份
@@ -655,7 +662,7 @@ type MCPServer struct {
 ```
 
 统一层不定义 SSE transport。Claude 原生包仍可声明旧式 SSE server，但统一
-Provider 只支持两个 provider 共同具备的 stdio 与 Streamable HTTP；需要 SSE
+Core 只支持两个 adapter 共同具备的 stdio 与 Streamable HTTP；需要 SSE
 的调用方直接使用原生 `claude` Session。统一层也不定义
 `MCPConfigMode`、`inherit`/`replace`、`StrictMCPConfig` 或任何清空 native
 ambient MCP 的开关。
@@ -664,12 +671,12 @@ ambient MCP 的开关。
 
 #### Runtime 与 Session 合成
 
-Runtime 默认 MCP 属于构造 Provider 之前的 Runtime 配置解释，不进入 Provider
+Runtime 默认 MCP 属于构造 Core 之前的 Runtime 配置解释，不进入 Core
 或 Session 状态。负责解析 RuntimeConfig 的上层必须在每次 `Open`、`Resume`
-以及通过 `Provider.Resume` 完成的显式 load 之前合成最终列表：
+以及通过 `Core.Resume` 完成的显式 load 之前合成最终列表：
 
 - 不使用 Runtime 默认项的调用方直接把完整列表放入
-  `OpenOptions.MCPServers`，Provider 不自行补充默认 MCP。
+  `OpenOptions.MCPServers`，Core 不自行补充默认 MCP。
 - 合成键是区分大小写的 server `Name`。
 - Session 声明与 Runtime 默认项同名时，Session 项整体替换 Runtime 项，不做字段
   级合并，也不继承 Runtime 项未声明的 Args、Env、Headers 或其他字段。
@@ -680,7 +687,7 @@ Runtime 默认 MCP 属于构造 Provider 之前的 Runtime 配置解释，不进
   空集合时由 Runtime 配置本身提供空集合。
 - Session 项也不能删除单个 Runtime 默认项；统一层不定义 tombstone、禁用标记
   或按 name 删除操作。需要减少默认项时修改 Runtime 配置。
-- Provider 只接收合成后的 `OpenOptions.MCPServers`，不知道某一项来自 Runtime
+- Core 只接收合成后的 `OpenOptions.MCPServers`，不知道某一项来自 Runtime
   还是 Session，也不再次覆盖、去重或继承。
 
 该规则只合成调用方拥有的 Runtime 配置。Codex 或 Claude 自己从用户、项目、
@@ -689,7 +696,7 @@ Runtime 默认 MCP 属于构造 Provider 之前的 Runtime 配置解释，不进
 merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企业策略拒绝。
 需要确定性 server 集合时，调用方必须隔离原生配置来源或外层执行环境。
 
-#### Provider 映射
+#### Adapter 映射
 
 | 统一字段或能力 | 约束 | Codex | Claude |
 |---|---|---|---|
@@ -715,7 +722,7 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 - HTTP 必须有非空 `URL`，禁止 `Command`、`Args`、`Env` 和 `Cwd`。
 - 文本、名称、map key 与 value 必须是合法 UTF-8。结构校验和 provider 字段
   支持检查都在原生进程启动或 thread RPC 前完成。
-- slice 和 map 在进入 Provider 时复制；调用方后续 mutation 不影响已经开始的
+- slice 和 map 在进入 Core 时复制；调用方后续 mutation 不影响已经开始的
   Open/Resume。
 - SDK 不解析、展开或持久化 Env/Header secret。错误只包含 server 序号、字段名、
   provider 和 reason，不包含配置值；MCP 配置不进入统一 Event、Meta 或日志。
@@ -815,7 +822,7 @@ provider 的原生 config ID；adapter 负责映射到对应原生字段。
 等原生通知无法形成完整 catalog 时继续按既有 `config_options_unsupported` gap
 交付。
 
-#### Provider 映射
+#### Adapter 映射
 
 provider 映射如下：
 
@@ -869,8 +876,8 @@ const (
 )
 ```
 
-- `Start` 返回 Provider 的基础支持面；`Session.Capabilities()` 返回该 Session
-  实际可用的支持面，可以等于或窄于 Provider。
+- `Start` 返回 Core 的基础支持面；`Session.Capabilities()` 返回该 Session
+  实际可用的支持面，可以等于或窄于 Core。
 - 缺失或 false 都表示调用方不能假定支持。能力存在也不绕过当前 Session 状态。
 - `EffectiveFeatures` 表达本次请求最终是否启用，不能仅从 `Capabilities`
   推断。
@@ -921,7 +928,7 @@ type Session interface {
     ) (InterruptReceipt, error)
 
     // Close 释放本 Session 的原生附着或自有资源。
-    // 它不停止 Provider，也不递归停止全部子 Agent。
+    // 它不停止 Core，也不递归停止全部子 Agent。
     Close(ctx context.Context) error
 
     // Done 表示 Session 交互终止；Err 是稳定的首个终止原因。
@@ -1156,7 +1163,7 @@ Prompt trace 是单次输入调用元数据，不是环境变量，也不是 Ses
 它通过 `context.Context` 与 `StartOrSteer` 关联；统一层只使用 W3C Trace
 Context 原文，不解析 trace 后重建 ID，不依赖某个 OpenTelemetry SDK。
 
-SDK 合同与 Provider 原生行为分开：SDK 只提取并校验 carrier、创建可选本地
+SDK 合同与原生 Agent 行为分开：SDK 只提取并校验 carrier、创建可选本地
 span、把它映射到原生提交入口，并保持 best-effort。provider 是否创建 span、
 steer 是否复用原 turn trace、settings env 是否被后续工具或排队 prompt 读取，
 都由 Codex/Core 或 Claude CLI 决定；这些差异被接受，但不是 SDK 新增或保证的
@@ -1211,7 +1218,7 @@ const SpanStartOrSteer = "agent.start_or_steer"
 ```
 
 `OpenOptions` 不增加 tracer。具体 adapter 的 `Config` 增加可选
-`Tracer agent.Tracer`；Provider 构造时固定，调用方可实现按租户路由的 tracer，
+`Tracer agent.Tracer`；Core 构造时固定，调用方可实现按租户路由的 tracer，
 但该路由不进入统一 Session 合同。
 
 `Tracer.StartSpan` 同时收到调用 context 和可选的 W3C parent。`parent` 非 nil
@@ -1247,7 +1254,7 @@ tracer 仍可从原 context 读取自己的 active parent。
 
 1. 输入接纳阶段读取 `TraceContextFromContext` 并尝试校验。无效 carrier 视为
    没有 context parent，不改变输入接纳，也不省略 SDK 本地 span。
-2. adapter 完成 provider-specific 输入校验，并完成本地并发、关闭和未知状态
+2. adapter 完成 adapter-specific 输入校验，并完成本地并发、关闭和未知状态
    接纳。未接纳的调用不启动 span。
 3. 配置了 tracer 时，在本地接纳输入后、原生写入前创建一次
    `agent.start_or_steer` span。context carrier 存在时作为显式 parent；不存在
@@ -1287,7 +1294,7 @@ SDK 对 provider 的映射义务：
 | SDK span | 配置 tracer 时为每次已接纳的 `StartOrSteer` 创建 | 同样创建，只覆盖 SDK 调用 |
 | 原生提交入口 | JSON-RPC request envelope 顶层 `trace`；不在 `turn/start.params` 内 | 同一常驻 CLI 上，在写入 user frame 前通过 `apply_flag_settings.settings.env` 设置 `TRACEPARENT`/`TRACESTATE`；不重启进程 |
 
-以下是 Provider 原生行为，只用于说明两个运行时的差异，不是 SDK 合同：
+以下是原生 Agent 行为，只用于说明两个运行时的差异，不是 SDK 合同：
 
 | 项 | 原生 Codex | 原生 Claude |
 |---|---|---|
@@ -1404,8 +1411,8 @@ CLI 进程级状态，不提供 prompt/turn 隔离。trace env 写入后，当�
 新工具调用、工具启动的新子进程或随后 prompt 都可能读取到当前值；已经启动的
 进程不保证更新。SDK 的合同止于在 user frame 前尽力执行 settings 写入并保持
 本地顺序；它不按工具调用快照或重写环境，也不把下一 prompt 的 baseline 恢复
-解释为收回已经传播的 trace。该跨 prompt、跨工具的影响是明确接受的 Provider
-原生行为；需要严格归属时，调用方必须使用 provider 自己保证隔离的机制，不能
+解释为收回已经传播的 trace。该跨 prompt、跨工具的影响是明确接受的原生 Agent
+行为；需要严格归属时，调用方必须使用原生 Agent 自己保证隔离的机制，不能
 仅靠本 SDK 的 context carrier。
 
 上述能力属于 Claude 原生 stream-json/control 合同，不是 ACP 兼容层。
@@ -1566,6 +1573,43 @@ type EventStream interface {
   通过 `Done`/`Err` 读取。终止后不自动重连或补历史。
 - 统一层只有单 Session 流。多个 Session 的公平汇聚由 MASS Runtime 完成，
   SDK 不提供广播。
+
+### Session 附着、关闭与原因稳定性
+
+每个 adapter Session 构造一个 `eventstream.Stream`。原生观察循环由 adapter
+启动并负责接收、转换、事件信封和错误映射；转换结果通过 `Publish` 入队，
+循环退出时调用 `ObservationEnded(cause)`。共享模块不解析原生数据，也不查询
+或结算交互引用。
+
+`Claim` 只允许一次，且不启动原生观察。自然终止发生在首次取流之前时，已经
+接纳的事实仍可通过该次 claim 排空；显式 `Close` 一旦开始，后续 claim 返回
+`session_closed`。已取得的 reader 保持排空能力。
+
+显式 `Close` 与自然 `ObservationEnded` 竞争同一条清理路径：
+
+1. 首次关闭入口标记 closing，并同步调用一次 `BeginClose`。adapter 在该 hook
+   中禁止新的操作并快照未结算交互；此时不发布这些交互的关闭事件。
+2. 清理路径调用一次 `CloseNative`，缓存其返回值。adapter 负责停止原生附着或
+   Session 自有进程，使观察循环可以退出；不关闭 Core 的共享连接或其他 Session。
+3. 等待 `ObservationEnded`，保证观察循环不再调用 `Publish`。自然终止先到时，
+   该信号可以早于 `BeginClose` 和 `CloseNative`；显式关闭先到时，清理路径等待
+   adapter 报告观察结束，不能由调用方 context 取消跳过此等待。
+4. 保留第一次 `ObservationEnded` 提供的非 nil cause。该 cause 为 nil 时，
+   才调用 `FinalCause` 从已完成清理的原生状态取得 fallback，并在生成关闭事件
+   前固定最终 cause。后续 Close 或 ObservationEnded 不能覆盖它。
+5. 调用一次 `CloseEvents`。adapter 按自身原生权威规则结算步骤 1 的快照并生成
+   有序关闭事件；共享模块通过 `Publish` 将该批事件追加到已接纳事实之后。
+6. 用最终 cause 关闭 event queue。reader 排空后，nil cause 对应 `io.EOF`，
+   非 nil cause 对应同一稳定错误；queue close 后不再接受事件。
+7. 调用一次 `Release`，从 `corelease` 移除该 Session lease。
+8. 关闭 `Done`。观察到 Done 后，`Err` 与 queue 的最终 cause 一致，且该 Session
+   不再阻止 `Core.Stop`。事件消费者是否已经排空不影响 lease 释放。
+
+`Session.Close` 等待上述路径完成，重复调用返回同一个 `CloseNative` 清理结果；
+该结果与观察终止 cause 分开保存。清理错误不覆盖已确定的观察原因。
+`Err` 在 Done 之前可能尚未完成 fallback，调用方须在 Done 后读取稳定最终值。
+即使显式关闭与自然终止同时到达，native cleanup、关闭事件、queue close、
+lease release 和 Done 都只执行一次。
 
 ### 事件信封
 
@@ -2002,7 +2046,7 @@ Codex shell 示例（`source=unifiedExecStartup`）：
 使用 `toolName: "commandExecution"` 这个 fallback，不能伪造
 `exec_command`。
 
-统一层暂不定义 Provider 无关的计划语义。Claude 的 `TodoWrite`、
+统一层暂不定义 adapter 无关的计划语义。Claude 的 `TodoWrite`、
 `TaskCreate` 和 `TaskUpdate` 原本就是工具调用，只保留带原生输入的
 tool call，不额外生成计划事件或计划缺口。Codex 的独立 plan item、
 `item/plan/delta` 和 `turn/plan/updated` 暂不转换为统一事件，也不作为
@@ -2103,13 +2147,13 @@ Codex 的具体 adapter 只为 MASS 提供 native escape hatch：
 ```go
 package agentcodex
 
-// NativeClient 返回 Provider 自有的同一条已初始化连接。
+// NativeClient 返回 Core 自有的同一条已初始化连接。
 // 只在 Start 成功之后、Stop 之前有效；调用方不得关闭或替换该连接。
-func (*Provider) NativeClient() (*codex.Client, error)
+func (*Core) NativeClient() (*codex.Client, error)
 ```
 
-该方法不在 `agent.Provider` 中定义，也不是历史接口。MASS 可以在自己的
-provider-specific Runtime 包内声明只含查询方法的私有接口，并把
+该方法不在 `agent.Core` 中定义，也不是历史接口。MASS 可以在自己的
+adapter-specific Runtime 包内声明只含查询方法的私有接口，并把
 `NativeClient()` 的结果绑定到该接口，以限制实际使用面。
 
 Claude 没有对应 client，MASS 直接调用 package-level
@@ -2124,10 +2168,10 @@ Claude 没有对应 client，MASS 直接调用 package-level
   附着、控制 Session 的方法。
 - 查询不能创建 `agent.Session`、增加 `Session.Events()` 消费者、发布实时
   事件或授予回答权限。
-- MASS 不得另建第二个 `codex.Client` 来读取历史；必须复用 Provider 的生命周期
+- MASS 不得另建第二个 `codex.Client` 来读取历史；必须复用 Core 的生命周期
   和数据域。
 - 未启动或已停止时返回错误，不得按需创建第二条连接。
-- MASS 只在 provider-specific Runtime 内使用它，不把原生 client、原生查询值或
+- MASS 只在 adapter-specific Runtime 内使用它，不把原生 client、原生查询值或
   查询错误类型暴露到 MASS Service、HTTP 或 SSE。
 - 返回值和错误的持有、取消、raw 数据及覆盖边界仍由原生查询合同定义。
 
@@ -2140,7 +2184,7 @@ MASS 的 `Driver`、`DriverSession`、`Address`、回执、事件和恢复合同
 - [Runtime driver 合同](https://github.com/zoumo/mass/blob/main/harness/modules/runtime/runtime-driver.tsp)
 - [Runtime events](https://github.com/zoumo/mass/blob/main/harness/modules/runtime/events.md)
 
-本设计只定义 MASS Runtime adapter 如何消费 `agent.Provider` 和
+本设计只定义 MASS Runtime adapter 如何消费 `agent.Core` 和
 `agent.Session`。`RuntimeDriver`、多 Session 汇聚、`Address`、运行来源、
 恢复、显式历史 load、持久化分类和 Service 边界仍由 MASS 拥有。统一层不提供
 MASS `Address`、`Source`、回执或恢复文件类型，也不通过类型别名耦合两边。
@@ -2171,12 +2215,12 @@ MASS adapter 必须逐项保留：
 | 不存在的持久化标记 | 仍由 MASS `Persistent()`/EventStore 规则决定 |
 
 该映射只适用于 `agent.Event` 的 live relay。原生历史导入没有 `agent.Event`；
-MASS 按 provider-specific 查询结果和现有 load 规则直接构造 `SessionEvent`。
+MASS 按 native-specific 查询结果和现有 load 规则直接构造 `SessionEvent`。
 
 `namespace`、`sessionName` 和 `replay` 由 MASS Runtime 在事件进入 Driver 流前
 补齐。在 live relay 路径，MASS 不为统一事件重新解析原生协议，不重写 payload，
 不修改已确认的时间或事件身份。原生历史导入仍使用 MASS 自己的
-provider-specific 转换，但不生成 `agent.Event`。
+adapter-specific 转换，但不生成 `agent.Event`。
 `session.history_replay` 是 MASS 专属的控制事件，不属于 SDK 实时事件联合。
 
 现有 MASS `SessionEvent` JSON、字段语义、历史格式和 SSE 分支不得变化。实现上
@@ -2187,8 +2231,8 @@ provider-specific 转换，但不生成 `agent.Event`。
 一次正常交互的顺序是：
 
 1. Service 从尚未启动的 Driver 取得唯一 `Events()` 流并开始接收。
-2. Service 调用 `Driver.Start`，MASS Driver 调用 `Provider.Start`。
-3. Service 请求打开或恢复；MASS Driver 调用 SDK Provider，成功后生成新的
+2. Service 调用 `Driver.Start`，MASS Driver 调用 `Core.Start`。
+3. Service 请求打开或恢复；MASS Driver 调用 SDK Core，成功后生成新的
    `events.Source` 并返回 `DriverSession`。
 4. MASS 为 Session 启动唯一 relay，从 `SDK Session.Events()` 读取并补齐
    `SessionEvent`；Service 仍只读取 Driver 的公共事件流。
@@ -2197,23 +2241,23 @@ provider-specific 转换，但不生成 `agent.Event`。
 6. 关闭 Session 时 MASS 先确认自己的工作已结算，再关闭 SDK Session 并排空
    该 Session 已接纳的事实；Driver 流继续服务其他 Session。
 7. Service 排空并关闭全部 Session 后调用 `Driver.Stop`，再调用
-   `Provider.Stop` 并正常结束 Driver 事件流。
+   `Core.Stop` 并正常结束 Driver 事件流。
 
-### RuntimeDriver 到 Provider
+### RuntimeDriver 到 Core
 
 | MASS 操作 | SDK 调用 | MASS 保留的职责 |
 |---|---|---|
-| `Driver.Start` | `Provider.Start` | Runtime 配置、运行绑定、共享资源责任 |
-| `OpenSession` | `Provider.Open` | Address、Source、恢复材料、事件队列 |
-| `ResumeSession` | `Provider.Resume` | 恢复前 metadata/文件身份、init 或私有探针确认、恢复后复核、旧运行隔离 |
+| `Driver.Start` | `Core.Start` | Runtime 配置、运行绑定、共享资源责任 |
+| `OpenSession` | `Core.Open` | Address、Source、恢复材料、事件队列 |
+| `ResumeSession` | `Core.Resume` | 恢复前 metadata/文件身份、init 或私有探针确认、恢复后复核、旧运行隔离 |
 | `SendPrompt` | `Session.StartOrSteer` | Session/运行归属、Service 回执和持久化 |
 | `AnswerInteraction` | `Session.Answer` | 当前运行和 Session 校验；原生句柄仍只在 adapter |
 | `Cancel` | `Session.Interrupt` | 是否允许关闭/归档、Service 取消回执 |
 | `CloseSession` | `Session.Close` | 工作是否已结算、恢复材料保留、Driver 绑定移除 |
-| `Driver.Stop` | 关闭全部 Session 后 `Provider.Stop` | 事件排空、EventPipe 终止、当前运行解除 |
-| `LoadSession` | `Provider.Resume` 只恢复同一原生会话；历史由 MASS Runtime 直接调用 Codex/Claude 原生查询 API | 显式恢复、历史读取、转换、提交、replay 与发布顺序 |
+| `Driver.Stop` | 关闭全部 Session 后 `Core.Stop` | 事件排空、EventPipe 终止、当前运行解除 |
+| `LoadSession` | `Core.Resume` 只恢复同一原生会话；历史由 MASS Runtime 直接调用 Codex/Claude 原生查询 API | 显式恢复、历史读取、转换、提交、replay 与发布顺序 |
 
-`OpenSession`、`ResumeSession` 和通过 `Provider.Resume` 完成的 `LoadSession`
+`OpenSession`、`ResumeSession` 和通过 `Core.Resume` 完成的 `LoadSession`
 都必须在调用 SDK 前按 [Runtime 与 Session 合成](#mcp-runtime-overlay)生成最终
 `MCPServers`。MASS 保留 RuntimeConfig 默认项、Session 覆盖和 secret 引用的解释；
 SDK 只校验并透传最终列表。Runtime 默认项与 native ambient 是不同来源，不能把
@@ -2244,7 +2288,7 @@ MASS history-load conversion（仅显式 load）
   Driver 流，并按 MASS opening 逻辑暂存；不能因为 Service 尚未登记绑定而丢弃，
   也不能通过第二次 `Events()` 补读。
 - 中继不能创建第二条 SDK 事件流，也不能让 Service 或外部订阅者直接读取。
-- 历史 load 的 SessionEvent 由 MASS provider-specific 转换产生，不是
+- 历史 load 的 SessionEvent 由 MASS adapter-specific 转换产生，不是
   `agent.Session.Events()` 的成员；它只复用同一 Driver EventPipe 和发布链。
 - 中继对每个事件保留原顺序，补齐 MASS 字段后写入现有有界、公平的 Driver
   EventPipe；不能增加第二套无界转发队列。
@@ -2292,7 +2336,7 @@ MASS 有两条不会互相替代的历史路径。统一 SDK 不在这两条路�
 | 普通 SDK 使用方 | `codex` / `claude` 的原生历史查询 | 原生 thread/turn/item 或 message/coverage 值 |
 | MASS 使用方读取已提交历史 | `SessionService.listHistoryEvents` | EventStore 中的 `HistoryPage<SessionEvent>` |
 | MASS 使用方导入原生会话 | `Service.LoadSession`，随后查询历史或订阅 SSE | `SessionLoadAccepted`；异步提交后的 `SessionEvent` |
-| MASS Runtime 实现者 | Codex `Provider.NativeClient()` 或 Claude package-level 查询 | 仅用于 `LoadSession` 的原生只读材料 |
+| MASS Runtime 实现者 | Codex `Core.NativeClient()` 或 Claude package-level 查询 | 仅用于 `LoadSession` 的原生只读材料 |
 
 ### 读取 MASS 已持久化历史
 
@@ -2316,10 +2360,10 @@ SessionService.listHistoryEvents
 Service.LoadSession
     -> 固定 Runtime、Address、loadId、原生 SessionID 和绝对 cwd
     -> RuntimeDriver.LoadSession
-        -> Codex: Provider.NativeClient().ReadThread/ListThreadTurns/ListThreadItems
+        -> Codex: Core.NativeClient().ReadThread/ListThreadTurns/ListThreadItems
         -> Claude: claude.GetSessionMessages
         -> 读取 metadata/baseline，校验身份、cwd、来源
-        -> Provider.Resume 恢复同一原生会话
+        -> Core.Resume 恢复同一原生会话
         -> 重新读取原生历史并复核未漂移
         -> 原生记录转换为 MASS SessionEvent，加 replay
         -> 唯一 Driver EventPipe
@@ -2327,9 +2371,9 @@ Service.LoadSession
         -> history_replay: started/native_completed/failed/canceled
 ```
 
-provider-specific 查询职责：
+native-specific 查询职责：
 
-| Provider | metadata / 身份 | 保存内容 | 恢复后复核 |
+| 原生 SDK | metadata / 身份 | 保存内容 | 恢复后复核 |
 |---|---|---|---|
 | Codex | `ReadThread(IncludeTurns=false)` | `ListThreadTurns`（按原生 item view，必要时 `ListThreadItems`） | 再次 `ReadThread` 并重新分页核对元数据、顺序、cursor 穷尽和内容摘要 |
 | Claude | `GetSessionInfo` 预检；恢复后 live init 或匹配的私有 `SessionStart:resume` callback | `GetSessionMessages` | 再次 `GetSessionInfo` 核对同一 ID、Path、文件身份、cwd 与完整 coverage；再读取完整有界消息链，并核对 coverage、原始 bytes、UUID/parent 顺序 |
@@ -2341,11 +2385,11 @@ provider-specific 查询职责：
 
 1. Service 先建立唯一 Driver 流接收，再调用 `LoadSession`；历史不另开第二条
    Driver 流、历史总线或 Broadcast 注入入口。
-2. Codex 的原生查询通过 `NativeClient()` 复用 Provider 连接；Claude 调用显式
+2. Codex 的原生查询通过 `NativeClient()` 复用 Core 连接；Claude 调用显式
    scope 的 package-level 查询。恢复前的 metadata 查询不能创建 Session，也不能
    把请求中的原生 ID 当成观察身份。
-3. `Provider.Resume` 只恢复同一原生执行连接，不自动导入或回放保存历史。恢复
-   后对原生身份的确认仍属于统一 Provider 的恢复合同。
+3. `Core.Resume` 只恢复同一原生执行连接，不自动导入或回放保存历史。恢复
+   后对原生身份的确认仍属于统一 Core 的恢复合同。
 4. MASS 通过原生查询 API 读取历史，不通过 `Session.Events()` 读取历史。
    `Session.Events()` 只接收恢复成功后产生的实时观察；两者可以进入同一
    Driver EventPipe，但历史和实时事件的来源、顺序及 replay 标记仍按 MASS
@@ -2363,14 +2407,14 @@ provider-specific 查询职责：
 统一实时层不提供 `NativeHistory`、`HistoryReader`、`LoadSession`、
 `HistoryQuery` 或 `HistoryEvent`，也不得：
 
-- 让普通 `Provider.Resume` 自动回放历史；
+- 让普通 `Core.Resume` 自动回放历史；
 - 通过第二次 `Session.Events()` 补读历史；
 - 把 MASS `session.history_replay` 加入统一实时事件联合；
 - 从统一实时事件或历史记录重建旧回答权限；
 - 改动 MASS `LoadSession` 的所有权、提交顺序和失败释放语义。
 
 历史导入、转换和 replay 不在本次统一层范围内。若以后确需复用转换代码，必须
-另行设计 provider-specific 的纯转换能力，并保持 MASS 对 load 生命周期、replay
+另行设计 adapter-specific 的纯转换能力，并保持 MASS 对 load 生命周期、replay
 信封、覆盖判断、提交和发布的全部所有权；不能因此恢复 SDK history replay 或
 引入通用历史查询接口。
 
@@ -2430,9 +2474,9 @@ provider-specific 查询职责：
 | 能力 | `agent-sdk-go` 统一层 | MASS |
 |---|---|---|
 | 原生协议、原生身份、原始数据 | 通过原生 SDK 保留 | 不解析 |
-| 共享连接或自有进程 | Provider 拥有和释放 | 决定 Runtime 何时启停 |
+| 共享连接或自有进程 | Core 拥有和释放 | 决定 Runtime 何时启停 |
 | 单 Session 打开/恢复/提交/回答/中断/关闭 | 统一接口 | 通过 RuntimeDriver 编排 |
-| Provider 专属创建参数 | adapter 构造配置或具体类型 | 负责从 RuntimeConfig 映射 |
+| Adapter 专属创建参数 | adapter 构造配置或具体类型 | 负责从 RuntimeConfig 映射 |
 | 原生工作归属与状态投影 | provider adapter | 消费结果，不重做转换 |
 | 原生事件到统一事件 | provider adapter | 不重新解析 |
 | 交互句柄和单次回答权 | adapter 私有 registry | 校验运行并转发引用 |
@@ -2461,7 +2505,7 @@ provider-specific 查询职责：
 
 ### 2. 建立 SDK 统一核心
 
-新增 `agent` 包的 Provider、Session、EventStream、事件、内容块、交互、回执和
+新增 `agent` 包的 Core、Session、EventStream、事件、内容块、交互、回执和
 错误值。该包只依赖标准库，不导入原生 SDK 或 MASS，不启动 Agent。
 
 同时修订当前仓库中“没有 root generic client / 没有共享公共协议”的表述，明确
@@ -2553,10 +2597,10 @@ MASS SDK 驱动、以及真实 Agent。前者通过不证明真实 Agent 已验�
 
 ### 7. MASS 双路径接入
 
-在 MASS Runtime 内新增基于 SDK Provider 的新实现，与旧转换实现并存。先接入
+在 MASS Runtime 内新增基于 SDK Core 的新实现，与旧转换实现并存。先接入
 Codex，再接入 Claude。新实现只保留：
 
-- RuntimeConfig → 具体 Provider 配置；
+- RuntimeConfig → 具体 Core 配置；
 - Address、Source、恢复材料和运行绑定；
 - per-Session relay 和唯一 Driver EventPipe；
 - 现有历史 load、Store、Service 和传输，不新增 SDK history 抽象。
@@ -2569,7 +2613,7 @@ Codex，再接入 Claude。新实现只保留：
 
 ### 8. 切换 Codex Runtime
 
-先把 MASS Codex Runtime 切换到 SDK Provider。每次切换保留以下行为：
+先把 MASS Codex Runtime 切换到 SDK Core。每次切换保留以下行为：
 
 - 一个 Driver 一条 Service 消费的事件流；
 - 单 Session 顺序、背压、关闭排空和旧运行隔离；
@@ -2592,7 +2636,7 @@ linkage 和无法归属的交互行为保持不变。
 
 仅在两个 provider 都通过各自记录的离线门禁且回退窗口结束后，删除 MASS 中
 重复的纯实时事件转换、block 身份、状态投影和交互句柄 registry。历史记录到
-`SessionEvent` 的 provider-specific 转换不删除，也不迁移到 SDK。
+`SessionEvent` 的 adapter-specific 转换不删除，也不迁移到 SDK。
 
 以下代码不删除：
 
@@ -2607,20 +2651,25 @@ linkage 和无法归属的交互行为保持不变。
 - 统一核心没有 OpenTelemetry 或其他 telemetry 生产依赖；`Tracer` 的第三方
   adapter 可在仓库外部实现，不能进入 SDK 生产依赖树。
 - 两个 adapter 互不导入，原生包不导入统一层。
-- `agent/internal/lifecycle` 的依赖门禁只允许标准库和公开 `agent` 合同；两个
+- `agent/internal/corelease` 的依赖门禁只允许标准库和公开 `agent` 合同；两个
   adapter 都通过该模块覆盖 Start 单次获取、in-flight Open/Resume 拒绝 Stop、
   失败 Open 自动结算、终止性 Stop 与 release 错误缓存，且不保留重复生命周期
   状态、计数器、Session 集合或私有 reserve/complete helper。
+- `agent/internal/eventstream` 的直接依赖只允许标准库、公开 `agent` 与
+  `internal/queue`；传递依赖仅增加已审核 carrier validator 与 golib/channx。
+  两个共享模块均不导入原生 SDK、adapter 或 interaction state machine。
+  离线测试覆盖一次 claim、自然终止前的事件保留、显式关闭前拒绝取流、
+  关闭事件排序、稳定 cause、清理错误缓存，以及先 release 后 Done。
 - `agent/internal/interactionledger` 只保存统一权威状态；其测试覆盖唯一引用、
   单调注册顺序、一次 claim、NotSent 回滚、完成等待和结算优先级。adapter 的
   私有 registry 仍独占原生 request、handle、reply construction 和查询。
-- Provider 基础 Capabilities 由 adapter 供给并由生命周期冻结；Session 级能力
-  只能窄化，不修改 Provider 级快照。Claude Start 不启动进程，每个 Session
+- Core 基础 Capabilities 由 adapter 供给并由生命周期冻结；Session 级能力
+  只能窄化，不修改 Core 级快照。Claude Start 不启动进程，每个 Session
   仍独占并关闭自己的原生 CLI 进程。
 - `Capabilities.Supports` 识别 `processEnv`、`shellEnv` 与 `promptTrace`；
   未知能力仍返回 false，不能仅凭 map key 透传。
-- Provider、Session、EventStream、Input、Answer 和可选能力有公开接口编译测试。
-- Provider 进程环境测试固定 Codex 与 Claude 的 nil 继承、非 nil 整体替换和
+- Core、Session、EventStream、Input、Answer 和可选能力有公开接口编译测试。
+- Core 进程环境测试固定 Codex 与 Claude 的 nil 继承、非 nil 整体替换和
   slice 复制语义，并覆盖非 nil 空 slice 与 nil 的区分；进程启动前修改调用方
   slice 不影响实际环境。进程环境 sentinel 不出现在错误、事件或日志。
 - Claude `ProcessEnv` synthetic 测试固定 `Config.Env` 为 nil 时以一次
@@ -2709,13 +2758,13 @@ linkage 和无法归属的交互行为保持不变。
 - Codex 与 Claude 的合成协议输入逐事件比较统一输出；比较类型、payload、身份、
   Meta、顺序和未知数据范围，忽略随机 EventID。
 - 每个 Session 只允许一个消费者；重复取流失败；慢消费者不重排事件；关闭一个
-  Session 不关闭其他 Session 或 Provider。
+  Session 不关闭其他 Session 或 Core。
 - 真实原生交互句柄不能被事件、历史、复制值或伪造引用重建；跨 Session、旧
   运行、已回答和过期引用均拒绝。
 - MASS 的 wire JSON、历史、SSE、恢复、acceptance 和回答行为保持兼容。
 - MASS 普通历史查询只调用 EventStore；原生 load 通过 Codex `NativeClient()`
   的只读查询或 Claude package-level 查询读取保存内容，由 MASS 转换并标记
-  replay；`Provider.Resume` 不自动回放历史，`Session.Events` 不承担历史补读。
+  replay；`Core.Resume` 不自动回放历史，`Session.Events` 不承担历史补读。
 - 统一 `agent` 层没有 `NativeHistory`、`HistoryReader`、`HistoryEvent` 或
   等价历史抽象，也没有 `LoadSession` 或 replay 方法。
 - `agent.Event` 包装为 `SessionEvent` 时 EventID、Time、ItemID、payload 和
@@ -2729,7 +2778,7 @@ linkage 和无法归属的交互行为保持不变。
   测试固定 argv。
 - 统一层只存在 stdio 和 Streamable HTTP MCP；没有 SSE transport 或
   `MCPConfigMode`。Runtime 默认项与 Session 同名项由上层合成，Session 项整体
-  覆盖，且 Provider 不再二次合并。
+  覆盖，且 Core 不再二次合并。
 - MCP synthetic 测试固定 Codex thread config 与 Claude argv 的精确映射；无法
   表达的字段在原生副作用前失败，secret sentinel 不出现在错误、事件或日志。
 - Additional system prompt synthetic 测试固定空值省略、Unicode/换行原样传递、
@@ -2774,14 +2823,14 @@ linkage 和无法归属的交互行为保持不变。
   SDK 不提供 Session 内热更新，也不承诺跨 provider 精确一致的追加位置或子
   Agent 继承。`SystemPrompt` 不保留兼容别名；调用方必须显式迁移到
   `AdditionalSystemPrompt`。
-- Provider 进程环境、Claude Session `ProcessEnv`、Codex Session `ShellEnv`
+- Core 进程环境、Claude Session `ProcessEnv`、Codex Session `ShellEnv`
   和 prompt trace 是四个独立合同。`ProcessEnv` 只覆盖 Claude 自有 CLI 进程，
   Codex 明确不支持；`ShellEnv` 不改变 app-server/CLI 进程环境，也不支持
   Claude。Prompt trace 的 SDK 合同只包括 carrier 提取与校验、映射原生提交
   入口、可选本地 span 和 best-effort 写入；它不是通用 shell/mcp 环境变量
   API。原生 Codex 在 steer 时复用原 turn trace，以及原生 Claude 的 settings
-  env 可能被后续新工具、子进程或排队 prompt 读取，都是明确接受的 Provider
-  原生行为，不是 SDK 新增或保证的语义。SDK 不模拟、重定向或隔离这些运行时
+  env 可能被后续新工具、子进程或排队 prompt 读取，都是明确接受的原生 Agent
+  行为，不是 SDK 新增或保证的语义。SDK 不模拟、重定向或隔离这些运行时
   状态。ACP prompt metadata 不属于本 SDK 的原生 wire 合同。
 - Trace 是可选可观测性能力：正常 tracer 失败退化为无 span，不改变 Agent
   结果；Claude 完整 control 写入后的拒绝、等待超时或未知响应保持 best-effort，

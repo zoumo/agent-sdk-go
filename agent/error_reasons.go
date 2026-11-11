@@ -29,7 +29,7 @@ const (
 	ErrorReasonUnsupportedAnswer          = "unsupported_answer"
 )
 
-// Stable Error.Reason values produced by provider-neutral validation and
+// Stable Error.Reason values produced by adapter-neutral validation and
 // lifecycle code shared by both adapters.
 const (
 	ErrorReasonAdditionalSystemPromptContainsNUL = "additional_system_prompt_contains_nul"
@@ -39,9 +39,9 @@ const (
 	ErrorReasonConfigValueInvalidUTF8            = "config_value_invalid_utf8"
 	ErrorReasonConfigIDUnknown                   = "config_id_unknown"
 	ErrorReasonEnvironmentInvalid                = "environment_invalid"
-	ErrorReasonProviderHasOpenSessions           = "provider_has_open_sessions"
-	ErrorReasonProviderNotStarted                = "provider_not_started"
-	ErrorReasonProviderStopped                   = "provider_stopped"
+	ErrorReasonCoreHasOpenSessions               = "core_has_open_sessions"
+	ErrorReasonCoreNotStarted                    = "core_not_started"
+	ErrorReasonCoreStopped                       = "core_stopped"
 )
 
 // ErrorReasonSuffixFailed is the operation suffix for an unclassified native

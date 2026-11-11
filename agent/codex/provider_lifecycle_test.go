@@ -155,22 +155,23 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
 	require.NoError(t, err)
-	stream, err := session.Events()
-	require.NoError(t, err)
 	select {
 	case <-session.Done():
 	case <-ctx.Done():
 		require.NoError(t, ctx.Err())
 	}
 
+	require.NoError(t, provider.Stop(ctx))
+	stream, err := session.Events()
+	require.NoError(t, err)
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessageChunk, event.Type())
 	_, err = stream.Next(ctx)
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+	assert.Same(t, session.Err(), err)
 
-	require.NoError(t, provider.Stop(ctx))
 	require.NoError(t, session.Close(ctx))
 }
 
@@ -200,7 +201,7 @@ func codexThreadStartResult(threadID string) string {
 	}`
 }
 
-func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Provider {
+func newTestProvider(t *testing.T, peerSession *mocktest.Session) *agentcodex.Core {
 	return newTestProviderWithExperimentalAPI(t, peerSession, true)
 }
 
@@ -208,7 +209,7 @@ func newTestProviderWithExperimentalAPI(
 	t *testing.T,
 	peerSession *mocktest.Session,
 	enabled bool,
-) *agentcodex.Provider {
+) *agentcodex.Core {
 	t.Helper()
 	return newTestProviderWithInitialize(t, peerSession, codextypes.InitializeParams{
 		ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
@@ -222,7 +223,7 @@ func newTestProviderWithInitialize(
 	t *testing.T,
 	peerSession *mocktest.Session,
 	initialize codextypes.InitializeParams,
-) *agentcodex.Provider {
+) *agentcodex.Core {
 	t.Helper()
 	return newTestProviderWithWrappers(
 		t,
@@ -243,7 +244,7 @@ func newTestProviderWithWrappers(
 	peerSession *mocktest.Session,
 	initialize codextypes.InitializeParams,
 	wrappers testStreamWrappers,
-) *agentcodex.Provider {
+) *agentcodex.Core {
 	t.Helper()
 	runCtx, cancelRun := context.WithTimeout(
 		context.WithoutCancel(t.Context()),

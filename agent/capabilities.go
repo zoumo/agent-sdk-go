@@ -81,7 +81,7 @@ func (c Capabilities) Validate() error {
 	)
 }
 
-// ActionReceipt records the acceptance observed for a provider-specific action.
+// ActionReceipt records the acceptance observed for an adapter-specific action.
 type ActionReceipt struct {
 	Acceptance Acceptance
 }

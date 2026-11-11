@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 var (
@@ -22,23 +22,19 @@ var (
 	_ agent.Injector         = (*session)(nil)
 	_ agent.Archiver         = (*session)(nil)
 	_ agent.ConfigController = (*session)(nil)
-	_ agent.EventStream      = (*eventStream)(nil)
 )
 
 type session struct {
-	provider *Provider
+	provider *Core
 	native   *codex.Session
 	features agent.EffectiveFeatures
-	events   queue.Queue[agent.Event]
+	stream   *eventstream.Stream
 
-	mu               sync.Mutex
-	eventsClaimed    bool
-	closed           bool
-	explicitClose    bool
-	providerReleased bool
-	submitting       bool
-	injecting        bool
-	submitUnknown    bool
+	mu            sync.Mutex
+	closed        bool
+	submitting    bool
+	injecting     bool
+	submitUnknown bool
 	// workEpoch prevents a late submit failure from rearming unknown state after
 	// the observer has already accepted native turn evidence.
 	workEpoch    uint64
@@ -51,23 +47,15 @@ type session struct {
 	interactions      map[agent.InteractionRef]*pendingInteraction
 	requestRefs       map[string]agent.InteractionRef
 	interactionLedger *interactionledger.Ledger
-	done              chan struct{}
-	err               error
 
 	parentMu sync.RWMutex
 	parents  map[string]string
 
-	toolIdentities  map[toolIdentityKey]toolIdentity
-	observationDone chan struct{}
-	closeOnce       sync.Once
-	closeErr        error
-
-	nativeCleanupOnce sync.Once
-	nativeCleanupErr  error
+	toolIdentities map[toolIdentityKey]toolIdentity
 }
 
 func newSession(
-	provider *Provider,
+	provider *Core,
 	native *codex.Session,
 	features agent.EffectiveFeatures,
 ) *session {
@@ -80,9 +68,35 @@ func newSession(
 		interactionLedger: interactionledger.New("codex-"),
 		parents:           make(map[string]string),
 		toolIdentities:    make(map[toolIdentityKey]toolIdentity),
-		done:              make(chan struct{}),
-		observationDone:   make(chan struct{}),
 	}
+	var invalidated []*pendingInteraction
+	created.stream = eventstream.New(eventstream.Hooks{
+		BeginClose: func(eventstream.End) {
+			invalidated = created.closeForOperations()
+		},
+		CloseNative: func() error {
+			return nativeOperationError("close", native.Close())
+		},
+		FinalCause: func() error { return sessionTerminationError(native.Err()) },
+		CloseEvents: func(end eventstream.End) []agent.Event {
+			created.toolIdentities = nil
+			reason := "session_ended"
+			if end.Explicit {
+				reason = agent.ErrorReasonSessionClosed
+			} else if end.Cause != nil {
+				reason = "session_failed"
+			}
+			events := created.closedInteractionEvents(
+				invalidated,
+				agent.InteractionCancelled,
+				reason,
+				time.Now().UTC(),
+			)
+			invalidated = nil
+			return events
+		},
+		Release: func() { provider.sessionClosed(created) },
+	})
 	return created
 }
 
@@ -104,28 +118,7 @@ func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 }
 
 func (s *session) Events() (agent.EventStream, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Observation may end before the consumer claims the stream. Keep the
-	// accepted events and terminal cause claimable unless Close was explicit.
-	if s.closed && s.explicitClose {
-		return nil, adapterError(
-			agent.ErrorClosed,
-			agent.ErrorReasonSessionClosed,
-			"session is closed",
-			nil,
-		)
-	}
-	if s.eventsClaimed {
-		return nil, adapterError(
-			agent.ErrorFailedPrecondition,
-			agent.ErrorReasonEventsAlreadyClaimed,
-			"the session event stream has already been claimed",
-			nil,
-		)
-	}
-	s.eventsClaimed = true
-	return &eventStream{session: s}, nil
+	return s.stream.Claim()
 }
 
 func (s *session) StartOrSteer(
@@ -355,31 +348,14 @@ func (s *session) Unarchive(ctx context.Context) (agent.ActionReceipt, error) {
 	}}, nil
 }
 
-func (s *session) Close(context.Context) error {
-	s.closeOnce.Do(func() {
-		invalidated := s.closeForOperations(true)
-		s.closeErr = s.cleanupNative()
-		<-s.observationDone
-		events := s.closedInteractionEvents(
-			invalidated,
-			agent.InteractionCancelled,
-			agent.ErrorReasonSessionClosed,
-			time.Now().UTC(),
-		)
-		_ = s.pushEvents(events)
-		s.terminate(s.native.Err())
-		_ = s.events.Close(sessionTerminationError(s.native.Err()))
-		s.releaseProviderSession(false)
-	})
-	return s.closeErr
+func (s *session) Close(ctx context.Context) error {
+	return s.stream.Close(ctx)
 }
 
-func (s *session) Done() <-chan struct{} { return s.done }
+func (s *session) Done() <-chan struct{} { return s.stream.Done() }
 
 func (s *session) Err() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.err
+	return s.stream.Err()
 }
 
 func (s *session) requireOpen() error {
@@ -397,134 +373,42 @@ func (s *session) requireOpen() error {
 }
 
 func (s *session) observe() {
-	defer close(s.observationDone)
+	s.stream.ObservationEnded(sessionTerminationError(s.receiveUntilTerminal()))
+}
+
+func (s *session) receiveUntilTerminal() error {
 	for {
 		received, err := s.native.Receive(context.Background())
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				s.finishObservation(nil)
-				return
+				return s.native.Err()
 			}
-			s.failObservation(sessionTerminationError(err))
-			return
+			return err
 		}
 		events, convertErr := s.convertReceived(received)
 		if convertErr != nil {
-			s.failObservation(convertErr)
-			return
+			return convertErr
 		}
 		if err := s.pushEvents(events); err != nil {
-			s.failObservation(adapterError(
+			return adapterError(
 				agent.ErrorUnavailable,
 				agent.ErrorReasonEventDeliveryFailed,
 				"deliver unified Codex event",
 				err,
-			))
-			return
+			)
 		}
 	}
 }
 
 func (s *session) pushEvents(events []agent.Event) error {
-	if len(events) == 0 {
-		return nil
-	}
-	items := make([]queue.Item[agent.Event], 0, len(events))
-	for _, event := range events {
-		items = append(items, queue.Item[agent.Event]{Value: event, Bytes: 1})
-	}
-	return s.events.PushBatch(items)
+	return s.stream.Publish(events)
 }
 
-func (s *session) closeForOperations(explicit bool) []*pendingInteraction {
+func (s *session) closeForOperations() []*pendingInteraction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
-	if explicit {
-		s.explicitClose = true
-	}
 	return s.clearInteractionsLocked()
-}
-
-func (s *session) finishObservation(cause error) {
-	reason := "session_ended"
-	if cause != nil {
-		cause = sessionTerminationError(cause)
-		reason = "session_failed"
-	}
-	s.endObservation(cause, reason)
-}
-
-func (s *session) failObservation(cause error) {
-	s.endObservation(sessionTerminationError(cause), "session_failed")
-}
-
-func (s *session) endObservation(cause error, reason string) {
-	s.toolIdentities = nil
-	invalidated := s.closeForOperations(false)
-	events := s.closedInteractionEvents(
-		invalidated,
-		agent.InteractionCancelled,
-		reason,
-		time.Now().UTC(),
-	)
-	_ = s.pushEvents(events)
-	_ = s.cleanupNative()
-	s.closeObservedQueue(cause)
-	s.releaseProviderSession(true)
-	s.terminate(cause)
-}
-
-func (s *session) closeObservedQueue(cause error) {
-	s.mu.Lock()
-	explicit := s.explicitClose
-	s.mu.Unlock()
-	if !explicit {
-		_ = s.events.Close(cause)
-	}
-}
-
-func (s *session) cleanupNative() error {
-	s.nativeCleanupOnce.Do(func() {
-		if err := s.native.Close(); err != nil {
-			s.nativeCleanupErr = nativeOperationError("close", err)
-		}
-	})
-	return s.nativeCleanupErr
-}
-
-func (s *session) releaseProviderSession(requireImplicit bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.providerReleased || (requireImplicit && s.explicitClose) {
-		return
-	}
-	s.providerReleased = true
-	s.provider.sessionClosed(s)
-}
-
-func (s *session) terminate(cause error) {
-	cause = sessionTerminationError(cause)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closed = true
-	if s.err == nil && cause != nil {
-		s.err = cause
-	}
-	select {
-	case <-s.done:
-		return
-	default:
-		close(s.done)
-	}
-}
-
-type eventStream struct {
-	session *session
-}
-
-func (s *eventStream) Next(ctx context.Context) (agent.Event, error) {
-	return s.session.events.Pop(ctx)
 }
 
 func textInput(input agent.Input) (codex.Input, error) {

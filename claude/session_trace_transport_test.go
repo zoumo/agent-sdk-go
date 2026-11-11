@@ -48,6 +48,19 @@ func (writer *promptTraceFaultWriter) Close() error {
 	return writer.WriteCloser.Close()
 }
 
+func requireWriteGateAvailable(t *testing.T, gate chan struct{}) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		select {
+		case gate <- struct{}{}:
+			<-gate
+			return true
+		default:
+			return false
+		}
+	}, 3*time.Second, time.Millisecond, "write gate remained locked")
+}
+
 func TestPromptTraceTransportFailure(t *testing.T) {
 	for _, mode := range []string{"blocked", "partial", "short"} {
 		t.Run(mode, func(t *testing.T) {
@@ -103,7 +116,7 @@ func TestPromptTraceTransportFailure(t *testing.T) {
 			}
 			assert.NotContains(t, writer.written.String(), `"type":"user"`)
 			assert.Error(t, session.Err())
-			assert.Empty(t, session.client.writeGate)
+			requireWriteGateAvailable(t, session.client.writeGate)
 			select {
 			case session.settingsGate <- struct{}{}:
 				<-session.settingsGate

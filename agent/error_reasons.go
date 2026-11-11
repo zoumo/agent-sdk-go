@@ -29,7 +29,7 @@ const (
 	ErrorReasonUnsupportedAnswer          = "unsupported_answer"
 )
 
-// Stable Error.Reason values produced by provider-neutral validation and
+// Stable Error.Reason values produced by adapter-neutral validation and
 // lifecycle code shared by both adapters.
 const (
 	ErrorReasonAdditionalSystemPromptContainsNUL = "additional_system_prompt_contains_nul"

@@ -6,9 +6,9 @@ import (
 	"unicode/utf8"
 )
 
-// OpenOptions contains provider-neutral creation options. An adapter that
+// OpenOptions contains adapter-neutral creation options. An adapter that
 // cannot enforce a nonzero option rejects it before native side effects.
-// Provider-specific creation options belong on the concrete adapter.
+// Adapter-specific creation options belong on the concrete adapter.
 type OpenOptions struct {
 	Cwd string
 	// ProcessEnv is an additive, set-only overlay for a Claude Session CLI.
@@ -34,8 +34,8 @@ type OpenOptions struct {
 	Config SessionConfig
 }
 
-// Validate checks the provider-neutral creation options before native side
-// effects. Provider-specific support is checked by the adapter.
+// Validate checks the adapter-neutral creation options before native side
+// effects. Adapter-specific support is checked by the adapter.
 func (o OpenOptions) Validate() error {
 	if o.Cwd == "" {
 		return invalidArgument("missing_cwd", "working directory is required")
@@ -77,7 +77,7 @@ type ResumeOptions struct {
 	OpenOptions
 }
 
-// Validate checks the provider-neutral resume options before native side
+// Validate checks the adapter-neutral resume options before native side
 // effects.
 func (o ResumeOptions) Validate() error {
 	if o.SessionID == "" {
@@ -86,7 +86,7 @@ func (o ResumeOptions) Validate() error {
 	return o.OpenOptions.Validate()
 }
 
-// Features contains provider-neutral runtime feature requests. A nil field
+// Features contains adapter-neutral runtime feature requests. A nil field
 // uses the provider default.
 type Features struct {
 	AgentQuestions *bool

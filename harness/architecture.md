@@ -8,24 +8,24 @@ status: stable
 
 These rules describe the agreed repository boundaries. For document ownership and
 navigation, see the [harness index](index.md).
-The provider-independent behavior contract and onboarding requirements live in
+The adapter-independent behavior contract and onboarding requirements live in
 [SDK behavior contract](sdk/architecture.md); this page governs repository module
 and dependency boundaries.
 
 - Use one module, `github.com/zoumo/agent-sdk-go`, and one version. Keep a single
   root `go.mod`/`go.sum`; do not introduce nested modules or `go.work`.
 - Keep the supported native SDK imports `codex`, `codex/types`, `claude` and
-  `claude/types` independent. The optional `agent` package is a provider-neutral
+  `claude/types` independent. The optional `agent` package is an adapter-neutral
   upper-layer contract, not a root client or a replacement for the native APIs.
   Do not add old-path forwarding packages or a shared native answer state machine.
   Common approval operations follow the [SDK behavior contract](sdk/architecture.md),
-  preserving original native answer handles and provider-specific options.
+  preserving original native answer handles and native-specific options.
 - The `agent` core production code must use only the standard library and the
   SDK-internal carrier validator described below. It must not
-  import either native SDK, MASS or recording/replay code. Provider adapters may
+  import either native SDK, MASS or recording/replay code. Adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
-  mechanics (`agent/internal/lifecycle`, `agent/internal/eventenvelope`,
-  `agent/internal/interactionledger`, `agent/internal/submissiontrace`,
+  mechanics (`agent/internal/corelease`, `agent/internal/eventstream`,
+  `agent/internal/eventenvelope`, `agent/internal/interactionledger`, `agent/internal/submissiontrace`,
   `internal/queue` and `internal/uuidv4`), but adapters must not import each
   other or the other native SDK, and native packages must not import `agent`.
 - `internal/tracecontext` shares only standard-library W3C carrier validation
@@ -45,13 +45,22 @@ and dependency boundaries.
   `internal/lineage` accepts confirmed relationship facts; it does not parse
   native events, infer creation, send protocol messages or grant answer authority.
   Its precise contract and resource bounds live in [lineage](modules/native-session/design.md#lineage-shared-relationship-rules).
-- `agent/internal/lifecycle` owns the shared Provider lifecycle state and may
-  import only the standard library and the public `agent` contract. It must not
-  import either native SDK or native `types`, an adapter, MASS, recording/replay
-  code, tools or tests. Go internal visibility restricts it to packages under
-  `agent`.
+- `agent/internal/corelease` owns Core admission, opaque shared resources,
+  capability snapshots, in-flight opens and Session leases. It may import only
+  the standard library and the public `agent` contract.
+- `agent/internal/eventstream` owns per-Session event delivery, the one-time
+  stream claim, terminal cause, cleanup ordering, lease release and `Done`/`Err`.
+  It may import only the standard library, public `agent` and `internal/queue`;
+  its transitive non-standard dependencies additionally allow the carrier
+  validator through `agent` and the reviewed `github.com/zoumo/golib/channx`
+  through `internal/queue`.
+  Neither shared module may import a native SDK or native `types`, an adapter,
+  interaction state machines (including `interactionledger`), MASS,
+  recording/replay code, tools or tests. Native receive, conversion, answer
+  authority and interaction settlement remain adapter-owned. Go internal
+  visibility restricts both modules to packages under `agent`.
 - `agent/internal/interactionledger` owns only Session-scoped opaque interaction
-  references, registration order and provider-neutral authority slots. A slot
+  references, registration order and adapter-neutral authority slots. A slot
   may record pending, answering, sent or settled authority and settlement
   results, but never a native request, raw frame, request identifier, handle,
   reply callback or reference-to-adapter lookup. Each adapter's private registry
@@ -59,7 +68,7 @@ and dependency boundaries.
 - `agent/internal/submissiontrace` owns only the best-effort local span lifecycle
   for one admitted unified submission. It may import the standard library and
   public `agent` contract; it must not import a native SDK, adapter, MASS or
-  tracing implementation. Provider-specific carrier conversion and wire mapping
+  tracing implementation. Adapter-specific carrier conversion and wire mapping
   remain with each adapter.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
@@ -69,7 +78,7 @@ and dependency boundaries.
   FIFO ownership and resource semantics live in [event delivery](modules/native-session/design.md#delivery-event-delivery).
 - `agent/internal/eventenvelope` shares only unified event-envelope construction:
   identity, fallback time, validation and error classification. It may depend on
-  the standard library, `agent` and `internal/uuidv4`; provider-specific payload
+  the standard library, `agent` and `internal/uuidv4`; adapter-specific payload
   conversion and Meta/raw extraction stay in each adapter.
 - Native parsing, unknown data, aliases, execution identities, transport and
   process lifecycle stay with each native SDK. Session state ownership and
@@ -89,7 +98,7 @@ Both native SDKs use the same separation of responsibilities:
 | Location | Responsibility |
 |---|---|
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
-| `agent/` | Provider-neutral live Session contract, values, validation and event encoding |
+| `agent/` | Adapter-neutral Agent Core and live Session contracts, values, validation and event encoding |
 | `tests/simulation/simulate/` | SDK-owned simulate, coverage, independent policy hosts, cancellation and authenticated loopback bridge |
 | `tests/simulation/drivers/` | Go simulation process entry and driver documentation |
 | `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |

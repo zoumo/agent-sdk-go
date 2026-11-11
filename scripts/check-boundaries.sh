@@ -25,20 +25,50 @@ done
 # either native package, MASS, or a third-party production dependency.
 agent_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent | sed '/^$/d')
 test "$agent_deps" = $'github.com/zoumo/agent-sdk-go/internal/tracecontext\ngithub.com/zoumo/agent-sdk-go/agent'
-# The shared Provider lifecycle may use only the public agent contract in
+# Core admission and leases may use only the public agent contract in
 # addition to the standard library. It cannot reach either native SDK or types.
-lifecycle_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/lifecycle | sed '/^$/d')
+corelease_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/corelease | sed '/^$/d')
 while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
-    github.com/zoumo/agent-sdk-go/agent/internal/lifecycle) ;;
+    github.com/zoumo/agent-sdk-go/agent/internal/corelease) ;;
     *)
-      echo "unexpected agent/internal/lifecycle dependency: $dependency" >&2
+      echo "unexpected agent/internal/corelease dependency: $dependency" >&2
       exit 1
       ;;
   esac
-done <<< "$lifecycle_deps"
+done <<< "$corelease_deps"
+# Session event delivery adds only the reviewed FIFO and its ChannX dependency.
+eventstream_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/eventstream | sed '/^$/d')
+while IFS= read -r dependency; do
+  case "$dependency" in
+    github.com/zoumo/agent-sdk-go/internal/tracecontext|\
+    github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/agent/internal/eventstream|\
+    github.com/zoumo/agent-sdk-go/internal/queue|\
+    github.com/zoumo/golib/channx) ;;
+    *)
+      echo "unexpected agent/internal/eventstream dependency: $dependency" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$eventstream_deps"
+# Transitive allowances do not authorize direct imports of carrier or FIFO internals.
+for shared in corelease eventstream; do
+  shared_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "./agent/internal/$shared")
+  while IFS= read -r dependency; do
+    case "$dependency" in
+      github.com/zoumo/agent-sdk-go/agent) ;;
+      github.com/zoumo/agent-sdk-go/internal/queue)
+        test "$shared" = eventstream ;;
+      *.*)
+        echo "unexpected direct agent/internal/$shared dependency: $dependency" >&2
+        exit 1
+        ;;
+    esac
+  done <<< "$shared_imports"
+done
 # Submission tracing shares only the public contract and standard library.
 submissiontrace_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/submissiontrace | sed '/^$/d')
 while IFS= read -r dependency; do
@@ -68,7 +98,7 @@ while IFS= read -r dependency; do
   esac
 done <<< "$interactionledger_deps"
 # Each adapter may use standard library packages, its own native SDK, the
-# provider-neutral core, and reviewed SDK-internal mechanics. It must not reach
+# adapter-neutral core, and reviewed SDK-internal mechanics. It must not reach
 # the other adapter or the other native SDK.
 for adapter in codex claude; do
   adapter_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "./agent/$adapter")
@@ -78,7 +108,8 @@ for adapter in codex claude; do
         case "$dependency" in
           github.com/zoumo/agent-sdk-go/agent|\
           github.com/zoumo/agent-sdk-go/agent/"$adapter"|\
-          github.com/zoumo/agent-sdk-go/agent/internal/lifecycle|\
+          github.com/zoumo/agent-sdk-go/agent/internal/corelease|\
+          github.com/zoumo/agent-sdk-go/agent/internal/eventstream|\
           github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace|\
           github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
           github.com/zoumo/agent-sdk-go/"$adapter"|\
@@ -96,7 +127,7 @@ for adapter in codex claude; do
   done <<< "$adapter_imports"
 done
 # Unified event-envelope construction is adapter-only shared mechanics. It must
-# not acquire native SDKs or provider-specific conversion dependencies.
+# not acquire native SDKs or adapter-specific conversion dependencies.
 eventenvelope_dependencies=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/eventenvelope | sed '/^$/d')
 while IFS= read -r dependency; do
   case "$dependency" in

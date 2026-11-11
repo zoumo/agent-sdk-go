@@ -1,7 +1,7 @@
-// Package agentclaude adapts the native Claude Session to the provider-neutral
+// Package agentclaude adapts the native Claude Session to the adapter-neutral
 // live agent contract.
 //
-// Provider Start only makes the provider lifecycle ready; each Session owns its
+// Core Start only makes the Core lifecycle ready; each Session owns its
 // native Claude CLI process. Open waits for a live native init before returning
 // the real session identity. Resume first confirms the reviewed CLI version and
 // the requested saved transcript under Config.ConfigDir, then accepts matching
@@ -21,7 +21,7 @@
 // state is released when the next response starts. An aborted assistant frame is
 // reported rather than presented as complete content.
 // Message, response, block, and tool identities remain in event item IDs and
-// Meta. The provider declares text input, permission, and form capabilities;
+// Meta. The Core declares text input, permission, and form capabilities;
 // disabling AgentQuestions removes form support and disables the native tool.
 //
 // Tool calls and results preserve the exact native tool_use.name, including the
@@ -42,11 +42,11 @@
 // directories, URL interactions, multi-block input, and native frames or answer
 // extensions without an exact mapping are not advertised. TodoWrite, TaskCreate,
 // and TaskUpdate remain ordinary tool calls with their native input; they do not
-// also produce a provider-neutral plan event. AskUserQuestion accepts string
+// also produce an adapter-neutral plan event. AskUserQuestion accepts string
 // answers and, for multi-select questions, string arrays. Multi-select arrays
 // are joined with ", " before the native write; native array answers are not
 // supported.
-// Open and Resume pass the final provider-neutral external MCP list to native
+// Open and Resume pass the final adapter-neutral external MCP list to native
 // Claude stdio or Streamable HTTP configuration. Stdio maps Command, Args, and
 // Env; Streamable HTTP maps URL and Headers. Cwd, EnvHeaders, and
 // BearerTokenEnvVar are rejected as unsupported before process launch rather than

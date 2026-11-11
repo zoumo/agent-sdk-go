@@ -4,7 +4,7 @@ Shell commands below run from the repository root; see [root validation](../docs
 
 An experimental, independent native Go client for a locally installed Claude Code CLI. No other Go SDK or language runtime is required by the client. Original code is licensed under Apache-2.0.
 The optional [unified Claude adapter](../agent/claude/doc.go) exposes the same
-`agent.Provider`/`agent.Session` live contract as the Codex adapter. Native
+`agent.Core`/`agent.Session` live contract as the Codex adapter. Native
 package-level session and history queries remain the source for saved content.
 
 ## Compatibility

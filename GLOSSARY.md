@@ -6,6 +6,11 @@
 
 ### 会话与执行
 
+**Agent Core（Agent 核心，`Core`）**:
+统一 Agent 层中管理启停、打开和恢复 Session 的 Agent 级 adapter owner。
+它与描述工具来源的 Tool Provider 不同。
+_Avoid_: Provider（指 Agent 级 owner 时）、Tool Provider、根客户端
+
 **Session（会话）**:
 跨多次输入和执行持续存在的原生交互上下文。一次执行结果是会话内的事实，不是会话本身。
 _Avoid_: 任务、单次执行、Turn（指整个 Session 时）
@@ -16,13 +21,13 @@ _Avoid_: 任务、单次执行、Turn（指整个 Session 时）
 和 `effort`。
 _Avoid_: 全部原生 Session 配置、权限设置、跨 provider 思考预算
 
-**Process environment（Provider 进程环境）**:
-构造 Provider 时选择的 Codex app-server 或 Claude CLI 基础子进程环境。nil 继承
+**Process environment（Core 进程环境）**:
+构造 Core 时选择的 Codex app-server 或 Claude CLI 基础子进程环境。nil 继承
 当前进程，非 nil 整体替换；Claude 的 Session overlay 另由 `ProcessEnv` 表达。
 _Avoid_: ShellEnv、全部 Session 配置
 
 **Session process environment（Session 进程环境，`ProcessEnv`）**:
-Claude Session 自有 CLI 进程的 additive、set-only 环境 overlay；以 Provider
+Claude Session 自有 CLI 进程的 additive、set-only 环境 overlay；以 Core
 进程环境为基础，在 `Open`/`Resume` 时合成。它影响该 CLI 及其子进程；Codex
 共享 app-server，不支持 Session 级 `ProcessEnv`。
 _Avoid_: ShellEnv、per-prompt env、Codex app-server 环境
@@ -33,7 +38,7 @@ shell / unified-exec 类子进程。本合同规定 Codex 支持；Claude 因没
 入口而明确不支持。
 _Avoid_: `ProcessEnv`、Claude settings `env`、任意子进程环境
 
-**Provider-native behavior（Provider 原生行为）**:
+**Native Agent behavior（原生 Agent 行为）**:
 由 Codex/Core 或 Claude CLI 自身定义并执行的行为。SDK 可以映射输入并接收观察
 结果，但不拥有、模拟或保证其 span 创建、turn trace 复用、进程环境继承和并发
 隔离。
@@ -53,7 +58,7 @@ trace 进入 shell 或 MCP 子进程，也不保证具体 CLI 版本最终导出
 span。原生 Codex 把输入接纳为 steer 时，不创建新的 turn 执行 span，会复用
 原 turn 的 trace；原生 Claude 的 settings env 是进程级状态，写入后当前 turn
 的后续新工具、工具启动的子进程或随后 prompt 都可能读取当前值，已经启动的
-进程不保证更新。这些是明确接受的 Provider 原生行为，不是 SDK 新增或保证的
+进程不保证更新。这些是明确接受的原生 Agent 行为，不是 SDK 新增或保证的
 语义；SDK 不重定向 provider turn trace，也不提供 prompt/turn 环境隔离。
 ACP v2 在 `session/prompt._meta` 预留同类字段，但只有实现并宣告该能力的
 adapter 才形成 ACP 传播。per-prompt trace 不要求每个 prompt 启动新进程；同一
@@ -165,7 +170,7 @@ _Avoid_: 统一 leaf name、工具动作类别
 `agent`、`dynamic`、`mcp` 或 `mcp:<server>`；`mcp:` 非法，`<server>` 非空
 且允许继续包含 `:`。已知 MCP server 时把 server 放在 `mcp:<server>` 中，
 不另设 payload server 字段。
-_Avoid_: 事件来源、Session provider
+_Avoid_: 事件来源、Agent Core、Session owner
 
 **Tool kind（工具类别）**:
 SDK 按 ACP 词汇附加的跨 Agent 动作分类，用于展示、统计和粗粒度路由提示，不表示
@@ -236,7 +241,7 @@ _Avoid_: 全部历史、完整存储快照
 _Avoid_: SDK MCP server（指外部 server 时）、普通工具
 
 **Runtime MCP defaults（Runtime MCP 默认项）**:
-调用方在构造 Provider 前从 Runtime 配置解析的外部 MCP 声明。Session 声明可按
+调用方在构造 Core 前从 Runtime 配置解析的外部 MCP 声明。Session 声明可按
 name 整体覆盖同名默认项。
 _Avoid_: native ambient MCP、用户配置、项目配置
 

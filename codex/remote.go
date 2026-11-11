@@ -127,7 +127,6 @@ func NewRemote(ctx context.Context, options RemoteOptions) (*Client, error) {
 	c := newClient(limits)
 	c.remoteToken = options.BearerToken
 	frames := newWebsocketFrameTransport(conn, limits.MaxFrameBytes)
-	c.frames = frames
 	c.transport = frames
 	c.workers.Add(2)
 	go func() { defer c.workers.Done(); defer close(c.readDone); c.readLoop() }()

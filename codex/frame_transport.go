@@ -38,7 +38,12 @@ type streamInput interface {
 	InputHalfClosed() bool
 }
 
-type transportShutdown struct{}
+type transportShutdown struct {
+	waitErr      error
+	readComplete bool
+	readEOF      bool
+	closeErr     error
+}
 
 var errStreamReaderClosed = errors.New("codex: stream reader closed locally")
 
@@ -95,26 +100,6 @@ func writeLineFrame(_ context.Context, writer io.Writer, payload []byte) error {
 	return err
 }
 
-type stdioFrameTransport struct {
-	reader *lineFrameReader
-	writer io.Writer
-}
-
-func newStdioFrameTransport(reader io.Reader, writer io.Writer, maxFrameBytes int) *stdioFrameTransport {
-	return &stdioFrameTransport{
-		reader: newLineFrameReader(reader, maxFrameBytes),
-		writer: writer,
-	}
-}
-
-func (t *stdioFrameTransport) ReadFrame() ([]byte, error) {
-	return t.reader.ReadFrame()
-}
-
-func (t *stdioFrameTransport) WriteFrame(ctx context.Context, payload []byte) error {
-	return writeLineFrame(ctx, t.writer, payload)
-}
-
 type streamFrameTransport struct {
 	reader     *lineFrameReader
 	readCloser io.ReadCloser
@@ -168,6 +153,26 @@ func (t *streamFrameTransport) WriteFrame(ctx context.Context, payload []byte) e
 	return err
 }
 
+func (t *streamFrameTransport) StreamInput() streamInput { return t }
+
+func (t *streamFrameTransport) StderrReader() io.Reader { return t.stderr }
+
+func (t *streamFrameTransport) Abort() { _ = t.CloseInput() }
+
+func (t *streamFrameTransport) Shutdown(done, readDone <-chan struct{}, timeout time.Duration) transportShutdown {
+	select {
+	case <-t.InputHalfClosedSignal():
+	case <-done:
+	case <-readDone:
+	}
+	completion := t.Complete(readDone, timeout)
+	return transportShutdown{
+		waitErr:      completion.waitErr,
+		readComplete: completion.readComplete,
+		readEOF:      completion.readEOF,
+	}
+}
+
 func (t *streamFrameTransport) CloseInput() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -191,14 +196,6 @@ func (t *streamFrameTransport) InputHalfClosed() bool {
 
 func (t *streamFrameTransport) InputHalfClosedSignal() <-chan struct{} {
 	return t.inputHalfClosedSignal
-}
-
-func (t *streamFrameTransport) StderrReader() io.Reader {
-	return t.stderr
-}
-
-func (t *streamFrameTransport) HasStderr() bool {
-	return t.stderr != nil
 }
 
 func (t *streamFrameTransport) ReadEOF() bool {

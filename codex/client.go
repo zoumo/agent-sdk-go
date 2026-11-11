@@ -12,10 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"os"
-	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,15 +47,9 @@ type outbound struct {
 type Client struct {
 	mu                 sync.Mutex
 	limits             Limits
-	cmd                *exec.Cmd
-	stdin              *os.File
-	stdout             *os.File
-	stderr             *os.File
-	streams            *streamFrameTransport
 	terminalClosed     bool
 	closing            bool
 	remoteToken        string
-	frames             frameTransport
 	transport          connectionTransport
 	queue              chan outbound
 	pending            map[ID]*pendingCall
@@ -77,7 +68,6 @@ type Client struct {
 	cause              error
 	done               chan struct{}
 	cleaned            chan struct{}
-	reaped             chan struct{}
 	readDone           chan struct{}
 	closeErr           error
 	serverInfo         json.RawMessage
@@ -101,69 +91,23 @@ func NewStdio(ctx context.Context, options StdioOptions) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(context.WithoutCancel(ctx), options.Executable, options.Args...)
-	cmd.Env = options.Env
-	cmd.Dir = options.Dir
-	// Own our pipe endpoints explicitly: Cmd.Wait must not close stdout before the
-	// reader has consumed a final buffered response.
-	inR, inW, err := os.Pipe()
+	transport, err := startStdioFrameTransport(ctx, options, limits)
 	if err != nil {
 		return nil, err
 	}
-	outR, outW, err := os.Pipe()
-	if err != nil {
-		inR.Close()
-		inW.Close()
-		return nil, err
-	}
-	errR, errW, err := os.Pipe()
-	if err != nil {
-		inR.Close()
-		inW.Close()
-		outR.Close()
-		outW.Close()
-		return nil, err
-	}
-	all := []*os.File{inR, inW, outR, outW, errR, errW}
-	cmd.Stdin = inR
-	cmd.Stdout = outW
-	cmd.Stderr = errW
-	if err = cmd.Start(); err != nil {
-		for _, f := range all {
-			f.Close()
-		}
-		return nil, err
-	}
-	inR.Close()
-	outW.Close()
-	errW.Close()
 	c := newClient(limits)
-	c.cmd, c.stdin, c.stdout, c.stderr = cmd, inW, outR, errR
-	c.frames = newStdioFrameTransport(outR, inW, limits.MaxFrameBytes)
-	go func() {
-		waitErr := cmd.Wait()
-		close(c.reaped)
-		// Allow the reader to consume a final response, but do not depend on EOF:
-		// a descendant may retain inherited stdout after the owned child exits.
-		drain := min(limits.ShutdownTimeout/2, 100*time.Millisecond)
-		timer := time.NewTimer(drain)
-		defer timer.Stop()
-		select {
-		case <-c.readDone:
-		case <-timer.C:
-			c.fail(fmt.Errorf("codex: owned child exited: %w", errors.Join(io.EOF, waitErr)))
-		}
-	}()
+	c.transport = transport
 	c.workers.Add(3)
 	go func() { defer c.workers.Done(); defer close(c.readDone); c.readLoop() }()
 	go func() { defer c.workers.Done(); c.writeLoop() }()
 	go func() { defer c.workers.Done(); c.drainStderr() }()
+	go c.watchOwnedProcessExit(transport.OwnedProcessExit())
 	go c.cleanup()
 	return c.initialize(ctx, options.Initialize)
 }
 
 func newClient(limits Limits) *Client {
-	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), reaped: make(chan struct{}), readDone: make(chan struct{})}
+	c := &Client{limits: limits, queue: make(chan outbound, limits.OutboundQueue), pending: make(map[ID]*pendingCall), reverse: make(map[ID]*requestState), requestHistory: make(map[requestKey]*requestState), done: make(chan struct{}), cleaned: make(chan struct{}), readDone: make(chan struct{})}
 	c.ownership.client = c
 	return c
 }
@@ -457,7 +401,7 @@ func (c *Client) writeLoop() {
 					c.fail(ErrWriteTimeout)
 				}
 			})
-			err := c.frames.WriteFrame(m.ctx, m.frame)
+			err := c.transport.WriteFrame(m.ctx, m.frame)
 			finished.Store(true)
 			timer.Stop()
 			c.mu.Lock()
@@ -499,6 +443,10 @@ func (c *Client) finishLocked(p *pendingCall, result json.RawMessage, err error)
 }
 
 func (c *Client) fail(cause error) {
+	c.terminate(cause, true)
+}
+
+func (c *Client) terminate(cause error, abort bool) {
 	cause = c.safeError(cause)
 	if cause == nil {
 		cause = ErrClosed
@@ -534,44 +482,14 @@ func (c *Client) fail(cause error) {
 	c.requestHistory = nil
 	close(c.done)
 	c.mu.Unlock()
-	if c.transport != nil {
+	if abort && c.transport != nil {
 		c.transport.Abort()
-	} else if c.streams != nil {
-		_ = c.streams.CloseInput()
-	} else {
-		_ = c.stdin.Close()
 	}
 }
 
 func (c *Client) cleanup() {
-	if c.transport != nil {
-		c.transport.Shutdown(c.done, c.readDone, c.limits.ShutdownTimeout)
-		c.finishCleanup()
-		return
-	}
-	if c.streams != nil {
-		c.cleanupStream()
-		return
-	}
-	<-c.done
-	deadline := time.NewTimer(c.limits.ShutdownTimeout)
-	defer deadline.Stop()
-	grace := time.NewTimer(c.limits.ShutdownTimeout / 2)
-	defer grace.Stop()
-	select {
-	case <-c.reaped:
-	case <-grace.C:
-		_ = c.cmd.Process.Kill()
-		select {
-		case <-c.reaped:
-		case <-deadline.C:
-			c.mu.Lock()
-			c.closeErr = ErrShutdownTimeout
-			c.mu.Unlock()
-		}
-	}
-	_ = c.stdout.Close()
-	_ = c.stderr.Close()
+	shutdown := c.transport.Shutdown(c.done, c.readDone, c.limits.ShutdownTimeout)
+	c.applyTransportShutdown(shutdown)
 	c.finishCleanup()
 }
 
@@ -588,18 +506,13 @@ func (c *Client) finishCleanup() {
 	}
 }
 
-func (c *Client) cleanupStream() {
-	select {
-	case <-c.streams.InputHalfClosedSignal():
-	case <-c.done:
-	case <-c.readDone:
-	}
-	completion := c.streams.Complete(c.readDone, c.limits.ShutdownTimeout)
-	if completion.waitErr != nil {
+func (c *Client) applyTransportShutdown(shutdown transportShutdown) {
+	input := c.transport.StreamInput()
+	if shutdown.waitErr != nil {
 		// Close is a request to stop this connection, not permission to hide
 		// the peer's authoritative completion failure. Replace only a generic
 		// local-close or premature-EOF cause; a specific terminal cause wins.
-		c.authoritativeStreamFailure(completion.waitErr)
+		c.authoritativeStreamFailure(shutdown.waitErr)
 	}
 
 	c.mu.Lock()
@@ -608,11 +521,13 @@ func (c *Client) cleanupStream() {
 	c.mu.Unlock()
 	switch {
 	case terminal:
-	case completion.waitErr != nil:
-		c.fail(completion.waitErr)
-	case !c.streams.InputHalfClosed():
+	case shutdown.waitErr != nil:
+		c.fail(shutdown.waitErr)
+	case input == nil:
 		c.fail(ErrShutdownTimeout)
-	case !completion.readEOF || !completion.readComplete:
+	case !input.InputHalfClosed():
+		c.fail(ErrShutdownTimeout)
+	case !shutdown.readEOF || !shutdown.readComplete:
 		if !closing {
 			c.fail(fmt.Errorf("%w: peer ended without an input-acknowledged EOF", ErrUnexpectedEOF))
 		}
@@ -621,11 +536,13 @@ func (c *Client) cleanupStream() {
 	}
 
 	c.mu.Lock()
-	if c.closeErr == nil && c.cause != nil && !errors.Is(c.cause, ErrClosed) {
+	if c.closeErr == nil && shutdown.closeErr != nil {
+		c.closeErr = shutdown.closeErr
+	}
+	if input != nil && c.closeErr == nil && c.cause != nil && !errors.Is(c.cause, ErrClosed) {
 		c.closeErr = c.cause
 	}
 	c.mu.Unlock()
-	c.finishCleanup()
 }
 
 func (c *Client) authoritativeStreamFailure(cause error) {
@@ -656,16 +573,18 @@ func (c *Client) completeStream() {
 }
 
 func (c *Client) streamsInputHalfClosed() bool {
-	return c.streams != nil && c.streams.InputHalfClosed()
+	input := c.transport.StreamInput()
+	return input != nil && input.InputHalfClosed()
 }
 
 // CloseInput half-closes the SDK outbound writer while retaining the reader for
 // final peer frames. It is intended for stream transports.
 func (c *Client) CloseInput() error {
-	if c.streams == nil {
+	input := c.transport.StreamInput()
+	if input == nil {
 		return ErrStreamRequired
 	}
-	return c.streams.CloseInput()
+	return input.CloseInput()
 }
 
 func awaitUntil(ch <-chan struct{}, until time.Time) bool {
@@ -685,13 +604,13 @@ func awaitUntil(ch <-chan struct{}, until time.Time) bool {
 // or kills an unrelated process, process group, or remote server.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	if c.streams != nil {
+	if c.transport.StreamInput() != nil {
 		c.closing = true
 	}
 	terminal := c.terminalClosed
 	c.mu.Unlock()
 	if !terminal {
-		c.fail(ErrClosed)
+		c.terminate(ErrClosed, false)
 	}
 	<-c.cleaned
 	c.mu.Lock()
@@ -709,9 +628,9 @@ func saturatingAdd(a, b uint64) uint64 {
 }
 
 func (c *Client) drainStderr() {
-	reader := io.Reader(c.stderr)
-	if c.streams != nil {
-		reader = c.streams.StderrReader()
+	reader := c.transport.StderrReader()
+	if reader == nil {
+		return
 	}
 	buf := make([]byte, 4096)
 	for {

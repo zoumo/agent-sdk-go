@@ -2093,8 +2093,9 @@ linkage 和无法归属的交互行为保持不变。
   `set_max_thinking_tokens`；不相关且仍有效的 flag settings 不被静默清除，
   且更新不触发进程重启。
 - `ConfigReceipt` 只包含精确 `ConfigChange` 和 acceptance，不包含当前配置
-  快照；重复值、原生拒绝和结果未知分别保留 `not-sent`、`native_rejected` 与
-  `outcome_unknown` 的可区分语义，不从当前执行结果反推配置生效。
+  快照；原生写入前失败、原生拒绝和结果未知分别保留 `not-sent`、`native_rejected`
+  与 `outcome_unknown` 的可区分语义；重复值仍派发并保留实际 acceptance，不因本地
+  相等判断跳过原生更新，不从当前执行结果反推配置生效。
 - `EventSessionConfigOptionUpdate` 的 ACP-shaped 合同不变；provider 无法提供
   完整 option catalog 时不合成完整快照。
 - Codex 与 Claude 的合成协议输入逐事件比较统一输出；比较类型、payload、身份、

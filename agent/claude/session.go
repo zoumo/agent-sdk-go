@@ -190,6 +190,12 @@ func (s *session) StartOrSteer(
 
 	priority := "next"
 	shouldQuery := true
+	if trace.Carrier != nil {
+		ctx = claude.WithTraceContext(ctx, claude.TraceContext{
+			Traceparent: trace.Carrier.Traceparent,
+			Tracestate:  trace.Carrier.Tracestate,
+		})
+	}
 	nativeSubmission, submitErr := s.native.Submit(ctx, claude.Input{
 		User: &claudetypes.UserInput{
 			Message: claudetypes.InputMessage{

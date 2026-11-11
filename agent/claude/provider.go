@@ -293,9 +293,10 @@ func (p *Provider) sessionClosed(closed *session) {
 
 func providerCapabilities() agent.Capabilities {
 	return agent.Capabilities{
-		agent.CapabilityTextInput:  true,
-		agent.CapabilityPermission: true,
-		agent.CapabilityForm:       true,
+		agent.CapabilityTextInput:   true,
+		agent.CapabilityPromptTrace: true,
+		agent.CapabilityPermission:  true,
+		agent.CapabilityForm:        true,
 	}
 }
 

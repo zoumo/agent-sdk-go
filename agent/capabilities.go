@@ -17,6 +17,7 @@ const (
 	CapabilityURL               = "url"
 	CapabilityProcessEnv        = "processEnv"
 	CapabilityShellEnv          = "shellEnv"
+	CapabilityPromptTrace       = "promptTrace"
 )
 
 // capabilityNames is the canonical capability surface queried by Supports and
@@ -32,6 +33,7 @@ var capabilityNames = [...]string{
 	CapabilityURL,
 	CapabilityProcessEnv,
 	CapabilityShellEnv,
+	CapabilityPromptTrace,
 }
 
 var capabilitySet = func() map[string]struct{} {

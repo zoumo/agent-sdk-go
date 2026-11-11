@@ -316,7 +316,11 @@ func checkAgentProductionPackage(t *testing.T) checkedAgentPackage {
 	require.NotEmpty(t, files)
 
 	info := &types.Info{Defs: make(map[*ast.Ident]types.Object)}
-	checked, err := (&types.Config{Importer: importer.Default()}).Check(
+	// The gc importer only resolves installed archives; source resolves the
+	// module-local trace validator and its real imports.
+	checked, err := (&types.Config{
+		Importer: importer.ForCompiler(fset, "source", nil),
+	}).Check(
 		"github.com/zoumo/agent-sdk-go/agent",
 		fset,
 		files,

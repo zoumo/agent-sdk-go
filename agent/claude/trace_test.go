@@ -12,6 +12,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
 type traceRecorder struct {
@@ -155,6 +156,43 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			assert.Equal(t, 1, recorder.starts)
 		})
 	}
+}
+
+func TestTraceNilContextDoesNotAdmitOrPoisonSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := append([]string(nil), mockClaudeInit...)
+	frames = append(frames,
+		claudeSessionInitFrame(t, "native-nil-context", cwd),
+		claudeStartOrSteerFrame(t, "after nil"),
+	)
+	recorder := &traceRecorder{}
+	provider := newTestClaudeProviderWithConfig(t, agentclaude.Config{Tracer: recorder}, prepareClaudePeer(t, "passed", frames...))
+	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+
+	receipt, err := session.StartOrSteer(nil, claudeTextInput("nil context")) //nolint:staticcheck // verifies nil-context admission without a carrier.
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
+	var agentErr *agent.Error
+	require.ErrorAs(t, err, &agentErr)
+	assert.Equal(t, agent.ErrorReasonForOperation("start_or_steer", agent.ErrorReasonSuffixFailed), agentErr.Reason)
+	assert.ErrorIs(t, err, queue.ErrNilContext)
+	assert.Nil(t, receipt.Acceptance.Sent)
+	assert.Zero(t, recorder.starts, "an unadmitted call must not create a span")
+
+	receipt, err = session.StartOrSteer(ctx, claudeTextInput("after nil"))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
+	require.NotNil(t, receipt.Acceptance.Sent)
+	assert.True(t, *receipt.Acceptance.Sent)
+	assert.Equal(t, 1, recorder.starts)
+	require.NoError(t, session.Close(ctx))
 }
 
 func claudePromptTraceFrames(t *testing.T, id string, trace agent.TraceContext, rejected bool) []string {

@@ -16,7 +16,7 @@ import (
 func TestAcceptanceMatrixMatchesSharedPolicy(t *testing.T) {
 	slots, err := acceptanceSlots()
 	require.NoError(t, err)
-	require.Len(t, slots, 72)
+	require.Len(t, slots, 76)
 
 	counts := map[string]int{}
 	optional := map[string]bool{}
@@ -26,7 +26,7 @@ func TestAcceptanceMatrixMatchesSharedPolicy(t *testing.T) {
 			optional[slot.Provider+"/"+slot.CaseID] = true
 		}
 	}
-	require.Equal(t, map[string]int{"required": 63, "optional": 9}, counts)
+	require.Equal(t, map[string]int{"required": 65, "optional": 11}, counts)
 
 	var got []string
 	for key := range optional {
@@ -39,10 +39,12 @@ func TestAcceptanceMatrixMatchesSharedPolicy(t *testing.T) {
 		"claude/SDK-CASE-025",
 		"claude/SDK-CASE-026",
 		"claude/SDK-CASE-032",
+		"claude/SDK-CASE-038",
 		"codex/SDK-CASE-003",
 		"codex/SDK-CASE-012",
 		"codex/SDK-CASE-025",
 		"codex/SDK-CASE-026",
+		"codex/SDK-CASE-038",
 	}, got)
 
 	for i, c := range acceptanceCases {
@@ -203,7 +205,7 @@ func TestExternalSelectionUsesMatrixAndPreservesProvenance(t *testing.T) {
 		"provider": "codex", "caseId": "custom-structured", "provenance": "synthetic",
 	})
 	_, err = selectExternalRecording(root, slots)
-	require.ErrorContains(t, err, "absent from the 72-slot matrix")
+	require.ErrorContains(t, err, "absent from the 76-slot matrix")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), []byte("{"), 0o600))
 	_, err = selectExternalRecording(root, slots)
@@ -222,8 +224,8 @@ func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 		require.NoError(t, err, string(b))
 	}
 	require.Equal(t, coverageSchemaVersion, report.SchemaVersion)
-	require.Equal(t, coverageMatrix{Cases: 36, Slots: 72, Required: 63, Optional: 9}, report.Matrix)
-	require.Len(t, report.Cases, 72)
+	require.Equal(t, coverageMatrix{Cases: 38, Slots: 76, Required: 65, Optional: 11}, report.Matrix)
+	require.Len(t, report.Cases, 76)
 	for _, row := range report.Cases {
 		require.Empty(t, row.CleanupError, "%s/%s", row.Provider, row.CaseID)
 		if row.MaterialStatus == materialStatusUnavailable {
@@ -236,7 +238,18 @@ func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 		}
 	}
 	require.Zero(t, report.MaterialFailed)
-	require.Equal(t, 72, report.Counts["passed"]+report.Counts["failed"]+report.Counts["unverified"])
+	require.Equal(t, 76, report.Counts["passed"]+report.Counts["failed"]+report.Counts["unverified"])
+	for _, key := range []string{
+		"codex/SDK-CASE-037", "codex/SDK-CASE-038",
+		"claude/SDK-CASE-037", "claude/SDK-CASE-038",
+	} {
+		row := coverageRowByKey(t, report, key)
+		require.Equal(t, "passed", row.SimulationStatus, "%s: %s", key, row.Error)
+		require.Equal(t, materialStatusAvailable, row.MaterialStatus, key)
+		require.Equal(t, "official", row.Source.Provenance, key)
+		require.Equal(t, "builtin", row.Material.Provenance, key)
+		require.True(t, row.CoverageEligible, key)
+	}
 }
 
 func TestGateSyntheticRecordingLeavesCoverageUnverified(t *testing.T) {
@@ -250,9 +263,9 @@ func TestGateSyntheticRecordingLeavesCoverageUnverified(t *testing.T) {
 
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
-	require.Len(t, report.Cases, 72)
-	require.Equal(t, map[string]int{"passed": 1, "unverified": 71}, report.Counts)
-	require.Equal(t, 63, report.RequiredBlocking)
+	require.Len(t, report.Cases, 76)
+	require.Equal(t, map[string]int{"passed": 1, "unverified": 75}, report.Counts)
+	require.Equal(t, 65, report.RequiredBlocking)
 	require.NotNil(t, report.Selection)
 	require.Equal(t, "synthetic", report.Selection.Provenance)
 
@@ -319,7 +332,7 @@ func TestGateCancellationCleansSelectedSession(t *testing.T) {
 
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
-	require.Equal(t, map[string]int{"failed": 1, "unverified": 71}, report.Counts)
+	require.Equal(t, map[string]int{"failed": 1, "unverified": 75}, report.Counts)
 	selected := coverageRowByKey(t, report, "codex/SDK-CASE-001")
 	require.Equal(t, "failed", selected.SimulationStatus)
 	require.Empty(t, selected.CleanupError)
@@ -355,6 +368,6 @@ func TestGateRejectsExternalSelectionOutsideMatrixWithoutPreparing(t *testing.T)
 		"--gate", "--recording", source, "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.Error(t, err, string(b))
-	require.Contains(t, string(b), "absent from the 72-slot matrix")
+	require.Contains(t, string(b), "absent from the 76-slot matrix")
 	require.NoDirExists(t, filepath.Join(output, "codex-sdk-synthetic-codex"))
 }

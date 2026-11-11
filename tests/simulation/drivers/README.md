@@ -67,11 +67,11 @@ disappear.
 Source capture paths are opaque to assertions; external captures are passed only
 to library prepare/export operations.
 
-Coverage retains all 72 provider/case slots with source verification, route,
+Coverage retains all 76 provider/case slots with source verification, route,
 required/optional and current simulation status. Required gaps fail. Optional
 business failures stay visible; source corruption cannot be waived. `--gate
---recording` evaluates all 72 slots: only the selected material can pass and the
-other 71 remain unverified, so the gate still fails. A synthetic or consumer input
+--recording` evaluates all 76 slots: only the selected material can pass and the
+other 75 remain unverified, so the gate still fails. A synthetic or consumer input
 cannot fill real-material coverage. SDK failures preserve external source bytes
 and the source index.
 
@@ -99,7 +99,7 @@ notification signals when tests can half-close SDK input.
 
 ## 仿真测试流程目录
 
-The SDK-owned 72-slot provider/case matrix and its required/optional policy come
+The SDK-owned 76-slot provider/case matrix and its required/optional policy come
 from the shared acceptance catalog. The gate probes each slot through public
 prepare/export operations; there is no runtime list/describe catalog. This
 repository does not copy tool scenarios, recordings or official drivers. Story

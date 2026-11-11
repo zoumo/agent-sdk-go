@@ -2,6 +2,9 @@
 
 ## v0.1.0-rc.1 — planned, unreleased
 
+- Pins the testify library to merged `main` revision `90fa757261dd`, including
+  the official context-injection recordings in the 38-case, 76-slot SDK gate.
+
 - Adds optional `agent.Injector` for context-only input through Codex
   `thread/inject_items` and Claude `shouldQuery=false`, with acceptance evidence
   separate from model consumption and no prompt fallback.
@@ -38,7 +41,7 @@
   history queries, native replay protocol fields and simulation replay.
 - Adds typed Claude permission modes and Codex approval policies while retaining
   Codex compatibility aliases and native unknown-variant round trips.
-- Defines eight user stories and 36 complete simulation flows with separate
+- Defines eight user stories and 38 complete simulation flows with separate
   native capability/evidence records. Synthetic faults remain code integration
   tests. Question/approval handling retains the original native request authority.
 - Shares confirmed relationship bookkeeping through private `internal/lineage`,

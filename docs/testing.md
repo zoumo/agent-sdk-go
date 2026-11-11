@@ -30,7 +30,7 @@ official-driver and Python snapshots do not remain in this repository.
 Simulation obtains assertion inputs from the typed execution report and prepared
 material. Callers read the
 execution report, then remove the caller-owned fixture after every SDK client
-and mock exits. The migrated synthetic, single-case and 72-slot gate checks
+and mock exits. The migrated synthetic, single-case and 76-slot gate checks
 remain in `tests/simulation/simulate`.
 
 The `quality` task checks module and native dependency boundaries, the
@@ -190,7 +190,7 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The catalog defines eight stories and 36 flows. Available material comes from the pinned library's builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
+The catalog defines eight stories and 38 flows. Available material comes from the pinned library's builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
 public-interface assertions, full consumption and cleanup checks; tooling or
 synthetic checks cannot fill that gap. Missing required coverage must be reported.
 Go SDK simulation flow implementations and their regression tests live in

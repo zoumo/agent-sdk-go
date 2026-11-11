@@ -334,7 +334,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 				continue
 			case "get_settings":
 				if !sameJSON(w.Request, []byte(`{"subtype":"get_settings"}`)) {
-					return errors.New("effort preflight request differs")
+					return errors.New("get_settings request differs")
 				}
 				var applyOrdinal int
 				var applyWire control
@@ -366,7 +366,35 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 					}
 				}
 				if applyOrdinal == 0 {
-					return errors.New("effort preflight has no apply_flag_settings follow-up")
+					var expected control
+					for _, candidate := range frames {
+						if candidate.Direction != "s2c" {
+							continue
+						}
+						var wire control
+						if err := json.Unmarshal(candidate.Wire, &wire); err != nil {
+							return err
+						}
+						if wire.Type == "control_response" && wire.Response.RequestID == w.RequestID {
+							expected = wire
+							break
+						}
+					}
+					settings, queryErr := s.GetSettings(ctx)
+					if expected.Response.Subtype == "error" {
+						var native *claude.ControlError
+						if queryErr == nil || !errors.As(queryErr, &native) {
+							return fmt.Errorf("get_settings did not reproduce native rejection: %w", queryErr)
+						}
+					} else {
+						if queryErr != nil {
+							return queryErr
+						}
+						if expected.Response.Subtype != "success" || !sameJSON(settings, expected.Response.Response) {
+							return errors.New("get_settings response differs from recording")
+						}
+					}
+					continue
 				}
 				var change struct {
 					EffortLevel *string `json:"effortLevel"`

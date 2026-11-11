@@ -198,6 +198,10 @@ ID、replay 或 dequeue acknowledgment。设置 env 成功也不证明具体 CLI
 
 SetModel、SetThinking 与 SetEffort 只改变主会话原生支持范围，不排队等待空闲、不中断、不重建、不递归修改子 Agent。Codex 的 model/effort 影响后续 turns；Claude 原生 ack 不建立跨执行的生效屏障。所有成功返回都不把 requested 写成 observed。原生拒绝保留原错误及关联，已知不支持在发送前明确拒绝。
 
+Claude `Session.GetSettings` 是原生 `get_settings` 的只读查询，逐字返回 response
+body，不缓存或解释为统一配置状态。查询成功不表示执行 idle，也不确认模型已消费
+此前输入；查询错误保留原生 control 与派发证据。
+
 <a id="interface-codex-会话配置"></a>
 
 ### Codex 会话配置

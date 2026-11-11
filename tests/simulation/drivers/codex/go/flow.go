@@ -241,6 +241,20 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 		var result any
 		var callErr error
 		switch m.Method {
+		case "thread/inject_items":
+			var params types.ThreadInjectItemsParams
+			if err := json.Unmarshal(m.Params, &params); err != nil {
+				return err
+			}
+			if params.ThreadID != s.ThreadID() {
+				return errors.New("foreign inject thread")
+			}
+			callErr = s.Inject(ctx, params.Items)
+			result = types.ThreadInjectItemsResponse{}
+		case "thread/loaded/list":
+			var response json.RawMessage
+			callErr = c.Call(ctx, m.Method, m.Params, &response)
+			result = response
 		case "turn/start":
 			var p types.TurnStartParams
 			if e := json.Unmarshal(m.Params, &p); e != nil {

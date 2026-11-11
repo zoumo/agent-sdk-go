@@ -76,6 +76,21 @@
       "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
     },
     {
+      "id": "context-inject-mock",
+      "kind": "mock",
+      "status": "passed",
+      "command": "go test ./agent ./agent/codex ./agent/claude ./codex ./codex/types -run Inject -count=1",
+      "test_files": [
+        "session_inject_test.go",
+        "../agent/codex/inject_test.go",
+        "../agent/codex/inject_internal_test.go"
+      ],
+      "coverage": "Owned main-thread thread/inject_items encoding, idle/active routing, no prompt fallback, unsupported/native rejection, invalid input, cancellation, close, local overlap/unknown-submit rejection and unknown injection outcome without an interrupt target. Synthetic peers only; no real CLI/model execution.",
+      "tested_sdk_base": "0bf16b14f6a047f3695a3f3ebd8ee050986999f8",
+      "revision_note": "Context inject pre-commit working tree; delivery revision is reported separately.",
+      "schema_protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d"
+    },
+    {
       "id": "ticket01-model-unit",
       "kind": "unit",
       "status": "passed",

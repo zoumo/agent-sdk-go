@@ -51,6 +51,14 @@ Additional inspected type-organization file bytes (same pinned commits):
 
 ## CLI 2.1.258 and TypeScript 0.3.258 baseline
 
+The same pinned `sdk.d.ts` declares `SDKUserMessage.shouldQuery` (around line
+5286) and documents false as a transcript append without triggering an assistant
+turn, merged into the next user message that queries. The unified `Injector`
+uses that field and requires a confirmed stable live-init CLI version in the
+2.x series at least 2.1.258. This is a source-backed support boundary, not a
+claim of runtime verification for every later version. A local write alone
+does not prove transcript recording or model consumption.
+
 Read-only inspection on 2026-10-18 identified installed CLI **2.1.258**,
 Mach-O arm64, SHA256
 `0d036f0b635d239844e6df6996bc05263fe305df505b073c71f79f83668ea35a`.

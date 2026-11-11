@@ -41,6 +41,19 @@ verifies the official experimental archive's Git blob and extracts its
 `json_schema["codex_app_server_protocol.schemas.json"]` member before generating
 Go bindings and synthetic round-trip cases. The generator owns the exact root set.
 
+The selected closure also includes `ThreadInjectItemsParams` and
+`ThreadInjectItemsResponse` from that same pinned archive. `Session.Inject` sends
+`thread/inject_items` on its owned main thread, preserving raw Responses API item
+values and native rejection/dispatch evidence. The method is already declared in
+the 0.162.1 schema; no version upgrade is implied by adding its wrapper.
+Runtime source inspection at Codex 0.166.0
+(`6ff1e1ca3b30fc8b914720681fcf5fe62e95f856`, core session injection and app-server
+`thread_inject_items` tests) establishes the history-only idle path and the native
+pending-input path while running. It does not establish exactly when a running
+turn consumes the items. RPC success proves acceptance, not consumption or
+durable recording; an unsupported server's native method-not-found remains
+visible to native callers and maps to `unsupported` in the unified adapter.
+
 The archive request/result roots preserve the native split: `thread/archive`
 returns an empty object while `thread/unarchive` returns the restored `Thread`.
 The corresponding `thread/archived` and `thread/unarchived` notifications remain

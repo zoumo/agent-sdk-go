@@ -21,16 +21,21 @@ cancellation and its simulation orchestration.
 The repository uses this exact test dependency:
 
 ```text
-require github.com/zoumo/agent-sdk-testify v0.1.2
-sum h1:7pO42y7Dg8NXbQNg51d02+TKLzjmQ8WyW4EvCsCZ51k=
+require github.com/zoumo/agent-sdk-testify v0.1.3-0.20261111143023-90fa757261dd
+sum h1:StU10BzY2cxU5XqcQiqmVFuKfUQkF1st4NDZW3UBnmw=
 ```
 
-The tag resolves to revision
-`ec80d165277190756b6506594141436a9bdcab97`. The exact version and checksum
+The pseudo-version fixes the merged `main` revision
+`90fa757261dd767a3909797a1627ce1a38751fe1`. The exact version and checksum
 appear in `go.mod`, `go.sum` and `internal/mocktest/testify_identity.go`.
 `TestTestifyIdentityMatchesModulePin` guards agreement between those sources.
 A version or checksum change is an explicit reviewed dependency update, not a
 runtime override.
+
+The embedded material snapshot has its own immutable source revision,
+`e35e76fa066f160a37e18d0d487e87af96db9260`. It includes the official idle and
+running context-injection recordings for both providers. Material provenance
+does not replace the linked module identity.
 
 The module is test-only. A module-graph gate must prove that `codex`, `claude`,
 `agent`, `codex/types`, `claude/types` and other production trees do not import

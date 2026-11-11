@@ -19,6 +19,7 @@ import (
 
 var (
 	_ agent.Session          = (*session)(nil)
+	_ agent.Injector         = (*session)(nil)
 	_ agent.ConfigController = (*session)(nil)
 	_ agent.EventStream      = (*eventStream)(nil)
 )
@@ -36,6 +37,7 @@ type session struct {
 	explicitClose     bool
 	providerReleased  bool
 	submitting        bool
+	injecting         bool
 	submitUnknown     bool
 	workActive        bool
 	activeSubmit      string
@@ -48,6 +50,7 @@ type session struct {
 	doneClosed        bool
 	err               error
 	resume            *resumeIdentityGuard
+	injectSupported   bool
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
@@ -110,6 +113,9 @@ func newSession(
 				err,
 			)
 		}
+	}
+	if init != nil && init.System != nil {
+		created.injectSupported = supportsInject(init.System.ClaudeCodeVersion)
 	}
 	return created, nil
 }
@@ -175,7 +181,7 @@ func (s *session) StartOrSteer(
 			nil,
 		)
 	}
-	if s.submitting || s.submitUnknown {
+	if s.submitting || s.injecting || s.submitUnknown {
 		s.mu.Unlock()
 		return claudeInputNotApplied(), nil
 	}

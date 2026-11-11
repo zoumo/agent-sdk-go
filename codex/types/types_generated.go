@@ -2968,6 +2968,25 @@ const (
 
 type ThreadID = string
 
+type ThreadInjectItemsParams struct {
+	// Raw Responses API items to append to the thread's model-visible history.
+	Items    []json.RawMessage `json:"items" protocol:"required"`
+	ThreadID string            `json:"threadId" protocol:"required"`
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadInjectItemsParams) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadInjectItemsParams) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
+type ThreadInjectItemsResponse struct {
+	// UnknownFields preserves unrecognized members for forward-compatible round trips.
+	UnknownFields map[string]json.RawMessage `json:"-"`
+}
+
+func (v ThreadInjectItemsResponse) MarshalJSON() ([]byte, error)     { return marshalObject(v) }
+func (v *ThreadInjectItemsResponse) UnmarshalJSON(data []byte) error { return unmarshalObject(data, v) }
+
 // ThreadItem contains exactly one typed variant or Unknown.
 type ThreadItem struct {
 	UserMessage         *UserMessageThreadItem

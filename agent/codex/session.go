@@ -19,6 +19,7 @@ import (
 
 var (
 	_ agent.Session          = (*session)(nil)
+	_ agent.Injector         = (*session)(nil)
 	_ agent.Archiver         = (*session)(nil)
 	_ agent.ConfigController = (*session)(nil)
 	_ agent.EventStream      = (*eventStream)(nil)
@@ -36,6 +37,7 @@ type session struct {
 	explicitClose    bool
 	providerReleased bool
 	submitting       bool
+	injecting        bool
 	submitUnknown    bool
 	// workEpoch prevents a late submit failure from rearming unknown state after
 	// the observer has already accepted native turn evidence.
@@ -145,7 +147,7 @@ func (s *session) StartOrSteer(
 			nil,
 		)
 	}
-	if s.submitting || s.submitUnknown {
+	if s.submitting || s.injecting || s.submitUnknown {
 		s.mu.Unlock()
 		return codexInputNotApplied(false), nil
 	}

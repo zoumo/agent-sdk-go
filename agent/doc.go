@@ -12,6 +12,9 @@
 // StartOrSteer lets the adapter start new work, join acceptable current work, or
 // report that input was not applied; it never queues, waits for idle, persists,
 // or retries.
+// Sessions may implement Injector to append context without requesting a model
+// response. InjectReceipt reports acceptance only; native timing and version
+// limits are defined in harness/modules/unified-agent/design.md#context-inject.
 // OpenOptions.Config groups main-session Model and Effort values. An
 // empty field omits that value; a nonempty value is passed literally, without
 // trimming, aliasing or cross-provider conversion. Sessions may optionally

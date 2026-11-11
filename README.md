@@ -102,6 +102,13 @@ func consume(ctx context.Context, provider agent.Provider, cwd string) error {
 }
 ```
 
+To append context without requesting a model response, assert the optional
+`agent.Injector` interface and call `Inject(ctx, input)`. Both adapters implement
+it; unsupported native versions return `agent.ErrorUnsupported` without a prompt
+fallback. The receipt describes acceptance, not model consumption. See the
+[inject contract](harness/modules/unified-agent/design.md#context-inject) for
+content, lifecycle, concurrency and version limits.
+
 Use `provider.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
 options})` to restore an existing native session; the returned `agent.Session`
 has the same API. Resume restores execution and never converts saved content into
@@ -251,8 +258,8 @@ The offline entry links the exact pinned testify module and its embedded fixed
 corpus; absent required recordings fail the simulation gate. Material adoption
 and catalog maintenance belong to the
 [pinned test library](https://github.com/zoumo/agent-sdk-testify). The test-only pin is
-`github.com/zoumo/agent-sdk-testify v0.1.2`
-with checksum `h1:7pO42y7Dg8NXbQNg51d02+TKLzjmQ8WyW4EvCsCZ51k=`.
+`github.com/zoumo/agent-sdk-testify v0.1.3-0.20261111143023-90fa757261dd`
+with checksum `h1:StU10BzY2cxU5XqcQiqmVFuKfUQkF1st4NDZW3UBnmw=`.
 It is linked only by test and simulation hosts; production SDK packages do not
 import it. The complete boundary is in
 [Go library mode](harness/modules/agent-sdk-testify/library-mode.md).

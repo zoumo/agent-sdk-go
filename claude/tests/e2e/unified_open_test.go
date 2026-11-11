@@ -45,11 +45,20 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 	require.NotNil(t, receipt.Acceptance.Sent)
 	require.True(t, *receipt.Acceptance.Sent)
 	require.Nil(t, receipt.Acceptance.NativeAccepted)
-	seenInit, seenAnswer := false, false
+	seenInit, seenAnswer, seenCoverageGap := false, false, false
 	for {
 		event, err := stream.Next(ctx)
 		require.NoError(t, err)
 		require.Equal(t, initialID, event.SessionID)
+		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok && payload.Reason == "native_relationship_gap" {
+			meta, ok := event.Meta["claude"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "forwarding-not-confirmed", meta["observationReason"])
+			require.Equal(t, "initialize-forwardSubagentText-is-a-request", meta["evidence"])
+			require.False(t, seenCoverageGap)
+			seenCoverageGap = true
+			continue
+		}
 		nativeType, nativeSubtype, raw := claudeNativeEventEvidence(t, event)
 		if nativeType == "system" && nativeSubtype == "init" {
 			var init struct {
@@ -83,6 +92,7 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 			t.Logf("unified result matched session_id=%s subtype=%s is_error=%t", result.SessionID, result.Subtype, result.IsError)
 			require.True(t, seenInit, "successful result arrived without a matching native init")
 			require.True(t, seenAnswer, "successful result arrived without a matching assistant message")
+			require.True(t, seenCoverageGap, "requested forwarding coverage gap was not delivered")
 			break
 		}
 		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok {

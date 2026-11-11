@@ -298,6 +298,9 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 	sessionID := agentExecutionSessionID
 	resumeSeen := false
 	for _, arg := range os.Args[1:] {
+		if value, ok := strings.CutPrefix(arg, "--session-id="); ok {
+			sessionID = value
+		}
 		if value, ok := strings.CutPrefix(arg, "--resume="); ok {
 			sessionID = value
 			resumeSeen = true

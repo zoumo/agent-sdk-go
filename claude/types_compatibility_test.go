@@ -50,6 +50,7 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 	config := types.Options{
 		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", Tools: []string{"Bash", "Read"}, DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
 		AppendSystemPrompt: "multi-line\nliteral append prompt --leading-dash ünïcødé",
+		SessionID:          "11111111-1111-4111-8111-111111111111",
 		MCPServers: []types.MCPServer{{
 			Name: "remote", Transport: types.MCPTransportHTTP, URL: "https://example.invalid/mcp",
 			Headers: map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},

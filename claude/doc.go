@@ -16,6 +16,9 @@
 // Session imposes no default answer or local approval deadline. Parsing, history
 // and diagnostic material cannot create answer authority.
 //
+// SessionID assigns a new native identity through --session-id and is
+// mutually exclusive with ResumeID. Initialize does not echo it; later native
+// main-session messages and non-replay init are checked against it.
 // ResumeID requests native continuation through Open; history reads do not
 // establish a running Session or restore permission authority.
 //

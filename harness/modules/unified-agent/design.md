@@ -263,7 +263,7 @@ type Core interface {
     // 第二个资源所有者，也不改变冻结的能力集合。
     Start(ctx context.Context) (Capabilities, error)
 
-    // Open 创建新的原生主 Session，并在真实身份确认后返回。
+    // Open 创建新的原生主 Session，并在固定非空原生身份、完成初始化后返回。
     Open(ctx context.Context, options OpenOptions) (Session, error)
 
     // Resume 恢复已存在的原生主 Session，不以新建代替恢复。
@@ -329,6 +329,11 @@ type EffectiveFeatures struct {
 规则：
 
 - `Cwd` 必须由调用方明确给出且为绝对路径；provider 不接受隐式工作目录。
+- Claude `Open` 生成 UUID，通过官方 `--session-id` 指定新会话身份；
+  native initialize 成功后返回，不等待 `system/init`，不发送用户输入。
+  initialize ACK 不回显该 ID。后续原生主消息必须匹配指定 ID，init 必须非
+  replay、只出现一次，且 cwd 与请求目录为同一目录；冲突以 `native_rejected`
+  终止 Session。init 的命令列表在到达后交付。该流程不依赖本地身份文件或刷新 API。
 - `Resume` 必须定向并确认原原生身份；Claude 还必须在启动前预检保存材料，
   以 live init 或匹配的私有 `SessionStart` callback 确认身份，并在返回前复核
   同一文件身份（见 [Claude 恢复身份](#claude-resume-identity)）。恢复响应中的
@@ -577,8 +582,8 @@ Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Core 使用�
 相同的 `CLIPath` 和由 `Config.Env` 与本次 `ProcessEnv` 合成的有效进程环境，
 执行无会话副作用的版本查询；版本不能确认时，`Resume` 在启动 Session 进程前
 失败关闭。不能从 `SessionStart` lifecycle frame 或 init 是否出现推断 CLI
-版本。新建 `Open` 不使用恢复探针或该版本门禁，仍只以 non-replay 的 live
-`system/init` 确认身份。
+版本。新建 `Open` 不使用恢复探针或该版本门禁，使用官方 `--session-id`
+指定 UUID，并在 initialize 成功后返回；后续原生主消息核对指定身份。
 
 Claude Core 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
 复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生 hook 名称、matcher
@@ -939,10 +944,10 @@ type Session interface {
 
 ### 生命周期与状态
 
-- `ID` 只能在原生真实身份确认后非空。Codex 以启动/恢复响应确认身份；Claude
-  新建时以非 replay 的原生 init 确认身份，恢复时还可用匹配的私有
-  `SessionStart` callback 确认身份，单独 hook lifecycle frame 不充分。返回
-  Session 之前不能伪造 ID。
+- `ID` 在 `Open`/`Resume` 返回时必须非空，且在整个附着生命周期内保持不变。
+  Codex 以启动/恢复响应确认身份；Claude 新建时用官方 `--session-id` 指定
+  UUID，initialize 成功后返回，并核对后续原生主消息。恢复时以 init 或匹配的
+  私有 `SessionStart` callback 确认身份，单独 hook lifecycle frame 不充分。
 - 每个 Session 只允许一个本地 `StartOrSteer` 写入在进行。并发调用返回
   `not_applied` 和空 `Submission`，不等待、不写第二帧，也不形成本地输入队列。
 - `StartOrSteer` 先尝试加入可接受的当前工作；没有当前工作或原生调度可接收时，

@@ -73,6 +73,17 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error        { return e.Err }
 func (e *Error) Is(target error) bool { return target == ErrUnknownOutcome && e.OutcomeUnknown }
 
+// SessionIdentityError rejects native messages that conflict with an assigned
+// SessionID. Reason identifies an identity, init replay, duplicate or cwd conflict.
+type SessionIdentityError struct {
+	Reason string
+}
+
+func (e *SessionIdentityError) Error() string {
+	return "claude: assigned session rejected: " + e.Reason
+}
+func (e *SessionIdentityError) Unwrap() error { return ErrProtocol }
+
 // ResourceLimitError identifies a bound that was exceeded. Incoming overflows
 // terminate the client; a locally oversized Send is rejected before writing.
 type ResourceLimitError struct {

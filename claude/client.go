@@ -28,7 +28,7 @@ type Limits = types.Limits
 
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
 // child's entire environment; nil inherits os.Environ. WorkDir, Model, Effort,
-// Tools, DisallowedTools and ResumeID are passed literally, without a shell.
+// Tools, DisallowedTools, SessionID and ResumeID are passed literally, without a shell.
 // Existing CLI settings apply.
 //
 //nolint:recvcheck // Canonical configuration API uses value and pointer receivers.
@@ -60,6 +60,10 @@ type Options struct {
 	// SessionStartProbe appends one private SessionStart callback matcher to
 	// Initialize.Hooks. Nil leaves initialization unchanged.
 	SessionStartProbe *SessionStartProbe
+	// SessionID assigns a new native session through --session-id. It is passed
+	// literally and is mutually exclusive with ResumeID. Initialize does not echo
+	// this identity; later native main-session messages are checked against it.
+	SessionID string
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
@@ -83,6 +87,9 @@ type Options struct {
 }
 
 func (o *Options) defaults() error {
+	if o.SessionID != "" && o.ResumeID != "" {
+		return dispatchFailure("open", fmt.Errorf("%w: session ID and resume ID are mutually exclusive", ErrInvalidInput))
+	}
 	switch o.ChildDetailPolicy {
 	case "", ChildDetailPreserve, ChildDetailSuppress:
 	default:
@@ -1064,6 +1071,9 @@ func interactionArgs(options Options) ([]string, error) {
 		// The CLI takes an optional resume value. Binding it to the flag also
 		// prevents a dash-leading value from becoming a different CLI option.
 		args = append(args, "--resume="+options.ResumeID)
+	}
+	if options.SessionID != "" {
+		args = append(args, "--session-id="+options.SessionID)
 	}
 	return args, nil
 }

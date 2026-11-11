@@ -110,6 +110,14 @@ fallback. The receipt describes acceptance, not model consumption. See the
 [inject contract](harness/modules/unified-agent/design.md#context-inject) for
 content, lifecycle, concurrency and version limits.
 
+Claude `Open` generates a UUID and supplies it through the official
+`--session-id` creation option, following the ACP adapter's startup mechanism.
+After the native initialize exchange succeeds, `ID()` is nonempty and stable
+without user input. Initialize does not echo the ID, and Open does not wait for
+`system/init` or a model turn. Later native main-session messages must match the
+assigned identity; a live, unique init must also identify the requested working
+directory. A conflict terminates the session with `native_rejected`.
+
 Use `core.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
 options})` to restore an existing native session; the returned `agent.Session`
 has the same API. Resume restores execution and never converts saved content into

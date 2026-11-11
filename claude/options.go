@@ -5,6 +5,7 @@ package claude
 import "github.com/zoumo/agent-sdk-go/claude/types"
 
 // OptionsFromTypes adapts callback-free configuration to runtime options.
+// SessionID and ResumeID are mutually exclusive.
 // Set runtime-only Subagents, ChildDetailPolicy, HandleSDKMCP and SessionStartProbe
 // on the returned value when needed.
 // Env and MCP server slices/maps are shared, as when copying Options; this
@@ -21,6 +22,7 @@ func OptionsFromTypes(config types.Options) Options {
 		StrictMCPConfig:    config.StrictMCPConfig,
 		Thinking:           config.Thinking,
 		Initialize:         config.Initialize,
+		SessionID:          config.SessionID,
 		ResumeID:           config.ResumeID,
 		Tools:              config.Tools,
 		DisallowedTools:    config.DisallowedTools,
@@ -47,6 +49,7 @@ func (o Options) Types() types.Options {
 		StrictMCPConfig:    o.StrictMCPConfig,
 		Thinking:           o.Thinking,
 		Initialize:         o.Initialize,
+		SessionID:          o.SessionID,
 		ResumeID:           o.ResumeID,
 		Tools:              o.Tools,
 		DisallowedTools:    o.DisallowedTools,

@@ -69,6 +69,21 @@ func TestNilEnvironmentStaysNil(t *testing.T) {
 	assert.Nil(t, provider.config.Env)
 }
 
+func TestOpenSessionIdentityGenerationFailureDoesNotLaunch(t *testing.T) {
+	provider := New(Config{CLIPath: "/nonexistent"})
+	provider.newSessionID = func() (string, error) { return "", errors.New("random unavailable") }
+	ctx := context.Background()
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	opened, err := provider.Open(ctx, agent.OpenOptions{Cwd: t.TempDir()})
+	require.Nil(t, opened)
+	var classified *agent.Error
+	require.ErrorAs(t, err, &classified)
+	assert.Equal(t, agent.ErrorUnavailable, classified.Code)
+	assert.Equal(t, ErrorReasonSessionIDFailed, classified.Reason)
+	require.NoError(t, provider.Stop(ctx))
+}
+
 func TestNativeOptionsDisableQuestionsOnlyWhenRequested(t *testing.T) {
 	provider := New(Config{})
 	enabled := true

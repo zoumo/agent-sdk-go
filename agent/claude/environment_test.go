@@ -186,6 +186,9 @@ func TestEnvironmentDiscoveryUsesEffectiveProcessEnvironment(t *testing.T) {
 			},
 		}, nil
 	})
+	agentclaude.SetSessionIDGeneratorForTest(provider, func() (string, error) {
+		return claudeResumePeerSessionID, nil
+	})
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)

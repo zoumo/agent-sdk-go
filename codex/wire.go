@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -51,45 +50,22 @@ func objectFields(raw []byte) (map[string]json.RawMessage, error) {
 }
 
 func (c *Client) readLoop() {
-	if c.remote != nil {
-		c.readRemote()
-		return
-	}
-	size := 64 << 10
-	if c.limits.MaxFrameBytes < size {
-		size = c.limits.MaxFrameBytes + 1
-	}
-	reader := io.Reader(c.stdout)
-	if c.streamMode {
-		reader = c.streamReader
-	}
-	r := bufio.NewReaderSize(reader, size)
-	var frame []byte
 	for {
-		part, err := r.ReadSlice('\n')
-		total := len(frame) + len(part)
-		terminated := len(part) > 0 && part[len(part)-1] == '\n'
-		payload := total
-		if terminated {
-			payload--
-		}
-		if payload > c.limits.MaxFrameBytes {
-			c.fail(fmt.Errorf("%w: %w", ErrProtocol, ErrFrameTooLarge))
-			return
-		}
-		frame = append(frame, part...)
-		if errors.Is(err, bufio.ErrBufferFull) {
-			continue
-		}
+		frame, err := c.transport.ReadFrame()
 		if err != nil {
-			if len(frame) > 0 {
-				c.fail(fmt.Errorf("%w: unterminated frame: %w", ErrProtocol, err))
-			} else if c.streamMode && errors.Is(err, io.EOF) {
+			if errors.Is(err, errStreamReaderClosed) {
+				return
+			}
+			input := c.transport.StreamInput()
+			// Framing failures may wrap EOF. A concrete protocol failure must
+			// not be downgraded by half-close or unexpected-EOF policy.
+			if errors.Is(err, ErrProtocol) {
+				c.fail(err)
+			} else if input != nil && errors.Is(err, io.EOF) {
 				c.mu.Lock()
-				c.readEOF = true
 				closing := c.closing
 				c.mu.Unlock()
-				if c.inputIsClosed() || closing {
+				if input.InputHalfClosed() || closing {
 					return
 				}
 				c.fail(fmt.Errorf("%w: peer closed before SDK input", ErrUnexpectedEOF))
@@ -98,13 +74,10 @@ func (c *Client) readLoop() {
 			}
 			return
 		}
-		raw := bytes.TrimSuffix(frame, []byte{'\n'})
-		raw = bytes.TrimSuffix(raw, []byte{'\r'})
-		if err := c.routeFrame(raw); err != nil {
+		if err := c.routeFrame(frame); err != nil {
 			c.fail(err)
 			return
 		}
-		frame = frame[:0]
 	}
 }
 

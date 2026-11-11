@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if ! command -v rg >/dev/null 2>&1; then
-  echo "check-boundaries.sh requires ripgrep (rg)" >&2
-  exit 1
-fi
 cd "$(dirname "$0")/.."
 test "$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')" = 1
 test -z "$(find . \( -name go.work -o -name go.work.sum \) -not -path './.git/*' -print)"
@@ -141,29 +137,6 @@ while IFS= read -r dependency; do
       ;;
   esac
 done <<< "$eventenvelope_dependencies"
-if rg -n --glob '*.go' 'github.com/zoumo/agent-sdk-go/agent/claude' agent/codex; then
-  echo "agent/codex must not import agent/claude" >&2
-  exit 1
-fi
-if rg -n --glob '*.go' 'github.com/zoumo/agent-sdk-go/agent/codex' agent/claude; then
-  echo "agent/claude must not import agent/codex" >&2
-  exit 1
-fi
-# Native production code stays below the optional unified layer.
-if rg -n --glob '*.go' --glob '!**/*_test.go' 'github.com/zoumo/agent-sdk-go/agent' codex claude; then
-  echo "native SDK production code must not import the agent layer" >&2
-  exit 1
-fi
-# The SDK never imports MASS implementation code or reads MASS environment
-# conventions. MASS owns configuration, identity, persistence, and aggregation.
-if rg -n --glob '*.go' --glob '!**/*_test.go' 'github\.com/[^"]*/(mass|mass-go)(/|")' agent codex claude; then
-  echo "SDK production code must not import MASS" >&2
-  exit 1
-fi
-if rg -n --glob '*.go' --glob '!**/*_test.go' 'MASS_[A-Z0-9_]+' agent codex claude; then
-  echo "SDK production code must not depend on MASS environment conventions" >&2
-  exit 1
-fi
 # The generic FIFO must directly reuse the reviewed ChannX package.
 queue_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' ./internal/queue)
 if ! [[ "$queue_imports" == *github.com/zoumo/golib/channx* ]]; then
@@ -207,7 +180,50 @@ for native in codex claude; do
   fi
 done
 python3 - <<'PY'
-import json, subprocess
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+
+rules = [
+    (('agent/codex',), False, r'github\.com/zoumo/agent-sdk-go/agent/claude',
+     'agent/codex must not import agent/claude'),
+    (('agent/claude',), False, r'github\.com/zoumo/agent-sdk-go/agent/codex',
+     'agent/claude must not import agent/codex'),
+    (('codex', 'claude'), True, r'github\.com/zoumo/agent-sdk-go/agent',
+     'native SDK production code must not import the agent layer'),
+    (('agent', 'codex', 'claude'), True, r'github\.com/[^"]*/(mass|mass-go)(/|")',
+     'SDK production code must not import MASS'),
+    (('agent', 'codex', 'claude'), True, r'MASS_[A-Z0-9_]+',
+     'SDK production code must not depend on MASS environment conventions'),
+    (('internal', 'tests', 'codex', 'claude'), False,
+     r'protocol mock|"protocol"\s*,\s*"mock"|--scenario|--sdk-test-handshakes',
+     'legacy mock CLI dependency in SDK process adapter'),
+]
+
+def scan_error(error):
+    raise error
+
+for roots, production_only, pattern, description in rules:
+    expression = re.compile(pattern)
+    for root in roots:
+        for directory, _, names in os.walk(root, onerror=scan_error):
+            for name in sorted(names):
+                path = Path(directory) / name
+                if not name.endswith('.go') or path.is_symlink():
+                    continue
+                if not stat.S_ISREG(path.stat().st_mode):
+                    continue
+                if production_only and name.endswith('_test.go'):
+                    continue
+                for number, line in enumerate(path.read_text(encoding='utf-8').split('\n'), 1):
+                    if expression.search(line):
+                        print(f'{path}:{number}:{line}', file=sys.stderr)
+                        sys.exit(description)
+
 rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...', './tests/simulation/drivers/codex/go/...', './tests/simulation/drivers/claude/go/...'], text=True)
 decoder = json.JSONDecoder()
 while rows.strip():
@@ -221,10 +237,3 @@ while rows.strip():
         assert not dep.startswith('github.com/zoumo/agent-sdk-go/tests/simulation/drivers/' + other), (path, dep)
         assert not dep.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dep)
 PY
-
-# SDK process adapters must target the external record/verify/mock interface,
-# never the removed protocol subcommands or scenario flag.
-if rg -n --glob '*.go' 'protocol mock|"protocol"[[:space:]]*,[[:space:]]*"mock"|--scenario|--sdk-test-handshakes' internal tests codex claude; then
- echo "legacy mock CLI dependency in SDK process adapter" >&2
- exit 1
-fi

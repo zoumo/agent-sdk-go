@@ -20,45 +20,51 @@ class WorkflowCoverage(unittest.TestCase):
         return dict(re.findall(
             r"(?ms)^  ([a-z0-9_]+):\n(.*?)(?=^  [a-z0-9_]+:\n|\Z)", workflow))
 
-    def test_offline_platforms_and_consumers_retain_supported_runners(self):
+    def test_jobs_use_linux_only(self):
         jobs = self.workflow_jobs()
-        offline = jobs["offline"]
-        self.assertIn("    name: ${{ matrix.runner }} / required", offline)
-        matrix = re.search(r"(?m)^        runner: \[([^\]]+)\]$", offline)
-        self.assertIsNotNone(matrix, "expected an explicit offline runner matrix")
-        labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
-        self.assertIn("    runs-on: ${{ matrix.runner }}", offline)
+        self.assertCountEqual(jobs, ["checks", "race", "e2e", "consumer"])
+        for name, job in jobs.items():
+            with self.subTest(job=name):
+                self.assertIn("    runs-on: ubuntu-24.04", job)
+                self.assertNotIn("macos-", job)
+                self.assertNotIn("    matrix:", job)
 
-        consumer = jobs["consumer"]
-        matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", consumer)
-        self.assertIsNotNone(matrix, "expected an explicit consumer OS matrix")
-        labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
-        self.assertIn("    runs-on: ${{ matrix.os }}", consumer)
-
-    def test_offline_platform_job_runs_checks_in_one_environment(self):
-        offline = self.workflow_jobs()["offline"]
-        self.assertIn("sudo apt-get install -y ripgrep", offline)
-        self.assertIn("brew install ripgrep", offline)
+    def test_checks_job_installs_tools_and_runs_offline_checks(self):
+        checks = self.workflow_jobs()["checks"]
+        for dependency in ("ripgrep", "apt-get", "brew install", "go install"):
+            self.assertNotIn(dependency, checks)
         self.assertIn(
-            "      - name: Install pinned golangci-lint\n"
-            "        if: runner.os == 'Linux'\n",
-            offline,
+            "      - name: Install pinned golangci-lint\n",
+            checks,
         )
-        self.assertIn("golangci-lint@v2.12.2", offline)
-        self.assertIn("python3 codex/scripts/check_whitespace.py", offline)
-        self.assertIn('if [[ "${RUNNER_OS}" == "Linux" ]]; then', offline)
-        self.assertIn("make fmt-check", offline)
-        self.assertIn("make lint", offline)
-        self.assertIn("bash scripts/check-offline.sh parallel", offline)
-        self.assertNotIn("matrix.task", offline)
-        self.assertNotIn("    needs:", offline)
+        self.assertIn("GOLANGCI_LINT_VERSION: '2.12.2'", checks)
+        self.assertIn('$(go env GOOS)-$(go env GOARCH).tar.gz', checks)
+        self.assertIn('golangci-lint-${GOLANGCI_LINT_VERSION}-checksums.txt', checks)
+        self.assertIn('test -s "$archive.sha256"', checks)
+        self.assertIn('sha256sum -c "$archive.sha256"', checks)
+        self.assertIn('./golangci-lint version', checks)
+        self.assertIn("python3 codex/scripts/check_whitespace.py", checks)
+        self.assertIn("make fmt-check", checks)
+        self.assertIn("make lint", checks)
+        self.assertIn("bash scripts/check-offline.sh checks", checks)
+        self.assertNotIn("check-offline.sh race", checks)
+        self.assertNotIn("check-offline.sh e2e", checks)
+
+    def test_race_and_simulation_gate_run_as_separate_jobs(self):
+        jobs = self.workflow_jobs()
+        for name, command in [("race", "race"), ("e2e", "e2e")]:
+            with self.subTest(job=name):
+                self.assertIn(f"bash scripts/check-offline.sh {command}", jobs[name])
+                self.assertNotIn("golangci-lint", jobs[name])
+                self.assertNotIn("    needs:", jobs[name])
+        self.assertIn("name: simulation-ubuntu-24.04", jobs["e2e"])
+        self.assertNotIn("simulation-ubuntu-24.04", jobs["checks"])
+        self.assertNotIn("simulation-ubuntu-24.04", jobs["race"])
 
     def test_offline_script_exposes_each_ci_task(self):
         script = (ROOT.parent / "scripts/check-offline.sh").read_text()
         self.assertIn("task=${1:-all}", script)
-        for task in ("parallel", "quality", "test", "race", "e2e", "build"):
+        for task in ("parallel", "checks", "quality", "test", "race", "e2e", "build"):
             with self.subTest(task=task):
                 self.assertIn(f"  {task})\n", script)
         self.assertIn(
@@ -76,14 +82,14 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn('if ! wait "$pid"; then', script)
         self.assertIn('for task in "${serial_tasks[@]}"; do', script)
         self.assertIn('if ! run_task_lane "$work" "$task"; then', script)
-
-    def test_required_check_is_the_platform_job(self):
-        jobs = self.workflow_jobs()
-        self.assertNotIn("required", jobs)
-        self.assertIn("    name: ${{ matrix.runner }} / required", jobs["offline"])
+        self.assertIn(
+            "  checks)\n    quality_checks\n    test_checks\n    build_checks\n    ;;\n",
+            script,
+        )
 
     def test_same_repository_pr_consumers_fetch_published_head(self):
         consumer = self.workflow_jobs()["consumer"]
+        self.assertIn("    name: External consumer (pushed commit)", consumer)
         self.assertIn("    if: github.event_name != 'pull_request' || "
                       "github.event.pull_request.head.repo.full_name == github.repository", consumer)
         revision = "${{ github.event.pull_request.head.sha || github.sha }}"

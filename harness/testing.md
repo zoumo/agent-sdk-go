@@ -106,8 +106,8 @@ Moving an assertion does not change its evidence level: synthetic driver tests
 are not successful real-recording simulation evidence.
 
 Use Go 1.26 or newer and retain offline, race, vet, generation, inventory,
-simulation source/hash validation, dependency-boundary and independent-consumer gates on
-Linux/macOS. External consumer modules must fetch the new repository's precise
+simulation source/hash validation, dependency-boundary and independent-consumer gates in
+Linux CI. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.
 The exact `agent-sdk-testify` module is a test-only dependency linked into test
 and simulation hosts. Its version, checksum, production-boundary rules and

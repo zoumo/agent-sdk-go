@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 python=${PYTHON:-python3}
 task=${1:-all}
 if (( $# > 1 )); then
-  echo "usage: $0 [all|parallel|quality|test|race|e2e|build]" >&2
+  echo "usage: $0 [all|parallel|checks|quality|test|race|e2e|build]" >&2
   exit 2
 fi
 export GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off
@@ -112,6 +112,11 @@ case "$task" in
     quality_checks
     parallel_checks
     ;;
+  checks)
+    quality_checks
+    test_checks
+    build_checks
+    ;;
   quality)
     quality_checks
     ;;
@@ -128,7 +133,7 @@ case "$task" in
     build_checks
     ;;
   *)
-    echo "usage: $0 [all|parallel|quality|test|race|e2e|build]" >&2
+    echo "usage: $0 [all|parallel|checks|quality|test|race|e2e|build]" >&2
     exit 2
     ;;
 esac

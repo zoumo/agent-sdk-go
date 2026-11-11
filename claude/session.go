@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"sync"
 	"time"
 
@@ -51,17 +52,20 @@ type (
 // Session owns lifecycle and the single delivery FIFO. liveAdmission interprets
 // observation evidence; interaction owns I/O and authoritative control handles.
 type Session struct {
-	discovery   discoveryScope
-	admission   *liveAdmission
-	client      *interaction
-	done        chan struct{}
-	clientReady chan struct{}
-	requestedID string
-	effortMu    sync.Mutex
-	mu          sync.Mutex
-	fifo        queue.Queue[Received]
-	closed      bool
-	cause       error
+	discovery     discoveryScope
+	admission     *liveAdmission
+	client        *interaction
+	done          chan struct{}
+	clientReady   chan struct{}
+	requestedID   string
+	settingsMu    sync.Mutex
+	traceBaseline TraceContext
+	traceCurrent  TraceContext
+	traceKnown    bool
+	mu            sync.Mutex
+	fifo          queue.Queue[Received]
+	closed        bool
+	cause         error
 }
 
 // Open starts one owned native process and fixes the observed main identity
@@ -71,6 +75,9 @@ func Open(ctx context.Context, options SessionOptions) (*Session, error) {
 		return nil, queue.ErrNilContext
 	}
 	o := Options(options)
+	if o.Env == nil {
+		o.Env = os.Environ()
+	}
 	if err := o.defaults(); err != nil {
 		return nil, err
 	}
@@ -91,6 +98,8 @@ func newSession(o Options) (*Session, error) {
 		done: make(chan struct{}), clientReady: make(chan struct{}),
 		requestedID: o.ResumeID, discovery: freezeDiscoveryScope(&o),
 	}
+	s.traceBaseline = startupTrace(o.Env)
+	s.traceCurrent, s.traceKnown = s.traceBaseline, true
 	admission, err := newLiveAdmission(o, &s.mu)
 	if err != nil {
 		return nil, err
@@ -120,6 +129,9 @@ func (s *Session) RequestedResumeID() string { return s.requestedID }
 func (s *Session) Done() <-chan struct{}     { return s.done }
 func (s *Session) Err() error                { s.mu.Lock(); defer s.mu.Unlock(); return s.cause }
 func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
+	s.applyPromptTrace(ctx)
 	err := s.client.sendInput(ctx, input)
 	return Submission{Written: err == nil}, err
 }

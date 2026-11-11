@@ -105,8 +105,8 @@ func (s *Session) SetEffort(ctx context.Context, change EffortChange) (Configura
 		return ConfigurationReceipt{}, fail(fmt.Errorf("%w: empty effort level", ErrInvalidInput))
 	}
 
-	s.effortMu.Lock()
-	defer s.effortMu.Unlock()
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
 
 	settings, err := s.client.controlRequest(
 		ctx,

@@ -53,12 +53,14 @@ func (c *Client) readLoop() {
 	for {
 		frame, err := c.frames.ReadFrame()
 		if err != nil {
-			if c.streamMode && errors.Is(err, io.EOF) {
+			if errors.Is(err, errStreamReaderClosed) {
+				return
+			}
+			if c.streams != nil && errors.Is(err, io.EOF) {
 				c.mu.Lock()
-				c.readEOF = true
 				closing := c.closing
 				c.mu.Unlock()
-				if c.inputIsClosed() || closing {
+				if c.streamsInputHalfClosed() || closing {
 					return
 				}
 				c.fail(fmt.Errorf("%w: peer closed before SDK input", ErrUnexpectedEOF))

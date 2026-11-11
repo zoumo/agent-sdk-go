@@ -87,6 +87,37 @@ func TestStreamClientCompletesAfterInputHalfClose(t *testing.T) {
 	require.Equal(t, uint64(1), client.Diagnostics().Notifications)
 }
 
+func TestStreamClientCloseInputPreservesCloseError(t *testing.T) {
+	peer := newStreamPeer()
+	closeErr := errors.New("synthetic writer close failure")
+	writer := &closeErrorWriter{WriteCloser: peer.transport.Writer, err: closeErr}
+	peer.transport.Writer = writer
+	peerDone := make(chan error, 1)
+	go func() {
+		peerDone <- serveCodexStream(peer, true)
+	}()
+
+	client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+		Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+	}, peer.transport)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close(); _ = peer.reader.Close(); _ = peer.writer.Close() })
+	peer.wait <- nil
+
+	require.ErrorIs(t, client.CloseInput(), closeErr)
+	require.ErrorIs(t, client.CloseInput(), closeErr)
+	require.EqualValues(t, 1, writer.calls.Load())
+	require.NoError(t, <-peerDone)
+	select {
+	case <-client.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream client did not finish after a writer close error")
+	}
+	require.NoError(t, client.Err())
+	require.NoError(t, client.Close())
+	require.Equal(t, uint64(1), client.Diagnostics().Notifications)
+}
+
 func TestStreamSessionCloseToleratesCompletedInputHalfClose(t *testing.T) {
 	peer := newStreamPeer()
 	peerReady := make(chan struct{})
@@ -465,6 +496,20 @@ func (w *shortWriteCloser) Write(value []byte) (int, error) {
 	default:
 	}
 	return 0, nil
+}
+
+type closeErrorWriter struct {
+	io.WriteCloser
+	err   error
+	calls atomic.Int32
+}
+
+func (w *closeErrorWriter) Close() error {
+	w.calls.Add(1)
+	if err := w.WriteCloser.Close(); err != nil {
+		return err
+	}
+	return w.err
 }
 
 func TestStreamClientShutdownDeadlineStartsAtHalfClose(t *testing.T) {

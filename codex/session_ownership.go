@@ -248,7 +248,7 @@ func (o *sessionOwnership) release(s *Session) error {
 	}
 	c.mu.Unlock()
 	for _, id := range release {
-		if c.streamMode && c.inputIsClosed() {
+		if c.streamsInputHalfClosed() {
 			c.mu.Lock()
 			o.retainInputHalfClosedFenceLocked(id)
 			c.mu.Unlock()
@@ -263,7 +263,7 @@ func (o *sessionOwnership) release(s *Session) error {
 		c.mu.Lock()
 		if err == nil || c.cause != nil {
 			delete(o.attachments, id)
-		} else if c.streamMode && errors.Is(err, ErrInputClosed) {
+		} else if c.streams != nil && errors.Is(err, ErrInputClosed) {
 			o.retainInputHalfClosedFenceLocked(id)
 		} else {
 			a := o.attachments[id]

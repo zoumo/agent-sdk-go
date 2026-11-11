@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-26]
+        runner: [ubuntu-24.04]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     defaults:
@@ -47,24 +47,23 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: false
-      - name: Install ripgrep
-        run: |
-          if command -v rg >/dev/null 2>&1; then
-            rg --version
-            exit 0
-          fi
-          if [[ "${RUNNER_OS}" == "macOS" ]]; then
-            brew install ripgrep
-          else
-            sudo apt-get update
-            sudo apt-get install -y ripgrep
-          fi
-          rg --version
       - name: Install pinned golangci-lint
         if: runner.os == 'Linux'
+        env:
+          GOLANGCI_LINT_VERSION: '2.12.2'
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          archive="golangci-lint-${GOLANGCI_LINT_VERSION}-$(go env GOOS)-$(go env GOARCH).tar.gz"
+          release="https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}"
+          cd "$(mktemp -d "$RUNNER_TEMP/golangci-lint.XXXXXXXX")"
+          curl --fail --silent --show-error --location --retry 3 "$release/$archive" --output "$archive"
+          curl --fail --silent --show-error --location --retry 3 \
+            "$release/golangci-lint-${GOLANGCI_LINT_VERSION}-checksums.txt" --output checksums.txt
+          awk -v archive="$archive" '$2 == archive' checksums.txt > "$archive.sha256"
+          test -s "$archive.sha256"
+          sha256sum -c "$archive.sha256"
+          tar -xzf "$archive" --strip-components=1 "${archive%.tar.gz}/golangci-lint"
+          ./golangci-lint version
+          echo "$PWD" >> "$GITHUB_PATH"
       - name: Download Go dependencies
         run: go mod download
       - name: Verify source ancestry and module files
@@ -91,7 +90,7 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ## Offline validation only
-          Linux/macOS native unit/subprocess contracts, schemas/inventories, data-package
+          Linux native unit/subprocess contracts, schemas/inventories, data-package
           independence, simulation tooling, synthetic integration checks, examples, race and vet are separate gates.
           All real agent/model tests are **SKIPPED**. Catalog availability and offline
           checks do not establish any successful real recording.
@@ -114,7 +113,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-26]
+        os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:

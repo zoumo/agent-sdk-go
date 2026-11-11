@@ -51,6 +51,18 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 			want: "external testify executable environment",
 		},
 		{
+			name: "hidden untracked environment variable",
+			file: ".config/local",
+			body: "AGENT_SDK_TESTIFY_BIN=/tmp/tool\n",
+			want: ".config/local:1:",
+		},
+		{
+			name: "completion environment variable",
+			file: "scripts/complete",
+			body: "CLAUDE_GO_REPLAY_COMPLETE=/tmp/complete\n",
+			want: "external testify executable environment",
+		},
+		{
 			name: "Python environment variable",
 			file: "scripts/run.py",
 			body: "import os\nos.environ[\"AGENT_SDK_TESTIFY_BIN\"] = \"/tmp/agent-sdk-testify\"\n",
@@ -108,6 +120,12 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 			name: "documented launcher",
 			file: "harness/modules/agent-sdk-testify/design.md",
 			body: "Start the launcher before the test.\n",
+			want: "retired testify process workflow terms",
+		},
+		{
+			name: "case insensitive documentation",
+			file: "docs/testing.md",
+			body: "Read the RESULT\tDESCRIPTOR.\n",
 			want: "retired testify process workflow terms",
 		},
 		{
@@ -171,6 +189,18 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 			want: "schema-3 and schema-4 switch",
 		},
 		{
+			name: "schema four comparison",
+			file: "tests/simulation/simulate/session.go",
+			body: "package main\n\nfunc badSchema() bool { return SchemaVersion != 4 }\n",
+			want: "schema-3 and schema-4 comparison",
+		},
+		{
+			name: "case insensitive multiline schema switch",
+			file: "tests/simulation/simulate/session.go",
+			body: "package main\n\nfunc badSchema() {\n\tswitch SCHEMAVERSION {\n\tcase\n\t\t4:\n\t}\n}\n",
+			want: "schema-3 and schema-4 switch",
+		},
+		{
 			name: "receipt parser",
 			file: "tests/simulation/simulate/session.go",
 			body: "package main\n\nvar badReceipt = \"executions/receipt.json\"\n",
@@ -200,6 +230,59 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 			require.Contains(t, string(output), tc.want, "gate failed for an unrelated reason:\n%s", output)
 		})
 	}
+}
+
+func TestRemovedTestifyCLISurfaceGatePreservesExclusions(t *testing.T) {
+	root := t.TempDir()
+	writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
+	writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+	for _, name := range []string{
+		".artifacts/run.sh", ".git/run.sh", ".scratch/run.sh",
+		"scripts/check-removed-cli-surfaces.sh", "tests/gates/contraction_test.go", "go.sum",
+	} {
+		writeGateFixture(t, root, name, "AGENT_SDK_TESTIFY_BIN=/tmp/tool\n")
+	}
+	for _, name := range []string{"codex/types/message.go", "claude/types/message.go", "agent/options.go"} {
+		writeGateFixture(t, root, name, "package types\n\ntype Message struct { PID int `json:\"pid\"` }\n")
+	}
+	writeGateFixture(t, root, "tests/fixture_test.go", "package tests\n\nvar receipt = \"receipt.json\"\n")
+	writeGateFixture(t, root, "docs/README.md", "A wrapper for unrelated tools.\n")
+	writeGateFixture(t, root, "scripts/binary", "\x00AGENT_SDK_TESTIFY_BIN\n")
+
+	output, err := gate(t, root)
+	require.NoError(t, err, string(output))
+	require.Contains(t, string(output), "removed testify CLI surfaces are absent")
+}
+
+func TestRemovedTestifyCLISurfaceGateDoesNotUseRipgrep(t *testing.T) {
+	root := t.TempDir()
+	writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
+	writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+	tools := t.TempDir()
+	poison := filepath.Join(tools, "rg")
+	require.NoError(t, os.WriteFile(poison, []byte("#!/bin/sh\necho unexpected-ripgrep >&2\nexit 99\n"), 0o755))
+	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	output, err := gate(t, root)
+	require.NoError(t, err, string(output))
+	require.NotContains(t, string(output), "unexpected-ripgrep")
+}
+
+func TestRemovedTestifyCLISurfaceGateRejectsUnreadableFiles(t *testing.T) {
+	root := t.TempDir()
+	writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
+	writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+	writeGateFixture(t, root, "scripts/unreadable", "AGENT_SDK_TESTIFY_BIN=/tmp/tool\n")
+	path := filepath.Join(root, "scripts", "unreadable")
+	require.NoError(t, os.Chmod(path, 0))
+	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("current user can read files without read permission")
+	}
+
+	output, err := gate(t, root)
+	require.Error(t, err, string(output))
+	require.Contains(t, string(output), "surface scan failed")
 }
 
 func writeGateFixture(t *testing.T, root, name, body string) {

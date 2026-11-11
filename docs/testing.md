@@ -42,7 +42,7 @@ package suite under the race detector, `e2e` runs the fixed real-recording
 simulation gate, and `build` compiles every package and the SDK simulation
 runner/driver. `GOMAXPROCS=2`, package scheduling `-p=1` and
 `GORACE=atexit_sleep_ms=0` bound test load. CI runs all five tasks on
-`ubuntu-24.04` and `macos-26`. Every example compiles with `go test ./...`.
+`ubuntu-24.04`. Every example compiles with `go test ./...`.
 The pinned testify module owns official driver/package checks. Hosted CI builds
 only the SDK-owned simulation runner and driver and links that module; it does
 not build or download a separate testify artifact.
@@ -93,10 +93,11 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) defines one offline job for each
-supported runner: `ubuntu-24.04 / required` and `macos-26 / required`. Each job
-installs Go, `ripgrep` and the pinned formatter/linter once, runs `quality`, then
-runs `test` and `build` concurrently, then runs `race` and `e2e` separately.
+The [workflow](../.github/workflows/ci.yml) defines one offline job:
+`ubuntu-24.04 / required`. It installs Go and downloads the pinned
+formatter/linter's official precompiled archive, verifying its SHA-256 before
+extraction. Source scans use the Python standard library. The job runs `quality`,
+then runs `test` and `build` concurrently, then runs `race` and `e2e` separately.
 Race and the required recording gate both exercise timing-sensitive subprocess
 protocols, so they do not overlap each other or package tests. The first task
 mutates generated files for its drift check, so it precedes the concurrent
@@ -104,12 +105,12 @@ phase. The job status is the required aggregate for that platform; task output
 remains grouped in its logs. The offline tasks build only the SDK-owned
 simulation runner and driver; the in-process testify module is fetched by the
 normal Go module graph.
-External consumer CI uses the same `ubuntu-24.04` and `macos-26` matrix for
+External consumer CI uses `ubuntu-24.04` for
 pushed `main` commits, manual workflow runs and same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure two offline platform jobs and two External consumer jobs.
-Fork PRs retain the offline jobs and skip
+These events configure one offline job and one External consumer job.
+Fork PRs retain the offline job and skip
 consumers because fork-only SHAs are not assumed retrievable from this
 repository. Token permissions remain contents: read; no pull_request_target
 execution is added. Configured coverage does not prove that any runner executed. See

@@ -20,33 +20,38 @@ class WorkflowCoverage(unittest.TestCase):
         return dict(re.findall(
             r"(?ms)^  ([a-z0-9_]+):\n(.*?)(?=^  [a-z0-9_]+:\n|\Z)", workflow))
 
-    def test_offline_platforms_and_consumers_retain_supported_runners(self):
+    def test_offline_platform_and_consumers_use_linux_only(self):
         jobs = self.workflow_jobs()
         offline = jobs["offline"]
         self.assertIn("    name: ${{ matrix.runner }} / required", offline)
         matrix = re.search(r"(?m)^        runner: \[([^\]]+)\]$", offline)
         self.assertIsNotNone(matrix, "expected an explicit offline runner matrix")
         labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
+        self.assertEqual(labels, ["ubuntu-24.04"])
         self.assertIn("    runs-on: ${{ matrix.runner }}", offline)
 
         consumer = jobs["consumer"]
         matrix = re.search(r"(?m)^        os: \[([^\]]+)\]$", consumer)
         self.assertIsNotNone(matrix, "expected an explicit consumer OS matrix")
         labels = [label.strip().strip("\"'") for label in matrix.group(1).split(",")]
-        self.assertCountEqual(labels, ["ubuntu-24.04", "macos-26"])
+        self.assertEqual(labels, ["ubuntu-24.04"])
         self.assertIn("    runs-on: ${{ matrix.os }}", consumer)
 
     def test_offline_platform_job_runs_checks_in_one_environment(self):
         offline = self.workflow_jobs()["offline"]
-        self.assertIn("sudo apt-get install -y ripgrep", offline)
-        self.assertIn("brew install ripgrep", offline)
+        for dependency in ("ripgrep", "apt-get", "brew install", "go install"):
+            self.assertNotIn(dependency, offline)
         self.assertIn(
             "      - name: Install pinned golangci-lint\n"
             "        if: runner.os == 'Linux'\n",
             offline,
         )
-        self.assertIn("golangci-lint@v2.12.2", offline)
+        self.assertIn("GOLANGCI_LINT_VERSION: '2.12.2'", offline)
+        self.assertIn('$(go env GOOS)-$(go env GOARCH).tar.gz', offline)
+        self.assertIn('golangci-lint-${GOLANGCI_LINT_VERSION}-checksums.txt', offline)
+        self.assertIn('test -s "$archive.sha256"', offline)
+        self.assertIn('sha256sum -c "$archive.sha256"', offline)
+        self.assertIn('./golangci-lint version', offline)
         self.assertIn("python3 codex/scripts/check_whitespace.py", offline)
         self.assertIn('if [[ "${RUNNER_OS}" == "Linux" ]]; then', offline)
         self.assertIn("make fmt-check", offline)

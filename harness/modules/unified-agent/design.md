@@ -136,7 +136,13 @@ codex/types <-- codex          claude/types <-- claude
                    |                              |
              agent/codex                    agent/claude
                    \                              /
-                    +--> agent/internal/lifecycle <--+
+                    +-------------+--------------+
+                                  |
+             +--------------------+--------------------+
+             |                                         |
+agent/internal/lifecycle         agent/internal/interactionledger
+             |                                         |
+             +--------------------+--------------------+
                                   |
                                 agent
                              ^
@@ -150,9 +156,10 @@ codex/types <-- codex          claude/types <-- claude
 目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图只
 说明本设计的调用方向：统一 `agent` 是上层实时合同，原生 SDK 不反向依赖它；
 两个 adapter 只适配各自 provider，并共同使用 `agent/internal/lifecycle` 持有
-Provider 生命周期状态；该模块只依赖标准库和公开 `agent` 合同，不导入原生 SDK。
-Provider 的原生资源与 Session 仍由各 adapter 拥有。MASS Runtime adapter 可以
-消费统一层，而 MASS Service、Store 和 transport 仍只依赖 MASS 自己的合同。
+Provider 生命周期状态、使用 `agent/internal/interactionledger` 保存统一回答
+准入状态；这些模块不导入原生 SDK。Provider 的原生资源、Session 和回答句柄仍
+由各 adapter 拥有。MASS Runtime adapter 可以消费统一层，而 MASS Service、Store
+和 transport 仍只依赖 MASS 自己的合同。
 MASS 的配置、资源身份和恢复解释在构造 Provider 前完成，不进入 SDK adapter。
 
 ## 为什么不整体搬迁 MASS Runtime
@@ -212,8 +219,8 @@ type Provider interface {
     Resume(ctx context.Context, options ResumeOptions) (Session, error)
 
     // Stop 只释放本 Provider 拥有的资源。
-    // 有 Open/Resume 正在进行或仍有未关闭 Session 时必须拒绝；不能等待后
-    // 暗自停止。首次被接纳的 Stop 是终止性的，release 失败也缓存结果。
+    // 有 Open/Resume 正在进行，或仍有活跃/正在清理的 Session 时必须拒绝；
+    // 不能等待后暗自停止。首次被接纳的 Stop 是终止性的，release 失败也缓存结果。
     Stop(ctx context.Context) error
 }
 ```
@@ -281,6 +288,11 @@ type EffectiveFeatures struct {
 - 进行中的 `Open` 和 `Resume` 计入 in-flight 操作，`Stop` 必须拒绝而不是等待。
   Open 的 callback 失败时，adapter 必须先完成原生清理，再由共享生命周期自动
   撤销 opening；之后 Provider 仍可 Stop，也可继续使用到 Stop。
+- Provider 的 Session registry 持有活跃或正在清理的 lease。没有显式 `Close`
+  时，原生观察终止必须先完成 native cleanup 并恰好释放一次 lease，之后才关闭
+  `Done`；已经接纳的事件仍可排空，不再阻止 `Provider.Stop`。显式 `Close` 已
+  开始时，`Stop` 仍拒绝，直到该清理路径释放 lease。自然终止后的 `Session.Close`
+  只复用同一 cleanup 结果，不重复 native cleanup 或 Provider release。
 - 首次被接纳的 `Stop` 是终止性的：release 至多执行一次，release 错误被缓存，
   后续 `Stop` 返回同一结果；即使 release 失败，`Start`、`Open` 和 `Resume`
   也不能再运行。没有未关闭 Session 时重复 Stop 返回缓存结果。
@@ -813,23 +825,27 @@ type Input struct {
     Content []ContentBlock
 }
 
-type ContentBlock interface {
-    contentBlock()
+type ContentBlock struct {
+    Text         *ContentBlockText
+    Image        *ContentBlockImage
+    Audio        *ContentBlockAudio
+    ResourceLink *ContentBlockResourceLink
+    Resource     *ContentBlockResource
 }
 
-type TextBlock struct {
+type ContentBlockText struct {
     Text        string
     Annotations *Annotations
 }
 
-type ImageBlock struct {
+type ContentBlockImage struct {
     Data        string
     MIMEType    string
     URI         *string
     Annotations *Annotations
 }
 
-type AudioBlock struct {
+type ContentBlockAudio struct {
     Data        string
     MIMEType    string
     Annotations *Annotations
@@ -842,12 +858,12 @@ type EmbeddedResource struct {
     Blob     *string
 }
 
-type ResourceBlock struct {
+type ContentBlockResource struct {
     Resource    EmbeddedResource
     Annotations *Annotations
 }
 
-type ResourceLinkBlock struct {
+type ContentBlockResourceLink struct {
     URI         string
     Name        string
     MIMEType    *string
@@ -864,7 +880,9 @@ type Annotations struct {
 }
 ```
 
-内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。数组顺序
+内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。
+`ContentBlock` 的五个指针分支必须且只能有一个非 nil；JSON 继续使用原有 `type`
+判别字段和对应分支字段。数组顺序
 是内容顺序；`image`、`audio` 的 `Data` 和资源的 `Blob` 是不带 data URI 前缀的
 Base64 原文。`resource` 必须且只能在 `Text`、`Blob` 中提供一种正文。
 
@@ -952,6 +970,9 @@ type URLAnswer struct {
     Outcome URLOutcome
 }
 
+func MatchAnswer(kind InteractionKind, answer Answer) (Answer, error)
+func ValidateAnswer(kind InteractionKind, answer Answer) error
+
 type InteractionOutcome string
 
 const (
@@ -973,6 +994,18 @@ const (
   不能把统一层的兼容编码当成原生数组支持。
 - `url` 只表达外部流程入口；URL 的完成仍由原生事实结算。
 
+`agent.MatchAnswer(kind, answer)` 接受三种 answer 的值或非 nil 指针，成功时
+统一返回 `PermissionAnswer`、`FormAnswer` 或 `URLAnswer` 值。它校验 kind
+匹配、outcome 及对应字段组合：permission 的 selected 必须有 `OptionID`，
+cancelled 不得有；form 的 accept 必须有可 JSON 编码的非 nil `Content`，
+decline/cancel 不得有；URL 只接受 accept/decline/cancel。`ValidateAnswer`
+委托 `MatchAnswer`，丢弃规范化值并返回同一错误。
+
+失败返回 nil answer 和 `invalid_argument` 错误：nil/typed-nil 使用
+`missing_answer`，kind 不匹配使用 `answer_kind_mismatch`，不支持的包装类型使用
+`unsupported_answer`；outcome 和字段错误保留对应的具体 reason。该操作不写原生
+请求、不消耗回答权限；原生选项成员资格与 form schema 兼容性仍由 adapter 校验。
+
 原生 `IncomingRequest`、`AnswerHandle` 和 permission handle 只存在于 adapter
 私有 registry。统一事件只交付 `InteractionRef`。该引用绑定 Session、adapter
 实例、当前运行和具体工作；回答前必须再次检查原句柄仍有效。跨 Session、旧运行、
@@ -981,6 +1014,14 @@ const (
 并发回答在单个交互内串行接纳，至多一个回答进入原生提交。事件可以先于 answer
 回执到达。发送结果未知时不恢复回答权限，不自动重答。当前 adapter 不宣告
 `url`，除非以后有可验证的原生实现。
+
+共享 `interactionledger` 每 Session 一份，只分配不透明 `InteractionRef`、单调
+注册顺序并保存 pending、answering、sent、settled 等统一权威阶段。它负责一次
+claim、answer 完成等待、确定 `NotSent` 后的回滚，以及 terminal result、sent
+outcome 与 fallback 的结算顺序。等待不得持有 adapter 锁。slot 不保存原生
+request、raw frame、request ID、handle、reply callback 或 ref→adapter 查询；
+adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造回复的位置。因此
+共享 slot 只协调回答准入，不转移原生回答权限，也不形成第二套句柄 registry。
 
 ## 事件流与统一事件
 
@@ -2027,6 +2068,9 @@ linkage 和无法归属的交互行为保持不变。
   adapter 都通过该模块覆盖 Start 单次获取、in-flight Open/Resume 拒绝 Stop、
   失败 Open 自动结算、终止性 Stop 与 release 错误缓存，且不保留重复生命周期
   状态、计数器、Session 集合或私有 reserve/complete helper。
+- `agent/internal/interactionledger` 只保存统一权威状态；其测试覆盖唯一引用、
+  单调注册顺序、一次 claim、NotSent 回滚、完成等待和结算优先级。adapter 的
+  私有 registry 仍独占原生 request、handle、reply construction 和查询。
 - Provider 基础 Capabilities 由 adapter 供给并由生命周期冻结；Session 级能力
   只能窄化，不修改 Provider 级快照。Claude Start 不启动进程，每个 Session
   仍独占并关闭自己的原生 CLI 进程。

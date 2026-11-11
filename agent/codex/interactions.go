@@ -11,17 +11,9 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
-)
-
-type interactionPhase uint8
-
-const (
-	interactionPending interactionPhase = iota
-	interactionAnswering
-	interactionAnswered
 )
 
 type pendingInteraction struct {
@@ -39,10 +31,7 @@ type pendingInteraction struct {
 	choices    map[string]func(context.Context) error
 	cancel     func(context.Context) error
 	questions  map[string]struct{}
-	phase      interactionPhase
-	answerDone chan struct{}
-	answered   bool
-	answerErr  error
+	slot       interactionledger.Slot
 	sequence   uint64
 }
 
@@ -62,7 +51,7 @@ func (s *session) convertRequest(received codex.Received) ([]agent.Event, error)
 	if err := request.Handle().Err(); err != nil {
 		return s.notificationGap(
 			received,
-			"native_request_ended",
+			agent.ErrorReasonNativeRequestEnded,
 			"Codex native request ended before it could be exposed",
 		)
 	}
@@ -131,7 +120,6 @@ func (s *session) commandInteraction(
 		received:  received,
 		choices:   choices,
 		cancel:    cancel,
-		phase:     interactionPending,
 	}
 	unifiedRequest := agent.InteractionRequest{
 		Kind:       agent.InteractionPermission,
@@ -176,7 +164,6 @@ func (s *session) fileChangeInteraction(
 		received:  received,
 		choices:   choices,
 		cancel:    choices["cancel"],
-		phase:     interactionPending,
 	}
 	unifiedRequest := agent.InteractionRequest{
 		Kind:       agent.InteractionPermission,
@@ -195,7 +182,7 @@ func (s *session) formInteraction(
 	if !s.features.AgentQuestions {
 		return s.unsupportedRequest(
 			received,
-			"agent_questions_disabled",
+			agent.ErrorReasonAgentQuestionsDisabled,
 			"Codex user-input requests are disabled for this session",
 		)
 	}
@@ -261,7 +248,6 @@ func (s *session) formInteraction(
 		request:   request,
 		received:  received,
 		questions: questions,
-		phase:     interactionPending,
 	}
 	unifiedRequest := agent.InteractionRequest{
 		Kind:            agent.InteractionForm,
@@ -345,16 +331,6 @@ func (s *session) registerInteraction(
 	interaction *pendingInteraction,
 	request agent.InteractionRequest,
 ) ([]agent.Event, error) {
-	ref, err := newInteractionRef()
-	if err != nil {
-		return nil, adapterError(
-			agent.ErrorUnavailable,
-			"interaction_ref_failed",
-			"create interaction reference",
-			err,
-		)
-	}
-	interaction.ref = ref
 	interaction.requestKey = requestIDKey(interaction.request.ID())
 
 	s.mu.Lock()
@@ -365,7 +341,8 @@ func (s *session) registerInteraction(
 	if existing := s.requestRefs[interaction.requestKey]; existing != "" {
 		previous := s.interactions[existing]
 		s.mu.Unlock()
-		if previous != nil && previous.phase == interactionAnswered {
+		if previous != nil &&
+			previous.slot.State() == interactionledger.Sent {
 			return s.unsupportedRequest(
 				interaction.received,
 				"duplicate_native_request",
@@ -401,6 +378,19 @@ func (s *session) registerInteraction(
 			)
 		}
 	}
+
+	ref, sequence, err := s.interactionLedger.Allocate()
+	if err != nil {
+		s.mu.Unlock()
+		return nil, adapterError(
+			agent.ErrorUnavailable,
+			agent.ErrorReasonInteractionRefFailed,
+			"create interaction reference",
+			err,
+		)
+	}
+	interaction.ref = ref
+	interaction.sequence = sequence
 
 	var stateEvent *agent.Event
 	if interaction.blocking &&
@@ -446,7 +436,6 @@ func (s *session) registerInteraction(
 		return nil, requestErr
 	}
 
-	interaction.sequence = s.nextInteractionSequenceLocked()
 	s.interactions[interaction.ref] = interaction
 	if interaction.requestKey != "" {
 		s.requestRefs[interaction.requestKey] = interaction.ref
@@ -498,7 +487,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)
@@ -508,7 +497,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_interaction_ref",
+			agent.ErrorReasonInvalidInteractionRef,
 			"interaction reference is not live in this session",
 			nil,
 		)
@@ -517,16 +506,16 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorUnsupported,
-			"agent_questions_disabled",
+			agent.ErrorReasonAgentQuestionsDisabled,
 			"Codex user-input requests are disabled for this session",
 			nil,
 		)
 	}
-	if interaction.phase != interactionPending {
+	if interaction.slot.State() != interactionledger.Pending {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorFailedPrecondition,
-			"interaction_not_pending",
+			agent.ErrorReasonInteractionNotPending,
 			"interaction is no longer pending",
 			nil,
 		)
@@ -534,30 +523,41 @@ func (s *session) answerInteraction(
 	if err := interaction.request.Handle().Err(); err != nil {
 		return s.finishTerminalInteractionAndUnlock(interaction, err)
 	}
-	if err := agent.ValidateAnswer(interaction.kind, answer); err != nil {
+	matched, err := agent.MatchAnswer(interaction.kind, answer)
+	if err != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, err
 	}
-	reply, validationErr := interactionReply(interaction, answer)
+	reply, validationErr := interactionReply(interaction, matched)
 	if validationErr != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, validationErr
 	}
-	done := make(chan struct{})
-	interaction.answerDone = done
-	interaction.phase = interactionAnswering
+	if !interaction.slot.Claim() {
+		s.mu.Unlock()
+		return agent.InteractionReceipt{}, adapterError(
+			agent.ErrorFailedPrecondition,
+			agent.ErrorReasonInteractionNotPending,
+			"interaction is no longer pending",
+			nil,
+		)
+	}
 	s.mu.Unlock()
 
 	answerErr := reply(ctx)
 
 	s.mu.Lock()
-	interaction.answered = answerErr == nil
-	interaction.answerErr = answerErr
-	if interaction.answered {
-		interaction.phase = interactionAnswered
+	switch {
+	case answerErr == nil:
+		interaction.slot.CompleteSent(agent.InteractionAnswered)
+	case answerOutcomeUnknown(answerErr):
+		interaction.slot.CompleteTerminal(
+			agent.InteractionFailed,
+			agent.ErrorReasonAnswerOutcomeUnknown,
+		)
+	default:
+		interaction.slot.ReleaseNotSent()
 	}
-	close(interaction.answerDone)
-	interaction.answerDone = nil
 	current := s.interactions[ref]
 	if current != interaction {
 		s.mu.Unlock()
@@ -579,14 +579,12 @@ func (s *session) answerInteraction(
 			s.pushInteractionSettlement(
 				interaction,
 				agent.InteractionFailed,
-				"answer_outcome_unknown",
+				agent.ErrorReasonAnswerOutcomeUnknown,
 				statePayload,
 			)
 			return agent.InteractionReceipt{Interaction: ref}, nativeOperationError("answer", answerErr)
 		}
 		if interactionStillLive(interaction) {
-			interaction.phase = interactionPending
-			interaction.answerErr = nil
 			s.mu.Unlock()
 			sent := false
 			return agent.InteractionReceipt{
@@ -596,7 +594,7 @@ func (s *session) answerInteraction(
 		}
 		outcome, reason := terminalInteractionOutcome(answerErr)
 		if outcome == "" {
-			outcome, reason = agent.InteractionExpired, "native_request_ended"
+			outcome, reason = agent.InteractionExpired, agent.ErrorReasonNativeRequestEnded
 		}
 		s.removeInteractionLocked(interaction)
 		statePayload := s.interactionsSettledLocked()
@@ -627,6 +625,7 @@ func (s *session) finishTerminalInteractionAndUnlock(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, nativeOperationError("answer", cause)
 	}
+	interaction.slot.CompleteTerminal(outcome, reason)
 	s.removeInteractionLocked(interaction)
 	statePayload := s.interactionsSettledLocked()
 	s.mu.Unlock()
@@ -642,13 +641,13 @@ func interactionReply(
 	interaction *pendingInteraction,
 	answer agent.Answer,
 ) (func(context.Context) error, error) {
-	switch concrete := concreteAnswerValue(answer).(type) {
+	switch concrete := answer.(type) {
 	case agent.PermissionAnswer:
 		if concrete.Outcome == agent.PermissionCancelled {
 			if interaction.cancel == nil {
 				return nil, adapterError(
 					agent.ErrorUnsupported,
-					"permission_cancel_unsupported",
+					ErrorReasonPermissionCancelUnsupported,
 					"this Codex permission request has no proven cancellation",
 					nil,
 				)
@@ -659,7 +658,7 @@ func interactionReply(
 		if reply == nil {
 			return nil, adapterError(
 				agent.ErrorInvalidArgument,
-				"permission_option_not_offered",
+				agent.ErrorReasonPermissionOptionNotOffered,
 				"permission option was not offered by the native request",
 				nil,
 			)
@@ -669,7 +668,7 @@ func interactionReply(
 		if concrete.Outcome != agent.FormAccept {
 			return nil, adapterError(
 				agent.ErrorUnsupported,
-				"form_outcome_unsupported",
+				ErrorReasonFormOutcomeUnsupported,
 				"Codex user-input decline and cancellation are not proven",
 				nil,
 			)
@@ -684,7 +683,7 @@ func interactionReply(
 	default:
 		return nil, adapterError(
 			agent.ErrorUnsupported,
-			"answer_kind_unsupported",
+			agent.ErrorReasonAnswerKindUnsupported,
 			"answer kind is not supported for this Codex interaction",
 			nil,
 		)
@@ -699,7 +698,7 @@ func formResponse(
 	if _, present := content["answers"]; len(content) != 1 || !present {
 		return response, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer must contain only a native answers object",
 			nil,
 		)
@@ -708,7 +707,7 @@ func formResponse(
 	if err != nil {
 		return response, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer cannot be encoded",
 			err,
 		)
@@ -716,7 +715,7 @@ func formResponse(
 	if err := json.Unmarshal(raw, &response); err != nil || response.Answers == nil {
 		return codextypes.ToolRequestUserInputResponse{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer does not match the native response shape",
 			err,
 		)
@@ -724,7 +723,7 @@ func formResponse(
 	if len(response.UnknownFields) != 0 {
 		return codextypes.ToolRequestUserInputResponse{}, adapterError(
 			agent.ErrorInvalidArgument,
-			"invalid_form_answer",
+			agent.ErrorReasonInvalidFormAnswer,
 			"form answer contains unsupported response fields",
 			nil,
 		)
@@ -733,7 +732,7 @@ func formResponse(
 		if _, known := interaction.questions[questionID]; !known {
 			return codextypes.ToolRequestUserInputResponse{}, adapterError(
 				agent.ErrorInvalidArgument,
-				"unknown_form_question",
+				agent.ErrorReasonUnknownFormQuestion,
 				"form answer uses a question ID not present in the native request",
 				nil,
 			)
@@ -741,7 +740,7 @@ func formResponse(
 		if len(answer.UnknownFields) != 0 {
 			return codextypes.ToolRequestUserInputResponse{}, adapterError(
 				agent.ErrorInvalidArgument,
-				"invalid_form_answer",
+				agent.ErrorReasonInvalidFormAnswer,
 				"form answer contains unsupported question fields",
 				nil,
 			)
@@ -749,7 +748,7 @@ func formResponse(
 		if answer.Answers == nil {
 			return codextypes.ToolRequestUserInputResponse{}, adapterError(
 				agent.ErrorInvalidArgument,
-				"invalid_form_answer",
+				agent.ErrorReasonInvalidFormAnswer,
 				"form answers must be string arrays",
 				nil,
 			)
@@ -784,16 +783,18 @@ func (s *session) resolveInteraction(received codex.Received) ([]agent.Event, er
 	s.mu.Unlock()
 
 	at := time.Now().UTC()
-	outcome, reason := s.settlement(
-		interaction,
-		agent.InteractionCancelled,
+	result := interaction.slot.Resolve(
+		interactionledger.Result{
+			Outcome: agent.InteractionCancelled,
+			Reason:  "native_resolved",
+		},
 		"native_resolved",
 	)
 	return s.interactionSettlementEvents(
 		received,
 		interaction,
-		outcome,
-		reason,
+		result.Outcome,
+		result.Reason,
 		at,
 		statePayload,
 	)
@@ -807,12 +808,15 @@ func (s *session) closedInteractionEvents(
 ) []agent.Event {
 	events := make([]agent.Event, 0, len(interactions))
 	for _, interaction := range interactions {
-		itemOutcome, itemReason := s.settlement(interaction, outcome, reason)
+		result := interaction.slot.Resolve(
+			interactionledger.Result{Outcome: outcome, Reason: reason},
+			reason,
+		)
 		settled, err := s.interactionSettlementEvents(
 			interaction.received,
 			interaction,
-			itemOutcome,
-			itemReason,
+			result.Outcome,
+			result.Reason,
 			at,
 			nil,
 		)
@@ -912,31 +916,6 @@ func (s *session) pushInteractionSettlement(
 	_ = s.pushEvents(events)
 }
 
-func (s *session) settlement(
-	interaction *pendingInteraction,
-	fallback agent.InteractionOutcome,
-	fallbackReason string,
-) (agent.InteractionOutcome, string) {
-	s.mu.Lock()
-	done := interaction.answerDone
-	s.mu.Unlock()
-	if done != nil {
-		<-done
-	}
-
-	s.mu.Lock()
-	answered := interaction.answered
-	answerErr := interaction.answerErr
-	s.mu.Unlock()
-	if answered {
-		return agent.InteractionAnswered, fallbackReason
-	}
-	if answerOutcomeUnknown(answerErr) {
-		return agent.InteractionFailed, "answer_outcome_unknown"
-	}
-	return fallback, fallbackReason
-}
-
 func interactionCloseMeta(interaction *pendingInteraction) map[string]any {
 	meta := map[string]any{
 		"request": interaction.request.Raw(),
@@ -972,16 +951,6 @@ func (s *session) blockingInteractionsLocked() int {
 		}
 	}
 	return count
-}
-
-func (s *session) nextInteractionSequenceLocked() uint64 {
-	var largestSequence uint64
-	for _, interaction := range s.interactions {
-		if interaction.sequence > largestSequence {
-			largestSequence = interaction.sequence
-		}
-	}
-	return largestSequence + 1
 }
 
 func (s *session) removeInteractionLocked(interaction *pendingInteraction) {
@@ -1220,14 +1189,6 @@ func denyWithCommandDecision(
 	return request.Deny(ctx, codex.ApprovalOptions{CommandExecution: response})
 }
 
-func newInteractionRef() (agent.InteractionRef, error) {
-	value, err := uuidv4.New()
-	if err != nil {
-		return "", err
-	}
-	return agent.InteractionRef("codex-" + value), nil
-}
-
 func requestIDKey(id codex.ID) string {
 	if value, ok := id.StringValue(); ok {
 		return requestKeyForValues(&value, nil)
@@ -1270,19 +1231,6 @@ func requestMethod(received codex.Received) string {
 		return received.Request.Method()
 	}
 	return ""
-}
-
-func concreteAnswerValue(answer agent.Answer) any {
-	switch value := answer.(type) {
-	case *agent.PermissionAnswer:
-		return *value
-	case *agent.FormAnswer:
-		return *value
-	case *agent.URLAnswer:
-		return *value
-	default:
-		return answer
-	}
 }
 
 func terminalInteractionOutcome(err error) (agent.InteractionOutcome, string) {

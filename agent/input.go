@@ -9,34 +9,35 @@ type Input struct {
 	Content []ContentBlock
 }
 
-// ContentBlock is one of the five supported input content kinds.
-type ContentBlock interface {
-	contentBlock()
+// ContentBlock is one of the five supported input content kinds. Exactly one
+// branch must be non-nil.
+//
+//nolint:recvcheck // JSON decoding mutates blocks; reads and encoding accept values.
+type ContentBlock struct {
+	Text         *ContentBlockText         `json:"-"`
+	Image        *ContentBlockImage        `json:"-"`
+	Audio        *ContentBlockAudio        `json:"-"`
+	ResourceLink *ContentBlockResourceLink `json:"-"`
+	Resource     *ContentBlockResource     `json:"-"`
 }
 
-type TextBlock struct {
+type ContentBlockText struct {
 	Text        string
 	Annotations *Annotations
 }
 
-func (TextBlock) contentBlock() {}
-
-type ImageBlock struct {
+type ContentBlockImage struct {
 	Data        string
 	MIMEType    string
 	URI         *string
 	Annotations *Annotations
 }
 
-func (ImageBlock) contentBlock() {}
-
-type AudioBlock struct {
+type ContentBlockAudio struct {
 	Data        string
 	MIMEType    string
 	Annotations *Annotations
 }
-
-func (AudioBlock) contentBlock() {}
 
 type EmbeddedResource struct {
 	URI      string
@@ -45,14 +46,12 @@ type EmbeddedResource struct {
 	Blob     *string
 }
 
-type ResourceBlock struct {
+type ContentBlockResource struct {
 	Resource    EmbeddedResource
 	Annotations *Annotations
 }
 
-func (ResourceBlock) contentBlock() {}
-
-type ResourceLinkBlock struct {
+type ContentBlockResourceLink struct {
 	URI         string
 	Name        string
 	MIMEType    *string
@@ -61,8 +60,6 @@ type ResourceLinkBlock struct {
 	Size        *int64
 	Annotations *Annotations
 }
-
-func (ResourceLinkBlock) contentBlock() {}
 
 type Annotations struct {
 	Audience     []string

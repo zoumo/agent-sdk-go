@@ -41,14 +41,14 @@ func validateConfigValue(
 	if !utf8.ValidString(value) {
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "config_value_invalid_utf8",
+			Reason:  ErrorReasonConfigValueInvalidUTF8,
 			Message: name + " must be valid UTF-8",
 		}
 	}
 	if strings.ContainsRune(value, '\x00') {
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "config_value_contains_nul",
+			Reason:  ErrorReasonConfigValueContainsNUL,
 			Message: name + " must not contain NUL",
 		}
 	}
@@ -77,14 +77,14 @@ func (c ConfigChange) Validate() error {
 	default:
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "config_id_unknown",
+			Reason:  ErrorReasonConfigIDUnknown,
 			Message: "configuration ID is not supported",
 		}
 	}
 	if c.Value == "" {
 		return &Error{
 			Code:    ErrorInvalidArgument,
-			Reason:  "config_value_empty",
+			Reason:  ErrorReasonConfigValueEmpty,
 			Message: "configuration value must be nonempty",
 		}
 	}

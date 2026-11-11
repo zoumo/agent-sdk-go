@@ -76,12 +76,12 @@ func TestOpenOptionsValidateAdditionalSystemPrompt(t *testing.T) {
 		{
 			name:       "invalid UTF-8",
 			value:      sentinel + string([]byte{0xff}),
-			wantReason: "additional_system_prompt_invalid_utf8",
+			wantReason: agent.ErrorReasonAdditionalSystemPromptInvalidUTF8,
 		},
 		{
 			name:       "NUL",
 			value:      sentinel + "\x00tail",
-			wantReason: "additional_system_prompt_contains_nul",
+			wantReason: agent.ErrorReasonAdditionalSystemPromptContainsNUL,
 		},
 	}
 

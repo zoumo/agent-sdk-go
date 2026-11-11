@@ -31,6 +31,7 @@ func TestProviderLifecycleIsIdempotentAndTerminal(t *testing.T) {
 
 	capabilities, err := provider.Start(ctx)
 	require.NoError(t, err)
+	require.NoError(t, capabilities.Validate())
 	assert.True(t, capabilities.Supports(agent.CapabilityTextInput))
 	assert.True(t, capabilities.Supports(agent.CapabilityPermission))
 	assert.True(t, capabilities.Supports(agent.CapabilityForm))
@@ -113,7 +114,7 @@ func TestProviderStopRejectsInFlightOpen(t *testing.T) {
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(stopErr))
 	var classified *agent.Error
 	require.ErrorAs(t, stopErr, &classified)
-	assert.Equal(t, "provider_has_open_sessions", classified.Reason)
+	assert.Equal(t, agent.ErrorReasonProviderHasOpenSessions, classified.Reason)
 
 	release()
 	var result openResult
@@ -176,7 +177,7 @@ func TestProviderStopRejectsInFlightResume(t *testing.T) {
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(stopErr))
 	var classified *agent.Error
 	require.ErrorAs(t, stopErr, &classified)
-	assert.Equal(t, "provider_has_open_sessions", classified.Reason)
+	assert.Equal(t, agent.ErrorReasonProviderHasOpenSessions, classified.Reason)
 
 	cancelResume()
 	var result resumeResult
@@ -219,7 +220,7 @@ func TestOpenFailureSettlesLifecycleAndProviderCanOpenAgain(t *testing.T) {
 	assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
 	var classified *agent.Error
 	require.ErrorAs(t, err, &classified)
-	assert.Equal(t, "session_cwd_mismatch", classified.Reason)
+	assert.Equal(t, agentclaude.ErrorReasonSessionCWDMismatch, classified.Reason)
 
 	session, err = provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
 	require.NoError(t, err)

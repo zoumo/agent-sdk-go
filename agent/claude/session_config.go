@@ -72,7 +72,7 @@ func (s *session) requireOpen() error {
 	if s.closed {
 		return adapterError(
 			agent.ErrorClosed,
-			"session_closed",
+			agent.ErrorReasonSessionClosed,
 			"session is closed",
 			nil,
 		)

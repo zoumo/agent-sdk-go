@@ -24,7 +24,7 @@ var (
 )
 
 type session struct {
-	provider *Provider
+	provider *Core
 	native   *claude.Session
 	id       string
 	features agent.EffectiveFeatures
@@ -65,7 +65,7 @@ type session struct {
 }
 
 func newSession(
-	provider *Provider,
+	provider *Core,
 	native *claude.Session,
 	init *claudetypes.Event,
 	sessionID string,

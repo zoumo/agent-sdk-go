@@ -114,7 +114,7 @@ func TestProviderStopRejectsInFlightOpen(t *testing.T) {
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(stopErr))
 	var classified *agent.Error
 	require.ErrorAs(t, stopErr, &classified)
-	assert.Equal(t, agent.ErrorReasonProviderHasOpenSessions, classified.Reason)
+	assert.Equal(t, agent.ErrorReasonCoreHasOpenSessions, classified.Reason)
 
 	release()
 	var result openResult
@@ -177,7 +177,7 @@ func TestProviderStopRejectsInFlightResume(t *testing.T) {
 	assert.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(stopErr))
 	var classified *agent.Error
 	require.ErrorAs(t, stopErr, &classified)
-	assert.Equal(t, agent.ErrorReasonProviderHasOpenSessions, classified.Reason)
+	assert.Equal(t, agent.ErrorReasonCoreHasOpenSessions, classified.Reason)
 
 	cancelResume()
 	var result resumeResult

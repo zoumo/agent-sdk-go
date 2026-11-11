@@ -43,9 +43,9 @@ func TestStableErrorReasons(t *testing.T) {
 		{"execution option invalid UTF-8", agent.ErrorReasonExecutionOptionInvalidUTF8, "execution_option_invalid_utf8"},
 		{"execution option unknown", agent.ErrorReasonExecutionOptionUnknown, "execution_option_unknown"},
 		{"missing model", agent.ErrorReasonMissingModel, "missing_model"},
-		{"provider has open sessions", agent.ErrorReasonProviderHasOpenSessions, "provider_has_open_sessions"},
-		{"provider not started", agent.ErrorReasonProviderNotStarted, "provider_not_started"},
-		{"provider stopped", agent.ErrorReasonProviderStopped, "provider_stopped"},
+		{"core has open sessions", agent.ErrorReasonCoreHasOpenSessions, "core_has_open_sessions"},
+		{"core not started", agent.ErrorReasonCoreNotStarted, "core_not_started"},
+		{"core stopped", agent.ErrorReasonCoreStopped, "core_stopped"},
 		{"operation failed suffix", agent.ErrorReasonForOperation("open", agent.ErrorReasonSuffixFailed), "open_failed"},
 	}
 

@@ -7,12 +7,12 @@ import (
 	"slices"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/agent/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-var _ agent.Provider = (*Provider)(nil)
+var _ agent.Core = (*Core)(nil)
 
 type openingMode string
 
@@ -21,12 +21,12 @@ const (
 	openingResume openingMode = "resume"
 )
 
-// Provider owns one Codex app-server connection shared by all of its sessions.
-type Provider struct {
+// Core owns one Codex app-server connection shared by all of its sessions.
+type Core struct {
 	config         codex.StdioOptions
 	streams        streamFactory
 	formsSupported bool
-	lifecycle      *lifecycle.Lifecycle[*codex.Client, *session]
+	leases         *corelease.Core[*codex.Client, *session]
 }
 
 type streamStart struct {
@@ -36,29 +36,29 @@ type streamStart struct {
 
 type streamFactory func(context.Context) (streamStart, error)
 
-// New constructs a Codex provider. No process or connection is created until
+// New constructs a Codex Core. No process or connection is created until
 // Start succeeds.
-func New(config Config) *Provider {
+func New(config Config) *Core {
 	stdio := cloneStdioOptions(config.Stdio)
 	stdio.Initialize = withDefaultCapabilities(stdio.Initialize)
-	provider := &Provider{
+	core := &Core{
 		config:         stdio,
 		formsSupported: supportsAgentQuestions(stdio.Initialize),
 	}
-	provider.lifecycle = lifecycle.New[*codex.Client, *session](
-		providerCapabilities(provider.formsSupported),
-		provider.acquireClient,
-		provider.releaseClient,
+	core.leases = corelease.New[*codex.Client, *session](
+		providerCapabilities(core.formsSupported),
+		core.acquireClient,
+		core.releaseClient,
 	)
-	return provider
+	return core
 }
 
-// Start acquires the single native connection owned by this provider.
-func (p *Provider) Start(ctx context.Context) (agent.Capabilities, error) {
-	return p.lifecycle.Start(ctx)
+// Start acquires the single native connection owned by this Core.
+func (p *Core) Start(ctx context.Context) (agent.Capabilities, error) {
+	return p.leases.Start(ctx)
 }
 
-func (p *Provider) acquireClient(ctx context.Context) (*codex.Client, error) {
+func (p *Core) acquireClient(ctx context.Context) (*codex.Client, error) {
 	var client *codex.Client
 	var err error
 	if p.streams == nil {
@@ -82,7 +82,7 @@ func (p *Provider) acquireClient(ctx context.Context) (*codex.Client, error) {
 	if err != nil {
 		return nil, adapterError(
 			agent.ErrorUnavailable,
-			ErrorReasonProviderStartFailed,
+			ErrorReasonCoreStartFailed,
 			"start Codex app-server",
 			err,
 		)
@@ -90,21 +90,21 @@ func (p *Provider) acquireClient(ctx context.Context) (*codex.Client, error) {
 	return client, nil
 }
 
-// Stop releases the provider-owned connection. It is terminal and succeeds
+// Stop releases the Core-owned connection. It is terminal and succeeds
 // idempotently after the first successful stop.
-func (p *Provider) Stop(ctx context.Context) error {
-	return p.lifecycle.Stop(ctx)
+func (p *Core) Stop(ctx context.Context) error {
+	return p.leases.Stop(ctx)
 }
 
-func (p *Provider) releaseClient(_ context.Context, client *codex.Client) error {
+func (p *Core) releaseClient(_ context.Context, client *codex.Client) error {
 	if err := client.Close(); err != nil {
-		return nativeOperationError("stop_provider", err)
+		return nativeOperationError("stop_core", err)
 	}
 	return nil
 }
 
-// Open creates a native main session after the provider has started.
-func (p *Provider) Open(
+// Open creates a native main session after the Core has started.
+func (p *Core) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
 ) (agent.Session, error) {
@@ -119,8 +119,7 @@ func (p *Provider) Open(
 	if err != nil {
 		return nil, err
 	}
-	var created *session
-	err = p.lifecycle.Open(ctx, func(
+	created, err := p.leases.Open(ctx, func(
 		ctx context.Context,
 		client *codex.Client,
 	) (*session, error) {
@@ -137,13 +136,12 @@ func (p *Provider) Open(
 		if err != nil {
 			return nil, nativeOperationError(string(openingStart), err)
 		}
-		created = newSession(
+		return newSession(
 			p,
 			native,
 			features,
 			initialExecutionOptionsReport(native, options.Execution, openingStart),
-		)
-		return created, nil
+		), nil
 	})
 	if err != nil {
 		return nil, err
@@ -154,7 +152,7 @@ func (p *Provider) Open(
 
 // Resume restores an existing native main session. Saved turns in the native
 // response are not converted into live events.
-func (p *Provider) Resume(
+func (p *Core) Resume(
 	ctx context.Context,
 	options agent.ResumeOptions,
 ) (agent.Session, error) {
@@ -169,8 +167,7 @@ func (p *Provider) Resume(
 	if err != nil {
 		return nil, err
 	}
-	var created *session
-	err = p.lifecycle.Open(ctx, func(
+	created, err := p.leases.Open(ctx, func(
 		ctx context.Context,
 		client *codex.Client,
 	) (*session, error) {
@@ -191,13 +188,12 @@ func (p *Provider) Resume(
 		if err != nil {
 			return nil, nativeOperationError(string(openingResume), err)
 		}
-		created = newSession(
+		return newSession(
 			p,
 			native,
 			features,
 			initialExecutionOptionsReport(native, options.Execution, openingResume),
-		)
-		return created, nil
+		), nil
 	})
 	if err != nil {
 		return nil, err
@@ -206,13 +202,13 @@ func (p *Provider) Resume(
 	return created, nil
 }
 
-// NativeClient returns the provider-owned native connection while the provider
+// NativeClient returns the Core-owned native connection while the Core
 // is active. Callers must not close it or invoke methods that create, attach,
 // resume, control, or answer sessions; only read-only native queries are allowed.
 // The concrete return type preserves the design's native escape hatch; callers
 // that need a compile-time restriction must bind it to a query-only interface.
-func (p *Provider) NativeClient() (*codex.Client, error) {
-	return p.lifecycle.Resource()
+func (p *Core) NativeClient() (*codex.Client, error) {
+	return p.leases.Resource()
 }
 
 func providerCapabilities(formsSupported bool) agent.Capabilities {
@@ -247,7 +243,7 @@ func effectiveFeatures(
 	}
 }
 
-func (p *Provider) openingConfiguration(
+func (p *Core) openingConfiguration(
 	options agent.OpenOptions,
 ) (
 	agent.EffectiveFeatures,
@@ -307,6 +303,6 @@ func validateOpenOptions(options agent.OpenOptions) error {
 	return nil
 }
 
-func (p *Provider) sessionClosed(session *session) {
-	p.lifecycle.SessionClosed(session)
+func (p *Core) sessionClosed(session *session) {
+	p.leases.SessionClosed(session)
 }

@@ -18,7 +18,7 @@ type TestStreamOpen struct {
 
 // NewWithStream constructs a provider whose sessions use caller-supplied
 // in-process streams.
-func NewWithStream(config Config, next func(context.Context, claude.SessionOptions) (TestStreamOpen, error)) *Provider {
+func NewWithStream(config Config, next func(context.Context, claude.SessionOptions) (TestStreamOpen, error)) *Core {
 	provider := New(config)
 	provider.streams = func(ctx context.Context, options claude.SessionOptions) (streamOpen, error) {
 		opened, err := next(ctx, options)

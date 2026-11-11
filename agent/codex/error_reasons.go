@@ -7,6 +7,6 @@ const (
 	ErrorReasonFormOutcomeUnsupported       = "form_outcome_unsupported"
 	ErrorReasonInvalidNativeEvent           = "invalid_native_event"
 	ErrorReasonPermissionCancelUnsupported  = "permission_cancel_unsupported"
-	ErrorReasonProviderStartFailed          = "provider_start_failed"
+	ErrorReasonCoreStartFailed              = "core_start_failed"
 	ErrorReasonStartOrSteerIdentityMissing  = "start_or_steer_identity_missing"
 )

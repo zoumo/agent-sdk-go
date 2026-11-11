@@ -25,7 +25,7 @@ var (
 )
 
 type session struct {
-	provider *Provider
+	provider *Core
 	native   *codex.Session
 	features agent.EffectiveFeatures
 	events   queue.Queue[agent.Event]
@@ -68,7 +68,7 @@ type session struct {
 }
 
 func newSession(
-	provider *Provider,
+	provider *Core,
 	native *codex.Session,
 	features agent.EffectiveFeatures,
 	execution agent.ExecutionOptionsReport,

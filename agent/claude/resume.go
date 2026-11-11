@@ -60,7 +60,7 @@ type resumeCallbackRequest struct {
 	Input      json.RawMessage `json:"input"`
 }
 
-func (p *Provider) prepareResume(
+func (p *Core) prepareResume(
 	ctx context.Context,
 	options agent.ResumeOptions,
 ) (*resumeAttempt, error) {
@@ -89,7 +89,7 @@ func (p *Provider) prepareResume(
 	}, nil
 }
 
-func (p *Provider) requireResumeVersion(ctx context.Context, cwd string) error {
+func (p *Core) requireResumeVersion(ctx context.Context, cwd string) error {
 	queryCtx, cancel := context.WithTimeout(ctx, claudeVersionQueryTimeout)
 	defer cancel()
 
@@ -189,7 +189,7 @@ func (o *cappedOutput) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (p *Provider) preflightResume(
+func (p *Core) preflightResume(
 	ctx context.Context,
 	options agent.ResumeOptions,
 ) (*resumeTarget, error) {

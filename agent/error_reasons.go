@@ -37,9 +37,9 @@ const (
 	ErrorReasonExecutionOptionInvalidUTF8        = "execution_option_invalid_utf8"
 	ErrorReasonExecutionOptionUnknown            = "execution_option_unknown"
 	ErrorReasonMissingModel                      = "missing_model"
-	ErrorReasonProviderHasOpenSessions           = "provider_has_open_sessions"
-	ErrorReasonProviderNotStarted                = "provider_not_started"
-	ErrorReasonProviderStopped                   = "provider_stopped"
+	ErrorReasonCoreHasOpenSessions               = "core_has_open_sessions"
+	ErrorReasonCoreNotStarted                    = "core_not_started"
+	ErrorReasonCoreStopped                       = "core_stopped"
 )
 
 // ErrorReasonSuffixFailed is the operation suffix for an unclassified native

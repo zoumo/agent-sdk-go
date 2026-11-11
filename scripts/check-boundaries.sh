@@ -38,6 +38,18 @@ while IFS= read -r dependency; do
       ;;
   esac
 done <<< "$lifecycle_deps"
+# Submission tracing shares only the public contract and standard library.
+submissiontrace_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/submissiontrace | sed '/^$/d')
+while IFS= read -r dependency; do
+  case "$dependency" in
+    github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace) ;;
+    *)
+      echo "unexpected submissiontrace dependency: $dependency" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$submissiontrace_deps"
 # The shared interaction ledger may use only the public agent contract and the
 # reviewed UUID primitive. It never reaches an adapter, native SDK, or registry.
 interactionledger_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/interactionledger | sed '/^$/d')
@@ -64,6 +76,7 @@ for adapter in codex claude; do
           github.com/zoumo/agent-sdk-go/agent|\
           github.com/zoumo/agent-sdk-go/agent/"$adapter"|\
           github.com/zoumo/agent-sdk-go/agent/internal/lifecycle|\
+          github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace|\
           github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
           github.com/zoumo/agent-sdk-go/"$adapter"|\
           github.com/zoumo/agent-sdk-go/"$adapter"/types|\

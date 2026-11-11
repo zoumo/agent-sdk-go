@@ -131,11 +131,13 @@ func (t *streamFrameTransport) ReadFrame() ([]byte, error) {
 	if err != nil {
 		t.mu.Lock()
 		closedLocally := t.readClosedLocally
-		if errors.Is(err, io.EOF) && !closedLocally {
+		// A truncated frame wraps EOF with ErrProtocol. Only a bare EOF proves
+		// the peer reached a frame boundary.
+		if errors.Is(err, io.EOF) && !errors.Is(err, ErrProtocol) && !closedLocally {
 			t.readEOF = true
 		}
 		t.mu.Unlock()
-		if closedLocally {
+		if closedLocally && !errors.Is(err, ErrProtocol) {
 			return nil, errStreamReaderClosed
 		}
 	}

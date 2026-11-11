@@ -215,6 +215,57 @@ func TestStreamClientRejectsUnexpectedPeerEOF(t *testing.T) {
 	require.ErrorIs(t, client.Close(), codex.ErrUnexpectedEOF)
 }
 
+func TestStreamClientRejectsUnterminatedPeerFrame(t *testing.T) {
+	for _, halfClose := range []bool{false, true} {
+		name := "before input half-close"
+		if halfClose {
+			name = "after input half-close"
+		}
+		t.Run(name, func(t *testing.T) {
+			peer := newStreamPeer()
+			peer.transport.Wait = nil
+			handshakeDone := make(chan error, 1)
+			sendFrame := make(chan struct{})
+			peerDone := make(chan error, 1)
+			go func() {
+				if err := serveCodexHandshake(peer); err != nil {
+					handshakeDone <- err
+					return
+				}
+				handshakeDone <- nil
+				<-sendFrame
+				if _, err := io.WriteString(peer.writer, "{\"method\":\"stream/prelude\"}\n{\"method\":\"stream/final\""); err != nil {
+					peerDone <- err
+					return
+				}
+				peerDone <- peer.writer.Close()
+			}()
+
+			client, err := codex.NewStreams(t.Context(), codex.StreamOptions{
+				Initialize: types.InitializeParams{ClientInfo: types.ClientInfo{Name: "stream-test", Version: "1"}},
+			}, peer.transport)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = client.Close(); _ = peer.reader.Close(); _ = peer.writer.Close() })
+			require.NoError(t, <-handshakeDone)
+			if halfClose {
+				require.NoError(t, client.CloseInput())
+			}
+			close(sendFrame)
+			require.NoError(t, <-peerDone)
+
+			select {
+			case <-client.Done():
+			case <-time.After(5 * time.Second):
+				t.Fatal("unterminated peer frame did not terminate the stream client")
+			}
+			require.ErrorIs(t, client.Err(), codex.ErrProtocol)
+			require.ErrorContains(t, client.Err(), "unterminated frame")
+			require.ErrorIs(t, client.Close(), codex.ErrProtocol)
+			require.Equal(t, uint64(1), client.Diagnostics().Notifications)
+		})
+	}
+}
+
 func TestStreamClientWaitFailureReplacesUnexpectedPeerEOF(t *testing.T) {
 	peer := newStreamPeer()
 	peerDone := make(chan error, 1)

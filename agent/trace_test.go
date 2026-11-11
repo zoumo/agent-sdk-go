@@ -95,8 +95,8 @@ func TestTraceContextContextAndBusinessSurface(t *testing.T) {
 		validEvent("message-1", agent.UserMessage{MessageID: "message-1", Content: textContent("hello")}),
 	} {
 		structure := reflect.TypeOf(value)
-		for i := range structure.NumField() {
-			assert.NotContains(t, strings.ToLower(structure.Field(i).Name), "trace")
+		for field := range structure.Fields() {
+			assert.NotContains(t, strings.ToLower(field.Name), "trace")
 		}
 		encoded, err := json.Marshal(value)
 		require.NoError(t, err)

@@ -31,8 +31,7 @@ date: 2026-11-11
   Trace 是观测信息，不值得为了精确归属增加 acknowledgment、等待或拒绝提交；
   已经由 CLI 排队但尚未取走的 prompt 可能继承后一次写入的 env，这是接受的
   限制；SDK 不维护另一层 prompt 队列。
-  ACP v2 虽在 `session/prompt._meta` 预留同类字段，但当前 Claude ACP adapter
-  尚未转发；ACP 兼容与该原生 control 映射是两条路径。
+  ACP 兼容与该原生 control 映射是两条路径。
 
 Codex 在 steer 时复用原 turn trace、Claude settings env 在进程内扩散，都是
 Provider 原生行为。它们解释 SDK 为什么只能做 best-effort 映射而不能承诺统一
@@ -66,36 +65,9 @@ hook、shell 或 trace。
   env 可能作用到更早尚未取走的 prompt；要消除该竞态需要额外 acknowledgment
   和等待。本设计不采用该复杂度，因为 trace 关联错误只影响观测，不应阻塞
   Agent 输入。
-- 核对时的官方 Claude Agent SDK 文档与 TypeScript 包 0.3.322 说明：SDK 以
-  child process 运行 Claude CLI，`query()` 的 `env` 是完整启动环境，
-  TypeScript 的非 nil `env` 整体替换 ambient 环境。settings `env` 同样作用于
-  Claude Code 进程；Go SDK 的 `Env []string` 保持 `os/exec` 的 nil 继承、
-  非 nil 替换语义。
-- ACP v2 extensibility 在 `session/prompt.params._meta` 顶层预留
-  `traceparent`、`tracestate` 和 `baggage`，值必须符合对应 W3C 格式。这是
-  协议级 carrier，不等于某个 adapter 已实现传播。
-- `claude-agent-acp` 0.104.1（commit
-  `f5d79167a649737bdeb1ce3b55ad449a34bb9d47`）只把
-  `session/new._meta.claudeCode.options.env` 合入 session 启动环境；
-  `session/prompt` 不读取或转发上述 trace 字段。社区 PR #910 未合并，它从
-  prompt metadata 取值，通过运行中 Query 的
-  `applyFlagSettings({env:{TRACEPARENT,TRACESTATE}})` 逐 prompt 切换；为了
-  严格归属，它要求前序 prompt 已结束、settings 结果未知时关闭 Session。该
-  实现不重启 CLI：`session/new` 的 trace 进入启动 env，后续 prompt 的 trace
-  在同一常驻进程上改写 settings env，因此确实实现了同一长连接内的 per-prompt
-  trace；限制是它依赖未公开的设置层生命周期和 prompt dequeue 顺序，不是当前
-  adapter 合同。
-- 本仓库的原生 Claude SDK 已使用 `apply_flag_settings` 实现运行时 effort，
-  因此 Claude prompt trace 也直接建立在该 CLI control 路径上，不依赖
-  `claude-agent-acp` 或 ACP 的 `_meta`。本合同要求 settings 更新与输入写入
-  串行，每次写 user frame 前尝试应用目标 trace env，并保留不相关的 flag
-  settings；不等待 prompt 开始，也不维护 dequeue acknowledgment。
-- 官方 SDK 文档把自动 trace 注入描述为 `query()` 启动 CLI 子进程时的
-  `TRACEPARENT`/`TRACESTATE` 环境注入，CLI 可把固定值继续转发给
-  Bash/PowerShell。公开 issue #99607 报告该行为从 Claude CLI 2.1.257 起回归：
-  headless turn 不再发出 `claude_code.interaction`，inbound `TRACEPARENT`
-  被忽略；仓库审阅基线 2.1.258 在受影响范围内。因此“设置 trace env”不能证明
-  provider 已建立正确的 trace 关联。
+Claude/ACP/CLI 的来源、版本与回归报告归原生 SDK 来源文档维护；本 ADR 只确定
+作用域和映射合同，不把来源审阅或 settings acknowledgment 当作 provider span
+关联证明。
 
 ## 决策
 
@@ -128,15 +100,17 @@ hook、shell 或 trace。
     startup trace 值，没有值就写空字符串。
 
     SDK 的义务到原生入口为止：Codex 逐次写入 envelope carrier；Claude 在 user
-    frame 前尽力应用 settings env。Claude 写入失败、超时或结果未知时，`Submit`
-    仍写 user frame 并保留原有成功/失败语义；下一次提交重新写完整目标值。所有
+    frame 前尽力应用 settings env。完整 control frame 后的拒绝、等待超时或未知
+    响应只使 trace 状态未知；transport 和调用 context 仍可用时继续写 user frame，
+    下一次提交重写完整目标值。control 写入阻塞时使用既有取消机制关闭 transport
+    并释放 gate；部分写、短写或其他 transport 写入失败终止交互并报告既有写入
+    错误和未知结果，不追加 user frame，也不返回 `Written=true`。所有
     `Submit` 写入、trace control 与 `SetEffort` 共用串行 gate，只保证本地
     apply/user frame 写入顺序；等待 control response 或调用 context 结束不是
     prompt 出队确认。SDK 不维护 pending 队列、replay 状态或 dequeue
     acknowledgment，也不因同一 Session 另有 prompt 正在执行而拒绝带 trace 的
     提交。Claude 路径不重启 CLI，也不把 ACP `_meta` 当作实现依赖；ACP 接入仍
-    属于独立 adapter 能力。PR #910 是同一常驻进程内逐 prompt 切换的社区证据，
-    不是本合同的上游依赖。
+    属于独立 adapter 能力。
 
     以下是 Provider 原生行为，不是 SDK 新增或保证的语义：
 
@@ -166,7 +140,8 @@ hook、shell 或 trace。
 carrier 送入 provider native 提交；它是 best-effort 传播能力，不保证最终
 provider span 归属。为 false 时 context carrier 不返回 `unsupported`，SDK
 仍可使用同一 context 创建本地 span，只是不写入 provider request。carrier
-无效、settings 更新失败或归属发生竞态都不改变 Agent 输入结果。
+无效 carrier、完整 control 写入后的拒绝或等待超时，以及归属竞态不改变健康
+transport 上的输入结果；实际 transport 写入失败或挂起遵循正常失败和取消合同。
 
 ## 外部依赖评估
 

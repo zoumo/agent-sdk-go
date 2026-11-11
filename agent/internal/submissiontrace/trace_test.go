@@ -12,7 +12,10 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 )
 
-type tracerFunc func(context.Context, string, *agent.TraceContext) agent.Span
+type (
+	tracerFunc    func(context.Context, string, *agent.TraceContext) agent.Span
+	activeSpanKey struct{}
+)
 
 func (f tracerFunc) StartSpan(ctx context.Context, name string, parent *agent.TraceContext) agent.Span {
 	return f(ctx, name, parent)
@@ -52,7 +55,7 @@ func TestSubmissionTraceCarrierSelectionAndPanicIsolation(t *testing.T) {
 		{name: "end panic", contextCarrier: &parent, spanCarrier: child, panicAt: "end", want: &child},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := context.WithValue(context.Background(), struct{}{}, "active-span")
+			ctx := context.WithValue(context.Background(), activeSpanKey{}, "active-span")
 			if test.contextCarrier != nil {
 				ctx = agent.WithTraceContext(ctx, *test.contextCarrier)
 			}

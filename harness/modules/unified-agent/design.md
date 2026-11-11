@@ -77,7 +77,8 @@ README 和包文档说明。现有原生 Session 的语义以
     于每条 prompt 写入前通过 `apply_flag_settings.settings.env` 切换
     `TRACEPARENT`/`TRACESTATE`，下一条无 trace prompt 恢复启动环境或清空；
     这属于 provider 级 per-prompt trace，不重启 CLI。Trace 是 best-effort：
-    settings 更新失败或排队中的 prompt 继承后一次 env 都不改变输入结果；
+    完整 control 后的拒绝、等待超时或排队 prompt 继承后一次 env 不改变健康
+    transport 上的输入结果；control 写入失败或挂起遵循正常 transport 失败合同。
     SDK 只保证本地 settings/input 写入顺序，不等待 prompt dequeue。ACP v2
     在 `session/prompt._meta` 的预留字段与当前 ACP adapter 实现仍各自独立。
     Codex steer 复用原 turn trace、Claude settings env 的进程级扩散属于
@@ -881,8 +882,9 @@ const (
   必然继承。
 - `promptTrace` 表示来自 context 的有效 carrier 或 tracer-created child
   carrier 会被尝试送入 provider native 提交路径。传播是 best-effort：
-  carrier 无效、Claude settings 更新失败或并发覆盖只影响 trace 归属，不改变
-  输入接纳与业务错误。它不表示本地 span 存在；配置了 `Tracer` 的 Session 总
+  carrier 无效、Claude 完整 control 后的拒绝或等待超时、并发覆盖只影响 trace
+  归属，不改变健康 transport 上的输入接纳与业务错误；实际 transport 写入失败
+  或挂起遵循正常失败和取消合同。它不表示本地 span 存在；配置了 `Tracer` 的 Session 总
   可使用同一 context 创建本地 span，即使 `promptTrace` 为 false。该能力为
   false 时 context carrier 不返回 `unsupported`，只是不进入 provider request。
   它也不保证每次调用产生新的 provider span，或隔离 provider turn、进程环境
@@ -1213,10 +1215,12 @@ tracer 仍可从原 context 读取自己的 active parent。
    时 tracer 可从同一个 `ctx` 取得自身可识别的 active parent。tracer 返回 nil
    表示没有 SDK span。
 4. span carrier 有效时优先作为 provider trace carrier；span 缺失或 carrier
-   无效时回退到有效 context carrier。两者都不存在时跳过 provider 传播。
+   无效时回退到有效 context carrier。两者都不存在时用零原生 carrier 覆盖传入
+   context 中可能残留的原生 helper 值，再跳过 provider 传播。
 5. Session 宣告 `promptTrace` 时，adapter 尝试把选定的有效 carrier 送入原生
    提交路径；未宣告时跳过 provider 传播，但上面的本地 span 仍正常结束。
-   provider 传播是 best-effort，失败不能改变输入接纳或业务错误。
+   provider control response 是 best-effort，拒绝或等待超时不能改变健康
+   transport 上的输入接纳；transport 写入失败或挂起遵循既有失败和取消合同。
 6. 对每个非 nil span，`StartOrSteer` 返回前恰好调用一次 `Span.End(err)`。
    span 只覆盖本地接纳、可能的原生写入和调用返回，不覆盖 turn 开始、执行
    完成、审批等待或后续事件。
@@ -1343,9 +1347,11 @@ func TraceContextFromContext(ctx context.Context) (TraceContext, bool)
    两个变量总是同时出现。没有 `tracestate` 时写空字符串，不能用省略字段的
    方式清除旧值。该请求不得清除不相关的 flag settings，尤其不能改写
    `effortLevel` 或 `ultracode`。
-3. settings 更新是 best-effort。成功时记录目标状态；失败、超时或结果未知时
-   记录状态未知，但仍继续写入该次 user frame。`Session.Submit` 的成功与否只
-   由既有输入写入语义决定，不因 trace 配置失败而改变。
+3. 完整写出 control frame 后的 settings response 是 best-effort。成功时记录
+   目标状态；拒绝、等待超时或未知响应时记录状态未知，只要 transport 和调用
+   context 仍可用，就继续写入 user frame。control 写入阻塞时使用既有取消机制
+   关闭 transport 并释放 gate；部分写、短写或其他 transport 写入失败终止交互，
+   返回既有 transport 错误和未知结果，不追加 user frame 或返回 `Written=true`。
 
 下一次提交在状态未知时重新写完整目标值；这是唯一的重试机制。SDK 不等待
 prompt 开始信号，不维护 pending UUID 或 dequeue acknowledgment，也不等待
@@ -1363,20 +1369,10 @@ CLI 进程级状态，不提供 prompt/turn 隔离。trace env 写入后，当�
 原生行为；需要严格归属时，调用方必须使用 provider 自己保证隔离的机制，不能
 仅靠本 SDK 的 context carrier。
 
-ACP v2 在 `session/prompt.params._meta` 顶层预留 `traceparent`、
-`tracestate` 和 `baggage`，值使用对应 W3C 格式。核对时的
-`claude-agent-acp` 0.104.1 不读取或转发这些字段；社区 PR #910 用同一
-`apply_flag_settings.env` 机制实现了逐 prompt 切换，证明单进程复用可行，但
-PR 仍未合并，并为严格归属要求前序 prompt 已结束、settings 结果未知时关闭
-Session。本 SDK 不复制那套状态机，只接受 best-effort 的观测误差。上述能力是
-Claude 原生 stream-json/control 合同，不是 ACP 兼容层，也不依赖该 PR。ACP
-adapter 若接入 `_meta`，应把字段映射到同一原生 helper。
-
-设置 trace env 成功只证明 CLI 接受了 settings 更新，不证明目标 CLI 版本一定
-导出正确关联的 provider span。公开 issue #99607 报告 Claude CLI 2.1.257 起
-不再发出 `claude_code.interaction`，inbound `TRACEPARENT` 被忽略；仓库审阅
-基线 2.1.258 也在受影响范围内。该回归不改变 SDK 的 best-effort 映射，但不能
-据此声称 provider trace 已关联。
+上述能力属于 Claude 原生 stream-json/control 合同，不是 ACP 兼容层。
+ACP adapter 若接入 `_meta`，应把字段映射到同一原生 helper。SDK 不依赖
+ACP 社区实现，也不复制其严格归属状态机。设置 trace env 成功只证明 CLI 接受了
+settings 更新，不证明目标 CLI 版本导出正确关联的 provider span。
 
 ## 交互与回答权限
 
@@ -2634,9 +2630,11 @@ linkage 和无法归属的交互行为保持不变。
   旧覆盖时不发送额外 control；有旧覆盖时下一条无 trace prompt 恢复 `Open`
   时捕获的 startup baseline，baseline 缺失则写空值。该 request 不清除
   `effortLevel`、`ultracode` 或其他无关 flag settings，也不重启 CLI。
-- Claude settings 更新失败、超时或结果未知时，`Submit` 仍写入 user frame 并
-  保持原输入结果；状态记为未知，下一条 prompt 重新写完整目标值，不关闭
-  Session。快速连续提交不同 trace 时，SDK 不等待 dequeue acknowledgment、
+- Claude 完整 control 写入后的拒绝、等待超时或未知响应只使状态未知，健康
+  transport 和有效调用 context 上的 `Submit` 仍写 user frame，下一条 prompt
+  重写完整目标值。control 写入阻塞须通过取消关闭 transport；部分写、短写或
+  其他 transport 写入失败终止交互，不追加 user frame，不报告成功输入。
+  快速连续提交不同 trace 时，SDK 不等待 dequeue acknowledgment、
   不新增 pending 队列，也不因同一 Session 有未结束 prompt 而拒绝提交；测试
   固定本地 apply/user frame 顺序并明确允许前序排队 prompt 的 trace 竞态。
   有效 context carrier 不返回 `unsupported`，Session 宣告 `promptTrace`。
@@ -2745,11 +2743,11 @@ linkage 和无法归属的交互行为保持不变。
   API。原生 Codex 在 steer 时复用原 turn trace，以及原生 Claude 的 settings
   env 可能被后续新工具、子进程或排队 prompt 读取，都是明确接受的 Provider
   原生行为，不是 SDK 新增或保证的语义。SDK 不模拟、重定向或隔离这些运行时
-  状态。ACP v2 prompt metadata 是协议预留，当前 `claude-agent-acp` 未转发，
-  SDK 不把它当作 ACP 已支持能力。
+  状态。ACP prompt metadata 不属于本 SDK 的原生 wire 合同。
 - Trace 是可选可观测性能力：正常 tracer 失败退化为无 span，不改变 Agent
-  结果；Claude 的 provider trace settings 更新失败、超时或结果未知时仍照常
-  提交 prompt，下一条重写完整目标值。SDK 不维护 prompt 出队屏障，接受 CLI
+  结果；Claude 完整 control 写入后的拒绝、等待超时或未知响应保持 best-effort，
+  下一条重写完整目标值；transport 写失败或挂起遵循既有取消和失败合同，不报告
+  成功输入。SDK 不维护 prompt 出队屏障，接受 CLI
   内部排队导致的 trace 归属误差。SDK span 只表示一次输入提交，不表示 turn
   完成。统一层不依赖 OpenTelemetry，也不保存 trace 到历史或 Session 状态。
 - Claude 原生包新增的 `AppendSystemPrompt` 是增量启动配置，不改变原生 wire

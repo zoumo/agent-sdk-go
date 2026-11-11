@@ -67,7 +67,7 @@ func generatedSessionConfig(options *SessionOptions) (map[string]json.RawMessage
 	}
 	if len(options.ShellEnv) != 0 {
 		if err := validateEnvironment(options.ShellEnv); err != nil {
-			return nil, fmt.Errorf("%w: ShellEnv: %s", ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: ShellEnv: %w", ErrInvalidInput, err)
 		}
 		for _, key := range slices.Sorted(maps.Keys(options.ShellEnv)) {
 			if reservedShellEnvKey(key) {

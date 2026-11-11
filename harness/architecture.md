@@ -20,13 +20,17 @@ and dependency boundaries.
   Do not add old-path forwarding packages or a shared native answer state machine.
   Common approval operations follow the [SDK behavior contract](sdk/architecture.md),
   preserving original native answer handles and provider-specific options.
-- The `agent` core production code must use only the standard library. It must not
+- The `agent` core production code must use only the standard library and the
+  SDK-internal carrier validator described below. It must not
   import either native SDK, MASS or recording/replay code. Provider adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
   mechanics (`agent/internal/lifecycle`, `agent/internal/eventenvelope`,
   `agent/internal/interactionledger`, `agent/internal/submissiontrace`,
   `internal/queue` and `internal/uuidv4`), but adapters must not import each
   other or the other native SDK, and native packages must not import `agent`.
+- `internal/tracecontext` shares only standard-library W3C carrier validation
+  between `agent`, `claude` and `codex`; public types and context keys remain
+  package-owned and independent.
 - Trace values, context helpers and the `agent.Tracer` seam are part of the
   standard-library-only core. OpenTelemetry or another telemetry SDK can
   implement `Tracer` and adapt `TraceContext` outside this repository, but must

@@ -11,6 +11,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
+	"github.com/zoumo/agent-sdk-go/claude"
 )
 
 type traceRecorder struct {
@@ -105,6 +106,10 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			assert.Zero(t, recorder.starts)
 			submitCtx, cancelSubmit := context.WithCancel(ctx)
 			defer cancelSubmit()
+			submitCtx = claude.WithTraceContext(submitCtx, claude.TraceContext{
+				Traceparent: parent.Traceparent,
+				Tracestate:  "stale=native",
+			})
 			if !test.noParent {
 				carrier := parent
 				if test.invalidParent {

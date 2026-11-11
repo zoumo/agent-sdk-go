@@ -131,7 +131,9 @@ func (s *Session) Err() error                { s.mu.Lock(); defer s.mu.Unlock();
 func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
 	s.settingsMu.Lock()
 	defer s.settingsMu.Unlock()
-	s.applyPromptTrace(ctx)
+	if err := s.applyPromptTrace(ctx); err != nil {
+		return Submission{}, err
+	}
 	err := s.client.sendInput(ctx, input)
 	return Submission{Written: err == nil}, err
 }

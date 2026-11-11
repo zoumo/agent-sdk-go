@@ -107,8 +107,8 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 | 值 | Codex | Claude |
 |---|---|---|
 | Input | 原生 `[]types.UserInput` 与 turn/start 可用执行选项；不含可改写的主 ThreadID。 | `Input{Text}` 或 `Input{User: *types.UserInput}`，后者携带原生 InputMessage 与关联/扩展；支持 text、image、document、tool_result，其他块明确拒绝。image source 支持 base64/url，document source 支持 base64/url/text/content；工具结果/文档的嵌套内容同样校验支持范围。根 envelope 由 Session 固定，不从输出 decoder 推导发送许可。 |
-| Trace context | `Session.Submit` 从 context 读取 `types.W3cTraceContext`，有效时只写入 JSON-RPC request envelope 顶层 `trace`，不写入 `turn/start.params`。 | `Session.Submit` 从 context 读取 `claude.TraceContext`，尽力在写入 user frame 前通过同一常驻 CLI 的 `apply_flag_settings.settings.env` 切换 `TRACEPARENT`/`TRACESTATE`；不重启进程，trace 失败也不影响输入接纳。 |
-| Submission | 保留原生 TurnStartResponse（包括 turn 身份）；成功表示 RPC 确认，不表示 turn 完成。 | 成功表示 user frame 本地写入完成；trace settings 只尽力应用，不参与成功判定，也没有虚构 CLI turn 接受回执或 Turn。 |
+| Trace context | `Session.Submit` 从 context 读取 `types.W3cTraceContext`，有效时只写入 JSON-RPC request envelope 顶层 `trace`，不写入 `turn/start.params`。 | `Session.Submit` 从 context 读取 `claude.TraceContext`，尽力在写入 user frame 前通过同一常驻 CLI 的 `apply_flag_settings.settings.env` 切换 `TRACEPARENT`/`TRACESTATE`；不重启进程，control response 拒绝或超时不影响健康 transport 上的输入接纳。 |
+| Submission | 保留原生 TurnStartResponse（包括 turn 身份）；成功表示 RPC 确认，不表示 turn 完成。 | 成功表示 user frame 本地写入完成；trace control 的 transport 写入失败遵循既有写入错误合同，完整 control 写入后的拒绝或等待超时不参与成功判定。没有虚构 CLI turn 接受回执或 Turn。 |
 | ModelChange | SetModel 直接接受原生模型标识字符串。 | `Model *string`：nil 省略 model，恢复原生默认；非 nil 非空标识逐字发送；不发送 model:null，不将空字符串或跨提供方别名等同默认。 |
 | ThinkingChange | 原生 ReasoningEffort 与 ReasoningSummary 值，分别用 thread/settings/update 的 effort 和 summary；两字段独立保留省略/null，不增加跨提供方档位或将展示配置转换成预算。 | `MaxThinkingTokens *int` 的 nil 发送 null 清除，非 nil 保留 0/整数；`ThinkingDisplay *string` 的 nil 省略，值为 summarized/omitted，`ClearDisplay` 单独发送 null 清除；创建时原生 thinking enabled/adaptive/disabled 独立表达，不将创建模式隐式转换成动态预算。 |
 | EffortChange | — | `Level *string` 通过 apply_flag_settings 的 `effortLevel` 设置；nil 发送 null 清除 flag-layer override，非 nil 非空值逐字发送，空值拒绝。请求必须保留不相关且仍有效的 flag settings；无法确认时在写入前拒绝。该请求不改变 max_thinking_tokens，也不转换成 thinking budget。 |
@@ -176,11 +176,13 @@ func TraceContextFromContext(ctx context.Context) (TraceContext, bool)
 不能清除 `effortLevel`、`ultracode` 或其他无关 flag settings。
 
 `apply_flag_settings` 是提交入口的一次 best-effort 尝试。等待 control response
-或调用 context 结束只用于确定本次 apply 结果，不是 prompt 出队确认。无论结果
-是成功、失败、超时还是未知，`Session.Submit` 都在同一 gate 内继续写 user
-frame；成功时记录已知目标值，其他结果记录状态未知，下一次 prompt 重写完整
-目标值。`Submit` 的成功与否只由既有 user frame 写入语义决定，trace 配置不能
-新增拒绝路径。apply 成功而 input 写失败时沿用既有写入错误语义，不自动重发。
+不是 prompt 出队确认。完整写出 control frame 后，control response 的拒绝、
+等待超时或未知响应仅使 trace 状态未知；只要 transport 和调用 context 仍可用，
+`Session.Submit` 就在同一 gate 内继续写 user frame，下一次 prompt 重写完整目标值。
+control 写入阻塞时使用既有取消机制关闭 transport，释放写入和 settings gate；
+部分写、短写或其他 transport 写入失败终止交互并报告原生 write 错误和未知结果，
+不再追加 user frame，也不返回 `Written=true`。apply 成功而 input 写失败时沿用
+既有写入错误语义，不自动重发。
 
 SDK 不维护 prompt 队列，不等待 prompt 开始或整个 turn，也不因同一 Session
 另有 prompt 正在执行而拒绝带 trace 的提交。Claude CLI 可以把已写入的输入留在
@@ -353,12 +355,8 @@ turn-level retarget；需要相同 trace 的多次输入必须由调用方复用
 trace。只有 `Session.Submit` 通过私有的 trace-aware call path 写 request
 envelope。
 
-Claude 原生包使用 CLI stream-json/control 协议，不使用 ACP。ACP v2 的
-`session/prompt._meta` 虽然有 `traceparent`/`tracestate` 预留字段，但当前
-`claude-agent-acp` 0.104.1 不读取或转发；社区 PR #910 用
-`apply_flag_settings.env` 展示了同进程逐 prompt 切换，仍未合并，因此它可以
-作为机制证据，但不是 ACP adapter 合同。本包的 Claude 支持直接来自原生长连接
-control 协议，和上述 ACP adapter 状态相互独立。
+Claude 原生包使用 CLI stream-json/control 协议，不使用 ACP。本包的 Claude
+支持直接来自原生长连接 control 协议，和 ACP adapter 状态相互独立。
 
 固定 trace 可在启动前通过 `SessionOptions.Env`（或统一层的 `ProcessEnv`）
 提供；prompt trace 使用同一常驻进程的 settings env，并在下一条无 trace prompt
@@ -366,10 +364,9 @@ control 协议，和上述 ACP adapter 状态相互独立。
 并保持本地 apply/user frame 顺序；CLI 之后如何使用该环境属于 Provider 原生
 行为：trace env 写入后，当前 turn 的后续新工具、工具启动的新子进程或随后
 prompt 都可能读取当前值；已经启动的进程不保证更新。SDK 不按工具调用快照或
-恢复，也不保证 prompt/turn 隔离。公开 issue #99607 报告 Claude CLI 2.1.257
-起忽略 inbound `TRACEPARENT`，审阅基线 2.1.258 也受影响；因此原生包只承诺
-best-effort 设置尝试和本地写入顺序，不保证具体 CLI 版本已导出正确关联的
-provider span。
+恢复，也不保证 prompt/turn 隔离。原生包只承诺 best-effort control response
+和本地写入顺序；transport 写入失败遵循正常失败合同，不保证具体 CLI 版本
+已导出正确关联的 provider span。
 
 <a id="interface-真实-incomingrequest"></a>
 

@@ -477,10 +477,6 @@ func (c *interaction) writeJSONChecked(ctx context.Context, value any, authorize
 
 // Admission covers preparation and encoding, not just the final OS write.
 func (c *interaction) writeEncodedChecked(ctx context.Context, encode func() ([]byte, error), authorize func() error) error {
-	return c.writeEncoded(ctx, encode, authorize, false)
-}
-
-func (c *interaction) writeEncoded(ctx context.Context, encode func() ([]byte, error), authorize func() error, bestEffort bool) error {
 	// Serialize encoding as well as writing: concurrent callers do not each
 	// retain an SDK-encoded frame while waiting for the writer.
 	select {
@@ -520,28 +516,19 @@ func (c *interaction) writeEncoded(ctx context.Context, encode func() ([]byte, e
 	}
 	// Closing a pipe unblocks an in-flight Write on supported Go platforms. There
 	// is no detached write goroutine that can later send after cancellation.
-	var canceled chan struct{}
-	var stopCancel func() bool
-	if !bestEffort {
-		canceled = make(chan struct{})
-		stopCancel = context.AfterFunc(ctx, func() {
-			c.fail(&Error{Op: "write", Err: ctx.Err(), OutcomeUnknown: true})
-			if c.streamMode {
-				_ = c.closeInput()
-			} else {
-				_ = c.stdin.Close()
-			}
-			close(canceled)
-		})
-	}
-	// Trace settings cannot close the transport to interrupt a write. Keep that
-	// write synchronous so a timed-out attempt cannot overtake the user frame.
+	canceled := make(chan struct{})
+	stopCancel := context.AfterFunc(ctx, func() {
+		c.fail(&Error{Op: "write", Err: ctx.Err(), OutcomeUnknown: true})
+		if c.streamMode {
+			_ = c.closeInput()
+		} else {
+			_ = c.stdin.Close()
+		}
+		close(canceled)
+	})
 	n, err := c.outboundWriter().Write(frame)
-	if stopCancel != nil && !stopCancel() {
+	if !stopCancel() {
 		<-canceled
-		return &Error{Op: "write", Err: ctx.Err(), OutcomeUnknown: true}
-	}
-	if bestEffort && ctx.Err() != nil {
 		return &Error{Op: "write", Err: ctx.Err(), OutcomeUnknown: true}
 	}
 	if err == nil && n != len(frame) {
@@ -553,7 +540,7 @@ func (c *interaction) writeEncoded(ctx context.Context, encode func() ([]byte, e
 	}
 	if err != nil {
 		e := &Error{Op: "write", Err: err, OutcomeUnknown: true}
-		if !bestEffort && !errors.Is(err, ErrInputClosed) {
+		if !errors.Is(err, ErrInputClosed) {
 			c.fail(e)
 		}
 		return e
@@ -609,10 +596,6 @@ func (c *interaction) control(ctx context.Context, subtype string, request any) 
 }
 
 func (c *interaction) controlRequest(ctx context.Context, subtype string, request any, fullResponse bool) (json.RawMessage, error) {
-	return c.controlRequestWithPolicy(ctx, subtype, request, fullResponse, false)
-}
-
-func (c *interaction) controlRequestWithPolicy(ctx context.Context, subtype string, request any, fullResponse, bestEffort bool) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -632,9 +615,9 @@ func (c *interaction) controlRequestWithPolicy(ctx context.Context, subtype stri
 	c.pending[id] = waiter
 	c.mu.Unlock()
 	defer func() { c.mu.Lock(); delete(c.pending, id); c.mu.Unlock() }()
-	if err := c.writeEncoded(ctx, func() ([]byte, error) {
+	if err := c.writeEncodedChecked(ctx, func() ([]byte, error) {
 		return json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": request})
-	}, nil, bestEffort); err != nil {
+	}, nil); err != nil {
 		return nil, err
 	}
 	// Prefer an already-arrived response when the peer exits immediately after it.

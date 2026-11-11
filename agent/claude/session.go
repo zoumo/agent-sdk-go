@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/claude"
@@ -20,7 +21,6 @@ import (
 var (
 	_ agent.Session          = (*session)(nil)
 	_ agent.ConfigController = (*session)(nil)
-	_ agent.EventStream      = (*eventStream)(nil)
 )
 
 type session struct {
@@ -28,13 +28,10 @@ type session struct {
 	native   *claude.Session
 	id       string
 	features agent.EffectiveFeatures
-	events   queue.Queue[agent.Event]
+	stream   *eventstream.Stream
 
 	mu                sync.Mutex
-	eventsClaimed     bool
 	closed            bool
-	explicitClose     bool
-	providerReleased  bool
 	submitting        bool
 	submitUnknown     bool
 	workActive        bool
@@ -44,22 +41,12 @@ type session struct {
 	interactions      map[agent.InteractionRef]*pendingInteraction
 	interactionRefs   map[string]agent.InteractionRef
 	interactionLedger *interactionledger.Ledger
-	done              chan struct{}
-	doneClosed        bool
-	err               error
 	resume            *resumeIdentityGuard
 
 	lanes  map[string]*claudeLane
 	blocks map[claudeBlockKey]*claudeBlock
 	calls  map[string]claudeCall
 	usage  claudeUsageState
-
-	observationDone chan struct{}
-	closeOnce       sync.Once
-	closeErr        error
-
-	nativeCleanupOnce sync.Once
-	nativeCleanupErr  error
 }
 
 func newSession(
@@ -79,10 +66,24 @@ func newSession(
 		interactions:      make(map[agent.InteractionRef]*pendingInteraction),
 		interactionRefs:   make(map[string]agent.InteractionRef),
 		interactionLedger: interactionledger.New("claude-"),
-		done:              make(chan struct{}),
-		observationDone:   make(chan struct{}),
 		resume:            resume,
 	}
+	var invalidated []*pendingInteraction
+	created.stream = eventstream.New(eventstream.Hooks{
+		BeginClose: func(eventstream.End) {
+			invalidated = created.closeForOperations()
+		},
+		CloseNative: func() error {
+			return nativeOperationError("close", native.Close())
+		},
+		FinalCause: func() error { return sessionTerminationError(native.Err()) },
+		CloseEvents: func(eventstream.End) []agent.Event {
+			events, _ := created.closeInteractionEvents(invalidated, time.Now().UTC())
+			invalidated = nil
+			return events
+		},
+		Release: func() { provider.sessionClosed(created) },
+	})
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
 		if err != nil {
@@ -129,28 +130,7 @@ func (s *session) EffectiveFeatures() agent.EffectiveFeatures {
 }
 
 func (s *session) Events() (agent.EventStream, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Observation may end before the consumer claims the stream. Keep the
-	// accepted events and terminal cause claimable unless Close was explicit.
-	if s.closed && s.explicitClose {
-		return nil, adapterError(
-			agent.ErrorClosed,
-			agent.ErrorReasonSessionClosed,
-			"session is closed",
-			nil,
-		)
-	}
-	if s.eventsClaimed {
-		return nil, adapterError(
-			agent.ErrorFailedPrecondition,
-			agent.ErrorReasonEventsAlreadyClaimed,
-			"the session event stream has already been claimed",
-			nil,
-		)
-	}
-	s.eventsClaimed = true
-	return &eventStream{session: s}, nil
+	return s.stream.Claim()
 }
 
 func (s *session) StartOrSteer(
@@ -308,36 +288,20 @@ func (s *session) Interrupt(
 	}, nil
 }
 
-func (s *session) Close(context.Context) error {
-	s.closeOnce.Do(func() {
-		invalidated := s.closeForOperations(true)
-		s.closeErr = s.cleanupNative()
-		<-s.observationDone
-		events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
-		_ = s.pushEvents(events)
-		cause := sessionTerminationError(s.native.Err())
-		s.terminate(cause)
-		_ = s.events.Close(cause)
-		s.releaseProviderSession(false)
-	})
-	return s.closeErr
+func (s *session) Close(ctx context.Context) error {
+	return s.stream.Close(ctx)
 }
 
-func (s *session) Done() <-chan struct{} { return s.done }
+func (s *session) Done() <-chan struct{} { return s.stream.Done() }
 
 func (s *session) Err() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.err
+	return s.stream.Err()
 }
 
-func (s *session) closeForOperations(explicit bool) []*pendingInteraction {
+func (s *session) closeForOperations() []*pendingInteraction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
-	if explicit {
-		s.explicitClose = true
-	}
 	interactions := make([]*pendingInteraction, 0, len(s.interactions))
 	for _, interaction := range s.interactions {
 		interactions = append(interactions, interaction)
@@ -351,39 +315,7 @@ func (s *session) closeForOperations(explicit bool) []*pendingInteraction {
 }
 
 func (s *session) observe() {
-	defer close(s.observationDone)
-	cause := s.receiveUntilTerminal()
-	invalidated := s.closeForOperations(false)
-	events, _ := s.closeInteractionEvents(invalidated, time.Now().UTC())
-	_ = s.pushEvents(events)
-	_ = s.cleanupNative()
-	s.mu.Lock()
-	explicit := s.explicitClose
-	s.mu.Unlock()
-	if !explicit {
-		_ = s.events.Close(sessionTerminationError(cause))
-	}
-	s.releaseProviderSession(true)
-	s.terminate(cause)
-}
-
-func (s *session) cleanupNative() error {
-	s.nativeCleanupOnce.Do(func() {
-		if err := s.native.Close(); err != nil {
-			s.nativeCleanupErr = nativeOperationError("close", err)
-		}
-	})
-	return s.nativeCleanupErr
-}
-
-func (s *session) releaseProviderSession(requireImplicit bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.providerReleased || (requireImplicit && s.explicitClose) {
-		return
-	}
-	s.providerReleased = true
-	s.provider.sessionClosed(s)
+	s.stream.ObservationEnded(sessionTerminationError(s.receiveUntilTerminal()))
 }
 
 func (s *session) receiveUntilTerminal() error {
@@ -391,7 +323,7 @@ func (s *session) receiveUntilTerminal() error {
 		received, err := s.native.Receive(context.Background())
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return nil
+				return s.native.Err()
 			}
 			if nativeErr := s.native.Err(); nativeErr != nil {
 				if decodeErr := claudeDecodeError(nativeErr); decodeErr != nil {
@@ -436,29 +368,8 @@ func (s *session) receiveUntilTerminal() error {
 	}
 }
 
-func (s *session) terminate(cause error) {
-	cause = sessionTerminationError(cause)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.closed = true
-	if s.err == nil && cause != nil {
-		s.err = cause
-	}
-	if !s.doneClosed {
-		s.doneClosed = true
-		close(s.done)
-	}
-}
-
 func (s *session) pushEvents(events []agent.Event) error {
-	if len(events) == 0 {
-		return nil
-	}
-	items := make([]queue.Item[agent.Event], 0, len(events))
-	for _, event := range events {
-		items = append(items, queue.Item[agent.Event]{Value: event, Bytes: 1})
-	}
-	return s.events.PushBatch(items)
+	return s.stream.Publish(events)
 }
 
 func (s *session) updateState(state agent.SessionState) *agent.SessionState {
@@ -484,14 +395,6 @@ func (s *session) markUnknownState() *agent.SessionState {
 	s.workActive = true
 	s.stateVersion++
 	return previous
-}
-
-type eventStream struct {
-	session *session
-}
-
-func (s *eventStream) Next(ctx context.Context) (agent.Event, error) {
-	return s.session.events.Pop(ctx)
 }
 
 func textInput(input agent.Input) (string, error) {

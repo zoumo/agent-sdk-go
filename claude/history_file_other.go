@@ -10,3 +10,7 @@ import (
 func openDiscoveryFile(root *os.Root, path string) (*os.File, error) {
 	return nil, ErrUnsupported
 }
+
+func childFileIdentityOf(_ os.FileInfo) (childFileIdentity, bool) {
+	return childFileIdentity{}, false
+}

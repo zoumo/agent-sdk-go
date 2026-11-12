@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 
 const savedChildParent = "11111111-1111-4111-8111-111111111111"
 
-func childHistoryFixture(t *testing.T) (SessionQueryScope, string) {
+func childHistoryFixture(t testing.TB) (SessionQueryScope, string) {
 	t.Helper()
 	config := t.TempDir()
 	project := t.TempDir()
@@ -25,7 +26,7 @@ func childHistoryFixture(t *testing.T) (SessionQueryScope, string) {
 	return SessionQueryScope{ConfigDir: config, ProjectDir: project}, filepath.Join(base, savedChildParent, "subagents")
 }
 
-func writeChild(t *testing.T, root, id, body string) string {
+func writeChild(t testing.TB, root, id, body string) string {
 	t.Helper()
 	path := filepath.Join(root, "agent-"+id+".jsonl")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
@@ -120,6 +121,67 @@ func TestIndependentChildHistoryLayoutAndIdentity(t *testing.T) {
 			childQueryKind(t, err, kind)
 			require.Empty(t, content.Messages)
 			require.Empty(t, content.Info.AgentID)
+		})
+	}
+}
+
+func TestIndependentChildHistoryMaxAgentsBoundary(t *testing.T) {
+	names := []string{"Alpha", "Beta", "Gamma", "Delta"}
+	for _, tc := range []struct {
+		name  string
+		files int
+		max   int
+		kind  string
+	}{
+		{"at-limit", 3, 3, ""},
+		{"over-limit", 4, 3, "resource-limit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scope, root := childHistoryFixture(t)
+			for _, id := range names[:tc.files] {
+				writeChild(t, root, id, "")
+			}
+			page, err := ListSubagents(context.Background(), savedChildParent, ListSubagentsOptions{Scope: scope, Limit: tc.max, MaxAgents: tc.max})
+			if tc.kind != "" {
+				childQueryKind(t, err, tc.kind)
+				require.Empty(t, page.Records)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, page.Records, tc.files)
+			for i, id := range names[:tc.files] {
+				require.Equal(t, id, page.Records[i].AgentID)
+			}
+		})
+	}
+}
+
+func BenchmarkIndependentChildHistoryInventoryUnique(b *testing.B) {
+	for _, count := range []int{1000, 10000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			scope, root := childHistoryFixture(b)
+			scope.MaxEntries = count + 1024
+			for i := range count {
+				writeChild(b, root, strconv.Itoa(i), "")
+			}
+			b.ResetTimer()
+			for range b.N {
+				coverage := SubagentHistoryCoverage{SessionID: savedChildParent}
+				q, err := newChildQuery(context.Background(), savedChildParent, scope, SubagentHistoryLimits{}, 0, 0, count, 100, &coverage)
+				if err != nil {
+					b.Fatal(err)
+				}
+				candidates, err := q.inventory()
+				if err != nil {
+					q.close()
+					b.Fatal(err)
+				}
+				if len(candidates) != count {
+					q.close()
+					b.Fatalf("candidates = %d, want %d", len(candidates), count)
+				}
+				q.close()
+			}
 		})
 	}
 }

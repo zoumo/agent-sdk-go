@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func openSessionFixture(t *testing.T, configure ...func(*SessionOptions)) *Session {
+func openSessionFixture(t testing.TB, configure ...func(*SessionOptions)) *Session {
 	t.Helper()
 	o := SessionOptions(fixtureOptions(t, "tree"))
 	for _, f := range configure {
@@ -22,7 +22,7 @@ func openSessionFixture(t *testing.T, configure ...func(*SessionOptions)) *Sessi
 	return s
 }
 
-func sessionNative(t *testing.T, s *Session) Received {
+func sessionNative(t testing.TB, s *Session) Received {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -35,7 +35,7 @@ func sessionNative(t *testing.T, s *Session) Received {
 	}
 }
 
-func submitFrame(t *testing.T, s *Session, frame string) {
+func submitFrame(t testing.TB, s *Session, frame string) {
 	t.Helper()
 	receipt, err := s.Submit(context.Background(), Input{Text: frame})
 	require.NoError(t, err)

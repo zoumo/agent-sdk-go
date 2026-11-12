@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 type contractProvider struct{}
@@ -136,17 +137,17 @@ func TestUnifiedSessionHasOneInputOperation(t *testing.T) {
 }
 
 func TestPublicMCPContract(t *testing.T) {
-	stdio := agent.MCPServer{
+	stdio := mcp.Server{
 		Name:      "local",
-		Transport: agent.MCPTransportStdio,
+		Transport: mcp.TransportStdio,
 		Command:   "mcp-local",
 		Args:      []string{"--stdio"},
 		Env:       map[string]string{"LOCAL_MODE": "read-only"},
 		Cwd:       "/synthetic/workspace",
 	}
-	http := agent.MCPServer{
+	http := mcp.Server{
 		Name:              "remote",
-		Transport:         agent.MCPTransportHTTP,
+		Transport:         mcp.TransportHTTP,
 		URL:               "https://mcp.example.invalid/tools",
 		Headers:           map[string]string{"X-Workspace": "sdk"},
 		EnvHeaders:        map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
@@ -154,15 +155,15 @@ func TestPublicMCPContract(t *testing.T) {
 	}
 	options := agent.OpenOptions{
 		Cwd:        "/synthetic/workspace",
-		MCPServers: []agent.MCPServer{stdio, http},
+		MCPServers: []mcp.Server{stdio, http},
 	}
 	resume := agent.ResumeOptions{
 		SessionID:   "session-1",
 		OpenOptions: options,
 	}
 
-	assert.Equal(t, "stdio", string(agent.MCPTransportStdio))
-	assert.Equal(t, "http", string(agent.MCPTransportHTTP))
+	assert.Equal(t, "stdio", string(mcp.TransportStdio))
+	assert.Equal(t, "http", string(mcp.TransportHTTP))
 	assert.Equal(t, options.MCPServers, resume.MCPServers)
 	for _, field := range []string{"MCPConfigMode", "StrictMCPConfig", "SDKMCPServers"} {
 		_, found := reflect.TypeFor[agent.OpenOptions]().FieldByName(field)

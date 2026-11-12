@@ -10,6 +10,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/lineage"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 var (
@@ -29,8 +30,9 @@ type SessionOptions struct {
 	// Absent map keys do not override existing configuration.
 	Features map[Feature]bool
 	Tools    map[Tool]bool
-	// MCPServers adds external MCP servers to this Session's native thread config.
-	MCPServers []MCPServer
+	// MCPServers adds shared mcp.Server values to this Session's native thread
+	// config.
+	MCPServers []mcp.Server
 	// ShellEnv adds set-only variables to shell/unified-exec child environments.
 	// Empty values set empty strings. It does not change the app-server environment.
 	ShellEnv map[string]string

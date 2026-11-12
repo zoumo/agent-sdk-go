@@ -107,10 +107,12 @@ parameters; they do not prove that a real Codex process removed a tool.
 
 ## Thread MCP servers
 
-`SessionOptions.MCPServers` adds external MCP servers to this Session's
-`thread/start.config` or `thread/resume.config`. It does not write the user
-`config.toml`, and low-level `Client.StartThread` / `Client.ResumeThread` remain
-native-only. The fixed merge and limitation contract is in the
+`SessionOptions.MCPServers []mcp.Server` adds external MCP servers to this
+Session's `thread/start.config` or `thread/resume.config`. The shared `mcp`
+package is the single configuration type used here, by Claude, and by the
+unified `agent` layer. It does not write the user `config.toml`, and low-level
+`Client.StartThread` / `Client.ResumeThread` remain native-only. The fixed merge
+and limitation contract is in the
 [native Session design](../harness/modules/native-session/design.md#interface-codex-会话配置).
 
 | SDK field | Native field |
@@ -125,11 +127,11 @@ native-only. The fixed merge and limitation contract is in the
 | `EnvHeaders` | `env_http_headers` |
 | `BearerTokenEnvVar` | `bearer_token_env_var` |
 
-Exactly one of `Command` or `URL` selects the transport. A command selects a
-stdio server and permits `Args`, `Env` and `Cwd`. A URL selects streamable HTTP
-and permits `Headers`, `EnvHeaders` and `BearerTokenEnvVar`. `EnvHeaders` maps
-header names to environment-variable names. `BearerTokenEnvVar` is also an
-environment-variable name, not the secret itself.
+`Transport` is required: `mcp.TransportStdio` permits `Command`, `Args`, `Env`
+and `Cwd`; `mcp.TransportHTTP` permits `URL`, `Headers`, `EnvHeaders` and
+`BearerTokenEnvVar`. The SDK rejects `mcp.TransportSSE` before the thread RPC.
+`EnvHeaders` maps header names to environment-variable names.
+`BearerTokenEnvVar` is also an environment-variable name, not the secret itself.
 
 ```text
 session, err := codex.Open(ctx, codex.SessionOptions{
@@ -139,8 +141,9 @@ session, err := codex.Open(ctx, codex.SessionOptions{
         codex.FeatureViewImage:       false,
         codex.FeatureImageGeneration: false,
     },
-    MCPServers: []codex.MCPServer{{
+    MCPServers: []mcp.Server{{
         Name:       "remote",
+        Transport:  mcp.TransportHTTP,
         URL:        "https://example.invalid/mcp",
         EnvHeaders: map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
     }},

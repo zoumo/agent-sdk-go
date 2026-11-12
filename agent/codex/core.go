@@ -10,6 +10,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 var _ agent.Core = (*Core)(nil)
@@ -116,7 +117,7 @@ func (p *Core) Open(
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
-	mcpServers := nativeMCPServers(options.MCPServers)
+	mcpServers := mcp.CloneServers(options.MCPServers)
 	features, config, err := p.openingConfiguration(options)
 	if err != nil {
 		return nil, err
@@ -160,7 +161,7 @@ func (p *Core) Resume(
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
 		return nil, err
 	}
-	mcpServers := nativeMCPServers(options.MCPServers)
+	mcpServers := mcp.CloneServers(options.MCPServers)
 	features, config, err := p.openingConfiguration(options.OpenOptions)
 	if err != nil {
 		return nil, err

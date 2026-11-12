@@ -21,6 +21,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 // Limits is the callback-free resource configuration shared with types.
@@ -46,9 +47,9 @@ type Options struct {
 	AppendSystemPrompt string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
-	// MCPServers declares external stdio, HTTP or SSE MCP servers. The SDK
-	// copies these values when opening the Session.
-	MCPServers []MCPServer
+	// MCPServers declares shared mcp.Server values for stdio, HTTP or SSE. The
+	// SDK copies these values when opening the Session.
+	MCPServers []mcp.Server
 	// StrictMCPConfig adds --strict-mcp-config, asking the CLI to ignore MCP
 	// servers from other settings, only when true.
 	StrictMCPConfig bool
@@ -98,7 +99,7 @@ func (o *Options) defaults() error {
 	if err := validateInputEncoding(struct {
 		Model, Effort, AppendSystemPrompt string
 		Tools                             []string
-		MCPServers                        []MCPServer
+		MCPServers                        []mcp.Server
 	}{Model: o.Model, Effort: o.Effort, AppendSystemPrompt: o.AppendSystemPrompt, Tools: o.Tools, MCPServers: o.MCPServers}); err != nil {
 		return dispatchFailure("open", err)
 	}
@@ -133,7 +134,7 @@ func (o *Options) defaults() error {
 	}
 	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
 	o.Tools = slices.Clone(o.Tools)
-	o.MCPServers = cloneMCPServers(o.MCPServers)
+	o.MCPServers = mcp.CloneServers(o.MCPServers)
 	if o.CLIPath == "" {
 		o.CLIPath = "claude"
 	}

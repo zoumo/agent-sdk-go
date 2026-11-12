@@ -2,18 +2,12 @@ package agentclaude
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
-func claudeMCPServers(servers []agent.MCPServer) ([]claude.MCPServer, error) {
-	if len(servers) == 0 {
-		return nil, nil
-	}
-	converted := make([]claude.MCPServer, len(servers))
+func claudeMCPServers(servers []mcp.Server) ([]mcp.Server, error) {
 	for index, server := range servers {
 		switch {
 		case server.Cwd != "":
@@ -23,17 +17,8 @@ func claudeMCPServers(servers []agent.MCPServer) ([]claude.MCPServer, error) {
 		case server.BearerTokenEnvVar != "":
 			return nil, unsupportedClaudeMCPField(index, "bearer_token_env_var")
 		}
-		converted[index] = claude.MCPServer{
-			Name:      server.Name,
-			Transport: claude.MCPTransport(server.Transport),
-			Command:   server.Command,
-			Args:      slices.Clone(server.Args),
-			Env:       maps.Clone(server.Env),
-			URL:       server.URL,
-			Headers:   maps.Clone(server.Headers),
-		}
 	}
-	return converted, nil
+	return mcp.CloneServers(servers), nil
 }
 
 func unsupportedClaudeMCPField(index int, field string) error {

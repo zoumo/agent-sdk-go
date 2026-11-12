@@ -10,13 +10,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 func TestExternalMCPStdioArguments(t *testing.T) {
 	argv := captureArgs(t, func(options *Options) {
-		options.MCPServers = []MCPServer{{
+		options.MCPServers = []mcp.Server{{
 			Name:      "local",
-			Transport: MCPTransportStdio,
+			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 			Args:      []string{"--stdio", "literal value"},
 			Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
@@ -31,15 +33,15 @@ func TestExternalMCPStdioArguments(t *testing.T) {
 func TestExternalMCPRemoteArgumentsAndStrictOption(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
-		transport MCPTransport
+		transport mcp.Transport
 	}{
-		{name: "http", transport: MCPTransportHTTP},
-		{name: "sse", transport: MCPTransportSSE},
+		{name: "http", transport: mcp.TransportHTTP},
+		{name: "sse", transport: mcp.TransportSSE},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			argv := captureArgs(t, func(options *Options) {
 				options.StrictMCPConfig = true
-				options.MCPServers = []MCPServer{{
+				options.MCPServers = []mcp.Server{{
 					Name:      "remote",
 					Transport: tc.transport,
 					URL:       "https://example.invalid/mcp",
@@ -57,9 +59,9 @@ func TestExternalMCPRemoteArgumentsAndStrictOption(t *testing.T) {
 func TestExternalMCPMergesWithSDKMCPServers(t *testing.T) {
 	argv := captureArgs(t, func(options *Options) {
 		options.SDKMCPServers = []string{"fixture"}
-		options.MCPServers = []MCPServer{{
+		options.MCPServers = []mcp.Server{{
 			Name:      "remote",
-			Transport: MCPTransportHTTP,
+			Transport: mcp.TransportHTTP,
 			URL:       "https://example.invalid/mcp",
 		}}
 	})
@@ -78,79 +80,99 @@ func TestExternalMCPRejectsInvalidConfigurationBeforeLaunch(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		sdk     []string
-		servers []MCPServer
+		servers []mcp.Server
 	}{
 		{
 			name:    "empty transport",
-			servers: []MCPServer{{Name: "server", Command: "fixture-mcp"}},
+			servers: []mcp.Server{{Name: "server", Command: "fixture-mcp"}},
 		},
 		{
 			name:    "unknown transport",
-			servers: []MCPServer{{Name: "server", Transport: MCPTransport("oauth"), Command: "fixture-mcp"}},
+			servers: []mcp.Server{{Name: "server", Transport: mcp.Transport("oauth"), Command: "fixture-mcp"}},
 		},
 		{
 			name:    "stdio missing command",
-			servers: []MCPServer{{Name: "server", Transport: MCPTransportStdio}},
+			servers: []mcp.Server{{Name: "server", Transport: mcp.TransportStdio}},
 		},
 		{
 			name: "stdio with url",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportStdio, Command: "fixture-mcp", URL: "https://example.invalid/mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "stdio with headers",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportStdio, Command: "fixture-mcp", Headers: map[string]string{"Authorization": "secret"},
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Headers: map[string]string{"Authorization": "secret"},
 			}},
 		},
 		{
 			name:    "http missing url",
-			servers: []MCPServer{{Name: "server", Transport: MCPTransportHTTP}},
+			servers: []mcp.Server{{Name: "server", Transport: mcp.TransportHTTP}},
+		},
+		{
+			name: "stdio with cwd",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Cwd: "/synthetic",
+			}},
+		},
+		{
+			name: "http with env headers",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
+				EnvHeaders: map[string]string{"X-API-Key": "API_KEY"},
+			}},
+		},
+		{
+			name: "http with bearer token environment variable",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
+				BearerTokenEnvVar: "TOKEN",
+			}},
 		},
 		{
 			name: "http with command",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportHTTP, Command: "fixture-mcp", URL: "https://example.invalid/mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, Command: "fixture-mcp", URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "http with args",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportHTTP, Args: []string{"--stdio"}, URL: "https://example.invalid/mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, Args: []string{"--stdio"}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "http with env",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportHTTP, Env: map[string]string{"TOKEN": "secret"}, URL: "https://example.invalid/mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, Env: map[string]string{"TOKEN": "secret"}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "sse with stdio fields",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportSSE, Command: "fixture-mcp", Args: []string{"--stdio"}, Env: map[string]string{"TOKEN": "secret"}, URL: "https://example.invalid/mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportSSE, Command: "fixture-mcp", Args: []string{"--stdio"}, Env: map[string]string{"TOKEN": "secret"}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name:    "empty name",
-			servers: []MCPServer{{Transport: MCPTransportStdio, Command: "fixture-mcp"}},
+			servers: []mcp.Server{{Transport: mcp.TransportStdio, Command: "fixture-mcp"}},
 		},
 		{
 			name:    "invalid UTF-8 name",
-			servers: []MCPServer{{Name: string([]byte{0xff}), Transport: MCPTransportStdio, Command: "fixture-mcp"}},
+			servers: []mcp.Server{{Name: string([]byte{0xff}), Transport: mcp.TransportStdio, Command: "fixture-mcp"}},
 		},
 		{
 			name: "duplicate external name",
-			servers: []MCPServer{
-				{Name: "server", Transport: MCPTransportStdio, Command: "first"},
-				{Name: "server", Transport: MCPTransportStdio, Command: "second"},
+			servers: []mcp.Server{
+				{Name: "server", Transport: mcp.TransportStdio, Command: "first"},
+				{Name: "server", Transport: mcp.TransportStdio, Command: "second"},
 			},
 		},
 		{
 			name:    "conflicts with SDK name",
 			sdk:     []string{"server"},
-			servers: []MCPServer{{Name: "server", Transport: MCPTransportStdio, Command: "fixture-mcp"}},
+			servers: []mcp.Server{{Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp"}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -163,19 +185,19 @@ func TestExternalMCPValidationDoesNotExposeSecretValues(t *testing.T) {
 	const secret = "TOP-SECRET-MCP-VALUE"
 	for _, tc := range []struct {
 		name    string
-		servers []MCPServer
+		servers []mcp.Server
 	}{
 		{
 			name: "stdio environment",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportStdio, Command: "fixture-mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp",
 				Env: map[string]string{"TOKEN": secret}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "http headers",
-			servers: []MCPServer{{
-				Name: "server", Transport: MCPTransportHTTP, Command: "fixture-mcp",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, Command: "fixture-mcp",
 				Headers: map[string]string{"Authorization": "Bearer " + secret}, URL: "https://example.invalid/mcp",
 			}},
 		},
@@ -191,17 +213,17 @@ func TestExternalMCPOptionsCopyCallerData(t *testing.T) {
 	args := []string{"--stdio"}
 	env := map[string]string{"LOCAL_TOKEN": "${LOCAL_TOKEN}"}
 	headers := map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"}
-	servers := []MCPServer{
+	servers := []mcp.Server{
 		{
 			Name:      "local",
-			Transport: MCPTransportStdio,
+			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 			Args:      args,
 			Env:       env,
 		},
 		{
 			Name:      "remote",
-			Transport: MCPTransportHTTP,
+			Transport: mcp.TransportHTTP,
 			URL:       "https://example.invalid/mcp",
 			Headers:   headers,
 		},
@@ -223,7 +245,7 @@ func TestExternalMCPOptionsCopyCallerData(t *testing.T) {
 	require.Equal(t, "Bearer ${REMOTE_TOKEN}", c.opts.MCPServers[1].Headers["Authorization"])
 }
 
-func requireMCPLaunchRejected(t *testing.T, sdk []string, servers []MCPServer) error {
+func requireMCPLaunchRejected(t *testing.T, sdk []string, servers []mcp.Server) error {
 	t.Helper()
 	opts := fixtureOptions(t, "echo")
 	capture := filepath.Join(opts.WorkDir, "must-not-start.json")

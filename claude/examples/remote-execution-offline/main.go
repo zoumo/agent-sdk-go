@@ -16,6 +16,7 @@ import (
 	"time"
 
 	claude "github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 const (
@@ -60,9 +61,9 @@ func run(output io.Writer) error {
 			"GORACE=atexit_sleep_ms=0",
 		},
 		Tools: []string{""},
-		MCPServers: []claude.MCPServer{{
+		MCPServers: []mcp.Server{{
 			Name:      "remote",
-			Transport: claude.MCPTransportHTTP,
+			Transport: mcp.TransportHTTP,
 			URL:       "https://example.invalid/mcp",
 			Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
 		}},

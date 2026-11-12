@@ -95,7 +95,8 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Core`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | adapter 无关的 Agent Core、单 Session 实时合同与环境/trace seam |
+| `agent` | `Core`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | adapter 无关的 Agent Core、单 Session 实时合同与环境/trace seam |
+| `mcp` | `Server`、`Transport`、结构校验 | Codex、Claude 与统一层共用的 external MCP 配置值；不连接 server |
 | `agent/codex` | `New(Config)` 返回具体 `*agentcodex.Core`，它实现 `agent.Core` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*agentclaude.Core`，它实现 `agent.Core` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Codex 增加 `ShellEnv`、trace context helper 和 envelope trace 支持，Claude 增加 `AppendSystemPrompt`、trace context helper 和逐 prompt settings env 切换 | 原生协议、查询、原始数据和 provider 语义 |
@@ -189,6 +190,7 @@ agent/codex, agent/claude
     -> agent/internal/eventenvelope     -> agent, internal/uuidv4
     -> agent/internal/submissiontrace   -> agent
 
+agent, codex, claude, claude/types -> mcp
 agent          -> internal/tracecontext
 internal/queue -> github.com/zoumo/golib/channx
 ```
@@ -307,7 +309,7 @@ type OpenOptions struct {
     // process environment. Claude rejects non-empty values.
     ShellEnv               map[string]string
     Features               Features
-    MCPServers             []MCPServer
+    MCPServers             []mcp.Server
     Config                 SessionConfig
 }
 
@@ -672,18 +674,13 @@ MCP 连接、OAuth、健康检查、tool discovery、tool 调用或 application-
 MCP 的 JSON-RPC 回答。后者的原始 `mcp_message` 控制仍由原生 Claude Session
 和应用处理，不进入统一 MCP 配置。
 
+共享配置定义在独立的 `mcp` 包，Codex、Claude 和统一层都使用
+`[]mcp.Server`。`mcp.Transport` 必须显式提供，共享结构保留三方字段并集：
+
 ```go
-type MCPTransport string
-
-const (
-    MCPTransportStdio MCPTransport = "stdio"
-    // MCPTransportHTTP 是 MCP Streamable HTTP，不是旧式 HTTP+SSE。
-    MCPTransportHTTP MCPTransport = "http"
-)
-
-type MCPServer struct {
+type Server struct {
     Name              string
-    Transport         MCPTransport
+    Transport         Transport
     Command           string
     Args              []string
     Env               map[string]string
@@ -695,9 +692,11 @@ type MCPServer struct {
 }
 ```
 
-统一层不定义 SSE transport。Claude 原生包仍可声明旧式 SSE server，但统一
-Core 只支持两个 adapter 共同具备的 stdio 与 Streamable HTTP；需要 SSE
-的调用方直接使用原生 `claude` Session。统一层也不定义
+`mcp` 包定义 `TransportStdio`、`TransportHTTP` 和 `TransportSSE`。
+`TransportHTTP` 是 MCP Streamable HTTP；`TransportSSE` 是 Claude 原生包仍可
+声明的旧式 HTTP+SSE。统一 Core 只接受两个 adapter 共同具备的 stdio 与
+Streamable HTTP，并明确拒绝 SSE；需要 SSE 的调用方直接使用原生 `claude`
+Session。统一层也不定义
 `MCPConfigMode`、`inherit`/`replace`、`StrictMCPConfig` 或任何清空 native
 ambient MCP 的开关。
 
@@ -735,14 +734,14 @@ merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企
 | 统一字段或能力 | 约束 | Codex | Claude |
 |---|---|---|---|
 | `Name` | 非空、合法 UTF-8、无 `.`、列表内唯一 | `mcp_servers.<name>` key | `mcpServers.<name>` key |
-| `Transport` | 必须显式提供 | `stdio` 选择 command，`http` 选择 URL | 生成 `type:"stdio"` 或 `type:"http"` |
+| `Transport` | 必须显式提供；统一层拒绝 `sse` | 只接受 `stdio` 或 `http` | 接受 `stdio`、`http` 或 `sse` |
 | `Command` / `Args` / `Env` | 只用于 stdio | 同名字段 | 同名字段 |
 | `Cwd` | 只用于 stdio | `cwd` | 不支持 |
 | `URL` | 只用于 HTTP | `url` | `url` |
 | `Headers` | 只用于 HTTP | `http_headers` | `headers` |
 | `EnvHeaders` | 只用于 HTTP；值是环境变量名 | `env_http_headers` | 不支持 |
 | `BearerTokenEnvVar` | 只用于 HTTP；值是环境变量名 | `bearer_token_env_var` | 不支持 |
-| 旧式 HTTP+SSE | 不属于统一 transport | 不支持 | 原生包支持，统一层不暴露 |
+| 旧式 HTTP+SSE | `mcp.TransportSSE` 只供原生 Claude | 不支持 | 原生包支持，统一层不暴露 |
 
 adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他字段。`Cwd` 与
 `EnvHeaders`、`BearerTokenEnvVar` 存在于统一结构是为了保留 Codex 的原生安全
@@ -750,7 +749,8 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 
 #### 校验、生命周期与敏感值
 
-- `Transport` 不能由 `Command`/`URL` 推断；未知值返回 `invalid_argument`。
+- `Transport` 不能由 `Command`/`URL` 推断；缺失、未知或统一层不支持的
+  transport 返回 `invalid_argument`。
 - stdio 必须有非空 `Command`，禁止 `URL`、`Headers`、`EnvHeaders` 和
   `BearerTokenEnvVar`。
 - HTTP 必须有非空 `URL`，禁止 `Command`、`Args`、`Env` 和 `Cwd`。

@@ -14,6 +14,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 func TestProviderOpenPassesFinalMCPListToClaudeOptions(t *testing.T) {
@@ -45,17 +46,17 @@ func TestProviderOpenPassesFinalMCPListToClaudeOptions(t *testing.T) {
 		"Authorization": "Bearer ${REMOTE_TOKEN}",
 		"X-Workspace":   "synthetic",
 	}
-	servers := []agent.MCPServer{
+	servers := []mcp.Server{
 		{
 			Name:      "local",
-			Transport: agent.MCPTransportStdio,
+			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 			Args:      args,
 			Env:       envValues,
 		},
 		{
 			Name:      "remote",
-			Transport: agent.MCPTransportHTTP,
+			Transport: mcp.TransportHTTP,
 			URL:       "https://example.invalid/mcp",
 			Headers:   headers,
 		},
@@ -149,9 +150,9 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	require.NoError(t, err)
 	first, err := openProvider.Open(ctx, agent.OpenOptions{
 		Cwd: cwd,
-		MCPServers: []agent.MCPServer{{
+		MCPServers: []mcp.Server{{
 			Name:      "open-only",
-			Transport: agent.MCPTransportStdio,
+			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 		}},
 	})
@@ -170,9 +171,9 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 		SessionID: claudeResumePeerSessionID,
 		OpenOptions: agent.OpenOptions{
 			Cwd: cwd,
-			MCPServers: []agent.MCPServer{{
+			MCPServers: []mcp.Server{{
 				Name:      "resume-only",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.invalid/resume",
 			}},
 		},
@@ -209,7 +210,7 @@ func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {
 	require.NoError(t, err)
 	session, err := provider.Open(ctx, agent.OpenOptions{
 		Cwd:        cwd,
-		MCPServers: []agent.MCPServer{},
+		MCPServers: []mcp.Server{},
 	})
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
@@ -226,15 +227,15 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 	const sentinel = "mcp-secret-sentinel-t03"
 	tests := []struct {
 		name       string
-		server     agent.MCPServer
+		server     mcp.Server
 		wantCode   agent.ErrorCode
 		wantReason string
 	}{
 		{
 			name: "stdio working directory",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "local",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "fixture-mcp",
 				Cwd:       "/synthetic/" + sentinel,
 			},
@@ -243,9 +244,9 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 		},
 		{
 			name: "HTTP environment headers",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:       "remote",
-				Transport:  agent.MCPTransportHTTP,
+				Transport:  mcp.TransportHTTP,
 				URL:        "https://example.invalid/mcp",
 				EnvHeaders: map[string]string{"Authorization": sentinel},
 			},
@@ -254,9 +255,9 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 		},
 		{
 			name: "HTTP bearer environment variable",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:              "remote",
-				Transport:         agent.MCPTransportHTTP,
+				Transport:         mcp.TransportHTTP,
 				URL:               "https://example.invalid/mcp",
 				BearerTokenEnvVar: sentinel,
 			},
@@ -265,9 +266,9 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 		},
 		{
 			name: "unknown transport",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "legacy",
-				Transport: agent.MCPTransport("sse"),
+				Transport: mcp.TransportSSE,
 				URL:       "https://example.invalid/sse",
 			},
 			wantCode:   agent.ErrorInvalidArgument,
@@ -296,7 +297,7 @@ func TestProviderRejectsUnsupportedAndInvalidMCPBeforeLaunch(t *testing.T) {
 
 				options := agent.OpenOptions{
 					Cwd:        t.TempDir(),
-					MCPServers: []agent.MCPServer{tt.server},
+					MCPServers: []mcp.Server{tt.server},
 				}
 				if operation == "open" {
 					_, err = provider.Open(ctx, options)

@@ -16,6 +16,7 @@ import (
 	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 const codexMCPPeerGateDir = "AGENT_CODEX_MCP_PEER_GATE_DIR"
@@ -130,9 +131,9 @@ func TestProviderRejectsInvalidMCPServersBeforeThreadRPC(t *testing.T) {
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	const secret = "MCP-SECRET-MUST-NOT-LEAK"
-	invalidServers := []agent.MCPServer{{
+	invalidServers := []mcp.Server{{
 		Name:      "local",
-		Transport: agent.MCPTransportStdio,
+		Transport: mcp.TransportStdio,
 		Command:   "fixture-mcp",
 		Headers:   map[string]string{"Authorization": secret},
 	}}
@@ -213,11 +214,11 @@ func newCodexMCPProtocolPeerProvider(t *testing.T, gateDir string) *agentcodex.C
 	}})
 }
 
-func codexMCPTestServers(phase string) []agent.MCPServer {
-	return []agent.MCPServer{
+func codexMCPTestServers(phase string) []mcp.Server {
+	return []mcp.Server{
 		{
 			Name:      "local",
-			Transport: agent.MCPTransportStdio,
+			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp-" + phase,
 			Args:      []string{"--stdio", phase},
 			Env:       map[string]string{"FIXTURE_TOKEN": "fixture-token-" + phase},
@@ -225,7 +226,7 @@ func codexMCPTestServers(phase string) []agent.MCPServer {
 		},
 		{
 			Name:              "remote",
-			Transport:         agent.MCPTransportHTTP,
+			Transport:         mcp.TransportHTTP,
 			URL:               "https://example.invalid/mcp/" + phase,
 			Headers:           map[string]string{"Authorization": "Bearer fixture-" + phase},
 			EnvHeaders:        map[string]string{"X-API-Key": "REMOTE_API_KEY_" + strings.ToUpper(phase)},
@@ -234,7 +235,7 @@ func codexMCPTestServers(phase string) []agent.MCPServer {
 	}
 }
 
-func mutateCodexMCPServers(servers []agent.MCPServer) {
+func mutateCodexMCPServers(servers []mcp.Server) {
 	servers[0].Command = "mutated-command"
 	servers[0].Args[0] = "mutated-arg"
 	servers[0].Env["FIXTURE_TOKEN"] = "mutated-token"

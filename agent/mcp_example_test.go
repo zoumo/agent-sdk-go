@@ -4,29 +4,30 @@ import (
 	"fmt"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
-// ExampleMCPServer shows the final adapter-neutral external MCP list accepted by
+// ExampleOpenOptions_mcpServers shows the shared external MCP list accepted by
 // Open and Resume. EnvHeaders and BearerTokenEnvVar use environment-variable names
 // for Codex; the Claude adapter accepts the common stdio and HTTP URL/Headers
 // subset and rejects those two Codex-specific HTTP references.
 //
 // This example only validates parameters. It does not resolve a secret, launch a
 // native CLI, or connect to an MCP server.
-func ExampleMCPServer() {
+func ExampleOpenOptions_mcpServers() {
 	options := agent.OpenOptions{
 		Cwd: "/synthetic/workspace",
-		MCPServers: []agent.MCPServer{
+		MCPServers: []mcp.Server{
 			{
 				Name:      "local-tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "mcp-local",
 				Args:      []string{"--stdio"},
 				Env:       map[string]string{"LOCAL_TOOLS_MODE": "read-only"},
 			},
 			{
 				Name:              "remote-tools",
-				Transport:         agent.MCPTransportHTTP,
+				Transport:         mcp.TransportHTTP,
 				URL:               "https://mcp.example.invalid/tools",
 				Headers:           map[string]string{"X-Workspace": "sdk"},
 				EnvHeaders:        map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},

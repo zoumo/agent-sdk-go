@@ -214,9 +214,10 @@ Codex `SessionOptions.Features`、`Tools`、`MCPServers` 和 `ShellEnv` 只在
 `Open` 固定，分别生成 `features.*`、`tools.*.enabled`、
 `mcp_servers.<name>` 和 `shell_environment_policy.set` native config，并合并到
 本次 thread/start 或 thread/resume。未声明的 Feature/Tool key 不覆盖原配置；
-MCP server 必须具有非空、UTF-8 合法、无点号且唯一的 name，并严格选择
-command（stdio）或 URL（streamable HTTP）之一。stdio 与 HTTP 只接受各自字段
-组，不接受未声明的 tool filter、OAuth、timeout 或 approval 字段。
+`MCPServers []mcp.Server` 使用共享配置类型，并且 Transport 必须显式为
+`stdio` 或 `http`；Codex 在 thread RPC 前拒绝 SSE。MCP server 必须具有非空、
+UTF-8 合法、无点号且唯一的 name。stdio 与 HTTP 只接受各自字段组，不接受
+未声明的 tool filter、OAuth、timeout 或 approval 字段。
 
 新增的 `SessionOptions.ShellEnv` 只提供 additive set，不支持删除或空值
 unset。key 必须非空、合法 UTF-8、不含 NUL 或 `=`，并按 ASCII 大小写不敏感
@@ -272,11 +273,12 @@ ambient server，也不能删除其未声明字段。同名项可能保留不同
 
 ### Claude 外部 MCP 配置
 
-Claude `SessionOptions.MCPServers` 支持 native `stdio`、Streamable HTTP 和
-旧式 HTTP+SSE。stdio 接受 command、args 和 env；HTTP/SSE 接受 URL 和 headers。
-Claude 外部 server 没有 stdio cwd、env header 或 bearer token 环境变量字段。
-`StrictMCPConfig` 向原生 CLI 传递 `--strict-mcp-config`，但其企业策略兼容性、
-同名优先级和 ambient 覆盖属于原生 CLI 行为。
+Claude `SessionOptions.MCPServers []mcp.Server` 支持 native `stdio`、
+Streamable HTTP 和旧式 HTTP+SSE，且 Transport 必须显式指定。stdio 接受
+command、args 和 env；HTTP/SSE 接受 URL 和 headers。Claude 拒绝共享配置中的
+stdio cwd、env header 和 bearer token 环境变量字段。`StrictMCPConfig` 向原生
+CLI 传递 `--strict-mcp-config`，但其企业策略兼容性、同名优先级和 ambient
+覆盖属于原生 CLI 行为。
 
 这些是原生 Claude 能力。统一 Agent 层只采用 stdio 与 Streamable HTTP，不暴露
 旧式 SSE 或 `StrictMCPConfig`；其 Runtime/Session 合成规则见

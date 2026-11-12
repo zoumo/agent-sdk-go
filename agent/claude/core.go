@@ -14,6 +14,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 var _ agent.Core = (*Core)(nil)
@@ -163,7 +164,7 @@ func (p *Core) openNativeSession(
 	resumeID string,
 	sessionID string,
 	resume *resumeAttempt,
-	mcpServers []claude.MCPServer,
+	mcpServers []mcp.Server,
 	env []string,
 ) (*session, error) {
 	nativeOptions := p.nativeOptions(
@@ -319,7 +320,7 @@ func (p *Core) nativeOptions(
 	workDir string,
 	resumeID string,
 	features agent.Features,
-	mcpServers []claude.MCPServer,
+	mcpServers []mcp.Server,
 	sessionConfig agent.SessionConfig,
 ) claude.Options {
 	config := p.config

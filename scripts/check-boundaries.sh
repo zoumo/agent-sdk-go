@@ -13,14 +13,23 @@ for shared in lineage queue mocktest; do
 done
 for native in codex claude; do
   # Deliberately omit -test: native data packages have standard-library-only
-  # production dependencies; assertion/suite libraries belong to tests.
+  # production implementation plus the shared mcp contract; assertion/suite
+  # libraries belong to tests.
   deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$native/types" | sed '/^$/d')
-  test "$deps" = "github.com/zoumo/agent-sdk-go/$native/types"
+  case "$native" in
+    codex)
+      test "$deps" = "github.com/zoumo/agent-sdk-go/codex/types" ;;
+    claude)
+      test "$deps" = $'github.com/zoumo/agent-sdk-go/mcp\ngithub.com/zoumo/agent-sdk-go/claude/types' ;;
+  esac
 done
+# The shared MCP value and validation package uses only the standard library.
+mcp_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./mcp | sed '/^$/d')
+test "$mcp_deps" = "github.com/zoumo/agent-sdk-go/mcp"
 # The optional unified contract is above both native SDKs and must not acquire
 # either native package, MASS, or a third-party production dependency.
 agent_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent | sed '/^$/d')
-test "$agent_deps" = $'github.com/zoumo/agent-sdk-go/internal/tracecontext\ngithub.com/zoumo/agent-sdk-go/agent'
+test "$agent_deps" = $'github.com/zoumo/agent-sdk-go/internal/tracecontext\ngithub.com/zoumo/agent-sdk-go/mcp\ngithub.com/zoumo/agent-sdk-go/agent'
 # Core admission and leases may use only the public agent contract in
 # addition to the standard library. It cannot reach either native SDK or types.
 corelease_deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/corelease | sed '/^$/d')
@@ -28,6 +37,7 @@ while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/mcp|\
     github.com/zoumo/agent-sdk-go/agent/internal/corelease) ;;
     *)
       echo "unexpected agent/internal/corelease dependency: $dependency" >&2
@@ -41,6 +51,7 @@ while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/mcp|\
     github.com/zoumo/agent-sdk-go/agent/internal/eventstream|\
     github.com/zoumo/agent-sdk-go/internal/queue|\
     github.com/zoumo/golib/channx) ;;
@@ -71,6 +82,7 @@ while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/mcp|\
     github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace) ;;
     *)
       echo "unexpected submissiontrace dependency: $dependency" >&2
@@ -85,6 +97,7 @@ while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/mcp|\
     github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
     github.com/zoumo/agent-sdk-go/internal/uuidv4) ;;
     *)
@@ -103,6 +116,7 @@ for adapter in codex claude; do
       *.*)
         case "$dependency" in
           github.com/zoumo/agent-sdk-go/agent|\
+          github.com/zoumo/agent-sdk-go/mcp|\
           github.com/zoumo/agent-sdk-go/agent/"$adapter"|\
           github.com/zoumo/agent-sdk-go/agent/internal/corelease|\
           github.com/zoumo/agent-sdk-go/agent/internal/eventstream|\
@@ -129,6 +143,7 @@ while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/agent-sdk-go/internal/tracecontext|\
     github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/mcp|\
     github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope|\
     github.com/zoumo/agent-sdk-go/internal/uuidv4) ;;
     *)

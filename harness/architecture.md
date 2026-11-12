@@ -21,7 +21,7 @@ and dependency boundaries.
   Common approval operations follow the [SDK behavior contract](sdk/architecture.md),
   preserving original native answer handles and native-specific options.
 - The `agent` core production code must use only the standard library and the
-  SDK-internal carrier validator described below. It must not
+  SDK-internal carrier validator and shared `mcp` contract described below. It must not
   import either native SDK, MASS or recording/replay code. Adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
   mechanics (`agent/internal/corelease`, `agent/internal/eventstream`,
@@ -31,6 +31,11 @@ and dependency boundaries.
 - `internal/tracecontext` shares only standard-library W3C carrier validation
   between `agent`, `claude` and `codex`; public types and context keys remain
   package-owned and independent.
+- `mcp` shares only the external MCP server value and structural validation
+  between `agent`, `codex` and `claude`. It uses only the standard library and
+  does not connect to servers, resolve secrets, serialize native configuration,
+  or decide provider capabilities. Each entry point validates its supported
+  transports and fields before native side effects.
 - Trace values, context helpers and the `agent.Tracer` seam are part of the
   standard-library-only core. OpenTelemetry or another telemetry SDK can
   implement `Tracer` and adapt `TraceContext` outside this repository, but must
@@ -38,9 +43,10 @@ and dependency boundaries.
   native `types` package.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
-- Both native `types` packages must have standard-library-only **production**
-  dependencies. Their tests may use testify. Dependency gates must distinguish
-  production dependencies from test dependencies, and remain enabled.
+- Both native `types` packages must have **production** dependencies limited to
+  the standard library and the shared `mcp` package. Their tests may use
+  testify. Dependency gates must distinguish production dependencies from test
+  dependencies, and remain enabled.
 - Shared runtime code must not import either native SDK or native `types`.
   `internal/lineage` accepts confirmed relationship facts; it does not parse
   native events, infer creation, send protocol messages or grant answer authority.
@@ -73,8 +79,8 @@ and dependency boundaries.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib
-  packages must not enter SDK production dependency trees. Native types remain
-  standard-library-only.
+  packages must not enter SDK production dependency trees. Native types may add
+  only the shared `mcp` contract to the standard library.
   FIFO ownership and resource semantics live in [event delivery](modules/native-session/design.md#delivery-event-delivery).
 - `agent/internal/eventenvelope` shares only unified event-envelope construction:
   identity, fallback time, validation and error classification. It may depend on
@@ -99,6 +105,7 @@ Both native SDKs use the same separation of responsibilities:
 |---|---|
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
 | `agent/` | Adapter-neutral Agent Core and live Session contracts, values, validation and event encoding |
+| `mcp/` | Shared external MCP server value and structural validation, with standard-library-only implementation |
 | `tests/simulation/simulate/` | SDK-owned simulate, coverage, independent policy hosts, cancellation and authenticated loopback bridge |
 | `tests/simulation/drivers/` | Go simulation process entry and driver documentation |
 | `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |

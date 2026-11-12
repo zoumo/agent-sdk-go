@@ -308,13 +308,15 @@ func answerQuestions(request *claude.IncomingRequest,answers map[string]string)e
 
 ## External MCP servers
 
-Set `SessionOptions.MCPServers` to declare native stdio, HTTP or SSE servers for
-one Session. `Transport` is required: `MCPTransportStdio` accepts `Command`,
-`Args` and `Env`; `MCPTransportHTTP` and `MCPTransportSSE` accept `URL` and
-`Headers`. Fields from the other transport shape are rejected at Open. Names must
-be nonempty, valid UTF-8 and unique across both `MCPServers` and
-`SDKMCPServers`. The SDK copies the nested slices and maps at Open, so later
-caller mutation does not change the launched configuration.
+Set `SessionOptions.MCPServers []mcp.Server` to declare native stdio, HTTP or SSE
+servers for one Session. The shared `mcp` package is the single configuration
+type used here, by Codex, and by the unified `agent` layer. `Transport` is
+required: `mcp.TransportStdio` accepts `Command`, `Args` and `Env`;
+`mcp.TransportHTTP` and `mcp.TransportSSE` accept `URL` and `Headers`. Fields
+from the other transport shape are rejected at Open. All names must be nonempty,
+valid UTF-8 and unique across both `MCPServers` and `SDKMCPServers`. External
+server names must also contain no dot. The SDK copies the nested slices and maps
+at Open, so later caller mutation does not change the launched configuration.
 
 External and application SDK server declarations are merged into one native
 `--mcp-config` value. `StrictMCPConfig` adds `--strict-mcp-config` to ignore MCP
@@ -334,9 +336,9 @@ SDK forwards these references unchanged and does not redact the resulting argv.
 ```go
 claude.SessionOptions{
     Tools: []string{""},
-    MCPServers: []claude.MCPServer{{
+    MCPServers: []mcp.Server{{
         Name:      "remote",
-        Transport: claude.MCPTransportHTTP,
+        Transport: mcp.TransportHTTP,
         URL:       "https://example.invalid/mcp",
         Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
     }},

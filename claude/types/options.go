@@ -5,6 +5,8 @@ package types
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 // InitializeOptions selects native initialization fields. A nil Options.Initialize
@@ -38,28 +40,6 @@ type Limits struct {
 	PermissionHistory int
 }
 
-// MCPTransport selects one native Claude MCP transport. The zero value is
-// invalid; callers must choose a transport explicitly.
-type MCPTransport string
-
-const (
-	MCPTransportStdio MCPTransport = "stdio"
-	MCPTransportHTTP  MCPTransport = "http"
-	MCPTransportSSE   MCPTransport = "sse"
-)
-
-// MCPServer declares one external MCP server for a Session. Name is the unique
-// native configuration key and is not sent as an external server field.
-type MCPServer struct {
-	Name      string
-	Transport MCPTransport
-	Command   string
-	Args      []string
-	Env       map[string]string
-	URL       string
-	Headers   map[string]string
-}
-
 // Options is the callback-free configuration for a local CLI process.
 // Use claude.OptionsFromTypes to adapt it to runtime options. Env and MCP server
 // slices/maps retain normal Go sharing.
@@ -77,9 +57,9 @@ type Options struct {
 	AppendSystemPrompt string
 	// SDKMCPServers names application-hosted native SDK MCP servers.
 	SDKMCPServers []string
-	// MCPServers declares external stdio, HTTP or SSE MCP servers. The SDK
-	// copies these values when opening the Session.
-	MCPServers []MCPServer
+	// MCPServers declares shared mcp.Server values for stdio, HTTP or SSE. The
+	// SDK copies these values when opening the Session.
+	MCPServers []mcp.Server
 	// StrictMCPConfig adds --strict-mcp-config, asking the CLI to ignore MCP
 	// servers from other settings, only when true.
 	StrictMCPConfig bool

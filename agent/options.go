@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 // OpenOptions contains adapter-neutral creation options. An adapter that
@@ -30,7 +32,7 @@ type OpenOptions struct {
 	// caller composes Runtime defaults with Session declarations before calling a
 	// provider, which does not merge them again. Resume callers must repeat the
 	// complete list because the SDK does not persist it.
-	MCPServers []MCPServer
+	MCPServers []mcp.Server
 
 	Config SessionConfig
 }

@@ -12,19 +12,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 func TestOpenOptionsValidateAcceptsMCPTransportShapes(t *testing.T) {
 	tests := []struct {
 		name    string
-		servers []agent.MCPServer
+		servers []mcp.Server
 	}{
 		{
 			name: "stdio",
-			servers: []agent.MCPServer{
+			servers: []mcp.Server{
 				{
 					Name:      "local-tools",
-					Transport: agent.MCPTransportStdio,
+					Transport: mcp.TransportStdio,
 					Command:   "/usr/local/bin/local-tools",
 					Args:      []string{"serve", "--stdio"},
 					Env:       map[string]string{"LOCAL_TOOLS_TOKEN": "synthetic-token"},
@@ -34,10 +35,10 @@ func TestOpenOptionsValidateAcceptsMCPTransportShapes(t *testing.T) {
 		},
 		{
 			name: "streamable HTTP",
-			servers: []agent.MCPServer{
+			servers: []mcp.Server{
 				{
 					Name:              "remote-tools",
-					Transport:         agent.MCPTransportHTTP,
+					Transport:         mcp.TransportHTTP,
 					URL:               "https://mcp.example.test/tools",
 					Headers:           map[string]string{"X-Workspace": "synthetic"},
 					EnvHeaders:        map[string]string{"Authorization": "REMOTE_TOOLS_AUTHORIZATION"},
@@ -79,8 +80,8 @@ func TestResumeOptionsValidatesEmbeddedMCPServers(t *testing.T) {
 		SessionID: "session-1",
 		OpenOptions: agent.OpenOptions{
 			Cwd: t.TempDir(),
-			MCPServers: []agent.MCPServer{
-				{Transport: agent.MCPTransportStdio, Command: "server"},
+			MCPServers: []mcp.Server{
+				{Transport: mcp.TransportStdio, Command: "server"},
 			},
 		},
 	}
@@ -97,46 +98,46 @@ func TestResumeOptionsValidatesEmbeddedMCPServers(t *testing.T) {
 func TestOpenOptionsValidateRejectsInvalidMCPServerIdentityAndTransport(t *testing.T) {
 	tests := []struct {
 		name       string
-		servers    []agent.MCPServer
+		servers    []mcp.Server
 		wantReason string
 		wantText   string
 	}{
 		{
 			name: "empty name",
-			servers: []agent.MCPServer{
-				{Transport: agent.MCPTransportStdio, Command: "server"},
+			servers: []mcp.Server{
+				{Transport: mcp.TransportStdio, Command: "server"},
 			},
 			wantReason: "mcp_server_0_name_required",
 			wantText:   "MCP server 0 field name",
 		},
 		{
 			name: "invalid UTF-8 name",
-			servers: []agent.MCPServer{
-				{Name: string([]byte{0xff}), Transport: agent.MCPTransportStdio, Command: "server"},
+			servers: []mcp.Server{
+				{Name: string([]byte{0xff}), Transport: mcp.TransportStdio, Command: "server"},
 			},
 			wantReason: "mcp_server_0_name_invalid_utf8",
 			wantText:   "MCP server 0 field name",
 		},
 		{
 			name: "dotted name",
-			servers: []agent.MCPServer{
-				{Name: "tools.local", Transport: agent.MCPTransportStdio, Command: "server"},
+			servers: []mcp.Server{
+				{Name: "tools.local", Transport: mcp.TransportStdio, Command: "server"},
 			},
 			wantReason: "mcp_server_0_name_dot",
 			wantText:   "MCP server 0 field name",
 		},
 		{
 			name: "duplicate name",
-			servers: []agent.MCPServer{
-				{Name: "tools", Transport: agent.MCPTransportStdio, Command: "server"},
-				{Name: "tools", Transport: agent.MCPTransportHTTP, URL: "https://example.test/mcp"},
+			servers: []mcp.Server{
+				{Name: "tools", Transport: mcp.TransportStdio, Command: "server"},
+				{Name: "tools", Transport: mcp.TransportHTTP, URL: "https://example.test/mcp"},
 			},
 			wantReason: "mcp_server_1_name_duplicate",
 			wantText:   "MCP server 1 field name",
 		},
 		{
 			name: "missing transport",
-			servers: []agent.MCPServer{
+			servers: []mcp.Server{
 				{Name: "tools", Command: "server"},
 			},
 			wantReason: "mcp_server_0_transport_required",
@@ -144,24 +145,24 @@ func TestOpenOptionsValidateRejectsInvalidMCPServerIdentityAndTransport(t *testi
 		},
 		{
 			name: "unknown transport",
-			servers: []agent.MCPServer{
-				{Name: "tools", Transport: agent.MCPTransport("sse"), URL: "https://example.test/mcp"},
+			servers: []mcp.Server{
+				{Name: "tools", Transport: mcp.TransportSSE, URL: "https://example.test/mcp"},
 			},
 			wantReason: "mcp_server_0_transport_unknown",
 			wantText:   "MCP server 0 field transport",
 		},
 		{
 			name: "stdio missing command",
-			servers: []agent.MCPServer{
-				{Name: "tools", Transport: agent.MCPTransportStdio},
+			servers: []mcp.Server{
+				{Name: "tools", Transport: mcp.TransportStdio},
 			},
 			wantReason: "mcp_server_0_command_required",
 			wantText:   "MCP server 0 field command",
 		},
 		{
 			name: "HTTP missing URL",
-			servers: []agent.MCPServer{
-				{Name: "tools", Transport: agent.MCPTransportHTTP},
+			servers: []mcp.Server{
+				{Name: "tools", Transport: mcp.TransportHTTP},
 			},
 			wantReason: "mcp_server_0_url_required",
 			wantText:   "MCP server 0 field url",
@@ -190,15 +191,15 @@ func TestOpenOptionsValidateRejectsInvalidMCPServerIdentityAndTransport(t *testi
 func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) {
 	tests := []struct {
 		name       string
-		server     agent.MCPServer
+		server     mcp.Server
 		wantReason string
 		wantField  string
 	}{
 		{
 			name: "stdio URL",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "server",
 				URL:       "https://example.test/mcp",
 			},
@@ -207,9 +208,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "stdio headers",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "server",
 				Headers:   map[string]string{"Authorization": "Bearer synthetic"},
 			},
@@ -218,9 +219,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "stdio environment headers",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:       "tools",
-				Transport:  agent.MCPTransportStdio,
+				Transport:  mcp.TransportStdio,
 				Command:    "server",
 				EnvHeaders: map[string]string{"Authorization": "TOOLS_TOKEN"},
 			},
@@ -229,9 +230,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "stdio bearer token environment variable",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:              "tools",
-				Transport:         agent.MCPTransportStdio,
+				Transport:         mcp.TransportStdio,
 				Command:           "server",
 				BearerTokenEnvVar: "TOOLS_TOKEN",
 			},
@@ -240,9 +241,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "HTTP command",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.test/mcp",
 				Command:   "server",
 			},
@@ -251,9 +252,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "HTTP args",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.test/mcp",
 				Args:      []string{"serve"},
 			},
@@ -262,9 +263,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "HTTP environment",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.test/mcp",
 				Env:       map[string]string{"TOOLS_TOKEN": "synthetic"},
 			},
@@ -273,9 +274,9 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		},
 		{
 			name: "HTTP working directory",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.test/mcp",
 				Cwd:       "/synthetic/workspace",
 			},
@@ -288,7 +289,7 @@ func TestOpenOptionsValidateRejectsMCPFieldsFromTheOtherTransport(t *testing.T) 
 		t.Run(tt.name, func(t *testing.T) {
 			options := agent.OpenOptions{
 				Cwd:        t.TempDir(),
-				MCPServers: []agent.MCPServer{tt.server},
+				MCPServers: []mcp.Server{tt.server},
 			}
 
 			err := options.Validate()
@@ -307,15 +308,15 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 	invalid := string([]byte{0xff})
 	tests := []struct {
 		name       string
-		server     agent.MCPServer
+		server     mcp.Server
 		wantReason string
 		wantField  string
 	}{
 		{
 			name: "stdio command",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   invalid,
 			},
 			wantReason: "mcp_server_0_command_invalid_utf8",
@@ -323,9 +324,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "stdio argument",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "server",
 				Args:      []string{"serve", invalid},
 			},
@@ -334,9 +335,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "stdio environment key",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "server",
 				Env:       map[string]string{invalid: "value"},
 			},
@@ -345,9 +346,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "stdio environment value",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "server",
 				Env:       map[string]string{"TOOLS_TOKEN": invalid},
 			},
@@ -356,9 +357,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "stdio working directory",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportStdio,
+				Transport: mcp.TransportStdio,
 				Command:   "server",
 				Cwd:       invalid,
 			},
@@ -367,9 +368,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "HTTP URL",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       invalid,
 			},
 			wantReason: "mcp_server_0_url_invalid_utf8",
@@ -377,9 +378,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "HTTP header key",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.test/mcp",
 				Headers:   map[string]string{invalid: "value"},
 			},
@@ -388,9 +389,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "HTTP header value",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:      "tools",
-				Transport: agent.MCPTransportHTTP,
+				Transport: mcp.TransportHTTP,
 				URL:       "https://example.test/mcp",
 				Headers:   map[string]string{"Authorization": invalid},
 			},
@@ -399,9 +400,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "HTTP environment header key",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:       "tools",
-				Transport:  agent.MCPTransportHTTP,
+				Transport:  mcp.TransportHTTP,
 				URL:        "https://example.test/mcp",
 				EnvHeaders: map[string]string{invalid: "TOOLS_TOKEN"},
 			},
@@ -410,9 +411,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "HTTP environment header value",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:       "tools",
-				Transport:  agent.MCPTransportHTTP,
+				Transport:  mcp.TransportHTTP,
 				URL:        "https://example.test/mcp",
 				EnvHeaders: map[string]string{"Authorization": invalid},
 			},
@@ -421,9 +422,9 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		},
 		{
 			name: "HTTP bearer token environment variable",
-			server: agent.MCPServer{
+			server: mcp.Server{
 				Name:              "tools",
-				Transport:         agent.MCPTransportHTTP,
+				Transport:         mcp.TransportHTTP,
 				URL:               "https://example.test/mcp",
 				BearerTokenEnvVar: invalid,
 			},
@@ -436,7 +437,7 @@ func TestOpenOptionsValidateRejectsInvalidMCPUTF8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			options := agent.OpenOptions{
 				Cwd:        t.TempDir(),
-				MCPServers: []agent.MCPServer{tt.server},
+				MCPServers: []mcp.Server{tt.server},
 			}
 
 			err := options.Validate()
@@ -455,26 +456,26 @@ func TestMCPValidationDoesNotExposeSecretValues(t *testing.T) {
 	const sentinel = "mcp-secret-sentinel-7f0267e2"
 	tests := []struct {
 		name    string
-		servers []agent.MCPServer
+		servers []mcp.Server
 	}{
 		{
 			name: "stdio",
-			servers: []agent.MCPServer{
+			servers: []mcp.Server{
 				{
 					Name:      "local-tools",
-					Transport: agent.MCPTransportStdio,
+					Transport: mcp.TransportStdio,
 					Command:   "server",
 					Env:       map[string]string{"TOOLS_TOKEN": sentinel},
 				},
-				{Transport: agent.MCPTransportStdio, Command: "invalid-server"},
+				{Transport: mcp.TransportStdio, Command: "invalid-server"},
 			},
 		},
 		{
 			name: "HTTP",
-			servers: []agent.MCPServer{
+			servers: []mcp.Server{
 				{
 					Name:      "remote-tools",
-					Transport: agent.MCPTransportHTTP,
+					Transport: mcp.TransportHTTP,
 					URL:       "https://example.test/mcp",
 					Headers:   map[string]string{"Authorization": sentinel},
 					EnvHeaders: map[string]string{
@@ -482,7 +483,7 @@ func TestMCPValidationDoesNotExposeSecretValues(t *testing.T) {
 					},
 					BearerTokenEnvVar: sentinel,
 				},
-				{Transport: agent.MCPTransportHTTP, URL: "https://example.test/invalid"},
+				{Transport: mcp.TransportHTTP, URL: "https://example.test/invalid"},
 			},
 		},
 	}

@@ -566,7 +566,7 @@ func (g *resumeIdentityGuard) inspect(
 		return true, resumeDuplicateInit()
 	}
 	g.lateInitSeen = true
-	return true, nil
+	return false, nil
 }
 
 func resumeDuplicateInit() error {

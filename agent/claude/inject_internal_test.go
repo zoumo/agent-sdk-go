@@ -42,10 +42,10 @@ func TestInjectInFlightDoesNotAdmitQuery(t *testing.T) {
 }
 
 func TestInjectVersionBoundary(t *testing.T) {
-	for _, version := range []string{"2.1.258", "2.1.322", "2.2.0"} {
+	for _, version := range []string{"2.1.293", "2.1.294", "2.1.322", "2.2.0", "3.0.0", "2.1.293+build.1"} {
 		assert.True(t, supportsInject(version), version)
 	}
-	for _, version := range []string{"", "2.0.999", "2.1.257", "2.1.-258", "2.1.258-beta", "3.0.0", "2.1.258.extra"} {
+	for _, version := range []string{"", "2.0.999", "2.1.258", "2.1.292", "2.1.-293", "2.1.293-beta", "2.1.293.extra"} {
 		assert.False(t, supportsInject(version), version)
 	}
 }

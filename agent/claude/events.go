@@ -1444,8 +1444,14 @@ func nativeEventTime(raw json.RawMessage) time.Time {
 }
 
 func claudeParent(received claude.Received) string {
-	if received.Event != nil && received.Event.ParentToolUseID != nil {
+	if received.Event != nil && received.Event.ParentToolUseID != nil && *received.Event.ParentToolUseID != "" {
 		return *received.Event.ParentToolUseID
+	}
+	if received.Source.AssociationID != "" {
+		if received.Source.ToolUseID != "" {
+			return received.Source.ToolUseID
+		}
+		return received.Source.AssociationID
 	}
 	return ""
 }

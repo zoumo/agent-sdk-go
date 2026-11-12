@@ -1,4 +1,4 @@
-{"type":"system","subtype":"init","session_id":"demo","claude_code_version":"2.1.258","tools":["Agent"]}
+{"type":"system","subtype":"init","session_id":"demo","claude_code_version":"2.1.293","tools":["Agent"]}
 {"type":"assistant","session_id":"demo","message":{"content":[{"type":"tool_use","id":"spawn-child","name":"Agent","input":{"prompt":"Inspect synthetic local source","description":"inspect local source"}}]}}
 {"type":"assistant","session_id":"demo","parent_tool_use_id":"spawn-child","message":{"content":[{"type":"text","text":"child text"},{"type":"thinking","thinking":"child thinking","signature":"synthetic"},{"type":"tool_use","id":"spawn-grandchild","name":"Agent","input":{"prompt":"Inspect synthetic local source","description":"inspect local source"}}]}}
 {"type":"system","subtype":"task_started","session_id":"demo","task_id":"grandchild","task_type":"local_agent","tool_use_id":"spawn-grandchild","is_backgrounded":false}

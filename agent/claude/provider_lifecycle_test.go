@@ -68,7 +68,7 @@ func TestProviderStopRejectsInFlightOpen(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-in-flight","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	openEntered := make(chan struct{})
@@ -202,7 +202,7 @@ func TestOpenFailureSettlesLifecycleAndProviderCanOpenAgain(t *testing.T) {
 	secondFrames := append([]string(nil), mockClaudeInit...)
 	secondFrames = append(secondFrames,
 		`<{"type":"system","subtype":"init","session_id":"native-retry","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	provider := newTestClaudeProviderSequence(
 		t,

@@ -44,7 +44,7 @@ func TestPlannedCaseApprovalKinds(t *testing.T) {
 func TestGapConfigurationBetweenCompletedExecutions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "wire.jsonl")
 	s := openSessionFixture(t, func(o *SessionOptions) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	for i := range 2 {
 		if i == 1 {
@@ -87,7 +87,7 @@ func TestGapConfigurationBetweenCompletedExecutions(t *testing.T) {
 
 func TestGapChildInheritanceRemainsUnknown(t *testing.T) {
 	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	model := "root-requested"
 	r, err := s.SetModel(context.Background(), ModelChange{Model: &model})

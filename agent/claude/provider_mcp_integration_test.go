@@ -23,7 +23,7 @@ func TestProviderOpenPassesFinalMCPListToClaudeOptions(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"mcp-open","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	var observed []claude.SessionOptions
@@ -110,7 +110,7 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	openFrames := append([]string(nil), mockClaudeInit...)
 	openFrames = append(openFrames,
 		`<{"type":"system","subtype":"init","session_id":"mcp-open","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	openPeer := prepareClaudePeer(t, "passed", openFrames...)
 	var observed []claude.SessionOptions
@@ -191,7 +191,7 @@ func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"mcp-empty","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	var observed []claude.SessionOptions

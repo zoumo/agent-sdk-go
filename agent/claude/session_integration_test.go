@@ -21,7 +21,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-loop","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		claudeStartOrSteerFrame(t, "hello"),
 		claudeStartOrSteerFrame(t, "follow-up"),
 		`<{"type":"assistant","session_id":"native-loop","uuid":"assistant-event","timestamp":"2026-11-07T12:34:56.789Z","message":{"id":"message-1","role":"assistant","model":"synthetic","content":[{"type":"text","text":"hello from Claude","apiBlockIndex":0}],"future_message":null},"future":{"precise":9007199254740993},"future_message":null}`,
@@ -117,7 +117,7 @@ func TestResultErrorBecomesSessionError(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-error","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"result","subtype":"error_during_execution","session_id":"native-error","is_error":true,"result":"operation failed","errors":["first","second"],"timestamp":"2026-11-07T12:40:00Z","future":42}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
@@ -150,7 +150,7 @@ func TestEnvelopeErrorBecomesSessionError(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-envelope-error","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-envelope-error","error":"envelope failed","message":{"id":"partial-message","content":[{"type":"text","text":"partial","apiBlockIndex":0}]},"future":true}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
@@ -185,7 +185,7 @@ func TestEventWaitCancellationDoesNotConsumeOrClose(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"assistant","session_id":"native-early","message":{"id":"early-message","content":[{"type":"text","text":"early","apiBlockIndex":0}]}}`,
 		`<{"type":"system","subtype":"init","session_id":"native-early","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -223,7 +223,7 @@ func TestCloseDrainsAcceptedEarlyEventThenReturnsEOF(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"assistant","session_id":"native-drain","message":{"id":"drained-message","content":[{"type":"text","text":"drained","apiBlockIndex":0}]}}`,
 		`<{"type":"system","subtype":"init","session_id":"native-drain","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -259,7 +259,7 @@ func TestUnexpectedDisconnectTerminatesDoneErrAndStream(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-disconnect","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"disconnect"}}`,
 		"!",
 	)
@@ -296,7 +296,7 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-natural","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-natural","message":{"id":"kept-message","content":[{"type":"text","text":"kept","apiBlockIndex":0}]}}`,
 		`>{"type":"user","session_id":"","parent_tool_use_id":null,"message":{"role":"user","content":"disconnect"}}`,
 		"!",
@@ -336,7 +336,7 @@ func TestAnswerRejectsUnknownRefAndInterruptHasNoActiveWork(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-unsupported","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)

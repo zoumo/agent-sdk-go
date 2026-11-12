@@ -961,7 +961,7 @@ func resumeInitFrame(t *testing.T, id, cwd string) string {
 		"subtype":             "init",
 		"session_id":          id,
 		"cwd":                 cwd,
-		"claude_code_version": "2.1.258",
+		"claude_code_version": "2.1.293",
 	})
 }
 

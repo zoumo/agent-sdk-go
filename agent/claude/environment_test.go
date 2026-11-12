@@ -28,11 +28,11 @@ func TestEnvironmentProcessEnvComposesWithoutMutatingCaller(t *testing.T) {
 		overlay  map[string]string
 		expected []string
 	}{
-		{"replacement", []string{"TOKEN=base", "BASE=keep"}, map[string]string{"TOKEN": "literal=$HOME=附加", "EMPTY": "", "A": "first"}, []string{"TOKEN=base", "BASE=keep", "A=first", "EMPTY=", "TOKEN=literal=$HOME=附加"}},
-		{"empty replacement", []string{}, map[string]string{"EMPTY": ""}, []string{"EMPTY="}},
-		{"empty overlay", []string{"BASE=keep"}, map[string]string{}, []string{"BASE=keep"}},
-		{"nil overlay", []string{"BASE=keep"}, nil, []string{"BASE=keep"}},
-		{"empty replacement without overlay", []string{}, nil, []string{}},
+		{"replacement", []string{"TOKEN=base", "BASE=keep"}, map[string]string{"TOKEN": "literal=$HOME=附加", "EMPTY": "", "A": "first"}, []string{"TOKEN=base", "BASE=keep", "A=first", "EMPTY=", "TOKEN=literal=$HOME=附加", "CLAUDE_CODE_SDK_READS_SESSION_STATE=1"}},
+		{"empty replacement", []string{}, map[string]string{"EMPTY": ""}, []string{"EMPTY=", "CLAUDE_CODE_SDK_READS_SESSION_STATE=1"}},
+		{"empty overlay", []string{"BASE=keep"}, map[string]string{}, []string{"BASE=keep", "CLAUDE_CODE_SDK_READS_SESSION_STATE=1"}},
+		{"nil overlay", []string{"BASE=keep"}, nil, []string{"BASE=keep", "CLAUDE_CODE_SDK_READS_SESSION_STATE=1"}},
+		{"empty replacement without overlay", []string{}, nil, []string{"CLAUDE_CODE_SDK_READS_SESSION_STATE=1"}},
 		{"inherited", nil, map[string]string{"EMPTY": ""}, nil},
 		{"inherited without overlay", nil, nil, nil},
 	} {
@@ -41,7 +41,7 @@ func TestEnvironmentProcessEnvComposesWithoutMutatingCaller(t *testing.T) {
 			defer cancel()
 			cwd := t.TempDir()
 			frames := append([]string(nil), mockClaudeInit...)
-			frames = append(frames, `<{"type":"system","subtype":"init","session_id":"root","cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`)
+			frames = append(frames, `<{"type":"system","subtype":"init","session_id":"root","cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`)
 			beforeBase, beforeOverlay := slices.Clone(tc.base), maps.Clone(tc.overlay)
 			var observed []string
 			provider := newTestClaudeProviderWithObserver(t, agentclaude.Config{Env: tc.base}, func(options claude.SessionOptions) { observed = options.Env }, prepareClaudePeer(t, "passed", frames...))
@@ -58,7 +58,7 @@ func TestEnvironmentProcessEnvComposesWithoutMutatingCaller(t *testing.T) {
 			if tc.base == nil {
 				assert.Contains(t, observed, "AGENT_ENV_AMBIENT=ambient")
 				if len(tc.overlay) > 0 {
-					assert.Equal(t, "EMPTY=", observed[len(observed)-1])
+					assert.Contains(t, observed, "EMPTY=")
 				}
 			} else {
 				assert.Equal(t, tc.expected, observed)
@@ -73,6 +73,56 @@ func TestEnvironmentProcessEnvComposesWithoutMutatingCaller(t *testing.T) {
 			assert.Equal(t, saved, observed)
 			assert.True(t, session.Capabilities().Supports(agent.CapabilityProcessEnv))
 			assert.False(t, session.Capabilities().Supports(agent.CapabilityShellEnv))
+			require.NoError(t, session.Close(ctx))
+		})
+	}
+}
+
+func TestEnvironmentEnablesNativeSessionStateEvents(t *testing.T) {
+	const stateEnv = "CLAUDE_CODE_SDK_READS_SESSION_STATE"
+	for _, tc := range []struct {
+		name    string
+		base    []string
+		overlay map[string]string
+		ambient string
+		want    string
+	}{
+		{name: "replacement default", base: []string{"BASE=keep"}, want: "1"},
+		{name: "empty replacement default", base: []string{}, want: "1"},
+		{name: "explicit value preserved", base: []string{stateEnv + "=0"}, want: "0"},
+		{name: "explicit empty value preserved", base: []string{stateEnv + "="}, want: ""},
+		{name: "explicit lowercase name preserved", base: []string{"claude_code_sdk_reads_session_state=0"}, want: "0"},
+		{name: "project overlay preserved", base: []string{"BASE=keep"}, overlay: map[string]string{stateEnv: "0"}, want: "0"},
+		{name: "lowercase overlay preserved", base: []string{}, overlay: map[string]string{"claude_code_sdk_reads_session_state": ""}, want: ""},
+		{name: "inherited value preserved", ambient: "0", want: "0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.ambient != "" {
+				t.Setenv(stateEnv, tc.ambient)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cwd := t.TempDir()
+			frames := append([]string(nil), mockClaudeInit...)
+			frames = append(frames, `<{"type":"system","subtype":"init","session_id":"root","cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`)
+			var observed []string
+			provider := newTestClaudeProviderWithObserver(t, agentclaude.Config{Env: tc.base}, func(options claude.SessionOptions) { observed = options.Env }, prepareClaudePeer(t, "passed", frames...))
+			t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+			_, err := provider.Start(ctx)
+			require.NoError(t, err)
+			session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd, ProcessEnv: tc.overlay, ShellEnv: map[string]string{}})
+			require.NoError(t, err)
+			closeSessionOnCleanup(t, session)
+
+			values := make([]string, 0, 1)
+			for _, entry := range observed {
+				name, value, ok := strings.Cut(entry, "=")
+				if ok && strings.EqualFold(name, stateEnv) {
+					values = append(values, value)
+				}
+			}
+			require.Len(t, values, 1, "effective environment must select one session state mode")
+			assert.Equal(t, tc.want, values[0])
 			require.NoError(t, session.Close(ctx))
 		})
 	}
@@ -101,7 +151,7 @@ func TestEnvironmentResumeVersionAndLaunchShareEffectiveEnvironment(t *testing.T
 			peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 				CWD: cwd, TranscriptPath: transcript,
 				Frames:          []string{resumeInitFrame(t, claudeResumePeerSessionID, cwd)},
-				EnvironmentKeys: []string{"AGENT_ENV_AMBIENT", "AGENT_ENV_TOKEN", "EMPTY", "CLAUDE_CONFIG_DIR"},
+				EnvironmentKeys: []string{"AGENT_ENV_AMBIENT", "AGENT_ENV_TOKEN", "EMPTY", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_SDK_READS_SESSION_STATE"},
 				VersionEnvPath:  versionPath, SessionEnvPath: sessionPath,
 			})
 			// The fixture selector is copied through the overlay, allowing an otherwise
@@ -116,7 +166,7 @@ func TestEnvironmentResumeVersionAndLaunchShareEffectiveEnvironment(t *testing.T
 			t.Setenv("AGENT_ENV_AMBIENT", "ambient")
 			overlay := map[string]string{claudeResumePeerEnv: selector, "CLAUDE_CONFIG_DIR": configDir, "AGENT_ENV_TOKEN": "session", "EMPTY": "", "GORACE": "atexit_sleep_ms=0"}
 			var base []string
-			want := map[string]string{"CLAUDE_CONFIG_DIR": configDir, "AGENT_ENV_TOKEN": "session", "EMPTY": ""}
+			want := map[string]string{"CLAUDE_CONFIG_DIR": configDir, "AGENT_ENV_TOKEN": "session", "EMPTY": "", "CLAUDE_CODE_SDK_READS_SESSION_STATE": "1"}
 			switch baseKind {
 			case "inherited":
 				want["AGENT_ENV_AMBIENT"] = "ambient"
@@ -147,7 +197,7 @@ func TestEnvironmentDiscoveryUsesEffectiveProcessEnvironment(t *testing.T) {
 	defer cancel()
 	cwd, baseDir, effectiveDir := t.TempDir(), t.TempDir(), t.TempDir()
 	frames := append([]string(nil), mockClaudeInit...)
-	frames = append(frames, `<{"type":"system","subtype":"init","session_id":"`+claudeResumePeerSessionID+`","cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`)
+	frames = append(frames, `<{"type":"system","subtype":"init","session_id":"`+claudeResumePeerSessionID+`","cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`)
 	peer := prepareClaudePeer(t, "passed", frames...)
 	var native *claude.Session
 	provider := agentclaude.NewWithStream(agentclaude.Config{Env: []string{"CLAUDE_CONFIG_DIR=" + baseDir}}, func(ctx context.Context, options claude.SessionOptions) (agentclaude.TestStreamOpen, error) {

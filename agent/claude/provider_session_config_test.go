@@ -23,7 +23,7 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		frames := append([]string(nil), mockClaudeInit...)
 		frames = append(frames,
 			`<{"type":"system","subtype":"init","session_id":"native-open",`+
-				`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
+				`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 				`"model":"observed/model"}`,
 		)
 		provider, capture := startClaudeExecutionProvider(t, ctx, frames...)
@@ -49,7 +49,7 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		cwd := t.TempDir()
 		initJSON := `{"type":"system","subtype":"init","session_id":` +
 			jsonString(t, claudeResumePeerSessionID) + `,"cwd":` + jsonString(t, cwd) +
-			`,"claude_code_version":"2.1.258","model":"observed/model"}`
+			`,"claude_code_version":"2.1.293","model":"observed/model"}`
 		provider, argvPath := startClaudeResumeExecutionProvider(
 			t,
 			ctx,
@@ -244,7 +244,7 @@ func TestClaudeSetConfigMapsIDsToNativeOperations(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-runtime",`+
-			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
+			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 			`"model":"initial/model"}`,
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"get_settings"}}`,
 		`<{"type":"control_response","response":{"subtype":"success","request_id":"go_1","response":{"applied":{"ultracode":false}}}}`,
@@ -280,7 +280,7 @@ func TestClaudeSetConfigRejectsInvalidAndClosedBeforeNativeWrite(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-runtime",`+
-			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
+			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 			`"model":"initial/model"}`,
 	)
 	provider, _ := startClaudeExecutionProvider(t, ctx, frames...)
@@ -322,7 +322,7 @@ func TestClaudeSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) 
 		frames := append([]string(nil), mockClaudeInit...)
 		frames = append(frames,
 			`<{"type":"system","subtype":"init","session_id":"native-runtime",`+
-				`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
+				`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 				`"model":"initial/model"}`,
 			`>{"type":"control_request","request_id":"go_1","request":{"subtype":"set_model","model":"rejected/model"}}`,
 			`<{"type":"control_response","response":{"subtype":"error","request_id":"go_1","error":"unsupported model"}}`,
@@ -364,7 +364,7 @@ func TestClaudeSetConfigPreservesNativeRejectionAndOutcomeUnknown(t *testing.T) 
 		frames := append([]string(nil), mockClaudeInit...)
 		frames = append(frames,
 			`<{"type":"system","subtype":"init","session_id":"native-runtime",`+
-				`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
+				`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 				`"model":"initial/model"}`,
 			`>{"type":"control_request","request_id":"go_1","request":{"subtype":"set_model","model":"uncertain/model"}}`,
 			`!`,
@@ -396,7 +396,7 @@ func TestClaudeEffortPreflightFailureIsNotSent(t *testing.T) {
 		mockClaudeInit[0],
 		mockClaudeInit[1],
 		`<{"type":"system","subtype":"init","session_id":"native-runtime",` +
-			`"cwd":` + jsonString(t, cwd) + `,"claude_code_version":"2.1.258",` +
+			`"cwd":` + jsonString(t, cwd) + `,"claude_code_version":"2.1.293",` +
 			`"model":"initial/model"}`,
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"get_settings"}}`,
 		`!`,
@@ -431,7 +431,7 @@ func TestClaudeSetConfigRepeatsIdenticalRequests(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-runtime",`+
-			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258",`+
+			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 			`"model":"initial/model"}`,
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"set_model","model":"same/model"}}`,
 		`<{"type":"control_response","response":{"subtype":"success","request_id":"go_1","response":{}}}`,
@@ -474,7 +474,7 @@ func startClaudeSessionConfigForArgv(
 	}
 	initJSON := `{"type":"system","subtype":"init","session_id":` +
 		jsonString(t, sessionID) + `,"cwd":` + jsonString(t, cwd) +
-		`,"claude_code_version":"2.1.258","model":"default/model"}`
+		`,"claude_code_version":"2.1.293","model":"default/model"}`
 
 	var provider *agentclaude.Core
 	var capturedArgv func(*testing.T) []string

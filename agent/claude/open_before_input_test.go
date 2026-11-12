@@ -17,7 +17,7 @@ import (
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 )
 
-func TestOpenAssignsNativeUUIDBeforeAnyUserInput(t *testing.T) {
+func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {
 	for _, submit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "close without input", true: "one input"}[submit], func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -27,7 +27,7 @@ func TestOpenAssignsNativeUUIDBeforeAnyUserInput(t *testing.T) {
 			peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 				CWD: cwd, ArgvPath: argvPath, WaitForUser: true,
 				Frames: []string{
-					`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.258","slash_commands":["help"]}`,
+					`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293","slash_commands":["help"]}`,
 					`{"type":"assistant","session_id":"__SESSION_ID__","message":{"id":"answer","content":[{"type":"text","text":"answer","apiBlockIndex":0}]}}`,
 					`{"type":"result","subtype":"success","session_id":"__SESSION_ID__","is_error":false,"result":"answer"}`,
 					`{"type":"system","subtype":"session_state_changed","session_id":"__SESSION_ID__","state":"idle"}`,
@@ -41,11 +41,12 @@ func TestOpenAssignsNativeUUIDBeforeAnyUserInput(t *testing.T) {
 			require.NoError(t, err)
 			closeSessionOnCleanup(t, session)
 			initialID := session.ID()
-			require.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, initialID)
+			require.Equal(t, claudeResumePeerSessionID, initialID)
 			argv := readClaudeArgv(t, argvPath)
-			assert.Contains(t, argv, "--session-id="+initialID)
+			assert.Contains(t, argv, "--await-claim")
 			for _, arg := range argv {
 				assert.False(t, strings.HasPrefix(arg, "--resume"))
+				assert.False(t, strings.HasPrefix(arg, "--session-id="))
 			}
 			observation := readOpenPeerObservation(t, peer.Observation)
 			assert.Equal(t, initialID, observation.SessionID)
@@ -113,7 +114,7 @@ func TestOpenAssignsNativeUUIDBeforeAnyUserInput(t *testing.T) {
 	}
 }
 
-func TestAssignedSessionRejectsLaterNativeIdentityConflicts(t *testing.T) {
+func TestClaimedSessionRejectsLaterNativeIdentityConflicts(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		frames []string
@@ -125,7 +126,7 @@ func TestAssignedSessionRejectsLaterNativeIdentityConflicts(t *testing.T) {
 		{"replay init", []string{`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","isReplay":true}`}, agentclaude.ErrorReasonInitializeReplayed},
 		{"cwd", []string{`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"/nonexistent-assigned-cwd"}`}, agentclaude.ErrorReasonSessionCWDMismatch},
 		{"duplicate", []string{
-			`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.258"}`,
+			`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293"}`,
 			`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__"}`,
 		}, agentclaude.ErrorReasonInitializeDuplicate},
 	} {
@@ -177,7 +178,7 @@ func TestAssignedSessionAcceptsCanonicalInitCwd(t *testing.T) {
 	require.NoError(t, os.Symlink(cwd, alias))
 	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 		CWD: cwd, WaitForUser: true,
-		Frames: []string{`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.258","slash_commands":["help"]}`},
+		Frames: []string{`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293","slash_commands":["help"]}`},
 	})
 	provider := agentclaude.New(agentclaude.Config{CLIPath: peer.CLIPath, Env: peer.Env})
 	_, err := provider.Start(ctx)

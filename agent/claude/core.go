@@ -13,7 +13,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 var _ agent.Core = (*Core)(nil)
@@ -44,7 +43,7 @@ type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, err
 
 // New constructs a Claude Core without starting a native process.
 func New(config Config) *Core {
-	core := &Core{config: cloneConfig(config), newSessionID: uuidv4.New}
+	core := &Core{config: cloneConfig(config)}
 	core.leases = corelease.New[struct{}, *session](
 		providerCapabilities(),
 		nil,
@@ -63,8 +62,9 @@ func (p *Core) Stop(ctx context.Context) error {
 	return p.leases.Stop(ctx)
 }
 
-// Open creates a new Claude session with a caller-assigned native identity after
-// initialize succeeds. It does not wait for the later system/init notification.
+// Open creates a new Claude session and binds it to the claimed working
+// directory before returning. The CLI assigns the native identity, so the
+// returned Session is usable before any user input.
 func (p *Core) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
@@ -81,6 +81,9 @@ func (p *Core) Open(
 	}
 	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
+		if p.newSessionID == nil {
+			return p.openNativeSession(ctx, options, "", "", nil, mcpServers, env, true)
+		}
 		sessionID, err := p.newSessionID()
 		if err != nil || sessionID == "" {
 			return nil, adapterError(
@@ -90,7 +93,7 @@ func (p *Core) Open(
 				err,
 			)
 		}
-		return p.openNativeSession(ctx, options, "", sessionID, nil, mcpServers, env)
+		return p.openNativeSession(ctx, options, "", sessionID, nil, mcpServers, env, false)
 	})
 }
 
@@ -136,6 +139,7 @@ func (p *Core) Resume(
 			attempt,
 			mcpServers,
 			env,
+			false,
 		)
 	})
 }
@@ -165,6 +169,7 @@ func (p *Core) openNativeSession(
 	resume *resumeAttempt,
 	mcpServers []claude.MCPServer,
 	env []string,
+	claim bool,
 ) (*session, error) {
 	nativeOptions := p.nativeOptions(
 		options.Cwd,
@@ -174,6 +179,7 @@ func (p *Core) openNativeSession(
 		options.Config,
 	)
 	nativeOptions.SessionID = sessionID
+	nativeOptions.ClaimSession = claim
 	nativeOptions.Env = slices.Clone(env)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
 	if resume != nil {
@@ -252,6 +258,9 @@ func (p *Core) openNativeSession(
 	identity := sessionID
 	if resume != nil {
 		identity = resume.target.sessionID
+	}
+	if identity == "" && native != nil {
+		identity, _ = native.SessionID()
 	}
 	created, err := newSession(
 		p,

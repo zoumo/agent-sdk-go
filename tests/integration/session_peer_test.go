@@ -124,7 +124,7 @@ func sessionTargetPeer(provider, scenario string) error {
 			reply(fmt.Sprintf(`{"thread":{"id":%q,"cwd":"/synthetic","sessionId":"native-session","projectId":null,"cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"ephemeral":false,"modelProvider":"synthetic","preview":"","source":"appServer","status":{"type":"idle"},"turns":[]},"model":"creation-model","modelProvider":"synthetic","cwd":"/synthetic","approvalPolicy":"never","approvalsReviewer":"user","sandbox":{"type":"readOnly"}}`, id))
 		case f.Type == "control_request" && f.Request.Subtype == "initialize":
 			reply(`{}`)
-			emit(map[string]any{"type": "system", "subtype": "init", "session_id": root, "claude_code_version": "2.1.258", "model": "creation-model"})
+			emit(map[string]any{"type": "system", "subtype": "init", "session_id": root, "claude_code_version": "2.1.293", "model": "creation-model"})
 		case f.Method == "thread/unsubscribe":
 			reply(`{"status":"unsubscribed"}`)
 		case f.Method == "turn/interrupt" || f.Type == "control_request" && f.Request.Subtype == "interrupt":
@@ -135,7 +135,7 @@ func sessionTargetPeer(provider, scenario string) error {
 				if provider == "codex" {
 					raw(`{"method":"thread/settings/updated","params":{"threadId":"root","threadSettings":{"model":"observed-model","effort":"low","approvalPolicy":"never","approvalsReviewer":"user","collaborationMode":{"mode":"default","settings":{"model":"observed-model"}},"cwd":"/synthetic","modelProvider":"synthetic","sandboxPolicy":{"type":"readOnly"}}}}`)
 				} else {
-					emit(map[string]any{"type": "system", "subtype": "init", "session_id": root, "claude_code_version": "2.1.258", "model": "observed-model"})
+					emit(map[string]any{"type": "system", "subtype": "init", "session_id": root, "claude_code_version": "2.1.293", "model": "observed-model"})
 				}
 			}
 
@@ -370,7 +370,7 @@ func completeClaudeFixture(raw json.RawMessage) json.RawMessage {
 	case "system":
 		switch sub {
 		case "init":
-			for k, v := range map[string]string{"apiKeySource": `"none"`, "claude_code_version": `"2.1.258"`, "cwd": `"/synthetic"`, "tools": `[]`, "mcp_servers": `[]`, "model": `"synthetic"`, "permissionMode": `"default"`, "slash_commands": `[]`, "output_style": `"default"`, "skills": `[]`, "plugins": `[]`} {
+			for k, v := range map[string]string{"apiKeySource": `"none"`, "claude_code_version": `"2.1.293"`, "cwd": `"/synthetic"`, "tools": `[]`, "mcp_servers": `[]`, "model": `"synthetic"`, "permissionMode": `"default"`, "slash_commands": `[]`, "output_style": `"default"`, "skills": `[]`, "plugins": `[]`} {
 				put(k, v)
 			}
 		case "status":

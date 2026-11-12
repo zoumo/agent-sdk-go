@@ -29,7 +29,7 @@ func TestHistorySetupConsumesBackgroundResultsBeforeNextInput(t *testing.T) {
 				`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null}}`,
 				`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}`,
 				`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"first"}}`,
-				`<{"type":"system","subtype":"init","session_id":"root","claude_code_version":"2.1.258"}`,
+				`<{"type":"system","subtype":"init","session_id":"root","claude_code_version":"2.1.293"}`,
 				`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"first"}`,
 				`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"background"}`,
 				`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"second"}}`,

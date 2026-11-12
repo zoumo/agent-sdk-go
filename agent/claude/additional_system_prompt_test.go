@@ -357,7 +357,7 @@ func claudeAdditionalPromptInitFrames(
 	frames := append([]string(nil), mockClaudeInit...)
 	return append(frames,
 		`<{"type":"system","subtype":"init","session_id":`+jsonString(t, sessionID)+
-			`,"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			`,"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 	)
 }
 

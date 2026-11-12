@@ -110,13 +110,20 @@ fallback. The receipt describes acceptance, not model consumption. See the
 [inject contract](harness/modules/unified-agent/design.md#context-inject) for
 content, lifecycle, concurrency and version limits.
 
-Claude `Open` generates a UUID and supplies it through the official
-`--session-id` creation option, following the ACP adapter's startup mechanism.
-After the native initialize exchange succeeds, `ID()` is nonempty and stable
-without user input. Initialize does not echo the ID, and Open does not wait for
-`system/init` or a model turn. Later native main-session messages must match the
-assigned identity; a live, unique init must also identify the requested working
-directory. A conflict terminates the session with `native_rejected`.
+Claude `Open` starts the CLI as a parked spare with `--await-claim` and binds it
+to the requested working directory with one `claim_session` request. The claim
+response carries the native session ID, so `ID()` is nonempty and stable after
+initialize without user input, and the SDK generates no identity of its own.
+Open does not wait for `system/init` or a model turn. Later native main-session
+messages must match the claimed identity; a live, unique init must also identify
+the requested working directory. A conflict terminates the session with
+`native_rejected`. Local process startup requires a stable CLI >= 2.1.293,
+checked through `--version` before the Session process starts. Native callers that pass
+`claude.Options.SessionID` keep the explicit `--session-id=<uuid>` path instead.
+The adapter enables native session-state notifications by default (checked on
+2.1.293); unified `running` and `idle` transitions come from those notifications.
+The SDK switch and explicit environment overrides follow the
+[process environment contract](harness/modules/unified-agent/design.md#session-processenv).
 
 Use `core.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
 options})` to restore an existing native session; the returned `agent.Session`

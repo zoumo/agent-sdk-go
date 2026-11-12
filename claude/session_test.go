@@ -45,7 +45,7 @@ func submitFrame(t *testing.T, s *Session, frame string) {
 func TestSessionPreservesArrivalAndDuplicatesWithoutParent(t *testing.T) {
 	s := openSessionFixture(t)
 	frames := []string{
-		`{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`,
+		`{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`,
 		`{"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"missing","uuid":"same","message":{"content":"first"}}`,
 		`{"type":"result","session_id":"s","uuid":"result","result":"done"}`,
 		`{"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"missing","uuid":"same","message":{"content":"second"}}`,
@@ -69,7 +69,7 @@ func TestSessionQuarantineIsBoundedAndNeverBackfills(t *testing.T) {
 		o.Subagents.MaxUnresolvedBytes = 1024
 		o.Subagents.MaxUnresolvedWait = time.Minute
 	})
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	for _, f := range []string{
 		`{"type":"future","session_id":"s","agent_id":"not-proof","n":1}`,
@@ -103,7 +103,7 @@ func TestSessionCloseDrainsAndAbortDiscards(t *testing.T) {
 	for _, abort := range []bool{false, true} {
 		t.Run(map[bool]string{false: "close", true: "abort"}[abort], func(t *testing.T) {
 			s := openSessionFixture(t)
-			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 			sessionNative(t, s)
 			for range 20 {
 				submitFrame(t, s, `{"type":"result","session_id":"s","uuid":"repeat","result":"done"}`)
@@ -144,7 +144,7 @@ func TestSessionCloseDrainsAndAbortDiscards(t *testing.T) {
 
 func TestSessionParentKnowledgeCanArriveAfterChildWithoutReordering(t *testing.T) {
 	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	submitFrame(t, s, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`)
 	sessionNative(t, s)
@@ -168,7 +168,7 @@ func TestSessionParentKnowledgeCanArriveAfterChildWithoutReordering(t *testing.T
 
 func TestSessionLongMainConversationHasNoUUIDLedgerLimit(t *testing.T) {
 	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	for i := range 8300 {
 		frame := fmt.Sprintf(`{"type":"assistant","session_id":"s","uuid":"u%d","message":{"content":"text"}}`, i)
@@ -184,7 +184,7 @@ func TestSessionLongMainConversationHasNoUUIDLedgerLimit(t *testing.T) {
 func TestSessionDepthRejectionDoesNotRejectMemberOrSortRuns(t *testing.T) {
 	s := openSessionFixture(t, func(o *SessionOptions) { o.Subagents.MaxDepth = 1 })
 	frames := []string{
-		`{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`,
+		`{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`,
 		`{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","id":"spawn-a","name":"Agent","input":{}}]}}`,
 		`{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn-a","run_id":"z"}`,
 		`{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn-a","message":{"content":[{"type":"tool_use","id":"spawn-b","name":"Agent","input":{}}]}}`,
@@ -213,7 +213,7 @@ func TestSessionWaitCancellationAndQuarantineExpiry(t *testing.T) {
 			_, err := s.Receive(ctx)
 			require.ErrorIs(t, err, context.Canceled)
 			submitFrame(t, s, `{"type":"future","session_id":"foreign"}`)
-			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 			sessionNative(t, s)
 			// Snapshot reads do not expire material; only the active retention timer can
 			// advance Expired while the native peer is idle.
@@ -226,7 +226,7 @@ func TestSessionWaitCancellationAndQuarantineExpiry(t *testing.T) {
 
 func TestSessionForeignHistoryCannotSupplyLocalParentAlias(t *testing.T) {
 	s := openSessionFixture(t, func(o *SessionOptions) { o.Subagents.History = []SubagentHistory{{SessionID: "foreign", TaskID: "a"}} })
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	submitFrame(t, s, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`)
 	r := sessionNative(t, s)
@@ -238,7 +238,7 @@ func TestSessionFaultDrainsAcceptedFactsAndKeepsFirstCause(t *testing.T) {
 	for _, policy := range []ChildDetailPolicy{ChildDetailPreserve, ChildDetailSuppress} {
 		t.Run(string(policy), func(t *testing.T) {
 			s := openSessionFixture(t, func(o *SessionOptions) { o.ChildDetailPolicy = policy })
-			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 			sessionNative(t, s)
 			submitFrame(t, s, `{"type":"result","session_id":"s","result":"accepted"}`)
 			// Valid JSON with an invalid native message shape faults the SDK decoder.
@@ -264,7 +264,7 @@ func TestSessionFaultDrainsAcceptedFactsAndKeepsFirstCause(t *testing.T) {
 func TestSessionRejectsCyclesConflictsAndToolAliasesWithoutLosingFacts(t *testing.T) {
 	s := openSessionFixture(t)
 	frames := []string{
-		`{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`,
+		`{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`,
 		`{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"tool-a"}`,
 		`{"type":"assistant","session_id":"s","parent_tool_use_id":"tool-a","message":{"content":[{"type":"tool_use","id":"tool-b","name":"Agent","input":{}}]}}`,
 		`{"type":"system","subtype":"task_started","session_id":"s","task_id":"b","task_type":"local_agent","tool_use_id":"tool-b"}`,
@@ -303,14 +303,14 @@ func TestSessionRejectsCyclesConflictsAndToolAliasesWithoutLosingFacts(t *testin
 
 func TestSessionUnknownEnvelopeCannotBorrowMemberIDAndStreamUsesVerifiedAlias(t *testing.T) {
 	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	submitFrame(t, s, `{"type":"system","subtype":"task_started","session_id":"s","task_id":"native-task","task_type":"local_agent","tool_use_id":"spawn"}`)
 	sessionNative(t, s)
-	submitFrame(t, s, `{"type":"assistant","session_id":"s","agent_id":"a","parent_tool_use_id":"spawn","message":{"content":"member"}}`)
+	submitFrame(t, s, `{"type":"assistant","session_id":"s","agent_id":"native-task","parent_tool_use_id":"spawn","message":{"content":"member"}}`)
 	member := sessionNative(t, s)
 	require.Equal(t, "native-task", member.Source.TaskID)
-	require.Equal(t, "a", member.Source.AgentID)
+	require.Equal(t, "native-task", member.Source.AgentID)
 	submitFrame(t, s, `{"type":"future","session_id":"s","agent_id":"a","target":"other"}`)
 	submitFrame(t, s, `{"type":"stream_event","session_id":"s","parent_tool_use_id":"spawn","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"next"}}}`)
 	r := sessionNative(t, s)
@@ -346,7 +346,7 @@ func TestSessionUnknownIdentityExtensionsDoNotMergeTaskOrParent(t *testing.T) {
 }
 
 func TestSessionUnsupportedVersionPreservesFactsWithoutRelationshipClaims(t *testing.T) {
-	for _, version := range []string{"", "future"} {
+	for _, version := range []string{"", "future", "2.1.258", "2.1.292", "2.1.293-custom"} {
 		t.Run(version, func(t *testing.T) {
 			s := openSessionFixture(t)
 			submitFrame(t, s, fmt.Sprintf(`{"type":"system","subtype":"init","session_id":"s","claude_code_version":%q}`, version))
@@ -383,7 +383,7 @@ func TestSessionAdmissionKeepsFrameBatchesAndRequestsOrdered(t *testing.T) {
 			_, observed := s.SessionID()
 			require.False(t, observed)
 
-			init := `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`
+			init := `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`
 			task := `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`
 			detail := ` {"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"before parent"}]}} `
 			request := `{"type":"control_request","request_id":"after-child","request":{"subtype":"can_use_tool","tool_name":"Read","input":{}}}`

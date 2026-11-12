@@ -257,7 +257,7 @@ func TestSessionNonAgentFactsAndAliasConflictsNeverFabricateIdentity(t *testing.
 		require.Empty(t, r.Source.AssociationID)
 		require.Nil(t, r.Parent)
 	}
-	for _, frame := range []string{creationTask("a", "tool-a", ""), creationTask("a", "tool-b", ""), creationTask("b", "tool-b", "")} {
+	for _, frame := range []string{creationTask("a", "tool-a", ""), creationTask("b", "tool-a", ""), creationTask("b", "tool-b", "")} {
 		submitFrame(t, s, frame)
 		require.Equal(t, frame, string(sessionNative(t, s).Raw))
 	}
@@ -353,9 +353,9 @@ func TestSessionFormerCreationInputsRemainNativeFacts(t *testing.T) {
 		"background alone":             {creationInit, req, task},
 		"missing background":           {creationInit, req, creationTask("child", "call", "")},
 		"null background":              {creationInit, req, creationTask("child", "call", "null")},
-		"old":                          {strings.Replace(creationInit, "2.1.258", "2.1.77", 1), req, task, result},
-		"future":                       {strings.Replace(creationInit, "2.1.258", "2.1.259", 1), req, task, result},
-		"no version":                   {strings.Replace(creationInit, `"claude_code_version":"2.1.258",`, "", 1), req, task, result},
+		"old":                          {strings.Replace(creationInit, MinimumCLIVersion, "2.1.77", 1), req, task, result},
+		"future":                       {strings.Replace(creationInit, MinimumCLIVersion, "2.1.294", 1), req, task, result},
+		"no version":                   {strings.Replace(creationInit, `"claude_code_version":"`+MinimumCLIVersion+`",`, "", 1), req, task, result},
 		"no init":                      {req, task, result},
 		"resume key":                   {creationInit, creationRequest("call", "Agent", `{"description":"d","prompt":"p","resume":null}`, ""), task, result},
 		"SendMessage":                  {creationInit, creationRequest("call", "SendMessage", creationInput, ""), task, result},
@@ -364,7 +364,7 @@ func TestSessionFormerCreationInputsRemainNativeFacts(t *testing.T) {
 		"request remote":               {creationInit, creationRequest("call", "Agent", `{"description":"d","prompt":"p","isolation":"remote"}`, ""), task, result},
 		"wrong background input":       {creationInit, creationRequest("call", "Agent", `{"description":"d","prompt":"p","run_in_background":null}`, ""), task, result},
 		"unknown isolation":            {creationInit, creationRequest("call", "Agent", `{"description":"d","prompt":"p","isolation":"future"}`, ""), task, result},
-		"source target is not current": {strings.Replace(creationInit, "2.1.258", "2.1.302", 1), req, task, result},
+		"source target is not current": {strings.Replace(creationInit, MinimumCLIVersion, "2.1.302", 1), req, task, result},
 		"missing input":                {creationInit, creationRequest("call", "Agent", `{}`, ""), task, result},
 		"wrong type":                   {creationInit, req, strings.Replace(task, "local_agent", "local_bash", 1), result},
 		"result identity":              {creationInit, req, task, creationResult("call", "different", "completed")},

@@ -89,6 +89,11 @@ type Options struct {
 	// literally and is mutually exclusive with ResumeID. Initialize does not echo
 	// this identity; later native main-session messages are checked against it.
 	SessionID string
+	// ClaimSession starts the CLI as a parked spare through --await-claim and
+	// binds it to its working directory with one claim_session request. The CLI
+	// assigns the native identity, so this path needs neither --session-id nor
+	// user input. It is mutually exclusive with SessionID and ResumeID.
+	ClaimSession bool
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string

@@ -285,7 +285,7 @@ func forEachAgentExecutionProvider(
 
 func agentExecutionPeer(provider, scenario string) (err error) {
 	if provider == "claude" && len(os.Args) == 2 && os.Args[1] == "--version" {
-		_, err := fmt.Fprintln(os.Stdout, "2.1.258 (Claude Code)")
+		_, err := fmt.Fprintln(os.Stdout, "2.1.293 (Claude Code)")
 		return err
 	}
 	if scenario != agentExecutionSuccess &&
@@ -544,6 +544,12 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 			switch frame.Request.Subtype {
 			case "get_settings":
 				response = map[string]any{"applied": map[string]any{"ultracode": false}}
+			case "claim_session":
+				response = map[string]any{
+					"status":     "ok",
+					"cwd":        cwd,
+					"session_id": sessionID,
+				}
 			case "initialize", "set_model", "apply_flag_settings":
 			default:
 				return fmt.Errorf(
@@ -587,7 +593,7 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 					"subtype":             "init",
 					"session_id":          sessionID,
 					"cwd":                 cwd,
-					"claude_code_version": "2.1.258",
+					"claude_code_version": "2.1.293",
 					"model":               "observed/model",
 				}); err != nil {
 					return err

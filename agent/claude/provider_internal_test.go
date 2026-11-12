@@ -69,8 +69,11 @@ func TestNilEnvironmentStaysNil(t *testing.T) {
 	assert.Nil(t, provider.config.Env)
 }
 
-func TestOpenSessionIdentityGenerationFailureDoesNotLaunch(t *testing.T) {
+func TestReplaySessionIdentityGenerationFailureDoesNotLaunch(t *testing.T) {
 	provider := New(Config{CLIPath: "/nonexistent"})
+	provider.streams = func(context.Context, claude.SessionOptions) (streamOpen, error) {
+		return streamOpen{}, errors.New("injected transport must not be used")
+	}
 	provider.newSessionID = func() (string, error) { return "", errors.New("random unavailable") }
 	ctx := context.Background()
 	_, err := provider.Start(ctx)

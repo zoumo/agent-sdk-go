@@ -162,7 +162,7 @@ func (s *mockCLISuite) TestSlowConsumerBurst() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	frames := append([]string(nil), mockClaudeInit...)
-	frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`, `<{"type":"system","subtype":"init","session_id":"synthetic","claude_code_version":"2.1.258"}`, `<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`)
+	frames = append(frames, `>{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":""}`, `<{"type":"system","subtype":"init","session_id":"synthetic","claude_code_version":"2.1.293"}`, `<{"type":"control_request","request_id":"permission","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]},"tool_use_id":"tool"}}`)
 	for i := range count {
 		frames = append(frames, fmt.Sprintf(`<{"type":"assistant","session_id":"synthetic","message":{"content":[]},"index":%d}`, i))
 	}

@@ -5,25 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
-	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
-const (
-	claudeResumeVersion       = "2.1.258"
-	claudeResumeProbePrefix   = "agent-sdk-go:claude:resume-probe:"
-	claudeVersionQueryTimeout = 10 * time.Second
-	claudeVersionOutputLimit  = 4 << 10
-)
-
-var claudeVersionPattern = regexp.MustCompile(`(?i)v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?`)
+const claudeResumeProbePrefix = "agent-sdk-go:claude:resume-probe:"
 
 type resumeAttempt struct {
 	target *resumeTarget
@@ -91,103 +81,33 @@ func (p *Core) prepareResume(
 }
 
 func (p *Core) requireResumeVersion(ctx context.Context, cwd string, env []string) error {
-	queryCtx, cancel := context.WithTimeout(ctx, claudeVersionQueryTimeout)
-	defer cancel()
-
 	cliPath := p.config.CLIPath
 	if cliPath == "" {
 		cliPath = "claude"
 	}
-	var output cappedOutput
-	output.limit = claudeVersionOutputLimit
-	command := exec.CommandContext(queryCtx, cliPath, "--version")
-	command.Dir = cwd
-	command.Env = env
-	command.Stdout = &output
-	command.WaitDelay = time.Second
-	if err := command.Run(); err != nil {
+	_, err := claude.CheckCLIVersion(ctx, claude.Options{CLIPath: cliPath, WorkDir: cwd, Env: env})
+	if err == nil {
+		return nil
+	}
+	var versionErr *claude.CLIVersionError
+	if errors.As(err, &versionErr) {
+		reason := ErrorReasonResumeVersionUnsupported
+		if versionErr.Version == "" {
+			reason = ErrorReasonResumeVersionUnconfirmed
+		}
 		return adapterError(
-			agent.ErrorUnavailable,
-			ErrorReasonResumeVersionQueryFailed,
-			"query Claude version before resume",
+			agent.ErrorUnsupported,
+			reason,
+			"Claude resume requires stable CLI >= "+claude.MinimumCLIVersion,
 			err,
 		)
 	}
-	if output.truncated {
-		return adapterError(
-			agent.ErrorUnsupported,
-			ErrorReasonResumeVersionUnconfirmed,
-			"Claude version output exceeded its review bound",
-			nil,
-		)
-	}
-	versions := claudeVersionTokens(string(output.data))
-	if len(versions) == 0 {
-		return adapterError(
-			agent.ErrorUnsupported,
-			ErrorReasonResumeVersionUnconfirmed,
-			"Claude version could not be confirmed",
-			nil,
-		)
-	}
-	for _, version := range versions {
-		if version != claudeResumeVersion {
-			return adapterError(
-				agent.ErrorUnsupported,
-				ErrorReasonResumeVersionUnsupported,
-				"Claude resume requires CLI "+claudeResumeVersion,
-				nil,
-			)
-		}
-	}
-	return nil
-}
-
-func claudeVersionTokens(output string) []string {
-	matches := claudeVersionPattern.FindAllStringIndex(output, -1)
-	versions := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if !versionTokenBoundary(output, match[0], match[1]) {
-			continue
-		}
-		version := output[match[0]:match[1]]
-		if version[0] == 'v' || version[0] == 'V' {
-			version = version[1:]
-		}
-		versions = append(versions, version)
-	}
-	return versions
-}
-
-func versionTokenBoundary(output string, start, end int) bool {
-	if start > 0 && isVersionTokenByte(output[start-1]) {
-		return false
-	}
-	return end == len(output) || !isVersionTokenByte(output[end])
-}
-
-func isVersionTokenByte(value byte) bool {
-	return value >= '0' && value <= '9' ||
-		value >= 'A' && value <= 'Z' ||
-		value >= 'a' && value <= 'z' ||
-		value == '.' || value == '-' || value == '+' || value == '_'
-}
-
-type cappedOutput struct {
-	data      []byte
-	limit     int
-	truncated bool
-}
-
-func (o *cappedOutput) Write(data []byte) (int, error) {
-	remaining := o.limit - len(o.data)
-	if remaining > 0 {
-		o.data = append(o.data, data[:min(len(data), remaining)]...)
-	}
-	if len(data) > remaining {
-		o.truncated = true
-	}
-	return len(data), nil
+	return adapterError(
+		agent.ErrorUnavailable,
+		ErrorReasonResumeVersionQueryFailed,
+		"query Claude version before resume",
+		err,
+	)
 }
 
 func (p *Core) preflightResume(

@@ -103,6 +103,10 @@ func runWithPolicy(output io.Writer, policy claude.ChildDetailPolicy) error {
 // peer implements only initialize + one scripted user turn. It is not a model,
 // a CLI emulator, or evidence of installed CLI behavior.
 func peer() error {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		_, err := fmt.Fprintln(os.Stdout, claude.MinimumCLIVersion+" (Claude Code)")
+		return err
+	}
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadBytes('\n')
 	if err != nil {

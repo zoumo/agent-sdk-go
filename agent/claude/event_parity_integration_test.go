@@ -24,7 +24,7 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-parity","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		claudeStartOrSteerFrame(t, "inspect"),
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-parity","state":"running","timestamp":"2026-11-07T13:00:00Z"}`,
 		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-1","model":"synthetic-model","content":[]}}}`,
@@ -254,7 +254,7 @@ func TestClaudeToolIdentityMapping(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-tool-identity","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-tool-identity","message":{`+
 			`"id":"response-tools","content":[`+strings.Join(callBlocks, ",")+`]}}`,
 		`<{"type":"user","session_id":"native-tool-identity","message":{`+
@@ -316,7 +316,7 @@ func TestClaudeToolResultCopiesObservedIdentity(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-tool-result","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-tool-result","message":{`+
 			`"id":"response-result","content":[`+
 			`{"type":"tool_use","id":"tool-1","name":"Read","input":{"path":"a.txt"}}]}}`,
@@ -366,7 +366,7 @@ func TestClaudeAssistantBlockIdentityGapsWithoutGuessing(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-gap","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-gap","uuid":"unproven-frame","message":{"id":"response-gap","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}}`,
 		`<{"type":"user","session_id":"native-gap","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"missing-tool","content":"orphan","is_error":false}]}}`,
 	)
@@ -397,7 +397,7 @@ func TestClaudeUserTextPreservesNativeMessageIdentity(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-user","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"user","session_id":"native-user","uuid":"event-uuid",`+
 			`"user_message_uuid":"user-message-uuid",`+
 			`"timestamp":"2026-11-07T13:09:00Z",`+
@@ -435,7 +435,7 @@ func TestClaudeMixedUserContentIsUnsupported(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-user-order","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-user-order","uuid":"tool-frame",`+
 			`"message":{"id":"response-tools","content":[`+
 			`{"type":"tool_use","id":"tool-1","name":"Read","input":{"path":"a.txt"}},`+
@@ -489,7 +489,7 @@ func TestClaudeAssistantFrameDeduplicationIsResponseScoped(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-dedupe","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-dedupe"}}}`,
 		`<{"type":"stream_event","session_id":"native-dedupe","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
 		frame,
@@ -526,7 +526,7 @@ func TestClaudeAssistantFrameReusesStreamedResponseIdentity(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-fallback","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"stream_event","session_id":"native-fallback","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-fallback"}}}`,
 		`<{"type":"stream_event","session_id":"native-fallback","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
 		`<{"type":"assistant","session_id":"native-fallback","uuid":"fallback-frame","message":{"role":"assistant","content":[{"type":"text","text":"fallback"}]}}`,
@@ -560,7 +560,7 @@ func TestClaudeMalformedAssistantTextAndThinkingBecomeStableGaps(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-malformed","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-malformed","uuid":"malformed-frame",`+
 			`"message":{"id":"response-malformed","content":[`+
 			`{"type":"text","text":null,"apiBlockIndex":0},`+
@@ -598,7 +598,7 @@ func TestClaudeWrongAssistantBlockTypeBecomesDecodeGapBeforeNativeTermination(t 
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-decode-gap","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		// Keep the malformed frame behind a client frame so Open cannot race it.
 		claudeStartOrSteerFrame(t, "trigger malformed decode"),
 		`<{"type":"assistant","session_id":"native-decode-gap","uuid":"wrong-type-frame",`+
@@ -644,7 +644,7 @@ func TestClaudePlanLikeToolsRemainNativeToolCalls(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-plan","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-plan","uuid":"plan-frame",`+
 			`"message":{"id":"response-plan","content":[`+
 			`{"type":"tool_use","id":"todo-1","name":"TodoWrite","input":{"todos":[`+
@@ -711,7 +711,7 @@ func TestClaudeInitialAndChangedCommandsPreserveOrder(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-commands","state":"running","timestamp":"2026-11-07T13:20:00Z"}`,
 		`<{"type":"system","subtype":"init","session_id":"native-commands","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258","slash_commands":["review","init"],"timestamp":"2026-11-07T13:20:01Z"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293","slash_commands":["review","init"],"timestamp":"2026-11-07T13:20:01Z"}`,
 		`<{"type":"system","subtype":"commands_changed","session_id":"native-commands","timestamp":"2026-11-07T13:20:02Z","commands":[{"name":"review","description":"Review code","argumentHint":"[path]","aliases":["r"],"builtin":true,"future":9007199254740993},{"name":"deploy","description":"Deploy app","argumentHint":"","aliases":[],"builtin":false}]}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)

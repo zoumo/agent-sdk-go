@@ -3,6 +3,7 @@ module github.com/zoumo/agent-sdk-go
 go 1.26.0
 
 require (
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/coder/websocket v1.8.15
 	github.com/stretchr/testify v1.12.1
 	github.com/zoumo/agent-sdk-testify v0.1.3-0.20261111143023-90fa757261dd

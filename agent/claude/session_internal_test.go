@@ -476,6 +476,38 @@ func TestNewResponseReleasesPreviousBlockState(t *testing.T) {
 	assert.Contains(t, session.blocks, second)
 }
 
+func TestDeclaredChildIdentityKeepsMainResponseLane(t *testing.T) {
+	for _, tool := range []string{"spawn-tool", ""} {
+		t.Run(tool, func(t *testing.T) {
+			session := &session{id: "native-session"}
+			require.NoError(t, session.beginResponse("", "main-response"))
+			events, err := session.assistantEvent(claude.Received{
+				Source: claude.SubagentIdentity{SessionID: "native-session", TaskID: "a", AssociationID: "task:a", ToolUseID: tool},
+				Event: &claude.Event{
+					Type: "assistant", UUID: "child-frame",
+					Raw: json.RawMessage(`{"type":"assistant","agent_id":"a","uuid":"child-frame"}`),
+					Assistant: &claude.Message{
+						ID: "child-response",
+						Content: claude.Content{
+							Raw: json.RawMessage(`[{"type":"text","text":"child reply"}]`),
+						},
+					},
+				},
+			})
+			require.NoError(t, err)
+			require.NotEmpty(t, events)
+			assert.Equal(t, "main-response", session.response(""))
+			lane := tool
+			if lane == "" {
+				lane = "task:a"
+			}
+			assert.Equal(t, "child-response", session.response(lane))
+			meta := requireClaudeEventMeta(t, events[0])
+			assert.Equal(t, "a", meta["source"].(map[string]any)["taskId"])
+		})
+	}
+}
+
 func TestZeroLengthAssistantTextDoesNotCreateEvent(t *testing.T) {
 	session := &session{id: "native-session"}
 	const (

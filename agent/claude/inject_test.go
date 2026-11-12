@@ -53,13 +53,13 @@ func TestInjectWritesContextWithoutCreatingInterruptTarget(t *testing.T) {
 }
 
 func TestInjectRejectsUnconfirmedOrOldClaudeVersion(t *testing.T) {
-	for _, version := range []string{"", "2.1.257", "3.0.0", "2.1.258-beta"} {
+	for _, version := range []string{"", "2.1.258", "2.1.292", "2.1.293-beta"} {
 		t.Run(version, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			cwd := t.TempDir()
 			init := strings.Replace(claudeSessionInitFrame(t, "native-version", cwd),
-				`"claude_code_version":"2.1.258"`, `"claude_code_version":"`+version+`"`, 1)
+				`"claude_code_version":"2.1.293"`, `"claude_code_version":"`+version+`"`, 1)
 			session, _ := openClaudeInteractionSession(t, ctx, cwd, "passed", agent.Features{}, init)
 			receipt, err := session.(agent.Injector).Inject(ctx, claudeTextInput("context"))
 			require.Error(t, err)

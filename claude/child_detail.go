@@ -27,8 +27,11 @@ const (
 func pureChildDetail(e Event) bool {
 	switch e.Type {
 	case "assistant":
-		envelope := detailObject(e.Raw, "type", "session_id", "uuid", "parent_tool_use_id", "message", "timestamp", "subagent_type", "task_description")
+		envelope := detailObject(e.Raw, "type", "session_id", "uuid", "parent_tool_use_id", "message", "timestamp", "subagent_type", "task_description", "agent_id")
 		if e.Assistant == nil || envelope == nil {
+			return false
+		}
+		if raw, ok := envelope["agent_id"]; ok && (!detailString(raw, false) || e.AgentID == nil || *e.AgentID == "") {
 			return false
 		}
 		// CLI 2.1.258's forwarded-message serializer copies the message timestamp

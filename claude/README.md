@@ -9,9 +9,14 @@ package-level session and history queries remain the source for saved content.
 
 ## Compatibility
 
-Experimental; no CLI version is fully live-validated. The live protocol target is
-CLI **2.1.258** / official TypeScript **0.3.258**. Broader Python source references
-are separate baselines; exact hashes and licenses remain in
+Experimental; no CLI version is fully live-validated. Local process startup requires
+a stable CLI **>= 2.1.293**. The SDK queries `--version` before starting the Session
+process; old, prerelease, malformed, ambiguous or oversized output is rejected.
+Version parsing and comparison use `github.com/Masterminds/semver/v3`.
+Child relationship semantics use CLI **2.1.293** / official TypeScript
+**0.3.293** as their source baseline and apply across the supported CLI version
+range. Broader Python source references are separate baselines;
+exact hashes and licenses remain in
 [type sources](docs/type-sources.md). Synthetic tests do not certify live behavior.
 
 This implements a local stdio client with narrow input, permission/question,
@@ -130,6 +135,14 @@ Open with ResumeID requests native continuation in a fresh process; SessionID
 reports observed identity separately. Initialization does not prove recovery.
 Use [saved-history queries](#saved-history) for independent content reads.
 
+Set `SessionOptions.ClaimSession` to start with `--await-claim` and bind the
+working directory through `claim_session` after initialize. `Open` returns only
+after that response supplies the native session ID and confirms the directory;
+no user input is needed. This path was checked with CLI 2.1.293. Explicit
+`SessionOptions.SessionID` keeps the `--session-id` creation path. `ClaimSession`,
+`SessionID` and `ResumeID` are mutually exclusive. With none set, identity is
+still learned from native messages.
+
 Tools maps to the native built-in `--tools` allowlist. A nil or zero-length
 slice omits the option. A single empty string emits `--tools=`, while ordinary
 entries are passed as one comma-separated value. Mixing an empty string with
@@ -186,18 +199,30 @@ Breaking changes are in the [migration guide](../docs/migration.md#session).
 
 ## Child observation
 
-Exact CLI 2.1.258 init plus local_agent task_started with task/tool IDs establishes
-an alias; forwarded parent_tool_use_id may use that alias. Unknown agent_id,
-parent_task_id and run_id remain raw extensions, not identity or order evidence.
+A supported CLI init plus local_agent task_started establishes a
+task member; a supplied tool_use_id establishes its forwarding alias.
+Forwarded parent_tool_use_id may use an already confirmed alias.
+Assistant/user agent_id names the same task_id and can resolve an
+already confirmed member without a tool alias. Conflicting identity evidence
+remains visible with a diagnostic and cannot authorize detail suppression or
+tool ownership. A resumed task retains its identity and may acquire another
+bounded tool alias. task_started.parent_task_id confirms an edge only when that
+parent is already a known member; an unknown or absent parent does not imply
+the main session. Native task/tool ownership can independently confirm parentage.
+The SDK applies these rules to stable CLI versions >= 2.1.293, without an exact
+version whitelist. run_id never changes identity or arrival order.
 The parent graph rejects cycles/conflicts/depth excess without revoking membership.
 MaxNodes defaults to 4096 (maximum 65536); MaxDepth defaults to 32 (maximum 256).
-Other diagnostic defaults are described above. No successful live child forwarding
-or combined parent/child completion is certified.
+Other diagnostic defaults are described above. The opt-in relationship check
+exercises one local child through the public native Session; it does not certify
+all nested, background, resume or remote execution paths.
 
 Set ChildDetailPolicy to ChildDetailSuppress at Open, including ResumeID, to omit
 reviewed pure child detail. Empty/ChildDetailPreserve retains it; invalid values
 fail before spawn. Initialize still requests forwardSubagentText:true. Mixed,
-unknown, tool, permission and terminal frames remain intact. This is neither
+unknown, tool, permission and terminal frames remain intact. The 2.1.293 pure
+assistant shape permits agent_id only after member identity is confirmed and
+agrees with any known tool alias. This is neither
 redaction nor token-cost control; see the
 [closed filtering contract](../harness/modules/native-session/design.md#child-detail-可选子详细事件交付).
 

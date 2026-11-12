@@ -739,6 +739,17 @@ func TestProviderResumeLateEvidenceTerminatesReturnedSession(t *testing.T) {
 				}, []int{0, 100}
 			},
 		},
+		{
+			name: "duplicate late init after callback identity",
+			frames: func(t *testing.T, cwd, _ string) ([]string, []int) {
+				return []string{
+					resumeCallbackFrame(t, "identity-callback", nil),
+					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
+					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
+				}, []int{0, 100, 100}
+			},
+			callbackID: "identity-callback",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -821,6 +832,21 @@ func TestProviderResumeCallbackIdentityAllowsOneMatchingLateInit(t *testing.T) {
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
 	requireSessionAlive(t, session, 250*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return agentclaude.InjectSupportedForTest(session)
+	}, 3*time.Second, time.Millisecond)
+
+	receipt, err := session.(agent.Injector).Inject(ctx, claudeTextInput("resumed context"))
+	require.NoError(t, err)
+	assert.Equal(t, agent.Acceptance{Sent: new(true)}, receipt.Acceptance)
+
+	require.NoError(t, session.Close(ctx))
+	observation := readOpenPeerObservation(t, peer.Observation)
+	require.Len(t, observation.UserFrames, 1)
+	assert.JSONEq(t,
+		`{"type":"user","message":{"role":"user","content":"resumed context"},"session_id":"","parent_tool_use_id":null,"shouldQuery":false}`,
+		string(observation.UserFrames[0]),
+	)
 }
 
 func TestProviderResumeCallbackIdentityRejectsContradictoryLateInit(t *testing.T) {

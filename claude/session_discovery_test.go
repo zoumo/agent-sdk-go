@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ import (
 
 const discoveryMain = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
-func discoveryFixture(t *testing.T, beforeObserve ...func(string, string)) (*Session, string, string) {
+func discoveryFixture(t testing.TB, beforeObserve ...func(string, string)) (*Session, string, string) {
 	t.Helper()
 	config, cwd := t.TempDir(), t.TempDir()
 	cwd, err := filepath.EvalSymlinks(cwd)
@@ -38,7 +39,7 @@ func discoveryFixture(t *testing.T, beforeObserve ...func(string, string)) (*Ses
 	return s, base, cwd
 }
 func quoteDiscovery(s string) string { return string(mustMarshalJSON(s)) }
-func discoveryWrite(t *testing.T, path, data string) {
+func discoveryWrite(t testing.TB, path, data string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
@@ -156,6 +157,29 @@ func TestSessionDiscoveryDuplicateConflictAndUnknownLayout(t *testing.T) {
 	assert.Contains(t, reasons, "duplicate-agent-id")
 	assert.Contains(t, reasons, "orphan-sidecar")
 	assert.Contains(t, reasons, "unsupported-layout")
+}
+
+func BenchmarkSessionDiscoveryUnique(b *testing.B) {
+	for _, count := range []int{1000, 10000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			s, _, _ := discoveryFixture(b, func(base, _ string) {
+				for i := range count {
+					discoveryWrite(b, filepath.Join(base, "subagents", fmt.Sprintf("agent-%05d.jsonl", i)), "{}\n")
+				}
+			})
+			ctx := context.Background()
+			b.ResetTimer()
+			for range b.N {
+				page, err := s.ListSubagents(ctx, SubagentQuery{MaxRecords: count, MaxEntries: 2 * count})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if len(page.Records) != count {
+					b.Fatalf("records = %d, want %d", len(page.Records), count)
+				}
+			}
+		})
+	}
 }
 
 func TestSessionDiscoveryScopeFailureAndMissingLayout(t *testing.T) {

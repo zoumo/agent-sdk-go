@@ -23,6 +23,13 @@ type childCandidate struct {
 	name   string
 	info   os.FileInfo
 }
+
+// childFileIdentity mirrors os.SameFile equality while normalizing the
+// platform-specific Dev and Ino integer types.
+type childFileIdentity struct {
+	device int64
+	inode  int64
+}
 type childQuery struct {
 	ctx     context.Context
 	scope   SessionQueryScope
@@ -190,6 +197,8 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 	}
 	q.c.Root = filepath.Join(q.scope.ConfigDir, sub.path)
 	candidates := []childCandidate{}
+	agentIDs := map[string]struct{}{}
+	fileIDs := map[childFileIdentity]struct{}{}
 	var walk func(*childDirectory, int) error
 	walk = func(d *childDirectory, depth int) error {
 		if depth > q.c.Limits.MaxDepth {
@@ -227,12 +236,20 @@ func (q *childQuery) inventory() ([]childCandidate, error) {
 				if len(candidates) >= bound {
 					return queryError("resource-limit", d.path, "child inventory", nil)
 				}
-				for _, old := range candidates {
-					if id == old.agent || os.SameFile(info, old.info) {
-						return queryError("ambiguous", filepath.Join(d.path, name), "duplicate child identity or file alias", nil)
-					}
+				path := filepath.Join(d.path, name)
+				if _, ok := agentIDs[id]; ok {
+					return queryError("ambiguous", path, "duplicate child identity or file alias", nil)
+				}
+				identity, ok := childFileIdentityOf(info)
+				if !ok {
+					return queryError("unsupported", path, "child file identity unavailable", ErrUnsupported)
+				}
+				if _, ok := fileIDs[identity]; ok {
+					return queryError("ambiguous", path, "duplicate child identity or file alias", nil)
 				}
 				candidates = append(candidates, childCandidate{id, d, name, info})
+				agentIDs[id] = struct{}{}
+				fileIDs[identity] = struct{}{}
 			case strings.HasPrefix(name, "agent-") && strings.HasSuffix(name, ".meta.json"):
 				id := strings.TrimSuffix(strings.TrimPrefix(name, "agent-"), ".meta.json")
 				if !safeChildID(id) {

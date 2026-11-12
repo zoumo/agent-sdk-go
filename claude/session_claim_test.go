@@ -39,6 +39,13 @@ func TestClaimSessionBindsNativeIdentityBeforeInput(t *testing.T) {
 	require.True(t, known)
 	require.Equal(t, claimID, id)
 
+	coverage, err := session.Receive(ctx)
+	require.NoError(t, err)
+	require.Equal(t, ReceivedObservation, coverage.Kind)
+	require.NotNil(t, coverage.Observation)
+	require.Equal(t, "forwarding-not-confirmed", coverage.Observation.Reason)
+	require.Equal(t, "initialize-forwardSubagentText-is-a-request", coverage.Observation.Evidence)
+
 	warmup, err := session.Receive(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "status", warmup.Event.Subtype)

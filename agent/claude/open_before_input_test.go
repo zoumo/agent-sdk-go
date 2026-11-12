@@ -15,6 +15,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
+	"github.com/zoumo/agent-sdk-go/claude"
+	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 )
 
 func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {
@@ -58,6 +60,7 @@ func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {
 			assert.Equal(t, agent.Acceptance{Sent: new(false)}, rejected.Acceptance)
 			stream, err := session.Events()
 			require.NoError(t, err)
+			requireStartupForwardingGap(t, ctx, stream)
 			if submit {
 				receipt, err := session.StartOrSteer(ctx, agent.Input{
 					Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "one input"}}},
@@ -145,6 +148,7 @@ func TestClaimedSessionRejectsLaterNativeIdentityConflicts(t *testing.T) {
 			initialID := session.ID()
 			stream, err := session.Events()
 			require.NoError(t, err)
+			requireStartupForwardingGap(t, ctx, stream)
 			_, err = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "trigger"}}}})
 			require.NoError(t, err)
 			select {
@@ -189,6 +193,7 @@ func TestAssignedSessionAcceptsCanonicalInitCwd(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
+	requireStartupForwardingGap(t, ctx, stream)
 	_, err = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "trigger"}}}})
 	require.NoError(t, err)
 	event, err := stream.Next(ctx)
@@ -219,6 +224,7 @@ func TestAssignedSessionRoutesEarlyMessagesAndOriginalRequestWithoutInit(t *test
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
+	requireStartupForwardingGap(t, ctx, stream)
 	early, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, session.ID(), early.SessionID)
@@ -268,6 +274,73 @@ func readOpenPeerObservation(t *testing.T, path string) claudeResumePeerObservat
 	var observation claudeResumePeerObservation
 	require.NoError(t, json.Unmarshal(data, &observation))
 	return observation
+}
+
+func requireStartupForwardingGap(t *testing.T, ctx context.Context, stream agent.EventStream) {
+	t.Helper()
+	event, err := stream.Next(ctx)
+	require.NoError(t, err)
+	payload, ok := event.Payload.(agent.SessionErrorPayload)
+	require.True(t, ok)
+	require.Equal(t, "native_relationship_gap", payload.Reason)
+	meta, ok := event.Meta["claude"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "forwarding-not-confirmed", meta["observationReason"])
+	require.Equal(t, "initialize-forwardSubagentText-is-a-request", meta["evidence"])
+}
+
+func TestAssignedSessionForwardingCoverageFlowsThroughUnifiedEvents(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		initialize *claudetypes.InitializeOptions
+		requested  bool
+	}{
+		{"default", nil, true},
+		{"enabled", &claudetypes.InitializeOptions{ForwardSubagentText: new(true)}, true},
+		{"disabled", &claudetypes.InitializeOptions{ForwardSubagentText: new(false)}, false},
+		{"omitted", &claudetypes.InitializeOptions{}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cwd := t.TempDir()
+			peer := newClaudeResumePeer(t, claudeResumePeerScenario{
+				CWD: cwd,
+				Frames: []string{
+					`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293","slash_commands":["help"]}`,
+				},
+			})
+			core := agentclaude.New(agentclaude.Config{
+				CLIPath: peer.CLIPath, Env: peer.Env, Initialize: test.initialize,
+				Subagents: claude.SubagentOptions{History: []claude.SubagentHistory{
+					{SessionID: claudeResumePeerSessionID, TaskID: "parent"},
+					{SessionID: claudeResumePeerSessionID, TaskID: "child", ParentTaskID: "parent"},
+				}},
+			})
+			agentclaude.SetSessionIDGeneratorForTest(core, func() (string, error) {
+				return claudeResumePeerSessionID, nil
+			})
+			_, err := core.Start(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, core.Stop(context.Background())) })
+			session, err := core.Open(ctx, agent.OpenOptions{Cwd: cwd})
+			require.NoError(t, err)
+			closeSessionOnCleanup(t, session)
+			require.Equal(t, claudeResumePeerSessionID, session.ID())
+			stream, err := session.Events()
+			require.NoError(t, err)
+			if test.requested {
+				requireStartupForwardingGap(t, ctx, stream)
+			}
+			event, err := stream.Next(ctx)
+			require.NoError(t, err)
+			require.Equal(t, session.ID(), event.SessionID)
+			require.IsType(t, agent.AvailableCommandsUpdatePayload{}, event.Payload)
+			assert.Empty(t, readOpenPeerObservation(t, peer.Observation).UserFrames)
+			require.NoError(t, session.Close(ctx))
+			require.NoError(t, core.Stop(ctx))
+		})
+	}
 }
 
 func TestOpenInitializeFailureReleasesProvider(t *testing.T) {

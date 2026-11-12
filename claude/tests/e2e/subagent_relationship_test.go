@@ -37,6 +37,7 @@ func TestNativeSubagentRelationship293(t *testing.T) {
 	require.True(t, submission.Written)
 	var taskID string
 	seenChild, seenParent, seenMember, seenResult, seenChildResult := false, false, false, false, false
+	seenForwardingGap := false
 	for !seenResult {
 		record, err := session.Receive(ctx)
 		require.NoError(t, err)
@@ -46,6 +47,12 @@ func TestNativeSubagentRelationship293(t *testing.T) {
 		}
 		if record.Observation != nil {
 			t.Logf("observation reason=%s evidence=%s task=%s", record.Observation.Reason, record.Observation.Evidence, record.Observation.Source.TaskID)
+			if record.Observation.Reason == "forwarding-not-confirmed" {
+				require.False(t, seenForwardingGap)
+				require.Equal(t, "initialize-forwardSubagentText-is-a-request", record.Observation.Evidence)
+				seenForwardingGap = true
+				continue
+			}
 			require.Contains(t, []string{"member-confirmed", "parent-confirmed"}, record.Observation.Reason)
 			if record.Observation.Reason == "member-confirmed" {
 				seenMember = true
@@ -95,6 +102,7 @@ func TestNativeSubagentRelationship293(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, taskID, "the model did not start the required subagent")
+	require.True(t, seenForwardingGap)
 	require.True(t, seenMember)
 	require.True(t, seenChild, "no forwarded child assistant with agent_id was observed")
 	require.True(t, seenParent)

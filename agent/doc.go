@@ -54,31 +54,39 @@
 // history APIs, and Resume does not turn saved content into live events. MASS
 // resource identity and persistence also remain outside this contract.
 //
-// OpenOptions.MCPServers carries the final adapter-neutral external MCP list for
-// one Open or Resume call. The caller that interprets Runtime configuration must
-// compose Runtime defaults and the Session declaration before calling a Core.
-// Cores do not merge or persist that list; Resume requires a new final list.
-// The repository README section "External MCP servers" describes the composition
-// and adapter-specific limits.
+// OpenOptions.MCPServers []mcp.Server carries the final adapter-neutral external
+// MCP list for one Open or Resume call. The shared mcp.Server type is also the
+// native Codex and Claude configuration type. The caller that interprets Runtime
+// configuration must compose Runtime defaults and the Session declaration before
+// calling a Core. Cores do not merge or persist that list; Resume requires a new
+// final list. The repository README section "External MCP servers" describes the
+// composition and adapter-specific limits.
 //
 // OpenOptions.AdditionalSystemPrompt adds optional caller text for that Open or
 // Resume call only; empty requests no addition. It is per-operation
 // configuration, not Session state. The complete field contract is defined in
 // harness/modules/unified-agent/design.md#additional-system-prompt.
 //
-// The unified contract has only explicit stdio and MCP Streamable HTTP transports.
-// It has no SSE, MCPConfigMode, StrictMCPConfig, SDKMCPServers, or ambient-clear
-// control. Adapter-specific field restrictions are rejected before native side
-// effects. The SDK forwards environment and header values without resolving them;
-// it does not persist MCP configuration or include its values in unified Events,
-// Meta, or logs. MCP validation and adapter field-support errors do not echo those
-// values. Open or Resume errors can wrap native diagnostics as a cause, which
-// callers must protect separately. Open or Resume success does not prove MCP
-// connectivity, authentication, or tool discovery.
+// Features.RestrictLocalTools applies available native restrictions to built-in
+// local file and command tools on Open or Resume. EffectiveFeatures reports
+// whether restrictions were configured, without guaranteeing all local tools
+// are disabled. See harness/modules/unified-agent/design.md#restrict-local-tools
+// for scope and provider gaps.
+//
+// The unified contract accepts only explicit mcp.TransportStdio and
+// mcp.TransportHTTP and rejects mcp.TransportSSE. It has no MCPConfigMode,
+// StrictMCPConfig, SDKMCPServers, or ambient-clear control. Adapter-specific
+// field restrictions are rejected before native side effects. The SDK forwards
+// environment and header values without resolving them; it does not persist MCP
+// configuration or include its values in unified Events, Meta, or logs. MCP
+// validation and adapter field-support errors do not echo those values. Open or
+// Resume errors can wrap native diagnostics as a cause, which callers must protect
+// separately. Open or Resume success does not prove MCP connectivity,
+// authentication, or tool discovery.
 //
 // ExampleCore runs the complete open, start-or-steer, stream, answer, close,
 // resume, and stop flow over two synthetic Cores without launching a native
 // CLI.
-// ExampleMCPServer validates an offline final MCP list without connecting to a
-// server.
+// ExampleOpenOptions_mcpServers validates an offline final MCP list without
+// connecting to a server.
 package agent

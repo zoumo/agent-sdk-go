@@ -35,9 +35,11 @@ and mock exits. The migrated synthetic, single-case and 76-slot gate checks
 remain in `tests/simulation/simulate`.
 
 The `quality` task checks module and native dependency boundaries, the
-standard-library-only native types and `agent` core, adapter-specific
-imports, the absence of reverse native/adapter/MASS imports, native inventory,
-reproducible Codex generation and committed whitespace, then runs `go vet`.
+standard-library-only `mcp` implementation, native types limited to the standard
+library and `mcp`, the `agent` core limited to the standard library, carrier
+validator and `mcp`, adapter-specific imports, the absence of
+reverse native/adapter/MASS imports, native inventory, reproducible Codex
+generation and committed whitespace, then runs `go vet`.
 `test` runs unit/subprocess tests and offline examples. `race` repeats the
 package suite under the race detector, `e2e` runs the fixed real-recording
 simulation gate, and `build` compiles every package and the SDK simulation
@@ -169,11 +171,11 @@ a CLI:
 go test -run '^ExampleCore$' ./agent
 ```
 
-`ExampleMCPServer` validates the final external MCP list for both unified
+`ExampleOpenOptions_mcpServers` validates the final external MCP list for both unified
 transports without starting a CLI or connecting to a server:
 
 ```sh
-go test -run '^ExampleMCPServer$' ./agent
+go test -run '^ExampleOpenOptions_mcpServers$' ./agent
 go test -run '^TestProviderMapsFinalMCPServersToOpenAndResumeThreadConfig$' ./agent/codex
 go test -run '^TestProviderOpenPassesFinalMCPListToClaudeOptions$' ./agent/claude
 ```

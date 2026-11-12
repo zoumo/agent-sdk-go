@@ -87,3 +87,69 @@ func TestProviderPreservesExplicitExperimentalAPIFalse(t *testing.T) {
 	require.NoError(t, session.Close(ctx))
 	require.NoError(t, provider.Stop(ctx))
 }
+
+func TestRestrictLocalToolsOnCodexOpenAndResume(t *testing.T) {
+	for _, questionsEnabled := range []bool{true, false} {
+		name := "questions enabled"
+		if !questionsEnabled {
+			name = "questions disabled"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			config := `"features.shell_tool":false,"features.view_image":false,"features.image_generation":false,"model_reasoning_effort":"high"`
+			if !questionsEnabled {
+				config += `,"tools.experimental_request_user_input.enabled":false`
+			}
+			frames := append([]string(nil), mockCodexInit...)
+			frames = append(frames,
+				`>{"id":92,"method":"thread/start","params":{"config":{`+config+`},"cwd":"/synthetic"}}`,
+				`<{"id":92,"result":`+codexThreadStartResult("root-open")+`}`,
+				`>{"id":93,"method":"thread/unsubscribe","params":{"threadId":"root-open"}}`,
+				`<{"id":93,"result":{"status":"unsubscribed"}}`,
+				`>{"id":94,"method":"thread/resume","params":{"config":{`+config+`},"cwd":"/synthetic","excludeTurns":true,"threadId":"root-resume"}}`,
+				`<{"id":94,"result":`+codexThreadResumeResult("root-resume")+`}`,
+				`>{"id":95,"method":"thread/unsubscribe","params":{"threadId":"root-resume"}}`,
+				`<{"id":95,"result":{"status":"unsubscribed"}}`,
+				`>{"id":96,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+				`<{"id":96,"result":`+codexThreadStartResult("root-default")+`}`,
+				`>{"id":97,"method":"thread/unsubscribe","params":{"threadId":"root-default"}}`,
+				`<{"id":97,"result":{"status":"unsubscribed"}}`,
+			)
+			provider := newTestProvider(t, prepareCodexPeer(t, frames...))
+			t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
+			_, err := provider.Start(ctx)
+			require.NoError(t, err)
+			options := agent.OpenOptions{
+				Cwd: "/synthetic",
+				Features: agent.Features{
+					AgentQuestions:     &questionsEnabled,
+					RestrictLocalTools: true,
+				},
+				Config: agent.SessionConfig{Effort: "high"},
+			}
+			expected := agent.EffectiveFeatures{
+				AgentQuestions:     questionsEnabled,
+				RestrictLocalTools: true,
+			}
+			opened, err := provider.Open(ctx, options)
+			require.NoError(t, err)
+			assert.Equal(t, expected, opened.EffectiveFeatures())
+			assert.Equal(t, questionsEnabled, opened.Capabilities().Supports(agent.CapabilityForm))
+			require.NoError(t, opened.Close(ctx))
+
+			resumed, err := provider.Resume(ctx, agent.ResumeOptions{
+				SessionID:   "root-resume",
+				OpenOptions: options,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, expected, resumed.EffectiveFeatures())
+			require.NoError(t, resumed.Close(ctx))
+
+			defaultSession, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
+			require.NoError(t, err)
+			assert.Equal(t, agent.EffectiveFeatures{AgentQuestions: true}, defaultSession.EffectiveFeatures())
+			require.NoError(t, defaultSession.Close(ctx))
+		})
+	}
+}

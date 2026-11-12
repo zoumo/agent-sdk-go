@@ -95,7 +95,8 @@ README 和包文档说明。现有原生 Session 的语义以
 
 | 层 | 最终公开面 | 负责什么 |
 |---|---|---|
-| `agent` | `Core`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`MCPServer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | adapter 无关的 Agent Core、单 Session 实时合同与环境/trace seam |
+| `agent` | `Core`、`Session`、`EventStream`、`Event`/payload、`Input`、`Answer`、`SessionConfig`、`ConfigController`、`TraceContext`、`Tracer`、错误值 | adapter 无关的 Agent Core、单 Session 实时合同与环境/trace seam |
+| `mcp` | `Server`、`Transport`、结构校验 | Codex、Claude 与统一层共用的 external MCP 配置值；不连接 server |
 | `agent/codex` | `New(Config)` 返回具体 `*agentcodex.Core`，它实现 `agent.Core` 并提供 `NativeClient()` | Codex 原生连接、Session、事件和交互适配 |
 | `agent/claude` | `New(Config)` 返回具体 `*agentclaude.Core`，它实现 `agent.Core` | Claude 原生进程、Session、事件和交互适配 |
 | 原生 `codex`、`claude` | 现有公开 API、类型和 `types` 包；Codex 增加 `ShellEnv`、trace context helper 和 envelope trace 支持，Claude 增加 `AppendSystemPrompt`、trace context helper 和逐 prompt settings env 切换 | 原生协议、查询、原始数据和 provider 语义 |
@@ -189,6 +190,7 @@ agent/codex, agent/claude
     -> agent/internal/eventenvelope     -> agent, internal/uuidv4
     -> agent/internal/submissiontrace   -> agent
 
+agent, codex, claude, claude/types -> mcp
 agent          -> internal/tracecontext
 internal/queue -> github.com/zoumo/golib/channx
 ```
@@ -307,7 +309,7 @@ type OpenOptions struct {
     // process environment. Claude rejects non-empty values.
     ShellEnv               map[string]string
     Features               Features
-    MCPServers             []MCPServer
+    MCPServers             []mcp.Server
     Config                 SessionConfig
 }
 
@@ -319,10 +321,13 @@ type ResumeOptions struct {
 type Features struct {
     // nil 使用该 provider/schema 的默认值；当前默认 true。
     AgentQuestions *bool
+    // true 应用可用的原生本地工具限制；false 沿用原生配置。
+    RestrictLocalTools bool
 }
 
 type EffectiveFeatures struct {
     AgentQuestions bool
+    RestrictLocalTools bool
 }
 ```
 
@@ -351,8 +356,9 @@ type EffectiveFeatures struct {
   `unsupported`，不能映射到 app-server 或 shell 环境。
 - `ShellEnv` 按[环境配置](#environment-configuration)解释；provider 不支持
   非空值时必须返回 `unsupported`，不能静默忽略或映射到更宽的作用域。
-- 请求关闭某项功能必须得到 false；请求开启但 adapter 不支持时，允许降级为
-  false，并通过 `Session.EffectiveFeatures()` 返回。
+- `AgentQuestions` 请求关闭必须得到 false；请求开启但 adapter 不支持时，
+  允许降级为 false。`RestrictLocalTools` 使用下述 best-effort 合同。
+  两者均通过 `Session.EffectiveFeatures()` 返回有效映射。
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
 - `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
@@ -374,6 +380,31 @@ type EffectiveFeatures struct {
 - 首次被接纳的 `Stop` 是终止性的：release 至多执行一次，release 错误被缓存，
   后续 `Stop` 返回同一结果；即使 release 失败，`Start`、`Open` 和 `Resume`
   也不能再运行。没有未关闭 Session 时重复 Stop 返回缓存结果。
+
+### Restrict local tools
+
+<a id="restrict-local-tools"></a>
+
+`Features.RestrictLocalTools` 是单个 `bool` 开关，要求 adapter 对 provider
+内置的本地文件读写与命令执行工具应用可用的原生限制。`true` 请求限制，
+不承诺关闭全部本地工具；默认 `false` 沿用原生配置，不主动开启工具。
+该选项按 `Open`／`Resume` 操作传递，恢复时调用方必须重新声明。
+它与 `AgentQuestions` 独立，不主动关闭提问、计划或其他类别工具。
+
+| Provider | `true` 的原生映射 | `EffectiveFeatures.RestrictLocalTools` |
+|---|---|---|
+| Claude | `--disallowedTools` 加入 `Bash`、`PowerShell`、`Read`、`Glob`、`Grep`、`Write`、`Edit`、`NotebookEdit`、`EnterWorktree`、`ExitWorktree` | true |
+| Codex | thread config 设置 `features.shell_tool=false`、`features.view_image=false`、`features.image_generation=false` | true，表示配置了上述限制 |
+
+Claude 的 `AskUserQuestion` 仅由 `AgentQuestions` 控制。Codex 的公开配置没有
+完整文件工具 deny list，也没有关闭全部工具的公开入口；`apply_patch` 仍可能
+注册。因此 Codex 接受该请求并应用可用限制，不能把它解释为完整关闭。
+
+`EffectiveFeatures.RestrictLocalTools` 在本次请求为 true 且 adapter 配置了
+原生限制时为 true，默认 false。它描述 adapter 配置映射，允许 provider 之间
+存在 gap，不是全部工具已关闭的证明、运行时工具发现结果或未来工具名覆盖承诺。
+本选项不控制 MCP、hook、其他类别工具、子 Agent 的继承行为或 CLI 自身读取配置与
+写入会话材料；不构成操作系统安全隔离，也不修改 sandbox 或 approval policy。
 
 ### Additional system prompt
 
@@ -650,18 +681,13 @@ MCP 连接、OAuth、健康检查、tool discovery、tool 调用或 application-
 MCP 的 JSON-RPC 回答。后者的原始 `mcp_message` 控制仍由原生 Claude Session
 和应用处理，不进入统一 MCP 配置。
 
+共享配置定义在独立的 `mcp` 包，Codex、Claude 和统一层都使用
+`[]mcp.Server`。`mcp.Transport` 必须显式提供，共享结构保留三方字段并集：
+
 ```go
-type MCPTransport string
-
-const (
-    MCPTransportStdio MCPTransport = "stdio"
-    // MCPTransportHTTP 是 MCP Streamable HTTP，不是旧式 HTTP+SSE。
-    MCPTransportHTTP MCPTransport = "http"
-)
-
-type MCPServer struct {
+type Server struct {
     Name              string
-    Transport         MCPTransport
+    Transport         Transport
     Command           string
     Args              []string
     Env               map[string]string
@@ -673,9 +699,11 @@ type MCPServer struct {
 }
 ```
 
-统一层不定义 SSE transport。Claude 原生包仍可声明旧式 SSE server，但统一
-Core 只支持两个 adapter 共同具备的 stdio 与 Streamable HTTP；需要 SSE
-的调用方直接使用原生 `claude` Session。统一层也不定义
+`mcp` 包定义 `TransportStdio`、`TransportHTTP` 和 `TransportSSE`。
+`TransportHTTP` 是 MCP Streamable HTTP；`TransportSSE` 是 Claude 原生包仍可
+声明的旧式 HTTP+SSE。统一 Core 只接受两个 adapter 共同具备的 stdio 与
+Streamable HTTP，并明确拒绝 SSE；需要 SSE 的调用方直接使用原生 `claude`
+Session。统一层也不定义
 `MCPConfigMode`、`inherit`/`replace`、`StrictMCPConfig` 或任何清空 native
 ambient MCP 的开关。
 
@@ -713,14 +741,14 @@ merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企
 | 统一字段或能力 | 约束 | Codex | Claude |
 |---|---|---|---|
 | `Name` | 非空、合法 UTF-8、无 `.`、列表内唯一 | `mcp_servers.<name>` key | `mcpServers.<name>` key |
-| `Transport` | 必须显式提供 | `stdio` 选择 command，`http` 选择 URL | 生成 `type:"stdio"` 或 `type:"http"` |
+| `Transport` | 必须显式提供；统一层拒绝 `sse` | 只接受 `stdio` 或 `http` | 接受 `stdio`、`http` 或 `sse` |
 | `Command` / `Args` / `Env` | 只用于 stdio | 同名字段 | 同名字段 |
 | `Cwd` | 只用于 stdio | `cwd` | 不支持 |
 | `URL` | 只用于 HTTP | `url` | `url` |
 | `Headers` | 只用于 HTTP | `http_headers` | `headers` |
 | `EnvHeaders` | 只用于 HTTP；值是环境变量名 | `env_http_headers` | 不支持 |
 | `BearerTokenEnvVar` | 只用于 HTTP；值是环境变量名 | `bearer_token_env_var` | 不支持 |
-| 旧式 HTTP+SSE | 不属于统一 transport | 不支持 | 原生包支持，统一层不暴露 |
+| 旧式 HTTP+SSE | `mcp.TransportSSE` 只供原生 Claude | 不支持 | 原生包支持，统一层不暴露 |
 
 adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他字段。`Cwd` 与
 `EnvHeaders`、`BearerTokenEnvVar` 存在于统一结构是为了保留 Codex 的原生安全
@@ -728,7 +756,8 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 
 #### 校验、生命周期与敏感值
 
-- `Transport` 不能由 `Command`/`URL` 推断；未知值返回 `invalid_argument`。
+- `Transport` 不能由 `Command`/`URL` 推断；缺失、未知或统一层不支持的
+  transport 返回 `invalid_argument`。
 - stdio 必须有非空 `Command`，禁止 `URL`、`Headers`、`EnvHeaders` 和
   `BearerTokenEnvVar`。
 - HTTP 必须有非空 `URL`，禁止 `Command`、`Args`、`Env` 和 `Cwd`。
@@ -891,8 +920,9 @@ const (
 - `Start` 返回 Core 的基础支持面；`Session.Capabilities()` 返回该 Session
   实际可用的支持面，可以等于或窄于 Core。
 - 缺失或 false 都表示调用方不能假定支持。能力存在也不绕过当前 Session 状态。
-- `EffectiveFeatures` 表达本次请求最终是否启用，不能仅从 `Capabilities`
-  推断。
+- `EffectiveFeatures` 表达本次请求的有效 adapter 映射，不能仅从 `Capabilities`
+  推断；它不是运行时工具清单或安全隔离证明。`RestrictLocalTools` 的部分支持
+  按[限制本地工具](#restrict-local-tools)解释。
 - `AdditionalSystemPrompt` 是 `Open`/`Resume` 输入，不是运行时能力或 feature；
   它不进入 `Capabilities`，也不能通过 `EffectiveFeatures` 表达。
 - `processEnv` 表示非空 `OpenOptions.ProcessEnv` 能被该 Session 解释为自有

@@ -11,6 +11,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 func TestSessionExternalMCPStdioStart(t *testing.T) {
@@ -18,20 +19,22 @@ func TestSessionExternalMCPStdioStart(t *testing.T) {
 	rawConfig := map[string]json.RawMessage{
 		"model_reasoning_effort": json.RawMessage(`"low"`),
 	}
-	servers := []codex.MCPServer{{
-		Name:    "local",
-		Command: "fixture-mcp",
-		Args:    []string{"--stdio", "literal value"},
-		Env:     map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
-		Cwd:     "/synthetic/mcp",
+	servers := []mcp.Server{{
+		Name:      "local",
+		Transport: mcp.TransportStdio,
+		Command:   "fixture-mcp",
+		Args:      []string{"--stdio", "literal value"},
+		Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+		Cwd:       "/synthetic/mcp",
 	}}
 	wantRawConfig := maps.Clone(rawConfig)
-	wantServers := []codex.MCPServer{{
-		Name:    "local",
-		Command: "fixture-mcp",
-		Args:    []string{"--stdio", "literal value"},
-		Env:     map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
-		Cwd:     "/synthetic/mcp",
+	wantServers := []mcp.Server{{
+		Name:      "local",
+		Transport: mcp.TransportStdio,
+		Command:   "fixture-mcp",
+		Args:      []string{"--stdio", "literal value"},
+		Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+		Cwd:       "/synthetic/mcp",
 	}}
 
 	s, err := codex.Open(context.Background(), codex.SessionOptions{
@@ -65,16 +68,18 @@ func TestSessionExternalMCPHTTPResume(t *testing.T) {
 		ThreadID: resumedNativeID,
 		Config:   types.Some(rawConfig),
 	}
-	servers := []codex.MCPServer{{
+	servers := []mcp.Server{{
 		Name:              "remote",
+		Transport:         mcp.TransportHTTP,
 		URL:               "https://example.invalid/mcp",
 		Headers:           map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
 		EnvHeaders:        map[string]string{"X-API-Key": "REMOTE_API_KEY"},
 		BearerTokenEnvVar: "REMOTE_BEARER_TOKEN",
 	}}
 	wantRawConfig := maps.Clone(rawConfig)
-	wantServers := []codex.MCPServer{{
+	wantServers := []mcp.Server{{
 		Name:              "remote",
+		Transport:         mcp.TransportHTTP,
 		URL:               "https://example.invalid/mcp",
 		Headers:           map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
 		EnvHeaders:        map[string]string{"X-API-Key": "REMOTE_API_KEY"},
@@ -111,83 +116,90 @@ func TestSessionExternalMCPRejectsInvalidConfiguration(t *testing.T) {
 	f := startFake(t, "normal", codex.Limits{})
 	cases := []struct {
 		name       string
-		servers    []codex.MCPServer
+		servers    []mcp.Server
 		wantFields []string
 	}{
 		{
 			name:       "empty name",
-			servers:    []codex.MCPServer{{Command: "fixture-mcp"}},
+			servers:    []mcp.Server{{Transport: mcp.TransportStdio, Command: "fixture-mcp"}},
 			wantFields: []string{"name"},
 		},
 		{
 			name:       "invalid UTF-8 name",
-			servers:    []codex.MCPServer{{Name: string([]byte{0xff}), Command: "fixture-mcp"}},
+			servers:    []mcp.Server{{Name: string([]byte{0xff}), Transport: mcp.TransportStdio, Command: "fixture-mcp"}},
 			wantFields: []string{"name"},
 		},
 		{
 			name:       "dotted name",
-			servers:    []codex.MCPServer{{Name: "local.fixture", Command: "fixture-mcp"}},
-			wantFields: []string{"name", "."},
+			servers:    []mcp.Server{{Name: "local.fixture", Transport: mcp.TransportStdio, Command: "fixture-mcp"}},
+			wantFields: []string{"name", "dot"},
 		},
 		{
 			name: "duplicate name",
-			servers: []codex.MCPServer{
-				{Name: "local", Command: "first"},
-				{Name: "local", Command: "second"},
+			servers: []mcp.Server{
+				{Name: "local", Transport: mcp.TransportStdio, Command: "first"},
+				{Name: "local", Transport: mcp.TransportStdio, Command: "second"},
 			},
 			wantFields: []string{"name"},
 		},
 		{
-			name:       "missing command and URL",
-			servers:    []codex.MCPServer{{Name: "server"}},
-			wantFields: []string{"command", "url"},
+			name:       "missing transport",
+			servers:    []mcp.Server{{Name: "server"}},
+			wantFields: []string{"transport"},
 		},
 		{
-			name:       "both command and URL",
-			servers:    []codex.MCPServer{{Name: "server", Command: "fixture-mcp", URL: "https://example.invalid/mcp"}},
-			wantFields: []string{"command", "url"},
+			name: "unsupported SSE",
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportSSE, URL: "https://example.invalid/sse",
+			}},
+			wantFields: []string{"sse", "not supported"},
+		},
+		{
+			name:       "stdio with URL",
+			servers:    []mcp.Server{{Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", URL: "https://example.invalid/mcp"}},
+			wantFields: []string{"url"},
 		},
 		{
 			name: "stdio with headers",
-			servers: []codex.MCPServer{{
-				Name: "server", Command: "fixture-mcp", Headers: map[string]string{"Authorization": secret},
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Headers: map[string]string{"Authorization": secret},
 			}},
 			wantFields: []string{"stdio", "headers"},
 		},
 		{
 			name: "stdio with environment headers",
-			servers: []codex.MCPServer{{
-				Name: "server", Command: "fixture-mcp", EnvHeaders: map[string]string{"X-API-Key": "API_KEY"},
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", EnvHeaders: map[string]string{"X-API-Key": "API_KEY"},
 			}},
 			wantFields: []string{"stdio", "env_headers"},
 		},
 		{
 			name: "stdio with bearer token environment variable",
-			servers: []codex.MCPServer{{
-				Name: "server", Command: "fixture-mcp", BearerTokenEnvVar: secret,
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", BearerTokenEnvVar: secret,
 			}},
 			wantFields: []string{"stdio", "bearer_token_env_var"},
 		},
 		{
 			name: "HTTP with args",
-			servers: []codex.MCPServer{{
-				Name: "server", URL: "https://example.invalid/mcp", Args: []string{secret},
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp", Args: []string{secret},
 			}},
-			wantFields: []string{"streamable HTTP", "args"},
+			wantFields: []string{"HTTP", "args"},
 		},
 		{
 			name: "HTTP with environment",
-			servers: []codex.MCPServer{{
-				Name: "server", URL: "https://example.invalid/mcp", Env: map[string]string{"TOKEN": secret},
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp", Env: map[string]string{"TOKEN": secret},
 			}},
-			wantFields: []string{"streamable HTTP", "env"},
+			wantFields: []string{"HTTP", "env"},
 		},
 		{
 			name: "HTTP with working directory",
-			servers: []codex.MCPServer{{
-				Name: "server", URL: "https://example.invalid/mcp", Cwd: "/synthetic/" + secret,
+			servers: []mcp.Server{{
+				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp", Cwd: "/synthetic/" + secret,
 			}},
-			wantFields: []string{"streamable HTTP", "cwd"},
+			wantFields: []string{"HTTP", "cwd"},
 		},
 	}
 	for _, tc := range cases {
@@ -210,67 +222,73 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 	f := startFake(t, "resume-normal", codex.Limits{})
 	cases := []struct {
 		name       string
-		server     codex.MCPServer
+		server     mcp.Server
 		wantFields []string
 	}{
 		{
 			name:       "command",
-			server:     codex.MCPServer{Command: bad},
+			server:     mcp.Server{Transport: mcp.TransportStdio, Command: bad},
 			wantFields: []string{"command"},
 		},
 		{
 			name: "argument",
-			server: codex.MCPServer{
-				Command: "fixture-mcp",
-				Args:    []string{"--stdio", bad},
+			server: mcp.Server{
+				Transport: mcp.TransportStdio,
+				Command:   "fixture-mcp",
+				Args:      []string{"--stdio", bad},
 			},
-			wantFields: []string{"args[1]"},
+			wantFields: []string{"args"},
 		},
 		{
 			name: "environment key",
-			server: codex.MCPServer{
-				Command: "fixture-mcp",
-				Env:     map[string]string{bad: "VALUE"},
+			server: mcp.Server{
+				Transport: mcp.TransportStdio,
+				Command:   "fixture-mcp",
+				Env:       map[string]string{bad: "VALUE"},
 			},
 			wantFields: []string{"env key"},
 		},
 		{
 			name: "environment value",
-			server: codex.MCPServer{
-				Command: "fixture-mcp",
-				Env:     map[string]string{"TOKEN": bad},
+			server: mcp.Server{
+				Transport: mcp.TransportStdio,
+				Command:   "fixture-mcp",
+				Env:       map[string]string{"TOKEN": bad},
 			},
 			wantFields: []string{"env value"},
 		},
 		{
 			name:       "working directory",
-			server:     codex.MCPServer{Command: "fixture-mcp", Cwd: bad},
+			server:     mcp.Server{Transport: mcp.TransportStdio, Command: "fixture-mcp", Cwd: bad},
 			wantFields: []string{"cwd"},
 		},
 		{
 			name:       "URL",
-			server:     codex.MCPServer{URL: bad},
+			server:     mcp.Server{Transport: mcp.TransportHTTP, URL: bad},
 			wantFields: []string{"url"},
 		},
 		{
 			name: "header key",
-			server: codex.MCPServer{
-				URL:     "https://example.invalid/mcp",
-				Headers: map[string]string{bad: "VALUE"},
+			server: mcp.Server{
+				Transport: mcp.TransportHTTP,
+				URL:       "https://example.invalid/mcp",
+				Headers:   map[string]string{bad: "VALUE"},
 			},
 			wantFields: []string{"headers key"},
 		},
 		{
 			name: "header value",
-			server: codex.MCPServer{
-				URL:     "https://example.invalid/mcp",
-				Headers: map[string]string{"Authorization": bad},
+			server: mcp.Server{
+				Transport: mcp.TransportHTTP,
+				URL:       "https://example.invalid/mcp",
+				Headers:   map[string]string{"Authorization": bad},
 			},
 			wantFields: []string{"headers value"},
 		},
 		{
 			name: "environment header key",
-			server: codex.MCPServer{
+			server: mcp.Server{
+				Transport:  mcp.TransportHTTP,
 				URL:        "https://example.invalid/mcp",
 				EnvHeaders: map[string]string{bad: "VALUE"},
 			},
@@ -278,7 +296,8 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 		},
 		{
 			name: "environment header value",
-			server: codex.MCPServer{
+			server: mcp.Server{
+				Transport:  mcp.TransportHTTP,
 				URL:        "https://example.invalid/mcp",
 				EnvHeaders: map[string]string{"X-API-Key": bad},
 			},
@@ -286,7 +305,8 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 		},
 		{
 			name: "bearer token environment variable",
-			server: codex.MCPServer{
+			server: mcp.Server{
+				Transport:         mcp.TransportHTTP,
 				URL:               "https://example.invalid/mcp",
 				BearerTokenEnvVar: bad,
 			},
@@ -302,7 +322,7 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 			t.Run(mode+"/"+tc.name, func(t *testing.T) {
 				server := tc.server
 				server.Name = "server"
-				options := codex.SessionOptions{Client: f.c, MCPServers: []codex.MCPServer{server}}
+				options := codex.SessionOptions{Client: f.c, MCPServers: []mcp.Server{server}}
 				if resume {
 					options.Resume = &types.ThreadResumeParams{ThreadID: resumedNativeID}
 				}
@@ -328,10 +348,11 @@ func TestSessionExternalMCPRejectsRawConfigConflicts(t *testing.T) {
 		serverSecret = "MCP-FIELD-SECRET-MUST-NOT-LEAK"
 	)
 	f := startFake(t, "resume-normal", codex.Limits{})
-	servers := []codex.MCPServer{{
-		Name:    "remote",
-		URL:     "https://example.invalid/mcp",
-		Headers: map[string]string{"Authorization": "Bearer " + serverSecret},
+	servers := []mcp.Server{{
+		Name:      "remote",
+		Transport: mcp.TransportHTTP,
+		URL:       "https://example.invalid/mcp",
+		Headers:   map[string]string{"Authorization": "Bearer " + serverSecret},
 	}}
 	for _, rawPath := range []string{
 		"mcp_servers",
@@ -393,11 +414,12 @@ func TestSessionExternalMCPConfigIsolationAndCopies(t *testing.T) {
 	}
 	args := []string{"--stdio"}
 	env := map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"}
-	servers := []codex.MCPServer{{
-		Name:    "first",
-		Command: "fixture-mcp",
-		Args:    args,
-		Env:     env,
+	servers := []mcp.Server{{
+		Name:      "first",
+		Transport: mcp.TransportStdio,
+		Command:   "fixture-mcp",
+		Args:      args,
+		Env:       env,
 	}}
 
 	first, err := codex.Open(context.Background(), codex.SessionOptions{
@@ -411,11 +433,12 @@ func TestSessionExternalMCPConfigIsolationAndCopies(t *testing.T) {
 		"model_reasoning_effort": json.RawMessage(`"low"`),
 		"mcp_servers.ambient":    json.RawMessage(`{"url":"https://ambient.invalid/mcp"}`),
 	}, rawConfig)
-	assert.Equal(t, []codex.MCPServer{{
-		Name:    "first",
-		Command: "fixture-mcp",
-		Args:    []string{"--stdio"},
-		Env:     map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+	assert.Equal(t, []mcp.Server{{
+		Name:      "first",
+		Transport: mcp.TransportStdio,
+		Command:   "fixture-mcp",
+		Args:      []string{"--stdio"},
+		Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
 	}}, servers)
 
 	args[0] = "--changed"
@@ -425,8 +448,9 @@ func TestSessionExternalMCPConfigIsolationAndCopies(t *testing.T) {
 	rawConfig["mcp_servers.ambient"] = json.RawMessage(`{"url":"https://changed.invalid/mcp"}`)
 	headers := map[string]string{"Authorization": "Bearer ${SECOND_TOKEN}"}
 	envHeaders := map[string]string{"X-API-Key": "SECOND_API_KEY"}
-	secondServers := []codex.MCPServer{{
+	secondServers := []mcp.Server{{
 		Name:              "second",
+		Transport:         mcp.TransportHTTP,
 		URL:               "https://second.invalid/mcp",
 		Headers:           headers,
 		EnvHeaders:        envHeaders,

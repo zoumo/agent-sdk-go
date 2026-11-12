@@ -18,6 +18,7 @@ import (
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 const (
@@ -81,8 +82,9 @@ func run(output io.Writer) error {
 			codex.FeatureViewImage:       false,
 			codex.FeatureImageGeneration: false,
 		},
-		MCPServers: []codex.MCPServer{{
+		MCPServers: []mcp.Server{{
 			Name:       "remote",
+			Transport:  mcp.TransportHTTP,
 			URL:        "https://example.invalid/mcp",
 			EnvHeaders: map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
 		}},

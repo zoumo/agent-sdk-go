@@ -10,6 +10,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 var _ agent.Core = (*Core)(nil)
@@ -116,7 +117,7 @@ func (p *Core) Open(
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
-	mcpServers := nativeMCPServers(options.MCPServers)
+	mcpServers := mcp.CloneServers(options.MCPServers)
 	features, config, err := p.openingConfiguration(options)
 	if err != nil {
 		return nil, err
@@ -160,7 +161,7 @@ func (p *Core) Resume(
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
 		return nil, err
 	}
-	mcpServers := nativeMCPServers(options.MCPServers)
+	mcpServers := mcp.CloneServers(options.MCPServers)
 	features, config, err := p.openingConfiguration(options.OpenOptions)
 	if err != nil {
 		return nil, err
@@ -235,7 +236,8 @@ func effectiveFeatures(
 	formsSupported bool,
 ) agent.EffectiveFeatures {
 	return agent.EffectiveFeatures{
-		AgentQuestions: features.AgentQuestionsEnabled() && formsSupported,
+		AgentQuestions:     features.AgentQuestionsEnabled() && formsSupported,
+		RestrictLocalTools: features.RestrictLocalTools,
 	}
 }
 
@@ -263,9 +265,14 @@ func threadConfig(
 	features agent.EffectiveFeatures,
 	effort string,
 ) (codextypes.Optional[map[string]json.RawMessage], error) {
-	config := make(map[string]json.RawMessage, 2)
+	config := make(map[string]json.RawMessage, 5)
 	if !features.AgentQuestions {
 		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
+	}
+	if features.RestrictLocalTools {
+		config["features.shell_tool"] = json.RawMessage("false")
+		config["features.view_image"] = json.RawMessage("false")
+		config["features.image_generation"] = json.RawMessage("false")
 	}
 	if effort != "" {
 		encoded, err := json.Marshal(effort)

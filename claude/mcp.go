@@ -6,24 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"unicode/utf8"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
-
-// MCPTransport selects one native Claude MCP transport.
-type MCPTransport = types.MCPTransport
-
-const (
-	MCPTransportStdio = types.MCPTransportStdio
-	MCPTransportHTTP  = types.MCPTransportHTTP
-	MCPTransportSSE   = types.MCPTransportSSE
-)
-
-// MCPServer declares one external MCP server for a Session.
-type MCPServer = types.MCPServer
 
 // SDKMCPRequest preserves the original native server name and JSON-RPC message.
 // Metadata does not grant authority: only IncomingRequest.ReplyMCP can answer it.
@@ -32,10 +19,10 @@ type SDKMCPRequest struct {
 	Message    json.RawMessage
 }
 
-func nativeMCPServerConfig(server MCPServer) map[string]any {
+func nativeMCPServerConfig(server mcp.Server) map[string]any {
 	config := map[string]any{"type": string(server.Transport)}
 	switch server.Transport {
-	case MCPTransportStdio:
+	case mcp.TransportStdio:
 		config["command"] = server.Command
 		if len(server.Args) > 0 {
 			config["args"] = server.Args
@@ -43,7 +30,7 @@ func nativeMCPServerConfig(server MCPServer) map[string]any {
 		if len(server.Env) > 0 {
 			config["env"] = server.Env
 		}
-	case MCPTransportHTTP, MCPTransportSSE:
+	case mcp.TransportHTTP, mcp.TransportSSE:
 		config["url"] = server.URL
 		if len(server.Headers) > 0 {
 			config["headers"] = server.Headers
@@ -62,7 +49,10 @@ func validateSDKMCPServers(names []string) error {
 	return nil
 }
 
-func validateMCPServers(servers []MCPServer, sdkNames []string) error {
+func validateMCPServers(servers []mcp.Server, sdkNames []string) error {
+	if err := mcp.ValidateServers(servers); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
 	used := make(map[string]struct{}, len(sdkNames)+len(servers))
 	for _, name := range sdkNames {
 		if err := addMCPName(used, name); err != nil {
@@ -73,23 +63,13 @@ func validateMCPServers(servers []MCPServer, sdkNames []string) error {
 		if err := addMCPName(used, server.Name); err != nil {
 			return fmt.Errorf("%w: mcp server %d has an invalid or duplicate name", ErrInvalidInput, i)
 		}
-		switch server.Transport {
-		case MCPTransportStdio:
-			if server.Command == "" {
-				return fmt.Errorf("%w: mcp server %d: stdio requires command", ErrInvalidInput, i)
-			}
-			if server.URL != "" || len(server.Headers) > 0 {
-				return fmt.Errorf("%w: mcp server %d: stdio does not allow url or headers", ErrInvalidInput, i)
-			}
-		case MCPTransportHTTP, MCPTransportSSE:
-			if server.URL == "" {
-				return fmt.Errorf("%w: mcp server %d: %s requires url", ErrInvalidInput, i, server.Transport)
-			}
-			if server.Command != "" || len(server.Args) > 0 || len(server.Env) > 0 {
-				return fmt.Errorf("%w: mcp server %d: %s does not allow command, args or env", ErrInvalidInput, i, server.Transport)
-			}
-		default:
-			return fmt.Errorf("%w: mcp server %d requires transport stdio, http or sse", ErrInvalidInput, i)
+		switch {
+		case server.Cwd != "":
+			return fmt.Errorf("%w: mcp server %d: cwd is not supported", ErrInvalidInput, i)
+		case len(server.EnvHeaders) != 0:
+			return fmt.Errorf("%w: mcp server %d: env_headers is not supported", ErrInvalidInput, i)
+		case server.BearerTokenEnvVar != "":
+			return fmt.Errorf("%w: mcp server %d: bearer_token_env_var is not supported", ErrInvalidInput, i)
 		}
 	}
 	return nil
@@ -104,20 +84,6 @@ func addMCPName(seen map[string]struct{}, name string) error {
 	}
 	seen[name] = struct{}{}
 	return nil
-}
-
-func cloneMCPServers(servers []MCPServer) []MCPServer {
-	if servers == nil {
-		return nil
-	}
-	cloned := make([]MCPServer, len(servers))
-	for i, server := range servers {
-		cloned[i] = server
-		cloned[i].Args = slices.Clone(server.Args)
-		cloned[i].Env = maps.Clone(server.Env)
-		cloned[i].Headers = maps.Clone(server.Headers)
-	}
-	return cloned
 }
 
 func decodeSDKMCPRequest(raw json.RawMessage) (SDKMCPRequest, error) {

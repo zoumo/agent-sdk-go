@@ -13,6 +13,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 func TestConfigIsCopiedAndNativeOptionsTargetResume(t *testing.T) {
@@ -341,9 +342,9 @@ func TestEmbeddedStartupDeclarationKeepsFullSDKFeatureOptions(t *testing.T) {
 		Model:           "synthetic",
 		ResumeID:        "resume-id",
 		DisallowedTools: []string{"AskUserQuestion"},
-		MCPServers: []claude.MCPServer{{
+		MCPServers: []mcp.Server{{
 			Name:      "fixture",
-			Transport: claude.MCPTransportStdio,
+			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 		}},
 	}

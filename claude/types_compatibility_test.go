@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 // Function signatures require identical types, not merely convertible structs.
@@ -31,13 +32,11 @@ var (
 	}
 	_ types.PermissionBehavior = PermissionAllow
 	_ PermissionBehavior       = types.PermissionDeny
-	_ types.MCPTransport       = MCPTransportStdio
-	_ MCPTransport             = types.MCPTransportSSE
-	_ types.MCPServer          = MCPServer{}
+	_ mcp.Transport            = mcp.TransportSSE
 	_ Options                  = Options{
 		CLIPath: "fixture", WorkDir: ".", Model: "m", ResumeID: "s", Tools: []string{"Read"}, DisallowedTools: []string{"AskUserQuestion"},
 		AppendSystemPrompt: "literal append prompt",
-		MCPServers:         []MCPServer{{Name: "fixture", Transport: MCPTransportStdio, Command: "fixture-mcp"}}, StrictMCPConfig: true, Env: []string{},
+		MCPServers:         []mcp.Server{{Name: "fixture", Transport: mcp.TransportStdio, Command: "fixture-mcp"}}, StrictMCPConfig: true, Env: []string{},
 		InitializeTimeout: time.Second, ShutdownTimeout: time.Second,
 		Limits: Limits{
 			EventBuffer: 1, FrameBytes: 1024, PendingControls: 1, ControlBuffer: 1,
@@ -52,8 +51,8 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 		AppendSystemPrompt: "multi-line\nliteral append prompt --leading-dash ünïcødé",
 		SessionID:          "11111111-1111-4111-8111-111111111111",
 		ClaimSession:       true,
-		MCPServers: []types.MCPServer{{
-			Name: "remote", Transport: types.MCPTransportHTTP, URL: "https://example.invalid/mcp",
+		MCPServers: []mcp.Server{{
+			Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
 			Headers: map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
 		}},
 		StrictMCPConfig: true,

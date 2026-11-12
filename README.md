@@ -11,6 +11,7 @@ import (
     codextypes "github.com/zoumo/agent-sdk-go/codex/types"
     claude "github.com/zoumo/agent-sdk-go/claude"
     claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+    "github.com/zoumo/agent-sdk-go/mcp"
 )
 ```
 
@@ -137,6 +138,30 @@ unified history, `LoadSession`, replay, or root convenience client. MASS resourc
 identity, history import, persistence, and multi-session aggregation also remain
 outside this module.
 
+### Restrict local tools
+
+Set `Features.RestrictLocalTools` to apply available native restrictions to
+built-in local file read, write and command tools on `Open` or `Resume`.
+The default `false` preserves native configuration; repeat the request when
+resuming.
+
+```go
+options := agent.OpenOptions{
+    Cwd: "/absolute/workspace",
+    Features: agent.Features{RestrictLocalTools: true},
+}
+```
+
+Claude forwards a native tool deny list. Codex disables shell, image viewing and
+image generation, but its public configuration cannot disable `apply_patch` or
+provide a complete file-tool deny list. Accordingly,
+`session.EffectiveFeatures().RestrictLocalTools` reports whether the adapter
+configured the restrictions, including the partial Codex mapping. It does not
+mean every local tool is disabled. These controls apply to known built-in tools;
+MCP, hooks and the CLI's own file access are outside their scope. The
+[unified contract](harness/modules/unified-agent/design.md#restrict-local-tools)
+defines the mappings and gaps.
+
 ### Additional system prompt
 
 `agent.OpenOptions.AdditionalSystemPrompt` adds optional caller text after
@@ -158,10 +183,12 @@ The authoritative developer contract is
 [unified Agent MCP configuration](harness/modules/unified-agent/design.md#mcp-configuration).
 This section is the user-facing usage summary.
 
-`agent.OpenOptions.MCPServers` is the complete final external MCP list for one
-`Open` or `Resume` call. The component that interprets Runtime configuration must
-compose Runtime defaults with the current Session declaration before invoking the
-Core:
+`mcp.Server` is the one external MCP server configuration shared by the native
+Codex and Claude SDKs and the adapter-neutral agent layer. All three entry points
+accept `[]mcp.Server`. `agent.OpenOptions.MCPServers` is the complete final list
+for one `Open` or `Resume` call. The component that interprets Runtime
+configuration must compose Runtime defaults with the current Session declaration
+before invoking the Core:
 
 1. Match `Name` case-sensitively.
 2. Keep servers found only in the Runtime defaults.
@@ -174,11 +201,12 @@ The Core receives only this final list and performs no second merge. Resume
 must receive the full final list again; the unified SDK does not persist or restore
 MCP configuration from a previous Session.
 
-The only unified transports are explicit `MCPTransportStdio` (`"stdio"`) and
-`MCPTransportHTTP` (MCP Streamable HTTP). The unified layer has no SSE transport,
-`MCPConfigMode`, `StrictMCPConfig`, `SDKMCPServers`, or ambient-clear switch.
-Native Claude still exposes its SSE, strict, and application-hosted SDK MCP
-options through the `claude` package.
+The shared configuration requires an explicit transport. The unified layer
+accepts `mcp.TransportStdio` (`"stdio"`) and `mcp.TransportHTTP` (MCP Streamable
+HTTP), and rejects `mcp.TransportSSE`. It has no `MCPConfigMode`,
+`StrictMCPConfig`, `SDKMCPServers`, or ambient-clear switch. Native Claude still
+exposes SSE, strict configuration, and application-hosted SDK MCP options through
+the `claude` package.
 
 Validation runs before native side effects and does not infer a transport:
 
@@ -193,17 +221,17 @@ Validation runs before native side effects and does not infer a transport:
 ```go
 options := agent.OpenOptions{
     Cwd: "/absolute/workspace",
-    MCPServers: []agent.MCPServer{
+    MCPServers: []mcp.Server{
         {
             Name:      "local-tools",
-            Transport: agent.MCPTransportStdio,
+            Transport: mcp.TransportStdio,
             Command:   "mcp-local",
             Args:      []string{"--stdio"},
             Env:       map[string]string{"LOCAL_TOOLS_MODE": "read-only"},
         },
         {
             Name:              "remote-tools",
-            Transport:         agent.MCPTransportHTTP,
+            Transport:         mcp.TransportHTTP,
             URL:               "https://mcp.example.invalid/tools",
             Headers:           map[string]string{"X-Workspace": "sdk"},
             EnvHeaders:        map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
@@ -250,7 +278,7 @@ with in-memory synthetic fake Cores. It consumes a message, answers an
 interaction, waits for idle, closes, resumes, and stops without launching a real
 CLI. This example validates the shared interface only; adapter behavior is
 covered by the `agent/codex` and `agent/claude` integration tests.
-`go test ./agent -run '^ExampleMCPServer$'` validates an offline MCP declaration
+`go test ./agent -run '^ExampleOpenOptions_mcpServers$'` validates an offline MCP declaration
 for both transports without resolving a secret or connecting to a server.
 
 Go **1.26** or newer is required. The root `mise.toml` is optional for local

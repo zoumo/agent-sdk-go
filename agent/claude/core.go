@@ -13,6 +13,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 var _ agent.Core = (*Core)(nil)
@@ -167,7 +168,7 @@ func (p *Core) openNativeSession(
 	resumeID string,
 	sessionID string,
 	resume *resumeAttempt,
-	mcpServers []claude.MCPServer,
+	mcpServers []mcp.Server,
 	env []string,
 	claim bool,
 ) (*session, error) {
@@ -328,7 +329,7 @@ func (p *Core) nativeOptions(
 	workDir string,
 	resumeID string,
 	features agent.Features,
-	mcpServers []claude.MCPServer,
+	mcpServers []mcp.Server,
 	sessionConfig agent.SessionConfig,
 ) claude.Options {
 	config := p.config
@@ -349,6 +350,12 @@ func (p *Core) nativeOptions(
 	}
 	if !features.AgentQuestionsEnabled() {
 		options.DisallowedTools = []string{"AskUserQuestion"}
+	}
+	if features.RestrictLocalTools {
+		options.DisallowedTools = append(options.DisallowedTools,
+			"Bash", "PowerShell", "Read", "Glob", "Grep", "Write", "Edit",
+			"NotebookEdit", "EnterWorktree", "ExitWorktree",
+		)
 	}
 	return options
 }

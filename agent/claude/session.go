@@ -46,10 +46,10 @@ type session struct {
 	resume            *resumeIdentityGuard
 	injectSupported   bool
 
-	lanes  map[string]*claudeLane
-	blocks map[claudeBlockKey]*claudeBlock
-	calls  map[string]claudeCall
-	usage  claudeUsageState
+	lanes      map[string]*claudeLane
+	blocks     map[claudeBlockKey]*claudeBlock
+	calls      map[string]claudeCall
+	usageModel string
 }
 
 func newSession(

@@ -445,6 +445,7 @@ func textInput(input agent.Input) (string, error) {
 
 func effectiveFeatures(features agent.Features) agent.EffectiveFeatures {
 	return agent.EffectiveFeatures{
-		AgentQuestions: features.AgentQuestionsEnabled(),
+		AgentQuestions:     features.AgentQuestionsEnabled(),
+		RestrictLocalTools: features.RestrictLocalTools,
 	}
 }

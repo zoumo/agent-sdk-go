@@ -13,15 +13,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
-type claudeUsageState struct {
-	model         string
-	inputTokens   int64
-	outputTokens  int64
-	cacheRead     int64
-	cacheCreation int64
-	seen          bool
-}
-
 type claudeStreamFrame struct {
 	Type         string          `json:"type"`
 	ID           string          `json:"id"`
@@ -34,18 +25,9 @@ type claudeStreamFrame struct {
 		PartialJSON string `json:"partial_json"`
 	} `json:"delta"`
 	Message struct {
-		ID    string          `json:"id"`
-		Model string          `json:"model"`
-		Usage json.RawMessage `json:"usage"`
+		ID    string `json:"id"`
+		Model string `json:"model"`
 	} `json:"message"`
-	Usage json.RawMessage `json:"usage"`
-}
-
-type claudeUsageValues struct {
-	inputTokens   int64
-	outputTokens  int64
-	cacheRead     int64
-	cacheCreation int64
 }
 
 type claudeCoordinateState uint8
@@ -160,7 +142,9 @@ func (s *session) streamEvent(received claude.Received) ([]agent.Event, error) {
 		if err := s.beginResponse(parent, response); err != nil {
 			return nil, err
 		}
-		s.observeUsage(frame.Message.Usage, frame.Message.Model)
+		if frame.Message.Model != "" {
+			s.usageModel = frame.Message.Model
+		}
 		return nil, nil
 	case "content_block_start":
 		if frame.Index == nil || *frame.Index < 0 {
@@ -219,10 +203,7 @@ func (s *session) streamEvent(received claude.Received) ([]agent.Event, error) {
 			s.noteBlockStop(parent, *frame.Index)
 		}
 		return nil, nil
-	case "message_delta":
-		s.observeUsage(frame.Usage, "")
-		return nil, nil
-	case "message_stop":
+	case "message_delta", "message_stop":
 		return nil, nil
 	default:
 		return s.gap(
@@ -399,7 +380,9 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 			map[string]any{"uuid": received.Event.UUID},
 		)
 	}
-	s.observeUsage(message.Usage, message.Model)
+	if message.Model != "" {
+		s.usageModel = message.Model
+	}
 
 	blocks, err := assistantBlocks(message.Content)
 	if err != nil {
@@ -1190,16 +1173,16 @@ func (s *session) usageEvents(received claude.Received) ([]agent.Event, error) {
 			key, usage = model, value
 		}
 	} else {
-		value, ok := result.ModelUsage[s.usage.model]
+		value, ok := result.ModelUsage[s.usageModel]
 		if !ok {
 			return s.gap(
 				received,
 				"usage_model_ambiguous",
 				"Claude result usage cannot be attributed to the observed model",
-				map[string]any{"model": s.usage.model},
+				map[string]any{"model": s.usageModel},
 			)
 		}
-		key, usage = s.usage.model, value
+		key, usage = s.usageModel, value
 	}
 	if usage.ContextWindow < 0 {
 		return s.gap(
@@ -1264,63 +1247,6 @@ func modelCostNumber(raw json.RawMessage) string {
 		return ""
 	}
 	return number.String()
-}
-
-func (s *session) observeUsage(raw json.RawMessage, model string) {
-	if model != "" {
-		s.usage.model = model
-	}
-	values, ok := parseClaudeUsage(raw)
-	if !ok {
-		return
-	}
-	s.usage.inputTokens = values.inputTokens
-	s.usage.outputTokens = values.outputTokens
-	s.usage.cacheRead = values.cacheRead
-	s.usage.cacheCreation = values.cacheCreation
-	s.usage.seen = true
-}
-
-func parseClaudeUsage(raw json.RawMessage) (claudeUsageValues, bool) {
-	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return claudeUsageValues{}, false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var values map[string]any
-	if err := decoder.Decode(&values); err != nil {
-		return claudeUsageValues{}, false
-	}
-	read := func(name string) (int64, bool) {
-		value, present := values[name]
-		if !present {
-			return 0, false
-		}
-		number, ok := value.(json.Number)
-		if !ok {
-			return 0, false
-		}
-		parsed, err := number.Int64()
-		if err != nil || parsed < 0 {
-			return 0, false
-		}
-		return parsed, true
-	}
-	var result claudeUsageValues
-	var present bool
-	if value, ok := read("input_tokens"); ok {
-		result.inputTokens, present = value, true
-	}
-	if value, ok := read("output_tokens"); ok {
-		result.outputTokens, present = value, true
-	}
-	if value, ok := read("cache_read_input_tokens"); ok {
-		result.cacheRead, present = value, true
-	}
-	if value, ok := read("cache_creation_input_tokens"); ok {
-		result.cacheCreation, present = value, true
-	}
-	return result, present
 }
 
 func (s *session) envelopeErrorEvent(

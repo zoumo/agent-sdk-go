@@ -7,7 +7,8 @@ import (
 )
 
 // OpenOptions contains adapter-neutral creation options. An adapter that
-// cannot enforce a nonzero option rejects it before native side effects.
+// cannot enforce a nonzero option rejects it before native side effects, except
+// for the best-effort RestrictLocalTools feature.
 // Adapter-specific creation options belong on the concrete adapter.
 type OpenOptions struct {
 	Cwd string
@@ -86,10 +87,13 @@ func (o ResumeOptions) Validate() error {
 	return o.OpenOptions.Validate()
 }
 
-// Features contains adapter-neutral runtime feature requests. A nil field
-// uses the provider default.
+// Features contains adapter-neutral runtime feature requests.
 type Features struct {
 	AgentQuestions *bool
+	// RestrictLocalTools applies available native restrictions to built-in local
+	// file read, write and command tools. False leaves native defaults unchanged.
+	// Restrictions are best-effort and do not guarantee all such tools are disabled.
+	RestrictLocalTools bool
 }
 
 // AgentQuestionsEnabled reports the requested value, applying the current
@@ -99,7 +103,12 @@ func (f Features) AgentQuestionsEnabled() bool {
 }
 
 // EffectiveFeatures reports the requested features that the adapter can
-// actually enforce for a session.
+// configure for a session. These values describe adapter mappings, not a
+// runtime tool inventory or an operating-system security boundary.
 type EffectiveFeatures struct {
 	AgentQuestions bool
+	// RestrictLocalTools reports whether the adapter configured local tool
+	// restrictions. True does not mean every local tool is disabled. MCP, hooks
+	// and the CLI process's own file access are outside this feature's scope.
+	RestrictLocalTools bool
 }

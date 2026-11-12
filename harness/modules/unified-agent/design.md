@@ -319,10 +319,13 @@ type ResumeOptions struct {
 type Features struct {
     // nil 使用该 provider/schema 的默认值；当前默认 true。
     AgentQuestions *bool
+    // true 应用可用的原生本地工具限制；false 沿用原生配置。
+    RestrictLocalTools bool
 }
 
 type EffectiveFeatures struct {
     AgentQuestions bool
+    RestrictLocalTools bool
 }
 ```
 
@@ -348,8 +351,9 @@ type EffectiveFeatures struct {
   `unsupported`，不能映射到 app-server 或 shell 环境。
 - `ShellEnv` 按[环境配置](#environment-configuration)解释；provider 不支持
   非空值时必须返回 `unsupported`，不能静默忽略或映射到更宽的作用域。
-- 请求关闭某项功能必须得到 false；请求开启但 adapter 不支持时，允许降级为
-  false，并通过 `Session.EffectiveFeatures()` 返回。
+- `AgentQuestions` 请求关闭必须得到 false；请求开启但 adapter 不支持时，
+  允许降级为 false。`RestrictLocalTools` 使用下述 best-effort 合同。
+  两者均通过 `Session.EffectiveFeatures()` 返回有效映射。
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
 - `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
@@ -371,6 +375,31 @@ type EffectiveFeatures struct {
 - 首次被接纳的 `Stop` 是终止性的：release 至多执行一次，release 错误被缓存，
   后续 `Stop` 返回同一结果；即使 release 失败，`Start`、`Open` 和 `Resume`
   也不能再运行。没有未关闭 Session 时重复 Stop 返回缓存结果。
+
+### Restrict local tools
+
+<a id="restrict-local-tools"></a>
+
+`Features.RestrictLocalTools` 是单个 `bool` 开关，要求 adapter 对 provider
+内置的本地文件读写与命令执行工具应用可用的原生限制。`true` 请求限制，
+不承诺关闭全部本地工具；默认 `false` 沿用原生配置，不主动开启工具。
+该选项按 `Open`／`Resume` 操作传递，恢复时调用方必须重新声明。
+它与 `AgentQuestions` 独立，不主动关闭提问、计划或其他类别工具。
+
+| Provider | `true` 的原生映射 | `EffectiveFeatures.RestrictLocalTools` |
+|---|---|---|
+| Claude | `--disallowedTools` 加入 `Bash`、`PowerShell`、`Read`、`Glob`、`Grep`、`Write`、`Edit`、`NotebookEdit`、`EnterWorktree`、`ExitWorktree` | true |
+| Codex | thread config 设置 `features.shell_tool=false`、`features.view_image=false`、`features.image_generation=false` | true，表示配置了上述限制 |
+
+Claude 的 `AskUserQuestion` 仅由 `AgentQuestions` 控制。Codex 的公开配置没有
+完整文件工具 deny list，也没有关闭全部工具的公开入口；`apply_patch` 仍可能
+注册。因此 Codex 接受该请求并应用可用限制，不能把它解释为完整关闭。
+
+`EffectiveFeatures.RestrictLocalTools` 在本次请求为 true 且 adapter 配置了
+原生限制时为 true，默认 false。它描述 adapter 配置映射，允许 provider 之间
+存在 gap，不是全部工具已关闭的证明、运行时工具发现结果或未来工具名覆盖承诺。
+本选项不控制 MCP、hook、其他类别工具、子 Agent 的继承行为或 CLI 自身读取配置与
+写入会话材料；不构成操作系统安全隔离，也不修改 sandbox 或 approval policy。
 
 ### Additional system prompt
 
@@ -884,8 +913,9 @@ const (
 - `Start` 返回 Core 的基础支持面；`Session.Capabilities()` 返回该 Session
   实际可用的支持面，可以等于或窄于 Core。
 - 缺失或 false 都表示调用方不能假定支持。能力存在也不绕过当前 Session 状态。
-- `EffectiveFeatures` 表达本次请求最终是否启用，不能仅从 `Capabilities`
-  推断。
+- `EffectiveFeatures` 表达本次请求的有效 adapter 映射，不能仅从 `Capabilities`
+  推断；它不是运行时工具清单或安全隔离证明。`RestrictLocalTools` 的部分支持
+  按[限制本地工具](#restrict-local-tools)解释。
 - `AdditionalSystemPrompt` 是 `Open`/`Resume` 输入，不是运行时能力或 feature；
   它不进入 `Capabilities`，也不能通过 `EffectiveFeatures` 表达。
 - `processEnv` 表示非空 `OpenOptions.ProcessEnv` 能被该 Session 解释为自有

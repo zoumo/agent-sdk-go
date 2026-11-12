@@ -341,6 +341,12 @@ func (p *Core) nativeOptions(
 	if !features.AgentQuestionsEnabled() {
 		options.DisallowedTools = []string{"AskUserQuestion"}
 	}
+	if features.RestrictLocalTools {
+		options.DisallowedTools = append(options.DisallowedTools,
+			"Bash", "PowerShell", "Read", "Glob", "Grep", "Write", "Edit",
+			"NotebookEdit", "EnterWorktree", "ExitWorktree",
+		)
+	}
 	return options
 }
 

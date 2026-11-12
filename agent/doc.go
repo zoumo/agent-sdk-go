@@ -66,6 +66,12 @@
 // configuration, not Session state. The complete field contract is defined in
 // harness/modules/unified-agent/design.md#additional-system-prompt.
 //
+// Features.RestrictLocalTools applies available native restrictions to built-in
+// local file and command tools on Open or Resume. EffectiveFeatures reports
+// whether restrictions were configured, without guaranteeing all local tools
+// are disabled. See harness/modules/unified-agent/design.md#restrict-local-tools
+// for scope and provider gaps.
+//
 // The unified contract has only explicit stdio and MCP Streamable HTTP transports.
 // It has no SSE, MCPConfigMode, StrictMCPConfig, SDKMCPServers, or ambient-clear
 // control. Adapter-specific field restrictions are rejected before native side

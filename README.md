@@ -130,6 +130,30 @@ unified history, `LoadSession`, replay, or root convenience client. MASS resourc
 identity, history import, persistence, and multi-session aggregation also remain
 outside this module.
 
+### Restrict local tools
+
+Set `Features.RestrictLocalTools` to apply available native restrictions to
+built-in local file read, write and command tools on `Open` or `Resume`.
+The default `false` preserves native configuration; repeat the request when
+resuming.
+
+```go
+options := agent.OpenOptions{
+    Cwd: "/absolute/workspace",
+    Features: agent.Features{RestrictLocalTools: true},
+}
+```
+
+Claude forwards a native tool deny list. Codex disables shell, image viewing and
+image generation, but its public configuration cannot disable `apply_patch` or
+provide a complete file-tool deny list. Accordingly,
+`session.EffectiveFeatures().RestrictLocalTools` reports whether the adapter
+configured the restrictions, including the partial Codex mapping. It does not
+mean every local tool is disabled. These controls apply to known built-in tools;
+MCP, hooks and the CLI's own file access are outside their scope. The
+[unified contract](harness/modules/unified-agent/design.md#restrict-local-tools)
+defines the mappings and gaps.
+
 ### Additional system prompt
 
 `agent.OpenOptions.AdditionalSystemPrompt` adds optional caller text after

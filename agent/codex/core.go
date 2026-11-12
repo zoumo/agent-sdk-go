@@ -235,7 +235,8 @@ func effectiveFeatures(
 	formsSupported bool,
 ) agent.EffectiveFeatures {
 	return agent.EffectiveFeatures{
-		AgentQuestions: features.AgentQuestionsEnabled() && formsSupported,
+		AgentQuestions:     features.AgentQuestionsEnabled() && formsSupported,
+		RestrictLocalTools: features.RestrictLocalTools,
 	}
 }
 
@@ -263,9 +264,14 @@ func threadConfig(
 	features agent.EffectiveFeatures,
 	effort string,
 ) (codextypes.Optional[map[string]json.RawMessage], error) {
-	config := make(map[string]json.RawMessage, 2)
+	config := make(map[string]json.RawMessage, 5)
 	if !features.AgentQuestions {
 		config["tools.experimental_request_user_input.enabled"] = json.RawMessage("false")
+	}
+	if features.RestrictLocalTools {
+		config["features.shell_tool"] = json.RawMessage("false")
+		config["features.view_image"] = json.RawMessage("false")
+		config["features.image_generation"] = json.RawMessage("false")
 	}
 	if effort != "" {
 		encoded, err := json.Marshal(effort)

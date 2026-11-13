@@ -256,7 +256,7 @@ func mustMarshalJSON(v any) []byte {
 	return data
 }
 
-func fixtureOptions(t *testing.T, mode string) Options {
+func fixtureOptions(t testing.TB, mode string) Options {
 	t.Helper()
 	exe, err := os.Executable()
 	require.NoError(t, err)

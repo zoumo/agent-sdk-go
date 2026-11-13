@@ -538,12 +538,14 @@ internal/queue 只共享 FIFO 机械逻辑，直接使用根模块固定的 Chan
 
 Native adapters establish membership, identities, aliases and parent edges using version-supported evidence. An identity can be a confirmed member while its parent is unknown. Communication targets alone do not establish parentage; only evidence for the particular native operation may do so. No missing root edge or creation fact is invented. A conflict preserves the accepted parent; self-links and cycles are rejected even in components that have not reached a root. Ancestor queries include confirmed parents, nearest first.
 
-`Confirm` validates candidate vertices, edges, cycles and every affected depth
-before committing. Rejected candidates retain no vertex or relationship.
+`Confirm` validates candidate vertices, edges, cycles and the maximum depth of
+every affected descendant chain before committing. Rejected candidates retain
+no vertex or relationship.
 `ConfirmRoot` also rolls back a newly observed root or root designation when its
 child edge is rejected. A newly
 arriving ancestor can exceed an existing descendant's depth, so admission checks
-all observed chains. `Merge` atomically contracts two caller-confirmed equivalent
+the child's complete observed descendant subtree; maintained subtree heights
+cover unchanged chains. `Merge` atomically contracts two caller-confirmed equivalent
 identities, rewrites every descendant edge and removes the discarded vertex. It
 rejects conflicting parents, ancestor contraction and excessive resulting depth.
 Identity equivalence is established by the native adapter, never by the graph.

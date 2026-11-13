@@ -29,13 +29,21 @@ type Graph[K comparable] struct {
 	nodes   map[K]struct{}
 	roots   map[K]struct{}
 	parents map[K]K
+	// heights caches the maximum distance from each node to a descendant.
+	heights map[K]int
 }
 
 func New[K comparable](limits Limits) (*Graph[K], error) {
 	if limits.MaxNodes < 1 || limits.MaxRelations < 0 || limits.MaxDepth < 0 || limits.UnknownDepth < 0 || limits.UnknownDepth > 1 {
 		return nil, ErrInvalidLimits
 	}
-	return &Graph[K]{limits: limits, nodes: make(map[K]struct{}), roots: make(map[K]struct{}), parents: make(map[K]K)}, nil
+	return &Graph[K]{
+		limits:  limits,
+		nodes:   make(map[K]struct{}),
+		roots:   make(map[K]struct{}),
+		parents: make(map[K]K),
+		heights: make(map[K]int),
+	}, nil
 }
 
 func (g *Graph[K]) Has(id K) bool                  { _, ok := g.nodes[id]; return ok }
@@ -56,6 +64,7 @@ func (g *Graph[K]) Ensure(id K) error {
 		return ErrDepthLimit
 	}
 	g.nodes[id] = struct{}{}
+	g.heights[id] = 0
 	return nil
 }
 
@@ -64,10 +73,13 @@ func (g *Graph[K]) Root(id K) error {
 	if _, ok := g.parents[id]; ok {
 		return ErrConflict
 	}
-	if !g.Has(id) && len(g.nodes) >= g.limits.MaxNodes {
-		return ErrNodeLimit
+	if !g.Has(id) {
+		if len(g.nodes) >= g.limits.MaxNodes {
+			return ErrNodeLimit
+		}
+		g.nodes[id] = struct{}{}
+		g.heights[id] = 0
 	}
-	g.nodes[id] = struct{}{}
 	g.roots[id] = struct{}{}
 	return nil
 }
@@ -85,6 +97,7 @@ func (g *Graph[K]) ConfirmRoot(child, root K) error {
 		}
 		if !hadNode {
 			delete(g.nodes, root)
+			delete(g.heights, root)
 		}
 		return err
 	}
@@ -97,17 +110,18 @@ func (g *Graph[K]) Confirm(child, parent K) error {
 	if child == parent {
 		return ErrCycle
 	}
+	previous, hasParent := g.parents[child]
+	if hasParent && previous == parent {
+		return nil
+	}
 	if g.Reaches(parent, child) {
 		return ErrCycle
 	}
 	if g.IsRoot(child) {
 		return ErrConflict
 	}
-	if previous, ok := g.parents[child]; ok {
-		if previous != parent {
-			return ErrConflict
-		}
-		return nil
+	if hasParent {
+		return ErrConflict
 	}
 	nodes := len(g.nodes)
 	if !g.Has(child) {
@@ -122,26 +136,20 @@ func (g *Graph[K]) Confirm(child, parent K) error {
 	if len(g.parents) >= g.limits.MaxRelations {
 		return ErrRelationLimit
 	}
-	// Read the prospective edge without mutating even transiently. An arriving
-	// ancestor can deepen any already observed descendant.
-	lookup := func(id K) (K, bool) {
-		if id == child {
-			return parent, true
-		}
-		return g.Parent(id)
-	}
-	for id := range g.nodes {
-		if depth, _ := g.depth(id, lookup); depth > g.limits.MaxDepth {
-			return ErrDepthLimit
-		}
-	}
-	for _, id := range []K{child, parent} {
-		if depth, _ := g.depth(id, lookup); depth > g.limits.MaxDepth {
-			return ErrDepthLimit
-		}
+	parentDepth, _ := g.depth(parent, g.Parent)
+	childHeight := g.heights[child]
+	if parentDepth+1+childHeight > g.limits.MaxDepth {
+		return ErrDepthLimit
 	}
 	g.nodes[child], g.nodes[parent] = struct{}{}, struct{}{}
+	if _, ok := g.heights[child]; !ok {
+		g.heights[child] = 0
+	}
+	if _, ok := g.heights[parent]; !ok {
+		g.heights[parent] = 0
+	}
 	g.parents[child] = parent
+	g.raiseHeight(parent, childHeight+1)
 	return nil
 }
 
@@ -201,6 +209,22 @@ func (g *Graph[K]) depth(id K, parent func(K) (K, bool)) (int, bool) {
 	}
 }
 
+// raiseHeight updates the maximum descendant distance after an edge makes id
+// the parent of a taller subtree. Unchanged ancestors need not be revisited.
+func (g *Graph[K]) raiseHeight(id K, height int) {
+	for {
+		if g.heights[id] >= height {
+			return
+		}
+		g.heights[id] = height
+		parent, ok := g.parents[id]
+		if !ok {
+			return
+		}
+		id, height = parent, height+1
+	}
+}
+
 // Merge contracts two identities only after the caller has established their
 // equivalence. The caller chooses the stable keeper. Parent conflicts, ancestor
 // contraction and excessive descendant depth reject the entire operation.
@@ -242,7 +266,43 @@ func (g *Graph[K]) Merge(keep, drop K) error {
 		}
 	}
 	g.parents = parents
+	g.heights = buildHeights(g.nodes, parents, drop)
 	delete(g.nodes, drop)
 	delete(g.roots, drop)
 	return nil
+}
+
+// buildHeights computes each node's maximum descendant distance in a forest.
+func buildHeights[K comparable](nodes map[K]struct{}, parents map[K]K, excluded K) map[K]int {
+	remaining := make(map[K]int, len(nodes))
+	heights := make(map[K]int, len(nodes))
+	for id := range nodes {
+		if id != excluded {
+			heights[id] = 0
+		}
+	}
+	for _, parent := range parents {
+		remaining[parent]++
+	}
+	queue := make([]K, 0, len(heights))
+	for id := range heights {
+		if remaining[id] == 0 {
+			queue = append(queue, id)
+		}
+	}
+	for i := 0; i < len(queue); i++ {
+		id := queue[i]
+		parent, ok := parents[id]
+		if !ok {
+			continue
+		}
+		if height := heights[id] + 1; height > heights[parent] {
+			heights[parent] = height
+		}
+		remaining[parent]--
+		if remaining[parent] == 0 {
+			queue = append(queue, parent)
+		}
+	}
+	return heights
 }

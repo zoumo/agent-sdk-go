@@ -175,7 +175,7 @@ func (s *Session) ListSubagents(ctx context.Context, q SubagentQuery) (SubagentP
 		return p, discoveryError(p)
 	}
 	defer root.Close()
-	d := discoveryReader{ctx: ctx, session: s, root: root, page: &p, q: q}
+	d := discoveryReader{ctx: ctx, session: s, root: root, page: &p, q: q, agentIDs: map[string]struct{}{}}
 	main := filepath.Join("projects", key, id+".jsonl")
 	sub := filepath.Join("projects", key, id, "subagents")
 	p.Coverage.MainPath = filepath.Join(s.discovery.config, main)
@@ -240,12 +240,13 @@ func discoveryError(p SubagentPage) error {
 }
 
 type discoveryReader struct {
-	ctx     context.Context
-	session *Session
-	root    *os.Root
-	page    *SubagentPage
-	q       SubagentQuery
-	stopped bool
+	ctx      context.Context
+	session  *Session
+	root     *os.Root
+	page     *SubagentPage
+	q        SubagentQuery
+	agentIDs map[string]struct{}
+	stopped  bool
 }
 
 func (d *discoveryReader) issue(path, reason string, err error) {
@@ -494,12 +495,10 @@ func (d *discoveryReader) agent(path, name string) {
 	}
 	// Transcript sessionId, cwd, agentId and run extensions remain raw native
 	// fields. No fixed source proves they are aliases of the selected main ID.
-	for _, old := range d.page.Records {
-		if old.AgentID == id {
-			d.issue(path, "duplicate-agent-id", ErrDiscoveryCoverage)
-			break
-		}
+	if _, ok := d.agentIDs[id]; ok {
+		d.issue(path, "duplicate-agent-id", ErrDiscoveryCoverage)
 	}
+	d.agentIDs[id] = struct{}{}
 	d.page.Records = append(d.page.Records, r)
 }
 

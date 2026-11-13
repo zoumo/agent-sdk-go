@@ -2,6 +2,7 @@ package lineage
 
 import (
 	"maps"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -60,6 +61,11 @@ func snapshot(g *Graph[string]) any {
 		maps.Copy(r, m)
 		return r
 	}
+	copyHeights := func(m map[string]int) map[string]int {
+		r := make(map[string]int)
+		maps.Copy(r, m)
+		return r
+	}
 	nodes, roots := make(map[string]bool), make(map[string]bool)
 	for k := range g.nodes {
 		nodes[k] = true
@@ -67,7 +73,7 @@ func snapshot(g *Graph[string]) any {
 	for k := range g.roots {
 		roots[k] = true
 	}
-	return []any{nodes, roots, copyMap(g.parents)}
+	return []any{nodes, roots, copyMap(g.parents), copyHeights(g.heights)}
 }
 
 func reject(t *testing.T, g *Graph[string], want error, action func() error) {
@@ -75,6 +81,28 @@ func reject(t *testing.T, g *Graph[string], want error, action func() error) {
 	before := snapshot(g)
 	assert.ErrorIs(t, action(), want)
 	assert.Equal(t, before, snapshot(g), "rejection changed graph")
+}
+
+func assertHeights(t *testing.T, g *Graph[string]) {
+	t.Helper()
+	for id := range g.nodes {
+		want := 0
+		for descendant := range g.nodes {
+			current, distance := descendant, 0
+			for current != id {
+				parent, ok := g.Parent(current)
+				if !ok {
+					break
+				}
+				current, distance = parent, distance+1
+			}
+			if current == id && distance > want {
+				want = distance
+			}
+		}
+		assert.Equal(t, want, g.heights[id], "height for %s", id)
+	}
+	assert.Len(t, g.heights, len(g.nodes))
 }
 
 func (s *GraphSuite) TestConfirmRejectionsAreAtomic() {
@@ -93,6 +121,7 @@ func (s *GraphSuite) TestConfirmRejectionsAreAtomic() {
 	nodes, edges := g.Counts()
 	assert.Equal(t, 5, nodes)
 	assert.Equal(t, 3, edges)
+	assertHeights(t, g)
 }
 
 func (s *GraphSuite) TestLiteralLimitsAndLateAncestors() {
@@ -127,6 +156,45 @@ func (s *GraphSuite) TestLiteralLimitsAndLateAncestors() {
 	}
 }
 
+func (s *GraphSuite) TestConfirmChecksDeepestDescendantAtomically() {
+	t := s.T()
+	g := newGraph(t, Limits{MaxNodes: 10, MaxRelations: 9, MaxDepth: 4})
+	accept(t, g.Confirm("grandchild", "child"))
+	accept(t, g.Confirm("child", "branch"))
+	accept(t, g.Confirm("parent", "middle"))
+	accept(t, g.Confirm("middle", "top"))
+	reject(t, g, ErrDepthLimit, func() error { return g.Confirm("branch", "parent") })
+	accept(t, g.Confirm("branch", "middle"))
+	depth, rooted, exists := g.Depth("grandchild")
+	assert.Equal(t, 4, depth)
+	assert.False(t, rooted)
+	assert.True(t, exists)
+	assertHeights(t, g)
+}
+
+func TestConfirmDeepChainAtLimit(t *testing.T) {
+	const nodeCount = 4096
+	name := func(i int) string { return "node-" + strconv.Itoa(i) }
+	g := newGraph(t, Limits{
+		MaxNodes: nodeCount + 1, MaxRelations: nodeCount, MaxDepth: nodeCount - 1,
+	})
+	for i := 1; i < nodeCount; i++ {
+		accept(t, g.Confirm(name(i), name(i-1)))
+	}
+	depth, rooted, exists := g.Depth(name(nodeCount - 1))
+	assert.Equal(t, nodeCount-1, depth)
+	assert.False(t, rooted)
+	assert.True(t, exists)
+	nodes, relations := g.Counts()
+	assert.Equal(t, nodeCount, nodes)
+	assert.Equal(t, nodeCount-1, relations)
+
+	before := snapshot(g)
+	accept(t, g.Confirm(name(nodeCount-1), name(nodeCount-2)))
+	assert.Equal(t, before, snapshot(g), "idempotent edge changed graph")
+	reject(t, g, ErrDepthLimit, func() error { return g.Confirm("overflow", name(nodeCount-1)) })
+}
+
 func (s *GraphSuite) TestMergeRepointsAllDescendants() {
 	t := s.T()
 	g := s.graph
@@ -147,6 +215,23 @@ func (s *GraphSuite) TestMergeRepointsAllDescendants() {
 	nodes, edges := g.Counts()
 	assert.Equal(t, 5, nodes)
 	assert.Equal(t, 4, edges)
+	assertHeights(t, g)
+}
+
+func (s *GraphSuite) TestMergeRebuildsHeightsForLaterAdmission() {
+	t := s.T()
+	g := newGraph(t, Limits{MaxNodes: 10, MaxRelations: 10, MaxDepth: 2})
+	accept(t, g.Confirm("leaf", "child"))
+	accept(t, g.Confirm("child", "drop"))
+	accept(t, g.Ensure("keep"))
+	accept(t, g.Merge("keep", "drop"))
+	assertHeights(t, g)
+	parent, known := g.Parent("child")
+	assert.True(t, known, "merged parent edge missing")
+	assert.Equal(t, "keep", parent)
+	depth, _, _ := g.Depth("leaf")
+	assert.Equal(t, 2, depth)
+	reject(t, g, ErrDepthLimit, func() error { return g.Confirm("keep", "root") })
 }
 
 func (s *GraphSuite) TestMergeRejectsConflictsCyclesAndLateDepth() {
@@ -193,6 +278,7 @@ func (s *GraphSuite) TestRootAndEdgeAdmissionRollBackTogether() {
 	accept(t, g.ConfirmRoot("child", "root"))
 	assert.True(t, g.Reaches("child", "root"), "root edge not confirmed")
 	assert.True(t, g.IsRoot("root"), "root edge not confirmed")
+	assertHeights(t, g)
 }
 
 // New is a pure constructor: exercise its rejected inputs as independent cases.
@@ -233,6 +319,7 @@ func (s *GraphSuite) TestUnknownParentVerticesHaveLiteralCapacity() {
 			nodes, edges := g.Counts()
 			assert.Equal(t, tc.nodes, nodes)
 			assert.Equal(t, tc.edges, edges)
+			assertHeights(t, g)
 		})
 	}
 }

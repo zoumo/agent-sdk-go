@@ -288,6 +288,26 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 			}
 			callErr = s.Interrupt(ctx, codex.InterruptOptions{TurnID: p.TurnID})
 			result = types.TurnInterruptResponse{}
+		case "thread/unsubscribe":
+			var p types.ThreadUnsubscribeParams
+			if err := json.Unmarshal(m.Params, &p); err != nil {
+				return err
+			}
+			if p.ThreadID != s.ThreadID() {
+				return errors.New("foreign detach thread")
+			}
+			expected := responses[string(m.ID)]
+			var response types.ThreadUnsubscribeResponse
+			if expected.Error != nil || json.Unmarshal(expected.Result, &response) != nil ||
+				(response.Status != types.ThreadUnsubscribeStatusUnsubscribed &&
+					response.Status != types.ThreadUnsubscribeStatusNotLoaded &&
+					response.Status != types.ThreadUnsubscribeStatusNotSubscribed) {
+				return errors.New("recorded detach response differs")
+			}
+			if callErr = s.Close(); callErr != nil {
+				return fmt.Errorf("%s: %w", m.Method, callErr)
+			}
+			continue
 		case "thread/read":
 			var p types.ThreadReadParams
 			if e := json.Unmarshal(m.Params, &p); e != nil {
@@ -333,13 +353,23 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 }
 
 func openStreamSession(ctx context.Context, mock *mocktest.Session, initialize types.InitializeParams) (*codex.Client, *mocktest.Run, <-chan error, error) {
+	return openStreamSessionOnConnection(ctx, mock, "main", "", initialize)
+}
+
+func openStreamSessionOnConnection(
+	ctx context.Context,
+	mock *mocktest.Session,
+	connection, executionID string,
+	initialize types.InitializeParams,
+) (*codex.Client, *mocktest.Run, <-chan error, error) {
 	if mock == nil {
 		return nil, nil, nil, errors.New("prepared mock session is required")
 	}
 	nativeArgs := []string{"app-server", "--listen", "stdio://"}
 	run, err := mock.NewRun(ctx, mocktest.RunOptions{
-		Connection: "main",
-		NativeArgs: nativeArgs,
+		Connection:  connection,
+		ExecutionID: executionID,
+		NativeArgs:  nativeArgs,
 	})
 	if err != nil {
 		return nil, nil, nil, err

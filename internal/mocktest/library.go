@@ -42,10 +42,13 @@ type RunOptions struct {
 	NativeArgs  []string
 }
 
+// ExecutionStart is the immutable library projection used before SDK I/O.
+type ExecutionStart = agenttestify.ExecutionStart
+
 // Run exposes the SDK-side endpoints and the testify run handle for one
 // connection. Reader is peer-to-SDK and Writer is SDK-to-peer.
 type Run struct {
-	Start  agenttestify.ExecutionStart
+	Start  ExecutionStart
 	Reader io.ReadCloser
 	Writer io.WriteCloser
 	Stderr io.ReadCloser

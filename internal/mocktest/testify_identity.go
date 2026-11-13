@@ -11,10 +11,10 @@ import (
 
 const (
 	testifyModule         = "github.com/zoumo/agent-sdk-testify"
-	testifyModuleVersion  = "v0.1.3-0.20261113014718-45bce662f756"
-	testifyModuleSum      = "h1:8qY9qoQLa/NJGBUi7ky9AwmovY1MPBBPSiZlqL94cig="
-	testifyModuleRevision = "45bce662f7566757c24e2a286fbc25f29c796c04"
-	testifyModuleTime     = "2026-11-13T01:47:18Z"
+	testifyModuleVersion  = "v0.1.3-0.20261113062730-2480be142ccd"
+	testifyModuleSum      = "h1:BN2CMqY8+7uwjpTGj8Wwf/q0EvsJKmpb+PiJRpmkhk4="
+	testifyModuleRevision = "2480be142ccd86bf170ddff015a07c8ac44ccadc"
+	testifyModuleTime     = "2026-11-13T06:27:30Z"
 )
 
 func embeddedTestifyIdentity() *agenttestify.EmbeddedIdentity {

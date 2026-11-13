@@ -144,6 +144,12 @@ func TestCoverageEligibilityRequiresExportedBuiltinIdentity(t *testing.T) {
 		},
 	}
 	require.True(t, coverageEligible(base))
+	portable := base
+	portable.Material.Kind = "capture"
+	portable.Material.Provenance = "official"
+	require.True(t, coverageEligible(portable))
+	portable.Source.Kind = "recording"
+	require.False(t, coverageEligible(portable))
 
 	for _, tc := range []struct {
 		name   string
@@ -247,7 +253,7 @@ func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 		require.Equal(t, "passed", row.SimulationStatus, "%s: %s", key, row.Error)
 		require.Equal(t, materialStatusAvailable, row.MaterialStatus, key)
 		require.Equal(t, "official", row.Source.Provenance, key)
-		require.Equal(t, "builtin", row.Material.Provenance, key)
+		require.Equal(t, "official", row.Material.Provenance, key)
 		require.True(t, row.CoverageEligible, key)
 	}
 }

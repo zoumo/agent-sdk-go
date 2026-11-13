@@ -10,6 +10,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		_, _ = fmt.Fprintln(os.Stdout, "2.1.293 (Claude Code)")
+		os.Exit(0)
+	}
 	if provider := os.Getenv("SDK_INTEGRATION_PEER"); provider != "" {
 		if err := peer(provider, os.Getenv("SDK_INTEGRATION")); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -177,7 +181,7 @@ func peer(provider, scenario string) error {
 		}
 		if frame.Type == "control_request" && frame.Request.Subtype == "initialize" {
 			reply(`{}`)
-			emit("", `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			emit("", `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 			if scenario == "history-observation" {
 				association("child", "root")
 				snapshot(json.RawMessage(`null`))

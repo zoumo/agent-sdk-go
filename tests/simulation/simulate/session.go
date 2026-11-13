@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	preparedSessionSchema = 5
+	preparedSessionSchema = 7
 	lifecycleTimeout      = 30 * time.Second
 )
 
@@ -291,7 +291,7 @@ func validateSource(session *preparedSession, requested sourceSelection) error {
 		if source.Kind != "recording" || source.Provenance != "external" {
 			return errors.New("recording prepare did not produce an external recording source")
 		}
-		if !sourceDirectoryDigestMatches(sourcePath, source.SHA256) {
+		if hash, err := digestPath(sourcePath); err != nil || hash != source.SHA256 {
 			return errors.New("prepared recording source changed after prepare")
 		}
 	case requested.Case != "":
@@ -306,13 +306,6 @@ func validateSource(session *preparedSession, requested sourceSelection) error {
 		return errors.New("prepare source is incomplete")
 	}
 	return nil
-}
-
-func sourceDirectoryDigestMatches(dir, want string) bool {
-	planHash, planErr := digestPath(filepath.Join(dir, "plan.json"))
-	manifestHash, manifestErr := digestPath(filepath.Join(dir, "manifest.json"))
-	return planErr == nil && manifestErr == nil &&
-		digest([]byte(planHash+"\n"+manifestHash+"\n")) == want
 }
 
 func validateRoute(session *preparedSession) error {

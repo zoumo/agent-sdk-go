@@ -33,7 +33,7 @@ func TestOpenConfirmsInitAndCloseKeepsProviderHealthy(t *testing.T) {
 	frames := append([]string(nil), mockClaudeInit...)
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-open","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258","future":{"precise":9007199254740993}}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293","future":{"precise":9007199254740993}}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
@@ -85,13 +85,13 @@ func TestClosingOneSessionKeepsOtherSessionAndProviderHealthy(t *testing.T) {
 	firstFrames := append([]string(nil), mockClaudeInit...)
 	firstFrames = append(firstFrames,
 		`<{"type":"system","subtype":"init","session_id":"native-first","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-first","message":{"id":"first-message","content":[{"type":"text","text":"first","apiBlockIndex":0}]}}`,
 	)
 	secondFrames := append([]string(nil), mockClaudeInit...)
 	secondFrames = append(secondFrames,
 		`<{"type":"system","subtype":"init","session_id":"native-second","cwd":`+
-			jsonString(t, cwd)+`,"claude_code_version":"2.1.258"}`,
+			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		`<{"type":"assistant","session_id":"native-second","message":{"id":"second-message","content":[{"type":"text","text":"second","apiBlockIndex":0}]}}`,
 	)
 	firstPeer := prepareClaudePeer(t, "passed", firstFrames...)

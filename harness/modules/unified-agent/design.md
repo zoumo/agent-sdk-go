@@ -334,9 +334,12 @@ type EffectiveFeatures struct {
 规则：
 
 - `Cwd` 必须由调用方明确给出且为绝对路径；provider 不接受隐式工作目录。
-- Claude `Open` 生成 UUID，通过官方 `--session-id` 指定新会话身份；
-  native initialize 成功后返回，不等待 `system/init`，不发送用户输入。
-  initialize ACK 不回显该 ID。后续原生主消息必须匹配指定 ID，init 必须非
+- Claude `Open` 默认通过 `--await-claim` 启动，initialize 后发送
+  `claim_session` 绑定工作目录，并从响应取得 CLI 分配的原生 session ID；
+  SDK 不生成 session ID。claim 成功后返回，不等待 `system/init`，不发送用户输入。
+  原生 claim 与显式 `SessionID` 的互斥和身份确认见
+  [原生创建合同](../native-session/design.md#interface-session-与交付值)。
+  后续原生主消息必须匹配固定 ID，init 必须非
   replay、只出现一次，且 cwd 与请求目录为同一目录；冲突以 `native_rejected`
   终止 Session。init 的命令列表在到达后交付。该流程不依赖本地身份文件或刷新 API。
 - `Resume` 必须定向并确认原原生身份；Claude 还必须在启动前预检保存材料，
@@ -522,7 +525,7 @@ type OpenOptions struct {
 }
 ```
 
-- nil 或空 map 不改变 Core 的进程环境配置，也不触发环境合成。
+- nil 或空 map 不改变 Core 的进程环境基底；SDK 协议默认值仍按下述规则补齐。
 - 非空 map 只增加或覆盖所列变量；不提供删除、空值即 unset 或恢复 ambient
   变量的语义。空字符串是合法 value，表示把变量设置为空值。
 - Claude adapter 在 `Open`/`Resume` 中生成该 Session 的完整原生
@@ -532,6 +535,9 @@ type OpenOptions struct {
 2. `Config.Env` 为 nil 时调用一次 `os.Environ()` 并复制结果作为基底。
 3. 按排序后的 key 将 `ProcessEnv` 追加到基底，因此同名 overlay 值在该原生
    进程环境中覆盖基底值；其他基底项及其顺序不变。
+4. 若结果中没有 `CLAUDE_CODE_SDK_READS_SESSION_STATE`（变量名大小写不敏感），
+   追加该变量并设为 `1`，请求原生 Session 状态通知。已有变量保留原值，包括
+   空字符串；非 nil 空基底不隐式继承 ambient 环境，但仍补齐该协议默认值。
 
 合成后的环境同时用于版本查询、Claude 配置范围发现和 Session 进程启动，不得
 在一次 `Open`/`Resume` 内从不同环境快照读取。恢复身份仍由显式 `ConfigDir`
@@ -609,12 +615,13 @@ capability 只说明输入被按 shell-only 语义解释，不说明某个变量
 
 ### Claude 恢复身份
 
-Claude 的恢复身份合同只适用于已审阅的 CLI 2.1.258。Core 使用与 Session
+Claude 的进程启动要求稳定 CLI >= 2.1.293。Core 使用与 Session
 相同的 `CLIPath` 和由 `Config.Env` 与本次 `ProcessEnv` 合成的有效进程环境，
 执行无会话副作用的版本查询；版本不能确认时，`Resume` 在启动 Session 进程前
-失败关闭。不能从 `SessionStart` lifecycle frame 或 init 是否出现推断 CLI
-版本。新建 `Open` 不使用恢复探针或该版本门禁，使用官方 `--session-id`
-指定 UUID，并在 initialize 成功后返回；后续原生主消息核对指定身份。
+失败关闭。原生 Session 启动同样执行版本门禁，因此新建 `Open` 也在启动前拒绝
+旧版本、预发布版本和无法确认的版本。不能从 `SessionStart` lifecycle frame
+或 init 是否出现推断 CLI 版本。新建 `Open` 不使用恢复探针，按
+[创建规则](#core-接口)通过 claim 协议确认新身份。
 
 Claude Core 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
 复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生 hook 名称、matcher
@@ -975,8 +982,8 @@ type Session interface {
 ### 生命周期与状态
 
 - `ID` 在 `Open`/`Resume` 返回时必须非空，且在整个附着生命周期内保持不变。
-  Codex 以启动/恢复响应确认身份；Claude 新建时用官方 `--session-id` 指定
-  UUID，initialize 成功后返回，并核对后续原生主消息。恢复时以 init 或匹配的
+  Codex 以启动/恢复响应确认身份；Claude 新建时按创建规则取得原生身份，
+  并核对后续原生主消息。恢复时以 init 或匹配的
   私有 `SessionStart` callback 确认身份，单独 hook lifecycle frame 不充分。
 - 每个 Session 只允许一个本地 `StartOrSteer` 写入在进行。并发调用返回
   `not_applied` 和空 `Submission`，不等待、不写第二帧，也不形成本地输入队列。
@@ -1113,7 +1120,7 @@ type InjectReceipt struct {
 | Provider | 原生操作与版本边界 | 成功回执与消费边界 |
 |---|---|---|
 | Codex | `thread/inject_items`，将文本编码为 Responses API 的 user message / `input_text`。固定 0.162.1 schema 已声明该方法；0.166.0 来源说明追加历史且不启动 user turn。以实际 RPC 为准，method-not-found 映射为 `unsupported`，不猜测 server user-agent 版本。 | `Sent=true`、`NativeAccepted=true`；不填 `NativeRecorded`。idle 时留待后续模型请求；running 时由原生 pending input 机制决定消费时机，不保证某个 tool call 或模型步骤之前可见。 |
-| Claude | user envelope 的 `shouldQuery=false`，不附加 query priority。依据官方 TypeScript 0.3.258 类型合同，要求原生 live init 确认稳定 CLI 2.x 且版本不低于 2.1.258；缺少版本、旧版本、预发布版和其他 major 均返回 `unsupported`。仅以 callback 确认身份且尚无 live init 的恢复 Session 也不启用。 | 成功只填 `Sent=true`；官方类型描述为 transcript append，并入后续会 query 的 user message。写入成功不证明 CLI 接受、记录或消费，也不保证运行中当前 turn 消费。 |
+| Claude | user envelope 的 `shouldQuery=false`，不附加 query priority。依据官方 TypeScript 的该字段合同，要求原生 live init 确认符合 SDK 最低 CLI 版本要求；缺少版本、旧版本和预发布版均返回 `unsupported`，不另设功能级版本白名单。仅以 callback 确认身份且尚无 live init 的恢复 Session 也不启用。 | 成功只填 `Sent=true`；官方类型描述为 transcript append，并入后续会 query 的 user message。写入成功不证明 CLI 接受、记录或消费，也不保证运行中当前 turn 消费。 |
 
 原生来源、具体测试命令与录制证据分别维护在对应 SDK 的来源说明和测试入口；
 来源合同、合成协议测试、真实录制仿真与 Go SDK 真实 E2E 是独立证据。
@@ -2839,7 +2846,7 @@ linkage 和无法归属的交互行为保持不变。
 | 用户 hook 交错 | 调用方同 source hook 的 start/progress/response、成功或失败与探针交错时，探针归属不受影响；通用 frame 不被当命中。 |
 | init 与 callback 交错 | init 先确认身份时允许返回 Session，迟到匹配 callback 仍被应答一次；callback 先确认身份时，迟到 init 必须一致；两者 ID/cwd 矛盾时以 `native_rejected` 失败关闭。 |
 | 恢复后漂移 | 身份确认后 transcript 被替换、Path 或文件身份变化、coverage 不完整或 cwd 变化时，以 `native_rejected` 关闭进程且不返回 Session。 |
-| 版本门禁 | `Resume` 的版本查询无法执行时返回 `unavailable`，结果不是已确认的 2.1.258 时返回 `unsupported`；两种情况都在启动 Session 进程前失败。 |
+| 版本门禁 | 版本查询无法执行时返回 `unavailable`，结果不是稳定 CLI >= 2.1.293 时返回 `unsupported`；新建和恢复均在启动 Session 进程前失败。 |
 | 调用方 Hooks | 调用方其他 hook 语义保留，SDK matcher 只追加；非法 Hooks、保留前缀 ID 或无法无损追加时在进程启动前拒绝。 |
 
 ## 合同影响

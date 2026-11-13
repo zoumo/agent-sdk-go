@@ -34,7 +34,7 @@ func discoveryFixture(t testing.TB, beforeObserve ...func(string, string)) (*Ses
 	for _, setup := range beforeObserve {
 		setup(base, cwd)
 	}
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+discoveryMain+`","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+discoveryMain+`","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	return s, base, cwd
 }
@@ -439,7 +439,7 @@ func TestSessionDiscoveryExplicitRootAliasesAreResolvedAtOpen(t *testing.T) {
 	discoveryWrite(t, filepath.Join(base, "subagents", "agent-a.jsonl"), "{}\n")
 	require.NoError(t, os.Remove(configAlias))
 	require.NoError(t, os.Symlink(t.TempDir(), configAlias))
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+discoveryMain+`","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+discoveryMain+`","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	p, err := s.ListSubagents(context.Background(), SubagentQuery{})
 	require.NoError(t, err)

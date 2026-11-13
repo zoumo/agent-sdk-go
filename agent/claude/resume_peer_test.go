@@ -109,7 +109,7 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		}
 		output := scenario.VersionOutput
 		if output == "" {
-			output = "2.1.258 (Claude Code)\n"
+			output = "2.1.293 (Claude Code)\n"
 		}
 		_, _ = fmt.Fprint(os.Stdout, output)
 		return 0
@@ -130,10 +130,14 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		return 62
 	}
 	assignedID := ""
+	claiming := false
 	for _, arg := range args {
 		if value, ok := strings.CutPrefix(arg, "--session-id="); ok {
 			assignedID = value
 			scenario.SessionID = value
+		}
+		if arg == "--await-claim" {
+			claiming = true
 		}
 	}
 
@@ -161,7 +165,7 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 			}
 		}
 	}
-	if callbackID == "" && assignedID == "" {
+	if callbackID == "" && assignedID == "" && !claiming {
 		return 65
 	}
 	observation := &claudeResumePeerObservation{
@@ -188,6 +192,33 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	}
 	if _, err := fmt.Fprintln(os.Stdout, response); err != nil {
 		return 67
+	}
+	if claiming {
+		claim, err := reader.ReadBytes('\n')
+		if err != nil {
+			return 75
+		}
+		var request struct {
+			RequestID string `json:"request_id"`
+			Request   struct {
+				Subtype string
+				CWD     string `json:"cwd"`
+			} `json:"request"`
+		}
+		if json.Unmarshal(claim, &request) != nil ||
+			request.RequestID == "" ||
+			request.Request.Subtype != "claim_session" {
+			return 76
+		}
+		reply := fmt.Sprintf(
+			`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"status":"ok","cwd":%q,"session_id":%q}}}`,
+			request.RequestID,
+			request.Request.CWD,
+			scenario.SessionID,
+		)
+		if _, err := fmt.Fprintln(os.Stdout, reply); err != nil {
+			return 77
+		}
 	}
 	emit := func(frame string) error {
 		frame = strings.NewReplacer(

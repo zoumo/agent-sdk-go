@@ -2,8 +2,6 @@ package agentclaude
 
 import (
 	"context"
-	"strconv"
-	"strings"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
@@ -27,7 +25,7 @@ func (s *session) Inject(ctx context.Context, input agent.Input) (agent.InjectRe
 		s.mu.Unlock()
 		return receipt, adapterError(
 			agent.ErrorUnsupported, agent.ErrorReasonForCode("inject", agent.ErrorUnsupported),
-			"Claude inject requires a confirmed stable CLI version 2.1.258 or later in the 2.x series", nil,
+			"Claude inject requires a confirmed stable CLI version >= "+claude.MinimumCLIVersion, nil,
 		)
 	}
 	if s.submitting || s.injecting || s.submitUnknown {
@@ -66,16 +64,5 @@ func (s *session) Inject(ctx context.Context, input agent.Input) (agent.InjectRe
 }
 
 func supportsInject(version string) bool {
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 || parts[0] != "2" {
-		return false
-	}
-	for _, part := range parts {
-		if part == "" || strings.Trim(part, "0123456789") != "" {
-			return false
-		}
-	}
-	minor, minorErr := strconv.Atoi(parts[1])
-	patch, patchErr := strconv.Atoi(parts[2])
-	return minorErr == nil && patchErr == nil && (minor > 1 || minor == 1 && patch >= 258)
+	return claude.ValidateCLIVersion(version) == nil
 }

@@ -737,7 +737,7 @@ func claudeSessionTarget(t *testing.T, scenario string) {
 					}
 				}
 			}
-			if r.Observation != nil && (r.Observation.Reason == "forwarding-not-confirmed" || r.Observation.Reason == "identity-extension-unverified") {
+			if r.Observation != nil && (r.Observation.Reason == "forwarding-not-confirmed" || r.Observation.Reason == "identity-member-unconfirmed") {
 				gap = true
 			}
 		}
@@ -2678,7 +2678,7 @@ func (s *NativeIntegrationSuite) checkCodexChildDetailLifecycle() {
 }
 
 const (
-	claudeDetailInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`
+	claudeDetailInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`
 	claudeDetailTask = `{"type":"system","subtype":"task_started","session_id":"s","task_id":"a","task_type":"local_agent","tool_use_id":"spawn"}`
 	claudeDetailText = ` {"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":[{"type":"text","text":"child"}]}} `
 )
@@ -2813,7 +2813,7 @@ func checkClaudeMixedDetail(s *NativeIntegrationSuite) {
 		`{"type":"assistant","session_id":"s","agent_id":"a","message":{"content":[{"type":"text","text":"not proof"}]}}`,
 		claudeDetailTask,
 	}
-	for _, extra := range []string{`"future":null`, `"error":null`, `"tool_use_result":null`, `"agent_id":"a"`, `"parent_task_id":"p"`, `"isReplay":true`} {
+	for _, extra := range []string{`"future":null`, `"error":null`, `"tool_use_result":null`, `"agent_id":"unconfirmed"`, `"parent_task_id":"p"`, `"isReplay":true`} {
 		frames = append(frames, strings.Replace(claudeDetailText, `"type":"assistant"`, `"type":"assistant",`+extra, 1))
 	}
 	for _, content := range []string{
@@ -2857,7 +2857,7 @@ func checkClaudeMixedDetail(s *NativeIntegrationSuite) {
 	}
 	// A future version cannot reuse reviewed shapes as a suppression license.
 	future, _ := openClaudeDetail(s, claude.ChildDetailSuppress, "")
-	futureFrames := []string{strings.Replace(claudeDetailInit, "2.1.258", "future", 1), claudeDetailTask, claudeDetailText}
+	futureFrames := []string{strings.Replace(claudeDetailInit, "2.1.293", "future", 1), claudeDetailTask, claudeDetailText}
 	sendClaudeDetail(s, future, futureFrames...)
 	futureGot := drainClaudeDetail(s, future)
 	require.Len(t, futureGot, len(futureFrames))

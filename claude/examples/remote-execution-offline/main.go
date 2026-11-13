@@ -100,6 +100,10 @@ func run(output io.Writer) error {
 
 // peer records the exact argv used by the SDK and completes only initialize.
 func peer() error {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		_, err := fmt.Fprintln(os.Stdout, claude.MinimumCLIVersion+" (Claude Code)")
+		return err
+	}
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadBytes('\n')
 	if err != nil {

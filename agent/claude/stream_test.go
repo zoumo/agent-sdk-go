@@ -7,6 +7,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 // TestStreamOpen supplies one in-process native session to a provider. It
@@ -22,6 +23,7 @@ type TestStreamOpen struct {
 // in-process streams.
 func NewWithStream(config Config, next func(context.Context, claude.SessionOptions) (TestStreamOpen, error)) *Core {
 	provider := New(config)
+	provider.newSessionID = uuidv4.New
 	provider.streams = func(ctx context.Context, options claude.SessionOptions) (streamOpen, error) {
 		opened, err := next(ctx, options)
 		return streamOpen(opened), err

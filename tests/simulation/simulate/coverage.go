@@ -441,8 +441,8 @@ func coverageEligible(row coverageRow) bool {
 		row.Source.Kind == "case" &&
 		row.Source.Provenance == "official" &&
 		row.Source.ID == row.CaseID &&
-		row.Material.Kind == "material" &&
-		row.Material.Provenance == "builtin" &&
+		((row.Material.Kind == "material" && row.Material.Provenance == "builtin") ||
+			(row.Material.Kind == "capture" && row.Material.Provenance == "official")) &&
 		row.Material.Provider == row.Provider &&
 		row.Material.CaseID == row.CaseID &&
 		row.Material.PlanSHA256 != ""

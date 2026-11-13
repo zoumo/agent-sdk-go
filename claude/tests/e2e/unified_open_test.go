@@ -45,7 +45,8 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 	require.NotNil(t, receipt.Acceptance.Sent)
 	require.True(t, *receipt.Acceptance.Sent)
 	require.Nil(t, receipt.Acceptance.NativeAccepted)
-	seenInit, seenAnswer, seenCoverageGap := false, false, false
+	seenInit, seenAnswer, seenResult, seenRunning := false, false, false, false
+	seenCoverageGap := false
 	for {
 		event, err := stream.Next(ctx)
 		require.NoError(t, err)
@@ -93,18 +94,34 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 			require.True(t, seenInit, "successful result arrived without a matching native init")
 			require.True(t, seenAnswer, "successful result arrived without a matching assistant message")
 			require.True(t, seenCoverageGap, "requested forwarding coverage gap was not delivered")
-			break
+			seenResult = true
+		}
+		if payload, ok := event.Payload.(agent.StateUpdatePayload); ok {
+			require.Equal(t, "system", nativeType)
+			require.Equal(t, "session_state_changed", nativeSubtype)
+			require.NotNil(t, payload.State)
+			t.Logf("native session_state_changed: state=%s", *payload.State)
+			if *payload.State == agent.StateRunning {
+				seenRunning = true
+			}
+			if *payload.State == agent.StateIdle && seenResult {
+				require.True(t, seenRunning, "turn completed without a native running notification")
+				break
+			}
 		}
 		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok {
 			require.Equal(t, "native_event_unsupported", payload.Reason)
 			t.Logf("unified mapping gap: type=%s subtype=%s", nativeType, nativeSubtype)
 		}
 	}
+	interrupt, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	require.Equal(t, agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, interrupt)
 	require.NoError(t, session.Close(ctx))
 	require.NoError(t, session.Err())
 	require.Equal(t, initialID, session.ID())
 	require.NoError(t, provider.Stop(ctx))
-	t.Log("one unified input produced matching init, assistant and success result; Close and Stop succeeded")
+	t.Log("one unified input produced matching init, assistant, success result and native running/idle; Interrupt reported no active work; Close and Stop succeeded")
 }
 
 func claudeNativeEventEvidence(t *testing.T, event agent.Event) (string, string, json.RawMessage) {

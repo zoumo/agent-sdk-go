@@ -371,8 +371,8 @@ func mutationDriver(mutation, output string) string {
 	case "blank-probe-url":
 		body += quote(requestMutatorBinary) + " \"$2\"\n"
 	case "corrupt-probe-result":
-		body += "for result in " + quote(filepath.Join(output, "preserve", "session", "executions")) +
-			"/*/receipts/probe.result.json; do\n" +
+		body += "for result in " + quote(filepath.Join(output, "preserve", "session", "packages")) +
+			"/*/executions/*/receipts/probe.result.json; do\n" +
 			"  rm -f \"$result\"\n" +
 			"  mkdir -p \"$result\"\n" +
 			"done\n"
@@ -380,15 +380,15 @@ func mutationDriver(mutation, output string) string {
 	body += quote(driverBinary) + " \"$@\"\nstatus=$?\nif [ \"$status\" -eq 0 ]; then\n"
 	switch mutation {
 	case "missing-suppress":
-		body += "rm -f " + quote(filepath.Join(output, "suppress", "session", "executions")) + "/*/mock/receipts/main.json\n"
+		body += "rm -f " + quote(filepath.Join(output, "suppress", "session", "packages")) + "/*/executions/*/receipts/main.json\n"
 	case "cross-run":
 		saved := quote(filepath.Join(output, "saved-receipt.json"))
-		body += "for receipt in " + quote(filepath.Join(output, "preserve", "session", "executions")) + "/*/mock/receipts/main.json; do [ ! -f \"$receipt\" ] || cp \"$receipt\" " + saved + "; done\n"
-		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "executions")) + "/*/mock/receipts/main.json; do [ ! -f \"$receipt\" ] || cp " + saved + " \"$receipt\"; done\n"
+		body += "for receipt in " + quote(filepath.Join(output, "preserve", "session", "packages")) + "/*/executions/*/receipts/main.json; do [ ! -f \"$receipt\" ] || cp \"$receipt\" " + saved + "; done\n"
+		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "packages")) + "/*/executions/*/receipts/main.json; do [ ! -f \"$receipt\" ] || cp " + saved + " \"$receipt\"; done\n"
 	case "invalid-receipt":
 		body += "rm -f " + quote(filepath.Join(output, "suppress", "sdk", "raw", "raw.jsonl")) + "\n"
-		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "executions")) +
-			"/*/mock/receipts/main.json; do\n" +
+		body += "for receipt in " + quote(filepath.Join(output, "suppress", "session", "packages")) +
+			"/*/executions/*/receipts/main.json; do\n" +
 			"  if [ -f \"$receipt\" ]; then printf '{}\\n' > \"$receipt\"; fi\n" +
 			"done\n"
 	}

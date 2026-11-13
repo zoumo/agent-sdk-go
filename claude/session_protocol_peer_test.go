@@ -65,7 +65,7 @@ func runTreeFixture(reader *bufio.Reader) {
 	}
 }
 
-const creationInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258","tools":["Agent","Task","SendMessage"]}`
+const creationInit = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293","tools":["Agent","Task","SendMessage"]}`
 
 func creationRequest(tool, name, input, owner string) string {
 	source := ""

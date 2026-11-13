@@ -70,7 +70,7 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(session.Dir, "fixture.json"))
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, &descriptor))
-	require.Equal(t, 5, descriptor.SchemaVersion)
+	require.Equal(t, 7, descriptor.SchemaVersion)
 	require.Equal(t, session.SessionID, descriptor.FixtureID)
 	require.Equal(t, "embedded", descriptor.Tool.Source)
 	require.Equal(t, "github.com/zoumo/agent-sdk-testify", descriptor.Tool.Module)
@@ -79,13 +79,18 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	require.Empty(t, descriptor.Tool.Command)
 	require.Empty(t, descriptor.Tool.Args)
 	require.Empty(t, descriptor.Tool.SHA256)
-	require.FileExists(t, filepath.Join(descriptor.Source.Path, "plan.json"))
+	fixture, err := agenttestify.Open(session.Dir)
+	require.NoError(t, err)
+	require.FileExists(t, fixture.Source.Path)
 	require.Equal(t, "recording", descriptor.Source.Kind)
 	require.Equal(t, "external", descriptor.Source.Provenance)
 	mockRoute := descriptor.Routes["mock"]
-	require.Equal(t, session.Workspace, mockRoute.Workspace)
-	require.Equal(t, session.ProtocolCwd, mockRoute.ProtocolCwd)
-	require.Equal(t, session.Env, sortedEnvironment(mockRoute.Env))
+	require.Empty(t, mockRoute.Workspace)
+	require.Empty(t, mockRoute.ProtocolCwd)
+	require.Empty(t, mockRoute.Env)
+	require.Equal(t, session.Workspace, fixture.Routes["mock"].Workspace)
+	require.Equal(t, session.ProtocolCwd, fixture.Routes["mock"].ProtocolCwd)
+	require.Equal(t, session.Env, sortedEnvironment(fixture.Routes["mock"].Env))
 	require.Len(t, mockRoute.Connections, 1)
 	require.Equal(t, "main", mockRoute.Connections[0].ID)
 	require.Equal(t, "in-process", mockRoute.Connections[0].Transport)
@@ -93,7 +98,8 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	require.Empty(t, mockRoute.Connections[0].Args)
 	require.Empty(t, mockRoute.Connections[0].Launcher)
 	var manifest struct{ Provenance string }
-	data, err = os.ReadFile(filepath.Join(descriptor.Source.Path, "manifest.json"))
+	require.NotNil(t, fixture.Current)
+	data, err = os.ReadFile(filepath.Join(fixture.Current.Path, "manifest.json"))
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, &manifest))
 	require.Equal(t, "synthetic", manifest.Provenance)
@@ -132,7 +138,7 @@ func TestFromFixtureRejectsMismatchedEmbeddedIdentity(t *testing.T) {
 }
 
 func TestOpenRejectsLegacyFixtureSchemas(t *testing.T) {
-	for _, schemaVersion := range []int{3, 4} {
+	for _, schemaVersion := range []int{3, 4, 5, 6} {
 		t.Run(strconv.Itoa(schemaVersion), func(t *testing.T) {
 			dir := t.TempDir()
 			require.NoError(t, os.WriteFile(
@@ -144,7 +150,7 @@ func TestOpenRejectsLegacyFixtureSchemas(t *testing.T) {
 			session, err := Open(dir)
 			require.Nil(t, session)
 			require.ErrorContains(t, err, "unsupported fixture schemaVersion")
-			require.ErrorContains(t, err, "schema 5 is required")
+			require.ErrorContains(t, err, "schema 7 is required")
 		})
 	}
 }

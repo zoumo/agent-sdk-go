@@ -35,7 +35,7 @@ func isTreeRootEvent(e Event) bool {
 	case "assistant", "user", "result", "stream_event", "tool_progress":
 		return true
 	case "system":
-		// Subtypes reviewed in official TS 0.3.302. Unknown future subtypes stay
+		// Subtypes reviewed in official TS 0.3.302 and CLI 2.1.293. Unknown future subtypes stay
 		// unscoped unless their own agent/task/tool evidence proves attribution.
 		switch e.Subtype {
 		case "init", "status", "compact_boundary", "api_retry",
@@ -44,7 +44,7 @@ func isTreeRootEvent(e Event) bool {
 			"hook_started", "hook_progress", "hook_response", "informational",
 			"local_command_output", "memory_recall", "mirror_error",
 			"model_refusal_fallback", "model_refusal_no_fallback", "notification",
-			"permission_denied", "plugin_install", "thinking_tokens",
+			"permission_denied", "permission_check_status", "plugin_install", "thinking_tokens",
 			"worker_shutting_down", "task_started", "task_progress", "task_updated",
 			"task_notification":
 			return true

@@ -302,7 +302,7 @@ func TestIndependentChildHistoryErrorsAndIsolation(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 	writeChild(t, root, "Alpha", childConversation())
 	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+savedChildParent+`","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"`+savedChildParent+`","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	const live = `{"type":"assistant","session_id":"11111111-1111-4111-8111-111111111111","message":{"content":"unconsumed live"}}`
 	submitFrame(t, s, live)

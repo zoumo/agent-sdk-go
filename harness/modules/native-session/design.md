@@ -45,11 +45,15 @@ status: stable
 
 Claude 的 `Initialize` 及其中的调用方原生 `Hooks` 保留原有 JSON 语义；恢复时
 SDK 只追加自己的 `SessionStart` 身份探针，不改写或替换调用方其他 hook。新建
-Session 可通过 `SessionOptions.SessionID` 选择官方 `--session-id` 指定 UUID，
-该选项与 `ResumeID` 互斥。initialize 成功后 Open 即可固定该主身份，不等待
-`system/init`。initialize ACK 不回显该 ID。后续原生主消息必须匹配指定身份；
+Session 可通过 `SessionOptions.ClaimSession` 选择 `--await-claim`，在 initialize
+之后发送 `claim_session` 绑定工作目录，并从 claim 响应固定 CLI 分配的主身份。
+claim 成功必须包含非空 session ID、成功状态及与请求相同的工作目录；
+确认前到达的原生通知有界缓冲，确认后按序接纳。显式
+`SessionOptions.SessionID` 仍通过 `--session-id` 指定 UUID，并在 initialize
+成功后固定该主身份。`ClaimSession`、`SessionID` 与 `ResumeID` 互斥；
+两个创建路径均不等待 `system/init` 或用户输入。后续原生主消息必须匹配固定身份；
 `system/init` 必须非 replay、只出现一次，且 cwd 与请求目录为同一目录。
-未指定 `SessionID` 的调用仍从原生消息观察主身份。
+未选择这两个创建路径的调用仍从原生消息观察主身份。
 
 Codex `SessionOptions.Resume *types.ThreadResumeParams` 显式选择已有 thread，要求非空 ThreadID 和空 Thread 创建参数。Open 在派发前保留该身份的所有权及观察队列，接纳恢复应答前后的实时原生事实；仅在恢复应答确认同一身份后返回 Session。旧隔离记录不重新入队。恢复失败不重试、不创建替代 thread；已可能派发的恢复执行一次有界解除附着，失败保留不确定释放屏障，自有连接同时关闭回收。共享连接的其他 Session 不被关闭。
 
@@ -96,7 +100,7 @@ Done 表示交互终止，Err 保留首个终止原因；Close 返回资源回�
 
 Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际收到的原生启动响应副本，保留 model、sandbox 和未知字段。该只读查询不发送协议消息，不产生消费者或回答权限。
 
-主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。Claude 新建时可由官方 `--session-id` 指定 UUID，并在 initialize 成功后固定；后续原生主消息与 init 会核对指定身份。恢复时由 live init 或匹配的私有 `SessionStart` callback 确认身份；单独 hook lifecycle frame 不充分；尚未确认原生根身份时不伪造 observed ID。
+主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。Claude 新建身份按[创建合同](#interface-session-与交付值)固定；后续原生主消息与 init 会核对固定身份。恢复时由 live init 或匹配的私有 `SessionStart` callback 确认身份；单独 hook lifecycle frame 不充分；尚未确认原生根身份时不伪造 observed ID。
 
 <a id="interface-独立历史查询"></a>
 
@@ -446,9 +450,9 @@ ID 都不构成成功身份证据。恢复身份的顺序、超时和创建后�
 [Claude 恢复身份合同](../unified-agent/design.md#claude-resume-identity)维护；
 本包只提供原生注册、应答和输入值。
 
-该探针只为 `Resume` 注册，且只对已审阅的 Claude CLI 2.1.258 定义。hook input
-不携带 CLI 版本，不能从 `source` 或恢复结果推断版本；运行时版本未确认时不得
-把该 fallback 推广到其他版本。新建 Session 不使用该探针。
+该探针只为 `Resume` 注册，进程启动须通过统一 Agent 的
+[版本门禁](../unified-agent/design.md#claude-resume-identity)。hook input
+不携带 CLI 版本，不能从 `source` 或恢复结果推断版本。新建 Session 不使用该探针。
 
 <a id="interface-子-agent-查询"></a>
 
@@ -602,8 +606,10 @@ false/省略。过滤不是源输出控制，不修改提示词、工具、原�
 先按[事件交付](#delivery-event-delivery)完成原生校验、所有权判断、控制 registry 更新和
 成员/关系/工具 alias/生命周期处理，再决定本帧是否进入唯一 FIFO。已确认 child
 指当时已确认 Session 成员且不是根；不要求完整父图。Codex 使用确认的 threadId；
-Claude 仅使用审阅版本 task/tool alias 确认的 AssociationID，单独 agent_id、任意
-parent_tool_use_id、文本或路径猜测都不充分。不得扩大版本的身份确认规则。
+Claude 使用满足 SDK 最低版本要求的 live init、已确认 task 成员及 task/tool alias
+对应的 AssociationID；消息 agent_id 只能引用已确认 task，不能单独建立成员。
+任意 parent_tool_use_id、文本或路径猜测都不充分。版本范围由 SDK 统一门禁维护，
+关系与过滤不另设精确版本白名单。
 
 未知源/未知版本/解码错误/未知方法或变体均不因过滤丢弃；原已归属的保留，未归属的
 仍按原容量/到期规则隔离，不广播、不补投。foreign 诊断也不能当 child 删除。
@@ -621,7 +627,8 @@ parent_tool_use_id、文本或路径猜测都不充分。不得扩大版本的�
 保留帧的 Raw、Params、原生 payload/unknown/omitted/null 和相对次序不变；不拆分、
 删字段、重新 marshal 或制造一个看似原始的帧。不制造 filtered 占位事件或第二队列。
 未知扩展字段默认视为 mixed，保留整帧；白名单只允许固定 schema 的已知字段集合。
-普通关联用 threadId/turnId/itemId/UUID 等引用字段不单独构成新关系事实，但原生
+普通关联用 threadId/turnId/itemId/UUID，以及审阅版本中引用已确认 task 的消息
+agent_id 等字段不单独构成新关系事实；agent_id 与已知 tool alias 冲突时保留整帧。但原生
 身份扩展/任务 parent/终态字段构成保护事实。过滤发生在入队前，不能妨碍控制进展；
 Close 排空、Abort 放弃 backlog、取消等待、资源限制和原生处理顺序保持原合同。
 

@@ -22,6 +22,36 @@ func writeDelivery(t *testing.T, values []map[string]any) string {
 	return path
 }
 
+func TestChildPolicyBindsDeclaredAgentIdentity(t *testing.T) {
+	for _, agent := range []any{"child", "other", nil, 1} {
+		raw, err := json.Marshal(map[string]any{
+			"type": "assistant", "session_id": "root", "agent_id": agent,
+			"parent_tool_use_id": "call", "message": map[string]any{
+				"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "child"}},
+			},
+		})
+		require.NoError(t, err)
+		member := map[string]any{"observation": map[string]any{
+			"Reason": "member-confirmed", "Source": map[string]any{"association_id": "task:child"},
+		}}
+		detail := map[string]any{
+			"kind": "event", "origin": "live", "raw": string(raw),
+			"source": map[string]any{"association_id": "task:child", "task_id": "child", "agent_id": "child", "tool_use_id": "call"},
+		}
+		terminal := map[string]any{"kind": "event", "origin": "live", "raw": `{"type":"result","session_id":"root"}`}
+		before := writeDelivery(t, []map[string]any{member, detail, terminal})
+		after := writeDelivery(t, []map[string]any{member, terminal})
+		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(before), "report.json"),
+			[]byte(`{"receipts":[{"child-detail-selection":{"rootId":"root","childIds":["child"]}}]}`), 0o600))
+		err = CompareDelivery(before, after)
+		if agent == "child" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, "conflicting declared child identity")
+		}
+	}
+}
+
 func TestChildPolicyRetainsContextUnknownContentAndMixedFacts(t *testing.T) {
 	for _, context := range []any{nil, map[string]any{}, []any{}, "", "context", true, false, 0, map[string]any{"edits": []any{}}} {
 		member := map[string]any{"observation": map[string]any{"Reason": "member-confirmed", "Source": map[string]any{"association_id": "task:child"}}}

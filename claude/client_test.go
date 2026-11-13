@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,19 @@ func fixtureEmit(value any) {
 }
 
 func runFixture(mode string) {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		version := os.Getenv("CLAUDE_GO_FIXTURE_VERSION")
+		if version == "" {
+			version = MinimumCLIVersion + " (Claude Code)"
+		}
+		fmt.Fprintln(os.Stdout, version)
+		return
+	}
+	if path := os.Getenv("CLAUDE_GO_FIXTURE_STARTED"); path != "" {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			os.Exit(7)
+		}
+	}
 	if mode == "lifecycle_descendant" {
 		runLifecycleDescendant()
 		return
@@ -93,6 +107,16 @@ func runFixture(mode string) {
 		return
 	}
 	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{"subtype": "success", "request_id": init["request_id"], "response": map[string]any{"commands": []any{}}}})
+	if slices.Contains(os.Args[1:], "--await-claim") {
+		if err := runClaimHandshake(reader, mode); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(16)
+		}
+	}
+	if mode == "claim" {
+		runClaimFixture(reader)
+		return
+	}
 	if mode == "session_start_probe" || mode == "session_start_probe_wrong" || mode == "session_start_probe_duplicate" {
 		runSessionStartProbeFixture(reader, init, mode)
 		return
@@ -238,6 +262,103 @@ func fixtureOptions(t testing.TB, mode string) Options {
 	require.NoError(t, err)
 	dir := t.TempDir()
 	return Options{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "CLAUDE_GO_FIXTURE=" + mode, "GORACE=atexit_sleep_ms=0"}, InitializeTimeout: 3 * time.Second, ShutdownTimeout: 600 * time.Millisecond}
+}
+
+// runClaimHandshake answers the parked-spare binding that a claim-capable CLI
+// receives after initialize. The warm-up frame reproduces the CLI emitting a
+// session-scoped notification just before the claim response.
+func runClaimHandshake(reader *bufio.Reader, mode string) error {
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		return err
+	}
+	var request struct {
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype            string   `json:"subtype"`
+			CWD                string   `json:"cwd"`
+			AppendSystemPrompt string   `json:"append_system_prompt"`
+			SDKMCPServers      []string `json:"sdk_mcp_servers"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal(line, &request); err != nil {
+		return err
+	}
+	if request.RequestID == "" || request.Request.Subtype != "claim_session" {
+		return fmt.Errorf("expected claim_session, got %q", request.Request.Subtype)
+	}
+	if request.Request.CWD == "" {
+		return errors.New("claim_session has no working directory")
+	}
+	claimID := os.Getenv("CLAUDE_GO_CLAIM_ID")
+	if claimID == "" {
+		claimID = "claimed-native"
+	}
+	fixtureEmit(map[string]any{"type": "system", "subtype": "status", "status": "warmup", "session_id": claimID})
+	if mode == "claim_mcp" {
+		fixtureEmit(map[string]any{
+			"type": "control_request", "request_id": "claim-mcp",
+			"request": map[string]any{
+				"subtype": "mcp_message", "server_name": "fixture",
+				"message": map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+			},
+		})
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			return err
+		}
+		var response struct {
+			Response struct {
+				RequestID string         `json:"request_id"`
+				Response  map[string]any `json:"response"`
+			} `json:"response"`
+		}
+		if err := json.Unmarshal(line, &response); err != nil {
+			return err
+		}
+		if response.Response.RequestID == "" || response.Response.Response["mcp_response"] == nil {
+			return errors.New("claim MCP request was not answered before claim completion")
+		}
+	}
+	if mode == "claim_reject" {
+		fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{
+			"subtype": "error", "request_id": request.RequestID, "error": "not_a_spare",
+		}})
+		return nil
+	}
+	canonical, err := filepath.EvalSymlinks(request.Request.CWD)
+	if err != nil {
+		return err
+	}
+	fixtureEmit(map[string]any{"type": "control_response", "response": map[string]any{
+		"subtype": "success", "request_id": request.RequestID, "response": map[string]any{
+			"status": "ok", "cwd": canonical, "session_id": claimID,
+		},
+	}})
+	return nil
+}
+
+func runClaimFixture(reader *bufio.Reader) {
+	claimID := os.Getenv("CLAUDE_GO_CLAIM_ID")
+	if claimID == "" {
+		claimID = "claimed-native"
+	}
+	cwd, _ := os.Getwd()
+	fixtureEmit(map[string]any{
+		"type": "system", "subtype": "init", "session_id": claimID,
+		"cwd": cwd, "claude_code_version": "2.1.293", "slash_commands": []string{"help"},
+	})
+	if _, err := reader.ReadBytes('\n'); err != nil {
+		return
+	}
+	fixtureEmit(map[string]any{
+		"type": "assistant", "session_id": claimID,
+		"message": map[string]any{"content": []any{map[string]any{"type": "text", "text": "claimed answer"}}},
+	})
+	fixtureEmit(map[string]any{
+		"type": "result", "subtype": "success", "session_id": claimID, "result": "claimed answer",
+	})
+	_, _ = io.Copy(io.Discard, reader)
 }
 
 func openFixture(t *testing.T, mode string, configure ...func(*Options)) *interaction {

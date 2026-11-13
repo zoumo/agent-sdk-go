@@ -249,7 +249,7 @@ func TestSessionPermissionHistoryLimitsAndDuplicateNeverRegrant(t *testing.T) {
 func TestSessionPermissionWaitsWhileReaderContinues(t *testing.T) {
 	s := openSessionFixture(t)
 	p := sessionPermission(t, s, "approval", "Read", `{"file_path":"original"}`)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	submitFrame(t, s, `{"type":"result","session_id":"s","is_error":true,"result":"native failure"}`)
 	require.Equal(t, "native failure", sessionNative(t, s).Event.Result.Result)
@@ -272,7 +272,7 @@ func TestSessionPermissionNotSentKeepsOriginalHandle(t *testing.T) {
 			require.ErrorIs(t, err, ErrUnsupported)
 			require.NoError(t, p.Context().Err())
 			require.Error(t, p.Approve(nil, ApprovalOptions{})) //nolint:staticcheck // verifies nil-context rejection.
-			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+			submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 			require.Equal(t, "init", sessionNative(t, s).Event.Subtype)
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
@@ -320,7 +320,7 @@ func TestSessionQuestionRejectsUnverifiedAnswersWithoutConsumingHandle(t *testin
 
 func TestSessionRejectsUnprivilegedQuestions(t *testing.T) {
 	s := openSessionFixture(t)
-	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.258"}`)
+	submitFrame(t, s, `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`)
 	sessionNative(t, s)
 	frame := `{"type":"assistant","session_id":"s","message":{"content":[{"type":"tool_use","name":"AskUserQuestion","id":"ordinary","input":{"questions":[]}}]}}`
 	submitFrame(t, s, frame)

@@ -90,15 +90,19 @@ events. Historical data cannot create answer authority.
 
 ### Resources and close
 
-Claude unified `Open` now assigns a UUID through official `--session-id` and
-returns after initialize succeeds. `Session.ID()` is nonempty and stable before
-the first input. Initialize does not echo the ID; later native main messages
-are checked against the assignment. A replayed or duplicate init, a different
+Claude unified `Open` now uses `--await-claim`, completes initialize and sends
+`claim_session` to bind the working directory. The CLI supplies the native
+session ID in the claim response; the SDK does not generate one. `Session.ID()`
+is nonempty and stable before the first input. Later native main messages
+are checked against the claimed identity. A replayed or duplicate init, a different
 main-session identity, or an init cwd conflict terminates the Session with
 `native_rejected`. Available commands arrive with the later init notification.
-No user turn, refresh API or local identity file is needed. Native callers can
-opt into the same behavior with `claude.Options.SessionID`, which is mutually
-exclusive with `ResumeID`. Resume retains its saved-session preflight and live
+No user turn, refresh API or local identity file is needed. Local process startup
+now requires a stable CLI >= 2.1.293 and fails before starting the Session if the
+version is old or cannot be confirmed. Native callers opt into claim with
+`claude.Options.ClaimSession`. Explicit `claude.Options.SessionID` keeps the
+`--session-id` path; `ClaimSession`, `SessionID` and `ResumeID` are mutually
+exclusive. Resume retains its saved-session preflight and live
 identity confirmation.
 
 Close cleans up interaction and invalidates handles; accepted records remain

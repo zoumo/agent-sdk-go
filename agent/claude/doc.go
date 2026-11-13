@@ -2,14 +2,17 @@
 // live agent contract.
 //
 // Core Start only makes the Core lifecycle ready; each Session owns its
-// native Claude CLI process. Open assigns a UUID through native --session-id and
-// returns it after initialize succeeds, without waiting for system/init or sending
-// user input. Initialize does not echo the ID. Later main-session messages must
-// match it; init must be live, unique and identify the requested working directory.
+// native Claude CLI process. Open uses --await-claim and claim_session to bind
+// the working directory and obtain the native session ID before returning,
+// without waiting for system/init or sending user input. Later main-session
+// messages must match it; init must be live, unique and identify the requested
+// working directory.
 // Identity conflicts terminate the session. Resume first confirms the reviewed
 // CLI version and the requested saved transcript under Config.ConfigDir, then
 // accepts matching live init or its private SessionStart callback as the resumed identity.
 // Saved replay material is not converted into live events.
+// Session launches enable the CLI's SDK session-state notifications unless the
+// effective process environment already selects that variable.
 //
 // The adapter maps Claude user and assistant text and thinking, message and
 // content-block deltas, tool calls and results, session state, usage, available

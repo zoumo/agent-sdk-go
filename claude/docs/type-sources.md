@@ -54,8 +54,8 @@ Additional inspected type-organization file bytes (same pinned commits):
 The same pinned `sdk.d.ts` declares `SDKUserMessage.shouldQuery` (around line
 5286) and documents false as a transcript append without triggering an assistant
 turn, merged into the next user message that queries. The unified `Injector`
-uses that field and requires a confirmed stable live-init CLI version in the
-2.x series at least 2.1.258. This is a source-backed support boundary, not a
+uses that field and shares the SDK's stable CLI >= 2.1.293 support boundary,
+with a confirmed live init. The source baseline for that field is not a
 claim of runtime verification for every later version. A local write alone
 does not prove transcript recording or model consumption.
 
@@ -66,8 +66,9 @@ The [official SDK 0.3.258 archive](https://registry.npmjs.org/@anthropic-ai/clau
 manifest names CLI 2.1.258, commit `b3cd543a1f6fcdf4d8fabc0f5e5538d2ee7f38e1`,
 build date 2026-09-01. The installed binary hash differs from the manifest's
 darwin-arm64 checksum; they are not asserted to be identical builds. A version
-probe and static inspection do not establish live subagent behavior. Task/tool association
-is gated to the exact native init version 2.1.258, not a minimum version range.
+probe and static inspection do not establish live subagent behavior. This is a
+historical source baseline; the 2.1.258 runtime relationship profile is no longer
+supported. The active 2.1.293 profile is described below.
 
 | Fixed file | SHA256 |
 | --- | --- |
@@ -93,6 +94,54 @@ background agent identity, new/resumed registration, foreground registration
 and async launch paths. No embedded code was executed for that inspection.
 Both TypeScript versions have the same non-MIT licensing boundary. No TypeScript declaration
 bundle, binary or implementation is redistributed.
+
+## CLI 2.1.293 and TypeScript 0.3.293 relationship profile
+
+Review on 2026-11-12 used the
+[official SDK 0.3.293 archive](https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.293.tgz).
+Its manifest names CLI 2.1.293, commit
+`3abc54a9d60b4d12c627afad22d6e5f58a6199d2`, build date
+2026-10-07T06:56:40Z. The installed CLI reports 2.1.293 and has SHA256
+`27d4e9aeb2335156c7859edb6e13f35c884fa09915fea2f9b8305f4b52aeaaa0`;
+its hash differs from the manifest's darwin-arm64 checksum, so these are not
+asserted to be identical builds. The package remains non-MIT; only protocol
+semantics were reviewed, and no declaration bundle or implementation is copied.
+
+| Fixed file | SHA256 |
+| --- | --- |
+| 0.3.293 archive | `395bfbda4294c6334fa18be3706a46ff31851b4f4a6f74ba11ac96c9d97ced9f` |
+| sdk.d.ts | `bbfe75f8b5d29109d282d8b12d990f006744be11b53f86ce1b71c67824716254` |
+| sdk-tools.d.ts | `d850d83ecd9e5f92be6e1d98b54b228e68ce0cc32767391f6e20573a4870e024` |
+| manifest.json | `ce867df78920b885ffcd8ddeb5b12f867bbb34f8a7dd85d42740d48b4c6ef351` |
+
+`SDKAssistantMessage.agent_id` (`sdk.d.ts` 3647–3651) and
+`SDKUserMessage.agent_id` (6360–6364) explicitly name the subagent task_id,
+unchanged across resume. `SDKPartialAssistantMessage` (5512 onward) does not
+declare agent_id; its forwarded parent_tool_use_id remains the reviewed alias.
+`SDKTaskStartedMessage.parent_task_id` (6115–6119) names the launching task,
+can refer to foreground or ended parents, and instructs readers to treat
+unknown parents as no parent. This SDK therefore requires an already confirmed
+parent member and does not fabricate a main-session edge from absence.
+Task run_id identifies a run, not a new child; this SDK retains arrival order
+and does not add a current-run selection or event reordering mechanism.
+Background task snapshots do not independently create members or parent edges.
+
+These declarations establish the 2.1.293 source baseline. The SDK applies those
+semantics across its supported stable CLI >= 2.1.293 range, rather than using an
+exact version whitelist for individual features. This support policy does not
+claim live verification of every later release. Original synthetic tests cover
+later version numbers, identity conflicts, unknown fields/versions, parent cycles,
+tool aliases across runs and filtering. Opt-in live checks remain separate from
+source evidence and do not publish new recordings.
+
+The pinned testify module `45bce662f7566757c24e2a286fbc25f29c796c04`
+also supplies qualified CLI 2.1.293 protocol evidence for
+`system/permission_check_status`. Case `SDK-CASE-007`, material
+`9c925ae411d3fdfeecd0c83ce76fe41b`, raw SHA256
+`8a0a18035794bf7bf899d4abd9cc76b77165429be73ac1251a98d56227e12e43`,
+contains `checking` and `done` notifications with `tool_use_id`.
+The Session retains these same-session notifications and their original bytes;
+they do not establish child membership or permission-answer authority.
 
 ## Python protocol source hashes
 

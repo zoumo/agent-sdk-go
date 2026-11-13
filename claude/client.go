@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,8 +30,8 @@ type Limits = types.Limits
 
 // Options configures a locally installed CLI. Env, when non-nil, replaces the
 // child's entire environment; nil inherits os.Environ. WorkDir, Model, Effort,
-// Tools, DisallowedTools, SessionID and ResumeID are passed literally, without a shell.
-// Existing CLI settings apply.
+// Tools, DisallowedTools, SessionID and ResumeID are passed without a shell.
+// ClaimSession resolves WorkDir to an absolute path. Existing CLI settings apply.
 //
 //nolint:recvcheck // Canonical configuration API uses value and pointer receivers.
 type Options struct {
@@ -65,6 +66,13 @@ type Options struct {
 	// literally and is mutually exclusive with ResumeID. Initialize does not echo
 	// this identity; later native main-session messages are checked against it.
 	SessionID string
+	// ClaimSession starts the CLI as a parked spare through --await-claim and
+	// binds it to WorkDir with one claim_session request before Open returns. The
+	// CLI assigns the native identity and reports it in the claim response, so
+	// this path needs neither --session-id nor user input. It requires a CLI that
+	// supports --await-claim and is mutually exclusive with SessionID and
+	// ResumeID.
+	ClaimSession bool
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
@@ -90,6 +98,16 @@ type Options struct {
 func (o *Options) defaults() error {
 	if o.SessionID != "" && o.ResumeID != "" {
 		return dispatchFailure("open", fmt.Errorf("%w: session ID and resume ID are mutually exclusive", ErrInvalidInput))
+	}
+	if o.ClaimSession && (o.SessionID != "" || o.ResumeID != "") {
+		return dispatchFailure("open", fmt.Errorf("%w: claimed session cannot also assign or resume an identity", ErrInvalidInput))
+	}
+	if o.ClaimSession {
+		workDir, err := filepath.Abs(o.WorkDir)
+		if err != nil {
+			return dispatchFailure("open", err)
+		}
+		o.WorkDir = workDir
 	}
 	switch o.ChildDetailPolicy {
 	case "", ChildDetailPreserve, ChildDetailSuppress:
@@ -228,10 +246,14 @@ type interaction struct {
 	permissions                         map[string]*permissionState
 	permissionIDs                       map[string]struct{}
 	sessionStartProbeReplySent          atomic.Bool
+	claiming                            atomic.Bool
+	claimMu                             sync.Mutex
+	claimBuffered                       []Event
+	claimBufferedBytes                  int
 }
 
 func newInteraction(options Options, session *Session) *interaction {
-	return &interaction{
+	c := &interaction{
 		session: session, opts: options,
 		responses:   make(chan incomingControl, options.Limits.ControlBuffer),
 		epoch:       connectionEpoch.Add(1),
@@ -240,6 +262,8 @@ func newInteraction(options Options, session *Session) *interaction {
 		stdoutDone: make(chan struct{}), stderrDone: make(chan struct{}), processDone: make(chan struct{}), pending: make(map[string]pendingControl),
 		inputClosedCh: make(chan struct{}),
 	}
+	c.claiming.Store(options.ClaimSession)
+	return c
 }
 
 func openInteraction(ctx context.Context, options Options, session *Session) (*interaction, error) {
@@ -255,6 +279,9 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 	args, err := interactionArgs(options)
 	if err != nil {
 		return nil, &Error{Op: "arguments", Err: err}
+	}
+	if _, err := CheckCLIVersion(ctx, options); err != nil {
+		return nil, err
 	}
 	cmd := exec.CommandContext(context.WithoutCancel(ctx), options.CLIPath, args...)
 	cmd.Dir, cmd.Env = options.WorkDir, options.Env
@@ -301,10 +328,23 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 		}
 	}
 	c.start()
-	if err := c.initialize(ctx); err != nil {
+	if err := c.startup(ctx); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+func (c *interaction) startup(ctx context.Context) error {
+	if err := c.initialize(ctx); err != nil {
+		return err
+	}
+	if c.opts.ClaimSession {
+		if err := c.claim(ctx); err != nil {
+			c.cleanupFailedStartup()
+			return c.startupError("claim_session", err)
+		}
+	}
+	return nil
 }
 
 func (c *interaction) start() {
@@ -341,14 +381,7 @@ func (c *interaction) initialize(ctx context.Context) error {
 		}
 		c.mu.Unlock()
 		c.cleanupFailedStartup()
-		final := c.Err()
-		startup := &Error{Op: "initialize", Err: errors.Join(err, final)}
-		var diagnostics *Error
-		if errors.As(final, &diagnostics) {
-			startup.Stderr, startup.ExitCode = diagnostics.Stderr, diagnostics.ExitCode
-		}
-		startup.OutcomeUnknown = errors.Is(startup.Err, ErrUnknownOutcome)
-		return startup
+		return c.startupError("initialize", err)
 	}
 	select {
 	case <-c.done:
@@ -357,6 +390,17 @@ func (c *interaction) initialize(ctx context.Context) error {
 	default:
 	}
 	return nil
+}
+
+func (c *interaction) startupError(op string, err error) error {
+	final := c.Err()
+	startup := &Error{Op: op, Err: errors.Join(err, final)}
+	var diagnostics *Error
+	if errors.As(final, &diagnostics) {
+		startup.Stderr, startup.ExitCode = diagnostics.Stderr, diagnostics.ExitCode
+	}
+	startup.OutcomeUnknown = errors.Is(startup.Err, ErrUnknownOutcome)
+	return startup
 }
 
 // Open aborts its unreturned FIFO after failed startup cleanup.
@@ -374,9 +418,9 @@ func (c *interaction) Send(ctx context.Context, text string) error {
 func (c *interaction) RequestedResumeID() string { return c.opts.ResumeID }
 
 // SessionID returns the most recent nonempty native session ID observed in a
-// system or result frame. Before such a frame arrives it returns ("", false),
-// even when a resume ID was requested. The last observed ID remains available
-// after Close. Receive still exposes the original session fields and raw frame.
+// claim response, system or result frame. Before such evidence arrives it returns
+// ("", false), even when a resume ID was requested. The last observed ID remains
+// available after Close. Receive still exposes the original session fields and raw frame.
 func (c *interaction) SessionID() (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -645,11 +689,6 @@ func (c *interaction) controlRequest(ctx context.Context, subtype string, reques
 }
 
 func (c *interaction) route(event Event) error {
-	if (event.System != nil || event.Result != nil) && event.SessionID != "" {
-		c.mu.Lock()
-		c.sessionID = event.SessionID
-		c.mu.Unlock()
-	}
 	if event.Type == "control_response" {
 		reply := event.Response.Response
 		if reply.RequestID == "" || (reply.Subtype != "success" && reply.Subtype != "error") {
@@ -672,6 +711,28 @@ func (c *interaction) route(event Event) error {
 			waiter.reply <- result
 		}
 		return nil
+	}
+	if c.claiming.Load() {
+		if event.Control != nil && c.ownsSDKMCPRequest(event.Control) && c.opts.HandleSDKMCP != nil {
+			return c.routeNative(event)
+		}
+		c.claimMu.Lock()
+		if c.claiming.Load() {
+			err := c.bufferClaimedFrame(event)
+			c.claimMu.Unlock()
+			return err
+		}
+		c.claimMu.Unlock()
+	}
+	return c.routeNative(event)
+}
+
+// routeNative processes native control authority and admits Session records.
+func (c *interaction) routeNative(event Event) error {
+	if (event.System != nil || event.Result != nil) && event.SessionID != "" {
+		c.mu.Lock()
+		c.sessionID = event.SessionID
+		c.mu.Unlock()
 	}
 	if event.Cancel != nil {
 		if err := c.cancelPermission(event.Cancel.RequestID); err != nil {
@@ -1075,6 +1136,9 @@ func interactionArgs(options Options) ([]string, error) {
 	}
 	if options.SessionID != "" {
 		args = append(args, "--session-id="+options.SessionID)
+	}
+	if options.ClaimSession {
+		args = append(args, "--await-claim")
 	}
 	return args, nil
 }

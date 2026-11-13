@@ -166,7 +166,7 @@ func openClaudeConfigConcurrencyPeer(t *testing.T, ctx context.Context, hold boo
 			case "initialize":
 				err = send(frame.ID, `{}`, false)
 				if err == nil {
-					_, err = fmt.Fprintf(output, "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"config-concurrency\",\"cwd\":%q,\"claude_code_version\":\"2.1.258\"}\n", cwd)
+					_, err = fmt.Fprintf(output, "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"config-concurrency\",\"cwd\":%q,\"claude_code_version\":\"2.1.293\"}\n", cwd)
 				}
 			case "get_settings":
 				err = send(frame.ID, `{"applied":{"ultracode":false}}`, false)

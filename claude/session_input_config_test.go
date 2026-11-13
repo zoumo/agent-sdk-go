@@ -44,7 +44,7 @@ func runInputConfigFixture(reader *bufio.Reader) {
 		os.Exit(12)
 	}
 	defer f.Close()
-	fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": "main", "claude_code_version": "2.1.258"})
+	fixtureEmit(map[string]any{"type": "system", "subtype": "init", "session_id": "main", "claude_code_version": "2.1.293"})
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {

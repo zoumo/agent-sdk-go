@@ -59,6 +59,13 @@ func newLiveAdmission(o Options, mu *sync.Mutex) (*liveAdmission, error) {
 
 func (a *liveAdmission) sessionID() string { return a.root }
 
+// claimRoot fixes a native identity reported by claim_session. The identity is
+// known before input even though no caller assigned it.
+func (a *liveAdmission) claimRoot(sessionID string) []Received {
+	a.assigned = true
+	return a.confirmRoot(sessionID)
+}
+
 // release drops live relationship knowledge. Identity and bounded diagnostics
 // remain readable after termination, and retained diagnostics still expire.
 func (a *liveAdmission) release() {
@@ -110,21 +117,19 @@ func (a *liveAdmission) event(e Event) ([]Received, error) {
 	}
 	if e.System != nil && e.Subtype == "init" && rootFrame && e.SessionID == a.root {
 		a.nativeVersion = e.System.ClaudeCodeVersion
-		if a.nativeVersion != "2.1.258" {
-			observations = append(observations, liveObservation("relationship-version-unverified", "supported-native-version:2.1.258", SubagentIdentity{SessionID: a.root}, nil))
+		if !a.supportedVersion() {
+			observations = append(observations, liveObservation("relationship-version-unverified", "minimum-native-version:"+MinimumCLIVersion, SubagentIdentity{SessionID: a.root}, nil))
 		}
 	}
 	source := SubagentIdentity{SessionID: e.SessionID}
 	if e.AgentID != nil {
 		source.AgentID = *e.AgentID
-	} // unverified extension, never task equality
+	}
 	key := ""
-	// The fixed SDK 0.3.258 task_started local_agent + task_id + tool_use_id
-	// contract is separate from newer/unknown message agent_id and parent_task_id.
 	if isTreeTaskEvent(e) && e.System.TaskID != "" {
 		source.TaskID = e.System.TaskID
 		candidate := "task:" + source.TaskID
-		if e.Subtype == "task_started" && e.System.TaskType != nil && *e.System.TaskType == "local_agent" && a.nativeVersion == "2.1.258" {
+		if e.Subtype == "task_started" && e.System.TaskType != nil && *e.System.TaskType == "local_agent" && a.supportedVersion() {
 			key = candidate
 			source.AssociationID = key
 			if e.System.ToolUseID != nil {
@@ -134,37 +139,69 @@ func (a *liveAdmission) event(e Event) ([]Received, error) {
 				return []Received{{Kind: ReceivedNative, Event: &e, Raw: e.Raw, Source: source, Origin: "live"}},
 					&ResourceLimitError{Resource: "session members", Limit: a.limits.MaxNodes}
 			}
-			if old, ok := a.members[key]; ok && old.ToolUseID != "" && source.ToolUseID != "" && old.ToolUseID != source.ToolUseID {
-				observations = append(observations, liveObservation("tool-reference-conflict", "native-task", source, a.parent(key)))
-				source.ToolUseID = old.ToolUseID
-			}
 			if source.ToolUseID == "" {
 				source.ToolUseID = a.members[key].ToolUseID
 			}
 			member := source
-			member.AgentID = "" // unknown extensions never become authoritative aliases
-			a.members[key] = member
-			observations = append(observations, liveObservation("member-confirmed", "cli-2.1.258-local-agent-task", source, a.parent(key)))
+			member.AgentID = member.TaskID
+			member.ToolUseID = a.members[key].ToolUseID
+			observations = append(observations, liveObservation("member-confirmed", "cli-"+a.nativeVersion+"-local-agent-task", source, a.parent(key)))
 			if source.ToolUseID != "" {
 				if alias, ok := a.childTools[source.ToolUseID]; ok && alias != key {
 					observations = append(observations, liveObservation("tool-alias-conflict", "native-task-tool-mapping", source, a.parent(key)))
+				} else if !ok && len(a.childTools) >= a.limits.MaxNodes {
+					observations = append(observations, liveObservation("tool-knowledge-limit", "native-task-tool-mapping", source, a.parent(key)))
 				} else {
 					a.childTools[source.ToolUseID] = key
+					member.ToolUseID = source.ToolUseID
 				}
 			}
+			a.members[key] = member
 		} else if member, ok := a.members[candidate]; ok {
 			key = candidate
 			source = member
+			if a.supportedVersion() && e.System.ToolUseID != nil {
+				source.ToolUseID = *e.System.ToolUseID
+			}
 		}
 	}
-	// Forwarded stream/message/progress parent_tool_use_id can use an already confirmed
-	// native task/tool alias. Matching an unknown agent_id string cannot do so.
+	declaredIdentity := a.supportedVersion() && (e.Assistant != nil || e.User != nil) && e.AgentID != nil && *e.AgentID != ""
+	identityUnconfirmed := false
+	if declaredIdentity {
+		candidate := "task:" + *e.AgentID
+		if member, ok := a.members[candidate]; ok {
+			key = candidate
+			source.TaskID = member.TaskID
+			source.AssociationID = key
+			source.ToolUseID = member.ToolUseID
+		} else {
+			identityUnconfirmed = true
+			observations = append(observations, liveObservation("identity-member-unconfirmed", "cli-2.1.293-message-agent-id", source, nil))
+		}
+	}
 	if (e.Assistant != nil || e.User != nil || e.Stream != nil || e.Type == "tool_progress") && e.ParentToolUseID != nil && *e.ParentToolUseID != "" {
 		source.ToolUseID = *e.ParentToolUseID
 		if alias, ok := a.childTools[source.ToolUseID]; ok {
-			key = alias
-			source.TaskID = a.members[key].TaskID
-			source.AssociationID = key
+			if declaredIdentity && key != "" && key != alias {
+				identityUnconfirmed = true
+				observations = append(observations, liveObservation("identity-alias-conflict", "cli-2.1.293-message-agent-id-task-tool", source, nil))
+			} else if !identityUnconfirmed {
+				key = alias
+				source.TaskID = a.members[key].TaskID
+				source.AssociationID = key
+			}
+		}
+	}
+	if identityUnconfirmed {
+		key, source.TaskID, source.AssociationID = "", "", ""
+	}
+	declaredParent := a.supportedVersion() && e.System != nil && e.Subtype == "task_started" && e.System.ParentTaskID != nil
+	if declaredParent && key != "" && *e.System.ParentTaskID != "" {
+		parentKey := "task:" + *e.System.ParentTaskID
+		if _, ok := a.members[parentKey]; ok {
+			observations = append(observations, a.confirmParentWithEvidence(key, parentKey, source, "cli-2.1.293-parent-task-id"))
+		} else {
+			observations = append(observations, liveObservation("parent-member-unconfirmed", "cli-2.1.293-parent-task-id", source, a.parent(key)))
 		}
 	}
 	if key != "" && source.ToolUseID != "" {
@@ -172,13 +209,13 @@ func (a *liveAdmission) event(e Event) ([]Received, error) {
 			observations = append(observations, a.confirmParent(key, owner, source))
 		}
 	}
-	if e.AgentID != nil && *e.AgentID != "" {
-		observations = append(observations, liveObservation("identity-extension-unverified", "cli-2.1.258-does-not-declare-message-agent-id", source, a.parent(key)))
+	if e.AgentID != nil && *e.AgentID != "" && !declaredIdentity {
+		observations = append(observations, liveObservation("identity-extension-unverified", "unreviewed-message-agent-id", source, a.parent(key)))
 	}
-	if e.System != nil && e.System.ParentTaskID != nil {
-		observations = append(observations, liveObservation("parent-extension-unverified", "cli-2.1.258-does-not-declare-parent-task-id", source, a.parent(key)))
+	if e.System != nil && e.System.ParentTaskID != nil && !declaredParent {
+		observations = append(observations, liveObservation("parent-extension-unverified", "unreviewed-parent-task-id", source, a.parent(key)))
 	}
-	if e.Assistant != nil && a.nativeVersion == "2.1.258" {
+	if e.Assistant != nil && a.supportedVersion() {
 		// Root tool ownership needs the reviewed root envelope, or a verified task
 		// alias. An unknown agent extension cannot silently become a root owner.
 		ownerKnown := key != "" || rootFrame
@@ -207,10 +244,14 @@ func (a *liveAdmission) event(e Event) ([]Received, error) {
 	}
 	// Native first; the following bounded per-frame knowledge is not a second FIFO.
 	var records []Received
-	if a.detailPolicy != ChildDetailSuppress || key == "" || a.nativeVersion != "2.1.258" || !pureChildDetail(e) {
+	if a.detailPolicy != ChildDetailSuppress || key == "" || !a.supportedVersion() || !pureChildDetail(e) {
 		records = append(records, Received{Kind: ReceivedNative, Event: &e, Raw: e.Raw, Source: source, Parent: a.parent(key), Origin: "live"})
 	}
 	return append(records, observations...), nil
+}
+
+func (a *liveAdmission) supportedVersion() bool {
+	return ValidateCLIVersion(a.nativeVersion) == nil
 }
 
 func (a *liveAdmission) confirmRoot(sessionID string) []Received {
@@ -260,6 +301,10 @@ func (a *liveAdmission) checkAssignedIdentity(event Event, rootFrame bool) error
 }
 
 func (a *liveAdmission) confirmParent(child, parent string, source SubagentIdentity) Received {
+	return a.confirmParentWithEvidence(child, parent, source, "cli-"+a.nativeVersion+"-task-tool-owner")
+}
+
+func (a *liveAdmission) confirmParentWithEvidence(child, parent string, source SubagentIdentity, evidence string) Received {
 	var err error
 	if parent == "" {
 		err = a.parents.ConfirmRoot(child, "")
@@ -270,7 +315,7 @@ func (a *liveAdmission) confirmParent(child, parent string, source SubagentIdent
 	if err != nil {
 		reason = "parent-knowledge-rejected: " + err.Error()
 	}
-	return liveObservation(reason, "cli-2.1.258-task-tool-owner", source, a.parent(child))
+	return liveObservation(reason, evidence, source, a.parent(child))
 }
 
 func (a *liveAdmission) parent(key string) *SubagentIdentity {

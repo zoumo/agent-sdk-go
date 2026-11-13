@@ -126,7 +126,7 @@ by [Go library mode](modules/agent-sdk-testify/library-mode.md).
 `internal/mocktest` authors manifest-bound synthetic captures from SDK-owned
 fixtures, creates the SDK-side streams and exposes typed evidence; it contains
 no protocol matcher and imports neither native SDK. Simulation validates the
-prepared schema-5 identity and route, exports the complete material outside the
+prepared schema-7 identity and runtime route, exports the complete material outside the
 fixture and validates the exported inventory, plans, native streams, reports and
 history bindings. It never traverses the library's private storage.
 SDK assertion projections are INTERNAL SDK data derived from the public export;

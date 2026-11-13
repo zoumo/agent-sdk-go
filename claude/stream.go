@@ -34,7 +34,7 @@ func NativeArgs(options SessionOptions) ([]string, error) {
 }
 
 // OpenStreams connects an owned Session to caller-provided protocol streams.
-// It performs the same initialize exchange as Open without resolving CLIPath,
+// It performs the same startup exchanges as Open without resolving CLIPath,
 // starting a process or changing the host cwd or environment.
 func OpenStreams(ctx context.Context, options SessionOptions, transport StreamTransport) (*Session, error) {
 	if ctx == nil {
@@ -98,7 +98,7 @@ func openStreamInteraction(ctx context.Context, options Options, session *Sessio
 		}
 	}
 	c.start()
-	if err := c.initialize(ctx); err != nil {
+	if err := c.startup(ctx); err != nil {
 		return nil, err
 	}
 	return c, nil

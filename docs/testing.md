@@ -57,18 +57,24 @@ WebSocket harness requires Unix process groups for bounded server cleanup.
 It checks authentication, reconnection and client/server lifecycle through the
 SDK, Go networking and the server process handle. It does not inspect process-tree
 listener ownership or assert the absence of additional listeners. Claude includes
-an initialization/shutdown probe and opt-in assigned-session checks. The latter
-check unified Open before input and one model input, plus a native first turn
+an initialization/shutdown probe and opt-in session-identity checks. The latter
+check unified claim-based Open before input, one model input, native running/idle
+and no active work after idle, plus a native first turn
 whose init, assistant and success result match the UUID passed in --session-id.
+An opt-in 2.1.293 relationship check starts one local task and requires forwarded
+child identity, confirmed membership, a main-session parent and successful completion.
 They do not establish complete agent E2E coverage.
+Offline version tests exercise the public native Open path and assert that old,
+prerelease, ambiguous and oversized version output does not launch the Session
+process. Resume also checks query execution failures before launch.
 
 Each SDK has independent, opt-in E2E switches.
 Real CLI/agent tests are disabled through `CODEX_E2E_STDIO=0`,
 `CODEX_E2E_INTERACTIONS=0`, `CODEX_E2E_WEBSOCKET=0`, `CLAUDE_E2E=0`,
 and `SDK_REAL_AGENT_E2E=0`. Codex requires `CODEX_E2E_CLI` and Claude requires
 `CLAUDE_E2E_CLI` to select the executable. Each selected test requires its switch
-to equal `1` and refuses a nonempty `CI`. Offline validation and recorded replay invoke no real agent/model. Native successful subagent interoperability remains unverified;
-see each package's compatibility and recording documentation for precise evidence.
+to equal `1` and refuses a nonempty `CI`. Offline validation and recorded replay invoke no real agent/model.
+See each package's compatibility and recording documentation for precise evidence.
 
 Run the assigned-session model probes only with explicit opt-in:
 
@@ -76,10 +82,11 @@ Run the assigned-session model probes only with explicit opt-in:
 SDK_REAL_AGENT_E2E=1 CLAUDE_E2E=1 \
 CLAUDE_E2E_CLI=/absolute/path/to/claude \
 CLAUDE_E2E_MODEL=your-model \
-go test ./claude/tests/e2e -run 'TestUnifiedOpenBeforeInput|TestNativeAssignedSessionIdentityAcrossFirstTurn' -v -count=1
+go test ./claude/tests/e2e -run 'TestUnifiedOpenBeforeInput|TestNativeAssignedSessionIdentityAcrossFirstTurn|TestNativeSubagentRelationship293' -v -count=1
 ```
 
-These probes use temporary HOME/config directories and simple mode. They copy
+These probes use temporary HOME/config directories. The relationship check
+enables the native Task/Agent tool; the identity-only probes use simple mode. They copy
 only the Anthropic endpoint and authentication variables from the caller's
 environment or `~/.claude/settings.json`, and never print their values.
 

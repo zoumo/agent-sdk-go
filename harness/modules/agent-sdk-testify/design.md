@@ -28,7 +28,7 @@ each stdio host owns its in-process mock. Remote-close instead owns both mocks i
 the simulation process behind the authenticated bridge. Each host receives a
 new absolute output directory and never mutates a recording or prepared source.
 
-The preparation result must be schema 5 with an embedded module identity,
+The preparation result must be schema 7 with an embedded module identity,
 material source identity, enabled mock route, execution environment, workspace,
 protocol cwd and declared connection set. Validate all of those values and the
 exact module pin before protocol I/O. A missing or mismatched value fails
@@ -106,7 +106,7 @@ tests assert its typed failure and cleanup facts without relaxing matching.
 ## Evidence and errors
 
 Persist the embedded module version/sum/revision and Go build identity, SDK
-source/build identity, prepared schema-5 identity, source and export hashes,
+source/build identity, prepared schema-7 identity, source and export hashes,
 runtime/export separation, projection provenance, SDK results and deliveries,
 typed connection reports and cleanup results outside recordings.
 

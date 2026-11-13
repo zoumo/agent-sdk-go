@@ -315,7 +315,7 @@ func serveStreamResult(peer *streamPeer) error {
 	if _, err := readStreamFrame(reader); err != nil {
 		return err
 	}
-	if err := writeStreamFrame(peer.writer, `{"type":"system","subtype":"init","session_id":"synthetic","claude_code_version":"2.1.258"}`); err != nil {
+	if err := writeStreamFrame(peer.writer, `{"type":"system","subtype":"init","session_id":"synthetic","claude_code_version":"2.1.293"}`); err != nil {
 		return err
 	}
 	if err := writeStreamFrame(peer.writer, `{"type":"result","subtype":"success","session_id":"synthetic","is_error":false,"result":"ready"}`); err != nil {

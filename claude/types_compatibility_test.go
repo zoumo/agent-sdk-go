@@ -50,6 +50,7 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 		CLIPath: "literal cli", WorkDir: "literal dir", Model: "-model", ResumeID: "-session", Tools: []string{"Bash", "Read"}, DisallowedTools: []string{"AskUserQuestion", "Bash(git:*)"},
 		AppendSystemPrompt: "multi-line\nliteral append prompt --leading-dash ünïcødé",
 		SessionID:          "11111111-1111-4111-8111-111111111111",
+		ClaimSession:       true,
 		MCPServers: []mcp.Server{{
 			Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
 			Headers: map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},

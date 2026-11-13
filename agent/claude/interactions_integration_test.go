@@ -949,7 +949,7 @@ func claudeSessionInitFrame(t *testing.T, sessionID, cwd string) string {
 	t.Helper()
 	return `<{"type":"system","subtype":"init","session_id":"` + sessionID +
 		`","cwd":` + jsonString(t, cwd) +
-		`,"claude_code_version":"2.1.258"}`
+		`,"claude_code_version":"2.1.293"}`
 }
 
 func claudeStateFrame(sessionID, state, at string) string {

@@ -36,6 +36,9 @@ func AcceptExistingChildren(ctx context.Context, mock *mocktest.Session, root st
 			AgentIDs      []string
 			Files         map[string]existingChildSeedFile
 		}
+		HistoryBindings []struct {
+			Role, Source, SHA256 string
+		}
 	}
 	b, err := os.ReadFile(filepath.Join(root, "plan.json"))
 	if err != nil {
@@ -49,6 +52,14 @@ func AcceptExistingChildren(ctx context.Context, mock *mocktest.Session, root st
 		return err
 	}
 	seed := plan.HistorySeed
+	if len(seed.Files) == 0 && len(plan.HistoryBindings) > 0 {
+		seed.Files = map[string]existingChildSeedFile{}
+		for _, binding := range plan.HistoryBindings {
+			if binding.Role == "seed" {
+				seed.Files[binding.Source] = existingChildSeedFile{Source: binding.Source, SHA256: binding.SHA256}
+			}
+		}
+	}
 	if seed.SessionID == "" || len(seed.AgentIDs) == 0 || len(seed.Files) == 0 {
 		return errors.New("verified existing-child seed required")
 	}

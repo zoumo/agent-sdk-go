@@ -71,7 +71,7 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, mo
 	case "claude":
 		switch plan.DriverProfile {
 		case "existing-children":
-			err = claudesim.AcceptExistingChildren(ctx, mock, root)
+			err = claudesim.AcceptExistingChildren(ctx, mock, root, claude.ChildDetailPolicy(policy), out)
 		case "history":
 			err = claudesim.AcceptSavedHistory(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		default:

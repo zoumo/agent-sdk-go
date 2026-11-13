@@ -178,9 +178,6 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 		RecordingSHA256: pkg.Material.RecordingSHA256,
 		Connections:     append([]string(nil), pkg.Material.Connections...),
 	}
-	if session.AgentType == "claude" && len(pkg.Material.Connections) > 1 {
-		return r, errors.New("claude simulation supports only the main mock connection")
-	}
 	r.ChildDetailPolicy = planPolicy(pkg)
 	r.Provider = pkg.Plan.Provider
 	r.materialReady = true

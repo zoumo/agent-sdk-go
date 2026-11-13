@@ -68,24 +68,43 @@ func CompareDelivery(preserved, suppressed string) error {
 		children[text(child)] = true
 	}
 	if count == 0 {
-		frames, err := deliveries(filepath.Join(filepath.Dir(preserved), "raw", "raw.jsonl"))
-		if err != nil {
-			return err
-		}
-		for _, frame := range frames {
-			if frame["direction"] != "s2c" {
+		for _, relative := range []string{
+			filepath.Join("raw", "raw.jsonl"),
+			filepath.Join("remote-probe", "raw", "raw.jsonl"),
+		} {
+			frames, err := deliveries(filepath.Join(filepath.Dir(preserved), relative))
+			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			wire := mapping(frame["wire"])
-			for _, envelope := range []map[string]any{mapping(wire["result"]), mapping(wire["params"])} {
-				thread := mapping(envelope["thread"])
-				child, parent := text(thread["id"]), text(thread["parentThreadId"])
-				if child != "" && parent != "" {
-					if root != "" && root != parent {
-						return errors.New("child selection has conflicting native roots")
+			if err != nil {
+				return err
+			}
+			for _, frame := range frames {
+				if frame["direction"] != "s2c" {
+					continue
+				}
+				wire := mapping(frame["wire"])
+				for _, envelope := range []map[string]any{mapping(wire["result"]), mapping(wire["params"])} {
+					thread := mapping(envelope["thread"])
+					child, parent := text(thread["id"]), text(thread["parentThreadId"])
+					if child != "" && parent != "" {
+						if root != "" && root != parent {
+							return errors.New("child selection has conflicting native roots")
+						}
+						root = parent
+						children[child] = true
 					}
-					root = parent
-					children[child] = true
+				}
+				for _, value := range list(mapping(wire["result"])["data"]) {
+					thread := mapping(value)
+					child, parent := text(thread["id"]), text(thread["parentThreadId"])
+					if child != "" && parent != "" {
+						if root != "" && root != parent {
+							return errors.New("child selection has conflicting native roots")
+						}
+						root = parent
+						children[child] = true
+					}
 				}
 			}
 		}

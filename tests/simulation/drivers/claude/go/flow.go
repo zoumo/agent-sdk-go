@@ -22,6 +22,18 @@ import (
 // AcceptFlow executes recorded operations with the public Go Session. Incoming
 // permissions retain their original handles, including held approvals.
 func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
+	return acceptFlow(ctx, mock, root, host, policy, deliveries, nil)
+}
+
+func acceptFlow(
+	ctx context.Context,
+	mock *mocktest.Session,
+	root string,
+	host Host,
+	policy claude.ChildDetailPolicy,
+	deliveries io.Writer,
+	onStart func(mocktest.ExecutionStart),
+) (err error) {
 	var plan struct {
 		Project, Config, Model, DriverProfile string
 		FixtureProject                        string `json:"_fixtureProject"`
@@ -203,6 +215,9 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host H
 	s, run, inputClosed, err := openStreamSession(ctx, mock, options)
 	if err != nil {
 		return err
+	}
+	if onStart != nil {
+		onStart(run.Start)
 	}
 	defer func() {
 		err = errors.Join(err, finishStream(s, run, inputClosed))

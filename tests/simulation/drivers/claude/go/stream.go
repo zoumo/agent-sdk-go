@@ -12,6 +12,15 @@ import (
 )
 
 func openStreamSession(ctx context.Context, mock *mocktest.Session, options claude.SessionOptions) (*claude.Session, *mocktest.Run, <-chan error, error) {
+	return openStreamSessionOnConnection(ctx, mock, "main", "", options)
+}
+
+func openStreamSessionOnConnection(
+	ctx context.Context,
+	mock *mocktest.Session,
+	connection, executionID string,
+	options claude.SessionOptions,
+) (*claude.Session, *mocktest.Run, <-chan error, error) {
 	if mock == nil {
 		return nil, nil, nil, errors.New("prepared mock session is required")
 	}
@@ -19,9 +28,23 @@ func openStreamSession(ctx context.Context, mock *mocktest.Session, options clau
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	return openStreamSessionWithNativeArgs(ctx, mock, connection, executionID, options, mockNativeArgs(nativeArgs))
+}
+
+func openStreamSessionWithNativeArgs(
+	ctx context.Context,
+	mock *mocktest.Session,
+	connection, executionID string,
+	options claude.SessionOptions,
+	nativeArgs []string,
+) (*claude.Session, *mocktest.Run, <-chan error, error) {
+	if mock == nil {
+		return nil, nil, nil, errors.New("prepared mock session is required")
+	}
 	run, err := mock.NewRun(ctx, mocktest.RunOptions{
-		Connection: "main",
-		NativeArgs: mockNativeArgs(nativeArgs),
+		Connection:  connection,
+		ExecutionID: executionID,
+		NativeArgs:  append([]string(nil), nativeArgs...),
 	})
 	if err != nil {
 		return nil, nil, nil, err

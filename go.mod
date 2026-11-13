@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/coder/websocket v1.8.15
 	github.com/stretchr/testify v1.12.1
-	github.com/zoumo/agent-sdk-testify v0.1.3-0.20261113062730-2480be142ccd
+	github.com/zoumo/agent-sdk-testify v0.2.0
 	github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a
 )
 

@@ -2,9 +2,10 @@
 
 ## v0.1.0-rc.1 — planned, unreleased
 
-- Pins the testify library to merged `main` revision `2480be142ccd`, including
+- Pins the testify library to release `v0.2.0` revision `61366f562130`, including
   portable materials, self-seeded SDK-CASE-035 existing-child recordings and
-  Claude 2.1.293 recordings in the 38-case, 76-slot SDK gate.
+  Claude 2.1.293 recordings in the 38-case, 76-slot SDK gate. The release
+  versions the tool independently of the embedded material snapshot.
 
 - Adds optional `agent.Injector` for context-only input through Codex
   `thread/inject_items` and Claude `shouldQuery=false`, with acceptance evidence

@@ -134,7 +134,7 @@ later version numbers, identity conflicts, unknown fields/versions, parent cycle
 tool aliases across runs and filtering. Opt-in live checks remain separate from
 source evidence and do not publish new recordings.
 
-The pinned testify module `2480be142ccd86bf170ddff015a07c8ac44ccadc`
+The pinned testify module `61366f5621303367a7c3ea0bfc58af71af7e0afa`
 also supplies qualified CLI 2.1.293 protocol evidence for
 `system/permission_check_status`. Case `SDK-CASE-007`, material
 `9c925ae411d3fdfeecd0c83ce76fe41b`, raw SHA256

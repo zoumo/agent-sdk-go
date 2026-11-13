@@ -302,8 +302,8 @@ The offline entry links the exact pinned testify module and its embedded fixed
 corpus; absent required recordings fail the simulation gate. Material adoption
 and catalog maintenance belong to the
 [pinned test library](https://github.com/zoumo/agent-sdk-testify). The test-only pin is
-`github.com/zoumo/agent-sdk-testify v0.1.3-0.20261113062730-2480be142ccd`
-with checksum `h1:BN2CMqY8+7uwjpTGj8Wwf/q0EvsJKmpb+PiJRpmkhk4=`.
+`github.com/zoumo/agent-sdk-testify v0.2.0`
+with checksum `h1:qk18CXLUnNo2ohRJO+53GwaNbfvZH4ypMR8Hfjk29mQ=`.
 It is linked only by test and simulation hosts; production SDK packages do not
 import it. The complete boundary is in
 [Go library mode](harness/modules/agent-sdk-testify/library-mode.md).

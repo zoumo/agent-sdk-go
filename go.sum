@@ -6,8 +6,8 @@ github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdD
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
-github.com/zoumo/agent-sdk-testify v0.1.3-0.20261113062730-2480be142ccd h1:BN2CMqY8+7uwjpTGj8Wwf/q0EvsJKmpb+PiJRpmkhk4=
-github.com/zoumo/agent-sdk-testify v0.1.3-0.20261113062730-2480be142ccd/go.mod h1:XqC5i1y/g7tl3V0iA21J/8IUN8e7eXMYw0dykwkG/tY=
+github.com/zoumo/agent-sdk-testify v0.2.0 h1:qk18CXLUnNo2ohRJO+53GwaNbfvZH4ypMR8Hfjk29mQ=
+github.com/zoumo/agent-sdk-testify v0.2.0/go.mod h1:XqC5i1y/g7tl3V0iA21J/8IUN8e7eXMYw0dykwkG/tY=
 github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a h1:Hyb0V2EaZhrmAh/kEl4Cxi1p3uAmSXAI2ZCL9xLbUWY=
 github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a/go.mod h1:bBk2oZ4wN9zgq+9H2bObmGW7vVEetcJV1M/AvieZUN0=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=

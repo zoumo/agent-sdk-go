@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,28 +14,32 @@ import (
 )
 
 type materialDescriptor struct {
-	ID              string            `json:"id"`
-	Kind            string            `json:"kind"`
-	Action          string            `json:"action"`
-	Provenance      string            `json:"provenance"`
-	Path            string            `json:"path"`
-	PlanSHA256      string            `json:"planSHA256"`
-	ManifestSHA256  string            `json:"manifestSHA256"`
-	RecordingSHA256 string            `json:"recordingSHA256"`
-	Connections     []string          `json:"connections"`
-	CreatedAt       string            `json:"createdAt"`
-	Files           map[string]string `json:"files"`
+	FormatVersion    int               `json:"formatVersion"`
+	SourcePlanSHA256 string            `json:"sourcePlanSHA256"`
+	OriginSHA256     string            `json:"originSHA256"`
+	ID               string            `json:"id"`
+	Kind             string            `json:"kind"`
+	Action           string            `json:"action"`
+	Provenance       string            `json:"provenance"`
+	Path             string            `json:"path"`
+	PlanSHA256       string            `json:"planSHA256"`
+	ManifestSHA256   string            `json:"manifestSHA256"`
+	RecordingSHA256  string            `json:"recordingSHA256"`
+	Connections      []string          `json:"connections"`
+	CreatedAt        string            `json:"createdAt"`
+	Files            map[string]string `json:"files"`
 }
 
 type materialManifest struct {
-	SchemaVersion    int               `json:"schemaVersion"`
-	Files            map[string]string `json:"files"`
-	PlanSHA256       string            `json:"planSHA256"`
-	SourcePlanSHA256 string            `json:"sourcePlanSHA256"`
-	SavedFiles       map[string]string `json:"savedFiles"`
-	RemotePhaseFiles map[string]string `json:"remotePhaseFiles"`
-	Provenance       string            `json:"provenance"`
-	RecordingFormat  struct {
+	MaterialFormatVersion int               `json:"materialFormatVersion"`
+	SchemaVersion         int               `json:"schemaVersion"`
+	Files                 map[string]string `json:"files"`
+	PlanSHA256            string            `json:"planSHA256"`
+	SourcePlanSHA256      string            `json:"sourcePlanSHA256"`
+	SavedFiles            map[string]string `json:"savedFiles"`
+	RemotePhaseFiles      map[string]string `json:"remotePhaseFiles"`
+	Provenance            string            `json:"provenance"`
+	RecordingFormat       struct {
 		Name    string `json:"name"`
 		Version int    `json:"version"`
 	} `json:"recordingFormat"`
@@ -42,10 +47,14 @@ type materialManifest struct {
 }
 
 type materialPlan struct {
-	Provider      string `json:"provider"`
-	CaseID        string `json:"caseId"`
-	DriverProfile string `json:"driverProfile"`
-	Scenario      struct {
+	Provider        string `json:"provider"`
+	CaseID          string `json:"caseId"`
+	DriverProfile   string `json:"driverProfile"`
+	HistoryBindings []struct {
+		Source string `json:"source"`
+		SHA256 string `json:"sha256"`
+	} `json:"historyBindings"`
+	Scenario struct {
 		Parameters struct {
 			ChildDetailPolicy string `json:"childDetailPolicy"`
 		} `json:"parameters"`
@@ -61,19 +70,19 @@ type officialOrigin struct {
 }
 
 type materialPackage struct {
-	Root          string
-	Material      materialDescriptor
-	Manifest      materialManifest
-	Plan          materialPlan
-	PlanBytes     []byte
-	AssertionPlan []byte
-	ManifestRaw   []byte
-	Raw           []byte
-	Report        []byte
-	ReportSource  string
-	ReportSHA256  string
-	SourcePlan    []byte
-	Origin        *officialOrigin
+	Root         string
+	Material     materialDescriptor
+	Manifest     materialManifest
+	Plan         materialPlan
+	PlanBytes    []byte
+	ManifestRaw  []byte
+	Raw          []byte
+	Report       []byte
+	ReportSource string
+	ReportSHA256 string
+	SourcePlan   []byte
+	Origin       *officialOrigin
+	SavedHistory map[string]string
 }
 
 type syntheticEnvelope struct {
@@ -161,12 +170,47 @@ func validateExport(root string, session *preparedSession) (pkg *materialPackage
 		return nil, err
 	}
 	materialBytes, err := os.ReadFile(filepath.Join(root, "material.json"))
-	if err != nil {
+	descriptorMissing := errors.Is(err, os.ErrNotExist)
+	if err != nil && !descriptorMissing {
 		return nil, fmt.Errorf("exported material descriptor: %w", err)
 	}
 	pkg = &materialPackage{Root: root}
-	if err := json.Unmarshal(materialBytes, &pkg.Material); err != nil {
-		return nil, fmt.Errorf("exported material descriptor: %w", err)
+	if descriptorMissing {
+		if session.Fixture.Current == nil {
+			return nil, errors.New("descriptorless export has no prepared material identity")
+		}
+		if _, err := readMaterialManifest(root, &pkg.Manifest); err != nil {
+			return nil, err
+		}
+		if pkg.Manifest.MaterialFormatVersion != 0 {
+			return nil, errors.New("portable export omits its material descriptor")
+		}
+		current := session.Fixture.Current
+		pkg.Material = materialDescriptor{
+			ID: current.ID, Kind: current.Kind, Action: current.Action,
+			Provenance: current.Provenance, PlanSHA256: current.PlanSHA256,
+			ManifestSHA256: current.ManifestSHA256, RecordingSHA256: current.RecordingSHA256,
+			Connections: append([]string(nil), current.Connections...), Files: inventory,
+		}
+	} else {
+		if err := json.Unmarshal(materialBytes, &pkg.Material); err != nil {
+			return nil, fmt.Errorf("exported material descriptor: %w", err)
+		}
+	}
+	if pkg.Material.FormatVersion == 3 {
+		if pkg.Material.Path != "" || len(pkg.Material.Files) != 0 {
+			return nil, errors.New("portable material contains legacy path or inventory")
+		}
+		manifestBytes, err := readMaterialManifest(root, &pkg.Manifest)
+		if err != nil {
+			return nil, err
+		}
+		if digest(manifestBytes) != pkg.Material.ManifestSHA256 {
+			return nil, errors.New("portable material manifest hash differs")
+		}
+		pkg.Material.Files = make(map[string]string, len(pkg.Manifest.Files)+1)
+		maps.Copy(pkg.Material.Files, pkg.Manifest.Files)
+		pkg.Material.Files["manifest.json"] = pkg.Material.ManifestSHA256
 	}
 	if err := validateMaterialDescriptor(pkg.Material, inventory); err != nil {
 		return nil, err
@@ -234,30 +278,46 @@ func validateExport(root string, session *preparedSession) (pkg *materialPackage
 			return nil, errors.New("source plan hash differs from its manifest binding")
 		}
 	}
-	pkg.AssertionPlan = pkg.PlanBytes
 	if len(pkg.SourcePlan) > 0 {
-		pkg.AssertionPlan = pkg.SourcePlan
-	}
-	var assertionPlan materialPlan
-	if err := json.Unmarshal(pkg.AssertionPlan, &assertionPlan); err != nil {
-		return nil, fmt.Errorf("assertion plan: %w", err)
-	}
-	if assertionPlan.Provider != pkg.Plan.Provider || assertionPlan.CaseID != pkg.Plan.CaseID ||
-		assertionPlan.DriverProfile != pkg.Plan.DriverProfile {
-		return nil, errors.New("source and derived plan identities differ")
+		var sourcePlan materialPlan
+		if err := json.Unmarshal(pkg.SourcePlan, &sourcePlan); err != nil {
+			return nil, fmt.Errorf("source plan: %w", err)
+		}
+		if sourcePlan.Provider != pkg.Plan.Provider || sourcePlan.CaseID != pkg.Plan.CaseID ||
+			sourcePlan.DriverProfile != pkg.Plan.DriverProfile {
+			return nil, errors.New("source and derived plan identities differ")
+		}
 	}
 	if err := validateOfficialOrigin(read, session, pkg); err != nil {
+		return nil, err
+	}
+	if session.Fixture.Current == nil {
+		return nil, errors.New("prepared fixture has no current material")
+	}
+	pkg.Material.Path = session.Fixture.Current.Path
+	if err := validateExecutionMaterial(*session.Fixture.Current, pkg, session); err != nil {
 		return nil, err
 	}
 	if err := validatePreparedMaterialPath(session, pkg.Material.Path); err != nil {
 		return nil, err
 	}
 	if session.Source.Kind == "recording" {
-		if !sourceDirectoryDigestMatches(session.Source.Path, session.Source.SHA256) {
+		if hash, err := digestPath(session.Source.Path); err != nil || hash != session.Source.SHA256 {
 			return nil, errors.New("prepared source changed after prepare")
 		}
 	}
 	return pkg, nil
+}
+
+func readMaterialManifest(root string, manifest *materialManifest) ([]byte, error) {
+	data, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, manifest); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func materialInventory(root string) (map[string]string, error) {
@@ -300,6 +360,9 @@ func materialInventory(root string) (map[string]string, error) {
 }
 
 func validateMaterialDescriptor(material materialDescriptor, inventory map[string]string) error {
+	if material.FormatVersion != 0 && material.FormatVersion != 2 && material.FormatVersion != 3 {
+		return fmt.Errorf("unsupported material formatVersion %d", material.FormatVersion)
+	}
 	if material.ID == "" || material.Provenance == "" ||
 		(material.Kind != "material" && material.Kind != "capture") ||
 		material.PlanSHA256 == "" || material.ManifestSHA256 == "" ||
@@ -353,8 +416,7 @@ func validateMaterialManifest(root string, pkg *materialPackage, inventory map[s
 	if manifest.SchemaVersion != 0 && manifest.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported material manifest schemaVersion %d", manifest.SchemaVersion)
 	}
-	if manifest.PlanSHA256 != pkg.Material.PlanSHA256 ||
-		manifest.Files["raw.jsonl"] != pkg.Material.RecordingSHA256 {
+	if manifest.PlanSHA256 != pkg.Material.PlanSHA256 {
 		return errors.New("material manifest plan/raw binding differs")
 	}
 	if manifest.RecordingFormat.Name != "" &&
@@ -364,16 +426,49 @@ func validateMaterialManifest(root string, pkg *materialPackage, inventory map[s
 	if manifest.CaptureStatus != "" && manifest.CaptureStatus != "complete" {
 		return errors.New("material capture is incomplete")
 	}
+	rawName := "raw.jsonl"
+	if pkg.Material.FormatVersion == 3 {
+		rawName = "raw/raw.jsonl"
+		if manifest.MaterialFormatVersion != 3 || manifest.SourcePlanSHA256 != pkg.Material.SourcePlanSHA256 ||
+			manifest.SourcePlanSHA256 == "" || manifest.SavedFiles != nil || manifest.RemotePhaseFiles != nil {
+			return errors.New("portable material manifest bindings differ")
+		}
+	}
+	if manifest.Files[rawName] != pkg.Material.RecordingSHA256 {
+		return errors.New("material manifest raw binding differs")
+	}
 	for path, want := range manifest.Files {
 		if !safeRelative(path) {
 			return fmt.Errorf("material manifest path is unsafe: %s", path)
 		}
-		if got := inventory[filepath.Join("raw", path)]; got != want {
+		boundPath := path
+		if pkg.Material.FormatVersion != 3 {
+			boundPath = filepath.Join("raw", path)
+		}
+		if got := inventory[boundPath]; got != want {
 			return fmt.Errorf("material manifest file hash differs: %s", path)
 		}
 	}
 	if err := validateBoundFiles(root, pkg.Material.Files, manifest.SavedFiles, "saved history"); err != nil {
 		return err
+	}
+	if pkg.Material.FormatVersion == 3 {
+		if pkg.Plan.HistoryBindings == nil {
+			return errors.New("portable material omits history bindings")
+		}
+		history := make(map[string]string, len(pkg.Plan.HistoryBindings))
+		for _, binding := range pkg.Plan.HistoryBindings {
+			if previous, exists := history[binding.Source]; exists && previous != binding.SHA256 {
+				return errors.New("portable material has conflicting history bindings")
+			}
+			history[binding.Source] = binding.SHA256
+		}
+		if err := validateBoundFiles(root, pkg.Material.Files, history, "saved history"); err != nil {
+			return err
+		}
+		pkg.SavedHistory = history
+	} else {
+		pkg.SavedHistory = manifest.SavedFiles
 	}
 	if err := validateBoundFiles(root, pkg.Material.Files, manifest.RemotePhaseFiles, "remote phase"); err != nil {
 		return err
@@ -383,7 +478,11 @@ func validateMaterialManifest(root string, pkg *materialPackage, inventory map[s
 		if _, exists := pkg.Material.Files[rawPath]; !exists {
 			return errors.New("probe connection has no remote phase recording")
 		}
-		if hash, listed := manifest.RemotePhaseFiles[rawPath]; !listed || hash != pkg.Material.Files[rawPath] {
+		bindings := manifest.RemotePhaseFiles
+		if pkg.Material.FormatVersion == 3 {
+			bindings = manifest.Files
+		}
+		if hash, listed := bindings[rawPath]; !listed || hash != pkg.Material.Files[rawPath] {
 			return errors.New("probe remote phase is not bound by the manifest")
 		}
 	}
@@ -464,7 +563,13 @@ func validateOfficialOrigin(read func(string) ([]byte, error), session *prepared
 		return err
 	}
 	if len(originBytes) == 0 {
+		if pkg.Material.OriginSHA256 != "" {
+			return errors.New("portable material omits bound official origin")
+		}
 		return nil
+	}
+	if pkg.Material.FormatVersion == 3 && digest(originBytes) != pkg.Material.OriginSHA256 {
+		return errors.New("portable material official origin hash differs")
 	}
 	var origin officialOrigin
 	if err := json.Unmarshal(originBytes, &origin); err != nil {
@@ -485,8 +590,9 @@ func validateOfficialOrigin(read func(string) ([]byte, error), session *prepared
 	if !reflect.DeepEqual(sortedStrings(origin.Connections), sortedStrings(pkg.Material.Connections)) {
 		return errors.New("official origin connections differ from the material")
 	}
-	if session.Source.Kind == "case" && pkg.Material.Provenance != "builtin" {
-		return errors.New("builtin case export is not builtin provenance")
+	if session.Source.Kind == "case" &&
+		pkg.Material.Provenance != "builtin" && pkg.Material.Provenance != "official" {
+		return errors.New("builtin case export lacks official provenance")
 	}
 	return nil
 }
@@ -559,7 +665,7 @@ func projectAssertions(root string, pkg *materialPackage, session *preparedSessi
 		return err
 	}
 	for _, name := range []string{"plan.json", "case.json"} {
-		if err := os.WriteFile(filepath.Join(root, name), pkg.AssertionPlan, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(root, name), pkg.PlanBytes, 0o600); err != nil {
 			return err
 		}
 	}
@@ -645,13 +751,29 @@ func projectAssertions(root string, pkg *materialPackage, session *preparedSessi
 	inputs.Source.Kind = session.Source.Kind
 	inputs.Source.ID = session.Source.ID
 	inputs.Source.SHA256 = session.Source.SHA256
-	for path, hash := range pkg.Manifest.SavedFiles {
+	for path, hash := range pkg.SavedHistory {
 		inputs.SavedHistory = append(inputs.SavedHistory, struct {
 			Path   string `json:"path"`
 			SHA256 string `json:"sha256"`
 		}{path, hash})
 	}
 	sort.Slice(inputs.SavedHistory, func(i, j int) bool { return inputs.SavedHistory[i].Path < inputs.SavedHistory[j].Path })
+	for _, history := range inputs.SavedHistory {
+		source, err := os.ReadFile(filepath.Join(pkg.Root, history.Path))
+		if err != nil {
+			return err
+		}
+		if digest(source) != history.SHA256 {
+			return errors.New("saved history changed before SDK projection")
+		}
+		target := filepath.Join(root, history.Path)
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, source, 0o600); err != nil {
+			return err
+		}
+	}
 	config := session.Mock.Env["CLAUDE_CONFIG_DIR"]
 	if config == "" {
 		config = session.Mock.Env["CODEX_HOME"]
@@ -693,8 +815,8 @@ func projectAssertions(root string, pkg *materialPackage, session *preparedSessi
 	}
 	if got, err := os.ReadFile(filepath.Join(root, "plan.json")); err != nil {
 		return err
-	} else if !bytes.Equal(got, pkg.AssertionPlan) {
-		return errors.New("SDK assertion projection changed source plan bytes")
+	} else if !bytes.Equal(got, pkg.PlanBytes) {
+		return errors.New("SDK assertion projection changed material plan bytes")
 	}
 	for _, item := range projectionEvidence {
 		source, err := os.ReadFile(filepath.Join(root, item.SourceFile))

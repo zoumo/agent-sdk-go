@@ -67,6 +67,32 @@ func CompareDelivery(preserved, suppressed string) error {
 	for _, child := range list(selection["childIds"]) {
 		children[text(child)] = true
 	}
+	if count == 0 {
+		frames, err := deliveries(filepath.Join(filepath.Dir(preserved), "raw", "raw.jsonl"))
+		if err != nil {
+			return err
+		}
+		for _, frame := range frames {
+			if frame["direction"] != "s2c" {
+				continue
+			}
+			wire := mapping(frame["wire"])
+			for _, envelope := range []map[string]any{mapping(wire["result"]), mapping(wire["params"])} {
+				thread := mapping(envelope["thread"])
+				child, parent := text(thread["id"]), text(thread["parentThreadId"])
+				if child != "" && parent != "" {
+					if root != "" && root != parent {
+						return errors.New("child selection has conflicting native roots")
+					}
+					root = parent
+					children[child] = true
+				}
+			}
+		}
+		if root != "" && len(children) > 0 {
+			count = 1
+		}
+	}
 	if count != 1 || root == "" || len(children) == 0 {
 		return errors.New("recording lacks the original native child selection")
 	}

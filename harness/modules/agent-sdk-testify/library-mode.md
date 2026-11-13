@@ -21,20 +21,21 @@ cancellation and its simulation orchestration.
 The repository uses this exact test dependency:
 
 ```text
-require github.com/zoumo/agent-sdk-testify v0.1.3-0.20261111143023-90fa757261dd
-sum h1:StU10BzY2cxU5XqcQiqmVFuKfUQkF1st4NDZW3UBnmw=
+require github.com/zoumo/agent-sdk-testify v0.1.3-0.20261113014718-45bce662f756
+sum h1:8qY9qoQLa/NJGBUi7ky9AwmovY1MPBBPSiZlqL94cig=
 ```
 
 The pseudo-version fixes the merged `main` revision
-`90fa757261dd767a3909797a1627ce1a38751fe1`. The exact version and checksum
+`45bce662f7566757c24e2a286fbc25f29c796c04`. The exact version and checksum
 appear in `go.mod`, `go.sum` and `internal/mocktest/testify_identity.go`.
 `TestTestifyIdentityMatchesModulePin` guards agreement between those sources.
 A version or checksum change is an explicit reviewed dependency update, not a
 runtime override.
 
 The embedded material snapshot has its own immutable source revision,
-`e35e76fa066f160a37e18d0d487e87af96db9260`. It includes the official idle and
-running context-injection recordings for both providers. Material provenance
+`615c15aa84ae4a99334eaee3fe94102b68b6eb83`. It includes Claude 2.1.293
+recordings and the official idle and running context-injection recordings
+for both providers. Material provenance
 does not replace the linked module identity.
 
 The module is test-only. A module-graph gate must prove that `codex`, `claude`,
@@ -84,12 +85,20 @@ For this repository, `Source` is `ToolSourceEmbedded`; `Module` is
 `github.com/zoumo/agent-sdk-testify`; `Version`, `ModuleSum`, module revision
 and Go version must match the linked binary. `Command`, `Args` and `SHA256`
 must be empty. Fixture and execution descriptors carry this identity under
-schema 5. Opening a fixture whose embedded identity differs from the linked
+schema 7. Opening a fixture whose embedded identity differs from the linked
 module fails closed.
 
 Fixture material identity is separate from module identity. It binds the case
 or recording source, plan, manifest and connection set. Neither identity grants
 permission to traverse library storage outside the public API.
+
+Schema 7 keeps machine paths and environment values in the public runtime
+views, not the persistent descriptor. In-process consumers use `ExecutionStart`
+for each execution. Portable format-3 exports bind their complete core inventory
+in `manifest.json`, history sources in the material plan, and the original
+source plan separately. Official verification and execution evidence are not
+part of that material export. SDK assertions derive expected history and child
+facts from the exported transcripts and protocol bytes.
 
 ## Directional mock streams
 
@@ -410,7 +419,7 @@ driver process as the public SDK host; the driver receives exported material and
 uses the bridge for every mock connection.
 
 The SDK simulation process owns prepare/export, coverage and typed evidence
-validation. It validates schema 5, embedded identity, source identity, the mock
+validation. It validates schema 7, embedded identity, source identity, the mock
 route and the complete connection set before any protocol I/O. Export goes to a
 new directory outside the fixture. The driver runs the public SDK business flow
 and the simulation process binds the result to exactly one execution and
@@ -432,7 +441,7 @@ Adoption is accepted when the offline gate proves all of the following:
   falsely clear ownership.
 - Typed reports prove strict replay, full consumption, client EOF, incomplete
   or complete cleanup and `NativeLaunched=false` for every embedded connection.
-- Fixture and execution descriptors use schema 5 and fail closed on identity,
+- Fixture and execution descriptors use schema 7 and fail closed on identity,
   material or schema mismatch.
 - HTTP, socket, generic UI and unrelated process checks cannot substitute for
   the offline library gate.

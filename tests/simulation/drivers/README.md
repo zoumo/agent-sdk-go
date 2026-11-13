@@ -40,17 +40,22 @@ SDK host and simulation runner.
 
 ### 审核采用和日常门禁
 
-Prepare is the only material source entry. SDK validates the schemaVersion 5
+Prepare is the only material source entry. SDK validates the schemaVersion 7
 fixture identity, embedded identity, source and in-process mock route. Export
 into a new directory outside the fixture is the only assertion-input source: SDK
-validates the export inventory, plan/source-plan, native frames, report and
-manifest-bound saved history before projection.
+validates the manifest-bound export inventory, plan/source-plan, native frames,
+material report and plan-bound saved history before projection.
 
-plan.json/case.json and source streams are projected into INTERNAL SDK fixture
+The material plan and source streams are projected into INTERNAL SDK fixture
 files under each run's sdk directory so the existing typed Go flows retain their
 assertions. Source bytes and projected `agent-mock-jsonl` bytes are both retained
-with hashes. For built-in exports, the official verification report supplies the
-assertion expectations; an external capture falls back to its top-level report.
+with hashes. Portable materials supply assertion expectations in their material
+report; official verification and execution evidence remain outside the export.
+Legacy external captures retain their original report selection. The original
+source plan remains separately hash-bound provenance; the material plan supplies
+creation arguments, frozen seed identity and explicit history bindings.
+SDK history expectations come from the bound transcript bytes, and child
+relationships come from recorded native protocol facts.
 Those files are SDK implementation details, not paths the SDK may discover inside
 the tool. runtime.json contains workspace/config paths from the prepared host.
 Opaque saved-history IDs never become paths. Claude history queries use the

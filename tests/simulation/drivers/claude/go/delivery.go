@@ -66,6 +66,25 @@ func CompareDelivery(preserved, suppressed string) error {
 	for _, child := range list(selection["childIds"]) {
 		children[text(child)] = true
 	}
+	if count == 0 {
+		frames, err := deliveries(filepath.Join(filepath.Dir(preserved), "raw", "raw.jsonl"))
+		if err != nil {
+			return err
+		}
+		for _, frame := range frames {
+			wire := mapping(frame["wire"])
+			if frame["direction"] == "s2c" && wire["subtype"] == "task_started" && wire["task_type"] == "local_agent" {
+				if root != "" && root != text(wire["session_id"]) {
+					return errors.New("recorded child selection has conflicting roots")
+				}
+				root = text(wire["session_id"])
+				children[text(wire["task_id"])] = true
+			}
+		}
+		if root != "" && len(children) > 0 {
+			count = 1
+		}
+	}
 	if count != 1 || root == "" || len(children) == 0 {
 		return errors.New("recording lacks the original native child selection")
 	}
@@ -97,7 +116,14 @@ func CompareDelivery(preserved, suppressed string) error {
 		if id == "" || wire["session_id"] != root || !confirmed[id] || wire["type"] != "assistant" || text(wire["parent_tool_use_id"]) == "" || source["tool_use_id"] != wire["parent_tool_use_id"] {
 			return errors.New("suppression removed unconfirmed Claude detail")
 		}
-		if !only(wire, "type", "session_id", "uuid", "parent_tool_use_id", "message", "timestamp", "subagent_type", "task_description") {
+		if agent, exists := wire["agent_id"]; exists {
+			agentID := text(agent)
+			if agentID == "" || agentID != source["agent_id"] || agentID != source["task_id"] ||
+				"task:"+agentID != id || !children[agentID] {
+				return errors.New("suppression removed a conflicting declared child identity")
+			}
+		}
+		if !only(wire, "type", "session_id", "uuid", "parent_tool_use_id", "agent_id", "message", "timestamp", "subagent_type", "task_description") {
 			return errors.New("suppression removed mixed Claude metadata")
 		}
 		message := mapping(wire["message"])

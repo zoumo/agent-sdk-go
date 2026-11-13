@@ -2,8 +2,8 @@
 
 ## v0.1.0-rc.1 — planned, unreleased
 
-- Pins the testify library to merged `main` revision `90fa757261dd`, including
-  the official context-injection recordings in the 38-case, 76-slot SDK gate.
+- Pins the testify library to merged `main` revision `45bce662f756`, including
+  portable materials and Claude 2.1.293 recordings in the 38-case, 76-slot SDK gate.
 
 - Adds optional `agent.Injector` for context-only input through Codex
   `thread/inject_items` and Claude `shouldQuery=false`, with acceptance evidence

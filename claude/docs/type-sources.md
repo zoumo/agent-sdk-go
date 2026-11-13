@@ -134,6 +134,15 @@ later version numbers, identity conflicts, unknown fields/versions, parent cycle
 tool aliases across runs and filtering. Opt-in live checks remain separate from
 source evidence and do not publish new recordings.
 
+The pinned testify module `45bce662f7566757c24e2a286fbc25f29c796c04`
+also supplies qualified CLI 2.1.293 protocol evidence for
+`system/permission_check_status`. Case `SDK-CASE-007`, material
+`9c925ae411d3fdfeecd0c83ce76fe41b`, raw SHA256
+`8a0a18035794bf7bf899d4abd9cc76b77165429be73ac1251a98d56227e12e43`,
+contains `checking` and `done` notifications with `tool_use_id`.
+The Session retains these same-session notifications and their original bytes;
+they do not establish child membership or permission-answer authority.
+
 ## Python protocol source hashes
 
 [Official source archive](https://github.com/anthropics/claude-agent-sdk-python/archive/f93e29cc951cd5fddcaaed9f3c49c3c38dedd6ab.tar.gz), SHA256 `07a88363bb6bd3774e79dea95793d8bc14071a2f80dd61f0c457adf2eccb76cc`.

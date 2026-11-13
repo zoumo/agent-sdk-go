@@ -36,6 +36,23 @@ func ValidateChildDelivery(root string, background bool) error {
 	}
 	parents := map[string]string{}
 	rootID := ""
+	for _, frame := range frames {
+		if frame["direction"] != "s2c" {
+			continue
+		}
+		wire := mapping(frame["wire"])
+		for _, envelope := range []map[string]any{mapping(wire["result"]), mapping(wire["params"])} {
+			thread := mapping(envelope["thread"])
+			child, parent := text(thread["id"]), text(thread["parentThreadId"])
+			if child == "" || parent == "" {
+				continue
+			}
+			if previous, exists := parents[child]; exists && previous != parent {
+				return errors.New("recorded child has conflicting native parents")
+			}
+			parents[child] = parent
+		}
+	}
 
 	for _, v := range list(original["childEvidence"]) {
 		item := mapping(v)

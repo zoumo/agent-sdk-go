@@ -176,6 +176,12 @@ func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, root string
 	if err := json.Unmarshal(b, &report); err != nil {
 		return err
 	}
+	if len(report.Receipts) == 0 {
+		report.Receipts, err = savedHistoryExpectations(root, id)
+		if err != nil {
+			return err
+		}
+	}
 	checked := 0
 	for _, receipt := range report.Receipts {
 		if raw, ok := receipt["get_subagent_messages"]; ok {

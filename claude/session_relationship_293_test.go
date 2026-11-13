@@ -13,6 +13,22 @@ import (
 
 const relationshipInit293 = `{"type":"system","subtype":"init","session_id":"s","claude_code_version":"2.1.293"}`
 
+func TestSession293PermissionCheckStatusPreservesNativeFacts(t *testing.T) {
+	frames := []string{
+		relationshipInit293,
+		`{"type":"system","subtype":"permission_check_status","session_id":"s","tool_use_id":"call","status":"checking","future":{"n":9007199254740993}}`,
+		`{"type":"system","subtype":"permission_check_status","session_id":"s","tool_use_id":"call","status":"done"}`,
+	}
+	records, _ := relationshipRecords(t, frames)
+	require.Len(t, records, len(frames))
+	for index, frame := range frames {
+		require.Equal(t, frame, string(records[index].Raw))
+		require.Equal(t, "s", records[index].Source.SessionID)
+		require.Empty(t, records[index].Source.AssociationID)
+		require.Nil(t, records[index].Parent)
+	}
+}
+
 func relationshipRecords(t *testing.T, frames []string, configure ...func(*SessionOptions)) ([]Received, []string) {
 	t.Helper()
 	session := openSessionFixture(t, configure...)

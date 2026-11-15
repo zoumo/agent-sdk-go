@@ -137,13 +137,14 @@ func TestProviderStopRejectsInFlightResume(t *testing.T) {
 	transcript := writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
 	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 		CWD:            cwd,
 		TranscriptPath: transcript,
+		StatusIgnore:   true,
 	})
 	provider := newResumeProvider(
 		t,

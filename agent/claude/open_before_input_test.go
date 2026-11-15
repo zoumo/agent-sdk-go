@@ -118,20 +118,17 @@ func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {
 }
 
 func TestClaimedSessionRejectsLaterNativeIdentityConflicts(t *testing.T) {
+	validInit := `{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293"}`
 	for _, test := range []struct {
 		name   string
 		frames []string
 		reason string
 	}{
-		{"init identity", []string{`{"type":"system","subtype":"init","session_id":"other","cwd":"__CWD__"}`}, agentclaude.ErrorReasonSessionIdentityMismatch},
+		{"init identity", []string{validInit, `{"type":"system","subtype":"init","session_id":"other","cwd":"__CWD__"}`}, agentclaude.ErrorReasonSessionIdentityMismatch},
 		{"assistant identity", []string{`{"type":"assistant","session_id":"other","message":{"id":"foreign","content":[]}}`}, agentclaude.ErrorReasonSessionIdentityMismatch},
 		{"result identity", []string{`{"type":"result","subtype":"success","session_id":"other","is_error":false}`}, agentclaude.ErrorReasonSessionIdentityMismatch},
-		{"replay init", []string{`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","isReplay":true}`}, agentclaude.ErrorReasonInitializeReplayed},
-		{"cwd", []string{`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"/nonexistent-assigned-cwd"}`}, agentclaude.ErrorReasonSessionCWDMismatch},
-		{"duplicate", []string{
-			`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293"}`,
-			`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__"}`,
-		}, agentclaude.ErrorReasonInitializeDuplicate},
+		{"replay init", []string{validInit, `{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","isReplay":true}`}, agentclaude.ErrorReasonInitializeReplayed},
+		{"cwd", []string{validInit, `{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"/nonexistent-assigned-cwd"}`}, agentclaude.ErrorReasonSessionCWDMismatch},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -171,6 +168,87 @@ func TestClaimedSessionRejectsLaterNativeIdentityConflicts(t *testing.T) {
 			assert.Error(t, session.Close(ctx))
 			require.NoError(t, provider.Stop(ctx))
 		})
+	}
+}
+
+func TestClaimedSessionAcceptsRepeatedMatchingInit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
+		CWD: cwd,
+		TurnFrames: [][]string{
+			{
+				`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293","slash_commands":["help"]}`,
+				`{"type":"system","subtype":"session_state_changed","session_id":"__SESSION_ID__","state":"running"}`,
+				`{"type":"assistant","session_id":"__SESSION_ID__","message":{"id":"first","content":[{"type":"text","text":"first answer","apiBlockIndex":0}]}}`,
+				`{"type":"result","subtype":"success","session_id":"__SESSION_ID__","is_error":false,"result":"first answer"}`,
+				`{"type":"system","subtype":"session_state_changed","session_id":"__SESSION_ID__","state":"idle"}`,
+			},
+			{
+				`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293","slash_commands":["help","review"]}`,
+				`{"type":"system","subtype":"session_state_changed","session_id":"__SESSION_ID__","state":"running"}`,
+				`{"type":"assistant","session_id":"__SESSION_ID__","message":{"id":"second","content":[{"type":"text","text":"second answer","apiBlockIndex":0}]}}`,
+				`{"type":"result","subtype":"success","session_id":"__SESSION_ID__","is_error":false,"result":"second answer"}`,
+				`{"type":"system","subtype":"session_state_changed","session_id":"__SESSION_ID__","state":"idle"}`,
+			},
+		},
+	})
+	provider := agentclaude.New(agentclaude.Config{CLIPath: peer.CLIPath, Env: peer.Env})
+	_, err := provider.Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = provider.Stop(context.Background()) })
+	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: cwd})
+	require.NoError(t, err)
+	closeSessionOnCleanup(t, session)
+	initialID := session.ID()
+	stream, err := session.Events()
+	require.NoError(t, err)
+	requireStartupForwardingGap(t, ctx, stream)
+
+	_, err = session.StartOrSteer(ctx, claudeTextInput("first"))
+	require.NoError(t, err)
+	requireClaudeTurn(t, ctx, stream, initialID, []agent.AvailableCommand{{Name: "help"}}, "first answer")
+	require.NoError(t, session.Err())
+
+	_, err = session.StartOrSteer(ctx, claudeTextInput("second"))
+	require.NoError(t, err)
+	requireClaudeTurn(t, ctx, stream, initialID, []agent.AvailableCommand{{Name: "help"}, {Name: "review"}}, "second answer")
+	require.NoError(t, session.Err())
+	require.Equal(t, initialID, session.ID())
+	require.Len(t, readOpenPeerObservation(t, peer.Observation).UserFrames, 2)
+	require.NoError(t, session.Close(ctx))
+	require.NoError(t, provider.Stop(ctx))
+}
+
+func requireClaudeTurn(
+	t *testing.T,
+	ctx context.Context,
+	stream agent.EventStream,
+	sessionID string,
+	commands []agent.AvailableCommand,
+	answer string,
+) {
+	t.Helper()
+	seenCommands, seenAnswer := false, false
+	for {
+		event, err := stream.Next(ctx)
+		require.NoError(t, err)
+		require.Equal(t, sessionID, event.SessionID)
+		switch payload := event.Payload.(type) {
+		case agent.AvailableCommandsUpdatePayload:
+			require.Equal(t, commands, payload.AvailableCommands)
+			seenCommands = true
+		case agent.AgentMessage:
+			require.Equal(t, answer, payload.Content[0].Text.Text)
+			seenAnswer = true
+		case agent.StateUpdatePayload:
+			if payload.State != nil && *payload.State == agent.StateIdle {
+				require.True(t, seenCommands)
+				require.True(t, seenAnswer)
+				return
+			}
+		}
 	}
 }
 

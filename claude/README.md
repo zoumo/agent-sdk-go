@@ -142,6 +142,10 @@ no user input is needed. This path was checked with CLI 2.1.293. Explicit
 `SessionOptions.SessionID` keeps the `--session-id` creation path. `ClaimSession`,
 `SessionID` and `ResumeID` are mutually exclusive. With none set, identity is
 still learned from native messages.
+After claim or explicit SessionID, every live, non-replay init must match that
+identity and the requested working directory. A repeated matching init is
+delivered normally and refreshes observed metadata without resetting the FIFO,
+relationships or permission authority; conflicting init still terminates.
 
 Tools maps to the native built-in `--tools` allowlist. A nil or zero-length
 slice omits the option. A single empty string emits `--tools=`, while ordinary

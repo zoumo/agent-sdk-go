@@ -6,7 +6,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -104,7 +103,7 @@ func TestProviderResumeChecksVersionBeforeSessionLaunch(t *testing.T) {
 			defer cancel()
 			cwd := t.TempDir()
 			configDir := newResumeConfigDir(t)
-			writeResumeTranscript(t, configDir, "project", claudeResumePeerSessionID, cwd)
+			writeResumeTranscript(t, configDir, resumeProjectKey(t, cwd), claudeResumePeerSessionID, cwd)
 			peer := newClaudeResumePeer(t, tt.scenario)
 			cliPath := peer.CLIPath
 			if tt.missingCLI {
@@ -142,22 +141,22 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 			},
 		},
 		{
-			name: "wrong cwd",
+			name: "only in another project",
 			setup: func(t *testing.T, configDir, _ string) {
-				writeResumeTranscript(
-					t,
-					configDir,
-					"project",
-					claudeResumePeerSessionID,
-					t.TempDir(),
-				)
+				otherCwd := t.TempDir()
+				writeResumeTranscript(t, configDir, resumeProjectKey(t, otherCwd), claudeResumePeerSessionID, otherCwd)
 			},
 		},
 		{
-			name: "ambiguous",
+			name: "wrong cwd",
 			setup: func(t *testing.T, configDir, cwd string) {
-				writeResumeTranscript(t, configDir, "project-a", claudeResumePeerSessionID, cwd)
-				writeResumeTranscript(t, configDir, "project-b", claudeResumePeerSessionID, cwd)
+				writeResumeTranscript(
+					t,
+					configDir,
+					resumeProjectKey(t, cwd),
+					claudeResumePeerSessionID,
+					t.TempDir(),
+				)
 			},
 		},
 		{
@@ -166,7 +165,7 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 				writeResumeSource(
 					t,
 					configDir,
-					"project",
+					resumeProjectKey(t, cwd),
 					claudeResumePeerSessionID,
 					resumeMetadataLine(t, claudeResumePeerSessionID, cwd)+"{bad}\n",
 				)
@@ -178,7 +177,7 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 				writeResumeSource(
 					t,
 					configDir,
-					"project",
+					resumeProjectKey(t, cwd),
 					claudeResumePeerSessionID,
 					resumeMetadataLine(t, "22222222-2222-4222-8222-222222222222", cwd),
 				)
@@ -194,7 +193,7 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 					claudeResumePeerSessionID,
 					cwd,
 				)
-				directory := filepath.Join(configDir, "projects", "project")
+				directory := filepath.Join(configDir, "projects", resumeProjectKey(t, cwd))
 				require.NoError(t, os.MkdirAll(directory, 0o700))
 				require.NoError(t, os.Symlink(
 					target,
@@ -208,7 +207,7 @@ func TestProviderResumeRejectsMetadataBeforeSessionLaunch(t *testing.T) {
 				path := writeResumeTranscript(
 					t,
 					configDir,
-					"project",
+					resumeProjectKey(t, cwd),
 					claudeResumePeerSessionID,
 					cwd,
 				)
@@ -254,7 +253,7 @@ func TestProviderResumeConfirmsInitIdentityAndAllowsGrowth(t *testing.T) {
 	transcript := writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
@@ -292,7 +291,7 @@ func TestProviderResumeDropsReplayContent(t *testing.T) {
 	writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
@@ -347,60 +346,25 @@ func TestProviderResumeDropsReplayContent(t *testing.T) {
 	assert.Equal(t, "live-message:0", event.ItemID)
 }
 
-func TestProviderResumeConfirmsCallbackOnlyIdentity(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func TestProviderResumePreservesCallerHooksWithoutPrivateCallback(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cwd := t.TempDir()
-	configDir := newResumeConfigDir(t)
-	transcript := writeResumeTranscript(
-		t,
-		configDir,
-		"project",
-		claudeResumePeerSessionID,
-		cwd,
-	)
-	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
-		CWD:            cwd,
-		TranscriptPath: transcript,
-		Frames: []string{
-			resumeCallbackFrame(t, "callback-only", nil),
-		},
-	})
-	provider := newResumeProviderWithHooks(
-		t,
-		peer.CLIPath,
-		peer.Env,
-		configDir,
-		3*time.Second,
-		json.RawMessage(`{
-			"SessionStart": [{"matcher":"startup","hookCallbackIds":["caller-start"]}],
-			"Stop": [{"hookCallbackIds":["caller-stop"]}]
-		}`),
-	)
-
-	session, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID:   claudeResumePeerSessionID,
-		OpenOptions: agent.OpenOptions{Cwd: cwd},
-	})
+	cwd, config := t.TempDir(), newResumeConfigDir(t)
+	writeResumeTranscript(t, config, resumeProjectKey(t, cwd), claudeResumePeerSessionID, cwd)
+	peer := newClaudeResumePeer(t, claudeResumePeerScenario{CWD: cwd})
+	hooks := json.RawMessage(`{"SessionStart":[{"matcher":"startup","hookCallbackIds":["caller-start"]}],"Stop":[{"hookCallbackIds":["caller-stop"]}]}`)
+	provider := newResumeProviderWithHooks(t, peer.CLIPath, peer.Env, config, time.Second, hooks)
+	session, err := provider.Resume(ctx, agent.ResumeOptions{SessionID: claudeResumePeerSessionID, OpenOptions: agent.OpenOptions{Cwd: cwd}})
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, session)
-	assert.Equal(t, claudeResumePeerSessionID, session.ID())
-
-	observation := waitResumeObservation(t, peer.Observation, 1)
-	assert.True(t, strings.HasPrefix(
-		observation.CallbackID,
-		"agent-sdk-go:claude:resume-probe:",
-	))
-	var hooks map[string][]map[string]any
-	require.NoError(t, json.Unmarshal(observation.Hooks, &hooks))
-	require.Len(t, hooks["SessionStart"], 2)
-	assert.Equal(t, "caller-start", hooks["SessionStart"][0]["hookCallbackIds"].([]any)[0])
-	assert.Equal(t, observation.CallbackID, hooks["SessionStart"][1]["hookCallbackIds"].([]any)[0])
-	assert.Equal(t, "caller-stop", hooks["Stop"][0]["hookCallbackIds"].([]any)[0])
-	requireCallbackResponse(t, observation.Responses[0], "callback-only")
+	require.NoError(t, session.Close(ctx))
+	observation := readOpenPeerObservation(t, peer.Observation)
+	assert.Empty(t, observation.CallbackID)
+	assert.JSONEq(t, string(hooks), string(observation.Hooks))
+	assert.Empty(t, observation.UserFrames)
 }
 
-func TestProviderResumeRejectsWrongCallbackInput(t *testing.T) {
+func TestProviderResumeCallbackCannotReplaceStatus(t *testing.T) {
 	tests := []struct {
 		name      string
 		overrides func(t *testing.T) map[string]any
@@ -447,13 +411,14 @@ func TestProviderResumeRejectsWrongCallbackInput(t *testing.T) {
 			transcript := writeResumeTranscript(
 				t,
 				configDir,
-				"project",
+				resumeProjectKey(t, cwd),
 				claudeResumePeerSessionID,
 				cwd,
 			)
 			peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 				CWD:            cwd,
 				TranscriptPath: transcript,
+				StatusIgnore:   true,
 				Frames: []string{
 					resumeCallbackFrame(t, "wrong-callback", tt.overrides(t)),
 				},
@@ -472,7 +437,7 @@ func TestProviderResumeRejectsWrongCallbackInput(t *testing.T) {
 			})
 			require.Error(t, err)
 			assert.Nil(t, session)
-			assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
+			assert.Equal(t, agent.ErrorUnavailable, agent.CodeOf(err))
 			require.FileExists(t, peer.SessionMark)
 		})
 	}
@@ -486,13 +451,14 @@ func TestProviderResumeLifecycleOnlyTimesOut(t *testing.T) {
 	transcript := writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
 	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 		CWD:            cwd,
 		TranscriptPath: transcript,
+		StatusIgnore:   true,
 		Frames: []string{
 			resumeLifecycleFrame(t, "hook_started"),
 			resumeLifecycleFrame(t, "hook_progress"),
@@ -543,7 +509,7 @@ func TestProviderResumeRejectsContradictoryInit(t *testing.T) {
 			transcript := writeResumeTranscript(
 				t,
 				configDir,
-				"project",
+				resumeProjectKey(t, cwd),
 				claudeResumePeerSessionID,
 				cwd,
 			)
@@ -581,7 +547,7 @@ func TestProviderResumeRejectsReplayInit(t *testing.T) {
 	transcript := writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
@@ -621,7 +587,7 @@ func TestProviderResumeRejectsPostIdentityTranscriptReplacement(t *testing.T) {
 	transcript := writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
@@ -651,152 +617,43 @@ func TestProviderResumeRejectsPostIdentityTranscriptReplacement(t *testing.T) {
 	assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
 }
 
-func TestProviderResumeAnswersLateCallbackOnceAndKeepsInitIdentity(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cwd := t.TempDir()
-	configDir := newResumeConfigDir(t)
-	transcript := writeResumeTranscript(
-		t,
-		configDir,
-		"project",
-		claudeResumePeerSessionID,
-		cwd,
-	)
-	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
-		CWD:            cwd,
-		TranscriptPath: transcript,
-		Frames: []string{
-			resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-			resumeCallbackFrame(t, "late-callback", nil),
-		},
-		FrameDelays: []int{0, 100},
-	})
-	provider := newResumeProvider(
-		t,
-		peer.CLIPath,
-		peer.Env,
-		configDir,
-		time.Second,
-	)
-
-	session, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID:   claudeResumePeerSessionID,
-		OpenOptions: agent.OpenOptions{Cwd: cwd},
-	})
-	require.NoError(t, err)
-	closeSessionOnCleanup(t, session)
-	observation := waitResumeObservation(t, peer.Observation, 1)
-	requireCallbackResponse(t, observation.Responses[0], "late-callback")
-	requireSessionAlive(t, session, 200*time.Millisecond)
-}
-
 func TestProviderResumeLateEvidenceTerminatesReturnedSession(t *testing.T) {
-	tests := []struct {
-		name       string
-		frames     func(t *testing.T, cwd, transcript string) ([]string, []int)
-		callbackID string
-	}{
-		{
-			name: "duplicate callback after init",
-			frames: func(t *testing.T, cwd, _ string) ([]string, []int) {
-				return []string{
-					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-					resumeCallbackFrame(t, "first-callback", nil),
-					resumeCallbackFrame(t, "second-callback", nil),
-				}, []int{0, 100, 100}
-			},
-			callbackID: "first-callback",
-		},
-		{
-			name: "wrong callback after init",
-			frames: func(t *testing.T, cwd, _ string) ([]string, []int) {
-				return []string{
-					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-					resumeCallbackFrame(t, "wrong-late", map[string]any{
-						"session_id": "different-session",
-					}),
-				}, []int{0, 100}
-			},
-			callbackID: "wrong-late",
-		},
-		{
-			name: "duplicate callback identity",
-			frames: func(t *testing.T, _, _ string) ([]string, []int) {
-				return []string{
-					resumeCallbackFrame(t, "identity-callback", nil),
-					resumeCallbackFrame(t, "duplicate-identity", nil),
-				}, []int{0, 100}
-			},
-			callbackID: "identity-callback",
-		},
-		{
-			name: "duplicate init identity",
-			frames: func(t *testing.T, cwd, _ string) ([]string, []int) {
-				return []string{
-					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-				}, []int{0, 100}
-			},
-		},
-		{
-			name: "duplicate late init after callback identity",
-			frames: func(t *testing.T, cwd, _ string) ([]string, []int) {
-				return []string{
-					resumeCallbackFrame(t, "identity-callback", nil),
-					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-					resumeInitFrame(t, claudeResumePeerSessionID, cwd),
-				}, []int{0, 100, 100}
-			},
-			callbackID: "identity-callback",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	for _, name := range []string{"wrong session", "wrong cwd", "replay init", "duplicate init", "wrong main message"} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			cwd := t.TempDir()
-			configDir := newResumeConfigDir(t)
-			transcript := writeResumeTranscript(
-				t,
-				configDir,
-				"project",
-				claudeResumePeerSessionID,
-				cwd,
-			)
-			frames, delays := tt.frames(t, cwd, transcript)
-			peer := newClaudeResumePeer(t, claudeResumePeerScenario{
-				CWD:            cwd,
-				TranscriptPath: transcript,
-				Frames:         frames,
-				FrameDelays:    delays,
-			})
-			provider := newResumeProvider(
-				t,
-				peer.CLIPath,
-				peer.Env,
-				configDir,
-				time.Second,
-			)
-
-			session, err := provider.Resume(ctx, agent.ResumeOptions{
-				SessionID:   claudeResumePeerSessionID,
-				OpenOptions: agent.OpenOptions{Cwd: cwd},
-			})
+			cwd, config := t.TempDir(), newResumeConfigDir(t)
+			writeResumeTranscript(t, config, resumeProjectKey(t, cwd), claudeResumePeerSessionID, cwd)
+			frame := resumeInitFrame(t, claudeResumePeerSessionID, cwd)
+			frames := []string{frame}
+			switch name {
+			case "wrong session":
+				frames = []string{resumeInitFrame(t, "22222222-2222-4222-8222-222222222222", cwd)}
+			case "wrong cwd":
+				frames = []string{resumeInitFrame(t, claudeResumePeerSessionID, t.TempDir())}
+			case "replay init":
+				frames = []string{resumeFrame(t, map[string]any{"type": "system", "subtype": "init", "session_id": claudeResumePeerSessionID, "cwd": cwd, "isReplay": true})}
+			case "duplicate init":
+				frames = []string{frame, frame}
+			case "wrong main message":
+				frames = []string{resumeFrame(t, map[string]any{"type": "system", "subtype": "session_state_changed", "session_id": "22222222-2222-4222-8222-222222222222", "state": "idle"})}
+			}
+			peer := newClaudeResumePeer(t, claudeResumePeerScenario{CWD: cwd, Frames: []string{resumeLifecycleFrame(t, "hook_started")}, AfterStatus: frames, AfterStatusDelays: []int{100}})
+			provider := newResumeProvider(t, peer.CLIPath, peer.Env, config, time.Second)
+			session, err := provider.Resume(ctx, agent.ResumeOptions{SessionID: claudeResumePeerSessionID, OpenOptions: agent.OpenOptions{Cwd: cwd}})
 			require.NoError(t, err)
-			closeSessionOnCleanup(t, session)
+			t.Cleanup(func() {
+				if err := session.Close(context.Background()); err != nil {
+					assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(err))
+				}
+			})
 			waitSessionDone(t, session)
 			assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(session.Err()))
-			if tt.callbackID != "" {
-				observation := waitResumeObservation(t, peer.Observation, 1)
-				requireCallbackResponse(t, observation.Responses[0], tt.callbackID)
-				assert.Len(t, observation.Responses, 1)
-			}
 		})
 	}
 }
 
-func TestProviderResumeCallbackIdentityAllowsOneMatchingLateInit(t *testing.T) {
+func TestProviderResumeStatusIdentityAllowsOneMatchingLateInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
@@ -804,18 +661,17 @@ func TestProviderResumeCallbackIdentityAllowsOneMatchingLateInit(t *testing.T) {
 	transcript := writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)
 	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 		CWD:            cwd,
 		TranscriptPath: transcript,
-		Frames: []string{
-			resumeCallbackFrame(t, "identity-callback", nil),
+		AfterStatus: []string{
 			resumeInitFrame(t, claudeResumePeerSessionID, cwd),
 		},
-		FrameDelays: []int{0, 100},
+		AfterStatusDelays: []int{100},
 	})
 	provider := newResumeProvider(
 		t,
@@ -847,45 +703,6 @@ func TestProviderResumeCallbackIdentityAllowsOneMatchingLateInit(t *testing.T) {
 		`{"type":"user","message":{"role":"user","content":"resumed context"},"session_id":"","parent_tool_use_id":null,"shouldQuery":false}`,
 		string(observation.UserFrames[0]),
 	)
-}
-
-func TestProviderResumeCallbackIdentityRejectsContradictoryLateInit(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cwd := t.TempDir()
-	configDir := newResumeConfigDir(t)
-	transcript := writeResumeTranscript(
-		t,
-		configDir,
-		"project",
-		claudeResumePeerSessionID,
-		cwd,
-	)
-	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
-		CWD:            cwd,
-		TranscriptPath: transcript,
-		Frames: []string{
-			resumeCallbackFrame(t, "identity-callback", nil),
-			resumeInitFrame(t, "22222222-2222-4222-8222-222222222222", cwd),
-		},
-		FrameDelays: []int{0, 100},
-	})
-	provider := newResumeProvider(
-		t,
-		peer.CLIPath,
-		peer.Env,
-		configDir,
-		time.Second,
-	)
-
-	session, err := provider.Resume(ctx, agent.ResumeOptions{
-		SessionID:   claudeResumePeerSessionID,
-		OpenOptions: agent.OpenOptions{Cwd: cwd},
-	})
-	require.NoError(t, err)
-	closeSessionOnCleanup(t, session)
-	waitSessionDone(t, session)
-	assert.Equal(t, agent.ErrorNativeRejected, agent.CodeOf(session.Err()))
 }
 
 func newResumeProvider(
@@ -1032,44 +849,6 @@ func resumeFrame(t *testing.T, value any) string {
 	data, err := json.Marshal(value)
 	require.NoError(t, err)
 	return string(data)
-}
-
-func waitResumeObservation(
-	t *testing.T,
-	path string,
-	responses int,
-) claudeResumePeerObservation {
-	t.Helper()
-	var observation claudeResumePeerObservation
-	require.Eventually(t, func() bool {
-		data, err := os.ReadFile(path)
-		if err != nil || json.Unmarshal(data, &observation) != nil {
-			return false
-		}
-		return len(observation.Responses) >= responses
-	}, 3*time.Second, 10*time.Millisecond)
-	return observation
-}
-
-func requireCallbackResponse(
-	t *testing.T,
-	raw json.RawMessage,
-	requestID string,
-) {
-	t.Helper()
-	var wire struct {
-		Type     string `json:"type"`
-		Response struct {
-			Subtype   string         `json:"subtype"`
-			RequestID string         `json:"request_id"`
-			Response  map[string]any `json:"response"`
-		} `json:"response"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &wire))
-	assert.Equal(t, "control_response", wire.Type)
-	assert.Equal(t, "success", wire.Response.Subtype)
-	assert.Equal(t, requestID, wire.Response.RequestID)
-	assert.Empty(t, wire.Response.Response)
 }
 
 func requireSessionAlive(t *testing.T, session agent.Session, duration time.Duration) {

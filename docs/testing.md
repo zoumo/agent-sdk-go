@@ -90,6 +90,25 @@ enables the native Task/Agent tool; the identity-only probes use simple mode. Th
 only the Anthropic endpoint and authentication variables from the caller's
 environment or `~/.claude/settings.json`, and never print their values.
 
+`TestUnifiedResumeIdentityWithoutInput` is a separate opt-in lifecycle check for
+an explicitly supplied, offline, caller-owned saved Session. It calls only public
+Core Resume/Close/Stop and scoped metadata queries; it sends no user input and
+makes no model call. It reads no credential files. Supply an isolated CLI entrypoint
+that retains legitimate CLI authentication and disables personal hooks/tools:
+
+```sh
+SDK_REAL_AGENT_E2E=1 CLAUDE_E2E=1 \
+CLAUDE_RESUME_E2E_CLI=/absolute/path/to/isolated-claude \
+CLAUDE_RESUME_E2E_CONFIG_DIR=/absolute/native/config \
+CLAUDE_RESUME_E2E_CWD=/absolute/owned/project \
+CLAUDE_RESUME_E2E_SESSION_ID=your-owned-session-uuid \
+go test ./claude/tests/e2e -run '^TestUnifiedResumeIdentityWithoutInput$' -v -count=1
+```
+
+The check verifies the same native ID and transcript file identity before and
+after promptless resume. It does not establish a resumed business workflow or
+MCP connectivity; those require separate acceptance evidence.
+
 Small fixture embedding packages under each native `tests/testdata`
 contain code-owned synthetic inputs from `integration/`. Replay adapters share those bytes without
 depending on the caller's working directory. External consumers verify their packaging.

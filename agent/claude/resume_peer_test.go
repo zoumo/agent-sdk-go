@@ -23,25 +23,32 @@ const (
 )
 
 type claudeResumePeerScenario struct {
-	VersionOutput   string   `json:"versionOutput,omitempty"`
-	VersionExit     bool     `json:"versionExit,omitempty"`
-	SessionID       string   `json:"sessionId,omitempty"`
-	CWD             string   `json:"cwd,omitempty"`
-	TranscriptPath  string   `json:"transcriptPath,omitempty"`
-	Frames          []string `json:"frames,omitempty"`
-	FrameDelays     []int    `json:"frameDelays,omitempty"`
-	Mutation        string   `json:"mutation,omitempty"`
-	Replacement     string   `json:"replacement,omitempty"`
-	ObservationPath string   `json:"observationPath,omitempty"`
-	SessionMarker   string   `json:"sessionMarker,omitempty"`
-	ArgvPath        string   `json:"argvPath,omitempty"`
-	EnvironmentKeys []string `json:"environmentKeys,omitempty"`
-	VersionEnvPath  string   `json:"versionEnvPath,omitempty"`
-	SessionEnvPath  string   `json:"sessionEnvPath,omitempty"`
-	WaitForUser     bool     `json:"waitForUser,omitempty"`
-	BeforeInput     []string `json:"beforeInput,omitempty"`
-	InitializeError bool     `json:"initializeError,omitempty"`
-	InitializeDelay int      `json:"initializeDelay,omitempty"`
+	VersionOutput     string     `json:"versionOutput,omitempty"`
+	VersionExit       bool       `json:"versionExit,omitempty"`
+	SessionID         string     `json:"sessionId,omitempty"`
+	CWD               string     `json:"cwd,omitempty"`
+	TranscriptPath    string     `json:"transcriptPath,omitempty"`
+	Frames            []string   `json:"frames,omitempty"`
+	FrameDelays       []int      `json:"frameDelays,omitempty"`
+	Mutation          string     `json:"mutation,omitempty"`
+	Replacement       string     `json:"replacement,omitempty"`
+	ObservationPath   string     `json:"observationPath,omitempty"`
+	SessionMarker     string     `json:"sessionMarker,omitempty"`
+	ArgvPath          string     `json:"argvPath,omitempty"`
+	EnvironmentKeys   []string   `json:"environmentKeys,omitempty"`
+	VersionEnvPath    string     `json:"versionEnvPath,omitempty"`
+	SessionEnvPath    string     `json:"sessionEnvPath,omitempty"`
+	WaitForUser       bool       `json:"waitForUser,omitempty"`
+	BeforeInput       []string   `json:"beforeInput,omitempty"`
+	TurnFrames        [][]string `json:"turnFrames,omitempty"`
+	InitializeError   bool       `json:"initializeError,omitempty"`
+	InitializeDelay   int        `json:"initializeDelay,omitempty"`
+	StatusResponse    string     `json:"statusResponse,omitempty"`
+	StatusWrongID     bool       `json:"statusWrongId,omitempty"`
+	StatusError       bool       `json:"statusError,omitempty"`
+	StatusIgnore      bool       `json:"statusIgnore,omitempty"`
+	AfterStatus       []string   `json:"afterStatus,omitempty"`
+	AfterStatusDelays []int      `json:"afterStatusDelays,omitempty"`
 }
 
 type claudeResumePeerObservation struct {
@@ -131,6 +138,7 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	}
 	assignedID := ""
 	claiming := false
+	resuming := false
 	for _, arg := range args {
 		if value, ok := strings.CutPrefix(arg, "--session-id="); ok {
 			assignedID = value
@@ -138,6 +146,9 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		}
 		if arg == "--await-claim" {
 			claiming = true
+		}
+		if arg == "--resume" || strings.HasPrefix(arg, "--resume=") {
+			resuming = true
 		}
 	}
 
@@ -149,28 +160,32 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	var request struct {
 		RequestID string `json:"request_id"`
 		Request   struct {
-			Hooks map[string][]struct {
-				HookCallbackIDs []string `json:"hookCallbackIds"`
-			} `json:"hooks"`
+			Hooks json.RawMessage `json:"hooks"`
 		} `json:"request"`
 	}
 	if json.Unmarshal(initialize, &request) != nil || request.RequestID == "" {
 		return 64
 	}
 	callbackID := ""
-	for _, matcher := range request.Request.Hooks["SessionStart"] {
+	var hooks map[string][]struct {
+		HookCallbackIDs []string `json:"hookCallbackIds"`
+	}
+	if len(request.Request.Hooks) > 0 && json.Unmarshal(request.Request.Hooks, &hooks) != nil {
+		return 64
+	}
+	for _, matcher := range hooks["SessionStart"] {
 		for _, candidate := range matcher.HookCallbackIDs {
 			if strings.HasPrefix(candidate, "agent-sdk-go:claude:resume-probe:") {
 				callbackID = candidate
 			}
 		}
 	}
-	if callbackID == "" && assignedID == "" && !claiming {
+	if callbackID == "" && assignedID == "" && !claiming && !resuming {
 		return 65
 	}
 	observation := &claudeResumePeerObservation{
 		CallbackID: callbackID,
-		Hooks:      mustMarshalJSON(request.Request.Hooks),
+		Hooks:      append(json.RawMessage(nil), request.Request.Hooks...),
 		SessionID:  scenario.SessionID,
 	}
 	writeClaudeResumeObservation(scenario.ObservationPath, observation)
@@ -230,6 +245,23 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		_, err := fmt.Fprintln(os.Stdout, frame)
 		return err
 	}
+	statusRequestID := ""
+	if resuming {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			return 78
+		}
+		var wire struct {
+			RequestID string `json:"request_id"`
+			Request   struct {
+				Subtype string `json:"subtype"`
+			} `json:"request"`
+		}
+		if json.Unmarshal(line, &wire) != nil || wire.Request.Subtype != "get_status" || wire.RequestID == "" {
+			return 79
+		}
+		statusRequestID = wire.RequestID
+	}
 	for _, frame := range scenario.BeforeInput {
 		if emit(frame) != nil {
 			return 68
@@ -244,6 +276,25 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		observation.UserFrames = append(observation.UserFrames, append(json.RawMessage(nil), line...))
 		writeClaudeResumeObservation(scenario.ObservationPath, observation)
 	}
+	for _, frames := range scenario.TurnFrames {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			writeClaudeResumeObservation(scenario.ObservationPath, observation)
+			return 0
+		}
+		var wire struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(line, &wire) == nil && wire.Type == "user" {
+			observation.UserFrames = append(observation.UserFrames, append(json.RawMessage(nil), line...))
+			writeClaudeResumeObservation(scenario.ObservationPath, observation)
+		}
+		for _, frame := range frames {
+			if emit(frame) != nil {
+				return 68
+			}
+		}
+	}
 	for index, frame := range scenario.Frames {
 		if index < len(scenario.FrameDelays) && scenario.FrameDelays[index] > 0 {
 			time.Sleep(time.Duration(scenario.FrameDelays[index]) * time.Millisecond)
@@ -252,12 +303,40 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 			return 68
 		}
 	}
+	if resuming && !scenario.StatusIgnore {
+		body := scenario.StatusResponse
+		if body == "" {
+			body = resumeStatusBody(scenario.SessionID, scenario.CWD)
+		}
+		if scenario.StatusWrongID {
+			statusRequestID = "unrelated-request"
+		}
+		response := fmt.Sprintf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":%s}}`, statusRequestID, body)
+		if scenario.StatusError {
+			response = fmt.Sprintf(`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"status unavailable"}}`, statusRequestID)
+		}
+		if emit(response) != nil {
+			return 68
+		}
+		for index, frame := range scenario.AfterStatus {
+			if index < len(scenario.AfterStatusDelays) && scenario.AfterStatusDelays[index] > 0 {
+				time.Sleep(time.Duration(scenario.AfterStatusDelays[index]) * time.Millisecond)
+			}
+			if emit(frame) != nil {
+				return 68
+			}
+		}
+	}
 
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
 			var wire struct {
-				Type string `json:"type"`
+				Type      string `json:"type"`
+				RequestID string `json:"request_id"`
+				Request   struct {
+					Subtype string `json:"subtype"`
+				} `json:"request"`
 			}
 			if json.Unmarshal(line, &wire) != nil {
 				return 69
@@ -286,6 +365,11 @@ func applyClaudeResumeMutation(scenario *claudeResumePeerScenario) error {
 	switch scenario.Mutation {
 	case "":
 		return nil
+	case "unrelated-project-entry":
+		return os.WriteFile(
+			filepath.Join(filepath.Dir(filepath.Dir(scenario.TranscriptPath)), ".DS_Store"),
+			[]byte("unrelated project entry"), 0o600,
+		)
 	case "append":
 		file, err := os.OpenFile(scenario.TranscriptPath, os.O_APPEND|os.O_WRONLY, 0)
 		if err != nil {
@@ -337,15 +421,6 @@ func writeClaudeResumeObservation(
 	}
 }
 
-func mustMarshalJSON(value any) json.RawMessage {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return nil
-	}
-	return data
-}
-
-// Capture only explicitly selected synthetic keys, never the ambient environment.
 func writeClaudePeerEnvironment(path string, keys []string) error {
 	if path == "" {
 		return nil

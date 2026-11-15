@@ -5,11 +5,13 @@
 // native Claude CLI process. Open uses --await-claim and claim_session to bind
 // the working directory and obtain the native session ID before returning,
 // without waiting for system/init or sending user input. Later main-session
-// messages must match it; init must be live, unique and identify the requested
-// working directory.
+// messages must match it; every live, non-replay init must identify the
+// requested working directory. Repeated matching init refreshes metadata
+// without resetting delivery, relationship or permission authority.
 // Identity conflicts terminate the session. Resume first confirms the reviewed
 // CLI version and the requested saved transcript under Config.ConfigDir, then
-// accepts matching live init or its private SessionStart callback as the resumed identity.
+// confirms the live identity with a read-only get_status probe and rechecks the
+// same transcript file. Caller hooks remain unchanged; later init must match.
 // Saved replay material is not converted into live events.
 // Session launches enable the CLI's SDK session-state notifications unless the
 // effective process environment already selects that variable.
@@ -62,7 +64,7 @@
 // by version or policy. Enterprise policy may also reject dynamic or strict native
 // MCP configuration. A successful Open or Resume does not prove MCP connectivity,
 // authentication, or tool discovery.
-// Initial command lists are delivered when system/init arrives.
+// Initial command lists are delivered as each matching system/init arrives.
 // Internal control responses and positive member or parent
 // relationship confirmations are lifecycle plumbing and produce no unified
 // event. Confirmed source and parent identities remain in the Meta of subsequent

@@ -2,7 +2,6 @@ package agentclaude
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,14 +9,10 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
-
-const claudeResumeProbePrefix = "agent-sdk-go:claude:resume-probe:"
 
 type resumeAttempt struct {
 	target *resumeTarget
-	probe  claude.SessionStartProbe
 }
 
 type resumeTarget struct {
@@ -30,24 +25,8 @@ type resumeTarget struct {
 }
 
 type resumeIdentityGuard struct {
-	target              *resumeTarget
-	callbackID          string
-	callbackWasIdentity bool
-	lateCallbackSeen    bool
-	lateInitSeen        bool
-}
-
-type resumeCallbackInput struct {
-	HookEventName  string `json:"hook_event_name"`
-	Source         string `json:"source"`
-	SessionID      string `json:"session_id"`
-	CWD            string `json:"cwd"`
-	TranscriptPath string `json:"transcript_path"`
-}
-
-type resumeCallbackRequest struct {
-	CallbackID json.RawMessage `json:"callback_id"`
-	Input      json.RawMessage `json:"input"`
+	target   *resumeTarget
+	initSeen bool
 }
 
 func (p *Core) prepareResume(
@@ -62,22 +41,7 @@ func (p *Core) prepareResume(
 	if err != nil {
 		return nil, err
 	}
-	callbackID, err := uuidv4.New()
-	if err != nil {
-		return nil, adapterError(
-			agent.ErrorUnavailable,
-			ErrorReasonResumeProbeIDFailed,
-			"create Claude resume probe identity",
-			err,
-		)
-	}
-	return &resumeAttempt{
-		target: target,
-		probe: claude.SessionStartProbe{
-			Source:     "resume",
-			CallbackID: claudeResumeProbePrefix + callbackID,
-		},
-	}, nil
+	return &resumeAttempt{target: target}, nil
 }
 
 func (p *Core) requireResumeVersion(ctx context.Context, cwd string, env []string) error {
@@ -118,6 +82,7 @@ func (p *Core) preflightResume(
 		ctx,
 		p.config.ConfigDir,
 		options.SessionID,
+		options.Cwd,
 	)
 	if err != nil {
 		return nil, resumePreflightError(
@@ -180,12 +145,13 @@ func queryResumeInfo(
 	ctx context.Context,
 	configDir string,
 	sessionID string,
+	cwd string,
 ) (claude.SessionInfoResult, error) {
 	return claude.GetSessionInfo(
 		ctx,
 		sessionID,
 		claude.SessionInfoOptions{
-			Scope: claude.SessionQueryScope{ConfigDir: configDir},
+			Scope: claude.SessionQueryScope{ConfigDir: configDir, ProjectDir: cwd},
 		},
 	)
 }
@@ -200,7 +166,7 @@ func resumePreflightError(reason, message string, cause error) error {
 }
 
 func (t *resumeTarget) verifyPostcheck(ctx context.Context) error {
-	result, err := queryResumeInfo(ctx, t.configDir, t.sessionID)
+	result, err := queryResumeInfo(ctx, t.configDir, t.sessionID, t.cwd)
 	if err != nil {
 		return resumePostcheckError(
 			ErrorReasonResumePostcheckQueryFailed,
@@ -301,9 +267,10 @@ func waitForResumeIdentity(
 	ctx context.Context,
 	native *claude.Session,
 	target *resumeTarget,
-	callbackID string,
 ) (*claude.Event, []claude.Received, *resumeIdentityGuard, error) {
 	var buffered initBuffer
+	var init *claude.Event
+	guard := &resumeIdentityGuard{target: target}
 	for {
 		received, err := native.Receive(ctx)
 		if err != nil {
@@ -321,6 +288,22 @@ func waitForResumeIdentity(
 				err,
 			)
 		}
+		if received.Identity != nil {
+			identity := received.Identity
+			if identity.Err != nil {
+				code, reason := agent.ErrorUnavailable, ErrorReasonResumeIdentityWaitFailed
+				if errors.Is(identity.Err, claude.ErrProtocol) {
+					code, reason = agent.ErrorNativeRejected, ErrorReasonResumeIdentityMismatch
+				} else if errors.Is(identity.Err, context.DeadlineExceeded) || errors.Is(identity.Err, context.Canceled) {
+					reason = ErrorReasonResumeIdentityTimeout
+				}
+				return nil, nil, nil, adapterError(code, reason, "Claude read-only identity probe failed", nil)
+			}
+			if identity.SessionID != target.sessionID || !sameDirectory(identity.Cwd, target.cwd) {
+				return nil, nil, nil, adapterError(agent.ErrorNativeRejected, ErrorReasonResumeIdentityMismatch, "Claude status identity conflicts with the saved-session target", nil)
+			}
+			return init, buffered.events, guard, nil
+		}
 		if received.Event == nil {
 			if received.Request != nil {
 				if err := buffered.add(received); err != nil {
@@ -330,26 +313,17 @@ func waitForResumeIdentity(
 			continue
 		}
 
-		owned, callbackErr := target.verifyCallback(received.Event, callbackID)
-		if owned {
-			if callbackErr != nil {
-				return nil, nil, nil, callbackErr
-			}
-			return nil, buffered.events, &resumeIdentityGuard{
-				target:              target,
-				callbackID:          callbackID,
-				callbackWasIdentity: true,
-			}, nil
-		}
 		if isResumeInit(received.Event) {
 			if err := target.verifyInit(received.Event); err != nil {
 				return nil, nil, nil, err
 			}
+			if guard.initSeen {
+				return nil, nil, nil, resumeDuplicateInit()
+			}
+			guard.initSeen = true
 			event := *received.Event
-			return &event, buffered.events, &resumeIdentityGuard{
-				target:     target,
-				callbackID: callbackID,
-			}, nil
+			init = &event
+			continue
 		}
 		if err := buffered.add(received); err != nil {
 			return nil, nil, nil, err
@@ -385,107 +359,17 @@ func (t *resumeTarget) verifyInit(event *claude.Event) error {
 	return nil
 }
 
-func (t *resumeTarget) verifyCallback(
-	event *claude.Event,
-	callbackID string,
-) (bool, error) {
-	if event == nil ||
-		event.Control == nil ||
-		event.Control.Subtype != "hook_callback" {
-		return false, nil
-	}
-	request, ok := decodeResumeCallbackRequest(event.Control.Request)
-	if !ok {
-		return false, nil
-	}
-	actualID, ok := decodeJSONString(request.CallbackID)
-	if !ok || actualID != callbackID {
-		return false, nil
-	}
-
-	var input resumeCallbackInput
-	if len(request.Input) == 0 ||
-		json.Unmarshal(request.Input, &input) != nil ||
-		input.HookEventName != "SessionStart" ||
-		input.Source != "resume" ||
-		input.SessionID != t.sessionID ||
-		!sameDirectory(input.CWD, t.cwd) ||
-		!t.transcriptMatches(input.TranscriptPath) {
-		return true, adapterError(
-			agent.ErrorNativeRejected,
-			ErrorReasonResumeCallbackIdentityMismatch,
-			"Claude SessionStart callback does not match the saved-session target",
-			nil,
-		)
-	}
-	return true, nil
-}
-
-func decodeResumeCallbackRequest(raw json.RawMessage) (resumeCallbackRequest, bool) {
-	var request resumeCallbackRequest
-	if json.Unmarshal(raw, &request) != nil {
-		return resumeCallbackRequest{}, false
-	}
-	return request, true
-}
-
-func decodeJSONString(raw json.RawMessage) (string, bool) {
-	var value string
-	if json.Unmarshal(raw, &value) != nil {
-		return "", false
-	}
-	return value, true
-}
-
-func (t *resumeTarget) transcriptMatches(path string) bool {
-	if !filepath.IsAbs(path) {
-		return false
-	}
-	canonical, err := canonicalPath(path)
-	if err != nil || canonical != t.canonicalPath {
-		return false
-	}
-	info, err := os.Stat(path)
-	return err == nil &&
-		info.Mode().IsRegular() &&
-		os.SameFile(t.info, info)
-}
-
-func (g *resumeIdentityGuard) inspect(
-	event *claude.Event,
-) (bool, error) {
-	if g == nil {
-		return false, nil
-	}
-	owned, callbackErr := g.target.verifyCallback(event, g.callbackID)
-	if owned {
-		if callbackErr != nil {
-			return true, callbackErr
-		}
-		if g.callbackWasIdentity || g.lateCallbackSeen {
-			return true, adapterError(
-				agent.ErrorNativeRejected,
-				ErrorReasonResumeCallbackDuplicate,
-				"Claude SessionStart identity callback arrived more than once",
-				nil,
-			)
-		}
-		g.lateCallbackSeen = true
-		return true, nil
-	}
-	if !isResumeInit(event) {
+func (g *resumeIdentityGuard) inspect(event *claude.Event) (bool, error) {
+	if g == nil || !isResumeInit(event) {
 		return false, nil
 	}
 	if err := g.target.verifyInit(event); err != nil {
 		return true, err
 	}
-	if !g.callbackWasIdentity {
+	if g.initSeen {
 		return true, resumeDuplicateInit()
 	}
-	if g.lateInitSeen {
-		return true, resumeDuplicateInit()
-	}
-	g.lateInitSeen = true
+	g.initSeen = true
 	return false, nil
 }
 

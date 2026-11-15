@@ -569,7 +569,7 @@ func startClaudeResumeExecutionProvider(
 ) (*agentclaude.Core, string) {
 	t.Helper()
 	configDir := newResumeConfigDir(t)
-	transcript := writeResumeTranscript(t, configDir, "project", sessionID, cwd)
+	transcript := writeResumeTranscript(t, configDir, resumeProjectKey(t, cwd), sessionID, cwd)
 	argv := filepath.Join(t.TempDir(), "argv.json")
 	peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 		SessionID:      sessionID,

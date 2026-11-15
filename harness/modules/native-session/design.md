@@ -43,8 +43,8 @@ status: stable
 
 两端分别提供 `Open(ctx, SessionOptions) (*Session, error)`。Codex 的 SessionOptions 选择自有进程或显式已有 Client 连接，并携带原生 ThreadStartParams，或以 Resume 指针选择原生 ThreadResumeParams（两者互斥）；它还可以携带仅影响 shell/unified-exec 子进程的 `ShellEnv`。Claude 的 SessionOptions 携带原生进程选项，包括创建时 model/thinking/effort、完整进程 `Env`，以及显式声明的 SDK MCP server 名称。已有连接不再是正常调用必须拼装的订阅对象。所有权在原生派发之前保留，失败明确报告。
 
-Claude 的 `Initialize` 及其中的调用方原生 `Hooks` 保留原有 JSON 语义；恢复时
-SDK 只追加自己的 `SessionStart` 身份探针，不改写或替换调用方其他 hook。新建
+Claude 的 `Initialize` 及其中的调用方原生 `Hooks` 保留原有 JSON 语义；统一恢复
+不追加 SDK 私有 hook，通过只读 status 探针确认身份。新建
 Session 可通过 `SessionOptions.ClaimSession` 选择 `--await-claim`，在 initialize
 之后发送 `claim_session` 绑定工作目录，并从 claim 响应固定 CLI 分配的主身份。
 claim 成功必须包含非空 session ID、成功状态及与请求相同的工作目录；
@@ -100,7 +100,7 @@ Done 表示交互终止，Err 保留首个终止原因；Close 返回资源回�
 
 Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际收到的原生启动响应副本，保留 model、sandbox 和未知字段。该只读查询不发送协议消息，不产生消费者或回答权限。
 
-主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。Claude 新建身份按[创建合同](#interface-session-与交付值)固定；后续原生主消息与 init 会核对固定身份。恢复时由 live init 或匹配的私有 `SessionStart` callback 确认身份；单独 hook lifecycle frame 不充分；尚未确认原生根身份时不伪造 observed ID。
+主身份由 Session 固定。Codex 输入参数不再要求调用者重复填 ThreadID；Claude 输入不能将 session_id 或 parent_tool_use_id 当作任意目标选择器。Claude 新建身份按[创建合同](#interface-session-与交付值)固定；后续原生主消息与 init 会核对固定身份。统一恢复通过[只读身份探针](#claude-status-identity-probe)确认 ID/cwd；单独 init 或 hook lifecycle frame 不充分；尚未确认原生根身份时不伪造 observed ID。
 
 <a id="interface-独立历史查询"></a>
 
@@ -401,14 +401,35 @@ Claude 的 `Options/SessionOptions.Effort` 是创建时逐字传递的原生 `--
 
 Claude 的 `SDKMCPServers []string` 只声明由应用处理的原生 SDK MCP server 名称。实际 `mcp_message` 只有在 server 已声明时通过同一个 Receive FIFO 交付为 IncomingRequest；`MCPRequest()` 返回原生 server_name/message 的分离副本，`ReplyMCP(ctx, json.RawMessage)` 通过原始控制句柄回答 JSON-RPC。回复保留原 ID 和未知字段；notifications 仍确认外层 control 请求。它不授予工具审批权限，也不能使用 Approve/Deny/问答 Answer 代替。取消、单次回答、Close 和 OutcomeUnknown 沿用该原生连接的控制权威；未声明或其他不支持的控制请求仍明确拒绝。SDK 不添加公开的通用回调 API 或内部 MCP 服务实现；下节的 Claude 私有 `SessionStart` 身份探针只由本包应答，不进入该公开面。
 
+<a id="claude-status-identity-probe"></a>
+
+### Claude 只读身份探针
+
+`Session.ProbeIdentity(ctx)` 在当前连接上发送只读 `get_status` 控制请求，不发送
+user frame，不创建 Session、不调用模型。请求使用与其他控制操作相同的相关和
+关闭机制，只接受对应 request ID 的响应。调用完成后将一个
+`Received{Kind: ReceivedIdentity, Identity: *SessionIdentityResult}` 追加到 Receive
+FIFO；已接纳的通知不会被跳过。返回错误表示结果无法交付；原生查询失败或响应
+无效由 `SessionIdentityResult.Err` 表达。
+
+`SessionIdentityResult` 只保留 `SessionID`、`Cwd` 和不包含响应正文的 `Err`。
+响应必须有唯一、非空的 `Session ID` 行及唯一、绝对路径的 `cwd` 行；重复 JSON
+成员、类型错误、缺失或重复身份行均拒绝。原生账户、配置和其他 status 行不进入
+Receive 投影，不为非身份行增加缓存或日志。探针先核对原生已知/请求的主身份及
+启动 cwd；冲突时失败，未知主身份时据此固定观察根。成功后主身份不可漂移，
+已有关系和交付状态不重置。该投影不伪造 init、callback 或原生成员事件；调用方
+还须依据目标及[统一恢复合同](../unified-agent/design.md#claude-resume-identity)
+核对身份和目录，并复核保存文件。
+
 <a id="claude-sessionstart-probe"></a>
 
 ### Claude SessionStart 身份探针
 
 `SessionStart` 是 Claude Code 的原生 hook 事件，不是 SDK 新造的事件；原生
-`source` 为 `startup`、`resume`、`clear`、`compact`。Claude 依据初始化时发送的
-`hooks` 生成 `hook_started`、`hook_progress`、`hook_response`，并在需要
-callback 时发送 `control_request.request.subtype=hook_callback`。
+`source` 为 `startup`、`resume`、`clear`、`compact`。Claude 为执行中的 hook
+生成 `hook_started`、`hook_progress`、`hook_response`，并为已注册的 SDK callback
+发送 `control_request.request.subtype=hook_callback`。启动阶段的 hook 可以早于
+initialize 处理；追加 callback 不会追溯已经发生的 SessionStart。
 
 `hook_name` 由 CLI 在运行时生成，固定为 `<hook_event>:<source>`，例如
 `SessionStart:resume`；`matcher` 只筛选 `source`，调用方不能给 hook 指定私有
@@ -416,12 +437,12 @@ callback 时发送 `control_request.request.subtype=hook_callback`。
 `hook_started`、`hook_progress`、`hook_response` 都不携带 callback ID，不能
 用于探针归属或身份判断。
 
-SDK 的探针归属只使用 `callback_id`。SDK 在调用方 `Initialize.Hooks` 中追加一个
-私有 `SessionStart` matcher，其 `hookCallbackIds` 只包含本次恢复的 ID，并为
-每次 Resume 生成新的、不复用的
-`agent-sdk-go:claude:resume-probe:<uuid>`。该前缀由 SDK 保留；调用方 Hooks
+调用方可以显式设置原生 `SessionOptions.SessionStartProbe`。该可选探针的归属只
+使用 `callback_id`；SDK 在调用方 `Initialize.Hooks` 中追加一个私有 matcher，
+其 `hookCallbackIds` 只包含选项给出的本次操作 ID。调用方为每次操作提供新的、
+不复用的 `agent-sdk-go:` 前缀 ID。该前缀由 SDK 保留；调用方 Hooks
 已包含同前缀 ID、形状无效或无法无损追加时，在进程启动前拒绝，不覆盖调用方
-hook。注册必须在原生进程启动前完成。
+hook。选项在进程启动前构造，原生 CLI 在处理 initialize 时注册 callback。
 
 以下为 `control_request.request` 体，省略外层 `type`、`request_id` 和 `request`
 包裹：
@@ -450,9 +471,9 @@ ID 都不构成成功身份证据。恢复身份的顺序、超时和创建后�
 [Claude 恢复身份合同](../unified-agent/design.md#claude-resume-identity)维护；
 本包只提供原生注册、应答和输入值。
 
-该探针只为 `Resume` 注册，进程启动须通过统一 Agent 的
-[版本门禁](../unified-agent/design.md#claude-resume-identity)。hook input
-不携带 CLI 版本，不能从 `source` 或恢复结果推断版本。新建 Session 不使用该探针。
+统一 `Core.Resume` 不注册此可选 hook 探针，而是使用只读 `get_status`。原生调用方
+显式选择此选项时仍遵守上述注册、应答和保留前缀规则。hook input 不携带 CLI
+版本，不能从 `source` 或 callback 是否出现推断版本。
 
 <a id="interface-子-agent-查询"></a>
 

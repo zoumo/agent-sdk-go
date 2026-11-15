@@ -20,7 +20,6 @@ type liveAdmission struct {
 	root             string
 	assigned         bool
 	cwd              string
-	initSeen         bool
 	nativeVersion    string
 	members          map[string]SubagentIdentity
 	parents          *lineage.Graph[string]
@@ -288,15 +287,11 @@ func (a *liveAdmission) checkAssignedIdentity(event Event, rootFrame bool) error
 	if event.IsReplay != nil && *event.IsReplay {
 		return &SessionIdentityError{Reason: "initialize_replayed"}
 	}
-	if a.initSeen {
-		return &SessionIdentityError{Reason: "initialize_duplicate"}
-	}
 	left, leftErr := os.Stat(event.System.CWD)
 	right, rightErr := os.Stat(a.cwd)
 	if leftErr != nil || rightErr != nil || !left.IsDir() || !right.IsDir() || !os.SameFile(left, right) {
 		return &SessionIdentityError{Reason: "session_cwd_mismatch"}
 	}
-	a.initSeen = true
 	return nil
 }
 

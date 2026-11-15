@@ -285,6 +285,129 @@ func TestSessionDuplicateInitPreservesNativeFactsAndVersionRestraint(t *testing.
 	require.Nil(t, r.Parent)
 }
 
+func TestAssignedSessionRepeatedMatchingInitKeepsQueuedFactsAndRelationships(t *testing.T) {
+	options := fixtureOptions(t, "tree")
+	options.SessionID = "s"
+	s, err := Open(context.Background(), SessionOptions(options))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Abort() })
+
+	initFrame := func(commands string) string {
+		return fmt.Sprintf(
+			`{"type":"system","subtype":"init","session_id":"s","cwd":%q,"claude_code_version":"2.1.293","slash_commands":%s}`,
+			options.WorkDir, commands,
+		)
+	}
+	firstInit := initFrame(`["help"]`)
+	secondInit := initFrame(`["help","review"]`)
+	frames := []string{
+		firstInit,
+		nativeRootTool,
+		creationTask("a", "spawn", "false"),
+		nativeChildSnapshot,
+		secondInit,
+		`{"type":"assistant","session_id":"s","parent_tool_use_id":"spawn","message":{"content":"second"}}`,
+		`{"type":"result","subtype":"success","session_id":"s","is_error":false,"result":"first done"}`,
+		`{"type":"result","subtype":"success","session_id":"s","is_error":false,"result":"second done"}`,
+	}
+	for _, frame := range frames {
+		submitFrame(t, s, frame)
+	}
+	for index, frame := range frames {
+		received := sessionNative(t, s)
+		require.Equal(t, frame, string(received.Raw))
+		switch index {
+		case 3:
+			require.Equal(t, "a", received.Source.TaskID)
+			require.Equal(t, "spawn", received.Source.ToolUseID)
+			require.NotNil(t, received.Parent)
+			require.Equal(t, "s", received.Parent.SessionID)
+		case 5:
+			require.Equal(t, "a", received.Source.TaskID)
+			require.Equal(t, "spawn", received.Source.ToolUseID)
+			require.NotNil(t, received.Parent)
+			require.Equal(t, "s", received.Parent.SessionID)
+		case 6:
+			require.Equal(t, "first done", received.Event.Result.Result)
+		case 7:
+			require.Equal(t, "second done", received.Event.Result.Result)
+		}
+	}
+	id, observed := s.SessionID()
+	require.True(t, observed)
+	require.Equal(t, "s", id)
+	require.NoError(t, s.Err())
+	select {
+	case <-s.Done():
+		t.Fatal("matching repeated init terminated the assigned session")
+	default:
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err = s.Receive(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestAssignedSessionRejectsConflictsAfterMatchingInit(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		frame  func(cwd string) string
+		reason string
+	}{
+		{
+			name: "identity",
+			frame: func(cwd string) string {
+				return fmt.Sprintf(
+					`{"type":"system","subtype":"init","session_id":"other","cwd":%q,"claude_code_version":"2.1.293"}`,
+					cwd,
+				)
+			},
+			reason: "session_identity_mismatch",
+		},
+		{
+			name: "replay",
+			frame: func(cwd string) string {
+				return fmt.Sprintf(
+					`{"type":"system","subtype":"init","session_id":"s","cwd":%q,"claude_code_version":"2.1.293","isReplay":true}`,
+					cwd,
+				)
+			},
+			reason: "initialize_replayed",
+		},
+		{
+			name: "cwd",
+			frame: func(string) string {
+				return `{"type":"system","subtype":"init","session_id":"s","cwd":"/nonexistent-assigned-cwd","claude_code_version":"2.1.293"}`
+			},
+			reason: "session_cwd_mismatch",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			options := fixtureOptions(t, "tree")
+			options.SessionID = "s"
+			s, err := Open(context.Background(), SessionOptions(options))
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = s.Abort() })
+
+			matching := fmt.Sprintf(
+				`{"type":"system","subtype":"init","session_id":"s","cwd":%q,"claude_code_version":"2.1.293"}`,
+				options.WorkDir,
+			)
+			submitFrame(t, s, matching)
+			require.Equal(t, matching, string(sessionNative(t, s).Raw))
+			submitFrame(t, s, test.frame(options.WorkDir))
+			select {
+			case <-s.Done():
+			case <-time.After(3 * time.Second):
+				t.Fatal("identity conflict did not terminate the session")
+			}
+			var identity *SessionIdentityError
+			require.ErrorAs(t, s.Err(), &identity)
+			require.Equal(t, test.reason, identity.Reason)
+		})
+	}
+}
+
 func TestSessionConcurrentCloseWithUnreadFactsAndLongQuarantine(t *testing.T) {
 	s := openSessionFixture(t, func(o *SessionOptions) { o.Subagents.MaxUnresolvedWait = time.Minute })
 	submitFrame(t, s, nativeChildSnapshot)

@@ -94,9 +94,12 @@ Claude unified `Open` now uses `--await-claim`, completes initialize and sends
 `claim_session` to bind the working directory. The CLI supplies the native
 session ID in the claim response; the SDK does not generate one. `Session.ID()`
 is nonempty and stable before the first input. Later native main messages
-are checked against the claimed identity. A replayed or duplicate init, a different
-main-session identity, or an init cwd conflict terminates the Session with
-`native_rejected`. Available commands arrive with the later init notification.
+are checked against the claimed identity. Every init must be non-replay, match
+the claimed identity and requested cwd; a repeated matching init refreshes
+observed metadata without resetting delivery or relationship state. A replayed
+init, a different main-session identity, or an init cwd conflict terminates the
+Session with `native_rejected`. Available commands arrive with each matching
+init notification.
 No user turn, refresh API or local identity file is needed. Local process startup
 now requires a stable CLI >= 2.1.293 and fails before starting the Session if the
 version is old or cannot be confirmed. Native callers opt into claim with

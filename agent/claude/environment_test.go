@@ -146,7 +146,7 @@ func TestEnvironmentResumeVersionAndLaunchShareEffectiveEnvironment(t *testing.T
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			cwd, configDir := t.TempDir(), newResumeConfigDir(t)
-			transcript := writeResumeTranscript(t, configDir, "project", claudeResumePeerSessionID, cwd)
+			transcript := writeResumeTranscript(t, configDir, resumeProjectKey(t, cwd), claudeResumePeerSessionID, cwd)
 			versionPath, sessionPath := filepath.Join(t.TempDir(), "version-env.json"), filepath.Join(t.TempDir(), "session-env.json")
 			peer := newClaudeResumePeer(t, claudeResumePeerScenario{
 				CWD: cwd, TranscriptPath: transcript,

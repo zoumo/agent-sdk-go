@@ -127,7 +127,7 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	writeResumeTranscript(
 		t,
 		configDir,
-		"project",
+		resumeProjectKey(t, cwd),
 		claudeResumePeerSessionID,
 		cwd,
 	)

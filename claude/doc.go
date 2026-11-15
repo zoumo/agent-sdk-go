@@ -17,8 +17,9 @@
 // and diagnostic material cannot create answer authority.
 //
 // SessionID assigns a new native identity through --session-id and is
-// mutually exclusive with ResumeID. Initialize does not echo it; later native
-// main-session messages and non-replay init are checked against it.
+// mutually exclusive with ResumeID. Initialize does not echo it; each later
+// native main-session message and non-replay init is checked against it. A
+// repeated matching init refreshes observed metadata without resetting state.
 // ResumeID requests native continuation through Open; history reads do not
 // establish a running Session or restore permission authority.
 //

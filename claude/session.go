@@ -22,6 +22,7 @@ const (
 	ReceivedNative      ReceivedKind = "event"
 	ReceivedRequest     ReceivedKind = "request"
 	ReceivedObservation ReceivedKind = "observation"
+	ReceivedIdentity    ReceivedKind = "identity"
 )
 
 // Received retains the original native envelope. Parent knowledge is optional;
@@ -31,6 +32,7 @@ type Received struct {
 	Event       *Event
 	Request     *IncomingRequest
 	Observation *Observation
+	Identity    *SessionIdentityResult
 	Raw         json.RawMessage
 	Params      json.RawMessage
 	Source      SubagentIdentity

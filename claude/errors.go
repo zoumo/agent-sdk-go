@@ -74,7 +74,7 @@ func (e *Error) Unwrap() error        { return e.Err }
 func (e *Error) Is(target error) bool { return target == ErrUnknownOutcome && e.OutcomeUnknown }
 
 // SessionIdentityError rejects native messages that conflict with an assigned
-// SessionID. Reason identifies an identity, init replay, duplicate or cwd conflict.
+// SessionID. Reason identifies an identity, init replay or cwd conflict.
 type SessionIdentityError struct {
 	Reason string
 }

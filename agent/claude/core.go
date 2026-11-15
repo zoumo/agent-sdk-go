@@ -99,8 +99,8 @@ func (p *Core) Open(
 }
 
 // Resume confirms the supported CLI version and saved transcript before launch,
-// then restores the requested session after live init or its private callback
-// confirms the same identity.
+// then restores the requested session after a read-only native get_status probe
+// confirms its identity and working directory.
 func (p *Core) Resume(
 	ctx context.Context,
 	options agent.ResumeOptions,
@@ -183,9 +183,6 @@ func (p *Core) openNativeSession(
 	nativeOptions.ClaimSession = claim
 	nativeOptions.Env = slices.Clone(env)
 	nativeOptions.AppendSystemPrompt = options.AdditionalSystemPrompt
-	if resume != nil {
-		nativeOptions.SessionStartProbe = &resume.probe
-	}
 	var stream *streamOpen
 	if p.streams != nil {
 		opened, err := p.streams(ctx, claude.SessionOptions(nativeOptions))
@@ -222,16 +219,23 @@ func (p *Core) openNativeSession(
 	)
 	if resume != nil {
 		initContext, cancelInit := waitForInitContext(ctx, p.config.InitializeTimeout)
-		init, buffered, guard, err = waitForResumeIdentity(
-			initContext,
-			native,
-			resume.target,
-			resume.probe.CallbackID,
-		)
+		err = native.ProbeIdentity(initContext)
+		if err == nil {
+			init, buffered, guard, err = waitForResumeIdentity(initContext, native, resume.target)
+		} else {
+			code, reason := agent.ErrorUnavailable, ErrorReasonResumeIdentityWaitFailed
+			if errors.Is(err, claude.ErrProtocol) {
+				code, reason = agent.ErrorNativeRejected, ErrorReasonResumeIdentityMismatch
+			}
+			err = adapterError(code, reason, "query Claude resume identity", nil)
+		}
 		cancelInit()
 	}
 	if err != nil {
-		return nil, closeAfterOpenFailure(native, err)
+		if closeErr := native.Close(); closeErr != nil {
+			err = errors.Join(err, adapterError(agent.ErrorUnavailable, agent.ErrorReasonForOperation("close", agent.ErrorReasonSuffixFailed), "Claude resume cleanup reported a native failure", nil))
+		}
+		return nil, err
 	}
 	if init != nil {
 		if resumeID != "" && init.SessionID != resumeID {

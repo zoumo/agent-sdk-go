@@ -116,8 +116,10 @@ to the requested working directory with one `claim_session` request. The claim
 response carries the native session ID, so `ID()` is nonempty and stable after
 initialize without user input, and the SDK generates no identity of its own.
 Open does not wait for `system/init` or a model turn. Later native main-session
-messages must match the claimed identity; a live, unique init must also identify
-the requested working directory. A conflict terminates the session with
+messages must match the claimed identity; every live, non-replay init must also
+identify the requested working directory. A repeated matching init refreshes
+observed metadata without resetting delivery, relationships or permission
+authority. A conflict terminates the session with
 `native_rejected`. Local process startup requires a stable CLI >= 2.1.293,
 checked through `--version` before the Session process starts. Native callers that pass
 `claude.Options.SessionID` keep the explicit `--session-id=<uuid>` path instead.

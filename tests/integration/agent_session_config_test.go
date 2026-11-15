@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -542,6 +543,8 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 			}
 			response := any(map[string]any{})
 			switch frame.Request.Subtype {
+			case "get_status":
+				response = map[string]any{"sections": []any{map[string]any{"rows": []any{map[string]any{"label": "Session ID", "value": sessionID}, map[string]any{"label": "cwd", "value": cwd}}}}}
 			case "get_settings":
 				response = map[string]any{"applied": map[string]any{"ultracode": false}}
 			case "claim_session":
@@ -767,7 +770,10 @@ func newAgentExecutionProvider(
 
 func writeAgentExecutionResumeTranscript(t *testing.T, configDir, cwd string) {
 	t.Helper()
-	directory := filepath.Join(configDir, "projects", "-synthetic")
+	canonical, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	key := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(canonical, "-")
+	directory := filepath.Join(configDir, "projects", key)
 	require.NoError(t, os.MkdirAll(directory, 0o700))
 	source, err := json.Marshal(map[string]any{
 		"type":      "user",

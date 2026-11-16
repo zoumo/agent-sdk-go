@@ -22,7 +22,7 @@ class WorkflowCoverage(unittest.TestCase):
 
     def test_jobs_use_linux_only(self):
         jobs = self.workflow_jobs()
-        self.assertCountEqual(jobs, ["checks", "race", "e2e", "consumer"])
+        self.assertCountEqual(jobs, ["checks", "race", "consumer"])
         for name, job in jobs.items():
             with self.subTest(job=name):
                 self.assertIn("    runs-on: ubuntu-24.04", job)
@@ -50,16 +50,27 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertNotIn("check-offline.sh race", checks)
         self.assertNotIn("check-offline.sh e2e", checks)
 
-    def test_race_and_simulation_gate_run_as_separate_jobs(self):
+    def test_strict_simulation_gate_runs_in_package_suite_jobs(self):
         jobs = self.workflow_jobs()
-        for name, command in [("race", "race"), ("e2e", "e2e")]:
+        self.assertNotIn("e2e", jobs)
+        for name, command in [("checks", "checks"), ("race", "race")]:
             with self.subTest(job=name):
                 self.assertIn(f"bash scripts/check-offline.sh {command}", jobs[name])
-                self.assertNotIn("golangci-lint", jobs[name])
-                self.assertNotIn("    needs:", jobs[name])
-        self.assertIn("name: simulation-ubuntu-24.04", jobs["e2e"])
+                self.assertNotIn("check-offline.sh e2e", jobs[name])
+        self.assertNotIn("golangci-lint", jobs["race"])
+        self.assertNotIn("    needs:", jobs["race"])
+        self.assertIn("name: simulation-checks-ubuntu-24.04", jobs["checks"])
+        self.assertIn("name: simulation-race-ubuntu-24.04", jobs["race"])
         self.assertNotIn("simulation-ubuntu-24.04", jobs["checks"])
         self.assertNotIn("simulation-ubuntu-24.04", jobs["race"])
+        for name in ("checks", "race"):
+            with self.subTest(artifacts=name):
+                self.assertRegex(
+                    jobs[name],
+                    r"(?s)- name: Preserve simulation coverage and diagnostics\n"
+                    r"        if: always\(\)\n.*?"
+                    r"path: \.artifacts/simulation/gates/",
+                )
 
     def test_offline_script_exposes_each_ci_task(self):
         script = (ROOT.parent / "scripts/check-offline.sh").read_text()
@@ -72,8 +83,8 @@ class WorkflowCoverage(unittest.TestCase):
             script,
         )
         self.assertIn("local parallel_tasks=(test build)", script)
-        self.assertIn("local serial_tasks=(race e2e)", script)
-        self.assertIn("local all_tasks=(test race e2e build)", script)
+        self.assertIn("local serial_tasks=(race)", script)
+        self.assertIn("local all_tasks=(test race build)", script)
         self.assertIn(
             'AGENT_SDK_TESTIFY_BUILD_DIR="$work/$task/simulation"',
             script,
@@ -83,9 +94,14 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn('for task in "${serial_tasks[@]}"; do', script)
         self.assertIn('if ! run_task_lane "$work" "$task"; then', script)
         self.assertIn(
+            "  all)\n    quality_checks\n    test_checks\n    race_checks\n    build_checks\n    ;;\n",
+            script,
+        )
+        self.assertIn(
             "  checks)\n    quality_checks\n    test_checks\n    build_checks\n    ;;\n",
             script,
         )
+        self.assertIn("  e2e)\n    e2e_checks\n    ;;\n", script)
 
     def test_same_repository_pr_consumers_fetch_published_head(self):
         consumer = self.workflow_jobs()["consumer"]
@@ -110,6 +126,100 @@ class WorkflowCoverage(unittest.TestCase):
         )
         self.assertNotIn("GOPROXY=direct", script)
         self.assertIn("module.get('Origin', {}).get('Hash') == sys.argv[2]", script)
+
+
+class OfflineScheduling(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = Path(self.temp.name)
+        (self.repo / "scripts").mkdir()
+        (self.repo / "codex").mkdir()
+        shutil.copyfile(ROOT.parent / "scripts/check-offline.sh",
+                        self.repo / "scripts/check-offline.sh")
+        self.bin = self.repo / "bin"
+        self.bin.mkdir()
+        self.journal = self.repo / "commands.jsonl"
+        stub = (
+            f"#!{sys.executable}\n"
+            "import json, os, pathlib, sys\n"
+            "tool = pathlib.Path(sys.argv[0]).name\n"
+            "arguments = sys.argv[1:]\n"
+            "if tool == 'bash' and pathlib.Path(arguments[0]).name == 'check-offline.sh':\n"
+            "    os.execv('/bin/bash', ['/bin/bash', *arguments])\n"
+            "row = {'tool': tool, 'arguments': arguments}\n"
+            "with open(os.environ['SDK_CI_TEST_JOURNAL'], 'a') as journal:\n"
+            "    journal.write(json.dumps(row) + '\\n')\n"
+            "failure = os.environ.get('SDK_CI_TEST_FAILURE', '')\n"
+            "if tool == 'go' and arguments:\n"
+            "    lane = ('race' if '-race' in arguments else\n"
+            "            'e2e' if '-run' in arguments else arguments[0])\n"
+            "    if failure == lane:\n"
+            "        print('injected failure: ' + lane, file=sys.stderr)\n"
+            "        sys.exit(23)\n"
+        )
+        for name in ("go", "bash", "quality-python"):
+            executable = self.bin / name
+            executable.write_text(stub)
+            executable.chmod(0o755)
+
+    def run_lane(self, lane=None, failure=""):
+        self.journal.unlink(missing_ok=True)
+        arguments = [] if lane is None else [lane]
+        result = subprocess.run(
+            ["/bin/bash", str(self.repo / "scripts/check-offline.sh"), *arguments],
+            env={**os.environ, "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+                 "PYTHON": str(self.bin / "quality-python"),
+                 "SDK_CI_TEST_JOURNAL": str(self.journal),
+                 "SDK_CI_TEST_FAILURE": failure},
+            text=True, capture_output=True, timeout=30,
+        )
+        commands = [json.loads(line) for line in self.journal.read_text().splitlines()]
+        tests = [row["arguments"] for row in commands
+                 if row["tool"] == "go" and row["arguments"][0] == "test"]
+        return result, tests
+
+    def test_aggregate_entries_run_each_package_suite_once(self):
+        expected = [
+            ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."],
+            ["test", "-race", "-p=1", "-count=1", "-timeout", "600s", "./..."],
+        ]
+        for lane in (None, "all", "parallel"):
+            with self.subTest(lane=lane):
+                result, tests = self.run_lane(lane)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(tests, expected)
+
+    def test_ci_lanes_and_manual_gate_keep_complete_selection(self):
+        for lane, expected in (
+            ("checks", ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."]),
+            ("test", ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."]),
+            ("race", ["test", "-race", "-p=1", "-count=1", "-timeout", "600s", "./..."]),
+            ("e2e", ["test", "-count=1", "-timeout=600s", "-v",
+                     "./tests/simulation/simulate", "-run", "^TestSimulationGate$"]),
+        ):
+            with self.subTest(lane=lane):
+                result, tests = self.run_lane(lane)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(tests, [expected])
+
+    def test_required_test_failures_reach_every_entry(self):
+        for lane, failures in (
+            ("all", ("test", "race")),
+            ("parallel", ("test", "race")),
+            ("checks", ("test",)),
+            ("test", ("test",)),
+            ("race", ("race",)),
+            ("e2e", ("e2e",)),
+        ):
+            for failure in failures:
+                with self.subTest(lane=lane, failure=failure):
+                    result, _ = self.run_lane(lane, failure)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("injected failure: " + failure,
+                                  result.stdout + result.stderr)
+                    if lane == "parallel":
+                        self.assertIn(f"===== {failure} (failed) =====", result.stdout)
 
 
 class CIGates(unittest.TestCase):

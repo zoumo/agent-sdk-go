@@ -1,5 +1,5 @@
 // SDK-owned offline simulation. The external tool owns protocol/material work.
-package main
+package simulate
 
 import (
 	"context"
@@ -7,12 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
-	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -38,26 +34,6 @@ type options struct {
 	Jobs                                      int
 	Timeout                                   time.Duration
 	Gate                                      bool
-}
-
-func main() {
-	var o options
-	flag.StringVar(&o.Recording, "recording", "", "Absolute external capture")
-	flag.StringVar(&o.Provider, "provider", "", "codex or claude")
-	flag.StringVar(&o.Case, "case", "", "Builtin case ID")
-	flag.StringVar(&o.Output, "output", "", "New persistent absolute output")
-	flag.StringVar(&o.Driver, "driver", "", "Current SDK host executable")
-	flag.IntVar(&o.Jobs, "jobs", 1, "Concurrent cases")
-	flag.DurationVar(&o.Timeout, "timeout", 30*time.Second, "Per-case deadline")
-	flag.BoolVar(&o.Gate, "gate", false, "Run catalog; fail required gaps")
-	flag.Parse()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	if err := execute(ctx, o); err != nil {
-		stop()
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	stop()
 }
 
 func execute(ctx context.Context, o options) error {

@@ -38,12 +38,11 @@ race_checks() {
 e2e_checks() {
   # Required real-recording regression is independent of the synthetic tests above.
   # Missing trusted inputs fail closed; this command never records or uses accounts.
-  bash scripts/simulation.sh gate
+  go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$'
 }
 
 build_checks() {
   go build ./...
-  bash scripts/simulation.sh build
 }
 
 run_task_lane() {
@@ -65,8 +64,8 @@ run_task_lane() {
 
 parallel_checks() {
   local parallel_tasks=(test build)
-  local serial_tasks=(race e2e)
-  local all_tasks=(test race e2e build)
+  local serial_tasks=(race)
+  local all_tasks=(test race build)
   local work
   work=$(mktemp -d "${TMPDIR:-/tmp}/agent-sdk-offline.XXXXXXXX")
   local failed=0
@@ -84,8 +83,6 @@ parallel_checks() {
     fi
   done
 
-  # Race and the recording gate both exercise timing-sensitive subprocess
-  # protocols. Keep them isolated from each other and from package tests.
   for task in "${serial_tasks[@]}"; do
     if ! run_task_lane "$work" "$task"; then
       failed=1
@@ -105,7 +102,6 @@ case "$task" in
     quality_checks
     test_checks
     race_checks
-    e2e_checks
     build_checks
     ;;
   parallel)

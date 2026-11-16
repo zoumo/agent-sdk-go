@@ -65,12 +65,6 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		Payload:   payload,
 		Meta:      wire.Meta,
 	}
-	if decoded.Type() != wire.Type {
-		return invalidArgument(
-			"payload_type_mismatch",
-			"event type does not match payload",
-		)
-	}
 	if err := decoded.Validate(); err != nil {
 		return err
 	}

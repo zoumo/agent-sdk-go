@@ -161,8 +161,6 @@ func (l *Core[R, I]) Stop(ctx context.Context) error {
 	l.state = stateStopped
 	if l.release != nil {
 		l.stopErr = l.release(ctx, l.resource)
-	} else {
-		l.stopErr = nil
 	}
 	var zero R
 	l.resource = zero

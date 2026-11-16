@@ -17,15 +17,16 @@ bash scripts/check-offline.sh all
 ```
 
 The offline entry also accepts `parallel`, `checks`, `quality`, `test`, `race`,
-`e2e` or `build`. `all` runs every task in order; `parallel` runs `quality` first,
-then runs `test` and `build` concurrently, then runs `race` and `e2e` one at a
-time in the same checkout. `checks` runs `quality`, `test` and `build` for CI's
-narrower checks job.
+`e2e` or `build`. `all` runs `quality`, `test`, `race` and `build` in order;
+`parallel` runs `quality` first, then runs `test` and `build` concurrently, then
+runs `race` in isolation in the same checkout. `checks` runs `quality`, `test`
+and `build` for CI's checks job. Both package suites include the strict
+simulation test; `e2e` remains available for a verbose simulation-only run.
 
 Test and simulation hosts link the exact test-only in-process testify module; no
 separate helper process is required. The dependency boundary and pin are fixed
 by [Go library mode](../harness/modules/agent-sdk-testify/library-mode.md).
-`scripts/simulation.sh build` builds only the SDK runner and driver. The library
+`go test` builds the current SDK driver in `TestMain`. The library
 owns official driver/package and material checks. Scenario, recording,
 official-driver and Python snapshots do not remain in this repository.
 Simulation obtains assertion inputs from the typed execution report and prepared
@@ -34,20 +35,45 @@ execution report, then remove the caller-owned fixture after every SDK client
 and mock exits. The migrated synthetic, single-case and 76-slot gate checks
 remain in `tests/simulation/simulate`.
 
+Run the strict fixed-recording simulation directly:
+
+```sh
+go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$'
+```
+
+The package suite also runs this strict test. `-count=1` forces execution rather
+than reusing a cached test result. The test calls the simulation directly; only
+the SDK driver runs in a separate process with its own environment, workspace
+and bounded process-group cancellation. Process-level regression tests reuse
+the test binary; there is no separately built simulation runner or Shell entry.
+
+Without an explicit `-simulation.output`, the test runs in a private
+short directory under `/tmp`, resolved to its physical path. This keeps the
+execution workspace within Claude's existing 200-character project-key limit
+even when the checkout or `TMPDIR` is deep. Success, failure and handled
+INT/TERM cancellation archive the output unchanged under
+`.artifacts/simulation/gates/gate.*`; the test logs this location,
+and every CI validation job collects it. After a successful archive, the temporary run
+directory is removed. Recorded paths retain the original execution identity.
+An archive failure returns an error and retains the temporary output at the
+reported location. An explicit `-simulation.output` uses the caller's directory directly,
+without automatic archiving; that path must satisfy native limits.
+
 The `quality` task checks module and native dependency boundaries, the
 standard-library-only `mcp` implementation, native types limited to the standard
 library and `mcp`, the `agent` core limited to the standard library, carrier
 validator and `mcp`, adapter-specific imports, the absence of
 reverse native/adapter/MASS imports, native inventory, reproducible Codex
 generation and committed whitespace, then runs `go vet`.
-`test` runs unit/subprocess tests and offline examples. `race` repeats the
-package suite under the race detector, `e2e` runs the fixed real-recording
-simulation gate, and `build` compiles every package and the SDK simulation
-runner/driver. `GOMAXPROCS=2`, package scheduling `-p=1` and
-`GORACE=atexit_sleep_ms=0` bound test load. CI runs all five tasks on
-`ubuntu-24.04`. Every example compiles with `go test ./...`.
+`test` runs unit/subprocess tests, the strict simulation gate and offline examples.
+`race` repeats the package suite under the race detector, `e2e` runs only the
+fixed real-recording simulation gate through `go test` for manual use, and `build`
+compiles every package, including the SDK driver. `GOMAXPROCS=2`, package
+scheduling `-p=1` and `GORACE=atexit_sleep_ms=0` bound test load. CI runs the
+`checks` and `race` package suites on `ubuntu-24.04`; neither re-runs the strict
+gate as a separate command. Every example compiles with `go test ./...`.
 The pinned testify module owns official driver/package checks. Hosted CI builds
-only the SDK-owned simulation runner and driver and links that module; it does
+the tests and SDK-owned driver and links that module; it does
 not build or download a separate testify artifact.
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
@@ -137,21 +163,23 @@ revision, not uncommitted changes in the working checkout.
 
 ## Hosted gates
 
-The [workflow](../.github/workflows/ci.yml) defines four independent
+The [workflow](../.github/workflows/ci.yml) defines three independent
 `ubuntu-24.04` jobs. `checks` installs Go and downloads the pinned
 formatter/linter's official precompiled archive, verifying its SHA-256 before
 extraction. Source scans use the Python standard library. The job checks source
 ancestry, module cleanliness and whitespace, then runs `quality`, `test` and
-`build`. Dedicated `race` and `e2e` jobs run the timing-sensitive race suite and
-fixed recording gate on separate runners, without installing the linter or
-running generation checks. Failures and logs remain isolated while the jobs run concurrently.
-The offline tasks build only the SDK-owned simulation runner and driver; the
+`build`. The dedicated `race` job runs the timing-sensitive race suite on a
+separate runner, without installing the linter or running generation checks.
+Both jobs include the strict fixed-recording gate through `go test ./...`;
+there is no separate simulation-gate job. Failures and logs remain isolated while
+the jobs run concurrently.
+The offline tasks build the tests and SDK-owned driver; the
 in-process testify module is fetched by the normal Go module graph.
 External consumer CI runs for pushed `main` commits, manual workflow runs and
 same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
 published `github.event.pull_request.head.sha`, never the synthetic merge SHA.
-These events configure three validation jobs and one External consumer job.
+These events configure two validation jobs and one External consumer job.
 Fork PRs retain all validation jobs and skip
 consumers because fork-only SHAs are not assumed retrievable from this
 repository. Token permissions remain contents: read; no pull_request_target
@@ -273,7 +301,7 @@ No Windows runtime support is claimed.
 One version covers all four native imports. Before an authorized publication:
 
 1. Confirm the intended main SHA and both imported source histories.
-2. Require the exact SHA's `checks`, `race` and `e2e` CI jobs and the External
+2. Require the exact SHA's `checks` and `race` CI jobs and the External
    consumer job, and inspect their logs; rerun on the resulting main commit after
    merge. Fork PR consumer skips do not satisfy this gate.
 3. Review CHANGELOG, migration, licenses, native attribution and actual simulation

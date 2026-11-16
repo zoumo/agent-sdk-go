@@ -1,10 +1,9 @@
-package main
+package simulate
 
 import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"testing"
@@ -84,7 +83,7 @@ func TestClaudeMovedHistoryRetainsMaterialBinding(t *testing.T) {
 	output := filepath.Join(simulationRoot, "run")
 	driver := filepath.Join(t.TempDir(), "history-driver")
 	require.NoError(t, os.WriteFile(driver, []byte("#!/bin/sh\n"+quote(driverBinary)+" \"$@\"\n"), 0o700))
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driver)
+	cmd := simulationCommand(t.Context(), "--recording", source, "--output", output, "--driver", driver)
 	log, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(log))
 

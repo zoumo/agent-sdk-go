@@ -32,8 +32,6 @@ func cloneStdioOptions(value codex.StdioOptions) codex.StdioOptions {
 			capabilities.OptOutNotificationMethods,
 		)
 		cloned.Initialize.Capabilities = types.Some(capabilities)
-	} else if value.Initialize.Capabilities.IsNull() {
-		cloned.Initialize.Capabilities = types.Null[types.InitializeCapabilities]()
 	}
 	return cloned
 }

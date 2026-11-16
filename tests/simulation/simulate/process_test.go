@@ -1,14 +1,19 @@
-package main
+package simulate
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -16,18 +21,29 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
-var runnerBinary, driverBinary, requestMutatorBinary string
+var driverBinary, requestMutatorBinary string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "sdk-simulate-tests-")
+	if len(os.Args) > 1 && os.Args[1] == "--simulation-test-process" {
+		os.Exit(runSimulationProcess(os.Args[2:]))
+	}
+	buildRoot := os.Getenv("AGENT_SDK_TESTIFY_BUILD_DIR")
+	if buildRoot == "" {
+		buildRoot = "/tmp"
+	} else if err := os.MkdirAll(buildRoot, 0o700); err != nil {
+		panic(err)
+	}
+	dir, err := os.MkdirTemp(buildRoot, "sdk-simulation-tests-")
 	if err != nil {
 		panic(err)
 	}
-	runnerBinary = filepath.Join(dir, "simulate")
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		panic(err)
+	}
 	driverBinary = filepath.Join(dir, "driver")
 	requestMutatorBinary = filepath.Join(dir, "mutate-request")
 	for _, entry := range [][2]string{
-		{runnerBinary, "."},
 		{driverBinary, "../drivers"},
 		{requestMutatorBinary, "./testdata/mutate-request"},
 	} {
@@ -41,6 +57,33 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+func simulationCommand(ctx context.Context, arguments ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, os.Args[0], append([]string{"--simulation-test-process"}, arguments...)...)
+}
+
+func runSimulationProcess(arguments []string) int {
+	var o options
+	flags := flag.NewFlagSet("simulation-test-process", flag.ContinueOnError)
+	flags.StringVar(&o.Recording, "recording", "", "External test capture")
+	flags.StringVar(&o.Provider, "provider", "", "Test provider")
+	flags.StringVar(&o.Case, "case", "", "Test case")
+	flags.StringVar(&o.Output, "output", "", "Test evidence output")
+	flags.StringVar(&o.Driver, "driver", "", "Isolated SDK driver")
+	flags.IntVar(&o.Jobs, "jobs", 1, "Concurrent cases")
+	flags.DurationVar(&o.Timeout, "timeout", 30*time.Second, "Per-case deadline")
+	flags.BoolVar(&o.Gate, "gate", false, "Test full coverage")
+	if err := flags.Parse(arguments); err != nil {
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := execute(ctx, o); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }
 
 func writeJSONTest(t *testing.T, path string, v any) {
@@ -107,7 +150,7 @@ func refreshSyntheticBinding(t *testing.T, capture string) {
 func TestSDKRequestUsesLibraryOwnedStdio(t *testing.T) {
 	source := controlledCapture(t)
 	output := filepath.Join(t.TempDir(), "run")
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
+	cmd := simulationCommand(t.Context(), "--recording", source, "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 
@@ -141,7 +184,7 @@ func TestSDKRequestUsesLibraryOwnedStdio(t *testing.T) {
 func TestSourceSuppressPolicyStillRunsAndComparesBothPolicies(t *testing.T) {
 	source := controlledChildCapture(t)
 	output := filepath.Join(t.TempDir(), "run")
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", driverBinary)
+	cmd := simulationCommand(t.Context(), "--recording", source, "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 
@@ -223,7 +266,7 @@ func controlledChildCapture(t *testing.T) string {
 
 func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "run")
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--provider", "codex", "--case", "SDK-CASE-032", "--output", output, "--driver", driverBinary)
+	cmd := simulationCommand(t.Context(), "--provider", "codex", "--case", "SDK-CASE-032", "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 
@@ -299,7 +342,7 @@ func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {
 				require.NoError(t, os.WriteFile(driver, []byte(mutationDriver(tc.mutation, output)), 0o700))
 			}
 			args = append(args, "--output", output, "--driver", driver)
-			cmd := exec.CommandContext(t.Context(), runnerBinary, args...)
+			cmd := simulationCommand(t.Context(), args...)
 			b, err := cmd.CombinedOutput()
 			require.Error(t, err, string(b))
 
@@ -411,7 +454,7 @@ func TestAdoptedMaterialsRunCurrentSDKAndRetainFailures(t *testing.T) {
 	wrapper := filepath.Join(t.TempDir(), "driver")
 	script := "#!/bin/sh\nset -e\ncp numbers.txt " + quote(filepath.Join(filepath.Dir(output), "initial-numbers.txt")) + "\nexec " + quote(driverBinary) + " \"$@\"\n"
 	require.NoError(t, os.WriteFile(wrapper, []byte(script), 0o700))
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", wrapper)
+	cmd := simulationCommand(t.Context(), "--recording", source, "--output", output, "--driver", wrapper)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 	numbers, err := os.ReadFile(filepath.Join(filepath.Dir(output), "initial-numbers.txt"))
@@ -419,7 +462,7 @@ func TestAdoptedMaterialsRunCurrentSDKAndRetainFailures(t *testing.T) {
 	require.Equal(t, "7\n11\n", string(numbers))
 
 	failed := filepath.Join(t.TempDir(), "failed")
-	cmd = exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", failed, "--driver", "/usr/bin/false")
+	cmd = simulationCommand(t.Context(), "--recording", source, "--output", failed, "--driver", "/usr/bin/false")
 	b, err = cmd.CombinedOutput()
 	require.Error(t, err, string(b))
 	require.FileExists(t, filepath.Join(failed, "summary.json"))

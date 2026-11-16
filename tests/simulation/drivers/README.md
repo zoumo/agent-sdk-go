@@ -3,7 +3,7 @@
 <a id="repository-recording"></a>
 
 `codex/go` and `claude/go` own public SDK operations and business assertions.
-`../simulate` owns process orchestration, independent policy hosts, coverage,
+`../simulate` runs directly through `go test` and owns independent policy hosts, coverage,
 cancellation and authenticated loopback remote main/probe forwarding.
 The [pinned testify library](https://github.com/zoumo/agent-sdk-testify) owns record/verify,
 official drivers, case/binding contracts, recordings, matching, preparation and
@@ -25,18 +25,26 @@ owns its streams, public operations and business assertions.
 
 ## 仿真录制与测试输入
 
-Build only the SDK host and simulate executable:
+Run the full strict gate, a selected builtin case, or an external capture:
 
 ```sh
-bash scripts/simulation.sh build
-bash scripts/simulation.sh simulate --provider claude --case SDK-CASE-001 --output /absolute/new-run
-bash scripts/simulation.sh simulate --recording /absolute/external-capture --output /absolute/new-run
-bash scripts/simulation.sh gate --jobs 2
+go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2
+go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
+go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```
 
 Use Go 1.26 or newer. Test and simulation hosts link the exact in-process
-testify module; no separate helper process is required. Build creates only the
-SDK host and simulation runner.
+testify module; no separate testify process is required. `TestMain` builds the
+current SDK driver. The test process directly runs simulation coordination;
+the SDK driver retains its independent environment, workspace and process group.
+Process-level regression checks reuse the test binary without building a runner.
+
+The default gate runs in a short private directory and archives its unchanged
+output under `.artifacts/simulation/gates/`, including failures and handled
+cancellation. This avoids deep-checkout project keys without changing Claude's
+native 200-character limit. An explicit `-simulation.output` remains caller-owned.
+See [offline validation](../../../docs/testing.md) for evidence locations,
+temporary-directory cleanup and archive failure handling.
 
 ### 审核采用和日常门禁
 
@@ -74,8 +82,8 @@ to library prepare/export operations.
 
 Coverage retains all 76 provider/case slots with source verification, route,
 required/optional and current simulation status. Required gaps fail. Optional
-business failures stay visible; source corruption cannot be waived. `--gate
---recording` evaluates all 76 slots: only the selected material can pass and the
+business failures stay visible; source corruption cannot be waived. `TestSimulationGate`
+with `-simulation.recording` evaluates all 76 slots: only the selected material can pass and the
 other 75 remain unverified, so the gate still fails. A synthetic or consumer input
 cannot fill real-material coverage. SDK failures preserve external source bytes
 and the source index.

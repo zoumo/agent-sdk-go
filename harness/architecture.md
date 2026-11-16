@@ -106,7 +106,7 @@ Both native SDKs use the same separation of responsibilities:
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
 | `agent/` | Adapter-neutral Agent Core and live Session contracts, values, validation and event encoding |
 | `mcp/` | Shared external MCP server value and structural validation, with standard-library-only implementation |
-| `tests/simulation/simulate/` | SDK-owned simulate, coverage, independent policy hosts, cancellation and authenticated loopback bridge |
+| `tests/simulation/simulate/` | Direct Go-test simulation, strict coverage gate, independent policy hosts, cancellation, evidence archival and authenticated loopback bridge |
 | `tests/simulation/drivers/` | Go simulation process entry and driver documentation |
 | `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |
 | `codex/tests/replay`, `claude/tests/replay` | Synthetic fixture decoding and in-process stream adapters with SDK integration tests; SDK exercise helpers remain test-only; protocol matching belongs to the pinned testify library |
@@ -136,7 +136,7 @@ materialization and typed reports. Library sources, official drivers, recordings
 and scenarios are not copied into this repository. The SDK never installs,
 locates, launches or falls back to a separate testify program.
 
-The SDK runner imports the exact pinned module. It does not build another tool,
+The SDK simulation tests import the exact pinned module. They do not build another tool,
 search `PATH` or fall back to an Agent. Prepared and exported schemas are public
 library contracts; they do not grant permission to traverse private library
 storage.

@@ -1,10 +1,9 @@
-package main
+package simulate
 
 import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -220,7 +219,7 @@ func TestExternalSelectionUsesMatrixAndPreservesProvenance(t *testing.T) {
 
 func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "gate")
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--gate", "--jobs", "4", "--output", output, "--driver", driverBinary)
+	cmd := simulationCommand(t.Context(), "--gate", "--jobs", "4", "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
@@ -261,7 +260,7 @@ func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 func TestGateSyntheticRecordingLeavesCoverageUnverified(t *testing.T) {
 	source := gateRecordingCapture(t)
 	output := filepath.Join(t.TempDir(), "gate")
-	cmd := exec.CommandContext(t.Context(), runnerBinary,
+	cmd := simulationCommand(t.Context(),
 		"--gate", "--recording", source, "--jobs", "4",
 		"--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
@@ -293,7 +292,7 @@ func TestGateSyntheticRecordingLeavesCoverageUnverified(t *testing.T) {
 
 func TestClaudeRemoteWithoutCurrentMaterialIsUnavailable(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "run")
-	cmd := exec.CommandContext(t.Context(), runnerBinary,
+	cmd := simulationCommand(t.Context(),
 		"--provider", "claude", "--case", "SDK-CASE-032",
 		"--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
@@ -318,7 +317,7 @@ func TestGateCancellationCleansSelectedSession(t *testing.T) {
 		[]byte("#!/bin/sh\nprintf ready > "+quote(hostReady)+"\nsleep 60\n"), 0o700))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, runnerBinary,
+	cmd := simulationCommand(ctx,
 		"--gate", "--recording", source, "--output", output, "--driver", host)
 	require.NoError(t, cmd.Start())
 	require.Eventually(t, func() bool {
@@ -370,7 +369,7 @@ func coverageRowByKey(t *testing.T, report coverage, key string) coverageRow {
 func TestGateRejectsExternalSelectionOutsideMatrixWithoutPreparing(t *testing.T) {
 	source := controlledCapture(t)
 	output := filepath.Join(t.TempDir(), "gate")
-	cmd := exec.CommandContext(t.Context(), runnerBinary,
+	cmd := simulationCommand(t.Context(),
 		"--gate", "--recording", source, "--output", output, "--driver", driverBinary)
 	b, err := cmd.CombinedOutput()
 	require.Error(t, err, string(b))

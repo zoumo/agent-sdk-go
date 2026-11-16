@@ -1,9 +1,8 @@
-package main
+package simulate
 
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -17,7 +16,7 @@ import (
 func TestUnavailableAndCorruptMaterialFailExplicitly(t *testing.T) {
 	t.Run("unavailable builtin", func(t *testing.T) {
 		output := filepath.Join(t.TempDir(), "run")
-		cmd := exec.CommandContext(t.Context(), runnerBinary, "--provider", "codex", "--case", "SDK-CASE-012", "--output", output, "--driver", driverBinary)
+		cmd := simulationCommand(t.Context(), "--provider", "codex", "--case", "SDK-CASE-012", "--output", output, "--driver", driverBinary)
 		b, err := cmd.CombinedOutput()
 		require.Error(t, err, string(b))
 		var result summary
@@ -31,7 +30,7 @@ func TestUnavailableAndCorruptMaterialFailExplicitly(t *testing.T) {
 		root := controlledCapture(t)
 		require.NoError(t, os.WriteFile(filepath.Join(root, "raw", "raw.jsonl"), []byte("{}\n"), 0o600))
 		output := filepath.Join(t.TempDir(), "run")
-		cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", root, "--output", output, "--driver", driverBinary)
+		cmd := simulationCommand(t.Context(), "--recording", root, "--output", output, "--driver", driverBinary)
 		b, err := cmd.CombinedOutput()
 		require.Error(t, err, string(b))
 		require.FileExists(t, filepath.Join(output, "summary.json"))
@@ -47,7 +46,7 @@ func TestCancellationAlwaysFinalizesPreparedSession(t *testing.T) {
 	require.NoError(t, os.WriteFile(host, []byte("#!/bin/sh\nprintf ready > "+quote(hostReady)+"\nsleep 60\n"), 0o700))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, runnerBinary, "--recording", source, "--output", output, "--driver", host)
+	cmd := simulationCommand(ctx, "--recording", source, "--output", output, "--driver", host)
 	require.NoError(t, cmd.Start())
 	sessionPath := filepath.Join(output, "preserve", "session")
 	require.Eventually(t, func() bool {
@@ -70,7 +69,7 @@ func TestRemoteCancellationRetainsTypedEvidence(t *testing.T) {
 	host := filepath.Join(t.TempDir(), "idle-remote-host")
 	hostReady := filepath.Join(t.TempDir(), "host-ready")
 	require.NoError(t, os.WriteFile(host, []byte("#!/bin/sh\nprintf ready > "+quote(hostReady)+"\nsleep 60\n"), 0o700))
-	cmd := exec.CommandContext(context.Background(), runnerBinary,
+	cmd := simulationCommand(context.Background(),
 		"--provider", "codex", "--case", "SDK-CASE-032",
 		"--output", output, "--driver", host)
 	require.NoError(t, cmd.Start())
@@ -110,7 +109,7 @@ func TestPassedBusinessWithoutMockExecutionFails(t *testing.T) {
 	host := filepath.Join(t.TempDir(), "lying-host")
 	script := "#!/bin/sh\nset -e\nout=$(awk -F'\"' '/\"output\"/ {print $4; exit}' \"$2\")\nprintf '{\"status\":\"passed\"}\\n' > \"$out/result.json\"\n"
 	require.NoError(t, os.WriteFile(host, []byte(script), 0o700))
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", source, "--output", output, "--driver", host)
+	cmd := simulationCommand(t.Context(), "--recording", source, "--output", output, "--driver", host)
 	b, err := cmd.CombinedOutput()
 	require.Error(t, err, string(b))
 	require.Contains(t, string(b), "passed without a mock execution")
@@ -122,7 +121,7 @@ func TestBusinessFailureRetainsTypedExecutionAndCleansFixture(t *testing.T) {
 	resultPath := quote(filepath.Join(output, "preserve", "sdk", "result.json"))
 	script := "#!/bin/sh\nset -e\n" + quote(driverBinary) + " \"$@\"\nsed 's/\"passed\"/\"failed\"/' " + resultPath + " > " + resultPath + ".tmp\nmv " + resultPath + ".tmp " + resultPath + "\n"
 	require.NoError(t, os.WriteFile(host, []byte(script), 0o700))
-	cmd := exec.CommandContext(t.Context(), runnerBinary, "--recording", controlledCapture(t), "--output", output, "--driver", host)
+	cmd := simulationCommand(t.Context(), "--recording", controlledCapture(t), "--output", output, "--driver", host)
 	b, err := cmd.CombinedOutput()
 	require.Error(t, err, string(b))
 	var result summary

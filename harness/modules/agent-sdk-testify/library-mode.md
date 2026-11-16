@@ -418,7 +418,7 @@ SDK-owned captures passed to `agenttestify.Prepare`. Simulation keeps the SDK
 driver process as the public SDK host; the driver receives exported material and
 uses the bridge for every mock connection.
 
-The SDK simulation process owns prepare/export, coverage and typed evidence
+The Go simulation test process owns prepare/export, strict coverage and typed evidence
 validation. It validates schema 7, embedded identity, source identity, the mock
 route and the complete connection set before any protocol I/O. Export goes to a
 new directory outside the fixture. The driver runs the public SDK business flow

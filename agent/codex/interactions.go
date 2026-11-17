@@ -417,7 +417,7 @@ func (s *session) registerInteraction(
 			return nil, stateErr
 		}
 		stateEvent = &event
-		s.state = &requiresAction
+		s.state = new(requiresAction)
 	}
 	requestedEvent, requestErr := s.newEvent(
 		interaction.received,
@@ -936,7 +936,7 @@ func (s *session) interactionsSettledLocked() *agent.StateUpdatePayload {
 	if s.activeTurn != "" {
 		next = agent.StateRunning
 	}
-	s.state = &next
+	s.state = new(next)
 	return &agent.StateUpdatePayload{
 		PreviousState: &previous,
 		State:         &next,

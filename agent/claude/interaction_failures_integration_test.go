@@ -264,8 +264,7 @@ func TestClaudeOutcomeUnknownSettlesFailedAndRemovesAuthority(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(err))
 	requireAgentErrorReason(t, err, "answer_outcome_unknown")
-	require.NotNil(t, receipt.Acceptance.Sent)
-	assert.False(t, *receipt.Acceptance.Sent)
+	assert.Nil(t, receipt.Acceptance.Sent)
 
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)
@@ -370,8 +369,7 @@ func TestClaudeCloseWaitsForInFlightAnswerSettlement(t *testing.T) {
 	require.Error(t, answer.err)
 	assert.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(answer.err))
 	requireAgentErrorReason(t, answer.err, "answer_outcome_unknown")
-	require.NotNil(t, answer.receipt.Acceptance.Sent)
-	assert.False(t, *answer.receipt.Acceptance.Sent)
+	assert.Nil(t, answer.receipt.Acceptance.Sent)
 
 	closed := nextClaudeInteractionClosed(t, ctx, stream)
 	assert.Equal(t, requested.Interaction, closed.Interaction)

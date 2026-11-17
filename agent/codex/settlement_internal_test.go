@@ -96,3 +96,23 @@ func TestInteractionSettlementPreservesUnknownAnswerOutcome(t *testing.T) {
 		})
 	}
 }
+
+func TestSettledStateEventDoesNotAliasSession(t *testing.T) {
+	for _, activeTurn := range []string{"", "turn-a"} {
+		t.Run("active_turn="+activeTurn, func(t *testing.T) {
+			previous := agent.StateRequiresAction
+			s := &session{state: &previous, activeTurn: activeTurn}
+			payload := s.interactionsSettledLocked()
+			require.NotNil(t, payload)
+			want := agent.StateIdle
+			if activeTurn != "" {
+				want = agent.StateRunning
+			}
+			assert.Equal(t, want, *payload.State)
+			*payload.State = agent.StateRequiresAction
+			*payload.PreviousState = agent.StateIdle
+			assert.Equal(t, want, *s.state)
+			assert.Nil(t, s.interactionsSettledLocked(), "settlement must not repeat")
+		})
+	}
+}

@@ -246,7 +246,7 @@ func (s *session) turnStarted(received codex.Received) ([]agent.Event, error) {
 	if s.blockingInteractionsLocked() != 0 {
 		running = agent.StateRequiresAction
 	}
-	s.state = &running
+	s.state = new(running)
 	s.mu.Unlock()
 
 	payload := agent.StateUpdatePayload{
@@ -301,7 +301,7 @@ func (s *session) turnCompleted(received codex.Received) ([]agent.Event, error) 
 		if s.blockingInteractionsLocked() != 0 {
 			nextState = agent.StateRequiresAction
 		}
-		s.state = &nextState
+		s.state = new(nextState)
 	}
 	s.mu.Unlock()
 

@@ -125,7 +125,8 @@ func (o *sessionOwnership) resume(ctx context.Context, s *Session, params types.
 			o.attachments[s.root].managed = true
 		}
 		c.mu.Unlock()
-		return errors.Join(err, s.Close())
+		// Open will not return this Session, so no caller can drain its events.
+		return errors.Join(err, s.Abort())
 	}
 	return nil
 }

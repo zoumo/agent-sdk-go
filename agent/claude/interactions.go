@@ -293,7 +293,7 @@ func (s *session) registerInteraction(
 			"",
 			agent.StateUpdatePayload{
 				PreviousState: previous,
-				State:         &requiresAction,
+				State:         new(requiresAction),
 			},
 			interaction.startedAt,
 			map[string]any{"nativeState": string(agent.StateRequiresAction)},
@@ -480,10 +480,13 @@ func (s *session) Answer(
 			)
 		}
 	}
-	sent := false
+	var sent *bool
+	if answerNotSent(answerErr) {
+		sent = new(false)
+	}
 	return agent.InteractionReceipt{
 			Interaction: ref,
-			Acceptance:  agent.Acceptance{Sent: &sent},
+			Acceptance:  agent.Acceptance{Sent: sent},
 		},
 		interactionAnswerError(reason, answerErr)
 }

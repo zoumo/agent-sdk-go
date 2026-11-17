@@ -142,7 +142,7 @@ func (s *session) streamEvent(received claude.Received) ([]agent.Event, error) {
 		if err := s.beginResponse(parent, response); err != nil {
 			return nil, err
 		}
-		if frame.Message.Model != "" {
+		if parent == "" && frame.Message.Model != "" {
 			s.usageModel = frame.Message.Model
 		}
 		return nil, nil
@@ -380,7 +380,7 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 			map[string]any{"uuid": received.Event.UUID},
 		)
 	}
-	if message.Model != "" {
+	if parent == "" && message.Model != "" {
 		s.usageModel = message.Model
 	}
 

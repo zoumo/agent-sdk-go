@@ -79,6 +79,14 @@ func (s *Stream) Publish(events []agent.Event) error {
 func (s *Stream) Close(context.Context) error {
 	s.begin(End{Explicit: true}, false)
 	<-s.done
+	s.mu.Lock()
+	claimed := s.claimed
+	s.mu.Unlock()
+	if !claimed {
+		// Explicit close forbids a future Claim, including after natural
+		// termination. Only an existing reader can drain the closed queue.
+		_ = s.events.Abort(nil)
+	}
 	return s.closeErr
 }
 

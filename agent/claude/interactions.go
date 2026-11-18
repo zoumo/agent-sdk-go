@@ -16,6 +16,7 @@ import (
 const (
 	permissionAllowOnce  = "allow-once"
 	permissionRejectOnce = "reject-once"
+	permissionCancel     = "cancel"
 )
 
 type pendingInteraction struct {
@@ -44,7 +45,7 @@ func (s *session) convertRequest(received claude.Received) ([]agent.Event, error
 			"Permission request has no identity",
 		)
 	}
-	if request.Method() != "can_use_tool" {
+	if request.Method() != "can_use_tool" && request.Method() != "elicitation" {
 		return s.rejectUnsupportedRequest(
 			received,
 			"native_request_unsupported",
@@ -61,23 +62,6 @@ func (s *session) convertRequest(received claude.Received) ([]agent.Event, error
 			map[string]any{"requestId": request.ID()},
 		)
 	}
-	metadata, err := handle.Metadata()
-	if err != nil {
-		return s.rejectUnsupportedRequest(
-			received,
-			"native_request_invalid",
-			"Claude permission request cannot be decoded",
-			"Invalid Claude permission request",
-		)
-	}
-	if metadata.ToolUseID == "" {
-		return s.rejectUnsupportedRequest(
-			received,
-			"permission_tool_identity_missing",
-			"Claude permission request has no tool-use identity",
-			"Permission request has no tool-use identity",
-		)
-	}
 	s.mu.Lock()
 	attributed := !s.closed && (s.submitting || s.workActive)
 	s.mu.Unlock()
@@ -87,6 +71,18 @@ func (s *session) convertRequest(received claude.Received) ([]agent.Event, error
 			"interaction_attribution_unknown",
 			"Claude interaction cannot be attributed to current session work",
 			"Permission request is not attributable to current session work",
+		)
+	}
+	if request.Method() == "elicitation" {
+		return s.elicitationInteraction(received, request)
+	}
+	metadata, err := handle.Metadata()
+	if err != nil {
+		return s.rejectUnsupportedRequest(
+			received,
+			"native_request_invalid",
+			"Claude permission request cannot be decoded",
+			"Invalid Claude permission request",
 		)
 	}
 	if metadata.ToolName == "AskUserQuestion" {
@@ -125,13 +121,16 @@ func (s *session) permissionInteraction(
 			{
 				OptionID: permissionAllowOnce,
 				Name:     "Allow once",
-				Kind:     agent.PermissionAllowOnce,
+				Kind:     agent.PermissionAllow,
+				Scope:    agent.PermissionScopeOnce,
 			},
 			{
 				OptionID: permissionRejectOnce,
 				Name:     "Reject once",
-				Kind:     agent.PermissionRejectOnce,
+				Kind:     agent.PermissionReject,
+				Scope:    agent.PermissionScopeOnce,
 			},
+			{OptionID: permissionCancel, Name: "Cancel", Kind: agent.PermissionCancel},
 		},
 	}
 	return s.registerInteraction(interaction, unified)
@@ -142,6 +141,14 @@ func (s *session) questionInteraction(
 	request claude.IncomingRequest,
 	metadata claude.PermissionMetadata,
 ) ([]agent.Event, error) {
+	if metadata.ToolUseID == "" {
+		return s.rejectUnsupportedRequest(
+			received,
+			"permission_tool_identity_missing",
+			"Claude permission request has no tool-use identity",
+			"Permission request has no tool-use identity",
+		)
+	}
 	if !s.features.AgentQuestions {
 		return s.rejectUnsupportedRequest(
 			received,
@@ -224,7 +231,11 @@ func (s *session) rejectUnsupportedRequest(
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		rejected = received.Request.Deny(ctx, claude.DenialOptions{Message: denial}) == nil
+		if received.Request.Method() == "elicitation" {
+			rejected = received.Request.ReplyElicitation(ctx, "decline", nil) == nil
+		} else {
+			rejected = received.Request.Deny(ctx, claude.DenialOptions{Message: denial}) == nil
+		}
 	}
 	event, err := s.newEvent(
 		received,
@@ -356,7 +367,7 @@ func (s *session) Answer(
 			nil,
 		)
 	}
-	if interaction.kind == agent.InteractionForm && !s.features.AgentQuestions {
+	if interaction.request.Method() == "can_use_tool" && interaction.kind == agent.InteractionForm && !s.features.AgentQuestions {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorUnsupported,
@@ -523,7 +534,7 @@ func interactionReply(
 ) (func(context.Context) error, agent.InteractionOutcome, error) {
 	switch value := answer.(type) {
 	case agent.PermissionAnswer:
-		if value.Outcome == agent.PermissionCancelled {
+		if value.Outcome == agent.PermissionCancelled || value.OptionID == permissionCancel {
 			return func(ctx context.Context) error {
 				return interaction.request.Deny(ctx, claude.DenialOptions{
 					Message: "User canceled the request",
@@ -549,7 +560,12 @@ func interactionReply(
 				nil,
 			)
 		}
+	case agent.URLAnswer:
+		return elicitationReply(interaction.request, string(value.Outcome), nil)
 	case agent.FormAnswer:
+		if interaction.request.Method() == "elicitation" {
+			return elicitationReply(interaction.request, string(value.Outcome), value.Content)
+		}
 		switch value.Outcome {
 		case agent.FormAccept:
 			answers, answerErr := formAnswers(value.Content, interaction.questions)

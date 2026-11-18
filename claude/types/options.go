@@ -63,8 +63,10 @@ type Options struct {
 	// StrictMCPConfig adds --strict-mcp-config, asking the CLI to ignore MCP
 	// servers from other settings, only when true.
 	StrictMCPConfig bool
-	Thinking        *ThinkingConfig
-	Initialize      *InitializeOptions
+	// ReceiveElicitation enables Session.Receive delivery of standalone MCP elicitation controls.
+	ReceiveElicitation bool
+	Thinking           *ThinkingConfig
+	Initialize         *InitializeOptions
 	// SessionID assigns a new native session through --session-id. It is passed
 	// literally and is mutually exclusive with ResumeID. Initialize does not echo
 	// this identity; later native main-session messages and every live,

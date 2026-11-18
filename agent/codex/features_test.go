@@ -41,7 +41,7 @@ func TestAgentQuestionsFeatureControlsNativeThreadConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, agent.EffectiveFeatures{AgentQuestions: false}, opened.EffectiveFeatures())
-	assert.False(t, opened.Capabilities().Supports(agent.CapabilityForm))
+	assert.True(t, opened.Capabilities().Supports(agent.CapabilityForm))
 	require.NoError(t, opened.Close(ctx))
 
 	resumed, err := provider.Resume(ctx, agent.ResumeOptions{
@@ -78,12 +78,12 @@ func TestProviderPreservesExplicitExperimentalAPIFalse(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, capabilities.Supports(agent.CapabilityTextInput))
 	assert.True(t, capabilities.Supports(agent.CapabilityPermission))
-	assert.False(t, capabilities.Supports(agent.CapabilityForm))
+	assert.True(t, capabilities.Supports(agent.CapabilityForm))
 
 	session, err := provider.Open(ctx, agent.OpenOptions{Cwd: "/synthetic"})
 	require.NoError(t, err)
 	assert.Equal(t, agent.EffectiveFeatures{AgentQuestions: false}, session.EffectiveFeatures())
-	assert.False(t, session.Capabilities().Supports(agent.CapabilityForm))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
 	require.NoError(t, session.Close(ctx))
 	require.NoError(t, provider.Stop(ctx))
 }
@@ -135,7 +135,7 @@ func TestRestrictLocalToolsOnCodexOpenAndResume(t *testing.T) {
 			opened, err := provider.Open(ctx, options)
 			require.NoError(t, err)
 			assert.Equal(t, expected, opened.EffectiveFeatures())
-			assert.Equal(t, questionsEnabled, opened.Capabilities().Supports(agent.CapabilityForm))
+			assert.True(t, opened.Capabilities().Supports(agent.CapabilityForm))
 			require.NoError(t, opened.Close(ctx))
 
 			resumed, err := provider.Resume(ctx, agent.ResumeOptions{

@@ -107,10 +107,7 @@ func (s *session) start() {
 func (s *session) ID() string { return s.native.ThreadID() }
 
 func (s *session) Capabilities() agent.Capabilities {
-	return sessionCapabilities(
-		providerCapabilities(s.provider.formsSupported),
-		s.features,
-	)
+	return providerCapabilities()
 }
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {

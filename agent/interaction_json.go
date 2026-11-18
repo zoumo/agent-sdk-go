@@ -4,7 +4,7 @@ import "encoding/json"
 
 type permissionRequestJSON struct {
 	Kind       InteractionKind    `json:"kind"`
-	ToolCallID string             `json:"toolCallId"`
+	ToolCallID string             `json:"toolCallId,omitempty"`
 	Title      string             `json:"title,omitempty"`
 	Options    []PermissionOption `json:"options"`
 	Content    []ContentBlock     `json:"content,omitempty"`
@@ -90,4 +90,19 @@ func (r *InteractionRequest) UnmarshalJSON(data []byte) error {
 		RequestedSchema: wire.RequestedSchema,
 	}
 	return r.Validate()
+}
+
+// UnmarshalJSON rejects explicit empty and null scopes. A scope-free option
+// omits the JSON member entirely.
+func (s *PermissionScope) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	scope := PermissionScope(value)
+	if !validPermissionScope(scope) {
+		return invalidArgument("invalid_permission_option_scope", "permission option scope is not supported")
+	}
+	*s = scope
+	return nil
 }

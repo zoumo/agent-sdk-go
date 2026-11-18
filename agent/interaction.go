@@ -18,15 +18,34 @@ type PermissionOption struct {
 	OptionID string               `json:"optionId"`
 	Name     string               `json:"name"`
 	Kind     PermissionOptionKind `json:"kind"`
+	Scope    PermissionScope      `json:"scope,omitempty"`
 }
 
 type PermissionOptionKind string
 
 const (
+	PermissionAllow  PermissionOptionKind = "allow"
+	PermissionReject PermissionOptionKind = "reject"
+	PermissionCancel PermissionOptionKind = "cancel"
+)
+
+// Deprecated: These kinds preserve historical events. The old "always" kinds
+// did not distinguish session approval from a persistent policy change.
+const (
 	PermissionAllowOnce    PermissionOptionKind = "allow_once"
 	PermissionAllowAlways  PermissionOptionKind = "allow_always"
 	PermissionRejectOnce   PermissionOptionKind = "reject_once"
 	PermissionRejectAlways PermissionOptionKind = "reject_always"
+)
+
+// PermissionScope is the validity period of an allow or reject option.
+type PermissionScope string
+
+const (
+	PermissionScopeOnce    PermissionScope = "once"
+	PermissionScopeTurn    PermissionScope = "turn"
+	PermissionScopeSession PermissionScope = "session"
+	PermissionScopeAlways  PermissionScope = "always"
 )
 
 //nolint:recvcheck // JSON decoding mutates a request; reads and encoding accept values.
@@ -46,9 +65,6 @@ type InteractionRequest struct {
 func (r InteractionRequest) Validate() error {
 	switch r.Kind {
 	case InteractionPermission:
-		if r.ToolCallID == "" {
-			return invalidArgument("missing_tool_call_id", "permission request requires a tool call ID")
-		}
 		if len(r.Options) == 0 {
 			return invalidArgument("missing_permission_options", "permission request requires options")
 		}
@@ -58,24 +74,8 @@ func (r InteractionRequest) Validate() error {
 				"permission request contains fields for another interaction kind",
 			)
 		}
-		seen := make(map[string]struct{}, len(r.Options))
-		for _, option := range r.Options {
-			if option.OptionID == "" {
-				return invalidArgument("missing_permission_option_id", "permission option ID is required")
-			}
-			if _, exists := seen[option.OptionID]; exists {
-				return invalidArgument(
-					"duplicate_permission_option_id",
-					"permission option IDs must be unique",
-				)
-			}
-			seen[option.OptionID] = struct{}{}
-			if !validPermissionOptionKind(option.Kind) {
-				return invalidArgument(
-					"invalid_permission_option_kind",
-					"permission option kind is not supported",
-				)
-			}
+		if err := validatePermissionOptions(r.Options); err != nil {
+			return err
 		}
 		return validateOptionalContent(r.Content)
 	case InteractionForm:
@@ -287,9 +287,49 @@ const (
 	InteractionFailed    InteractionOutcome = "failed"
 )
 
-func validPermissionOptionKind(kind PermissionOptionKind) bool {
-	switch kind {
-	case PermissionAllowOnce, PermissionAllowAlways, PermissionRejectOnce, PermissionRejectAlways:
+func validatePermissionOptions(options []PermissionOption) error {
+	seen := make(map[string]struct{}, len(options))
+	hasCancel := false
+	for _, option := range options {
+		if option.OptionID == "" {
+			return invalidArgument("missing_permission_option_id", "permission option ID is required")
+		}
+		if _, exists := seen[option.OptionID]; exists {
+			return invalidArgument("duplicate_permission_option_id", "permission option IDs must be unique")
+		}
+		seen[option.OptionID] = struct{}{}
+
+		switch option.Kind {
+		case PermissionAllow, PermissionReject:
+			if !validPermissionScope(option.Scope) {
+				return invalidArgument("invalid_permission_option_scope", "allow and reject require a supported scope")
+			}
+		case PermissionCancel:
+			if hasCancel {
+				return invalidArgument("duplicate_permission_cancel", "permission request allows only one cancel option")
+			}
+			hasCancel = true
+			if option.Scope != "" {
+				return invalidArgument("unexpected_permission_option_scope", "cancel option cannot have a scope")
+			}
+		case PermissionAllowOnce, PermissionAllowAlways, PermissionRejectOnce, PermissionRejectAlways:
+			if option.Scope != "" {
+				return invalidArgument("unexpected_permission_option_scope", "historical permission options cannot have a scope")
+			}
+			continue
+		default:
+			return invalidArgument("invalid_permission_option_kind", "permission option kind is not supported")
+		}
+		if option.Name == "" {
+			return invalidArgument("missing_permission_option_name", "permission option name is required")
+		}
+	}
+	return nil
+}
+
+func validPermissionScope(s PermissionScope) bool {
+	switch s {
+	case PermissionScopeOnce, PermissionScopeTurn, PermissionScopeSession, PermissionScopeAlways:
 		return true
 	default:
 		return false

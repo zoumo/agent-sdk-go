@@ -395,7 +395,7 @@ func (s *session) threadStatusChanged(received codex.Received) ([]agent.Event, e
 		if !s.submitting {
 			s.noteWorkEvidenceLocked()
 		}
-		interactions = s.takeThreadInteractionsLocked(rootThreadID)
+		interactions = s.takeIdleTurnInteractionsLocked(rootThreadID)
 		if s.blockingInteractionsLocked() != 0 {
 			requiresAction := agent.StateRequiresAction
 			state = &requiresAction

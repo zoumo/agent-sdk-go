@@ -209,6 +209,21 @@ child chains. Go adds explicit scope, resource and integrity checks described in
 the [child-history contract](../../harness/contracts/history-query.md#children-claude-独立本地子历史);
 this query-source pin does not upgrade the live CLI baseline or prove real child files.
 
+## Standalone MCP elicitation
+
+In the fixed [TypeScript SDK 0.3.293 archive](https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.293.tgz),
+`package/core.d.ts` re-exports `package/sdk.d.ts`. The declarations for
+`SDKControlElicitationRequest` and `SDKControlCancelRequest` start at lines
+3916 and 3905 of `sdk.d.ts`. `ElicitationResult` at line 743 uses the MCP
+`ElicitResult` type. The SDK's `onElicitation` example handles omitted mode as
+form. In `package/sdk.mjs`, initialization sends no elicitation-specific
+field. The control handler wraps the callback result in the success response
+for the outer request ID. The cancellation handler uses that same ID to abort
+the callback. The optional URL elicitation ID identifies the external flow.
+
+The Go adapter tests exercise both modes and all three actions with synthetic
+protocol peers. Real CLI elicitation delivery and answers remain unverified.
+
 ## Local history adaptation
 
 Main-message compaction/parallel-tool recovery and metadata preview selection also

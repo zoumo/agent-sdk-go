@@ -24,11 +24,11 @@ const (
 
 // Core owns one Codex app-server connection shared by all of its sessions.
 type Core struct {
-	config         codex.StdioOptions
-	tracer         agent.Tracer
-	streams        streamFactory
-	formsSupported bool
-	leases         *corelease.Core[*codex.Client, *session]
+	config             codex.StdioOptions
+	tracer             agent.Tracer
+	streams            streamFactory
+	questionsSupported bool
+	leases             *corelease.Core[*codex.Client, *session]
 }
 
 type streamStart struct {
@@ -44,12 +44,12 @@ func New(config Config) *Core {
 	stdio := cloneStdioOptions(config.Stdio)
 	stdio.Initialize = withDefaultCapabilities(stdio.Initialize)
 	core := &Core{
-		config:         stdio,
-		tracer:         config.Tracer,
-		formsSupported: supportsAgentQuestions(stdio.Initialize),
+		config:             stdio,
+		tracer:             config.Tracer,
+		questionsSupported: supportsAgentQuestions(stdio.Initialize),
 	}
 	core.leases = corelease.New[*codex.Client, *session](
-		providerCapabilities(core.formsSupported),
+		providerCapabilities(),
 		core.acquireClient,
 		core.releaseClient,
 	)
@@ -206,37 +206,23 @@ func (p *Core) NativeClient() (*codex.Client, error) {
 	return p.leases.Resource()
 }
 
-func providerCapabilities(formsSupported bool) agent.Capabilities {
-	capabilities := agent.Capabilities{
+func providerCapabilities() agent.Capabilities {
+	return agent.Capabilities{
 		agent.CapabilityShellEnv:    true,
 		agent.CapabilityTextInput:   true,
 		agent.CapabilityPermission:  true,
 		agent.CapabilityPromptTrace: true,
+		agent.CapabilityForm:        true,
+		agent.CapabilityURL:         true,
 	}
-	if formsSupported {
-		capabilities[agent.CapabilityForm] = true
-	}
-	return capabilities
-}
-
-func sessionCapabilities(
-	base agent.Capabilities,
-	features agent.EffectiveFeatures,
-) agent.Capabilities {
-	capabilities := make(agent.Capabilities, len(base))
-	maps.Copy(capabilities, base)
-	if !features.AgentQuestions {
-		delete(capabilities, agent.CapabilityForm)
-	}
-	return capabilities
 }
 
 func effectiveFeatures(
 	features agent.Features,
-	formsSupported bool,
+	questionsSupported bool,
 ) agent.EffectiveFeatures {
 	return agent.EffectiveFeatures{
-		AgentQuestions:     features.AgentQuestionsEnabled() && formsSupported,
+		AgentQuestions:     features.AgentQuestionsEnabled() && questionsSupported,
 		RestrictLocalTools: features.RestrictLocalTools,
 	}
 }
@@ -248,7 +234,7 @@ func (p *Core) openingConfiguration(
 	codextypes.Optional[map[string]json.RawMessage],
 	error,
 ) {
-	features := effectiveFeatures(options.Features, p.formsSupported)
+	features := effectiveFeatures(options.Features, p.questionsSupported)
 	config, err := threadConfig(features, options.Config.Effort)
 	if err != nil {
 		return features, codextypes.Optional[map[string]json.RawMessage]{}, adapterError(

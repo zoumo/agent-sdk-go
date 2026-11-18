@@ -11,18 +11,20 @@
 // function-output, MCP, dynamic-tool, collaboration, web-search, image-view,
 // sleep, and image-generation item activity. Child-thread item events stay on
 // the main session stream with their source and confirmed parent identities in
-// Meta. Confirmed child command, file-change, and user-input interactions keep
-// their original native authority and can be answered through the same session;
-// blocking child interactions keep the session in requires_action across root
-// completion or idleness until native settlement. Child-thread lifecycle
+// Meta. The session answers supported child interactions through their original
+// native handles. Blocking child interactions keep the session in requires_action
+// across root completion or idleness until native settlement. Child-thread lifecycle
 // notifications remain explicit gaps.
 //
 // Tool calls and results use the Codex-specific ToolName, Provider and Kind
 // mappings, result-copy rule and native status projection defined in
 // harness/modules/unified-agent/design.md. Tool chunks remain {id, content}.
 //
-// Command and file-change approvals stay bound to their original native request
-// and may select only an option offered by that request. Native user-input forms
+// Command, file-change and MCP tool approvals stay bound to their native request
+// and may select only an option offered by that request. Additional sandbox
+// permission approvals display the requested profile and its reason, when present.
+// Callers can grant the whole profile for the turn or session, or deny it.
+// Standard MCP form and URL elicitations support accept, decline and cancel. Native user-input forms
 // support accepted answers; decline and cancel are rejected because their native
 // settlement is not proven. Interaction references are opaque, session-scoped,
 // one-shot, and remain pending until a native lifecycle fact closes them.
@@ -30,15 +32,15 @@
 // current versus new work, a recognized native refusal returns not_applied, and
 // an unknown outcome remains unsettled until native turn evidence arrives.
 //
-// The Core declares text input and permission capabilities. It declares form
-// support only when the native experimental API is enabled, and a session removes
-// form support when AgentQuestions is disabled. A nonempty unified
+// The Core supports permission, form and URL interactions. The experimental API
+// and AgentQuestions control the native request_user_input tool independently
+// of MCP elicitation. A nonempty unified
 // AdditionalSystemPrompt maps to developerInstructions on thread/start and
 // thread/resume; an empty value omits that field, and baseInstructions is never
 // set. The complete field contract is defined in
 // harness/modules/unified-agent/design.md#additional-system-prompt. Additional
-// directories are rejected before opening a session. URL, image, audio, resource,
-// and resource-link interactions or inputs are not advertised.
+// directories are rejected before opening a session. Image, audio, resource,
+// and resource-link inputs are not advertised.
 // Open and Resume use SessionConfig. Empty model and reasoning-effort values are
 // omitted; nonempty values are passed literally to native thread start or
 // resume. Runtime configuration uses the optional ConfigController.SetConfig
@@ -58,9 +60,7 @@
 // Codex package.
 // Reasoning part boundaries are also not represented.
 //
-// Permission-profile approvals are unsupported, as are native item and
-// notification variants without a proven mapping. Successful lineage
-// observations are attached to child event Meta; lineage failures are reported
+// Successful lineage observations are attached to child event Meta. Failures are reported
 // as non-fatal session errors. Unsupported notifications and items are reported
 // as session errors with stable reasons and native metadata; they are not
 // silently discarded. Saved resume history remains query-only and never becomes

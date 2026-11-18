@@ -266,7 +266,8 @@ func newExampleSession(
 		Options: []agent.PermissionOption{{
 			OptionID: "allow-once",
 			Name:     "Allow once",
-			Kind:     agent.PermissionAllowOnce,
+			Kind:     agent.PermissionAllow,
+			Scope:    agent.PermissionScopeOnce,
 		}},
 	}
 	return &exampleSession{

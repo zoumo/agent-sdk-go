@@ -135,7 +135,7 @@ func (s *session) start() {
 func (s *session) ID() string { return s.id }
 
 func (s *session) Capabilities() agent.Capabilities {
-	return sessionCapabilities(providerCapabilities(), s.features)
+	return providerCapabilities()
 }
 
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures {

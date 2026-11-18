@@ -53,6 +53,12 @@ func TestPermissionAnswerPreservesAuthorityUntilNativeClose(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 
+	_, err = session.Answer(ctx, requested.Interaction, agent.PermissionAnswer{Outcome: agent.PermissionCancelled})
+	var classified *agent.Error
+	require.ErrorAs(t, err, &classified)
+	assert.Equal(t, agent.ErrorUnsupported, classified.Code)
+	assert.Equal(t, agentcodex.ErrorReasonPermissionCancelUnsupported, classified.Reason)
+
 	receipt, err := session.Answer(ctx, requested.Interaction, agent.PermissionAnswer{
 		Outcome:  agent.PermissionSelected,
 		OptionID: "allow-once",
@@ -133,7 +139,7 @@ func TestDisabledAgentQuestionsRejectsNativeForm(t *testing.T) {
 	})
 
 	assert.False(t, session.EffectiveFeatures().AgentQuestions)
-	assert.False(t, session.Capabilities().Supports(agent.CapabilityForm))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
 	submitInteractionTurn(t, ctx, session)
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
 	gap := nextEvent(t, ctx, stream)
@@ -149,11 +155,91 @@ func TestDisabledAgentQuestionsRejectsNativeForm(t *testing.T) {
 	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 }
 
-func TestPermissionProfileApprovalIsAnExplicitGap(t *testing.T) {
+func TestPermissionProfileApprovalRoundTrip(t *testing.T) {
+	// Synthetic protocol peer. Profile extensions belong to the grant; request
+	// extensions (including response-like fields) do not.
+	const profile = `{"fileSystem":{"entries":[{"path":{"type":"path","path":"/synthetic/output"},"access":"write"}],"globScanMaxDepth":9007199254740993,"read":null},"network":{"enabled":true,"futureLimit":9007199254740995},"futureProfile":{"extra":null}}`
+	for _, tc := range []struct {
+		id, response string
+	}{
+		{"allow-turn", `{"permissions":` + profile + `,"scope":"turn"}`},
+		{"allow-session", `{"permissions":` + profile + `,"scope":"session"}`},
+		{"reject-once", `{"permissions":{}}`},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			frames := interactionSessionFrames(
+				`<{"id":"permissions","method":"item/permissions/requestApproval","params":{"cwd":"/synthetic","itemId":"permissions-item","permissions":`+profile+`,"reason":"Export the result","startedAtMs":1700000200000,"threadId":"root-a","turnId":"turn-a","scope":"always","strictAutoReview":true}}`,
+				`>{"id":"permissions","result":`+tc.response+`}`,
+				`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"permissions"}}`,
+			)
+			frames = append(frames, codexCloseFrames(94, "root-a")...)
+			session, stream := openInteractionSession(t, ctx, frames, agent.Features{})
+			submitInteractionTurn(t, ctx, session)
+			require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+			require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
+			event := nextInteractionRequested(t, ctx, stream)
+			req := event.Request
+			assert.True(t, event.Blocking)
+			assert.Equal(t, agent.InteractionPermission, req.Kind)
+			assert.Equal(t, "permissions-item", req.ToolCallID)
+			require.Len(t, req.Content, 2)
+			require.NotNil(t, req.Content[0].Text)
+			require.NotNil(t, req.Content[1].Text)
+			display := req.Content[0].Text.Text
+			assert.JSONEq(t, profile, display)
+			assert.Contains(t, display, "9007199254740993")
+			assert.Contains(t, display, "9007199254740995")
+			assert.Equal(t, "Export the result", req.Content[1].Text.Text)
+
+			var selected string
+			require.Len(t, req.Options, 3)
+			for _, option := range req.Options {
+				switch option.OptionID {
+				case "allow-turn":
+					assert.Equal(t, agent.PermissionAllow, option.Kind)
+					assert.Equal(t, agent.PermissionScopeTurn, option.Scope)
+				case "allow-session":
+					assert.Equal(t, agent.PermissionAllow, option.Kind)
+					assert.Equal(t, agent.PermissionScopeSession, option.Scope)
+				case "reject-once":
+					assert.Equal(t, agent.PermissionReject, option.Kind)
+					assert.Equal(t, agent.PermissionScopeOnce, option.Scope)
+				default:
+					t.Fatalf("unexpected option %q", option.OptionID)
+				}
+				if option.OptionID == tc.id {
+					selected = option.OptionID
+				}
+			}
+			require.NotEmpty(t, selected)
+
+			// A consumer may change its local display, but only the registered
+			// options and the original native grant authorize a reply.
+			req.Content[0].Text.Text = `{"extraGrant":true}`
+			req.Options[0].OptionID = "allow-always"
+			_, err := session.Answer(ctx, event.Interaction, agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow-always"})
+			require.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+			_, err = session.Answer(ctx, event.Interaction, agent.PermissionAnswer{Outcome: agent.PermissionCancelled})
+			require.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+
+			receipt, err := session.Answer(ctx, event.Interaction, agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: selected})
+			require.NoError(t, err)
+			assert.Equal(t, new(true), receipt.Acceptance.Sent)
+			closed := nextInteractionClosed(t, ctx, stream)
+			assert.Equal(t, event.Interaction, closed.Interaction)
+			assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
+			assert.Equal(t, "native_resolved", closed.Reason)
+		})
+	}
+}
+
+func TestPermissionProfileApprovalRejectsNullProfile(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	frames := interactionSessionFrames(
-		`<{"id":"permissions-1","method":"item/permissions/requestApproval","params":{"cwd":"/synthetic","itemId":"permissions-item","permissions":{},"startedAtMs":1700000200000,"threadId":"root-a","turnId":"turn-a"}}`,
+		`<{"id":"permissions-1","method":"item/permissions/requestApproval","params":{"cwd":"/synthetic","itemId":"permissions-item","permissions":null,"startedAtMs":1700000200000,"threadId":"root-a","turnId":"turn-a"}}`,
 		`>{"id":"permissions-1","error":{"code":-32602,"message":"Unsupported by the unified agent adapter"}}`,
 	)
 	frames = append(frames, codexCloseFrames(94, "root-a")...)
@@ -163,7 +249,7 @@ func TestPermissionProfileApprovalIsAnExplicitGap(t *testing.T) {
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
 	gap := nextEvent(t, ctx, stream)
 	require.Equal(t, agent.EventSessionError, gap.Type())
-	assert.Equal(t, "permission_profile_unsupported", sessionErrorReason(t, gap))
+	assert.Equal(t, "invalid_native_request", sessionErrorReason(t, gap))
 	assert.Equal(t, true, eventCodexMeta(t, gap)["requestRejected"])
 }
 
@@ -176,6 +262,13 @@ func TestChildInteractionsRetainOriginalAuthority(t *testing.T) {
 		kind     agent.InteractionKind
 	}{
 		{
+			name:     "MCP tool approval",
+			request:  mcpToolRequest(`"child-request"`, "child-a", "child-turn", `,"persist":["always","session"]`),
+			response: `>{"id":"child-request","result":{"action":"accept","content":null,"_meta":{"persist":"session"}}}`,
+			answer:   agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow-session"},
+			kind:     agent.InteractionPermission,
+		},
+		{
 			name:     "command",
 			request:  `<{"id":"child-request","method":"item/commandExecution/requestApproval","params":{"threadId":"child-a","turnId":"child-turn","itemId":"child-command","startedAtMs":1700000200200,"command":"echo child","cwd":"/synthetic","availableDecisions":["accept","decline"]}}`,
 			response: `>{"id":"child-request","result":{"decision":"accept"}}`,
@@ -184,6 +277,13 @@ func TestChildInteractionsRetainOriginalAuthority(t *testing.T) {
 				OptionID: "allow-once",
 			},
 			kind: agent.InteractionPermission,
+		},
+		{
+			name:     "additional permissions",
+			request:  `<{"id":"child-request","method":"item/permissions/requestApproval","params":{"cwd":"/synthetic","threadId":"child-a","turnId":"child-turn","itemId":"child-permissions","startedAtMs":1700000200200,"permissions":{"network":null}}}`,
+			response: `>{"id":"child-request","result":{"permissions":{"network":null},"scope":"turn"}}`,
+			answer:   agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow-turn"},
+			kind:     agent.InteractionPermission,
 		},
 		{
 			name:     "file-change",
@@ -266,7 +366,8 @@ func TestChildInteractionsRetainOriginalAuthority(t *testing.T) {
 }
 
 func TestChildBlockingInteractionSurvivesRootSettlement(t *testing.T) {
-	const childForm = `<{"id":"child-request","method":"item/tool/requestUserInput","params":{"threadId":"child-a","turnId":"child-turn","itemId":"child-form","isBlocking":true,"questions":[{"id":"choice","header":"Choice","question":"Pick one","options":[{"label":"A","description":"Option A"}],"isOther":false,"isSecret":false}]}}`
+	// A shared turn ID does not let a root lifecycle event settle a child handle.
+	const childForm = `<{"id":"child-request","method":"item/tool/requestUserInput","params":{"threadId":"child-a","turnId":"turn-a","itemId":"child-form","isBlocking":true,"questions":[{"id":"choice","header":"Choice","question":"Pick one","options":[{"label":"A","description":"Option A"}],"isOther":false,"isSecret":false}]}}`
 	tests := []struct {
 		name       string
 		settlement string
@@ -991,4 +1092,92 @@ func assertAccepted(t *testing.T, acceptance agent.Acceptance) {
 	assert.True(t, *acceptance.Sent)
 	assert.True(t, *acceptance.NativeAccepted)
 	assert.Nil(t, acceptance.NativeRecorded)
+}
+
+func TestOfferedApprovalOptionsRoundTripNativeDecision(t *testing.T) {
+	const (
+		command    = "item/commandExecution/requestApproval"
+		file       = "item/fileChange/requestApproval"
+		execPolicy = `{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["go","test"],"extension":"keep"}}`
+		allowHost  = `{"applyNetworkPolicyAmendment":{"network_policy_amendment":{"action":"allow","host":"a.example","extension":"keep"}}}`
+		denyHost   = `{"applyNetworkPolicyAmendment":{"network_policy_amendment":{"action":"deny","host":"b.example"}}}`
+	)
+	type choice struct {
+		id       string
+		kind     agent.PermissionOptionKind
+		scope    agent.PermissionScope
+		decision string
+	}
+
+	once := choice{"allow-once", agent.PermissionAllow, agent.PermissionScopeOnce, `"accept"`}
+	session := choice{"allow-session", agent.PermissionAllow, agent.PermissionScopeSession, `"acceptForSession"`}
+	reject := choice{"reject-once", agent.PermissionReject, agent.PermissionScopeOnce, `"decline"`}
+	cancel := choice{"cancel", agent.PermissionCancel, "", `"cancel"`}
+	for _, test := range []struct {
+		name        string
+		method      string
+		extraParams string
+		choices     []choice
+	}{
+		{"command defaults", command, "", []choice{once, reject}},
+		{
+			"offered command decisions", command, `,"availableDecisions":[` + denyHost + `,"acceptForSession",` + execPolicy + `,"cancel",` + allowHost + `]`,
+			[]choice{
+				{"native-decision-0", agent.PermissionReject, agent.PermissionScopeAlways, denyHost},
+				session,
+				{"native-decision-2", agent.PermissionAllow, agent.PermissionScopeAlways, execPolicy},
+				cancel,
+				{"native-decision-4", agent.PermissionAllow, agent.PermissionScopeAlways, allowHost},
+			},
+		},
+		{"file", file, "", []choice{once, session, reject, cancel}},
+	} {
+		for index, selected := range test.choices {
+			outcomes := []agent.PermissionOutcome{agent.PermissionSelected}
+			if selected.kind == agent.PermissionCancel {
+				outcomes = append(outcomes, agent.PermissionCancelled)
+			}
+			for _, outcome := range outcomes {
+				t.Run(test.name+"/"+selected.id+"/"+string(outcome), func(t *testing.T) {
+					ctx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+					defer stop()
+					frames := interactionSessionFrames(
+						`<{"id":"approval","method":"`+test.method+`","params":{"threadId":"root-a","turnId":"turn-a","itemId":"item","startedAtMs":1700000200000`+test.extraParams+`}}`,
+						`>{"id":"approval","result":{"decision":`+selected.decision+`}}`,
+						`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"approval"}}`,
+					)
+					frames = append(frames, codexCloseFrames(94, "root-a")...)
+					live, stream := openInteractionSession(t, ctx, frames, agent.Features{})
+					submitInteractionTurn(t, ctx, live)
+					require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+					require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
+					requested := nextInteractionRequested(t, ctx, stream)
+					require.Len(t, requested.Request.Options, len(test.choices))
+					for i, expected := range test.choices {
+						option := requested.Request.Options[i]
+						assert.Equal(t, expected.id, option.OptionID)
+						assert.Equal(t, expected.kind, option.Kind)
+						assert.Equal(t, expected.scope, option.Scope)
+					}
+
+					answer := agent.PermissionAnswer{Outcome: outcome}
+					if outcome == agent.PermissionSelected {
+						answer.OptionID = requested.Request.Options[index].OptionID
+					}
+					receipt, err := live.Answer(ctx, requested.Interaction, answer)
+					require.NoError(t, err)
+					require.NotNil(t, receipt.Acceptance.Sent)
+					assert.True(t, *receipt.Acceptance.Sent)
+					closed := nextInteractionClosed(t, ctx, stream)
+					assert.Equal(t, requested.Interaction, closed.Interaction)
+					assert.Equal(t, "native_resolved", closed.Reason)
+					want := agent.InteractionAnswered
+					if selected.kind == agent.PermissionCancel {
+						want = agent.InteractionCancelled
+					}
+					assert.Equal(t, want, closed.Outcome)
+				})
+			}
+		}
+	}
 }

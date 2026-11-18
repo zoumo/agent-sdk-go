@@ -217,7 +217,7 @@ func TestTracePromptSyntheticBestEffortAndRapidInputs(t *testing.T) {
 			frames = append(frames, claudeSessionInitFrame(t, "native-rapid-trace", cwd))
 			for i, trace := range []agent.TraceContext{first, second, {}} {
 				frames = append(frames, claudePromptTraceFrames(t, fmt.Sprintf("go_%d", i+1), trace, rejected && i == 0)...)
-				frames = append(frames, claudeStartOrSteerFrame(t, fmt.Sprintf("prompt-%d", i)))
+				frames = append(frames, claudeSubmissionFrame(t, uint64(i+1), fmt.Sprintf("prompt-%d", i)))
 			}
 			provider := newTestClaudeProviderWithConfig(t, agentclaude.Config{}, prepareClaudePeer(t, "passed", frames...))
 			t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })

@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -270,6 +271,10 @@ func newTestClaudeProviderWithStreamHook(
 				}
 			},
 		}, nil
+	})
+	var submissionCount atomic.Uint64
+	agentclaude.SetSubmissionIDGeneratorForTest(provider, func() (string, error) {
+		return claudeFixtureSubmissionID(submissionCount.Add(1)), nil
 	})
 	agentclaude.SetSessionIDGeneratorForTest(provider, func() (string, error) {
 		mu.Lock()

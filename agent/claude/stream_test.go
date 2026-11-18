@@ -31,6 +31,10 @@ func NewWithStream(config Config, next func(context.Context, claude.SessionOptio
 	return provider
 }
 
+func SetSubmissionIDGeneratorForTest(provider *Core, generate func() (string, error)) {
+	provider.newSubmissionID = generate
+}
+
 func SetSessionIDGeneratorForTest(provider *Core, generate func() (string, error)) {
 	provider.newSessionID = generate
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 var (
@@ -201,6 +200,7 @@ func (s *session) StartOrSteer(
 				Role:    "user",
 				Content: claudetypes.Content{Text: &text},
 			},
+			UUID:        &submissionID,
 			Priority:    &priority,
 			ShouldQuery: &shouldQuery,
 		},
@@ -247,7 +247,7 @@ func claudeInputNotApplied() agent.InputReceipt {
 }
 
 func (s *session) newSubmissionID(stateVersion uint64) (string, error) {
-	submissionID, err := uuidv4.New()
+	submissionID, err := s.provider.newSubmissionID()
 	if err != nil {
 		s.finishInputWrite(false, stateVersion)
 		return "", adapterError(

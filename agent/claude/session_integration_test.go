@@ -23,7 +23,7 @@ func TestStartOrSteerMapsMinimalEventsAndPreservesNativeEvidence(t *testing.T) {
 		`<{"type":"system","subtype":"init","session_id":"native-loop","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
 		claudeStartOrSteerFrame(t, "hello"),
-		claudeStartOrSteerFrame(t, "follow-up"),
+		claudeSubmissionFrame(t, 2, "follow-up"),
 		`<{"type":"assistant","session_id":"native-loop","uuid":"assistant-event","timestamp":"2026-11-07T12:34:56.789Z","message":{"id":"message-1","role":"assistant","model":"synthetic","content":[{"type":"text","text":"hello from Claude","apiBlockIndex":0}],"future_message":null},"future":{"precise":9007199254740993},"future_message":null}`,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-loop","state":"running","timestamp":"2026-11-07T12:34:57Z"}`,
 		`<{"type":"result","subtype":"success","session_id":"native-loop","is_error":false,"result":"done","timestamp":"2026-11-07T12:34:58Z"}`,

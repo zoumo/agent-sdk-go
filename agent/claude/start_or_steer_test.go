@@ -2,6 +2,7 @@ package agentclaude_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -53,7 +54,7 @@ func TestStartOrSteerWritesBestEffortWhileBusy(t *testing.T) {
 		claudeSessionInitFrame(t, "native-busy", cwd),
 		claudeStartOrSteerFrame(t, "first"),
 		claudeStateFrame("native-busy", "running", "2026-11-09T10:10:00Z"),
-		claudeStartOrSteerFrame(t, "second"),
+		claudeSubmissionFrame(t, 2, "second"),
 		claudeStateFrame("native-busy", "idle", "2026-11-09T10:10:01Z"),
 	}
 	session, stream := openClaudeInteractionSession(
@@ -134,7 +135,7 @@ func TestStartOrSteerPreservesExistingInterruptTarget(t *testing.T) {
 		claudeSessionInitFrame(t, "native-start-existing", cwd),
 		claudeStartOrSteerFrame(t, "first"),
 		claudeStateFrame("native-start-existing", "running", "2026-11-09T10:40:00Z"),
-		claudeStartOrSteerFrame(t, "second"),
+		claudeSubmissionFrame(t, 2, "second"),
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"interrupt"}}`,
 		`<{"type":"control_response","response":{"subtype":"success",` +
 			`"request_id":"go_1","response":{}}}`,
@@ -284,10 +285,20 @@ func TestStartOrSteerUnknownWriteIsNotRetriedOrQueued(t *testing.T) {
 	}
 }
 
+func claudeFixtureSubmissionID(ordinal uint64) string {
+	return fmt.Sprintf("00000000-0000-4000-8000-%012x", ordinal)
+}
+
 func claudeStartOrSteerFrame(t *testing.T, text string) string {
 	t.Helper()
+	return claudeSubmissionFrame(t, 1, text)
+}
+
+func claudeSubmissionFrame(t *testing.T, ordinal uint64, text string) string {
+	t.Helper()
 	return `>{"message":{"role":"user","content":` + jsonString(t, text) +
-		`},"parent_tool_use_id":null,"priority":"next","session_id":"","shouldQuery":true,"type":"user"}`
+		`},"parent_tool_use_id":null,"priority":"next","session_id":"","shouldQuery":true,"type":"user","uuid":` +
+		jsonString(t, claudeFixtureSubmissionID(ordinal)) + `}`
 }
 
 func claudeTextInput(text string) agent.Input {

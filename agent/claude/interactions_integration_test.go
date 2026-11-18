@@ -75,7 +75,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				),
 				test.response,
 				claudeStateFrame("native-permission", "running", "2026-11-07T14:00:03Z"),
-				claudeStartOrSteerFrame(t, "keep-open"),
+				claudeSubmissionFrame(t, 2, "keep-open"),
 			}
 			session, stream := openClaudeInteractionSession(
 				t,
@@ -180,7 +180,7 @@ func TestClaudePermissionRejectsRepeatedAndPostCloseAnswers(t *testing.T) {
 		`>{"type":"control_response","response":{"subtype":"success",` +
 			`"request_id":"permission-repeat","response":{"behavior":"allow",` +
 			`"updatedInput":{"file_path":"a.txt"}}}}`,
-		claudeStartOrSteerFrame(t, "keep-open"),
+		claudeSubmissionFrame(t, 2, "keep-open"),
 	}
 	session, stream := openClaudeInteractionSession(
 		t,
@@ -330,7 +330,7 @@ func TestClaudeInteractionRefsAreSessionScopedAndOpaque(t *testing.T) {
 	secondFrames := append([]string(nil), mockClaudeInit...)
 	secondFrames = append(secondFrames,
 		claudeSessionInitFrame(t, "native-scoped-second", cwd),
-		claudeStartOrSteerFrame(t, "run-second"),
+		claudeSubmissionFrame(t, 2, "run-second"),
 		claudeStateFrame("native-scoped-second", "running", "2026-11-07T14:18:00Z"),
 		claudePermissionRequestFrame(
 			"permission-scoped-second",

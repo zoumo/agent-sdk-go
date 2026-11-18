@@ -61,8 +61,9 @@ func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {
 			stream, err := session.Events()
 			require.NoError(t, err)
 			requireStartupForwardingGap(t, ctx, stream)
+			var receipt agent.InputReceipt
 			if submit {
-				receipt, err := session.StartOrSteer(ctx, agent.Input{
+				receipt, err = session.StartOrSteer(ctx, agent.Input{
 					Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "one input"}}},
 				})
 				require.NoError(t, err)
@@ -101,12 +102,15 @@ func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {
 				require.Len(t, observation.UserFrames, 1)
 				var wire struct {
 					Type    string `json:"type"`
+					UUID    string `json:"uuid"`
 					Message struct {
 						Content string `json:"content"`
 					} `json:"message"`
 				}
 				require.NoError(t, json.Unmarshal(observation.UserFrames[0], &wire))
 				assert.Equal(t, "user", wire.Type)
+				require.NotEmpty(t, receipt.Submission)
+				assert.Equal(t, receipt.Submission, wire.UUID)
 				assert.Equal(t, "one input", wire.Message.Content)
 			} else {
 				assert.Empty(t, observation.UserFrames)

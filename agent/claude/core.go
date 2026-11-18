@@ -13,6 +13,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
@@ -27,10 +28,11 @@ const (
 // Core owns the lifecycle of the Claude sessions it creates. Each Claude
 // session owns its native CLI process.
 type Core struct {
-	config       Config
-	streams      streamFactory
-	newSessionID func() (string, error)
-	leases       *corelease.Core[struct{}, *session]
+	config          Config
+	streams         streamFactory
+	newSessionID    func() (string, error)
+	newSubmissionID func() (string, error)
+	leases          *corelease.Core[struct{}, *session]
 }
 
 type streamOpen struct {
@@ -44,7 +46,7 @@ type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, err
 
 // New constructs a Claude Core without starting a native process.
 func New(config Config) *Core {
-	core := &Core{config: cloneConfig(config)}
+	core := &Core{config: cloneConfig(config), newSubmissionID: uuidv4.New}
 	core.leases = corelease.New[struct{}, *session](
 		providerCapabilities(),
 		nil,

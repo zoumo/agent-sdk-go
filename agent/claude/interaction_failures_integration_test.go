@@ -35,7 +35,7 @@ func TestClaudeNotSentAnswerRollsBackAndRetriesSameReference(t *testing.T) {
 		`>{"type":"control_response","response":{"subtype":"success",` +
 			`"request_id":"permission-not-sent","response":{"behavior":"allow",` +
 			`"updatedInput":{"file_path":"a.txt"}}}}`,
-		claudeStartOrSteerFrame(t, "keep-open"),
+		claudeSubmissionFrame(t, 2, "keep-open"),
 	}
 	session, stream := openClaudeInteractionSession(
 		t,
@@ -123,7 +123,7 @@ func TestClaudeNotSentWithCanceledNativeRequestConsumesAuthority(t *testing.T) {
 		claudeStateFrame("native-not-sent-cancel", "running", "2026-11-11T09:05:00Z"),
 		claudePermissionRequestFrame("permission-native-cancel", "Read", "read-tool", `{"file_path":"a.txt"}`),
 		`<{"type":"control_cancel_request","request_id":"permission-native-cancel"}`,
-		claudeStartOrSteerFrame(t, "keep-open"),
+		claudeSubmissionFrame(t, 2, "keep-open"),
 	}
 	session, stream := openClaudeInteractionSessionWithHook(t, ctx, cwd, "passed", agent.Features{},
 		func(transport claude.StreamTransport) claude.StreamTransport {
@@ -407,7 +407,7 @@ func TestClaudeNativeStateChangeWaitsForInFlightAnswerSettlement(t *testing.T) {
 		`>{"type":"control_response","response":{"subtype":"success",` +
 			`"request_id":"permission-inflight-state","response":{"behavior":"allow",` +
 			`"updatedInput":{"file_path":"a.txt"}}}}`,
-		claudeStartOrSteerFrame(t, "keep-open"),
+		claudeSubmissionFrame(t, 2, "keep-open"),
 	}
 	session, stream := openClaudeInteractionSessionWithHook(
 		t,

@@ -2,6 +2,18 @@
 type: Architecture
 title: 原生 Session 深模块设计
 status: stable
+description: "定义原生 Session 的调用方职责、资源与状态归属、权限、事件交付和子 Agent 关系。"
+tags: [codex, claude, session, events]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/modules/native-session/design.md"
+    title: "原生 Session 深模块设计"
+  - id: codex-session
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/codex/session.go"
+    title: "Codex Session 源码"
+  - id: claude-session
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/claude/session.go"
+    title: "Claude Session 源码"
 ---
 
 # 原生 Session 深模块设计

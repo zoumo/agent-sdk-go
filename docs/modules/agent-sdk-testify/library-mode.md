@@ -2,6 +2,18 @@
 type: Design
 title: SDK tests with the agent-sdk-testify Go library
 status: stable
+description: "Defines connection ownership, call order, and acceptance for Go SDK tests that use Testify for in-process replay."
+tags: [testify, replay, testing]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/modules/agent-sdk-testify/library-mode.md"
+    title: "SDK tests with the agent-sdk-testify Go library"
+  - id: fixture-bridge
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/internal/mocktest/library.go"
+    title: "Testify fixture bridge"
+  - id: module
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/go.mod"
+    title: "Testify dependency pin"
 ---
 
 # Testify library integration

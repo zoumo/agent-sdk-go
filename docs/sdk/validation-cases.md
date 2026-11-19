@@ -2,6 +2,18 @@
 type: Specification
 title: SDK 共同验收
 status: stable
+description: "说明 SDK 共同验收的用户目标、回放流程、原生适配边界及其与可执行验收矩阵的关系。"
+tags: [acceptance, cases, simulation]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/sdk/validation-cases.md"
+    title: "SDK 共同验收"
+  - id: acceptance-matrix
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/tests/simulation/simulate/coverage.go"
+    title: "SDK 验收矩阵"
+  - id: simulation-design
+    resource: "/modules/agent-sdk-testify/design.md"
+    title: "仿真设计与证据合同"
 ---
 
 # SDK 共同验收

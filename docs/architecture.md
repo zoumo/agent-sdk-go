@@ -2,6 +2,15 @@
 type: Architecture
 title: SDK 架构与依赖边界
 status: stable
+description: "Defines repository module and dependency boundaries, code layout, and coding conventions for the native and unified SDKs."
+tags: [architecture, dependencies, development]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/architecture.md"
+    title: "SDK 架构与依赖边界"
+  - id: module
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/go.mod"
+    title: "Go module declaration"
 ---
 
 # Architecture standards

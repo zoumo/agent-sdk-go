@@ -2,6 +2,15 @@
 type: Agent Instructions
 title: 文档维护规则
 status: stable
+description: "规定 SDK 文档的归属、修改权限、源码引用和 OKF 维护方式。"
+tags: [documentation, maintenance, okf]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/AGENTS.md"
+    title: "文档维护规则"
+  - id: repo-guide
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/AGENTS.md"
+    title: "仓库 Agent 指南"
 ---
 
 # 文档维护规则

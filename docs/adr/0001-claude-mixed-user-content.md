@@ -4,6 +4,12 @@ title: Claude mixed user content 明确不支持
 status: stable
 x-agent-sdk-go-decision-status: accepted
 x-agent-sdk-go-decision-date: "2026-11-08"
+description: "记录统一 Agent 接口对 Claude 文本与图片混合输入的支持边界。"
+tags: [claude, input, unified-agent]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/adr/0001-claude-mixed-user-content.md"
+    title: "Claude mixed user content 明确不支持"
 ---
 
 # Claude mixed user content 明确不支持

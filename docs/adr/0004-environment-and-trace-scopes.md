@@ -4,6 +4,12 @@ title: 环境与 prompt trace 按作用域分离
 status: stable
 x-agent-sdk-go-decision-status: accepted
 x-agent-sdk-go-decision-date: "2026-11-11"
+description: "记录 Core 进程环境、Session shell 环境、Claude Session 进程环境和 prompt trace 的独立作用域。"
+tags: [environment, prompt-trace, session]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/adr/0004-environment-and-trace-scopes.md"
+    title: "环境与 prompt trace 按作用域分离"
 ---
 
 # 环境与 prompt trace 按作用域分离

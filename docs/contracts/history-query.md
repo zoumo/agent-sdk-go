@@ -2,6 +2,18 @@
 type: Specification
 title: 独立历史查询
 status: stable
+description: "定义 Codex 与 Claude 独立查询历史时的发现范围、metadata 及主会话与子会话内容。"
+tags: [codex, claude, history]
+sources:
+  - id: document
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/contracts/history-query.md"
+    title: "独立历史查询"
+  - id: codex-history
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/codex/history.go"
+    title: "Codex 历史查询源码"
+  - id: claude-history
+    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/claude/session_query.go"
+    title: "Claude 会话查询源码"
 ---
 
 # 独立历史查询

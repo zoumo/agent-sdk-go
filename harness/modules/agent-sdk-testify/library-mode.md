@@ -18,29 +18,18 @@ cancellation and its simulation orchestration.
 
 ## Exact dependency
 
-The repository uses this exact test dependency:
+`go.mod` records the exact `github.com/zoumo/agent-sdk-testify` version.
+`go.sum` records its checksums. `internal/mocktest/testify_identity.go` records
+embedded identity for test binaries whose Go build metadata omits the module.
+`TestTestifyIdentityMatchesModulePin` checks agreement. Any pin change requires
+a dependency update.
 
-```text
-require github.com/zoumo/agent-sdk-testify v0.2.0
-sum h1:qk18CXLUnNo2ohRJO+53GwaNbfvZH4ypMR8Hfjk29mQ=
-```
+The embedded recording snapshot records a separate immutable source revision.
+Material provenance and linked module identity have separate fields in the
+execution evidence.
 
-The release version fixes revision
-`61366f5621303367a7c3ea0bfc58af71af7e0afa`. The exact version and checksum
-appear in `go.mod`, `go.sum` and `internal/mocktest/testify_identity.go`.
-`TestTestifyIdentityMatchesModulePin` guards agreement between those sources.
-A version or checksum change is an explicit reviewed dependency update, not a
-runtime override.
-
-The embedded material snapshot has its own immutable source revision,
-`e82f752448eab225f464df54be29cbd4f93fbc2f`. It includes Claude 2.1.293
-recordings, the official idle and running context-injection recordings for
-both providers, and the self-seeded SDK-CASE-035 existing-child recordings.
-Material provenance does not replace the linked module identity.
-
-The module is test-only. A module-graph gate must prove that `codex`, `claude`,
-`agent`, `codex/types`, `claude/types` and other production trees do not import
-it. There is no committed `replace`, nested module, `go.work` or local checkout.
+`agent-sdk-testify` is test-only. The module-graph gate checks that production
+packages exclude it. Dependency resolution uses the committed module pin.
 
 ## Boundary and ownership
 

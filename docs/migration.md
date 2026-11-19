@@ -1,11 +1,20 @@
 # Migration
 
-Replace imports of `github.com/zoumo/codex-sdk-go` with
-`github.com/zoumo/agent-sdk-go/codex`, and imports of
-`github.com/zoumo/claude-agent-sdk-go` with
-`github.com/zoumo/agent-sdk-go/claude`. Apply the same prefix substitution to
-`/types`. Update your dependency to the single module
-`github.com/zoumo/agent-sdk-go`. Old import paths are not forwarded.
+Move your application from the standalone SDK modules to the shared
+`github.com/zoumo/agent-sdk-go` module.
+
+1. Replace the old import prefixes in your application. Include each `types`
+   import that uses the old prefix.
+
+   | Replace | With |
+   |---|---|
+   | `github.com/zoumo/codex-sdk-go` | `github.com/zoumo/agent-sdk-go/codex` |
+   | `github.com/zoumo/claude-agent-sdk-go` | `github.com/zoumo/agent-sdk-go/claude` |
+
+2. Update your Go dependency to the version of `github.com/zoumo/agent-sdk-go`
+   that you intend to use. Run `go mod tidy`.
+3. Update your session calls using the [session migration](#session). Run your
+   application's tests to find any remaining old imports or API calls.
 
 The native source roots moved under `codex/` and `claude/`. Package-local examples
 and scripts retain package-relative paths: run their documented commands from the

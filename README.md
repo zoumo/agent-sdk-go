@@ -1,311 +1,107 @@
 # agent-sdk-go
 
-Native Go SDKs for Codex and Claude in one module and one release stream.
+Go clients for the Codex app-server and Claude Code CLI. Both SDKs use the
+`github.com/zoumo/agent-sdk-go` module and require Go 1.26 or newer.
 
-```go
-import (
-    "github.com/zoumo/agent-sdk-go/agent"
-    agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-    agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
-    codex "github.com/zoumo/agent-sdk-go/codex"
-    codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-    claude "github.com/zoumo/agent-sdk-go/claude"
-    claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
-    "github.com/zoumo/agent-sdk-go/mcp"
-)
-```
+| If you need | Use | Get started |
+|---|---|---|
+| Codex protocol types, turn operations, or saved thread queries | `github.com/zoumo/agent-sdk-go/codex` | [Codex SDK](codex/README.md) |
+| Claude protocol types, CLI options, or saved session queries | `github.com/zoumo/agent-sdk-go/claude` | [Claude SDK](claude/README.md) |
+| The same live session API for Codex and Claude | `github.com/zoumo/agent-sdk-go/agent` and one adapter per Core | [Run the unified session example](#optional-unified-live-layer) |
 
-The native `codex` and `claude` packages remain independent, first-class SDKs.
-The optional `agent` layer provides one live `Core`/`Session` contract above
-them. It is not a root client and does not replace native protocols, raw values,
-or history queries. `agent/codex` and `agent/claude` are separate adapters and do
-not import each other. Both native `types` packages and the `agent` core depend
-only on the Go standard library. The old module import paths have no compatibility
-forwarding packages.
+The native SDKs have separate `codex/types` and `claude/types` packages. Use the
+native SDK for protocol-specific controls and saved history even when your
+application uses `agent` for live sessions. See the [dependency rules](harness/architecture.md).
 
-| Start here | Documentation |
+| If you are | Read |
 |---|---|
-| Use an SDK | [Codex](codex/README.md), [Claude](claude/README.md) |
-| Use one live API for both | [Unified Agent Core](agent/doc.go), [offline session example](agent/core_example_test.go), [offline MCP example](agent/mcp_example_test.go) |
-| Understand the design | [Harness](harness/index.md), [shared terms](GLOSSARY.md) |
-| Test, record or inspect evidence | [Offline validation](docs/testing.md), [SDK simulation](tests/simulation/drivers/README.md), [pinned test library](https://github.com/zoumo/agent-sdk-testify) |
-| Migrate or release | [Migration](docs/migration.md), [release checks](docs/testing.md#release-preparation) |
-| Check licensing | [Licenses and native attribution](NOTICE) |
+| Moving from the earlier standalone modules | [Migration guide](docs/migration.md) |
+| Testing an SDK change | [Validation guide](docs/testing.md) |
+| Running an SDK against a recorded case | [Simulation guide](tests/simulation/drivers/README.md) |
+| Looking up contracts or terms | [Harness index](harness/index.md), [glossary](GLOSSARY.md) |
+| Preparing a release | [Release checks](docs/testing.md#release-preparation), [licenses and attribution](NOTICE) |
 
 ## Optional unified live layer
 
-`agentcodex.New(agentcodex.Config{...})` and
-`agentclaude.New(agentclaude.Config{...})` return concrete `*agentcodex.Core` and
-`*agentclaude.Core` values that implement `agent.Core`. Start the selected Core,
-then use `Open` or `Resume` to get
-an `agent.Session`. `Cwd` must be absolute. A session exposes operations and one
-event stream to one consumer:
+Run the example from the repository root. The example uses synthetic providers.
 
-```go
-func consume(ctx context.Context, core agent.Core, cwd string) error {
-    if _, err := core.Start(ctx); err != nil {
-        return err
-    }
-    session, err := core.Open(ctx, agent.OpenOptions{Cwd: cwd})
-    if err != nil {
-        return errors.Join(err, core.Stop(ctx))
-    }
-    events, err := session.Events()
-    if err != nil {
-        return errors.Join(err, session.Close(ctx), core.Stop(ctx))
-    }
-    receipt, err := session.StartOrSteer(ctx, agent.Input{
-        Content: []agent.ContentBlock{
-            {Text: &agent.ContentBlockText{Text: "Explain this change."}},
-        },
-    })
-    if err != nil {
-        return errors.Join(err, session.Close(ctx), core.Stop(ctx))
-    }
-    if receipt.Result == agent.InputNotApplied {
-        return errors.Join(
-            errors.New("input was not applied; the caller still owns it"),
-            session.Close(ctx),
-            core.Stop(ctx),
-        )
-    }
-    idle := false
-    for !idle {
-        event, err := events.Next(ctx)
-        if errors.Is(err, io.EOF) {
-            return errors.Join(
-                errors.New("event stream ended before idle"),
-                session.Close(ctx),
-                core.Stop(ctx),
-            )
-        }
-        if err != nil {
-            return errors.Join(err, session.Close(ctx), core.Stop(ctx))
-        }
-        switch payload := event.Payload.(type) {
-        case agent.InteractionRequestedPayload:
-            if payload.Request.Kind == agent.InteractionPermission {
-                _, err := session.Answer(ctx, payload.Interaction, agent.PermissionAnswer{
-                    Outcome:  agent.PermissionSelected,
-                    OptionID: payload.Request.Options[0].OptionID,
-                })
-                if err != nil {
-                    return errors.Join(err, session.Close(ctx), core.Stop(ctx))
-                }
-            }
-        case agent.StateUpdatePayload:
-            idle = payload.State != nil && *payload.State == agent.StateIdle
-        }
-    }
-    if err := session.Close(ctx); err != nil {
-        return errors.Join(err, core.Stop(ctx))
-    }
-    return core.Stop(ctx)
-}
+```sh
+go test -count=1 -v ./agent -run '^ExampleCore$'
 ```
 
-To append context without requesting a model response, assert the optional
-`agent.Injector` interface and call `Inject(ctx, input)`. Both adapters implement
-it; unsupported native versions return `agent.ErrorUnsupported` without a prompt
-fallback. The receipt describes acceptance, not model consumption. See the
-[inject contract](harness/modules/unified-agent/design.md#context-inject) for
-content, lifecycle, concurrency and version limits.
+The test passes after both providers report a reply, close the session, resume
+it by its saved ID, and stop. Follow the same lifecycle in your application.
+[ExampleCore source and expected output](agent/core_example_test.go)
 
-Claude `Open` starts the CLI as a parked spare with `--await-claim` and binds it
-to the requested working directory with one `claim_session` request. The claim
-response carries the native session ID, so `ID()` is nonempty and stable after
-initialize without user input, and the SDK generates no identity of its own.
-Open does not wait for `system/init` or a model turn. Later native main-session
-messages must match the claimed identity; every live, non-replay init must also
-identify the requested working directory. A repeated matching init refreshes
-observed metadata without resetting delivery, relationships or permission
-authority. A conflict terminates the session with
-`native_rejected`. Local process startup requires a stable CLI >= 2.1.293,
-checked through `--version` before the Session process starts. Native callers that pass
-`claude.Options.SessionID` keep the explicit `--session-id=<uuid>` path instead.
-The adapter enables native session-state notifications by default (checked on
-2.1.293); unified `running` and `idle` transitions come from those notifications.
-The SDK switch and explicit environment overrides follow the
-[process environment contract](harness/modules/unified-agent/design.md#session-processenv).
+1. Create a Core with `agentcodex.New` or `agentclaude.New`. Call `Core.Start`
+   to initialize it and get its capabilities.
+2. Call `Core.Open` with an absolute `OpenOptions.Cwd`. To restore an existing
+   native session, call `Core.Resume` with its saved `SessionID` and the open
+   options. Use the native SDK to read saved content.
+3. Call `Session.Events` once. Assign one consumer to read the event stream
+   with `Next` and distribute events to the rest of your application.
+4. Call `Session.StartOrSteer` to submit input. Check the receipt before
+   correlating events with the submission. If the result is `InputNotApplied`,
+   your application still owns the input and controls any retry.
+5. When an `InteractionRequestedPayload` arrives, show the request to your user
+   or apply your application's policy. Send the resulting answer to
+   `Session.Answer` with the original `Interaction` reference. For a permission
+   answer, use the `OptionID` of the selected option. The offline example uses
+   `allow-once` for its synthetic request.
+6. Consume events until your application has the result it needs. Session state
+   such as `idle` describes the session. Use the input receipt and the relevant
+   events for submission-specific evidence.
+7. Call `Session.Close` to release each session, then call `Core.Stop`.
+   `Core.Stop` rejects the call while a session is open or an open or resume
+   operation is in progress.
 
-Use `core.Resume(ctx, agent.ResumeOptions{SessionID: savedID, OpenOptions:
-options})` to restore an existing native session; the returned `agent.Session`
-has the same API. Resume restores execution and never converts saved content into
-live events. The Core must reject `Stop` while any session remains open.
+Read your adapter's package docs for setup and capabilities.
+[Codex adapter](agent/codex/doc.go) · [Claude adapter](agent/claude/doc.go)
 
-History stays native: use the Codex thread/turn/item queries,
-`(*agentcodex.Core).NativeClient()` for same-connection read-only access, or
-Claude's package-level session/message/subagent queries. There is deliberately no
-unified history, `LoadSession`, replay, or root convenience client. MASS resource
-identity, history import, persistence, and multi-session aggregation also remain
-outside this module.
+Unified Claude `Open` returns the native session ID from `claim_session` before
+the first input. Local startup checks for a stable Claude CLI at version 2.1.293
+or newer. [Session identity and startup contract](harness/modules/unified-agent/design.md)
+
+To append context without requesting a model response, check whether the
+session implements `agent.Injector`, then call `Inject`. The receipt records
+acceptance. An unsupported native version returns `agent.ErrorUnsupported`.
+[Context injection contract](harness/modules/unified-agent/design.md#context-inject)
 
 ### Restrict local tools
 
-Set `Features.RestrictLocalTools` to apply available native restrictions to
-built-in local file read, write and command tools on `Open` or `Resume`.
-The default `false` preserves native configuration; repeat the request when
-resuming.
-
-```go
-options := agent.OpenOptions{
-    Cwd: "/absolute/workspace",
-    Features: agent.Features{RestrictLocalTools: true},
-}
-```
-
-Claude forwards a native tool deny list. Codex disables shell, image viewing and
-image generation, but its public configuration cannot disable `apply_patch` or
-provide a complete file-tool deny list. Accordingly,
-`session.EffectiveFeatures().RestrictLocalTools` reports whether the adapter
-configured the restrictions, including the partial Codex mapping. It does not
-mean every local tool is disabled. These controls apply to known built-in tools;
-MCP, hooks and the CLI's own file access are outside their scope. The
-[unified contract](harness/modules/unified-agent/design.md#restrict-local-tools)
-defines the mappings and gaps.
+Set `OpenOptions.Features.RestrictLocalTools` when you open or resume a session.
+`Session.EffectiveFeatures` reports whether the adapter configured its native
+restrictions. Claude sends a tool deny list. Codex disables the shell, image
+viewing, and image generation features. The Codex mapping still permits other
+local capabilities, including `apply_patch` where the model exposes it.
+[Mappings and limits](harness/modules/unified-agent/design.md#restrict-local-tools)
 
 ### Additional system prompt
 
-`agent.OpenOptions.AdditionalSystemPrompt` adds optional caller text after
-native defaults for one `Open` or `Resume` call; it never replaces built-in
-instructions. The complete validation, adapter mapping, resume and disclosure
-contract is in the
-[authoritative unified-agent design](harness/modules/unified-agent/design.md#additional-system-prompt).
-
-```go
-options := agent.OpenOptions{
-    Cwd:                    "/absolute/workspace",
-    AdditionalSystemPrompt: "Follow the repository conventions.\nNever rewrite generated files.",
-}
-```
+Set `OpenOptions.AdditionalSystemPrompt` to add text to the native system
+prompt. Supply the value on each `Open` or `Resume` call that needs it.
+[Additional system prompt contract](harness/modules/unified-agent/design.md#additional-system-prompt)
 
 ### External MCP servers
 
-The authoritative developer contract is
-[unified Agent MCP configuration](harness/modules/unified-agent/design.md#mcp-configuration).
-This section is the user-facing usage summary.
+Set `OpenOptions.MCPServers` to the full list of external servers for an `Open`
+or `Resume` call. Declare each server as `mcp.TransportStdio` or
+`mcp.TransportHTTP`. If your application combines runtime defaults with session
+settings, compose the list before calling the Core. Match names case-sensitively
+and replace a same-name server as a whole. Send the full list again on resume.
 
-`mcp.Server` is the one external MCP server configuration shared by the native
-Codex and Claude SDKs and the adapter-neutral agent layer. All three entry points
-accept `[]mcp.Server`. `agent.OpenOptions.MCPServers` is the complete final list
-for one `Open` or `Resume` call. The component that interprets Runtime
-configuration must compose Runtime defaults with the current Session declaration
-before invoking the Core:
-
-1. Match `Name` case-sensitively.
-2. Keep servers found only in the Runtime defaults.
-3. Replace a Runtime server as a whole when the Session declares the same name.
-4. Append servers found only in the Session declaration.
-5. Treat an empty Session list as no Session override.
-6. Do not invent a tombstone, disable marker, or per-name deletion operation.
-
-The Core receives only this final list and performs no second merge. Resume
-must receive the full final list again; the unified SDK does not persist or restore
-MCP configuration from a previous Session.
-
-The shared configuration requires an explicit transport. The unified layer
-accepts `mcp.TransportStdio` (`"stdio"`) and `mcp.TransportHTTP` (MCP Streamable
-HTTP), and rejects `mcp.TransportSSE`. It has no `MCPConfigMode`,
-`StrictMCPConfig`, `SDKMCPServers`, or ambient-clear switch. Native Claude still
-exposes SSE, strict configuration, and application-hosted SDK MCP options through
-the `claude` package.
-
-Validation runs before native side effects and does not infer a transport:
-
-- `Name` must be nonempty valid UTF-8, contain no dot, and be unique in the list.
-- `Transport` must be explicitly `stdio` or `http`.
-- `stdio` requires a nonempty `Command` and forbids `URL`, `Headers`,
-  `EnvHeaders`, and `BearerTokenEnvVar`.
-- `http` requires a nonempty `URL` and forbids `Command`, `Args`, `Env`, and
-  `Cwd`.
-- Names, text fields, arguments, map keys, and map values must be valid UTF-8.
-
-```go
-options := agent.OpenOptions{
-    Cwd: "/absolute/workspace",
-    MCPServers: []mcp.Server{
-        {
-            Name:      "local-tools",
-            Transport: mcp.TransportStdio,
-            Command:   "mcp-local",
-            Args:      []string{"--stdio"},
-            Env:       map[string]string{"LOCAL_TOOLS_MODE": "read-only"},
-        },
-        {
-            Name:              "remote-tools",
-            Transport:         mcp.TransportHTTP,
-            URL:               "https://mcp.example.invalid/tools",
-            Headers:           map[string]string{"X-Workspace": "sdk"},
-            EnvHeaders:        map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
-            BearerTokenEnvVar: "REMOTE_TOKEN",
-        },
-    },
-}
-if err := options.Validate(); err != nil {
-    return err
-}
-```
-
-Codex maps the final fields to `thread/start.config` or
-`thread/resume.config`: `Command`, `Args`, `Env`, and `Cwd` for stdio; `URL`,
-`http_headers`, `env_http_headers`, and `bearer_token_env_var` for HTTP. The
-unified Claude adapter maps the common stdio fields and HTTP `URL`/`Headers`; it
-rejects `Cwd`, `EnvHeaders`, and `BearerTokenEnvVar` before process launch.
-
-Codex ambient MCP is field-level recursively merged with declared servers, so a
-same-name ambient server can retain undeclared fields or cause a transport
-conflict. A warm loaded thread may ignore new config on resume. The SDK does not
-promise ambient replacement or live MCP tool-set changes; use an isolated
-`CODEX_HOME` or outer execution environment when the server set must be
-deterministic. Claude's same-name precedence against native ambient configuration
-is target-CLI behavior that can vary by version and policy. Claude enterprise
-policy may reject dynamic or strict MCP configuration; the unified adapter does
-not override native policy. Isolate the Claude native configuration or outer
-execution environment when the server set must be deterministic.
-
-The SDK forwards `Env` and `Headers` without resolving them. `EnvHeaders` values
-and `BearerTokenEnvVar` are environment-variable names, not secret values. The SDK
-does not persist MCP configuration in Session state, place it in unified Events or
-Meta, or log its values. MCP validation and adapter field-support errors identify
-only the server position, field, provider, and reason, and do not echo MCP values.
-An Open or Resume error can wrap a native peer as its cause, and that native error
-may retain sensitive CLI diagnostics. Claude's `--mcp-config` is process argv.
-Use native environment references where appropriate and protect process inspection
-and native diagnostics. Prefer Codex `EnvHeaders`/`BearerTokenEnvVar` over literal
-credentials. A successful Open or Resume does not prove that an MCP server
-connected, authenticated, discovered tools, or executed them.
-
-`go test ./agent -run '^ExampleCore$'` runs the adapter-neutral flow twice
-with in-memory synthetic fake Cores. It consumes a message, answers an
-interaction, waits for idle, closes, resumes, and stops without launching a real
-CLI. This example validates the shared interface only; adapter behavior is
-covered by the `agent/codex` and `agent/claude` integration tests.
-`go test ./agent -run '^ExampleOpenOptions_mcpServers$'` validates an offline MCP declaration
-for both transports without resolving a secret or connecting to a server.
-
-Go **1.26** or newer is required. The root `mise.toml` is optional for local
-tool management. Formatting and linting use the root Makefile:
+Run the offline configuration example from the repository root. The test
+validates the declared fields for both transports.
 
 ```sh
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-go mod download
-make fmt
-make lint
-bash scripts/check-offline.sh
+go test -count=1 -v ./agent -run '^ExampleOpenOptions_mcpServers$'
 ```
 
-Native contract validation runs offline; real agent/model tests remain disabled.
-External consumer CI retrieves the exact
-pushed module and dependencies over the network, then compiles public imports,
-examples and documentation snippets without invoking a real CLI or model.
-Simulation catalog availability and source inspection do not establish successful
-real recordings. Code integration tests use explicitly synthetic input.
-The offline entry links the exact pinned testify module and its embedded fixed
-corpus; absent required recordings fail the simulation gate. Material adoption
-and catalog maintenance belong to the
-[pinned test library](https://github.com/zoumo/agent-sdk-testify). The test-only pin is
-`github.com/zoumo/agent-sdk-testify v0.2.0`
-with checksum `h1:qk18CXLUnNo2ohRJO+53GwaNbfvZH4ypMR8Hfjk29mQ=`.
-It is linked only by test and simulation hosts; production SDK packages do not
-import it. The complete boundary is in
-[Go library mode](harness/modules/agent-sdk-testify/library-mode.md).
+If your application requires a fixed set of servers, isolate the native
+configuration. Verify connectivity and tool availability through the native
+provider after opening the session. Check provider support and configuration
+precedence before adding credentials or resuming a session.
+[Codex MCP options](codex/README.md#thread-mcp-servers) ·
+[Claude MCP options](claude/README.md#external-mcp-servers) ·
+[Unified MCP contract](harness/modules/unified-agent/design.md#mcp-configuration) ·
+[Example source](agent/mcp_example_test.go)

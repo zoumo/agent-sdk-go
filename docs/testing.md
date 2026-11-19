@@ -1,51 +1,63 @@
 # Offline validation
 
-The [testing standards](../harness/testing.md) define test levels and required
-coverage.
-This guide describes current commands and configured gates. Simulation catalog
-availability and synthetic checks do not prove real recordings; see
-[data provenance](../tests/simulation/drivers/README.md#fixtures-仿真录制与测试输入).
+Run commands in this guide from the repository root with Go 1.26 or newer.
+Choose the check that matches the evidence you need. The repository defines
+required coverage by test level in the [testing standards](../harness/testing.md).
 
-Run from the repository root with Go 1.26 or newer:
+| If you need to check | Run | Read the result |
+|---|---|---|
+| The shared session API or an MCP declaration | [Run an offline example](#code-integration-tests) | Go checks the examples' expected output. |
+| The native public interfaces against synthetic peers | `go test -count=1 ./tests/integration ./codex ./claude` | Go reports test results by package. [Integration tests](#code-integration-tests) |
+| All required cases against fixed native recordings | [Run the simulation gate](#run-the-fixed-recording-gate) | Read `coverage.json` and the per-run results in the reported output directory. |
+| The repository's offline gates | [Run the offline checks](#run-the-offline-checks) | The command exits successfully when every selected check passes. |
+| A real installed CLI or model | [Select an opt-in real CLI check](#opt-in-real-cli-checks) | Read the result for that specific CLI, version, and scenario. |
+
+## Run the offline checks
+
+Prepare the linter and module cache before running the offline gate.
 
 ```sh
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 go mod download
+```
+
+Run the format, lint, and offline checks.
+
+```sh
 make fmt-check
 make lint
 bash scripts/check-offline.sh all
 ```
 
-The offline entry also accepts `parallel`, `checks`, `quality`, `test`, `race`,
-`e2e` or `build`. `all` runs `quality`, `test`, `race` and `build` in order;
-`parallel` runs `quality` first, then runs `test` and `build` concurrently, then
-runs `race` in isolation in the same checkout. `checks` runs `quality`, `test`
-and `build` for CI's checks job. Both package suites include the strict
-simulation test; `e2e` remains available for a verbose simulation-only run.
+The script takes one optional task argument.
 
-Test and simulation hosts link the exact test-only in-process testify module; no
-separate helper process is required. The dependency boundary and pin are fixed
-by [Go library mode](../harness/modules/agent-sdk-testify/library-mode.md).
-`go test` builds the current SDK driver in `TestMain`. The library
-owns official driver/package and material checks. Scenario, recording,
-official-driver and Python snapshots do not remain in this repository.
-Simulation obtains assertion inputs from the typed execution report and prepared
-material. Callers read the
-execution report, then remove the caller-owned fixture after every SDK client
-and mock exits. The migrated synthetic, single-case and 76-slot gate checks
-remain in `tests/simulation/simulate`.
+| Task | Checks |
+|---|---|
+| `all` | Run `quality`, `test`, `race`, and `build` in order. |
+| `parallel` | Run `quality`, then `test` and `build` concurrently, then `race` alone. |
+| `checks` | Run `quality`, `test`, and `build` for the CI checks job. |
+| `quality` | Check module and import boundaries, Codex protocol inventory and generation, and `go vet`. |
+| `test` | Run the package suites, including the recording gate, and execute offline examples. |
+| `race` | Run the package suites, including the recording gate, under the race detector. |
+| `e2e` | Run only the offline recording gate with verbose output. |
+| `build` | Compile every package, including the SDK simulation driver. |
 
-Run the strict fixed-recording simulation directly:
+## Run the fixed recording gate
 
 ```sh
 go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$'
 ```
 
-The package suite also runs this strict test. `-count=1` forces execution rather
-than reusing a cached test result. The test calls the simulation directly; only
-the SDK driver runs in a separate process with its own environment, workspace
-and bounded process-group cancellation. Process-level regression tests reuse
-the test binary; there is no separately built simulation runner or Shell entry.
+The test runs the gate in process. `TestMain` builds the SDK driver, which runs
+in a separate process with its own environment and workspace. Both link the
+fixed Testify Go module. The test reads the typed execution report before
+removing its fixture. [Testify library contract](../harness/modules/agent-sdk-testify/library-mode.md)
+
+Inspect `coverage.json` for each provider and case's requirement, material,
+source verification, and SDK result. Per-run `summary.json` records business,
+protocol, evidence, and cleanup outcomes. Use the
+[simulation guide](../tests/simulation/drivers/README.md) to select a single case
+or an external recording.
 
 Without an explicit `-simulation.output`, the test runs in a private
 short directory under `/tmp`, resolved to its physical path. This keeps the
@@ -59,22 +71,7 @@ An archive failure returns an error and retains the temporary output at the
 reported location. An explicit `-simulation.output` uses the caller's directory directly,
 without automatic archiving; that path must satisfy native limits.
 
-The `quality` task checks module and native dependency boundaries, the
-standard-library-only `mcp` implementation, native types limited to the standard
-library and `mcp`, the `agent` core limited to the standard library, carrier
-validator and `mcp`, adapter-specific imports, the absence of
-reverse native/adapter/MASS imports, native inventory, reproducible Codex
-generation and committed whitespace, then runs `go vet`.
-`test` runs unit/subprocess tests, the strict simulation gate and offline examples.
-`race` repeats the package suite under the race detector, `e2e` runs only the
-fixed real-recording simulation gate through `go test` for manual use, and `build`
-compiles every package, including the SDK driver. `GOMAXPROCS=2`, package
-scheduling `-p=1` and `GORACE=atexit_sleep_ms=0` bound test load. CI runs the
-`checks` and `race` package suites on `ubuntu-24.04`; neither re-runs the strict
-gate as a separate command. Every example compiles with `go test ./...`.
-The pinned testify module owns official driver/package checks. Hosted CI builds
-the tests and SDK-owned driver and links that module; it does
-not build or download a separate testify artifact.
+## Opt-in real CLI checks
 
 Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
 [`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
@@ -264,17 +261,21 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The catalog defines eight stories and 38 flows. Available material comes from the pinned library's builtin catalog. Required Go SDK simulation still needs reviewed real recordings,
-public-interface assertions, full consumption and cleanup checks; tooling or
-synthetic checks cannot fill that gap. Missing required coverage must be reported.
-Go SDK simulation flow implementations and their regression tests live in
-`tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`; the drivers root
-owns the driver entry and delivery checks. Native `tests/replay` packages retain
-SDK integration tests and synthetic fixture adapters over in-process streams. Pure
-protocol matching and official verification belong to the
-[pinned testify library](https://github.com/zoumo/agent-sdk-testify).
-See the [SDK adapter guide](../tests/simulation/drivers/README.md) for the
-library-backed fixture boundary.
+The [shared acceptance catalog](../harness/sdk/validation-cases.md) defines the
+case set and provider-specific requirements. The Testify module supplies the
+fixed recording corpus. The gate reports missing required material as a failure.
+Check the provider and case matrix independently of any recording with the
+existing policy test.
+
+```sh
+go test -count=1 ./tests/simulation/simulate -run '^TestAcceptanceMatrixMatchesSharedPolicy$'
+```
+
+SDK simulation evidence combines reviewed native recordings, public SDK
+assertions, strict replay, full consumption, and cleanup. Official verification
+belongs to the [Testify library](https://github.com/zoumo/agent-sdk-testify).
+Go simulation flows live under `tests/simulation/drivers/`; synthetic native
+replay fixtures support the [code integration tests](#code-integration-tests).
 
 ## Focused checks
 

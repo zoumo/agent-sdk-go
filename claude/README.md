@@ -1,11 +1,116 @@
 # Claude Agent SDK for Go
 
-Shell commands below run from the repository root; see [root validation](../docs/testing.md).
+Use `github.com/zoumo/agent-sdk-go/claude` to start a local Claude Code CLI or
+query saved sessions. Import `github.com/zoumo/agent-sdk-go/claude/types` for
+native protocol values. Go 1.26 or newer is required.
 
-An experimental, independent native Go client for a locally installed Claude Code CLI. No other Go SDK or language runtime is required by the client. Original code is licensed under Apache-2.0.
-The optional [unified Claude adapter](../agent/claude/doc.go) exposes the same
-`agent.Core`/`agent.Session` live contract as the Codex adapter. Native
-package-level session and history queries remain the source for saved content.
+Use the [unified Claude adapter](../agent/claude/doc.go) for the shared live
+session API. Saved history remains available through native package-level queries.
+
+## Session usage
+
+Run the offline child observation example from the repository root.
+
+```sh
+go run ./claude/examples/subagents-offline
+```
+
+The example prints separate runs for the preserve and suppress child detail policies.
+To use a real Claude CLI, install a stable version 2.1.293 or newer and configure
+its account. Then follow these steps.
+
+1. Set `CLIPath` to the absolute path of the installed `claude` CLI.
+2. Set `WorkDir` to the absolute path of your project.
+3. Call `Open` to start the process, then call `Submit` to write the input.
+4. Call `Receive` to read events. Examine the native result for the main session.
+
+Running the following program uses the configured account and may execute model
+work. It prints the local write receipt, the native event types, and the main result. If
+Claude requests a decision, the example exits and releases the Session. In an
+interactive application, route the original request to your decision handler.
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/zoumo/agent-sdk-go/claude"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() (err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	session, err := claude.Open(ctx, claude.SessionOptions{
+		CLIPath: "/explicit/path/to/claude",
+		WorkDir: "/absolute/project",
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, session.Abort()) }()
+
+	submission, err := session.Submit(ctx, claude.Input{Text: "Explain this directory."})
+	if err != nil {
+		return err
+	}
+	fmt.Println("complete local write", submission.Written)
+
+	for {
+		received, err := session.Receive(ctx)
+		if err != nil {
+			return err
+		}
+		if received.Request != nil {
+			return fmt.Errorf("request %s requires an application decision", received.Request.ID())
+		}
+		if received.Event == nil {
+			continue
+		}
+		event := received.Event
+		fmt.Println(event.Type)
+		mainID, hasMain := session.SessionID()
+		if !hasMain || event.SessionID != mainID || event.ParentToolUseID != nil || event.Result == nil {
+			continue
+		}
+		if event.IsReplay != nil && *event.IsReplay {
+			continue
+		}
+		if event.Result.IsError {
+			return fmt.Errorf("Claude result %s reports an error", event.Subtype)
+		}
+		fmt.Println(event.Result.Result)
+		return nil
+	}
+}
+```
+
+`Submit` retains native text or structured user content: text, image, document and
+tool_result. Use either Text or User, never both. Image sources support base64/url;
+document sources support base64/url/text/content. Unsupported variants fail before
+writing. Success proves a complete local write, with no invented CLI acceptance receipt or Claude Turn.
+The main envelope is fixed; session_id and parent_tool_use_id are not arbitrary
+input targets. A native result, including is_error, does not terminate Session.
+
+A Session owns the native process and a single FIFO. Use `Receive` for native
+`Event`, `IncomingRequest`, and observation records. Concurrent calls compete
+for the same FIFO. `Open` requests native forwarding. Initialize acceptance
+confirms the request only. Applications own UI/logging fan-out. Native Raw/unknown values and repeated
+UUIDs remain intact. Confirmed members do not wait for a complete parent path.
+Unknown envelopes and unconfirmed identities remain bounded `Unattributed`
+diagnostics with explicit coverage gaps; later evidence does not replay old facts.
+See [child observation](#child-observation).
 
 ## Compatibility
 
@@ -26,58 +131,6 @@ registration, remote CLI transports, administration, user-dialog APIs or
 durable recovery. Unknown frame preservation does not implement those operations.
 There is no public generic raw-write escape hatch. Inherited CLI configuration may
 still affect execution. See [offline checks](../docs/testing.md).
-
-## Session usage
-
-A Session owns the native process and one FIFO. `Open` requests native forwarding;
-accepting initialize alone does not prove all children will be forwarded. Running
-this example uses your explicitly selected CLI and its configured account. Default
-tests compile it and use only offline peers for execution.
-
-```go
-package main
-
-import (
- "context"
- "fmt"
- "log"
- claude "github.com/zoumo/agent-sdk-go/claude"
-)
-
-func main(){
- ctx:=context.Background()
- session,err:=claude.Open(ctx,claude.SessionOptions{CLIPath:"/explicit/path/to/claude",WorkDir:"/absolute/project"})
- if err!=nil{log.Print(err);return}
- defer session.Abort()
- submitted,err:=session.Submit(ctx,claude.Input{Text:"Explain this directory."})
- if err!=nil{log.Print(err);return}
- fmt.Println("complete local write",submitted.Written)
- for{
-  received,err:=session.Receive(ctx);if err!=nil{log.Print(err);return}
-  if received.Request!=nil{
-   fmt.Println("decision required",received.Request.ID(),received.Request.Handle().ToolName())
-   // Pass the original request to your UI. The SDK does not choose its answer.
-  }
-  if received.Event!=nil{fmt.Println(received.Event.Type,string(received.Event.Raw))}
-  if received.Observation!=nil{fmt.Println(received.Observation.Reason)}
- }
-}
-```
-
-`Submit` retains native text or structured user content: text, image, document and
-tool_result. Use either Text or User, never both. Image sources support base64/url;
-document sources support base64/url/text/content. Unsupported variants fail before
-writing. Success proves a complete local write, with no invented CLI acceptance receipt or Claude Turn.
-The main envelope is fixed; session_id and parent_tool_use_id are not arbitrary
-input targets. A native result, including is_error, does not terminate Session.
-
-`Receive` is the sole consumption entry for native Event, real IncomingRequest,
-observation evidence. Concurrent calls compete for the same
-FIFO. Applications own UI/logging fan-out. Native Raw/unknown values and repeated
-UUIDs remain intact. Confirmed members do not wait for a complete parent path.
-Unknown envelopes and unconfirmed identities remain bounded `Unattributed`
-diagnostics with explicit coverage gaps; later evidence does not replay old facts.
-See [child observation](#child-observation).
 
 ## Actual permission and question requests
 

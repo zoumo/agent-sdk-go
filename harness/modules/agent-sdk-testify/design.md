@@ -124,10 +124,11 @@ Cleanup uses a separate bounded context and removes every successful prepared
 fixture, including after export/projection failure, business failure and
 cancellation. Missing, corrupt or mismatched evidence fails closed.
 
-Complete coverage has 38 cases across both providers, represented as 76
-provider/case slots. Source verification, required/optional policy and current
-SDK simulation status remain separate. Required gaps fail; optional business
-gaps remain visible; source corruption fails regardless of policy.
+The gate evaluates every provider and case combination in the
+[shared acceptance catalog](../../sdk/validation-cases.md). Each row records its
+requirement, source verification, and SDK simulation status. Missing required
+coverage or corrupt source data fails the gate. The report retains optional
+business gaps.
 
 An explicitly selected synthetic input cannot promote source qualification or
 fill real recording coverage. Never rewrite the source index or discard trusted
@@ -140,10 +141,9 @@ required material is missing.
 ## Adoption and regression gates
 
 The exact dependency and in-process transport acceptance are defined in
-[Go library mode](library-mode.md). Simulation acceptance adds the provenance
-and coverage rules above: the offline gate preserves all 38 cases and 76 slots,
-fails missing required material, and keeps optional gaps visible. It also
-rejects retired process-oriented implementation and documentation surfaces.
+[Go library mode](library-mode.md). The offline simulation gate enforces the
+provenance and coverage rules above. It also rejects retired process-oriented
+implementation and documentation interfaces.
 
 A synthetic fixture, a protocol peer or a code integration test cannot fill a
 real-material slot. The gate preserves failure evidence and leaves the source

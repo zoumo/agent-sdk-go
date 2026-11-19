@@ -2,30 +2,22 @@
 
 <a id="repository-recording"></a>
 
-`codex/go` and `claude/go` own public SDK operations and business assertions.
-`../simulate` runs directly through `go test` and owns independent policy hosts, coverage,
-cancellation and authenticated loopback remote main/probe forwarding.
-The [pinned testify library](https://github.com/zoumo/agent-sdk-testify) owns record/verify,
-official drivers, case/binding contracts, recordings, matching, preparation and
-export. SDK code links the exact pinned module and consumes only its public
-prepare/open/session, execution-start and typed execution-report surfaces. It
-never resolves or reads the tool's source or material directories directly.
-Embedded identity records the module revision and sum, while material identity
-records the immutable builtin source revision separately. This repository does
-not build tool sources or read legacy recordings, scenarios, official-driver
-code or Python packaging as a fallback.
-
-The accepted test-only pin and checksum are maintained in
-[Go library mode](../../../harness/modules/agent-sdk-testify/library-mode.md).
-The SDK-owned fixture coordinator owns preparation and cleanup; the SDK host
-owns its streams, public operations and business assertions.
+Use this guide to run the Go SDK against fixed native recordings. The SDK's Go
+drivers call public SDK operations and check application behavior. The linked
+Testify library prepares fixtures, matches protocol traffic, and produces
+typed results. [Go library contract](../../../harness/modules/agent-sdk-testify/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
 <a id="stage-handoff"></a>
 
 ## 仿真录制与测试输入
 
-Run the full strict gate, a selected builtin case, or an external capture:
+Run commands from the repository root with Go 1.26 or newer. For the full
+strict gate, run `TestSimulationGate`. For a single built-in case, select the
+provider and case ID with `TestSimulationCase`. To replay an external capture,
+pass its path to `-simulation.recording`.
+
+Use a new output directory for each run that sets `-simulation.output`.
 
 ```sh
 go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2
@@ -33,11 +25,8 @@ go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -sim
 go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```
 
-Use Go 1.26 or newer. Test and simulation hosts link the exact in-process
-testify module; no separate testify process is required. `TestMain` builds the
-current SDK driver. The test process directly runs simulation coordination;
-the SDK driver retains its independent environment, workspace and process group.
-Process-level regression checks reuse the test binary without building a runner.
+`TestMain` builds the SDK driver. The test coordinates the simulation and
+starts each driver in its own environment, workspace, and process group.
 
 The default gate runs in a short private directory and archives its unchanged
 output under `.artifacts/simulation/gates/`, including failures and handled
@@ -80,13 +69,13 @@ disappear.
 Source capture paths are opaque to assertions; external captures are passed only
 to library prepare/export operations.
 
-Coverage retains all 76 provider/case slots with source verification, route,
-required/optional and current simulation status. Required gaps fail. Optional
-business failures stay visible; source corruption cannot be waived. `TestSimulationGate`
-with `-simulation.recording` evaluates all 76 slots: only the selected material can pass and the
-other 75 remain unverified, so the gate still fails. A synthetic or consumer input
-cannot fill real-material coverage. SDK failures preserve external source bytes
-and the source index.
+Read `coverage.json` for source verification, route, requirement, and SDK
+simulation status for each provider and case. The gate fails for required gaps
+and corrupt sources. The report retains optional business failures.
+`TestSimulationGate` with `-simulation.recording` still evaluates the full
+matrix. The selected recording can pass its own row, and the remaining rows
+report unverified coverage. Run `TestSimulationCase` to check one capture.
+Only qualifying native recordings contribute to required coverage.
 
 <a id="fixtures-私有仿真数据"></a>
 
@@ -112,12 +101,10 @@ notification signals when tests can half-close SDK input.
 
 ## 仿真测试流程目录
 
-The SDK-owned 76-slot provider/case matrix and its required/optional policy come
-from the shared acceptance catalog. The gate probes each slot through public
-prepare/export operations; there is no runtime list/describe catalog. This
-repository does not copy tool scenarios, recordings or official drivers. Story
-and case semantics remain in
-[共同验收](../../../harness/sdk/validation-cases.md#stories-sdk-用户故事).
+The SDK checks every provider and case combination with the library's public
+prepare and export operations. The shared acceptance catalog defines each
+story, case, and requirement.
+[共同验收](../../../harness/sdk/validation-cases.md#stories-sdk-用户故事)
 
 The Go driver implements the public SDK route for available cases. `passed`,
 `failed` and `unverified` status is recorded per execution; catalog availability

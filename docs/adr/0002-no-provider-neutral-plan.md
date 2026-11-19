@@ -1,8 +1,9 @@
 ---
 type: Decision
 title: 统一层不定义 adapter 无关的 Plan
-status: accepted
-date: 2026-11-08
+status: stable
+x-agent-sdk-go-decision-status: accepted
+x-agent-sdk-go-decision-date: "2026-11-08"
 ---
 
 # 统一层不定义 adapter 无关的 Plan

@@ -1,3 +1,8 @@
+---
+type: Guide
+title: Offline validation
+---
+
 # Offline validation
 
 Run commands in this guide from the repository root with Go 1.26 or newer.

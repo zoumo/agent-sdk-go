@@ -1,8 +1,9 @@
 ---
 type: Decision
 title: 统一输入操作采用 Start or steer
-status: accepted
-date: 2026-11-09
+status: stable
+x-agent-sdk-go-decision-status: accepted
+x-agent-sdk-go-decision-date: "2026-11-09"
 ---
 
 # 统一输入操作采用 Start or steer

@@ -1,8 +1,9 @@
 ---
 type: Decision
 title: 环境与 prompt trace 按作用域分离
-status: accepted
-date: 2026-11-11
+status: stable
+x-agent-sdk-go-decision-status: accepted
+x-agent-sdk-go-decision-date: "2026-11-11"
 ---
 
 # 环境与 prompt trace 按作用域分离

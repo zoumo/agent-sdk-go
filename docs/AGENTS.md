@@ -14,4 +14,6 @@ status: stable
 - 开发规范、核心设计合同和共同验收集中在 `docs/`。术语维护在根 [GLOSSARY.md](../GLOSSARY.md)。使用命令、原生来源与证据放在对应 SDK README、来源文件和工具说明。
 - 每项规则只维护一处；补充现有文档，不为单次任务创建报告、子索引或模板。历史由 Git 保存。
 - 公开 Go 声明、默认值和验收矩阵链接到所属源码。正文记录调用顺序、资源归属、设计约束与验收条件。实现历史由 Git 保存，验证结果以检查产物为准。
-- 采用 OKF v0.2：概念文档包含 type、title、status；根索引声明 okf_version。使用相对链接。
+- `docs/` 按 [OKF v0.3](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) 组织。维护根索引时保留 YAML 元数据，并为概念页填写 `type` 和 `title`。
+- `status` 用于文档生命周期，取值为 `draft`、`stable` 或 `deprecated`。ADR 用 `x-agent-sdk-go-decision-status` 和 `x-agent-sdk-go-decision-date` 记录决策状态与日期。
+- 使用相对链接。链接到源码或仓库级文档时，保留从当前文件出发的路径。

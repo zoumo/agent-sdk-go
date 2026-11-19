@@ -1,3 +1,8 @@
+---
+type: Guide
+title: Migration
+---
+
 # Migration
 
 Move your application from the standalone SDK modules to the shared

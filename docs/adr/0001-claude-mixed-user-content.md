@@ -1,8 +1,9 @@
 ---
 type: Decision
 title: Claude mixed user content 明确不支持
-status: accepted
-date: 2026-11-08
+status: stable
+x-agent-sdk-go-decision-status: accepted
+x-agent-sdk-go-decision-date: "2026-11-08"
 ---
 
 # Claude mixed user content 明确不支持

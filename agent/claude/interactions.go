@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -215,8 +217,27 @@ func claudeFormRequestedSchema(input claude.AskUserQuestionInput) map[string]any
 		},
 		"required":             []any{"answers"},
 		"additionalProperties": false,
-		"x-claude-questions":   input.Questions,
+		"x-claude-questions":   cloneClaudeQuestions(input.Questions),
 	}
+}
+
+func cloneClaudeQuestions(questions []claude.Question) []claude.Question {
+	cloned := slices.Clone(questions)
+	for i := range cloned {
+		q := &cloned[i]
+		q.Raw = slices.Clone(q.Raw)
+		q.Fields = maps.Clone(q.Fields)
+		q.Options = slices.Clone(q.Options)
+		for j := range q.Options {
+			option := &q.Options[j]
+			option.Raw = slices.Clone(option.Raw)
+			option.Fields = maps.Clone(option.Fields)
+			if option.Preview != nil {
+				option.Preview = new(*option.Preview)
+			}
+		}
+	}
+	return cloned
 }
 
 func (s *session) rejectUnsupportedRequest(

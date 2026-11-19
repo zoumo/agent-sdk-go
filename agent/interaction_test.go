@@ -26,13 +26,6 @@ func TestInteractionRequestValidationRejectsInvalidKindFieldCombinations(t *test
 		request agent.InteractionRequest
 	}{
 		{
-			name: "permission missing tool call",
-			request: agent.InteractionRequest{
-				Kind:    agent.InteractionPermission,
-				Options: options,
-			},
-		},
-		{
 			name: "permission without options",
 			request: agent.InteractionRequest{
 				Kind:       agent.InteractionPermission,
@@ -45,7 +38,7 @@ func TestInteractionRequestValidationRejectsInvalidKindFieldCombinations(t *test
 				Kind:       agent.InteractionPermission,
 				ToolCallID: "tool-1",
 				Options: []agent.PermissionOption{
-					{OptionID: "allow", Name: "Allow", Kind: "allow"},
+					{OptionID: "allow", Name: "Allow", Kind: "unknown"},
 				},
 			},
 		},
@@ -510,4 +503,60 @@ func TestInteractionRequestRoundTripsJSONByKind(t *testing.T) {
 	var decoded agent.InteractionRequest
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
 	assert.Equal(t, original, decoded)
+}
+
+func TestPermissionEventRoundTripsCurrentAndHistoricalOptions(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		request string
+	}{
+		{"current without tool ID", `{"kind":"permission","options":[
+			{"optionId":"a","name":"Allow once","kind":"allow","scope":"once"},
+			{"optionId":"b","name":"Allow this turn","kind":"allow","scope":"turn"},
+			{"optionId":"c","name":"Reject this session","kind":"reject","scope":"session"},
+			{"optionId":"d","name":"Reject persistently","kind":"reject","scope":"always"},
+			{"optionId":"e","name":"Cancel","kind":"cancel"}]}`},
+		{"historical", `{"kind":"permission","toolCallId":"tool-1","options":[
+			{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},
+			{"optionId":"allow-session","name":"Allow for this session","kind":"allow_always"},
+			{"optionId":"cancel","name":"Cancel","kind":"reject_once"},
+			{"optionId":"native-decision-3","name":"Apply network policy","kind":"reject_always"}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			wire := `{"eventId":"` + validEventID + `","sessionId":"s","time":"2026-11-19T00:00:00Z",
+				"type":"session.interaction_requested","payload":{"interaction":"i","blocking":true,
+				"request":` + test.request + `}}`
+			var event agent.Event
+			require.NoError(t, json.Unmarshal([]byte(wire), &event))
+			got, err := json.Marshal(event)
+			require.NoError(t, err)
+			assert.JSONEq(t, wire, string(got))
+		})
+	}
+}
+
+func TestPermissionJSONRejectsInvalidOptions(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		options string
+	}{
+		{"missing allow scope", `{"optionId":"a","name":"A","kind":"allow"}`},
+		{"missing reject scope", `{"optionId":"a","name":"A","kind":"reject"}`},
+		{"unknown scope", `{"optionId":"a","name":"A","kind":"allow","scope":"week"}`},
+		{"empty scope", `{"optionId":"a","name":"A","kind":"reject","scope":""}`},
+		{"null scope", `{"optionId":"a","name":"A","kind":"cancel","scope":null}`},
+		{"scoped cancel", `{"optionId":"a","name":"A","kind":"cancel","scope":"once"}`},
+		{"scoped historical kind", `{"optionId":"a","name":"A","kind":"allow_always","scope":"always"}`},
+		{"duplicate cancels", `{"optionId":"a","name":"A","kind":"cancel"},{"optionId":"b","name":"B","kind":"cancel"}`},
+		{"duplicate IDs", `{"optionId":"a","name":"A","kind":"allow","scope":"once"},{"optionId":"a","name":"B","kind":"cancel"}`},
+		{"missing name", `{"optionId":"a","kind":"cancel"}`},
+		{"unknown field", `{"optionId":"a","name":"A","kind":"cancel","extra":true}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var request agent.InteractionRequest
+			err := json.Unmarshal([]byte(`{"kind":"permission","options":[`+test.options+`]}`), &request)
+			require.Error(t, err)
+			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+		})
+	}
 }

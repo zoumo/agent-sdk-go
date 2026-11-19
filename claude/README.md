@@ -20,9 +20,9 @@ exact hashes and licenses remain in
 [type sources](docs/type-sources.md). Synthetic tests do not certify live behavior.
 
 This implements a local stdio client with narrow input, permission/question,
-model/thinking, external/application-owned MCP and local-history APIs. It does not
+MCP elicitation, model/thinking, external/application-owned MCP and local-history APIs. It does not
 provide full official configuration/control parity, hook callbacks, agent-definition
-registration, remote CLI transports, administration, user-dialog/elicitation APIs or
+registration, remote CLI transports, administration, user-dialog APIs or
 durable recovery. Unknown frame preservation does not implement those operations.
 There is no public generic raw-write escape hatch. Inherited CLI configuration may
 still affect execution. See [offline checks](../docs/testing.md).
@@ -87,6 +87,12 @@ interrupt. `Answer(QuestionAnswers)` answers a real AskUserQuestion using full
 question-text keys and preserves the original questions and unknown input fields.
 `Handle()` retains the original native PermissionRequest for explicit supported
 native responses. A parsed event, relationship or history record has no authority.
+
+Set `SessionOptions.ReceiveElicitation` to receive standalone MCP prompts through
+the same FIFO. For method `elicitation`, `Elicitation()` returns the server name,
+message, form schema or URL. Pass the original request to `ReplyElicitation` with
+`accept`, `decline` or `cancel`. Accepted forms may include a content map.
+The unified adapter enables this delivery for every Session.
 
 No default answer or SDK approval deadline is imposed on Session requests. The
 registry enforces cancellation, single use and invalidation at close. A queued

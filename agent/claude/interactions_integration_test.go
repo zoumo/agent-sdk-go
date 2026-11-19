@@ -16,11 +16,13 @@ import (
 
 func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 	tests := []struct {
-		name        string
-		requestID   string
-		response    string
-		answer      agent.PermissionAnswer
-		wantOutcome agent.InteractionOutcome
+		name         string
+		requestID    string
+		response     string
+		toolName     string
+		toolUseID    string
+		selectedKind agent.PermissionOptionKind
+		wantOutcome  agent.InteractionOutcome
 	}{
 		{
 			name:      "allow once",
@@ -28,11 +30,10 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			response: `>{"type":"control_response","response":{"subtype":"success",` +
 				`"request_id":"permission-allow","response":{"behavior":"allow",` +
 				`"updatedInput":{"file_path":"a.txt"}}}}`,
-			answer: agent.PermissionAnswer{
-				Outcome:  agent.PermissionSelected,
-				OptionID: "allow-once",
-			},
-			wantOutcome: agent.InteractionAnswered,
+			toolName:     "Read",
+			toolUseID:    "read-tool",
+			selectedKind: agent.PermissionAllow,
+			wantOutcome:  agent.InteractionAnswered,
 		},
 		{
 			name:      "reject once",
@@ -40,11 +41,10 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			response: `>{"type":"control_response","response":{"subtype":"success",` +
 				`"request_id":"permission-reject","response":{"behavior":"deny",` +
 				`"message":"User denied the request"}}}`,
-			answer: agent.PermissionAnswer{
-				Outcome:  agent.PermissionSelected,
-				OptionID: "reject-once",
-			},
-			wantOutcome: agent.InteractionAnswered,
+			toolName:     "Read",
+			toolUseID:    "read-tool",
+			selectedKind: agent.PermissionReject,
+			wantOutcome:  agent.InteractionAnswered,
 		},
 		{
 			name:      "cancel",
@@ -52,10 +52,19 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			response: `>{"type":"control_response","response":{"subtype":"success",` +
 				`"request_id":"permission-cancel","response":{"behavior":"deny",` +
 				`"message":"User canceled the request"}}}`,
-			answer: agent.PermissionAnswer{
-				Outcome: agent.PermissionCancelled,
-			},
+			toolName:    "Read",
+			toolUseID:   "read-tool",
 			wantOutcome: agent.InteractionCancelled,
+		},
+		{
+			name:      "select cancel",
+			requestID: "permission-cancel",
+			response: `>{"type":"control_response","response":{"subtype":"success",` +
+				`"request_id":"permission-cancel","response":{"behavior":"deny",` +
+				`"message":"User canceled the request"}}}`,
+			toolName:     "mcp__filesystem__read",
+			selectedKind: agent.PermissionCancel,
+			wantOutcome:  agent.InteractionCancelled,
 		},
 	}
 	for _, test := range tests {
@@ -69,8 +78,8 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				claudeStateFrame("native-permission", "running", "2026-11-07T14:00:00Z"),
 				claudePermissionRequestFrame(
 					test.requestID,
-					"Read",
-					"read-tool",
+					test.toolName,
+					test.toolUseID,
 					`{"file_path":"a.txt"}`,
 				),
 				test.response,
@@ -111,24 +120,30 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 			)
 			requested := nextClaudeInteractionRequested(t, ctx, stream)
 			assert.Equal(t, agent.InteractionPermission, requested.Request.Kind)
-			assert.Equal(t, "read-tool", requested.Request.ToolCallID)
+			assert.Equal(t, test.toolUseID, requested.Request.ToolCallID)
 			assert.Equal(t, "Read file", requested.Request.Title)
 			assert.True(t, requested.Blocking)
-			require.Len(t, requested.Request.Options, 2)
-			assert.Equal(t,
-				agent.PermissionAllowOnce,
-				requested.Request.Options[0].Kind,
-			)
-			assert.Equal(t,
-				agent.PermissionRejectOnce,
-				requested.Request.Options[1].Kind,
-			)
+			require.Equal(t, []agent.PermissionOption{
+				{OptionID: "allow-once", Name: "Allow once", Kind: agent.PermissionAllow, Scope: agent.PermissionScopeOnce},
+				{OptionID: "reject-once", Name: "Reject once", Kind: agent.PermissionReject, Scope: agent.PermissionScopeOnce},
+				{OptionID: "cancel", Name: "Cancel", Kind: agent.PermissionCancel},
+			}, requested.Request.Options)
 			require.Len(t, requested.Request.Content, 1)
 			text := requested.Request.Content[0].Text
 			require.NotNil(t, text)
 			assert.Contains(t, text.Text, `"file_path":"a.txt"`)
 
-			receipt, err := session.Answer(ctx, requested.Interaction, test.answer)
+			answer := agent.PermissionAnswer{Outcome: agent.PermissionCancelled}
+			if test.selectedKind != "" {
+				for _, option := range requested.Request.Options {
+					if option.Kind == test.selectedKind {
+						answer = agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: option.OptionID}
+						break
+					}
+				}
+				require.NotEmpty(t, answer.OptionID)
+			}
+			receipt, err := session.Answer(ctx, requested.Interaction, answer)
 			require.NoError(t, err)
 			assert.Equal(t, requested.Interaction, receipt.Interaction)
 			require.NotNil(t, receipt.Acceptance.Sent)
@@ -148,7 +163,7 @@ func TestClaudePermissionAnswerOutcomes(t *testing.T) {
 				time.Date(2026, 11, 7, 14, 0, 3, 0, time.UTC),
 			)
 
-			_, err = session.Answer(ctx, requested.Interaction, test.answer)
+			_, err = session.Answer(ctx, requested.Interaction, answer)
 			require.Error(t, err)
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 
@@ -680,7 +695,7 @@ func TestClaudeDisabledQuestionsRejectNativeForm(t *testing.T) {
 	)
 
 	assert.False(t, session.EffectiveFeatures().AgentQuestions)
-	assert.False(t, session.Capabilities().Supports(agent.CapabilityForm))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
 	_, err := session.StartOrSteer(ctx, agent.Input{
 		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "ask"}}},
 	})
@@ -963,10 +978,13 @@ func claudePermissionRequestFrame(
 	toolUseID string,
 	input string,
 ) string {
+	toolID := ""
+	if toolUseID != "" {
+		toolID = `,"tool_use_id":"` + toolUseID + `"`
+	}
 	return `<{"type":"control_request","request_id":"` + requestID +
-		`","request":{"subtype":"can_use_tool","tool_name":"` + toolName +
-		`","tool_use_id":"` + toolUseID + `","title":"Read file",` +
-		`"input":` + input + `}}`
+		`","request":{"subtype":"can_use_tool","tool_name":"` + toolName + `"` +
+		toolID + `,"title":"Read file","input":` + input + `}}`
 }
 
 func nextClaudeInteractionRequested(

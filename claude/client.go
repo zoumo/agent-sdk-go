@@ -57,8 +57,11 @@ type Options struct {
 	// HandleSDKMCP answers application-hosted MCP requests, including requests
 	// received before initialization completes. Nil delivers them through Receive.
 	HandleSDKMCP func(context.Context, IncomingRequest) error
-	Thinking     *types.ThinkingConfig
-	Initialize   *types.InitializeOptions
+	// ReceiveElicitation delivers standalone MCP elicitation controls through Session.Receive.
+	// The default retains the unsupported-control response for existing native callers.
+	ReceiveElicitation bool
+	Thinking           *types.ThinkingConfig
+	Initialize         *types.InitializeOptions
 	// SessionStartProbe appends one private SessionStart callback matcher to
 	// Initialize.Hooks. Nil leaves initialization unchanged.
 	SessionStartProbe *SessionStartProbe
@@ -770,7 +773,8 @@ func (c *interaction) routeNative(event Event) error {
 			}
 			return nil
 		}
-		if c.session != nil && (event.Control.Subtype == "can_use_tool" || c.ownsSDKMCPRequest(event.Control)) {
+		elicitation := c.opts.ReceiveElicitation && event.Control.Subtype == "elicitation"
+		if c.session != nil && (event.Control.Subtype == "can_use_tool" || elicitation || c.ownsSDKMCPRequest(event.Control)) {
 			return c.session.acceptRequest(event, permission)
 		}
 		work := incomingControl{subtype: event.Control.Subtype, permission: permission}

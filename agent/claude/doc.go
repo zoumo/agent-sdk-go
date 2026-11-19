@@ -18,7 +18,7 @@
 //
 // The adapter maps Claude user and assistant text and thinking, message and
 // content-block deltas, tool calls and results, session state, usage, available
-// commands, native errors, permission requests, and AskUserQuestion forms. A
+// commands, native errors, permission requests, AskUserQuestion forms, and MCP elicitations. A
 // text-only user content array becomes one UserMessage content array, and a
 // tool-result-only array emits tool results. Although the native message type
 // permits text and tool_result in one user content array, observed Claude output
@@ -29,8 +29,8 @@
 // state is released when the next response starts. An aborted assistant frame is
 // reported rather than presented as complete content.
 // Message, response, block, and tool identities remain in event item IDs and
-// Meta. The Core declares text input, permission, and form capabilities;
-// disabling AgentQuestions removes form support and disables the native tool.
+// Meta. MCP elicitations accept form and URL answers. AgentQuestions controls
+// the AskUserQuestion tool independently.
 //
 // Tool calls and results preserve the exact native tool_use.name, including the
 // complete mcp__... name. Their Claude-specific Provider and Kind mappings,

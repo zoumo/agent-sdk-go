@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"sort"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
+
+const permissionCancel = "cancel"
 
 type pendingInteraction struct {
 	ref        agent.InteractionRef
@@ -29,7 +32,6 @@ type pendingInteraction struct {
 	request    codex.IncomingRequest
 	received   codex.Received
 	choices    map[string]func(context.Context) error
-	cancel     func(context.Context) error
 	questions  map[string]struct{}
 	slot       interactionledger.Slot
 	sequence   uint64
@@ -61,14 +63,12 @@ func (s *session) convertRequest(received codex.Received) ([]agent.Event, error)
 		return s.commandInteraction(received, request, threadID)
 	case "item/fileChange/requestApproval":
 		return s.fileChangeInteraction(received, request, threadID)
+	case mcpElicitationMethod:
+		return s.mcpElicitation(received, request, threadID)
 	case "item/tool/requestUserInput":
 		return s.formInteraction(received, request, threadID)
 	case "item/permissions/requestApproval":
-		return s.unsupportedRequest(
-			received,
-			"permission_profile_unsupported",
-			"Codex permission-profile approval cannot be represented safely",
-		)
+		return s.permissionsInteraction(received, request, threadID)
 	default:
 		return s.unsupportedRequest(
 			received,
@@ -107,7 +107,6 @@ func (s *session) commandInteraction(
 			"Codex command approval contains unsupported options",
 		)
 	}
-	cancel := commandCancelChoice(request, params)
 	interaction := &pendingInteraction{
 		kind:      agent.InteractionPermission,
 		method:    request.Method(),
@@ -119,7 +118,6 @@ func (s *session) commandInteraction(
 		request:   request,
 		received:  received,
 		choices:   choices,
-		cancel:    cancel,
 	}
 	unifiedRequest := agent.InteractionRequest{
 		Kind:       agent.InteractionPermission,
@@ -163,7 +161,6 @@ func (s *session) fileChangeInteraction(
 		request:   request,
 		received:  received,
 		choices:   choices,
-		cancel:    choices["cancel"],
 	}
 	unifiedRequest := agent.InteractionRequest{
 		Kind:       agent.InteractionPermission,
@@ -172,6 +169,69 @@ func (s *session) fileChangeInteraction(
 		Options:    options,
 	}
 	return s.registerInteraction(interaction, unifiedRequest)
+}
+
+func (s *session) permissionsInteraction(
+	received codex.Received,
+	request codex.IncomingRequest,
+	threadID string,
+) ([]agent.Event, error) {
+	data, err := request.Data()
+	params, ok := data.(*codextypes.PermissionsRequestApprovalParams)
+	if err != nil || !ok || params.ItemID == "" || params.TurnID == "" || params.ThreadID != threadID {
+		return s.unsupportedRequest(received, "invalid_native_request", "Codex additional permission request has invalid parameters")
+	}
+
+	// The two native profiles have identical fields, including optional states
+	// and unknown members. Display the same grant that the answer handle sends.
+	grant := codextypes.GrantedPermissionProfile(params.Permissions)
+	profileJSON, err := json.Marshal(grant)
+	if err != nil {
+		return s.unsupportedRequest(received, "invalid_native_request", "Codex additional permissions cannot be represented")
+	}
+	content := []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: string(profileJSON)}}}
+	if reason, present := params.Reason.Get(); present && reason != "" {
+		content = append(content, agent.ContentBlock{Text: &agent.ContentBlockText{Text: reason}})
+	}
+
+	options := []agent.PermissionOption{
+		permissionOption("allow-turn", "Allow for this turn", agent.PermissionAllow, agent.PermissionScopeTurn),
+		permissionOption("allow-session", "Allow for this session", agent.PermissionAllow, agent.PermissionScopeSession),
+		permissionOption("reject-once", "Reject once", agent.PermissionReject, agent.PermissionScopeOnce),
+	}
+	choices := make(map[string]func(context.Context) error, len(options))
+	for _, option := range options {
+		if option.Kind == agent.PermissionReject {
+			choices[option.OptionID] = func(ctx context.Context) error {
+				return request.Deny(ctx, codex.ApprovalOptions{})
+			}
+			continue
+		}
+		scope := codextypes.PermissionGrantScope(option.Scope)
+		choices[option.OptionID] = func(ctx context.Context) error {
+			response := codextypes.PermissionsRequestApprovalResponse{Permissions: grant, Scope: codextypes.Some(scope)}
+			return request.Approve(ctx, codex.ApprovalOptions{Permissions: &response})
+		}
+	}
+	interaction := &pendingInteraction{
+		kind:      agent.InteractionPermission,
+		method:    request.Method(),
+		startedAt: unixMilliOrNow(params.StartedAtMs),
+		turnID:    params.TurnID,
+		itemID:    params.ItemID,
+		threadID:  threadID,
+		blocking:  true,
+		request:   request,
+		received:  received,
+		choices:   choices,
+	}
+	return s.registerInteraction(interaction, agent.InteractionRequest{
+		Kind:       agent.InteractionPermission,
+		ToolCallID: params.ItemID,
+		Title:      "Approve additional sandbox permissions",
+		Options:    options,
+		Content:    content,
+	})
 }
 
 func (s *session) formInteraction(
@@ -355,7 +415,7 @@ func (s *session) registerInteraction(
 			"Codex repeated an interaction request; the original reference remains authoritative",
 		)
 	}
-	if interaction.threadID == s.ID() {
+	if interaction.threadID == s.ID() && interaction.turnID != "" {
 		if s.activeTurn == "" {
 			if (!s.submitting && !s.submitUnknown) ||
 				s.lastFinished == interaction.turnID {
@@ -502,7 +562,7 @@ func (s *session) answerInteraction(
 			nil,
 		)
 	}
-	if interaction.kind == agent.InteractionForm && !s.features.AgentQuestions {
+	if interaction.method == "item/tool/requestUserInput" && !s.features.AgentQuestions {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, adapterError(
 			agent.ErrorUnsupported,
@@ -528,7 +588,7 @@ func (s *session) answerInteraction(
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, err
 	}
-	reply, validationErr := interactionReply(interaction, matched)
+	reply, outcome, validationErr := interactionReply(interaction, matched)
 	if validationErr != nil {
 		s.mu.Unlock()
 		return agent.InteractionReceipt{}, validationErr
@@ -549,7 +609,7 @@ func (s *session) answerInteraction(
 	s.mu.Lock()
 	switch {
 	case answerErr == nil:
-		interaction.slot.CompleteSent(agent.InteractionAnswered)
+		interaction.slot.CompleteSent(outcome)
 	case answerOutcomeUnknown(answerErr):
 		interaction.slot.CompleteTerminal(
 			agent.InteractionFailed,
@@ -640,33 +700,42 @@ func (s *session) finishTerminalInteractionAndUnlock(
 func interactionReply(
 	interaction *pendingInteraction,
 	answer agent.Answer,
-) (func(context.Context) error, error) {
+) (func(context.Context) error, agent.InteractionOutcome, error) {
 	switch concrete := answer.(type) {
 	case agent.PermissionAnswer:
+		id := concrete.OptionID
 		if concrete.Outcome == agent.PermissionCancelled {
-			if interaction.cancel == nil {
-				return nil, adapterError(
+			id = permissionCancel
+			if interaction.choices[id] == nil {
+				return nil, "", adapterError(
 					agent.ErrorUnsupported,
 					ErrorReasonPermissionCancelUnsupported,
 					"this Codex permission request has no proven cancellation",
 					nil,
 				)
 			}
-			return interaction.cancel, nil
 		}
-		reply := interaction.choices[concrete.OptionID]
+		reply := interaction.choices[id]
 		if reply == nil {
-			return nil, adapterError(
+			return nil, "", adapterError(
 				agent.ErrorInvalidArgument,
 				agent.ErrorReasonPermissionOptionNotOffered,
 				"permission option was not offered by the native request",
 				nil,
 			)
 		}
-		return reply, nil
+		if id == permissionCancel {
+			return reply, agent.InteractionCancelled, nil
+		}
+		return reply, agent.InteractionAnswered, nil
+	case agent.URLAnswer:
+		return mcpActionReply(interaction.request, string(concrete.Outcome), nil)
 	case agent.FormAnswer:
+		if interaction.method == mcpElicitationMethod {
+			return mcpActionReply(interaction.request, string(concrete.Outcome), concrete.Content)
+		}
 		if concrete.Outcome != agent.FormAccept {
-			return nil, adapterError(
+			return nil, "", adapterError(
 				agent.ErrorUnsupported,
 				ErrorReasonFormOutcomeUnsupported,
 				"Codex user-input decline and cancellation are not proven",
@@ -675,13 +744,13 @@ func interactionReply(
 		}
 		response, err := formResponse(interaction, concrete.Content)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		return func(ctx context.Context) error {
 			return interaction.request.Answer(ctx, response)
-		}, nil
+		}, agent.InteractionAnswered, nil
 	default:
-		return nil, adapterError(
+		return nil, "", adapterError(
 			agent.ErrorUnsupported,
 			agent.ErrorReasonAnswerKindUnsupported,
 			"answer kind is not supported for this Codex interaction",
@@ -970,7 +1039,7 @@ func (s *session) clearInteractionsLocked() []*pendingInteraction {
 func (s *session) takeTurnInteractionsLocked(turnID string) []*pendingInteraction {
 	selected := make(map[agent.InteractionRef]*pendingInteraction)
 	for ref, interaction := range s.interactions {
-		if interaction.turnID != turnID {
+		if interaction.threadID != s.ID() || interaction.turnID != turnID {
 			continue
 		}
 		selected[ref] = interaction
@@ -982,10 +1051,11 @@ func (s *session) takeTurnInteractionsLocked(turnID string) []*pendingInteractio
 	return sortedInteractions(selected)
 }
 
-func (s *session) takeThreadInteractionsLocked(threadID string) []*pendingInteraction {
+func (s *session) takeIdleTurnInteractionsLocked(threadID string) []*pendingInteraction {
 	selected := make(map[agent.InteractionRef]*pendingInteraction)
 	for ref, interaction := range s.interactions {
-		if interaction.threadID != threadID {
+		// Standalone MCP elicitations have no turn to expire at idle.
+		if interaction.threadID != threadID || interaction.turnID == "" {
 			continue
 		}
 		selected[ref] = interaction
@@ -1047,23 +1117,25 @@ func commandApprovalChoices(
 		case decision.Value != nil:
 			switch *decision.Value {
 			case codextypes.CommandExecutionApprovalDecisionValueAccept:
-				option = permissionOption("allow-once", "Allow once", agent.PermissionAllowOnce)
+				option = permissionOption("allow-once", "Allow once", agent.PermissionAllow, agent.PermissionScopeOnce)
 				approve = true
 			case codextypes.CommandExecutionApprovalDecisionValueAcceptForSession:
-				option = permissionOption("allow-session", "Allow for this session", agent.PermissionAllowAlways)
+				option = permissionOption("allow-session", "Allow for this session", agent.PermissionAllow, agent.PermissionScopeSession)
 				approve = true
 			case codextypes.CommandExecutionApprovalDecisionValueDecline:
-				option = permissionOption("reject-once", "Reject once", agent.PermissionRejectOnce)
+				option = permissionOption("reject-once", "Reject once", agent.PermissionReject, agent.PermissionScopeOnce)
 			case codextypes.CommandExecutionApprovalDecisionValueCancel:
-				option = permissionOption("cancel", "Cancel", agent.PermissionRejectOnce)
+				option = permissionOption(permissionCancel, "Cancel", agent.PermissionCancel, "")
 			default:
 				return nil, nil, false
 			}
 		case decision.AcceptWithExecpolicyAmendment != nil:
+			prefix := decision.AcceptWithExecpolicyAmendment.AcceptWithExecpolicyAmendment.ExecpolicyAmendment
 			option = permissionOption(
 				"native-decision-"+strconv.Itoa(index),
-				"Allow and apply the proposed execution policy",
-				agent.PermissionAllowAlways,
+				fmt.Sprintf("Allow command prefix %q", prefix),
+				agent.PermissionAllow,
+				agent.PermissionScopeAlways,
 			)
 			approve = true
 		case decision.ApplyNetworkPolicyAmendment != nil:
@@ -1073,15 +1145,17 @@ func commandApprovalChoices(
 			case codextypes.NetworkPolicyRuleActionAllow:
 				option = permissionOption(
 					"native-decision-"+strconv.Itoa(index),
-					"Allow and apply the proposed network policy",
-					agent.PermissionAllowAlways,
+					"Allow network access to "+strconv.Quote(policy.Host),
+					agent.PermissionAllow,
+					agent.PermissionScopeAlways,
 				)
 				approve = true
 			case codextypes.NetworkPolicyRuleActionDeny:
 				option = permissionOption(
 					"native-decision-"+strconv.Itoa(index),
-					"Reject and apply the proposed network policy",
-					agent.PermissionRejectAlways,
+					"Deny network access to "+strconv.Quote(policy.Host),
+					agent.PermissionReject,
+					agent.PermissionScopeAlways,
 				)
 			default:
 				return nil, nil, false
@@ -1109,27 +1183,6 @@ func commandApprovalChoices(
 	return options, choices, len(options) != 0
 }
 
-func commandCancelChoice(
-	request codex.IncomingRequest,
-	params *codextypes.CommandExecutionRequestApprovalParams,
-) func(context.Context) error {
-	decisions, present := params.AvailableDecisions.Get()
-	if !present {
-		return nil
-	}
-	for _, decision := range decisions {
-		if decision.Value == nil ||
-			*decision.Value != codextypes.CommandExecutionApprovalDecisionValueCancel {
-			continue
-		}
-		captured := decision
-		return func(ctx context.Context) error {
-			return denyWithCommandDecision(ctx, request, captured)
-		}
-	}
-	return nil
-}
-
 func fileChangeApprovalChoices(
 	request codex.IncomingRequest,
 ) ([]agent.PermissionOption, map[string]func(context.Context) error) {
@@ -1139,10 +1192,10 @@ func fileChangeApprovalChoices(
 		approve  bool
 	}
 	items := []choice{
-		{permissionOption("allow-once", "Allow once", agent.PermissionAllowOnce), codextypes.FileChangeApprovalDecisionAccept, true},
-		{permissionOption("allow-session", "Allow for this session", agent.PermissionAllowAlways), codextypes.FileChangeApprovalDecisionAcceptForSession, true},
-		{permissionOption("reject-once", "Reject once", agent.PermissionRejectOnce), codextypes.FileChangeApprovalDecisionDecline, false},
-		{permissionOption("cancel", "Cancel", agent.PermissionRejectOnce), codextypes.FileChangeApprovalDecisionCancel, false},
+		{permissionOption("allow-once", "Allow once", agent.PermissionAllow, agent.PermissionScopeOnce), codextypes.FileChangeApprovalDecisionAccept, true},
+		{permissionOption("allow-session", "Allow for this session", agent.PermissionAllow, agent.PermissionScopeSession), codextypes.FileChangeApprovalDecisionAcceptForSession, true},
+		{permissionOption("reject-once", "Reject once", agent.PermissionReject, agent.PermissionScopeOnce), codextypes.FileChangeApprovalDecisionDecline, false},
+		{permissionOption(permissionCancel, "Cancel", agent.PermissionCancel, ""), codextypes.FileChangeApprovalDecisionCancel, false},
 	}
 	options := make([]agent.PermissionOption, 0, len(items))
 	choices := make(map[string]func(context.Context) error, len(items))
@@ -1167,8 +1220,9 @@ func permissionOption(
 	id string,
 	name string,
 	kind agent.PermissionOptionKind,
+	scope agent.PermissionScope,
 ) agent.PermissionOption {
-	return agent.PermissionOption{OptionID: id, Name: name, Kind: kind}
+	return agent.PermissionOption{OptionID: id, Name: name, Kind: kind, Scope: scope}
 }
 
 func commandDecision(
@@ -1178,15 +1232,6 @@ func commandDecision(
 	selected := value
 	result.Value = &selected
 	return result
-}
-
-func denyWithCommandDecision(
-	ctx context.Context,
-	request codex.IncomingRequest,
-	decision codextypes.CommandExecutionApprovalDecision,
-) error {
-	response := &codextypes.CommandExecutionRequestApprovalResponse{Decision: decision}
-	return request.Deny(ctx, codex.ApprovalOptions{CommandExecution: response})
 }
 
 func requestIDKey(id codex.ID) string {

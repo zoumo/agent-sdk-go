@@ -62,7 +62,7 @@ func TestPermissionStateEventDoesNotAliasSession(t *testing.T) {
 	s.updateState(agent.StateRunning)
 	events, err := s.registerInteraction(&pendingInteraction{requestID: "req"}, agent.InteractionRequest{
 		Kind: agent.InteractionPermission, ToolCallID: "tool", Title: "test",
-		Options: []agent.PermissionOption{{OptionID: "deny", Name: "Deny", Kind: agent.PermissionRejectOnce}},
+		Options: []agent.PermissionOption{{OptionID: "deny", Name: "Deny", Kind: agent.PermissionReject, Scope: agent.PermissionScopeOnce}},
 	})
 	require.NoError(t, err)
 	require.Len(t, events, 2)

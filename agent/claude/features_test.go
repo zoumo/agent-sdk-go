@@ -69,7 +69,8 @@ func TestRestrictLocalToolsOnClaudeOpenAndResume(t *testing.T) {
 				closeSessionOnCleanup(t, session)
 				options.Features.RestrictLocalTools = false
 				assert.Equal(t, test.effective, session.EffectiveFeatures())
-				assert.Equal(t, test.effective.AgentQuestions, session.Capabilities().Supports(agent.CapabilityForm))
+				assert.True(t, session.Capabilities().Supports(agent.CapabilityForm))
+				assert.True(t, session.Capabilities().Supports(agent.CapabilityURL))
 				var denyArgs []string
 				for _, arg := range argv {
 					if strings.HasPrefix(arg, "--disallowedTools=") {

@@ -3,7 +3,6 @@ package agentclaude
 import (
 	"context"
 	"errors"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -316,19 +315,8 @@ func providerCapabilities() agent.Capabilities {
 		agent.CapabilityPromptTrace: true,
 		agent.CapabilityPermission:  true,
 		agent.CapabilityForm:        true,
+		agent.CapabilityURL:         true,
 	}
-}
-
-func sessionCapabilities(
-	base agent.Capabilities,
-	features agent.EffectiveFeatures,
-) agent.Capabilities {
-	capabilities := make(agent.Capabilities, len(base))
-	maps.Copy(capabilities, base)
-	if !features.AgentQuestions {
-		delete(capabilities, agent.CapabilityForm)
-	}
-	return capabilities
 }
 
 func (p *Core) nativeOptions(
@@ -340,19 +328,20 @@ func (p *Core) nativeOptions(
 ) claude.Options {
 	config := p.config
 	options := claude.Options{
-		CLIPath:           config.CLIPath,
-		WorkDir:           workDir,
-		MCPServers:        mcpServers,
-		Model:             sessionConfig.Model,
-		Effort:            sessionConfig.Effort,
-		Initialize:        config.Initialize,
-		ResumeID:          resumeID,
-		ChildDetailPolicy: config.ChildDetailPolicy,
-		Subagents:         config.Subagents,
-		Env:               config.Env,
-		InitializeTimeout: config.InitializeTimeout,
-		ShutdownTimeout:   config.ShutdownTimeout,
-		Limits:            config.Limits,
+		CLIPath:            config.CLIPath,
+		WorkDir:            workDir,
+		MCPServers:         mcpServers,
+		ReceiveElicitation: true,
+		Model:              sessionConfig.Model,
+		Effort:             sessionConfig.Effort,
+		Initialize:         config.Initialize,
+		ResumeID:           resumeID,
+		ChildDetailPolicy:  config.ChildDetailPolicy,
+		Subagents:          config.Subagents,
+		Env:                config.Env,
+		InitializeTimeout:  config.InitializeTimeout,
+		ShutdownTimeout:    config.ShutdownTimeout,
+		Limits:             config.Limits,
 	}
 	if !features.AgentQuestionsEnabled() {
 		options.DisallowedTools = []string{"AskUserQuestion"}

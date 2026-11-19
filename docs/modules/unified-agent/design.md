@@ -82,9 +82,9 @@ Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具
   SDK 不生成 session ID。claim 成功后返回，不等待 `system/init`，不发送用户输入。
   原生 claim 与显式 `SessionID` 的互斥和身份确认见
   [原生创建合同](../native-session/design.md#interface-session-与交付值)。
-  后续原生主消息必须匹配固定 ID，init 必须非
-  replay、只出现一次，且 cwd 与请求目录为同一目录；冲突以 `native_rejected`
-  终止 Session。init 的命令列表在到达后交付。该流程不依赖本地身份文件或刷新 API。
+  每次收到符合原生创建合同的 init，adapter 都交付其中的可用命令列表。
+  回放的 init、身份冲突或目录冲突以 `native_rejected` 终止 Session。
+  该流程不依赖本地身份文件或刷新 API。
 - `Resume` 必须定向并确认原原生身份；Claude 还必须在启动前预检保存材料，
   以只读 `get_status` 控制探针确认身份，并在返回前复核
   同一文件身份（见 [Claude 恢复身份](#claude-resume-identity)）。恢复响应中的

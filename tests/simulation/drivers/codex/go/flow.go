@@ -257,8 +257,8 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 					e = r.Handle().Answer(ctx, m.Result)
 				}
 			}
-			if e := recordedAnswerError(e); e != nil {
-				return e
+			if answerErr := recordedAnswerError(e); answerErr != nil {
+				return answerErr
 			}
 			continue
 		}

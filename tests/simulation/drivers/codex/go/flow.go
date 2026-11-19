@@ -257,7 +257,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 					e = r.Handle().Answer(ctx, m.Result)
 				}
 			}
-			if e != nil {
+			if e := recordedAnswerError(e); e != nil {
 				return e
 			}
 			continue
@@ -374,6 +374,17 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 		return receiveErr
 	}
 	return nil
+}
+
+func recordedAnswerError(err error) error {
+	var answer *codex.AnswerError
+	if errors.As(err, &answer) && answer.Dispatch == codex.OutcomeUnknown && errors.Is(answer, codex.ErrRequestResolved) {
+		// The strict mock matches the answer before emitting the recorded resolution.
+		// The resolution can reach the SDK reader before its writer reports completion.
+		// Keep checking the recorded facts and require the mock to consume the full trace.
+		return nil
+	}
+	return err
 }
 
 func answerSandboxPermissions(ctx context.Context, request *codex.IncomingRequest, recorded json.RawMessage) error {

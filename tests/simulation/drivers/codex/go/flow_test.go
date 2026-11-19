@@ -49,6 +49,20 @@ func TestJoinInputCloseError(t *testing.T) {
 	}
 }
 
+func TestRecordedAnswerError(t *testing.T) {
+	require.NoError(t, recordedAnswerError(nil))
+	require.NoError(t, recordedAnswerError(&codex.AnswerError{
+		Dispatch: codex.OutcomeUnknown,
+		Cause:    codex.ErrRequestResolved,
+	}))
+	for _, answerErr := range []*codex.AnswerError{
+		{Dispatch: codex.NotSent, Cause: codex.ErrRequestResolved},
+		{Dispatch: codex.OutcomeUnknown, Cause: codex.ErrWriteTimeout},
+	} {
+		require.Same(t, answerErr, recordedAnswerError(answerErr))
+	}
+}
+
 func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 	for _, decision := range []string{"accept", "decline"} {
 		t.Run(decision, func(t *testing.T) {
@@ -65,6 +79,7 @@ func TestFlowReproducesConfigurationApprovalAndNativeFacts(t *testing.T) {
 			addRoot(&fs, "s2c", `{"id":106,"result":{"turn":{"id":"turn-1","items":[],"status":"inProgress"}}}`)
 			addRoot(&fs, "s2c", `{"id":"permission","method":"item/commandExecution/requestApproval","params":{"threadId":"thread-001","turnId":"turn-1","itemId":"item-1","command":"DO NOT EXECUTE"}}`)
 			addRoot(&fs, "c2s", `{"id":"permission","result":{"decision":"`+decision+`"}}`)
+			addRoot(&fs, "s2c", `{"method":"serverRequest/resolved","params":{"threadId":"thread-001","requestId":"permission"}}`)
 			addRoot(&fs, "s2c", `{"method":"turn/completed","params":{"threadId":"thread-001","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}`)
 			var capture bytes.Buffer
 			for i, f := range fs {

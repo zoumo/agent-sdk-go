@@ -43,8 +43,8 @@ func TestSimulationGate(t *testing.T) {
 	output := runSimulationTest(t, true)
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
-	require.Equal(t, coverageMatrix{Cases: 38, Slots: 76, Required: 65, Optional: 11}, report.Matrix)
-	require.Len(t, report.Cases, 76)
+	require.Equal(t, coverageMatrix{Cases: 42, Slots: 84, Required: 69, Optional: 15}, report.Matrix)
+	require.Len(t, report.Cases, 84)
 	require.Zero(t, report.RequiredBlocking)
 	require.Zero(t, report.OptionalBlocking)
 	require.Zero(t, report.MaterialFailed)

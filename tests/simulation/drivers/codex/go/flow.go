@@ -176,7 +176,19 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 				ThreadID string `json:"threadId"`
 			}
 			_ = json.Unmarshal(m.Params, &p)
-			if m.Method != "" && (p.ThreadID == s.ThreadID() || len(m.ID) > 0) {
+			// Completed approval-fixture tool calls remain visible in both
+			// child detail policies, including calls owned by a spawned Thread.
+			var result struct {
+				Item struct {
+					Type   string `json:"type"`
+					Server string `json:"server"`
+				} `json:"item"`
+			}
+			if m.Method == "item/completed" {
+				_ = json.Unmarshal(m.Params, &result)
+			}
+			mcpResult := result.Item.Type == "mcpToolCall" && result.Item.Server == "approval_fixture"
+			if m.Method != "" && (p.ThreadID == s.ThreadID() || len(m.ID) > 0 || mcpResult) {
 				if e := wait(frame.Wire); e != nil {
 					return fmt.Errorf("ordinal %d %s: %w", frame.Ordinal, m.Method, e)
 				}
@@ -224,6 +236,18 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 							e = r.Deny(ctx, options)
 						}
 					}
+				case "item/permissions/requestApproval":
+					e = answerSandboxPermissions(ctx, r, m.Result)
+				case "mcpServer/elicitation/request":
+					var answer struct {
+						Action string `json:"action"`
+					}
+					if e = json.Unmarshal(m.Result, &answer); e == nil {
+						if answer.Action != "accept" {
+							return errors.New("MCP tool approval fixture requires accept")
+						}
+						e = r.Handle().Answer(ctx, answer)
+					}
 				case "item/tool/requestUserInput":
 					var answer types.ToolRequestUserInputResponse
 					if e = json.Unmarshal(m.Result, &answer); e == nil {
@@ -233,8 +257,8 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 					e = r.Handle().Answer(ctx, m.Result)
 				}
 			}
-			if e != nil {
-				return e
+			if answerErr := recordedAnswerError(e); answerErr != nil {
+				return answerErr
 			}
 			continue
 		}
@@ -350,6 +374,39 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 		return receiveErr
 	}
 	return nil
+}
+
+func recordedAnswerError(err error) error {
+	var answer *codex.AnswerError
+	if errors.As(err, &answer) && answer.Dispatch == codex.OutcomeUnknown && errors.Is(answer, codex.ErrRequestResolved) {
+		// The strict mock matches the answer before emitting the recorded resolution.
+		// The resolution can reach the SDK reader before its writer reports completion.
+		// Keep checking the recorded facts and require the mock to consume the full trace.
+		return nil
+	}
+	return err
+}
+
+func answerSandboxPermissions(ctx context.Context, request *codex.IncomingRequest, recorded json.RawMessage) error {
+	var response types.PermissionsRequestApprovalResponse
+	if err := json.Unmarshal(recorded, &response); err != nil {
+		return err
+	}
+	if !response.Permissions.FileSystem.IsSet() && !response.Permissions.Network.IsSet() {
+		return request.Deny(ctx, codex.ApprovalOptions{Permissions: &response})
+	}
+	var params types.PermissionsRequestApprovalParams
+	if err := json.Unmarshal(request.Params(), &params); err != nil {
+		return err
+	}
+	grant := types.GrantedPermissionProfile{
+		FileSystem: params.Permissions.FileSystem,
+		Network:    params.Permissions.Network,
+	}
+	return request.Approve(ctx, codex.ApprovalOptions{Permissions: &types.PermissionsRequestApprovalResponse{
+		Permissions: grant,
+		Scope:       response.Scope,
+	}})
 }
 
 func openStreamSession(ctx context.Context, mock *mocktest.Session, initialize types.InitializeParams) (*codex.Client, *mocktest.Run, <-chan error, error) {

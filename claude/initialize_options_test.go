@@ -21,6 +21,8 @@ func TestExplicitNativeInitializationPreservesOmissionAndAgents(t *testing.T) {
 		{"default", nil, `{"subtype":"initialize","hooks":null,"forwardSubagentText":true}`},
 		{"omitted", &types.InitializeOptions{}, `{"subtype":"initialize","hooks":null}`},
 		{"agents", &types.InitializeOptions{Agents: json.RawMessage(`{"reader":{"prompt":"read fixture","background":false}}`)}, `{"subtype":"initialize","hooks":null,"agents":{"reader":{"prompt":"read fixture","background":false}}}`},
+		{"system prompt with hooks omitted", &types.InitializeOptions{SystemPrompt: []string{""}, OmitHooks: true}, `{"subtype":"initialize","systemPrompt":[""]}`},
+		{"explicit hooks with omission enabled", &types.InitializeOptions{Hooks: json.RawMessage(`null`), OmitHooks: true}, `{"subtype":"initialize","hooks":null}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := fixtureOptions(t, "echo")

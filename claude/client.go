@@ -151,6 +151,10 @@ func (o *Options) defaults() error {
 		if err := json.Unmarshal(data, &frozen); err != nil {
 			return err
 		}
+		frozen.OmitHooks = o.Initialize.OmitHooks
+		if frozen.OmitHooks && o.Initialize.Hooks == nil {
+			frozen.Hooks = nil
+		}
 		o.Initialize = &frozen
 	}
 	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
@@ -371,11 +375,16 @@ func (c *interaction) initialize(ctx context.Context) error {
 	defer cancel()
 	forward := true
 	initialize := struct {
-		Subtype string `json:"subtype"`
+		Subtype string          `json:"subtype"`
+		Hooks   json.RawMessage `json:"hooks,omitempty"`
 		types.InitializeOptions
 	}{Subtype: "initialize", InitializeOptions: types.InitializeOptions{ForwardSubagentText: &forward}}
 	if c.opts.Initialize != nil {
 		initialize.InitializeOptions = *c.opts.Initialize
+	}
+	initialize.Hooks = initialize.InitializeOptions.Hooks
+	if initialize.Hooks == nil && !initialize.OmitHooks {
+		initialize.Hooks = json.RawMessage(`null`)
 	}
 	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
 		c.mu.Lock()

@@ -20,7 +20,7 @@ import (
 )
 
 // AcceptFlow executes recorded operations with the public Go Session. Incoming
-// permissions retain their original handles, including held approvals.
+// requests retain their original handles, including held approvals.
 func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
 	return acceptFlow(ctx, mock, root, host, policy, deliveries, nil)
 }
@@ -79,6 +79,7 @@ func acceptFlow(
 	answers := map[string]json.RawMessage{}
 	nativeRequests := map[string]json.RawMessage{}
 	var servers []string
+	var receiveElicitation bool
 	for scanner.Scan() {
 		var v frame
 		if err := json.Unmarshal(scanner.Bytes(), &v); err != nil {
@@ -96,6 +97,7 @@ func acceptFlow(
 				if err := json.Unmarshal(w.Request, &init); err != nil {
 					return err
 				}
+				init.OmitHooks = init.Hooks == nil
 			}
 		}
 		if v.Direction == "c2s" && w.Type == "control_response" {
@@ -105,6 +107,9 @@ func acceptFlow(
 			nativeRequests[w.RequestID] = v.Wire
 			var r struct{ Subtype string }
 			_ = json.Unmarshal(w.Request, &r)
+			if r.Subtype == "elicitation" {
+				receiveElicitation = true
+			}
 			if r.Subtype == "mcp_message" {
 				var metadata struct {
 					ServerName string `json:"server_name"`
@@ -169,7 +174,15 @@ func acceptFlow(
 		}
 		return nil
 	}
-	options := claude.SessionOptions{ChildDetailPolicy: policy, WorkDir: host.Workspace, Model: plan.Model, Env: host.Env, Initialize: &init, SDKMCPServers: servers}
+	options := claude.SessionOptions{
+		ChildDetailPolicy:  policy,
+		WorkDir:            host.Workspace,
+		Model:              plan.Model,
+		Env:                host.Env,
+		Initialize:         &init,
+		SDKMCPServers:      servers,
+		ReceiveElicitation: receiveElicitation,
+	}
 	for i := 0; i < len(plan.Args); i++ {
 		name, value, inline := strings.Cut(plan.Args[i], "=")
 		if name != "--model" && name != "--effort" && name != "--max-thinking-tokens" {
@@ -466,6 +479,21 @@ func acceptFlow(
 				return errors.New("original request handle missing")
 			}
 			if r.Method() == "mcp_message" {
+				continue
+			}
+			if r.Method() == "elicitation" {
+				var answer struct {
+					Action  string
+					Content map[string]any
+				}
+				decoder := json.NewDecoder(bytes.NewReader(w.Response.Response))
+				decoder.UseNumber()
+				if err := decoder.Decode(&answer); err != nil {
+					return err
+				}
+				if err := r.ReplyElicitation(ctx, answer.Action, answer.Content); err != nil {
+					return fmt.Errorf("ordinal %d elicitation reply: %w", v.Ordinal, err)
+				}
 				continue
 			}
 			var answer struct {

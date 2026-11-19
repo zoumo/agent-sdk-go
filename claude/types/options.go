@@ -16,6 +16,10 @@ type InitializeOptions struct {
 	Hooks               json.RawMessage `json:"hooks"`
 	Agents              json.RawMessage `json:"agents,omitempty"`
 	ForwardSubagentText *bool           `json:"forwardSubagentText,omitempty"`
+	// SystemPrompt supplies the native systemPrompt blocks.
+	SystemPrompt []string `json:"systemPrompt,omitempty"`
+	// OmitHooks omits the native hooks field when Hooks is nil.
+	OmitHooks bool `json:"-"`
 }
 
 // Limits bounds protocol and control resources. Zero fields select defaults. A bound exceeded

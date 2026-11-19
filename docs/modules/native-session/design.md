@@ -2,6 +2,8 @@
 type: Architecture
 title: 原生 Session 深模块设计
 status: stable
+description: "定义原生 Session 的调用方职责、资源与状态归属、权限、事件交付和子 Agent 关系。"
+tags: [codex, claude, session, events]
 ---
 
 # 原生 Session 深模块设计
@@ -51,8 +53,10 @@ claim 成功必须包含非空 session ID、成功状态及与请求相同的工
 确认前到达的原生通知有界缓冲，确认后按序接纳。显式
 `SessionOptions.SessionID` 仍通过 `--session-id` 指定 UUID，并在 initialize
 成功后固定该主身份。`ClaimSession`、`SessionID` 与 `ResumeID` 互斥；
-两个创建路径均不等待 `system/init` 或用户输入。后续原生主消息必须匹配固定身份；
-`system/init` 必须非 replay、只出现一次，且 cwd 与请求目录为同一目录。
+两个创建路径均不等待 `system/init` 或用户输入。后续原生主消息必须匹配固定身份。
+新建会话接纳与固定身份及请求目录匹配的非 replay `system/init`。重复收到匹配的
+init 时，Session 刷新观察到的元数据，保留已接纳的消息及父子关系。回放的 init、
+身份冲突或目录冲突会终止 Session。
 未选择这两个创建路径的调用仍从原生消息观察主身份。
 
 Codex `SessionOptions.Resume *types.ThreadResumeParams` 显式选择已有 thread，要求非空 ThreadID 和空 Thread 创建参数。Open 在派发前保留该身份的所有权及观察队列，接纳恢复应答前后的实时原生事实；仅在恢复应答确认同一身份后返回 Session。旧隔离记录不重新入队。恢复失败不重试、不创建替代 thread；已可能派发的恢复执行一次有界解除附着，失败保留不确定释放屏障，自有连接同时关闭回收。共享连接的其他 Session 不被关闭。

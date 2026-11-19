@@ -43,7 +43,7 @@ linters:
         - "-QF1008"
     testifylint:
       disable:
-        - require-error # Independent assertions use assert per harness/testing.md.
+        - require-error # Independent assertions use assert per docs/testing-standards.md.
     gocritic:
       enable-all: true
       disabled-checks:

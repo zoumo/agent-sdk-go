@@ -2,8 +2,8 @@
 
 Read the standards relevant to the task:
 
-- SDK, protocol, module, dependency or path changes: [development standards](harness/architecture.md).
-- Tests, helpers or generators: [testing standards](harness/testing.md).
+- SDK, protocol, module, dependency or path changes: [development standards](docs/architecture.md).
+- Tests, helpers or generators: [testing standards](docs/testing-standards.md).
 - Recording evidence: [recording and fixture provenance](tests/simulation/drivers/README.md#fixtures-仿真录制与测试输入).
 
 Use Go 1.26 or newer. `mise.toml` is an optional local convenience, not a
@@ -11,4 +11,4 @@ project requirement. Preserve native protocol contracts and recording
 provenance. Default validation is offline; this guide does not authorize real
 agent execution or new recordings.
 
-开始工作前读取 [harness 工作规则](harness/AGENTS.md)，设计从 [harness 入口](harness/index.md)读取。
+Documentation changes follow the [documentation rules](docs/AGENTS.md). Find design contracts in the [documentation index](docs/index.md).

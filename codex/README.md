@@ -1,15 +1,149 @@
-# codex-sdk-go
+# Codex SDK for Go
 
-Shell commands below run from the repository root; see [root validation](../docs/testing.md).
+<a id="codex-sdk-go"></a>
 
-A native Go client for the Codex app-server protocol.
+Use `github.com/zoumo/agent-sdk-go/codex` to start or connect to a Codex
+app-server. Import `github.com/zoumo/agent-sdk-go/codex/types` for native
+protocol values. Go 1.26 or newer is required.
 
-Connections and execution live in the native `codex` package. Events, native models,
-and optional values live in `github.com/zoumo/agent-sdk-go/codex/types`.
-The optional [unified Codex adapter](../agent/codex/doc.go) layers the same
-`agent.Core`/`agent.Session` contract over this SDK for applications that also
-use Claude. It does not replace the native protocol or history queries; use
-`agentcodex.Core.NativeClient()` only for same-connection read-only queries.
+Use the [unified Codex adapter](../agent/codex/doc.go) for the shared live
+session API. For same-connection read-only native queries from a unified Core,
+use `agentcodex.Core.NativeClient()`.
+
+## Open, submit and receive
+
+Run the offline child observation example from the repository root.
+
+```sh
+go run ./codex/examples/observe-subagents-offline
+```
+
+The example prints synthetic root and child events with their native IDs. To use
+a real Codex app-server, install a CLI that meets the [compatibility notes](#compatibility)
+and configure its account. Then follow these steps.
+
+1. Set `Stdio.Executable` to the absolute path of the installed `codex` CLI.
+2. Call `Open` to start the app-server and create a thread.
+3. Call `Submit` and save the native turn ID from `submission.Response`.
+4. Call `Receive` to read events. Match `TurnCompletedNotification` against your
+   thread and turn IDs. Read `Turn.Status` for the native result.
+
+Running the following program can execute model work. It prints the turn ID,
+text deltas, and the turn status. If the app-server requests a decision, the
+example exits and releases the Session. In an interactive application, route
+the original request to your decision handler.
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/codex/types"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() (err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	session, err := codex.Open(ctx, codex.SessionOptions{
+		Stdio: &codex.StdioOptions{
+			Executable: "/explicit/path/to/codex",
+			Args:       []string{"app-server"},
+			Initialize: types.InitializeParams{
+				ClientInfo: types.ClientInfo{Name: "example", Version: "1"},
+			},
+		},
+		Thread: types.ThreadStartParams{Ephemeral: types.Some(true)},
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, session.Abort()) }()
+
+	submission, err := session.Submit(ctx, codex.Input{
+		Input: []types.UserInput{{Text: types.Ptr(types.TextUserInput{Text: "Say hello briefly."})}},
+	})
+	if err != nil {
+		return err
+	}
+	turnID := submission.Response.Turn.ID
+	fmt.Println("native turn", turnID)
+
+	for {
+		received, err := session.Receive(ctx)
+		if err != nil {
+			return err
+		}
+		if received.Request != nil {
+			return fmt.Errorf("request %s requires an application decision", received.Request.Method())
+		}
+		if received.Event == nil {
+			continue
+		}
+		if received.Event.DecodeError != nil {
+			return received.Event.DecodeError
+		}
+		switch event := received.Event.Data.(type) {
+		case *types.AgentMessageDeltaNotification:
+			if event.ThreadID == session.ThreadID() && event.TurnID == turnID {
+				fmt.Print(event.Delta)
+			}
+		case *types.TurnCompletedNotification:
+			if event.ThreadID == session.ThreadID() && event.Turn.ID == turnID {
+				fmt.Printf("\nturn %s: %s\n", turnID, event.Turn.Status)
+				if event.Turn.Status != types.TurnStatusCompleted {
+					return fmt.Errorf("turn %s ended with status %s", turnID, event.Turn.Status)
+				}
+				return nil
+			}
+		}
+	}
+}
+```
+
+`Open` initializes the connection and fixes the server's main identity before
+returning. `StartResponse` retains a copy of the actual native startup model,
+sandbox and unknown fields.
+Each Session owns one FIFO; `Receive` selects native events, real
+`IncomingRequest` values and SDK observation evidence. Concurrent
+receivers compete for that same FIFO. Applications own UI/logging fan-out.
+A native result does not close the Session. `Submit` uses native turn/start,
+retains the actual native turn response, and never guesses start versus steer
+from local Busy state. A successful response is not turn completion.
+
+Use `IncomingRequest.Approve` / `Deny` with native `ApprovalOptions`, or `Answer`
+with `types.ToolRequestUserInputResponse` keyed by original question IDs. Native
+scope, execpolicy and network amendment options survive. The original
+`Handle().Answer` supports explicit raw extensions; `Handle().Reject` is an RPC
+error, separate from a user denial. Copies retain the same single-use authority.
+Cancellation, native resolution or Session termination invalidates that authority.
+No answer timeout, default deny or automatic retry is imposed by Session.
+
+Native `types.Event` retains exact `Raw`, `Params`, unknown fields/variants and
+native thread/turn/item IDs. Malformed known payloads retain bytes with a decode
+error; malformed envelopes terminate interaction. Raw duplicates remain facts.
+Confirmed members deliver immediately even when parent knowledge is missing.
+Later parent evidence never reorders earlier facts. Unconfirmed connection
+records are bounded diagnostic material in `Unattributed`, never live authority;
+later membership does not replay them into the Session FIFO.
+
+`Receive` cancellation affects only that wait. `Interrupt` requires an explicit
+native `TurnID`; its acknowledgment does not prove execution stopped. `Close`
+invalidates owned handles and cleans up without waiting for consumers. `Done`
+reports interaction termination independently of unread events. Drain to EOF or
+the stable terminal error, or explicitly `Abort` to discard abandoned backlog.
 
 ## Compatibility
 
@@ -32,7 +166,7 @@ controller, complete forwarding or combined completion.
 
 Creation uses `SessionOptions.Thread` (`types.ThreadStartParams`). Dynamic
 changes use `Session.SetModel(ctx, nativeModelID)` and
-`Session.SetThinking(ctx, ThinkingChange{Effort: types.Some[types.ReasoningEffort]("high")})`.
+`Session.SetThinking` with a native `types.ReasoningEffort` value such as `"high"`.
 The connection must opt in during initialization with
 `Capabilities: types.Some(types.InitializeCapabilities{ExperimentalAPI: types.Some(true)})`.
 Without that opt-in, setters return `ErrUnsupportedConfiguration` with `NotSent`.
@@ -113,7 +247,7 @@ package is the single configuration type used here, by Claude, and by the
 unified `agent` layer. It does not write the user `config.toml`, and low-level
 `Client.StartThread` / `Client.ResumeThread` remain native-only. The fixed merge
 and limitation contract is in the
-[native Session design](../harness/modules/native-session/design.md#interface-codex-会话配置).
+[native Session design](../docs/modules/native-session/design.md#interface-codex-会话配置).
 
 | SDK field | Native field |
 |---|---|
@@ -200,7 +334,7 @@ approvals and lifecycle facts intact. Complete items and mixed/unknown frames
 remain visible, with their original bytes. It is not content redaction or a
 token-cost control. The policy also applies to `Open` with explicit `Resume`
 parameters. Low-level `Client.ResumeThread` is unchanged. See the exact
-[method and shape contract](../harness/modules/native-session/design.md#child-detail-可选子详细事件交付).
+[method and shape contract](../docs/modules/native-session/design.md#child-detail-可选子详细事件交付).
 `NativeIntegrationSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
 public API delivery and original peer bytes; real child interoperability remains
 unverified.
@@ -219,78 +353,6 @@ MaxPages/MaxRecords/MaxBytes override these bounds. Failed calls retain accepted
 whole pages plus error/Coverage. EndReached requires explicit terminal null;
 EnumerationComplete also requires starting without a cursor. Missing/repeated/empty continuation cursors fail
 explicitly. No automatic retry or cache fallback runs.
-
-## Open, submit and receive
-
-Go 1.26 or newer is required. This example is compiled by external-consumer
-validation; default tests do not launch the selected real executable.
-
-```go
-package main
-
-import (
- "context"
- "fmt"
- "log"
- codex "github.com/zoumo/agent-sdk-go/codex"
- "github.com/zoumo/agent-sdk-go/codex/types"
-)
-
-func main(){
- ctx:=context.Background()
- session,err:=codex.Open(ctx,codex.SessionOptions{
-  Stdio:&codex.StdioOptions{Executable:"/explicit/path/to/codex",Args:[]string{"app-server"},Initialize:types.InitializeParams{ClientInfo:types.ClientInfo{Name:"example",Version:"1"}}},
-  Thread:types.ThreadStartParams{Ephemeral:types.Some(true)},
- })
- if err!=nil{log.Print(err);return}
- defer session.Abort()
- submission,err:=session.Submit(ctx,codex.Input{Input:[]types.UserInput{{Text:types.Ptr(types.TextUserInput{Text:"Say hello briefly."})}}})
- if err!=nil{log.Print(err);return}
- fmt.Println("native turn",submission.Response.Turn.ID)
- for{
-  received,err:=session.Receive(ctx);if err!=nil{log.Print(err);return}
-  if received.Request!=nil{
-   // Hand this original request to the application UI. It must supply the
-   // native answer or approval decision; the SDK makes no default decision.
-   fmt.Println("decision required",received.Request.ID(),received.Request.Method())
-  }
-  if received.Event!=nil{fmt.Println(received.Origin,received.Event.Method,string(received.Event.Params))}
-  if received.Observation!=nil{fmt.Println(received.Observation.Reason)}
- }
-}
-```
-
-`Open` initializes the connection and fixes the server's main identity before
-returning. `StartResponse` retains a copy of the actual native startup model,
-sandbox and unknown fields.
-Each Session owns one FIFO; `Receive` selects native events, real
-`IncomingRequest` values and SDK observation evidence. Concurrent
-receivers compete for that same FIFO. Applications own UI/logging fan-out.
-A native result does not close the Session. `Submit` uses native turn/start,
-retains the actual native turn response, and never guesses start versus steer
-from local Busy state. A successful response is not turn completion.
-
-Use `IncomingRequest.Approve` / `Deny` with native `ApprovalOptions`, or `Answer`
-with `types.ToolRequestUserInputResponse` keyed by original question IDs. Native
-scope, execpolicy and network amendment options survive. The original
-`Handle().Answer` supports explicit raw extensions; `Handle().Reject` is an RPC
-error, separate from a user denial. Copies retain the same single-use authority.
-Cancellation, native resolution or Session termination invalidates that authority.
-No answer timeout, default deny or automatic retry is imposed by Session.
-
-Native `types.Event` retains exact `Raw`, `Params`, unknown fields/variants and
-native thread/turn/item IDs. Malformed known payloads retain bytes with a decode
-error; malformed envelopes terminate interaction. Raw duplicates remain facts.
-Confirmed members deliver immediately even when parent knowledge is missing.
-Later parent evidence never reorders earlier facts. Unconfirmed connection
-records are bounded diagnostic material in `Unattributed`, never live authority;
-later membership does not replay them into the Session FIFO.
-
-`Receive` cancellation affects only that wait. `Interrupt` requires an explicit
-native `TurnID`; its acknowledgment does not prove execution stopped. `Close`
-invalidates owned handles and cleans up without waiting for consumers. `Done`
-reports interaction termination independently of unread events. Drain to EOF or
-the stable terminal error, or explicitly `Abort` to discard abandoned backlog.
 
 ## Context injection
 
@@ -518,7 +580,7 @@ item-view selection and omitted/null/value fields. Query availability depends on
 the server version/backend and stored history format. Metadata and saved items
 are not original notification/delta/approval logs or atomic snapshots. Remote
 queries use server storage and paths; local list may repair metadata unless
-`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../harness/contracts/history-query.md#codex-原生接口)
+`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../docs/contracts/history-query.md#codex-原生接口)
 and the [offline example](examples/history-query-offline).
 
 ## Offline examples and validation

@@ -1,11 +1,31 @@
+---
+type: Guide
+title: Migration
+description: "Explains how to migrate standalone Codex and Claude SDK imports and Session calls to the shared Go module."
+tags: [codex, claude, migration, session]
+sources:
+  - id: native-session
+    resource: "modules/native-session/design.md"
+    title: "Native Session contract"
+---
+
 # Migration
 
-Replace imports of `github.com/zoumo/codex-sdk-go` with
-`github.com/zoumo/agent-sdk-go/codex`, and imports of
-`github.com/zoumo/claude-agent-sdk-go` with
-`github.com/zoumo/agent-sdk-go/claude`. Apply the same prefix substitution to
-`/types`. Update your dependency to the single module
-`github.com/zoumo/agent-sdk-go`. Old import paths are not forwarded.
+Move your application from the standalone SDK modules to the shared
+`github.com/zoumo/agent-sdk-go` module.
+
+1. Replace the old import prefixes in your application. Include each `types`
+   import that uses the old prefix.
+
+   | Replace | With |
+   |---|---|
+   | `github.com/zoumo/codex-sdk-go` | `github.com/zoumo/agent-sdk-go/codex` |
+   | `github.com/zoumo/claude-agent-sdk-go` | `github.com/zoumo/agent-sdk-go/claude` |
+
+2. Update your Go dependency to the version of `github.com/zoumo/agent-sdk-go`
+   that you intend to use. Run `go mod tidy`.
+3. Update your session calls using the [session migration](#session). Run your
+   application's tests to find any remaining old imports or API calls.
 
 The native source roots moved under `codex/` and `claude/`. Package-local examples
 and scripts retain package-relative paths: run their documented commands from the
@@ -32,8 +52,8 @@ with each package, including upstream protocol and third-party attribution.
 The native SDK interface is `Open`, followed by the native
 `codex.Session.Submit` or `claude.Session.Submit` and the single
 `Session.Receive` FIFO. The native SDKs and `types` imports stay
-independent. [Session interfaces](../harness/modules/native-session/design.md#interface-原生-session-公开-interface)
-and [event delivery](../harness/modules/native-session/design.md#delivery-event-delivery) govern the behavior.
+independent. [Session interfaces](modules/native-session/design.md#interface-原生-session-公开-interface)
+and [event delivery](modules/native-session/design.md#delivery-event-delivery) govern the behavior.
 
 | Previous consumer coordination | Session path |
 |---|---|

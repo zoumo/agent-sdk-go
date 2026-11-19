@@ -21,7 +21,7 @@ excluded_files = {
     'go.sum',
 }
 documentation = {
-    'harness/architecture.md', 'harness/testing.md', 'docs/testing.md',
+    'docs/architecture.md', 'docs/testing-standards.md', 'docs/testing.md',
     'tests/simulation/drivers/README.md', 'README.md',
 }
 rules = [
@@ -70,7 +70,7 @@ try:
                 continue
             text = content.decode('utf-8', errors='replace')
             scopes = {'all'}
-            if relative in documentation or relative.startswith('harness/modules/agent-sdk-testify/'):
+            if relative in documentation or relative.startswith('docs/modules/agent-sdk-testify/'):
                 scopes.add('documentation')
             if name.endswith('.go'):
                 scopes.add('go')

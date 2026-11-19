@@ -35,7 +35,7 @@
 // Tool calls and results preserve the exact native tool_use.name, including the
 // complete mcp__... name. Their Claude-specific Provider and Kind mappings,
 // result-copy rule and status projection are defined in
-// harness/modules/unified-agent/design.md. Tool chunks remain {id, content}.
+// docs/modules/unified-agent/design.md. Tool chunks remain {id, content}.
 //
 // Input is one plain text block without annotations. StartOrSteer writes with
 // priority="next" and shouldQuery=true and reports only best-effort local write
@@ -46,7 +46,7 @@
 // AdditionalSystemPrompt maps to native AppendSystemPrompt and exactly one
 // --append-system-prompt=<text> argv element; empty omits it, and Resume requires
 // the value supplied for that call. The complete field contract is defined in
-// harness/modules/unified-agent/design.md#additional-system-prompt. Additional
+// docs/modules/unified-agent/design.md#additional-system-prompt. Additional
 // directories, URL interactions, multi-block input, and native frames or answer
 // extensions without an exact mapping are not advertised. TodoWrite, TaskCreate,
 // and TaskUpdate remain ordinary tool calls with their native input; they do not

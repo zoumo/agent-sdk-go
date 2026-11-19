@@ -1,8 +1,11 @@
 ---
 type: Decision
 title: 统一输入操作采用 Start or steer
-status: accepted
-date: 2026-11-09
+status: stable
+x-agent-sdk-go-decision-status: accepted
+x-agent-sdk-go-decision-date: "2026-11-09"
+description: "记录统一输入采用 Start or steer 的决定及其与原生 Session 的职责边界。"
+tags: [input, session, unified-agent]
 ---
 
 # 统一输入操作采用 Start or steer

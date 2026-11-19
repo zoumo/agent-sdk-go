@@ -24,9 +24,8 @@ type acceptanceCase struct {
 	ClaudeOptional bool
 }
 
-// This is the SDK-owned acceptance policy, not a copy of upstream scenarios,
-// bindings or recordings. Both providers share every case; the optional flags
-// follow harness/sdk/validation-cases.md.
+// This is the SDK-owned acceptance policy. Testify owns the scenarios,
+// bindings and recordings. For pass criteria, see docs/sdk/validation-cases.md.
 var acceptanceCases = []acceptanceCase{
 	{ID: "SDK-CASE-001"},
 	{ID: "SDK-CASE-002"},

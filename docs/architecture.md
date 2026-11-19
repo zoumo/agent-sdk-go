@@ -4,10 +4,6 @@ title: SDK 架构与依赖边界
 status: stable
 description: "Defines repository module and dependency boundaries, code layout, and coding conventions for the native and unified SDKs."
 tags: [architecture, dependencies, development]
-sources:
-  - id: document
-    resource: "architecture.md"
-    title: "SDK 架构与依赖边界"
 ---
 
 # Architecture standards

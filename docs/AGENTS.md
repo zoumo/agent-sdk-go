@@ -5,9 +5,6 @@ status: stable
 description: "规定 SDK 文档的归属、修改权限、源码引用和 OKF 维护方式。"
 tags: [documentation, maintenance, okf]
 sources:
-  - id: document
-    resource: "AGENTS.md"
-    title: "文档维护规则"
   - id: repo-guide
     resource: "../AGENTS.md"
     title: "仓库 Agent 指南"

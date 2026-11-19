@@ -5,9 +5,6 @@ status: stable
 description: "定义原生 SDK 的共同行为、调用方职责、子 Agent 观察及取消、关闭和恢复边界。"
 tags: [architecture, session, native-sdk]
 sources:
-  - id: document
-    resource: "architecture.md"
-    title: "原生 SDK 通用架构"
   - id: native-session
     resource: "../modules/native-session/design.md"
     title: "原生 Session 设计"

@@ -6,10 +6,6 @@ description: >-
   SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
 status: stable
 tags: [unified-agent, session, events]
-sources:
-  - id: document
-    resource: "design.md"
-    title: "统一 Agent Core、Session 与事件流"
 ---
 
 # 统一 Agent Core、Session 与事件流

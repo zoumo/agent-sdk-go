@@ -4,10 +4,6 @@ title: 独立历史查询
 status: stable
 description: "定义 Codex 与 Claude 独立查询历史时的发现范围、metadata 及主会话与子会话内容。"
 tags: [codex, claude, history]
-sources:
-  - id: document
-    resource: "history-query.md"
-    title: "独立历史查询"
 ---
 
 # 独立历史查询

@@ -5,9 +5,6 @@ status: stable
 description: "说明 SDK 共同验收的用户目标、回放流程、原生适配边界及其与可执行验收矩阵的关系。"
 tags: [acceptance, cases, simulation]
 sources:
-  - id: document
-    resource: "validation-cases.md"
-    title: "SDK 共同验收"
   - id: simulation-design
     resource: "../modules/agent-sdk-testify/design.md"
     title: "仿真设计与证据合同"

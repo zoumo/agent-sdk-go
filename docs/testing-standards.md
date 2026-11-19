@@ -5,9 +5,6 @@ status: stable
 description: "Defines test layers, isolation requirements, and the evidence that Go tests must provide for SDK acceptance."
 tags: [testing, acceptance, development]
 sources:
-  - id: document
-    resource: "testing-standards.md"
-    title: "SDK 测试规则"
   - id: acceptance-guide
     resource: "sdk/validation-cases.md"
     title: "SDK acceptance guide"

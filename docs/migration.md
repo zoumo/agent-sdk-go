@@ -4,9 +4,6 @@ title: Migration
 description: "Explains how to migrate standalone Codex and Claude SDK imports and Session calls to the shared Go module."
 tags: [codex, claude, migration, session]
 sources:
-  - id: document
-    resource: "migration.md"
-    title: "Migration"
   - id: native-session
     resource: "modules/native-session/design.md"
     title: "Native Session contract"

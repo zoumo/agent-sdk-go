@@ -5,9 +5,6 @@ status: stable
 description: "Defines how the SDK and Testify share responsibility for fixed-recording simulation, strict replay, evidence, and regression gates."
 tags: [simulation, testify, replay, acceptance]
 sources:
-  - id: document
-    resource: "design.md"
-    title: "SDK-owned simulation with the embedded testify library"
   - id: library-mode
     resource: "library-mode.md"
     title: "Testify library integration contract"

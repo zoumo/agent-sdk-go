@@ -4,9 +4,6 @@ title: Offline validation
 description: "Explains how to run offline checks, fixed-recording simulation, and opt-in live CLI checks, and how to read the results."
 tags: [testing, offline, simulation, release]
 sources:
-  - id: document
-    resource: "testing.md"
-    title: "Offline validation"
   - id: test-standards
     resource: "testing-standards.md"
     title: "SDK testing standards"

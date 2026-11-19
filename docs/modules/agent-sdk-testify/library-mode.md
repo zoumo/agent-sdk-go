@@ -4,10 +4,6 @@ title: SDK tests with the agent-sdk-testify Go library
 status: stable
 description: "Defines connection ownership, call order, and acceptance for Go SDK tests that use Testify for in-process replay."
 tags: [testify, replay, testing]
-sources:
-  - id: document
-    resource: "library-mode.md"
-    title: "SDK tests with the agent-sdk-testify Go library"
 ---
 
 # Testify library integration

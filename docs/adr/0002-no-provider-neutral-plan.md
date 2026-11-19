@@ -6,10 +6,6 @@ x-agent-sdk-go-decision-status: accepted
 x-agent-sdk-go-decision-date: "2026-11-08"
 description: "记录将 Plan 类型与通知留在原生 SDK 的决定，以及统一层对计划相关工具调用的处理。"
 tags: [plan, unified-agent]
-sources:
-  - id: document
-    resource: "0002-no-provider-neutral-plan.md"
-    title: "统一层不定义 adapter 无关的 Plan"
 ---
 
 # 统一层不定义 adapter 无关的 Plan

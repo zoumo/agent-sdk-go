@@ -233,14 +233,14 @@ func (p *Core) openNativeSession(
 		cancelInit()
 	}
 	if err != nil {
-		if closeErr := native.Close(); closeErr != nil {
+		if closeErr := native.Abort(); closeErr != nil {
 			err = errors.Join(err, adapterError(agent.ErrorUnavailable, agent.ErrorReasonForOperation("close", agent.ErrorReasonSuffixFailed), "Claude resume cleanup reported a native failure", nil))
 		}
 		return nil, err
 	}
 	if init != nil {
 		if resumeID != "" && init.SessionID != resumeID {
-			return nil, closeAfterOpenFailure(native, adapterError(
+			return nil, abortAfterOpenFailure(native, adapterError(
 				agent.ErrorNativeRejected,
 				ErrorReasonResumeIdentityMismatch,
 				"Claude resumed a different native session",
@@ -248,7 +248,7 @@ func (p *Core) openNativeSession(
 			))
 		}
 		if !sameDirectory(init.System.CWD, options.Cwd) {
-			return nil, closeAfterOpenFailure(native, adapterError(
+			return nil, abortAfterOpenFailure(native, adapterError(
 				agent.ErrorNativeRejected,
 				ErrorReasonSessionCWDMismatch,
 				"Claude init working directory does not match the requested directory",
@@ -258,7 +258,7 @@ func (p *Core) openNativeSession(
 	}
 	if resume != nil {
 		if err := resume.target.verifyPostcheck(ctx); err != nil {
-			return nil, closeAfterOpenFailure(native, err)
+			return nil, abortAfterOpenFailure(native, err)
 		}
 	}
 	identity := sessionID
@@ -278,7 +278,7 @@ func (p *Core) openNativeSession(
 		guard,
 	)
 	if err != nil {
-		return nil, closeAfterOpenFailure(native, err)
+		return nil, abortAfterOpenFailure(native, err)
 	}
 	return created, nil
 }
@@ -409,8 +409,9 @@ func (b *initBuffer) add(received claude.Received) error {
 	return nil
 }
 
-func closeAfterOpenFailure(native *claude.Session, cause error) error {
-	closeErr := native.Close()
+func abortAfterOpenFailure(native *claude.Session, cause error) error {
+	// No caller will receive this Session to drain the native queue.
+	closeErr := native.Abort()
 	if closeErr == nil {
 		return cause
 	}

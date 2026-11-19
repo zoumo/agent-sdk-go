@@ -2,6 +2,7 @@ package agentcodex_test
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -214,6 +215,55 @@ func TestStartOrSteerRejectsOverlapWithoutSecondNativeWrite(t *testing.T) {
 	require.NoError(t, first.err)
 	assert.Equal(t, agent.InputAppliedNewWork, first.receipt.Result)
 	assert.Equal(t, "turn-a", first.receipt.Submission)
+}
+
+func TestStartOrSteerLateResponsePreservesObservedIdle(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	const response = `{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress","startedAt":1700000000}}}`
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"first","type":"text"}],"threadId":"root-a"}}`,
+		`<{"method":"turn/started","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`<{"method":"thread/status/changed","params":{"threadId":"root-a","status":{"type":"idle"}}}`,
+		"<"+response,
+	)
+	frames = append(frames, codexCloseFrames(94, "root-a")...)
+	var gate *gatedFrameReader
+	session, stream := openControlledInteractionSessionWithStatus(t, ctx, frames, "passed", false, testStreamWrappers{
+		reader: func(reader io.ReadCloser) io.ReadCloser {
+			gate = newGatedFrameReader(reader, []byte(`"startedAt"`))
+			return gate
+		},
+	})
+	t.Cleanup(gate.releaseOnce)
+
+	type result struct {
+		receipt agent.InputReceipt
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		receipt, err := session.StartOrSteer(ctx, textInput("first"))
+		done <- result{receipt: receipt, err: err}
+	}()
+	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+	require.Equal(t, agent.StateIdle, nextState(t, ctx, stream))
+	awaitSignal(t, gate.entered, "turn/start response")
+	gate.releaseOnce()
+	started := <-done
+	require.NoError(t, started.err)
+	assert.Equal(t, "turn-a", started.receipt.Submission)
+	assert.Equal(t, agent.InputAppliedNewWork, started.receipt.Result)
+	require.NotNil(t, started.receipt.Acceptance.NativeAccepted)
+	assert.True(t, *started.receipt.Acceptance.NativeAccepted)
+
+	// The peer expects unsubscribe next. An interrupt would fail replay.
+	receipt, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	assert.Equal(t, agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, receipt)
+	require.NoError(t, err)
 }
 
 func TestStartOrSteerMissingTurnIdentityIsOutcomeUnknown(t *testing.T) {

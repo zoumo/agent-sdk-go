@@ -94,36 +94,32 @@ func newSession(
 		},
 		Release: func() { provider.sessionClosed(created) },
 	})
+	// Finish conversion before starting a queue the caller must drain.
+	var staged []agent.Event
 	for _, received := range buffered {
 		events, err := created.convertReceived(received)
 		if err != nil {
 			return nil, err
 		}
-		if err := created.pushEvents(events); err != nil {
-			return nil, adapterError(
-				agent.ErrorUnavailable,
-				agent.ErrorReasonEventDeliveryFailed,
-				"deliver buffered Claude event",
-				err,
-			)
-		}
+		staged = append(staged, events...)
 	}
 	if init != nil && init.System != nil && len(init.System.SlashCommands) != 0 {
 		events, err := created.initialCommandsEvent(*init)
 		if err != nil {
 			return nil, err
 		}
-		if err := created.pushEvents(events); err != nil {
-			return nil, adapterError(
-				agent.ErrorUnavailable,
-				agent.ErrorReasonEventDeliveryFailed,
-				"deliver initial Claude commands",
-				err,
-			)
-		}
+		staged = append(staged, events...)
 	}
 	if init != nil && init.System != nil {
 		created.injectSupported = supportsInject(init.System.ClaudeCodeVersion)
+	}
+	if err := created.pushEvents(staged); err != nil {
+		return nil, adapterError(
+			agent.ErrorUnavailable,
+			agent.ErrorReasonEventDeliveryFailed,
+			"deliver staged Claude events",
+			err,
+		)
 	}
 	return created, nil
 }

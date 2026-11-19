@@ -12,6 +12,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
+	"github.com/zoumo/agent-sdk-go/claude"
 )
 
 func TestClaudePermissionAnswerOutcomes(t *testing.T) {
@@ -517,6 +518,13 @@ func TestClaudeFormAnswerOutcomes(t *testing.T) {
 			assert.Len(t, alternatives, 2)
 			assert.Len(t, requested.Request.RequestedSchema["x-claude-questions"], 2)
 
+			if test.answer.Outcome == agent.FormAccept {
+				// Display edits must leave the original question and choices on the wire.
+				questions, ok := requested.Request.RequestedSchema["x-claude-questions"].([]claude.Question)
+				require.True(t, ok)
+				questions[0].Question = "Choose an output format"
+				questions[0].Options[0].Label = "JSON format"
+			}
 			receipt, err := session.Answer(ctx, requested.Interaction, test.answer)
 			require.NoError(t, err)
 			assert.Equal(t, requested.Interaction, receipt.Interaction)

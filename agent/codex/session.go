@@ -189,7 +189,8 @@ func (s *session) StartOrSteer(
 	if activeBefore != "" && activeBefore == turnID {
 		result = agent.InputAppliedCurrentWork
 	}
-	if s.lastFinished != turnID {
+	// Idle can arrive before the response to the submission that started this turn.
+	if s.lastFinished != turnID && s.idleTurn != turnID {
 		s.activeTurn = turnID
 	}
 	s.mu.Unlock()

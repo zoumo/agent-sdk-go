@@ -8,14 +8,8 @@ status: stable
 tags: [unified-agent, session, events]
 sources:
   - id: document
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/modules/unified-agent/design.md"
+    resource: "design.md"
     title: "统一 Agent Core、Session 与事件流"
-  - id: core
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/agent/core.go"
-    title: "统一 Agent Core 接口"
-  - id: session
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/agent/session.go"
-    title: "统一 Agent Session 接口"
 ---
 
 # 统一 Agent Core、Session 与事件流

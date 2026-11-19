@@ -5,13 +5,10 @@ description: "Explains how to run offline checks, fixed-recording simulation, an
 tags: [testing, offline, simulation, release]
 sources:
   - id: document
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/testing.md"
+    resource: "testing.md"
     title: "Offline validation"
-  - id: ci
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/.github/workflows/ci.yml"
-    title: "SDK CI workflow"
   - id: test-standards
-    resource: "/testing-standards.md"
+    resource: "testing-standards.md"
     title: "SDK testing standards"
 ---
 

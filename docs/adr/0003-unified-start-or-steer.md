@@ -8,7 +8,7 @@ description: "记录统一输入采用 Start or steer 的决定及其与原生 S
 tags: [input, session, unified-agent]
 sources:
   - id: document
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/adr/0003-unified-start-or-steer.md"
+    resource: "0003-unified-start-or-steer.md"
     title: "统一输入操作采用 Start or steer"
 ---
 

@@ -6,13 +6,10 @@ description: "Defines how the SDK and Testify share responsibility for fixed-rec
 tags: [simulation, testify, replay, acceptance]
 sources:
   - id: document
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/modules/agent-sdk-testify/design.md"
+    resource: "design.md"
     title: "SDK-owned simulation with the embedded testify library"
-  - id: acceptance-matrix
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/tests/simulation/simulate/coverage.go"
-    title: "Simulation acceptance matrix"
   - id: library-mode
-    resource: "/modules/agent-sdk-testify/library-mode.md"
+    resource: "library-mode.md"
     title: "Testify library integration contract"
 ---
 

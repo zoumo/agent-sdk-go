@@ -8,7 +8,7 @@ description: "记录将 Plan 类型与通知留在原生 SDK 的决定，以及�
 tags: [plan, unified-agent]
 sources:
   - id: document
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/adr/0002-no-provider-neutral-plan.md"
+    resource: "0002-no-provider-neutral-plan.md"
     title: "统一层不定义 adapter 无关的 Plan"
 ---
 

@@ -6,10 +6,10 @@ description: "定义原生 SDK 的共同行为、调用方职责、子 Agent 观
 tags: [architecture, session, native-sdk]
 sources:
   - id: document
-    resource: "https://github.com/zoumo/agent-sdk-go/blob/4f98d8a2ca105c56edb42b7aeca2798e5a8084af/docs/sdk/architecture.md"
+    resource: "architecture.md"
     title: "原生 SDK 通用架构"
   - id: native-session
-    resource: "/modules/native-session/design.md"
+    resource: "../modules/native-session/design.md"
     title: "原生 Session 设计"
 ---
 

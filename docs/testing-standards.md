@@ -8,9 +8,8 @@ status: stable
 
 Apply these rules to Go tests and generated Go tests. Execution commands and
 validation results are maintained separately and must reference these rules.
-The [SDK simulation user stories](sdk/validation-cases.md#stories-sdk-用户故事) define provider-independent
-acceptance targets. Map every target to native evidence and public-path checks;
-the specification alone does not establish implementation or test coverage.
+Map each acceptance target to native evidence and public SDK checks. Report
+the outcomes from the corresponding test runs. [SDK acceptance guide](sdk/validation-cases.md)
 
 ## 测试层级与自动化边界
 
@@ -113,8 +112,8 @@ Linux CI. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.
 The exact `agent-sdk-testify` module is a test-only dependency linked into test
 and simulation hosts. Its version, checksum, production-boundary rules and
-typed evidence contract are fixed by
-[Go library mode](modules/agent-sdk-testify/library-mode.md). Protocol matching
+typed evidence contract are described in
+[Testify library integration](modules/agent-sdk-testify/library-mode.md). Protocol matching
 and official verification remain owned by that module and are not reimplemented
 in SDK adapters. Recording and mock correctness cannot be established only by
 this repository's Go SDK tests.

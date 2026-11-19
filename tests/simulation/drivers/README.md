@@ -5,7 +5,7 @@
 Use this guide to run the Go SDK against fixed native recordings. The SDK's Go
 drivers call public SDK operations and check application behavior. The linked
 Testify library prepares fixtures, matches protocol traffic, and produces
-typed results. [Go library contract](../../../harness/modules/agent-sdk-testify/library-mode.md)
+typed results. [Go library contract](../../../docs/modules/agent-sdk-testify/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
 <a id="stage-handoff"></a>
@@ -101,10 +101,10 @@ notification signals when tests can half-close SDK input.
 
 ## 仿真测试流程目录
 
-The SDK checks every provider and case combination with the library's public
-prepare and export operations. The shared acceptance catalog defines each
-story, case, and requirement.
-[共同验收](../../../harness/sdk/validation-cases.md#stories-sdk-用户故事)
+The SDK uses the library's public prepare and export operations for every
+provider and case combination in its acceptance matrix. Testify supplies the
+scenarios and bindings.
+[SDK acceptance matrix](../simulate/coverage.go) · [共同验收](../../../docs/sdk/validation-cases.md#stories-sdk-用户故事)
 
 The Go driver implements the public SDK route for available cases. `passed`,
 `failed` and `unverified` status is recorded per execution; catalog availability

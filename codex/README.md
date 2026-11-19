@@ -247,7 +247,7 @@ package is the single configuration type used here, by Claude, and by the
 unified `agent` layer. It does not write the user `config.toml`, and low-level
 `Client.StartThread` / `Client.ResumeThread` remain native-only. The fixed merge
 and limitation contract is in the
-[native Session design](../harness/modules/native-session/design.md#interface-codex-会话配置).
+[native Session design](../docs/modules/native-session/design.md#interface-codex-会话配置).
 
 | SDK field | Native field |
 |---|---|
@@ -334,7 +334,7 @@ approvals and lifecycle facts intact. Complete items and mixed/unknown frames
 remain visible, with their original bytes. It is not content redaction or a
 token-cost control. The policy also applies to `Open` with explicit `Resume`
 parameters. Low-level `Client.ResumeThread` is unchanged. See the exact
-[method and shape contract](../harness/modules/native-session/design.md#child-detail-可选子详细事件交付).
+[method and shape contract](../docs/modules/native-session/design.md#child-detail-可选子详细事件交付).
 `NativeIntegrationSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
 public API delivery and original peer bytes; real child interoperability remains
 unverified.
@@ -580,7 +580,7 @@ item-view selection and omitted/null/value fields. Query availability depends on
 the server version/backend and stored history format. Metadata and saved items
 are not original notification/delta/approval logs or atomic snapshots. Remote
 queries use server storage and paths; local list may repair metadata unless
-`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../harness/contracts/history-query.md#codex-原生接口)
+`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../docs/contracts/history-query.md#codex-原生接口)
 and the [offline example](examples/history-query-offline).
 
 ## Offline examples and validation

@@ -11,14 +11,14 @@ Go clients for the Codex app-server and Claude Code CLI. Both SDKs use the
 
 The native SDKs have separate `codex/types` and `claude/types` packages. Use the
 native SDK for protocol-specific controls and saved history even when your
-application uses `agent` for live sessions. See the [dependency rules](harness/architecture.md).
+application uses `agent` for live sessions. See the [dependency rules](docs/architecture.md).
 
 | If you are | Read |
 |---|---|
 | Moving from the earlier standalone modules | [Migration guide](docs/migration.md) |
 | Testing an SDK change | [Validation guide](docs/testing.md) |
 | Running an SDK against a recorded case | [Simulation guide](tests/simulation/drivers/README.md) |
-| Looking up contracts or terms | [Harness index](harness/index.md), [glossary](GLOSSARY.md) |
+| Looking up contracts or terms | [Documentation index](docs/index.md), [glossary](GLOSSARY.md) |
 | Preparing a release | [Release checks](docs/testing.md#release-preparation), [licenses and attribution](NOTICE) |
 
 ## Optional unified live layer
@@ -60,12 +60,12 @@ Read your adapter's package docs for setup and capabilities.
 
 Unified Claude `Open` returns the native session ID from `claim_session` before
 the first input. Local startup checks for a stable Claude CLI at version 2.1.293
-or newer. [Session identity and startup contract](harness/modules/unified-agent/design.md)
+or newer. [Session identity and startup contract](docs/modules/unified-agent/design.md)
 
 To append context without requesting a model response, check whether the
 session implements `agent.Injector`, then call `Inject`. The receipt records
 acceptance. An unsupported native version returns `agent.ErrorUnsupported`.
-[Context injection contract](harness/modules/unified-agent/design.md#context-inject)
+[Context injection contract](docs/modules/unified-agent/design.md#context-inject)
 
 ### Restrict local tools
 
@@ -74,13 +74,13 @@ Set `OpenOptions.Features.RestrictLocalTools` when you open or resume a session.
 restrictions. Claude sends a tool deny list. Codex disables the shell, image
 viewing, and image generation features. The Codex mapping still permits other
 local capabilities, including `apply_patch` where the model exposes it.
-[Mappings and limits](harness/modules/unified-agent/design.md#restrict-local-tools)
+[Mappings and limits](docs/modules/unified-agent/design.md#restrict-local-tools)
 
 ### Additional system prompt
 
 Set `OpenOptions.AdditionalSystemPrompt` to add text to the native system
 prompt. Supply the value on each `Open` or `Resume` call that needs it.
-[Additional system prompt contract](harness/modules/unified-agent/design.md#additional-system-prompt)
+[Additional system prompt contract](docs/modules/unified-agent/design.md#additional-system-prompt)
 
 ### External MCP servers
 
@@ -103,5 +103,5 @@ provider after opening the session. Check provider support and configuration
 precedence before adding credentials or resuming a session.
 [Codex MCP options](codex/README.md#thread-mcp-servers) ·
 [Claude MCP options](claude/README.md#external-mcp-servers) ·
-[Unified MCP contract](harness/modules/unified-agent/design.md#mcp-configuration) ·
+[Unified MCP contract](docs/modules/unified-agent/design.md#mcp-configuration) ·
 [Example source](agent/mcp_example_test.go)

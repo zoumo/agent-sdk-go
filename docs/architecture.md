@@ -7,7 +7,7 @@ status: stable
 # Architecture standards
 
 These rules describe the agreed repository boundaries. For document ownership and
-navigation, see the [harness index](index.md).
+navigation, see the [documentation index](index.md).
 The adapter-independent behavior contract and onboarding requirements live in
 [SDK behavior contract](sdk/architecture.md); this page governs repository module
 and dependency boundaries.
@@ -92,7 +92,7 @@ and dependency boundaries.
 - Answers require their original native request/permission handle. Relationship
   records carry context only. Do not restore `TreeRecord`/`TreeEvent` APIs.
 
-Testing and source placement follow the [testing standards](testing.md) and
+Testing and source placement follow the [testing standards](testing-standards.md) and
 [code layout](#layout-code-layout-standards).
 
 <a id="layout-code-layout-standards"></a>
@@ -121,8 +121,7 @@ Both native SDKs use the same separation of responsibilities:
 SDK test and simulation hosts link the exact `agent-sdk-testify` Go module. Tests
 prepare a caller-owned fixture, start every declared connection with directional
 in-process streams, and read the typed execution report before removing the
-fixture directory. The exact version, checksum and test-only boundary are fixed
-by [Go library mode](modules/agent-sdk-testify/library-mode.md).
+fixture directory. See the [Testify library integration](modules/agent-sdk-testify/library-mode.md).
 `internal/mocktest` authors manifest-bound synthetic captures from SDK-owned
 fixtures, creates the SDK-side streams and exposes typed evidence; it contains
 no protocol matcher and imports neither native SDK. Simulation validates the

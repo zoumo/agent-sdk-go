@@ -2,15 +2,15 @@
 okf_version: "0.2"
 ---
 
-# Harness
-
-只维护开发规范与核心设计合同。设计目标不代表已实现或已验证。
+# Agent SDK Go 文档
 
 | 阅读目的 | 文档 |
 |---|---|
+| 运行离线检查与仿真 | [测试指南](testing.md) |
+| 更新旧版 SDK 接入 | [迁移指南](migration.md) |
 | 文档维护 | [工作规则](AGENTS.md) |
 | 模块、依赖、代码布局与编码 | [开发规范](architecture.md) |
-| 测试层级、隔离与验收 | [测试规范](testing.md) |
+| 测试层级、隔离与验收 | [测试规范](testing-standards.md) |
 | 共同能力与设计取舍 | [SDK 架构](sdk/architecture.md) |
 | 用户目标与验收流程 | [共同验收](sdk/validation-cases.md) |
 | Session 接口、权限、事件、关系与子详细交付 | [Session 合同](modules/native-session/design.md) |
@@ -21,5 +21,5 @@ okf_version: "0.2"
 | 环境与 prompt trace 按作用域分离 | [ADR 0004](adr/0004-environment-and-trace-scopes.md) |
 | 独立发现、metadata、主／子历史 | [历史查询合同](contracts/history-query.md) |
 | 测试编排、协议录制／回放与原生 SDK 驱动 | [测试工具设计](modules/agent-sdk-testify/design.md) |
-| 以 Go 库接入测试与仿真 | [testify 库模式](modules/agent-sdk-testify/library-mode.md) |
+| 以 Go 库接入测试与仿真 | [Testify 库接入](modules/agent-sdk-testify/library-mode.md) |
 | 术语 | [GLOSSARY](../GLOSSARY.md) |

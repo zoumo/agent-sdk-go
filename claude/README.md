@@ -176,13 +176,13 @@ acknowledgment does not prove the active model, effort or children changed.
 
 `Session.GetSettings(ctx)` exposes the native read-only query when callers need
 its raw response body. Its limits are defined in the
-[native input and configuration contract](../harness/modules/native-session/design.md#interface-原生输入与配置).
+[native input and configuration contract](../docs/modules/native-session/design.md#interface-原生输入与配置).
 
 `AppendSystemPrompt` adds caller text after the CLI's own system instructions
 without replacing them. A nonempty value becomes one literal
 `--append-system-prompt=<text>` argv element; empty omits the option. The
 complete validation, transport-disclosure and resume contract is in the
-[authoritative unified-agent design](../harness/modules/unified-agent/design.md#additional-system-prompt).
+[authoritative unified-agent design](../docs/modules/unified-agent/design.md#additional-system-prompt).
 
 `PermissionMode` and the corresponding `PermissionMode*` constants enumerate
 `default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk` and `auto`.
@@ -287,7 +287,7 @@ unknown, tool, permission and terminal frames remain intact. The 2.1.293 pure
 assistant shape permits agent_id only after member identity is confirmed and
 agrees with any known tool alias. This is neither
 redaction nor token-cost control; see the
-[closed filtering contract](../harness/modules/native-session/design.md#child-detail-可选子详细事件交付).
+[closed filtering contract](../docs/modules/native-session/design.md#child-detail-可选子详细事件交付).
 
 ```sh
 # From the repository root; executes only a synthetic peer:
@@ -318,13 +318,13 @@ Queries return detached data and never create live membership or answer authorit
 
 Main defaults: metadata page 100, message page 1000; source and inventory limits,
 strict parsing differences, errors and mutation checks are specified in the
-[history contract](../harness/contracts/history-query.md). Atomic is always false;
+[history contract](../docs/contracts/history-query.md). Atomic is always false;
 there is no shared snapshot across pages. Inspect errors and Coverage together.
 
 For child content, call package-level `ListSubagents(ctx, parentSessionID, options)`
 and `GetSubagentMessages(ctx, parentSessionID, agentID, options)` with the same
 explicit scope. All child branches are checked for duplicate IDs, cycles and
-missing parents; the [child-history contract](../harness/contracts/history-query.md#children-claude-独立本地子历史)
+missing parents; the [child-history contract](../docs/contracts/history-query.md#children-claude-独立本地子历史)
 defines limits, containment and mutation checks. Raw data and sidecars can be private.
 
 Session.ListSubagents instead uses Open's captured environment/cwd and observed

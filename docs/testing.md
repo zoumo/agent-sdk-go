@@ -2,7 +2,7 @@
 
 Run commands in this guide from the repository root with Go 1.26 or newer.
 Choose the check that matches the evidence you need. The repository defines
-required coverage by test level in the [testing standards](../harness/testing.md).
+required coverage by test level in the [testing standards](testing-standards.md).
 
 | If you need to check | Run | Read the result |
 |---|---|---|
@@ -51,7 +51,7 @@ go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulat
 The test runs the gate in process. `TestMain` builds the SDK driver, which runs
 in a separate process with its own environment and workspace. Both link the
 fixed Testify Go module. The test reads the typed execution report before
-removing its fixture. [Testify library contract](../harness/modules/agent-sdk-testify/library-mode.md)
+removing its fixture. [Testify library contract](modules/agent-sdk-testify/library-mode.md)
 
 Inspect `coverage.json` for each provider and case's requirement, material,
 source verification, and SDK result. Per-run `summary.json` records business,
@@ -195,7 +195,7 @@ control and answer operations, then verify ordered drain after disconnection.
 Typed execution reports check strict replay, full consumption, client EOF and the
 absence of a native launch. Shared FIFO tests cover cancellation, atomic batches,
 concurrent producers, close/abort races and reference release. See the
-[event delivery contract](../harness/modules/native-session/design.md#delivery-event-delivery).
+[event delivery contract](modules/native-session/design.md#delivery-event-delivery).
 
 `TestNativeIntegration` in `tests/integration` exercises both native SDK public
 interfaces through synthetic protocol peers. It retains original-handle authority,
@@ -261,11 +261,12 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The [shared acceptance catalog](../harness/sdk/validation-cases.md) defines the
-case set and provider-specific requirements. The Testify module supplies the
-fixed recording corpus. The gate reports missing required material as a failure.
-Check the provider and case matrix independently of any recording with the
-existing policy test.
+The [SDK acceptance matrix](../tests/simulation/simulate/coverage.go) defines
+which provider and case combinations are required. The Testify module supplies
+the fixed recording corpus. The gate reports missing required material as a
+failure. For business evidence and pass criteria, see the
+[SDK acceptance guide](sdk/validation-cases.md). Check the matrix independently
+of any recording with the existing policy test.
 
 ```sh
 go test -count=1 ./tests/simulation/simulate -run '^TestAcceptanceMatrixMatchesSharedPolicy$'

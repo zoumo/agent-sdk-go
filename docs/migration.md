@@ -41,8 +41,8 @@ with each package, including upstream protocol and third-party attribution.
 The native SDK interface is `Open`, followed by the native
 `codex.Session.Submit` or `claude.Session.Submit` and the single
 `Session.Receive` FIFO. The native SDKs and `types` imports stay
-independent. [Session interfaces](../harness/modules/native-session/design.md#interface-原生-session-公开-interface)
-and [event delivery](../harness/modules/native-session/design.md#delivery-event-delivery) govern the behavior.
+independent. [Session interfaces](modules/native-session/design.md#interface-原生-session-公开-interface)
+and [event delivery](modules/native-session/design.md#delivery-event-delivery) govern the behavior.
 
 | Previous consumer coordination | Session path |
 |---|---|

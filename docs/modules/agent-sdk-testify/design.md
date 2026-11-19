@@ -13,8 +13,8 @@ binding contracts, official drivers, recording/verification, material
 qualification, strict replay, history materialization, preparation, export and
 typed execution evidence.
 
-SDK test and simulation processes link the library in-process. The complete
-transport and dependency contract is in [Go library mode](library-mode.md).
+SDK test and simulation processes link the library in-process. The SDK-side
+stream ownership and call order are in [Testify library integration](library-mode.md).
 
 <a id="story-官方-sdk-仿真测试"></a>
 <a id="story-录制生命周期"></a>
@@ -34,17 +34,7 @@ protocol cwd and declared connection set. Validate all of those values and the
 exact module pin before protocol I/O. A missing or mismatched value fails
 closed.
 
-For each declared connection:
-
-1. Start `StartMockAgent` and read the immutable `ExecutionStart`.
-2. Construct the SDK stream client from the actual execution paths,
-   environment and native arguments.
-3. Consume from `FullConsumption` and `Done`; at full consumption, half-close
-   SDK input with `CloseInput`.
-4. Finish the public SDK business flow while final server frames remain
-   readable.
-5. Close the Session/Client, wait for the mock run and read the typed execution
-   report for the exact execution ID.
+For each declared connection, follow the [library call order](library-mode.md#connection-ownership-and-order).
 
 The driver performs typed public Session/Client/history operations and retains
 native answer handles. It emits business results and deliveries. A policy
@@ -124,8 +114,8 @@ Cleanup uses a separate bounded context and removes every successful prepared
 fixture, including after export/projection failure, business failure and
 cancellation. Missing, corrupt or mismatched evidence fails closed.
 
-The gate evaluates every provider and case combination in the
-[shared acceptance catalog](../../sdk/validation-cases.md). Each row records its
+The gate evaluates every provider and case combination in the SDK's
+[acceptance matrix](../../../tests/simulation/simulate/coverage.go). Each row records its
 requirement, source verification, and SDK simulation status. Missing required
 coverage or corrupt source data fails the gate. The report retains optional
 business gaps.
@@ -141,7 +131,7 @@ required material is missing.
 ## Adoption and regression gates
 
 The exact dependency and in-process transport acceptance are defined in
-[Go library mode](library-mode.md). The offline simulation gate enforces the
+[Testify library integration](library-mode.md). The offline simulation gate enforces the
 provenance and coverage rules above. It also rejects retired process-oriented
 implementation and documentation interfaces.
 
@@ -165,7 +155,7 @@ simulation evidence.
 
 The module-graph gate proves that production packages do not import testify.
 The identity test proves the embedded version, checksum and revision match
-`go.mod`/`go.sum`. The removed-surface gate scans code and harness documentation
+`go.mod`/`go.sum`. The removed-surface gate scans code and SDK documentation
 for retired process contracts.
 
 Real Agent/model execution and new recording remain explicit opt-in work outside

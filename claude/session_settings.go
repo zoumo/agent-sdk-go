@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
@@ -17,4 +18,37 @@ func (s *Session) GetSettings(ctx context.Context) (json.RawMessage, error) {
 		ctx, "get_settings", map[string]any{"subtype": "get_settings"}, false,
 	)
 	return response, dispatchFailure("get_settings", err)
+}
+
+// GetEffectiveSandbox reports the Bash sandbox settings from get_settings.
+// Omitted fields remain nil. The result describes CLI configuration.
+func (s *Session) GetEffectiveSandbox(ctx context.Context) (SandboxOptions, error) {
+	raw, err := s.GetSettings(ctx)
+	if err != nil {
+		return SandboxOptions{}, err
+	}
+	for _, key := range []string{"effective", "sandbox"} {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil || fields[key] == nil {
+			return SandboxOptions{}, fmt.Errorf("%w: missing or invalid get_settings field %s", ErrProtocol, key)
+		}
+		raw = fields[key]
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return SandboxOptions{}, fmt.Errorf("%w: invalid get_settings sandbox response", ErrProtocol)
+	}
+	var sandbox SandboxOptions
+	for key, field := range map[string]**bool{
+		"enabled":                  &sandbox.Enabled,
+		"failIfUnavailable":        &sandbox.FailIfUnavailable,
+		"allowUnsandboxedCommands": &sandbox.AllowUnsandboxedCommands,
+	} {
+		if value := fields[key]; value != nil {
+			if err := json.Unmarshal(value, field); err != nil {
+				return SandboxOptions{}, fmt.Errorf("%w: invalid get_settings sandbox field %s", ErrProtocol, key)
+			}
+		}
+	}
+	return sandbox, nil
 }

@@ -147,6 +147,13 @@ func (s *Session) bindClient(c *interaction) bool {
 }
 
 func (s *Session) Receive(ctx context.Context) (Received, error) { return s.fifo.Pop(ctx) }
+
+// InitialPermissionMode reports the permission mode confirmed by initialize.
+// An empty result means the CLI did not report a recognized mode.
+func (s *Session) InitialPermissionMode() PermissionMode {
+	return s.client.initialPermissionMode
+}
+
 func (s *Session) SessionID() (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

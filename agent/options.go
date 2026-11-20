@@ -14,6 +14,9 @@ import (
 // Adapter-specific creation options belong on the concrete adapter.
 type OpenOptions struct {
 	Cwd string
+	// PermissionPreset selects the approval and sandbox settings for this
+	// operation. Core.Open and Core.Resume default to PermissionPresetAutoReview.
+	PermissionPreset PermissionPreset
 	// ProcessEnv is an additive, set-only overlay for a Claude Session CLI.
 	// Nil or empty leaves the provider environment unchanged; empty values set
 	// variables to empty strings. Other adapters reject nonempty declarations.
@@ -45,6 +48,11 @@ func (o OpenOptions) Validate() error {
 	}
 	if !filepath.IsAbs(o.Cwd) {
 		return invalidArgument("cwd_not_absolute", "working directory must be absolute")
+	}
+	switch o.PermissionPreset {
+	case "", PermissionPresetManualReview, PermissionPresetAutoReview, PermissionPresetFullAccess:
+	default:
+		return invalidArgument(ErrorReasonInvalidPermissionPreset, "unknown session permission preset")
 	}
 	if !utf8.ValidString(o.AdditionalSystemPrompt) {
 		return invalidArgument(

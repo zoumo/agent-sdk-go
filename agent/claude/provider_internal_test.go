@@ -339,9 +339,12 @@ func TestInitBufferRejectsExcessEventsAndBytes(t *testing.T) {
 // intact.
 func TestEmbeddedStartupDeclarationKeepsFullSDKFeatureOptions(t *testing.T) {
 	options := claude.SessionOptions{
-		Model:           "synthetic",
-		ResumeID:        "resume-id",
-		DisallowedTools: []string{"AskUserQuestion"},
+		Model:                           "synthetic",
+		ResumeID:                        "resume-id",
+		DisallowedTools:                 []string{"AskUserQuestion"},
+		PermissionMode:                  claude.PermissionModeAuto,
+		Sandbox:                         &claude.SandboxOptions{Enabled: new(true)},
+		AllowDangerouslySkipPermissions: true,
 		MCPServers: []mcp.Server{{
 			Name:      "fixture",
 			Transport: mcp.TransportStdio,
@@ -354,9 +357,15 @@ func TestEmbeddedStartupDeclarationKeepsFullSDKFeatureOptions(t *testing.T) {
 	assert.Contains(t, declaration, "--resume=resume-id")
 	assert.NotContains(t, declaration, "--disallowedTools=AskUserQuestion")
 	assert.NotContains(t, strings.Join(declaration, "\n"), "--mcp-config=")
+	assert.NotContains(t, declaration, "--permission-mode=auto")
+	assert.NotContains(t, declaration, `--settings={"sandbox":{"enabled":true}}`)
+	assert.NotContains(t, declaration, "--allow-dangerously-skip-permissions")
 	full, err := claude.NativeArgs(options)
 	require.NoError(t, err)
 	assert.Contains(t, full, "--disallowedTools=AskUserQuestion")
 	assert.Contains(t, strings.Join(full, "\n"), "--mcp-config=")
+	assert.Contains(t, full, "--permission-mode=auto")
+	assert.Contains(t, full, `--settings={"sandbox":{"enabled":true}}`)
+	assert.Contains(t, full, "--allow-dangerously-skip-permissions")
 	assert.Equal(t, []string{"AskUserQuestion"}, options.DisallowedTools)
 }

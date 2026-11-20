@@ -84,6 +84,12 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// PermissionMode selects the initial native permission mode.
+	PermissionMode PermissionMode
+	// AllowDangerouslySkipPermissions permits a later switch to bypassPermissions.
+	AllowDangerouslySkipPermissions bool
+	// Sandbox supplies optional Bash sandbox settings to the CLI.
+	Sandbox *SandboxOptions
 	// Tools is passed as a comma-separated native --tools allowlist. Nil or
 	// empty omits the option; one empty string disables ordinary built-in tools.
 	Tools []string
@@ -94,6 +100,13 @@ type Options struct {
 	InitializeTimeout time.Duration
 	ShutdownTimeout   time.Duration
 	Limits            Limits
+}
+
+// SandboxOptions carries native Bash sandbox settings. Nil fields are omitted.
+type SandboxOptions struct {
+	Enabled                  *bool `json:"enabled,omitempty"`
+	FailIfUnavailable        *bool `json:"failIfUnavailable,omitempty"`
+	AllowUnsandboxedCommands *bool `json:"allowUnsandboxedCommands,omitempty"`
 }
 
 // ThinkingConfig is creation-only native thinking configuration from SDK

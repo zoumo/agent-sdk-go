@@ -20,6 +20,7 @@ func TestStableErrorReasons(t *testing.T) {
 		{"invalid native event", agentcodex.ErrorReasonInvalidNativeEvent, "invalid_native_event"},
 		{"permission cancel unsupported", agentcodex.ErrorReasonPermissionCancelUnsupported, "permission_cancel_unsupported"},
 		{"core start failed", agentcodex.ErrorReasonCoreStartFailed, "core_start_failed"},
+		{"sandbox profile conflict", agentcodex.ErrorReasonSandboxProfileConflict, "sandbox_profile_conflict"},
 		{"start or steer identity missing", agentcodex.ErrorReasonStartOrSteerIdentityMissing, "start_or_steer_identity_missing"},
 	}
 

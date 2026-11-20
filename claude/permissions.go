@@ -29,6 +29,10 @@ const (
 	PermissionModeAuto              = types.PermissionModeAuto
 )
 
+// SandboxOptions supplies native Bash sandbox settings. Nil fields leave the
+// corresponding native setting untouched.
+type SandboxOptions = types.SandboxOptions
+
 // PermissionAnswer is a runtime command. A nil UpdatedInput uses the original
 // input; it is distinct from the detached native PermissionResult value.
 type PermissionAnswer struct {

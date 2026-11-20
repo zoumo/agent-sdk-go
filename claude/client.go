@@ -79,6 +79,14 @@ type Options struct {
 	// ResumeID asks a fresh CLI process to resume its native session. It is
 	// passed literally; the SDK does not replay messages or restore pending work.
 	ResumeID string
+	// PermissionMode selects the initial native permission mode. Empty lets
+	// Claude select its mode from the effective configuration.
+	PermissionMode PermissionMode
+	// AllowDangerouslySkipPermissions enables switching to bypassPermissions
+	// later without changing the initial mode.
+	AllowDangerouslySkipPermissions bool
+	// Sandbox supplies optional Bash sandbox settings to the CLI.
+	Sandbox *SandboxOptions
 	// Tools is passed as a comma-separated native --tools allowlist. Nil or
 	// empty omits the option; one empty string disables ordinary built-in tools.
 	Tools []string
@@ -104,6 +112,9 @@ func (o *Options) defaults() error {
 	}
 	if o.ClaimSession && (o.SessionID != "" || o.ResumeID != "") {
 		return dispatchFailure("open", fmt.Errorf("%w: claimed session cannot also assign or resume an identity", ErrInvalidInput))
+	}
+	if o.PermissionMode != "" && !o.PermissionMode.Valid() {
+		return dispatchFailure("open", fmt.Errorf("%w: unsupported permission mode %q", ErrInvalidInput, o.PermissionMode))
 	}
 	if o.ClaimSession {
 		workDir, err := filepath.Abs(o.WorkDir)
@@ -247,6 +258,7 @@ type interaction struct {
 	cleanupErr                          error
 	stderrTail                          []byte
 	sessionID                           string
+	initialPermissionMode               PermissionMode
 	pending                             map[string]pendingControl
 	nextID                              atomic.Uint64
 	epoch                               uint64
@@ -386,7 +398,8 @@ func (c *interaction) initialize(ctx context.Context) error {
 	if initialize.Hooks == nil && !initialize.OmitHooks {
 		initialize.Hooks = json.RawMessage(`null`)
 	}
-	if _, err := c.control(initCtx, "initialize", initialize); err != nil {
+	raw, err := c.control(initCtx, "initialize", initialize)
+	if err != nil {
 		c.mu.Lock()
 		if !c.closing {
 			c.failLocked(&Error{Op: "initialize", Err: err})
@@ -394,6 +407,12 @@ func (c *interaction) initialize(ctx context.Context) error {
 		c.mu.Unlock()
 		c.cleanupFailedStartup()
 		return c.startupError("initialize", err)
+	}
+	var response map[string]json.RawMessage
+	var mode PermissionMode
+	if json.Unmarshal(raw, &response) == nil &&
+		json.Unmarshal(response["current_permission_mode"], &mode) == nil && mode.Valid() {
+		c.initialPermissionMode = mode
 	}
 	select {
 	case <-c.done:
@@ -410,6 +429,13 @@ func (c *interaction) startupError(op string, err error) error {
 	var diagnostics *Error
 	if errors.As(final, &diagnostics) {
 		startup.Stderr, startup.ExitCode = diagnostics.Stderr, diagnostics.ExitCode
+		sandbox := c.opts.Sandbox
+		if sandbox != nil && sandbox.Enabled != nil && *sandbox.Enabled &&
+			sandbox.FailIfUnavailable != nil && *sandbox.FailIfUnavailable &&
+			startup.ExitCode != nil && *startup.ExitCode == 1 &&
+			strings.Contains(startup.Stderr, "Error: sandbox required but unavailable:") {
+			startup.Err = errors.Join(ErrSandboxUnavailable, startup.Err)
+		}
 	}
 	startup.OutcomeUnknown = errors.Is(startup.Err, ErrUnknownOutcome)
 	return startup
@@ -1141,6 +1167,21 @@ func interactionArgs(options Options) ([]string, error) {
 	}
 	if len(options.DisallowedTools) > 0 {
 		args = append(args, "--disallowedTools="+strings.Join(options.DisallowedTools, ","))
+	}
+	if options.PermissionMode != "" {
+		args = append(args, "--permission-mode="+string(options.PermissionMode))
+	}
+	if options.AllowDangerouslySkipPermissions {
+		args = append(args, "--allow-dangerously-skip-permissions")
+	}
+	if options.Sandbox != nil && *options.Sandbox != (SandboxOptions{}) {
+		settings, err := json.Marshal(struct {
+			Sandbox *SandboxOptions `json:"sandbox"`
+		}{Sandbox: options.Sandbox})
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, "--settings="+string(settings))
 	}
 	if options.ResumeID != "" {
 		// The CLI takes an optional resume value. Binding it to the flag also

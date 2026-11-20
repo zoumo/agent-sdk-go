@@ -112,7 +112,8 @@ func TestProviderCopiesMCPConfigurationBeforeThreadRPC(t *testing.T) {
 	openResultReceived = true
 	require.NoError(t, openResult.err)
 	require.NoError(t, openResult.session.Close(ctx))
-	assert.JSONEq(t, expectedCodexMCPStartParams("open"), string(startParams))
+	expected := withDefaultCodexPermissionParams(t, []byte(expectedCodexMCPStartParams("open")))
+	assert.JSONEq(t, string(expected), string(startParams))
 }
 
 func TestProviderRejectsInvalidMCPServersBeforeThreadRPC(t *testing.T) {

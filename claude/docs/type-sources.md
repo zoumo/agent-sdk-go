@@ -15,6 +15,24 @@ original. Later local-history algorithms adapt the pinned MIT Python source note
 Do not label the TypeScript package MIT or apply this repository's license to the
 CLI/service. Source adaptations must retain their copyright and permission notice.
 
+### Session startup permissions
+
+Claude Code `2.1.293` reports the startup permission mode in
+`initialize.response.current_permission_mode`. The read-only `get_settings`
+control reports merged Bash sandbox configuration at `response.effective.sandbox`.
+Local startup probes on macOS observed these fields on claim and resume of a
+synthetic saved session. A probe with `disableAutoMode` observed `default` after
+requesting `auto`. The Linux x64 CLI exited before initialize when
+`failIfUnavailable` was true and `bwrap` and `socat` were missing. These probes
+sent control requests without user turns. A separate macOS probe drove real
+Bash tool calls with a local synthetic Messages API and disposable files.
+With the approval preset's sandbox settings, Bash wrote inside the workspace
+and failed to write a path explicitly denied by the file system policy.
+Setting `dangerouslyDisableSandbox=true` in the Bash input still failed to
+write the denied path. Disabling the sandbox allowed writes under the same
+file system policy. See the [pinned CLI release manifest](https://downloads.claude.ai/claude-code-releases/2.1.293/manifest.json)
+and the [sandboxing documentation](https://code.claude.com/docs/en/sandboxing).
+
 Reproducible SHA256 of downloaded reference bytes:
 
 | File | SHA256 |

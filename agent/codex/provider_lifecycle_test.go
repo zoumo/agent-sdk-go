@@ -176,6 +176,10 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 }
 
 func codexThreadStartResult(threadID string) string {
+	return codexPermissionResult(threadID, "on-request", "auto_review", "workspaceWrite")
+}
+
+func codexPermissionResult(threadID, approvalPolicy, reviewer, sandbox string) string {
 	return `{
 		"thread": {
 			"id": "` + threadID + `",
@@ -192,12 +196,12 @@ func codexThreadStartResult(threadID string) string {
 			"status": {"type": "idle"},
 			"turns": []
 		},
-		"approvalPolicy": "never",
-		"approvalsReviewer": "user",
+		"approvalPolicy": "` + approvalPolicy + `",
+		"approvalsReviewer": "` + reviewer + `",
 		"cwd": "/synthetic",
 		"model": "synthetic",
 		"modelProvider": "synthetic",
-		"sandbox": {"type": "readOnly"}
+		"sandbox": {"type": "` + sandbox + `"}
 	}`
 }
 
@@ -314,6 +318,58 @@ func prepareCodexPeerWithStatus(
 }
 
 func prepareCodexPeerWithFrameDelays(
+	t *testing.T,
+	wantStatus string,
+	delays map[int]time.Duration,
+	frames ...string,
+) *mocktest.Session {
+	t.Helper()
+	withDefaults := make([]string, len(frames))
+	for index, frame := range frames {
+		withDefaults[index] = expectDefaultCodexPermissions(t, frame)
+	}
+	return prepareCodexPeerWithExactFrames(t, wantStatus, delays, withDefaults...)
+}
+
+// expectDefaultCodexPermissions adds the fixed unified defaults to fixtures
+// for tests that exercise other session settings. The peer still compares all
+// arguments. Permission-specific tests supply their complete wire frames.
+func expectDefaultCodexPermissions(t *testing.T, frame string) string {
+	t.Helper()
+	if frame[0] != '>' {
+		return frame
+	}
+	var request map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(frame[1:]), &request))
+	switch string(request["method"]) {
+	case `"thread/start"`, `"thread/resume"`:
+		request["params"] = withDefaultCodexPermissionParams(t, request["params"])
+		data, err := json.Marshal(request)
+		require.NoError(t, err)
+		return ">" + string(data)
+	default:
+		return frame
+	}
+}
+
+func withDefaultCodexPermissionParams(t *testing.T, data json.RawMessage) json.RawMessage {
+	t.Helper()
+	var params map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &params))
+	for field, value := range map[string]json.RawMessage{
+		"approvalPolicy":    json.RawMessage(`"on-request"`),
+		"approvalsReviewer": json.RawMessage(`"auto_review"`),
+		"sandbox":           json.RawMessage(`"workspace-write"`),
+	} {
+		require.NotContains(t, params, field)
+		params[field] = value
+	}
+	expected, err := json.Marshal(params)
+	require.NoError(t, err)
+	return expected
+}
+
+func prepareCodexPeerWithExactFrames(
 	t *testing.T,
 	wantStatus string,
 	delays map[int]time.Duration,

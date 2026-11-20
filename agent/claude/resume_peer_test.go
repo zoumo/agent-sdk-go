@@ -3,6 +3,7 @@ package agentclaude_test
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,32 +24,37 @@ const (
 )
 
 type claudeResumePeerScenario struct {
-	VersionOutput     string     `json:"versionOutput,omitempty"`
-	VersionExit       bool       `json:"versionExit,omitempty"`
-	SessionID         string     `json:"sessionId,omitempty"`
-	CWD               string     `json:"cwd,omitempty"`
-	TranscriptPath    string     `json:"transcriptPath,omitempty"`
-	Frames            []string   `json:"frames,omitempty"`
-	FrameDelays       []int      `json:"frameDelays,omitempty"`
-	Mutation          string     `json:"mutation,omitempty"`
-	Replacement       string     `json:"replacement,omitempty"`
-	ObservationPath   string     `json:"observationPath,omitempty"`
-	SessionMarker     string     `json:"sessionMarker,omitempty"`
-	ArgvPath          string     `json:"argvPath,omitempty"`
-	EnvironmentKeys   []string   `json:"environmentKeys,omitempty"`
-	VersionEnvPath    string     `json:"versionEnvPath,omitempty"`
-	SessionEnvPath    string     `json:"sessionEnvPath,omitempty"`
-	WaitForUser       bool       `json:"waitForUser,omitempty"`
-	BeforeInput       []string   `json:"beforeInput,omitempty"`
-	TurnFrames        [][]string `json:"turnFrames,omitempty"`
-	InitializeError   bool       `json:"initializeError,omitempty"`
-	InitializeDelay   int        `json:"initializeDelay,omitempty"`
-	StatusResponse    string     `json:"statusResponse,omitempty"`
-	StatusWrongID     bool       `json:"statusWrongId,omitempty"`
-	StatusError       bool       `json:"statusError,omitempty"`
-	StatusIgnore      bool       `json:"statusIgnore,omitempty"`
-	AfterStatus       []string   `json:"afterStatus,omitempty"`
-	AfterStatusDelays []int      `json:"afterStatusDelays,omitempty"`
+	VersionOutput      string     `json:"versionOutput,omitempty"`
+	VersionExit        bool       `json:"versionExit,omitempty"`
+	SessionID          string     `json:"sessionId,omitempty"`
+	CWD                string     `json:"cwd,omitempty"`
+	TranscriptPath     string     `json:"transcriptPath,omitempty"`
+	Frames             []string   `json:"frames,omitempty"`
+	FrameDelays        []int      `json:"frameDelays,omitempty"`
+	Mutation           string     `json:"mutation,omitempty"`
+	Replacement        string     `json:"replacement,omitempty"`
+	ObservationPath    string     `json:"observationPath,omitempty"`
+	SessionMarker      string     `json:"sessionMarker,omitempty"`
+	ArgvPath           string     `json:"argvPath,omitempty"`
+	EnvironmentKeys    []string   `json:"environmentKeys,omitempty"`
+	VersionEnvPath     string     `json:"versionEnvPath,omitempty"`
+	SessionEnvPath     string     `json:"sessionEnvPath,omitempty"`
+	WaitForUser        bool       `json:"waitForUser,omitempty"`
+	BeforeInput        []string   `json:"beforeInput,omitempty"`
+	TurnFrames         [][]string `json:"turnFrames,omitempty"`
+	InitializeError    bool       `json:"initializeError,omitempty"`
+	InitializeDelay    int        `json:"initializeDelay,omitempty"`
+	InitialMode        *string    `json:"initialMode,omitempty"`
+	InitializeBody     string     `json:"initializeBody,omitempty"`
+	SandboxSettings    string     `json:"sandboxSettings,omitempty"`
+	SkipSandboxProbe   bool       `json:"skipSandboxProbe,omitempty"`
+	SandboxUnavailable bool       `json:"sandboxUnavailable,omitempty"`
+	StatusResponse     string     `json:"statusResponse,omitempty"`
+	StatusWrongID      bool       `json:"statusWrongId,omitempty"`
+	StatusError        bool       `json:"statusError,omitempty"`
+	StatusIgnore       bool       `json:"statusIgnore,omitempty"`
+	AfterStatus        []string   `json:"afterStatus,omitempty"`
+	AfterStatusDelays  []int      `json:"afterStatusDelays,omitempty"`
 }
 
 type claudeResumePeerObservation struct {
@@ -139,6 +145,8 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	assignedID := ""
 	claiming := false
 	resuming := false
+	var permissionMode string
+	var settingsJSON string
 	for _, arg := range args {
 		if value, ok := strings.CutPrefix(arg, "--session-id="); ok {
 			assignedID = value
@@ -150,12 +158,21 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		if arg == "--resume" || strings.HasPrefix(arg, "--resume=") {
 			resuming = true
 		}
+		if value, ok := strings.CutPrefix(arg, "--permission-mode="); ok {
+			permissionMode = value
+		}
+		if value, ok := strings.CutPrefix(arg, "--settings="); ok {
+			settingsJSON = value
+		}
 	}
-
 	reader := bufio.NewReader(os.Stdin)
 	initialize, err := reader.ReadBytes('\n')
 	if err != nil {
 		return 63
+	}
+	if scenario.SandboxUnavailable {
+		_, _ = fmt.Fprintln(os.Stderr, "Error: sandbox required but unavailable: bubblewrap (bwrap) not installed")
+		return 1
 	}
 	var request struct {
 		RequestID string `json:"request_id"`
@@ -195,9 +212,20 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	if scenario.InitializeDelay > 0 {
 		time.Sleep(time.Duration(scenario.InitializeDelay) * time.Millisecond)
 	}
+	mode := permissionMode
+	if scenario.InitialMode != nil {
+		mode = *scenario.InitialMode
+	}
+	responseBody := "{}"
+	if mode != "" {
+		responseBody = fmt.Sprintf(`{"current_permission_mode":%q}`, mode)
+	}
+	if scenario.InitializeBody != "" {
+		responseBody = scenario.InitializeBody
+	}
 	response := fmt.Sprintf(
-		`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{}}}`,
-		request.RequestID,
+		`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":%s}}`,
+		request.RequestID, responseBody,
 	)
 	if scenario.InitializeError {
 		response = fmt.Sprintf(
@@ -233,6 +261,17 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 		)
 		if _, err := fmt.Fprintln(os.Stdout, reply); err != nil {
 			return 77
+		}
+	}
+	if !scenario.InitializeError && !scenario.SkipSandboxProbe &&
+		permissionMode != "" && permissionMode == mode && settingsJSON != "" {
+		settings := scenario.SandboxSettings
+		if settings == "" {
+			settings = `{"effective":` + settingsJSON + `}`
+		}
+		if err := replyToClaudeSandboxProbe(reader, settings); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			return 81
 		}
 	}
 	emit := func(frame string) error {
@@ -359,6 +398,24 @@ func runClaudeResumePeer(scenarioPath string, args []string) int {
 	}
 	writeClaudeResumeObservation(scenario.ObservationPath, observation)
 	return 0
+}
+
+func replyToClaudeSandboxProbe(reader *bufio.Reader, settings string) error {
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		return err
+	}
+	var wire struct {
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype string `json:"subtype"`
+		} `json:"request"`
+	}
+	if json.Unmarshal(line, &wire) != nil || wire.Request.Subtype != "get_settings" || wire.RequestID == "" {
+		return errors.New("expected get_settings control")
+	}
+	_, err = fmt.Fprintf(os.Stdout, "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":%q,\"response\":%s}}\n", wire.RequestID, settings)
+	return err
 }
 
 func applyClaudeResumeMutation(scenario *claudeResumePeerScenario) error {

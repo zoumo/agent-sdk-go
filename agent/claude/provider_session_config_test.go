@@ -37,9 +37,9 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		require.NoError(t, err)
 		closeSessionOnCleanup(t, session)
 		assert.Equal(t, claudeExpectedArgs(
+			"--session-id="+session.ID(),
 			"--model= Caller/Model ",
 			"--effort= Native/High ",
-			"--session-id="+session.ID(),
 		), capture.argv(t))
 	})
 
@@ -70,9 +70,9 @@ func TestClaudeOpenAndResumePassLiteralSessionConfig(t *testing.T) {
 		require.NoError(t, err)
 		closeSessionOnCleanup(t, session)
 		assert.Equal(t, claudeExpectedArgs(
+			"--resume="+claudeResumePeerSessionID,
 			"--model= Resume/Model ",
 			"--effort= Resume/Effort ",
-			"--resume="+claudeResumePeerSessionID,
 		), readClaudeArgv(t, argvPath))
 	})
 }
@@ -87,24 +87,24 @@ func TestClaudeOpenAndResumePassSessionConfigFieldsIndependently(t *testing.T) {
 		{
 			name:     "open model only",
 			config:   agent.SessionConfig{Model: "model-only"},
-			wantArgs: claudeExpectedArgs("--model=model-only", "--session-id=native-open"),
+			wantArgs: claudeExpectedArgs("--session-id=native-open", "--model=model-only"),
 		},
 		{
 			name:     "open effort only",
 			config:   agent.SessionConfig{Effort: "effort-only"},
-			wantArgs: claudeExpectedArgs("--effort=effort-only", "--session-id=native-open"),
+			wantArgs: claudeExpectedArgs("--session-id=native-open", "--effort=effort-only"),
 		},
 		{
 			name:     "resume model only",
 			resume:   true,
 			config:   agent.SessionConfig{Model: "model-only"},
-			wantArgs: claudeExpectedArgs("--model=model-only", "--resume="+claudeResumePeerSessionID),
+			wantArgs: claudeExpectedArgs("--resume="+claudeResumePeerSessionID, "--model=model-only"),
 		},
 		{
 			name:     "resume effort only",
 			resume:   true,
 			config:   agent.SessionConfig{Effort: "effort-only"},
-			wantArgs: claudeExpectedArgs("--effort=effort-only", "--resume="+claudeResumePeerSessionID),
+			wantArgs: claudeExpectedArgs("--resume="+claudeResumePeerSessionID, "--effort=effort-only"),
 		},
 	}
 
@@ -392,15 +392,13 @@ func TestClaudeEffortPreflightFailureIsNotSent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
-	frames := []string{
-		mockClaudeInit[0],
-		mockClaudeInit[1],
-		`<{"type":"system","subtype":"init","session_id":"native-runtime",` +
-			`"cwd":` + jsonString(t, cwd) + `,"claude_code_version":"2.1.293",` +
+	frames := append(append([]string(nil), mockClaudeInit...),
+		`<{"type":"system","subtype":"init","session_id":"native-runtime",`+
+			`"cwd":`+jsonString(t, cwd)+`,"claude_code_version":"2.1.293",`+
 			`"model":"initial/model"}`,
 		`>{"type":"control_request","request_id":"go_1","request":{"subtype":"get_settings"}}`,
 		`!`,
-	}
+	)
 	peerSession := prepareClaudePeer(t, "failed", frames...)
 	provider := newTestClaudeProvider(t, peerSession)
 	_, err := provider.Start(ctx)
@@ -589,7 +587,7 @@ func startClaudeResumeExecutionProvider(
 	return provider, argv
 }
 
-func claudeExpectedArgs(extras ...string) []string {
+func claudeExpectedArgs(identity string, configArgs ...string) []string {
 	args := []string{
 		"--output-format", "stream-json",
 		"--verbose",
@@ -597,5 +595,6 @@ func claudeExpectedArgs(extras ...string) []string {
 		"--permission-prompt-tool", "stdio",
 		"--include-partial-messages",
 	}
-	return append(args, extras...)
+	args = append(args, configArgs...)
+	return append(args, "--permission-mode=auto", claudeApprovalSandbox, identity)
 }

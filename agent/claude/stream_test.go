@@ -48,8 +48,9 @@ func InjectSupportedForTest(public agent.Session) bool {
 
 // TestifyNativeArgs declares the reviewed stdio startup subset accepted by the
 // pinned bridge. It is intentionally not a claim of full CLI argv equivalence:
-// external MCP declarations, --disallowedTools, --effort, and appended system
-// prompts and --session-id are unsupported by that pin.
+// External MCP declarations, tool restrictions, effort, appended system
+// prompts, assigned session IDs, and native permission options are outside
+// that pin's reviewed subset.
 // The complete options still go to OpenStreams and its native behavior. Leave
 // all other arguments intact so unknown declarations fail closed upstream.
 func TestifyNativeArgs(options claude.SessionOptions) ([]string, error) {
@@ -63,7 +64,10 @@ func TestifyNativeArgs(options claude.SessionOptions) ([]string, error) {
 			!strings.HasPrefix(arg, "--mcp-config=") &&
 			!strings.HasPrefix(arg, "--effort=") &&
 			!strings.HasPrefix(arg, "--session-id=") &&
-			!strings.HasPrefix(arg, "--append-system-prompt=") {
+			!strings.HasPrefix(arg, "--append-system-prompt=") &&
+			!strings.HasPrefix(arg, "--permission-mode=") &&
+			!strings.HasPrefix(arg, "--settings=") &&
+			arg != "--allow-dangerously-skip-permissions" {
 			declaration = append(declaration, arg)
 		}
 	}

@@ -95,6 +95,11 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 	// Additional fields cannot silently expand the creation or update contract.
 	checked := checkAgentProductionPackage(t)
 	for name, want := range map[string][]string{
+		"OpenOptions": {
+			"Cwd", "PermissionPreset", "ProcessEnv", "ShellEnv", "AdditionalSystemPrompt",
+			"AdditionalDirs", "Features", "MCPServers", "Config",
+		},
+		"ResumeOptions": {"SessionID", "OpenOptions"},
 		"SessionConfig": {"Model", "Effort"},
 		"ConfigChange":  {"ID", "Value"},
 	} {
@@ -111,13 +116,17 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 }
 
 func sessionConfigDeclaration(node ast.Node) bool {
+	if function, ok := node.(*ast.FuncDecl); ok && slices.Contains([]string{
+		"threadConfig", "openingConfiguration", "nativeOptions",
+	}, function.Name.Name) {
+		return true
+	}
 	relevant := false
 	ast.Inspect(node, func(node ast.Node) bool {
 		identifier, ok := node.(*ast.Ident)
 		if ok && slices.Contains([]string{
 			"SessionConfig", "ConfigID", "ConfigChange", "ConfigReceipt", "ConfigController",
-			"ConfigModel", "ConfigEffort", "SetConfig", "OpenOptions", "ResumeOptions",
-			"threadConfig", "openingConfiguration", "nativeOptions",
+			"ConfigModel", "ConfigEffort", "SetConfig",
 		}, identifier.Name) {
 			relevant = true
 		}
@@ -163,6 +172,12 @@ func sessionConfigSurfaceViolations(node ast.Node) []string {
 	ast.Inspect(node, func(node ast.Node) bool {
 		var value string
 		switch node := node.(type) {
+		case *ast.TypeSpec:
+			// The creation contract, including PermissionPreset, is checked
+			// separately from runtime configuration declarations.
+			if node.Name.Name == "OpenOptions" {
+				return false
+			}
 		case *ast.Ident:
 			value = node.Name
 		case *ast.BasicLit:

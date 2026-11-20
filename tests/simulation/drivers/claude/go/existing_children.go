@@ -159,17 +159,17 @@ func AcceptExistingChildren(
 	}); err != nil {
 		return err
 	}
-	if setupStart.ExecutionID == "" || setupStart.ConnectionID != "main" || len(setupStart.NativeArgs) == 0 {
+	if setupStart.ExecutionID == "" || setupStart.ConnectionID != "main" {
 		return errors.New("existing-child setup start is incomplete")
 	}
 	if executions := mock.ExecutionIDs(); len(executions) != 1 || executions[0] != setupStart.ExecutionID {
 		return errors.New("existing-child setup did not produce one execution")
 	}
 
-	s, run, inputClosed, err := openStreamSessionWithNativeArgs(ctx, mock, "probe", setupStart.ExecutionID, claude.SessionOptions{
+	s, run, inputClosed, err := openStreamSessionOnConnection(ctx, mock, "probe", setupStart.ExecutionID, claude.SessionOptions{
 		ResumeID:   setup.SessionID,
 		Initialize: &initialize,
-	}, setupStart.NativeArgs)
+	})
 	if err != nil {
 		return err
 	}

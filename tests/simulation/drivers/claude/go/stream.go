@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/claude"
@@ -24,27 +23,9 @@ func openStreamSessionOnConnection(
 	if mock == nil {
 		return nil, nil, nil, errors.New("prepared mock session is required")
 	}
-	nativeArgs, err := claude.NativeArgs(options)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return openStreamSessionWithNativeArgs(ctx, mock, connection, executionID, options, mockNativeArgs(nativeArgs))
-}
-
-func openStreamSessionWithNativeArgs(
-	ctx context.Context,
-	mock *mocktest.Session,
-	connection, executionID string,
-	options claude.SessionOptions,
-	nativeArgs []string,
-) (*claude.Session, *mocktest.Run, <-chan error, error) {
-	if mock == nil {
-		return nil, nil, nil, errors.New("prepared mock session is required")
-	}
 	run, err := mock.NewRun(ctx, mocktest.RunOptions{
 		Connection:  connection,
 		ExecutionID: executionID,
-		NativeArgs:  append([]string(nil), nativeArgs...),
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -66,16 +47,6 @@ func openStreamSessionWithNativeArgs(
 	}
 	inputClosed := run.CloseInputWhenComplete(session.CloseInput)
 	return session, run, inputClosed, nil
-}
-
-func mockNativeArgs(args []string) []string {
-	result := []string{"--output-format", "stream-json", "--verbose", "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--include-partial-messages"}
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "--model=") || strings.HasPrefix(arg, "--resume=") {
-			result = append(result, arg)
-		}
-	}
-	return result
 }
 
 func finishStream(session *claude.Session, run *mocktest.Run, inputClosed <-chan error) error {

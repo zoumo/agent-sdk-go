@@ -3424,6 +3424,7 @@ func assertAgentExecutionClaudeRuntimeTrace(
 	argv := agentExecutionTraceArgv(t, entries)
 	assert.Contains(t, argv, "--model= Caller/Model v2 ")
 	assert.Contains(t, argv, "--effort= Native/High ")
+	assert.Contains(t, argv, "--permission-mode=auto")
 
 	initializes := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
 		return frame.Type == "control_request" && frame.Request.Subtype == "initialize"
@@ -3450,7 +3451,7 @@ func assertAgentExecutionClaudeRuntimeTrace(
 	getSettings := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
 		return frame.Type == "control_request" && frame.Request.Subtype == "get_settings"
 	})
-	require.Len(t, getSettings, 1)
+	require.Len(t, getSettings, 2)
 	var settings struct {
 		EffortLevel string `json:"effortLevel"`
 		Ultracode   *bool  `json:"ultracode"`
@@ -3462,7 +3463,10 @@ func assertAgentExecutionClaudeRuntimeTrace(
 	assert.Equal(t, " next/model ", models[0].frame.Request.Model)
 
 	require.Less(t, users[0].index, efforts[0].index)
-	require.Less(t, getSettings[0].index, efforts[0].index)
+	require.Less(t, initializes[0].index, getSettings[0].index)
+	require.Less(t, getSettings[0].index, users[0].index)
+	require.Less(t, users[0].index, getSettings[1].index)
+	require.Less(t, getSettings[1].index, efforts[0].index)
 	require.Less(t, efforts[0].index, users[1].index)
 	require.Less(t, users[1].index, models[0].index)
 	require.Less(t, models[0].index, users[2].index)
@@ -3520,13 +3524,16 @@ func assertAgentExecutionResumeTrace(t *testing.T, providerName, path string) {
 		assert.Contains(t, argv, "--resume="+agentExecutionSessionID)
 		assert.Contains(t, argv, "--model= Resume/Model ")
 		assert.Contains(t, argv, "--effort= Native/Resume ")
+		assert.Contains(t, argv, "--permission-mode=auto")
 		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
 			return frame.Type == "user"
 		}))
+		assert.Len(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
+			return frame.Type == "control_request" && frame.Request.Subtype == "get_settings"
+		}), 1)
 		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
 			return frame.Type == "control_request" &&
-				(frame.Request.Subtype == "get_settings" ||
-					frame.Request.Subtype == "set_model" ||
+				(frame.Request.Subtype == "set_model" ||
 					frame.Request.Subtype == "apply_flag_settings")
 		}))
 	default:

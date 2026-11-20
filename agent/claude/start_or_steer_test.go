@@ -255,7 +255,7 @@ func TestStartOrSteerUnknownWriteIsNotRetriedOrQueued(t *testing.T) {
 		t,
 		"failed",
 		10*time.Second,
-		map[int]time.Duration{3: time.Second},
+		map[int]time.Duration{len(frames) - 1: time.Second},
 		frames...,
 	)
 	provider := newTestClaudeProvider(t, peerSession)

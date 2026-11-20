@@ -546,14 +546,19 @@ func agentExecutionPeer(provider, scenario string) (err error) {
 			case "get_status":
 				response = map[string]any{"sections": []any{map[string]any{"rows": []any{map[string]any{"label": "Session ID", "value": sessionID}, map[string]any{"label": "cwd", "value": cwd}}}}}
 			case "get_settings":
-				response = map[string]any{"applied": map[string]any{"ultracode": false}}
+				response = json.RawMessage(`{
+					"effective":{"sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}},
+					"applied":{"ultracode":false}
+				}`)
 			case "claim_session":
 				response = map[string]any{
 					"status":     "ok",
 					"cwd":        cwd,
 					"session_id": sessionID,
 				}
-			case "initialize", "set_model", "apply_flag_settings":
+			case "initialize":
+				response = map[string]any{"current_permission_mode": "auto"}
+			case "set_model", "apply_flag_settings":
 			default:
 				return fmt.Errorf(
 					"unexpected agent execution Claude control request: %s",
@@ -688,13 +693,13 @@ func agentExecutionCodexResult(sessionID, cwd string) map[string]any {
 			"status":        map[string]any{"type": "idle"},
 			"turns":         []any{},
 		},
-		"approvalPolicy":    "never",
-		"approvalsReviewer": "user",
+		"approvalPolicy":    "on-request",
+		"approvalsReviewer": "auto_review",
 		"cwd":               cwd,
 		"model":             "observed/model",
 		"modelProvider":     "synthetic",
 		"reasoningEffort":   "observed-effort",
-		"sandbox":           map[string]any{"type": "readOnly"},
+		"sandbox":           map[string]any{"type": "workspaceWrite"},
 	}
 }
 

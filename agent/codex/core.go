@@ -111,10 +111,27 @@ func (p *Core) Open(
 	ctx context.Context,
 	options agent.OpenOptions,
 ) (agent.Session, error) {
+	if options.PermissionPreset == "" {
+		options.PermissionPreset = agent.PermissionPresetAutoReview
+	}
+	return p.OpenWithPermissions(ctx, options, Permissions{})
+}
+
+// OpenWithPermissions creates a native main session with the supplied
+// per-thread permissions after the Core has started.
+func (p *Core) OpenWithPermissions(
+	ctx context.Context,
+	options agent.OpenOptions,
+	permissions Permissions,
+) (agent.Session, error) {
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOpenOptions(options); err != nil {
+		return nil, err
+	}
+	permissions, err := permissions.resolve(options.PermissionPreset)
+	if err != nil {
 		return nil, err
 	}
 	mcpServers := mcp.CloneServers(options.MCPServers)
@@ -131,14 +148,24 @@ func (p *Core) Open(
 			MCPServers: mcpServers,
 			ShellEnv:   maps.Clone(options.ShellEnv),
 			Thread: codextypes.ThreadStartParams{
+				ApprovalPolicy:        permissions.ApprovalPolicy,
+				ApprovalsReviewer:     permissions.ApprovalsReviewer,
 				Config:                config,
 				Cwd:                   codextypes.Some(options.Cwd),
 				DeveloperInstructions: developerInstructions(options.AdditionalSystemPrompt),
 				Model:                 optionalString(options.Config.Model),
+				Permissions:           permissions.ProfileID,
+				Sandbox:               permissions.Sandbox,
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingStart), err)
+		}
+		if options.PermissionPreset != "" {
+			response, ok := native.StartResponse()
+			if !ok || !permissions.matches(response.ApprovalPolicy, response.ApprovalsReviewer, response.Sandbox) {
+				return nil, abortPermissionMismatch(native)
+			}
 		}
 		return newSession(p, native, features), nil
 	})
@@ -155,10 +182,27 @@ func (p *Core) Resume(
 	ctx context.Context,
 	options agent.ResumeOptions,
 ) (agent.Session, error) {
+	if options.PermissionPreset == "" {
+		options.PermissionPreset = agent.PermissionPresetAutoReview
+	}
+	return p.ResumeWithPermissions(ctx, options, Permissions{})
+}
+
+// ResumeWithPermissions restores an existing native main session with the
+// supplied per-thread permission overrides.
+func (p *Core) ResumeWithPermissions(
+	ctx context.Context,
+	options agent.ResumeOptions,
+	permissions Permissions,
+) (agent.Session, error) {
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
+		return nil, err
+	}
+	permissions, err := permissions.resolve(options.PermissionPreset)
+	if err != nil {
 		return nil, err
 	}
 	mcpServers := mcp.CloneServers(options.MCPServers)
@@ -175,18 +219,28 @@ func (p *Core) Resume(
 			MCPServers: mcpServers,
 			ShellEnv:   maps.Clone(options.ShellEnv),
 			Resume: &codextypes.ThreadResumeParams{
-				Config: config,
-				Cwd:    codextypes.Some(options.Cwd),
+				ApprovalPolicy:    permissions.ApprovalPolicy,
+				ApprovalsReviewer: permissions.ApprovalsReviewer,
+				Config:            config,
+				Cwd:               codextypes.Some(options.Cwd),
 				DeveloperInstructions: developerInstructions(
 					options.AdditionalSystemPrompt,
 				),
 				ExcludeTurns: codextypes.Some(true),
 				Model:        optionalString(options.Config.Model),
+				Permissions:  permissions.ProfileID,
+				Sandbox:      permissions.Sandbox,
 				ThreadID:     options.SessionID,
 			},
 		})
 		if err != nil {
 			return nil, nativeOperationError(string(openingResume), err)
+		}
+		if options.PermissionPreset != "" {
+			response, ok := native.ResumeResponse()
+			if !ok || !permissions.matches(response.ApprovalPolicy, response.ApprovalsReviewer, response.Sandbox) {
+				return nil, abortPermissionMismatch(native)
+			}
 		}
 		return newSession(p, native, features), nil
 	})

@@ -31,5 +31,6 @@ license: Apache-2.0
 * [ADR 0002](adr/0002-no-provider-neutral-plan.md) - 记录将 Plan 类型与通知留在原生 SDK 的决定，以及统一层对计划相关工具调用的处理。
 * [ADR 0003](adr/0003-unified-start-or-steer.md) - 记录统一输入采用 Start or steer 的决定及其与原生 Session 的职责边界。
 * [ADR 0004](adr/0004-environment-and-trace-scopes.md) - 记录 Core 进程环境、Session shell 环境、Claude Session 进程环境和 prompt trace 的独立作用域。
+* [ADR 0005](adr/0005-session-permission-presets.md) - 记录 Session 权限预设、默认自动审批与沙箱映射，以及恢复时的生效检查。
 
 术语见[仓库词汇表](../GLOSSARY.md)。

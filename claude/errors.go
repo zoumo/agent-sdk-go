@@ -14,6 +14,7 @@ var (
 	ErrStreamRequired           = errors.New("claude: stream transport required")
 	ErrInvalidInput             = errors.New("claude: invalid input")
 	ErrUnsupported              = errors.New("claude: unsupported operation")
+	ErrSandboxUnavailable       = errors.New("claude: required Bash sandbox unavailable")
 	ErrProtocol                 = errors.New("claude: invalid protocol frame")
 	ErrResourceLimit            = errors.New("claude: resource limit exceeded")
 	ErrUnexpectedEOF            = errors.New("claude: unexpected end of stdout")

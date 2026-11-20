@@ -77,9 +77,12 @@ Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具
 [创建和恢复选项](../../../agent/options.go) · [会话配置](../../../agent/session_config.go)
 
 - `Cwd` 必须由调用方明确给出且为绝对路径；provider 不接受隐式工作目录。
+- `PermissionPreset` 每次打开和恢复独立解析。默认值、原生覆盖方式和返回前的配置检查见
+  [权限预设 ADR](../../adr/0005-session-permission-presets.md)。
 - Claude `Open` 默认通过 `--await-claim` 启动，initialize 后发送
   `claim_session` 绑定工作目录，并从响应取得 CLI 分配的原生 session ID；
-  SDK 不生成 session ID。claim 成功后返回，不等待 `system/init`，不发送用户输入。
+  SDK 不生成 session ID。claim 和权限配置检查成功后返回，不等待 `system/init`，
+  不发送用户输入。
   原生 claim 与显式 `SessionID` 的互斥和身份确认见
   [原生创建合同](../native-session/design.md#interface-session-与交付值)。
   每次收到符合原生创建合同的 init，adapter 都交付其中的可用命令列表。
@@ -575,10 +578,9 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 
 #### 不支持的共享配置
 
-本版明确不支持 `sandbox`、`approvalPolicy` 和 `permissionsProfile`：
-它们既不加入 `SessionConfig`，也不加入 `ConfigID`。统一 adapter 不做同名
-映射，也不依据模型或 effort 推导其值。调用方需要这些原生能力时使用对应原生
-SDK，不能把它们塞入统一会话配置。
+`SessionConfig` 和 `ConfigID` 仅承载模型与 effort。创建和恢复的权限由
+`OpenOptions.PermissionPreset` 设置，原生权限字段由具体 adapter 接收。见
+[权限预设 ADR](../../adr/0005-session-permission-presets.md)。
 
 ### 能力与功能
 
@@ -1518,8 +1520,8 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
   Codex `thread/start` 与 `thread/resume` JSON、Claude
   `--append-system-prompt=` argv、`Resume` 重新提供完整文本，以及非法
   UTF-8/NUL 在原生副作用前失败；prompt sentinel 不出现在错误、事件或日志。
-- 本版统一选项中不存在 `sandbox`、`approvalPolicy` 或 `permissionsProfile`
-  映射，也不把这些原生值从其他请求字段反推出来。
+- 权限预设验收覆盖新建和恢复的原生参数、恢复时拒绝沿用旧的完全访问配置，
+  以及失败后释放本次取得的资源。
 - 默认验证离线运行。分别记录公开接口与合成协议、固定录制仿真及真实 Agent 的验证结论。
 
 ### Claude 恢复身份验收

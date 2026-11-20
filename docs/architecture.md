@@ -27,7 +27,8 @@ and dependency boundaries.
   import either native SDK, MASS or recording/replay code. Adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
   mechanics (`agent/internal/corelease`, `agent/internal/eventstream`,
-  `agent/internal/eventenvelope`, `agent/internal/interactionledger`, `agent/internal/submissiontrace`,
+  `agent/internal/eventenvelope`, `agent/internal/interactionledger`,
+  `agent/internal/submissiontrace`, `agent/internal/telemetry`,
   `internal/queue` and `internal/uuidv4`), but adapters must not import each
   other or the other native SDK, and native packages must not import `agent`.
 - `internal/tracecontext` shares only standard-library W3C carrier validation
@@ -38,11 +39,17 @@ and dependency boundaries.
   does not connect to servers, resolve secrets, serialize native configuration,
   or decide provider capabilities. Each entry point validates its supported
   transports and fields before native side effects.
-- Trace values, context helpers and the `agent.Tracer` seam are part of the
-  standard-library-only core. OpenTelemetry or another telemetry SDK can
-  implement `Tracer` and adapt `TraceContext` outside this repository, but must
-  not become a production dependency of `agent`, `codex`, `claude` or either
-  native `types` package.
+- The unified adapters use the OpenTelemetry Go trace and metric APIs.
+  `agent/internal/telemetry` owns their shared instruments and result
+  attributes. The adapters use `Config.TracerProvider` and
+  `Config.MeterProvider` when set. Each unset field uses the corresponding
+  global provider. The host owns provider setup, sampling, and export.
+  The boundary check limits OpenTelemetry API imports to the adapters and
+  shared instrumentation. The `go.opentelemetry.io/otel/sdk` packages and
+  exporters are test-only.
+- Trace values, context helpers, and `agent.Tracer` belong to the `agent`
+  contract. The native SDKs and their `types` packages use the existing W3C
+  carrier types and remain independent of OpenTelemetry.
 - `codex` and `claude` must not import each other. Native SDK production code
   must not depend on recording/replay tools or fixture containers.
 - Both native `types` packages must have **production** dependencies limited to
@@ -73,11 +80,12 @@ and dependency boundaries.
   results, but never a native request, raw frame, request identifier, handle,
   reply callback or reference-to-adapter lookup. Each adapter's private registry
   remains the only route from a reference to native answer authority.
-- `agent/internal/submissiontrace` owns only the best-effort local span lifecycle
-  for one admitted unified submission. It may import the standard library and
-  public `agent` contract; it must not import a native SDK, adapter, MASS or
-  tracing implementation. Adapter-specific carrier conversion and wire mapping
-  remain with each adapter.
+- `agent/internal/submissiontrace` runs the legacy `agent.Tracer` callback after
+  local submission admission. The unified adapter uses that callback for
+  `StartOrSteer` when `Config.Tracer` is set and still records the operation
+  metric. The standard submission span uses a valid explicit `agent.TraceContext`
+  as its parent when available, or inherits the active context span. Both paths
+  send the carrier through the adapter's existing native protocol.
 - `internal/queue` shares only concurrent FIFO mechanics. It imports no native
   SDK, native types, tools or fixtures. Its only non-standard production dependency
   is the pinned `github.com/zoumo/golib/channx.ChannX` implementation; other golib

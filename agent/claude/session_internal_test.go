@@ -42,7 +42,7 @@ func TestStartOrSteerRefusesConcurrentOrUnknownWrite(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			session := &session{}
+			session := &session{provider: New(Config{})}
 			test.setup(session)
 
 			receipt, err := session.StartOrSteer(context.Background(), agent.Input{

@@ -13,6 +13,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
@@ -122,6 +123,8 @@ func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
 ) (receipt agent.InputReceipt, err error) {
+	ctx, observation := s.provider.telemetry.BeginSubmission(ctx, s.provider.tracer != nil)
+	defer func() { observation.End(string(receipt.Result), err) }()
 	nativeInput, err := textInput(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
@@ -146,15 +149,21 @@ func (s *session) StartOrSteer(
 	submitEpoch := s.workEpoch
 	s.mu.Unlock()
 
-	trace := submissiontrace.Start(ctx, s.provider.tracer)
-	defer func() { trace.End(err) }()
+	var traceCarrier *agent.TraceContext
+	if s.provider.tracer != nil {
+		submission := submissiontrace.Start(ctx, s.provider.tracer)
+		defer func() { submission.End(err) }()
+		traceCarrier = submission.Carrier
+	} else {
+		traceCarrier = observation.SubmissionCarrier()
+	}
 
 	if ctx != nil {
 		carrier := codex.TraceContext{}
-		if trace.Carrier != nil {
-			carrier.Traceparent = codextypes.Some(trace.Carrier.Traceparent)
-			if trace.Carrier.Tracestate != "" {
-				carrier.Tracestate = codextypes.Some(trace.Carrier.Tracestate)
+		if traceCarrier != nil {
+			carrier.Traceparent = codextypes.Some(traceCarrier.Traceparent)
+			if traceCarrier.Tracestate != "" {
+				carrier.Tracestate = codextypes.Some(traceCarrier.Tracestate)
 			}
 		}
 		ctx = codex.WithTraceContext(ctx, carrier)
@@ -287,13 +296,18 @@ func (s *session) Answer(
 	interaction agent.InteractionRef,
 	answer agent.Answer,
 ) (agent.InteractionReceipt, error) {
-	return s.answerInteraction(ctx, interaction, answer)
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Answer)
+	receipt, err := s.answerInteraction(ctx, interaction, answer)
+	observation.EndAcceptance(receipt.Acceptance, err)
+	return receipt, err
 }
 
 func (s *session) Interrupt(
 	ctx context.Context,
 	_ agent.InterruptOptions,
-) (agent.InterruptReceipt, error) {
+) (receipt agent.InterruptReceipt, err error) {
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Interrupt)
+	defer func() { observation.End(string(receipt.Result), err) }()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -347,7 +361,10 @@ func (s *session) Unarchive(ctx context.Context) (agent.ActionReceipt, error) {
 }
 
 func (s *session) Close(ctx context.Context) error {
-	return s.stream.Close(ctx)
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Close)
+	reused, err := s.stream.Close(ctx)
+	observation.EndLifecycle(reused, err)
+	return err
 }
 
 func (s *session) Done() <-chan struct{} { return s.stream.Done() }

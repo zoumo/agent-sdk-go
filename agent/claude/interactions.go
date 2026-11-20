@@ -12,6 +12,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/claude"
 )
 
@@ -367,7 +368,9 @@ func (s *session) Answer(
 	ctx context.Context,
 	ref agent.InteractionRef,
 	answer agent.Answer,
-) (agent.InteractionReceipt, error) {
+) (receipt agent.InteractionReceipt, err error) {
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Answer)
+	defer func() { observation.EndAcceptance(receipt.Acceptance, err) }()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()

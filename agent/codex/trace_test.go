@@ -8,8 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
@@ -107,10 +111,15 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			if test.invalidSpan {
 				recorder.carrier = agent.TraceContext{Traceparent: "invalid"}
 			}
+			spans := tracetest.NewSpanRecorder()
+			reader := sdkmetric.NewManualReader()
 			provider := newTestProviderWithWrappers(t, prepareCodexPeer(t, frames...), codextypes.InitializeParams{
 				ClientInfo:   codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
 				Capabilities: codextypes.Some(codextypes.InitializeCapabilities{ExperimentalAPI: codextypes.Some(true)}),
-			}, testStreamWrappers{tracer: recorder})
+			}, testStreamWrappers{tracer: recorder, configure: func(config *agentcodex.Config) {
+				config.TracerProvider = sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+				config.MeterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			}})
 			t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 			_, err := provider.Start(ctx)
 			require.NoError(t, err)
@@ -166,6 +175,16 @@ func TestTraceStartOrSteerSynthetic(t *testing.T) {
 			require.Error(t, err)
 			assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
 			assert.Equal(t, 1, recorder.starts)
+			for _, span := range spans.Ended() {
+				assert.NotEqual(t, agent.SpanStartOrSteer, span.Name())
+			}
+			outcome := string(receipt.Result)
+			if test.missingIdentity {
+				outcome = "outcome_unknown"
+			}
+			assertDurationCounts(t, ctx, reader, map[[2]string]uint64{
+				{"start_or_steer", "rejected"}: 2, {"start_or_steer", outcome}: 1,
+			}, "start_or_steer")
 		})
 	}
 }

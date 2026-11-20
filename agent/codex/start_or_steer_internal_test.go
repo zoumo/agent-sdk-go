@@ -29,7 +29,7 @@ func TestStartOrSteerRefusesLocalConcurrentOrUnknownWrite(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := &session{}
+			s := &session{provider: New(Config{})}
 			test.setup(s)
 
 			receipt, err := s.StartOrSteer(context.Background(), agent.Input{
@@ -47,7 +47,7 @@ func TestStartOrSteerRefusesLocalConcurrentOrUnknownWrite(t *testing.T) {
 }
 
 func TestStartOrSteerClosedSessionRemainsAnError(t *testing.T) {
-	s := &session{closed: true}
+	s := &session{provider: New(Config{}), closed: true}
 	_, err := s.StartOrSteer(context.Background(), agent.Input{
 		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "closed"}}},
 	})

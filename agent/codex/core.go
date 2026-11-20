@@ -8,6 +8,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/codex"
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/mcp"
@@ -26,6 +27,7 @@ const (
 type Core struct {
 	config             codex.StdioOptions
 	tracer             agent.Tracer
+	telemetry          telemetry.Telemetry
 	streams            streamFactory
 	questionsSupported bool
 	leases             *corelease.Core[*codex.Client, *session]
@@ -46,6 +48,7 @@ func New(config Config) *Core {
 	core := &Core{
 		config:             stdio,
 		tracer:             config.Tracer,
+		telemetry:          telemetry.New("codex", config.TracerProvider, config.MeterProvider),
 		questionsSupported: supportsAgentQuestions(stdio.Initialize),
 	}
 	core.leases = corelease.New[*codex.Client, *session](
@@ -58,7 +61,10 @@ func New(config Config) *Core {
 
 // Start acquires the single native connection owned by this Core.
 func (p *Core) Start(ctx context.Context) (agent.Capabilities, error) {
-	return p.leases.Start(ctx)
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Start)
+	capabilities, reused, err := p.leases.Start(ctx)
+	observation.EndLifecycle(reused, err)
+	return capabilities, err
 }
 
 func (p *Core) acquireClient(ctx context.Context) (*codex.Client, error) {
@@ -96,7 +102,10 @@ func (p *Core) acquireClient(ctx context.Context) (*codex.Client, error) {
 // Stop releases the Core-owned connection. It is terminal and succeeds
 // idempotently after the first successful stop.
 func (p *Core) Stop(ctx context.Context) error {
-	return p.leases.Stop(ctx)
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Stop)
+	reused, err := p.leases.Stop(ctx)
+	observation.EndLifecycle(reused, err)
+	return err
 }
 
 func (p *Core) releaseClient(_ context.Context, client *codex.Client) error {
@@ -123,14 +132,16 @@ func (p *Core) OpenWithPermissions(
 	ctx context.Context,
 	options agent.OpenOptions,
 	permissions Permissions,
-) (agent.Session, error) {
+) (_ agent.Session, err error) {
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Open)
+	defer func() { observation.End("", err) }()
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
-	permissions, err := permissions.resolve(options.PermissionPreset)
+	permissions, err = permissions.resolve(options.PermissionPreset)
 	if err != nil {
 		return nil, err
 	}
@@ -194,14 +205,16 @@ func (p *Core) ResumeWithPermissions(
 	ctx context.Context,
 	options agent.ResumeOptions,
 	permissions Permissions,
-) (agent.Session, error) {
+) (_ agent.Session, err error) {
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Resume)
+	defer func() { observation.End("", err) }()
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
 		return nil, err
 	}
-	permissions, err := permissions.resolve(options.PermissionPreset)
+	permissions, err = permissions.resolve(options.PermissionPreset)
 	if err != nil {
 		return nil, err
 	}

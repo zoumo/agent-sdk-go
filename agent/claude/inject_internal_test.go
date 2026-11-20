@@ -17,6 +17,7 @@ func TestInjectDoesNotWriteDuringOverlappingOrUnknownInput(t *testing.T) {
 		"unknown query":       {injectSupported: true, submitUnknown: true},
 	} {
 		t.Run(name, func(t *testing.T) {
+			session.provider = New(Config{})
 			receipt, err := session.Inject(context.Background(), agent.Input{
 				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "context"}}},
 			})
@@ -30,7 +31,7 @@ func TestInjectDoesNotWriteDuringOverlappingOrUnknownInput(t *testing.T) {
 }
 
 func TestInjectInFlightDoesNotAdmitQuery(t *testing.T) {
-	session := &session{injecting: true}
+	session := &session{provider: New(Config{}), injecting: true}
 	receipt, err := session.StartOrSteer(context.Background(), agent.Input{
 		Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "query"}}},
 	})

@@ -44,7 +44,7 @@ func TestStartAcquiresOnceAndReturnsCapabilityCopies(t *testing.T) {
 
 	base[agent.CapabilityForm] = true
 	base[agent.CapabilityTextInput] = false
-	first, err := provider.Start(context.Background())
+	first, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, agent.Capabilities{
 		agent.CapabilityTextInput:  true,
@@ -54,7 +54,7 @@ func TestStartAcquiresOnceAndReturnsCapabilityCopies(t *testing.T) {
 
 	first[agent.CapabilityTextInput] = false
 	first[agent.CapabilityForm] = true
-	second, err := provider.Start(context.Background())
+	second, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, agent.Capabilities{
 		agent.CapabilityTextInput:  true,
@@ -66,7 +66,7 @@ func TestStartAcquiresOnceAndReturnsCapabilityCopies(t *testing.T) {
 	require.NoError(t, err)
 	assert.Same(t, resource, active)
 
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 	assert.Equal(t, int32(1), releaseCalls.Load())
 }
 
@@ -103,7 +103,7 @@ func TestOperationsBeforeStartAreRejected(t *testing.T) {
 		agent.ErrorReasonCoreNotStarted,
 	)
 	assert.Nil(t, resource)
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 }
 
 func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
@@ -123,7 +123,7 @@ func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
 		},
 	)
 
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	require.ErrorIs(t, err, startFailure)
 	_, err = provider.Resource()
 	requireLifecycleError(
@@ -133,12 +133,12 @@ func TestFailedStartLeavesLifecycleRetryable(t *testing.T) {
 		agent.ErrorReasonCoreNotStarted,
 	)
 
-	_, err = provider.Start(context.Background())
+	_, _, err = provider.Start(context.Background())
 	require.NoError(t, err)
 	active, err := provider.Resource()
 	require.NoError(t, err)
 	assert.Same(t, resource, active)
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 	assert.Equal(t, int32(2), acquireCalls.Load())
 }
 
@@ -157,11 +157,11 @@ func TestStopBeforeStartIsTerminalWithoutRelease(t *testing.T) {
 		},
 	)
 
-	require.NoError(t, provider.Stop(context.Background()))
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 	assert.Equal(t, int32(0), releaseCalls.Load())
 
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	identity, err := provider.Open(
 		context.Background(),
@@ -190,13 +190,13 @@ func TestSuccessfulStopIsTerminalAndReleasesOnce(t *testing.T) {
 		},
 	)
 
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
-	require.NoError(t, provider.Stop(context.Background()))
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
-	_, err = provider.Start(context.Background())
+	_, _, err = provider.Start(context.Background())
 	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	identity, err := provider.Open(
 		context.Background(),
@@ -223,7 +223,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 			return nil
 		},
 	)
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 
 	first := &fakeSession{id: 1}
@@ -244,7 +244,7 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 
 	requireLifecycleError(
 		t,
-		provider.Stop(context.Background()),
+		stopError(provider.Stop(context.Background())),
 		agent.ErrorFailedPrecondition,
 		agent.ErrorReasonCoreHasOpenSessions,
 	)
@@ -252,12 +252,12 @@ func TestOpenRegistersSessionsUntilEachIdentityCloses(t *testing.T) {
 	provider.SessionClosed(first)
 	requireLifecycleError(
 		t,
-		provider.Stop(context.Background()),
+		stopError(provider.Stop(context.Background())),
 		agent.ErrorFailedPrecondition,
 		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	provider.SessionClosed(second)
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 }
 
 func TestOpenFailureSettlesInFlightReservation(t *testing.T) {
@@ -271,7 +271,7 @@ func TestOpenFailureSettlesInFlightReservation(t *testing.T) {
 			return nil
 		},
 	)
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 
 	identity, err := provider.Open(
@@ -282,7 +282,7 @@ func TestOpenFailureSettlesInFlightReservation(t *testing.T) {
 	)
 	require.ErrorIs(t, err, openFailure)
 	assert.Nil(t, identity)
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 }
 
 func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
@@ -297,7 +297,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 			return nil
 		},
 	)
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 
 	openEntered := make(chan struct{})
@@ -326,7 +326,7 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 
 	stopResult := make(chan error, 1)
 	go func() {
-		stopResult <- provider.Stop(context.Background())
+		stopResult <- stopError(provider.Stop(context.Background()))
 	}()
 	stopErr := receiveWithin(t, stopResult, "Stop rejection during Open")
 	requireLifecycleError(
@@ -341,12 +341,12 @@ func TestStopRejectsInFlightOpenWithoutRelease(t *testing.T) {
 	require.NoError(t, receiveWithin(t, openResult, "Open completion"))
 	requireLifecycleError(
 		t,
-		provider.Stop(context.Background()),
+		stopError(provider.Stop(context.Background())),
 		agent.ErrorFailedPrecondition,
 		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	provider.SessionClosed(opened)
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 	assert.Equal(t, int32(1), releaseCalls.Load())
 }
 
@@ -380,12 +380,12 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 			return releaseFailure
 		},
 	)
-	_, err := provider.Start(ctx)
+	_, _, err := provider.Start(ctx)
 	require.NoError(t, err)
 
 	stopResult := make(chan error, 1)
 	go func() {
-		stopResult <- provider.Stop(ctx)
+		stopResult <- stopError(provider.Stop(ctx))
 	}()
 	receiveWithin(t, releaseEntered, "release callback entry")
 	assert.Equal(t, int32(1), releaseCalls.Load())
@@ -398,7 +398,7 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	starts := make(chan startResult, 1)
 	go func() {
 		close(startEntered)
-		capabilities, startErr := provider.Start(ctx)
+		capabilities, _, startErr := provider.Start(ctx)
 		starts <- startResult{capabilities: capabilities, err: startErr}
 	}()
 	receiveWithin(t, startEntered, "later Start entry")
@@ -423,7 +423,7 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	repeatedStops := make(chan error, 1)
 	go func() {
 		close(repeatedStopEntered)
-		repeatedStops <- provider.Stop(ctx)
+		repeatedStops <- stopError(provider.Stop(ctx))
 	}()
 	receiveWithin(t, repeatedStopEntered, "repeated Stop entry")
 
@@ -460,10 +460,10 @@ func TestStopAdmissionBlocksLaterOperationsUntilReleaseReturns(t *testing.T) {
 	repeatedStopErr := receiveWithin(t, repeatedStops, "repeated Stop result")
 	require.ErrorIs(t, repeatedStopErr, releaseFailure)
 	require.Same(t, firstStopErr, repeatedStopErr)
-	require.Same(t, firstStopErr, provider.Stop(ctx))
+	require.Same(t, firstStopErr, stopError(provider.Stop(ctx)))
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
-	_, err = provider.Start(ctx)
+	_, _, err = provider.Start(ctx)
 	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	identity, err := provider.Open(
 		ctx,
@@ -505,7 +505,7 @@ func TestConcurrentStartAcquiresOnce(t *testing.T) {
 	results := make(chan startResult, callers)
 	for range callers {
 		go func() {
-			capabilities, err := provider.Start(context.Background())
+			capabilities, _, err := provider.Start(context.Background())
 			results <- startResult{capabilities: capabilities, err: err}
 		}()
 	}
@@ -520,7 +520,7 @@ func TestConcurrentStartAcquiresOnce(t *testing.T) {
 		}, result.capabilities)
 	}
 	assert.Equal(t, int32(1), acquireCalls.Load())
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 }
 
 func TestReleaseFailureIsTerminalAndCached(t *testing.T) {
@@ -536,16 +536,16 @@ func TestReleaseFailureIsTerminalAndCached(t *testing.T) {
 			return releaseFailure
 		},
 	)
-	_, err := provider.Start(context.Background())
+	_, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 
-	first := provider.Stop(context.Background())
-	second := provider.Stop(context.Background())
+	first := stopError(provider.Stop(context.Background()))
+	second := stopError(provider.Stop(context.Background()))
 	require.ErrorIs(t, first, releaseFailure)
 	assert.Same(t, first, second)
 	assert.Equal(t, int32(1), releaseCalls.Load())
 
-	_, err = provider.Start(context.Background())
+	_, _, err = provider.Start(context.Background())
 	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
 	resource, err := provider.Resource()
 	requireLifecycleError(t, err, agent.ErrorClosed, agent.ErrorReasonCoreStopped)
@@ -559,7 +559,7 @@ func TestCoreSupportsNoCoreResource(t *testing.T) {
 		nil,
 	)
 
-	capabilities, err := provider.Start(context.Background())
+	capabilities, _, err := provider.Start(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, agent.Capabilities{
 		agent.CapabilityTextInput: true,
@@ -577,13 +577,15 @@ func TestCoreSupportsNoCoreResource(t *testing.T) {
 	assert.Same(t, opened, identity)
 	requireLifecycleError(
 		t,
-		provider.Stop(context.Background()),
+		stopError(provider.Stop(context.Background())),
 		agent.ErrorFailedPrecondition,
 		agent.ErrorReasonCoreHasOpenSessions,
 	)
 	provider.SessionClosed(identity)
-	require.NoError(t, provider.Stop(context.Background()))
+	require.NoError(t, stopError(provider.Stop(context.Background())))
 }
+
+func stopError(_ bool, err error) error { return err }
 
 func requireLifecycleError(
 	t *testing.T,

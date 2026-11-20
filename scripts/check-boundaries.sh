@@ -121,12 +121,14 @@ for adapter in codex claude; do
           github.com/zoumo/agent-sdk-go/agent/internal/corelease|\
           github.com/zoumo/agent-sdk-go/agent/internal/eventstream|\
           github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace|\
+          github.com/zoumo/agent-sdk-go/agent/internal/telemetry|\
           github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
           github.com/zoumo/agent-sdk-go/"$adapter"|\
           github.com/zoumo/agent-sdk-go/"$adapter"/types|\
           github.com/zoumo/agent-sdk-go/internal/queue|\
           github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope|\
-          github.com/zoumo/agent-sdk-go/internal/uuidv4) ;;
+          github.com/zoumo/agent-sdk-go/internal/uuidv4|\
+          go.opentelemetry.io/otel/trace|go.opentelemetry.io/otel/metric) ;;
           *)
             echo "unexpected agent/$adapter dependency: $dependency" >&2
             exit 1
@@ -136,6 +138,19 @@ for adapter in codex claude; do
     esac
   done <<< "$adapter_imports"
 done
+# Only the shared adapter instrumentation may use the rest of the OTel API.
+telemetry_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' ./agent/internal/telemetry)
+while IFS= read -r dependency; do
+  case "$dependency" in
+    github.com/zoumo/agent-sdk-go/agent|go.opentelemetry.io/otel|\
+    go.opentelemetry.io/otel/attribute|go.opentelemetry.io/otel/codes|\
+    go.opentelemetry.io/otel/metric|go.opentelemetry.io/otel/propagation|\
+    go.opentelemetry.io/otel/trace) ;;
+    *.*)
+      echo "unexpected agent/internal/telemetry dependency: $dependency" >&2
+      exit 1 ;;
+  esac
+done <<< "$telemetry_imports"
 # Unified event-envelope construction is adapter-only shared mechanics. It must
 # not acquire native SDKs or adapter-specific conversion dependencies.
 eventenvelope_dependencies=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./agent/internal/eventenvelope | sed '/^$/d')
@@ -170,6 +185,15 @@ done <<< "$queue_dependencies"
 production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/... ./agent/...)
 if [[ "$production_deps" == *github.com/stretchr/* ]]; then
   echo "testify dependencies must remain test-only" >&2
+  exit 1
+fi
+if [[ "$production_deps" == *go.opentelemetry.io/otel/sdk* || "$production_deps" == *go.opentelemetry.io/otel/exporters* ]]; then
+  echo "OpenTelemetry SDK and exporter dependencies must remain test-only" >&2
+  exit 1
+fi
+native_deps=$(go list -deps -f '{{.ImportPath}}' ./codex ./codex/types ./claude ./claude/types)
+if [[ "$native_deps" == *go.opentelemetry.io/* ]]; then
+  echo "native SDKs must not depend on OpenTelemetry" >&2
   exit 1
 fi
 # Recording/replay utilities and embedded fixtures are tooling, never SDK

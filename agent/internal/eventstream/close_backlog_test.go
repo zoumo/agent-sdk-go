@@ -36,8 +36,10 @@ func TestExplicitCloseDiscardsUnclaimedBacklog(t *testing.T) {
 					<-stream.Done()
 					assert.Equal(t, 2, stream.events.Stats().Items)
 				}
-				require.NoError(t, stream.Close(context.Background()))
-				_, err := stream.Claim()
+				reused, err := stream.Close(context.Background())
+				require.NoError(t, err)
+				assert.Equal(t, naturalFirst, reused)
+				_, err = stream.Claim()
 				require.Error(t, err)
 				assert.Equal(t, agent.ErrorClosed, agent.CodeOf(err))
 				assert.Zero(t, stream.events.Stats().Items, "no consumer can drain these events")

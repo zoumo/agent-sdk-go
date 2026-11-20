@@ -238,9 +238,10 @@ func newTestProviderWithInitialize(
 }
 
 type testStreamWrappers struct {
-	reader func(io.ReadCloser) io.ReadCloser
-	writer func(io.WriteCloser) io.WriteCloser
-	tracer agent.Tracer
+	reader    func(io.ReadCloser) io.ReadCloser
+	writer    func(io.WriteCloser) io.WriteCloser
+	tracer    agent.Tracer
+	configure func(*agentcodex.Config)
 }
 
 func newTestProviderWithWrappers(
@@ -267,12 +268,16 @@ func newTestProviderWithWrappers(
 		writer = wrappers.writer(writer)
 	}
 	var completion <-chan error
-	provider := agentcodex.NewWithStream(agentcodex.Config{Stdio: codex.StdioOptions{
+	config := agentcodex.Config{Stdio: codex.StdioOptions{
 		Args:       run.Start.NativeArgs,
 		Env:        run.Environment(),
 		Dir:        run.Start.ProtocolCwd,
 		Initialize: initialize,
-	}, Tracer: wrappers.tracer}, codex.StreamTransport{
+	}, Tracer: wrappers.tracer}
+	if wrappers.configure != nil {
+		wrappers.configure(&config)
+	}
+	provider := agentcodex.NewWithStream(config, codex.StreamTransport{
 		Reader: reader,
 		Writer: writer,
 		Stderr: run.Stderr,

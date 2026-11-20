@@ -10,6 +10,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
@@ -28,6 +29,7 @@ const (
 // session owns its native CLI process.
 type Core struct {
 	config          Config
+	telemetry       telemetry.Telemetry
 	streams         streamFactory
 	newSessionID    func() (string, error)
 	newSubmissionID func() (string, error)
@@ -45,7 +47,11 @@ type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, err
 
 // New constructs a Claude Core without starting a native process.
 func New(config Config) *Core {
-	core := &Core{config: cloneConfig(config), newSubmissionID: uuidv4.New}
+	core := &Core{
+		config:          cloneConfig(config),
+		telemetry:       telemetry.New("claude", config.TracerProvider, config.MeterProvider),
+		newSubmissionID: uuidv4.New,
+	}
 	core.leases = corelease.New[struct{}, *session](
 		providerCapabilities(),
 		nil,
@@ -56,12 +62,18 @@ func New(config Config) *Core {
 
 // Start marks this Core ready to open sessions.
 func (p *Core) Start(ctx context.Context) (agent.Capabilities, error) {
-	return p.leases.Start(ctx)
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Start)
+	capabilities, reused, err := p.leases.Start(ctx)
+	observation.EndLifecycle(reused, err)
+	return capabilities, err
 }
 
 // Stop rejects shutdown while any session is opening or open.
 func (p *Core) Stop(ctx context.Context) error {
-	return p.leases.Stop(ctx)
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Stop)
+	reused, err := p.leases.Stop(ctx)
+	observation.EndLifecycle(reused, err)
+	return err
 }
 
 // Open creates a new Claude session and binds it to the claimed working
@@ -83,14 +95,16 @@ func (p *Core) OpenWithPermissions(
 	ctx context.Context,
 	options agent.OpenOptions,
 	permissions Permissions,
-) (agent.Session, error) {
+) (_ agent.Session, err error) {
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Open)
+	defer func() { observation.End("", err) }()
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOpenOptions(options); err != nil {
 		return nil, err
 	}
-	permissions, err := permissions.resolve(options.PermissionPreset, "open")
+	permissions, err = permissions.resolve(options.PermissionPreset, "open")
 	if err != nil {
 		return nil, err
 	}
@@ -135,14 +149,16 @@ func (p *Core) ResumeWithPermissions(
 	ctx context.Context,
 	options agent.ResumeOptions,
 	permissions Permissions,
-) (agent.Session, error) {
+) (_ agent.Session, err error) {
+	ctx, observation := p.telemetry.Begin(ctx, telemetry.Resume)
+	defer func() { observation.End("", err) }()
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOpenOptions(options.OpenOptions); err != nil {
 		return nil, err
 	}
-	permissions, err := permissions.resolve(options.PermissionPreset, "resume")
+	permissions, err = permissions.resolve(options.PermissionPreset, "resume")
 	if err != nil {
 		return nil, err
 	}

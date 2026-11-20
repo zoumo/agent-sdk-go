@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"slices"
 
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -15,6 +18,10 @@ type Config struct {
 	Stdio codex.StdioOptions
 	// Tracer optionally creates a local span for each admitted StartOrSteer.
 	Tracer agent.Tracer
+
+	// TracerProvider and MeterProvider default to the host's OpenTelemetry providers.
+	TracerProvider trace.TracerProvider
+	MeterProvider  metric.MeterProvider
 }
 
 func cloneStdioOptions(value codex.StdioOptions) codex.StdioOptions {

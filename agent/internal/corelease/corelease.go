@@ -50,16 +50,17 @@ func New[R any, I comparable](
 }
 
 // Start acquires the Core resource once and returns a copy of the base
-// capabilities. A failed acquisition leaves the lifecycle retryable.
-func (l *Core[R, I]) Start(ctx context.Context) (agent.Capabilities, error) {
+// capabilities and whether the resource was already started. A failed
+// acquisition leaves the lifecycle retryable.
+func (l *Core[R, I]) Start(ctx context.Context) (agent.Capabilities, bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	switch l.state {
 	case stateStarted:
-		return maps.Clone(l.capabilities), nil
+		return maps.Clone(l.capabilities), true, nil
 	case stateStopped:
-		return nil, coreStoppedError()
+		return nil, false, coreStoppedError()
 	}
 
 	var (
@@ -69,12 +70,12 @@ func (l *Core[R, I]) Start(ctx context.Context) (agent.Capabilities, error) {
 	if l.acquire != nil {
 		resource, err = l.acquire(ctx)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	l.resource = resource
 	l.state = stateStarted
-	return maps.Clone(l.capabilities), nil
+	return maps.Clone(l.capabilities), false, nil
 }
 
 // Open reserves one in-flight operation, runs open outside the lifecycle lock,
@@ -142,20 +143,21 @@ func (l *Core[R, I]) SessionClosed(identity I) {
 }
 
 // Stop is terminal once admitted. It rejects while an Open is in flight or any
-// Session remains registered, releases at most once, and caches the result.
-func (l *Core[R, I]) Stop(ctx context.Context) error {
+// Session remains registered, releases at most once, and reports whether the
+// terminal result was reused.
+func (l *Core[R, I]) Stop(ctx context.Context) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	switch l.state {
 	case stateStopped:
-		return l.stopErr
+		return true, l.stopErr
 	case stateNew:
 		l.state = stateStopped
-		return nil
+		return false, nil
 	}
 	if l.opening != 0 || len(l.sessions) != 0 {
-		return coreHasOpenSessionsError()
+		return false, coreHasOpenSessionsError()
 	}
 
 	l.state = stateStopped
@@ -164,7 +166,7 @@ func (l *Core[R, I]) Stop(ctx context.Context) error {
 	}
 	var zero R
 	l.resource = zero
-	return l.stopErr
+	return false, l.stopErr
 }
 
 func coreStoppedError() error {

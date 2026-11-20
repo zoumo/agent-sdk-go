@@ -4,12 +4,15 @@ import (
 	"context"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 )
 
-func (s *session) Inject(ctx context.Context, input agent.Input) (agent.InjectReceipt, error) {
-	receipt := agent.InjectReceipt{Acceptance: configNotSent()}
+func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.InjectReceipt, err error) {
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Inject)
+	defer func() { observation.EndAcceptance(receipt.Acceptance, err) }()
+	receipt = agent.InjectReceipt{Acceptance: configNotSent()}
 	text, err := textInput(input)
 	if err != nil {
 		return receipt, err

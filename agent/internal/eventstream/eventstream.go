@@ -76,8 +76,9 @@ func (s *Stream) Publish(events []agent.Event) error {
 	return s.events.PushBatch(items)
 }
 
-func (s *Stream) Close(context.Context) error {
-	s.begin(End{Explicit: true}, false)
+// Close waits for cleanup and reports whether cleanup had already begun.
+func (s *Stream) Close(context.Context) (bool, error) {
+	began := s.begin(End{Explicit: true}, false)
 	<-s.done
 	s.mu.Lock()
 	claimed := s.claimed
@@ -87,7 +88,7 @@ func (s *Stream) Close(context.Context) error {
 		// termination. Only an existing reader can drain the closed queue.
 		_ = s.events.Abort(nil)
 	}
-	return s.closeErr
+	return !began, s.closeErr
 }
 
 func (s *Stream) ObservationEnded(cause error) {
@@ -102,7 +103,7 @@ func (s *Stream) Err() error {
 	return s.end.Cause
 }
 
-func (s *Stream) begin(end End, observed bool) {
+func (s *Stream) begin(end End, observed bool) bool {
 	s.mu.Lock()
 	if end.Explicit {
 		s.explicitClose = true
@@ -114,7 +115,7 @@ func (s *Stream) begin(end End, observed bool) {
 	}
 	if s.closing {
 		s.mu.Unlock()
-		return
+		return false
 	}
 	s.closing = true
 	s.end.Explicit = end.Explicit
@@ -125,6 +126,7 @@ func (s *Stream) begin(end End, observed bool) {
 		s.hooks.BeginClose(begin)
 	}
 	go s.finish()
+	return true
 }
 
 func (s *Stream) finish() {

@@ -17,6 +17,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 
+func closeError(_ bool, err error) error { return err }
+
 func TestConcurrentClaimsAdmitOneConsumer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stream := eventstream.New(eventstream.Hooks{})
@@ -111,7 +113,7 @@ func TestNaturalTerminationKeepsEventsClaimableAndReleasesBeforeDone(t *testing.
 
 				_, err = stream.Claim()
 				assertAgentReason(t, err, agent.ErrorFailedPrecondition, agent.ErrorReasonEventsAlreadyClaimed)
-				require.NoError(t, stream.Close(context.Background()))
+				require.NoError(t, closeError(stream.Close(context.Background())))
 				assert.Equal(t, test.cause, stream.Err())
 			})
 		})
@@ -157,7 +159,7 @@ func TestExplicitCloseWaitsForObservationSettlementAndCachesCleanup(t *testing.T
 		require.NoError(t, err)
 		require.NoError(t, stream.Publish([]agent.Event{{EventID: "before-close"}}))
 		closed := make(chan error, 1)
-		go func() { closed <- stream.Close(context.Background()) }()
+		go func() { closed <- closeError(stream.Close(context.Background())) }()
 		<-nativeEntered
 		_, err = stream.Claim()
 		assertAgentReason(t, err, agent.ErrorClosed, agent.ErrorReasonSessionClosed)
@@ -190,7 +192,7 @@ func TestExplicitCloseWaitsForObservationSettlementAndCachesCleanup(t *testing.T
 		assertTerminal(t, reader, terminalErr)
 		canceled, cancel := context.WithCancel(context.Background())
 		cancel()
-		assert.Same(t, cleanupErr, stream.Close(canceled))
+		assert.Same(t, cleanupErr, closeError(stream.Close(canceled)))
 		assert.Equal(t, []string{"begin", "native", "cause", "closures", "release"}, order)
 	})
 }
@@ -202,7 +204,7 @@ func TestExplicitCloseBeforeClaimRejectsStream(t *testing.T) {
 			BeginClose: func(eventstream.End) { close(begun) },
 		})
 		closed := make(chan error, 1)
-		go func() { closed <- stream.Close(context.Background()) }()
+		go func() { closed <- closeError(stream.Close(context.Background())) }()
 		<-begun
 		_, err := stream.Claim()
 		assertAgentReason(t, err, agent.ErrorClosed, agent.ErrorReasonSessionClosed)
@@ -243,7 +245,7 @@ func TestFirstObservationCauseRemainsStable(t *testing.T) {
 				reader, err := stream.Claim()
 				require.NoError(t, err)
 				assertTerminal(t, reader, test.cause)
-				assert.Same(t, cleanupErr, stream.Close(context.Background()))
+				assert.Same(t, cleanupErr, closeError(stream.Close(context.Background())))
 				assert.Equal(t, test.cause, stream.Err())
 			})
 		})
@@ -279,7 +281,7 @@ func TestConcurrentExplicitAndNaturalTerminationRunsHooksOnce(t *testing.T) {
 		for range workers {
 			wait.Go(func() {
 				<-start
-				results <- stream.Close(context.Background())
+				results <- closeError(stream.Close(context.Background()))
 			})
 			wait.Go(func() {
 				<-start

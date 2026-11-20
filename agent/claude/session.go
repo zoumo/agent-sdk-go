@@ -12,6 +12,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
@@ -146,6 +147,8 @@ func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
 ) (receipt agent.InputReceipt, err error) {
+	ctx, observation := s.provider.telemetry.BeginSubmission(ctx, s.provider.config.Tracer != nil)
+	defer func() { observation.End(string(receipt.Result), err) }()
 	text, err := textInput(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
@@ -172,8 +175,14 @@ func (s *session) StartOrSteer(
 	s.submitting = true
 	s.mu.Unlock()
 
-	trace := submissiontrace.Start(ctx, s.provider.config.Tracer)
-	defer func() { trace.End(err) }()
+	var traceCarrier *agent.TraceContext
+	if s.provider.config.Tracer != nil {
+		submission := submissiontrace.Start(ctx, s.provider.config.Tracer)
+		defer func() { submission.End(err) }()
+		traceCarrier = submission.Carrier
+	} else {
+		traceCarrier = observation.SubmissionCarrier()
+	}
 
 	submissionID, err := s.newSubmissionID(stateVersion)
 	if err != nil {
@@ -183,10 +192,10 @@ func (s *session) StartOrSteer(
 	priority := "next"
 	shouldQuery := true
 	var carrier claude.TraceContext
-	if trace.Carrier != nil {
+	if traceCarrier != nil {
 		carrier = claude.TraceContext{
-			Traceparent: trace.Carrier.Traceparent,
-			Tracestate:  trace.Carrier.Tracestate,
+			Traceparent: traceCarrier.Traceparent,
+			Tracestate:  traceCarrier.Tracestate,
 		}
 	}
 	ctx = claude.WithTraceContext(ctx, carrier)
@@ -273,7 +282,9 @@ func (s *session) inputWriteMayBeActiveLocked(stateVersion uint64) bool {
 func (s *session) Interrupt(
 	ctx context.Context,
 	_ agent.InterruptOptions,
-) (agent.InterruptReceipt, error) {
+) (receipt agent.InterruptReceipt, err error) {
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Interrupt)
+	defer func() { observation.End(string(receipt.Result), err) }()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -299,7 +310,10 @@ func (s *session) Interrupt(
 }
 
 func (s *session) Close(ctx context.Context) error {
-	return s.stream.Close(ctx)
+	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Close)
+	reused, err := s.stream.Close(ctx)
+	observation.EndLifecycle(reused, err)
+	return err
 }
 
 func (s *session) Done() <-chan struct{} { return s.stream.Done() }

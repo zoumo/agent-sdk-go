@@ -5,6 +5,9 @@ import (
 	"slices"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
@@ -19,6 +22,9 @@ type Config struct {
 	Env []string
 	// Tracer optionally creates a local span for each admitted StartOrSteer.
 	Tracer agent.Tracer
+	// TracerProvider and MeterProvider default to the host's OpenTelemetry providers.
+	TracerProvider trace.TracerProvider
+	MeterProvider  metric.MeterProvider
 	// ConfigDir is the explicit absolute Claude local-storage root used by
 	// Resume preflight and postcheck. It is not inferred from HOME or Cwd.
 	ConfigDir         string

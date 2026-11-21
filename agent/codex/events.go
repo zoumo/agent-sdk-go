@@ -626,7 +626,8 @@ func (s *session) reasoningMessage(
 		parts, present = item.Content.Get()
 	}
 	if !present || len(parts) == 0 {
-		return s.itemGap(received, codextypes.ThreadItem{Reasoning: item})
+		// Codex can complete a reasoning item without exposing any text.
+		return nil, nil
 	}
 	content := make([]agent.ContentBlock, 0, len(parts))
 	for _, text := range parts {

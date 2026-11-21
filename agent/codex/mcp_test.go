@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -53,16 +54,23 @@ func TestProviderMapsFinalMCPServersToOpenAndResumeThreadConfig(t *testing.T) {
 	require.NoError(t, opened.Close(ctx))
 
 	resumeServers := codexMCPTestServers("resume")
+	resumeServers[1].Headers = []mcp.NamedValue{{
+		Name: "Authorization",
+		ValueFrom: &mcp.ValueSource{FileKeyRef: &mcp.FileKeyRef{
+			Path: "binding.env", Key: "AUTH",
+		}},
+	}}
 	resumed, err := provider.Resume(ctx, agent.ResumeOptions{
 		SessionID: "root-resume",
 		OpenOptions: agent.OpenOptions{
 			Cwd:        "/synthetic",
 			MCPServers: resumeServers,
+			MCPFiles:   fstest.MapFS{"binding.env": {Data: []byte("AUTH='Bearer fixture-resume'\n")}},
 		},
 	})
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, resumed)
-	mutateCodexMCPServers(resumeServers)
+	resumeServers[1].Headers[0].ValueFrom.FileKeyRef.Path = "changed.env"
 	require.NoError(t, resumed.Close(ctx))
 }
 
@@ -136,7 +144,7 @@ func TestProviderRejectsInvalidMCPServersBeforeThreadRPC(t *testing.T) {
 		Name:      "local",
 		Transport: mcp.TransportStdio,
 		Command:   "fixture-mcp",
-		Headers:   map[string]string{"Authorization": secret},
+		Headers:   []mcp.NamedValue{mcp.Literal("Authorization", secret)},
 	}}
 	for _, reject := range []struct {
 		name string
@@ -222,14 +230,14 @@ func codexMCPTestServers(phase string) []mcp.Server {
 			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp-" + phase,
 			Args:      []string{"--stdio", phase},
-			Env:       map[string]string{"FIXTURE_TOKEN": "fixture-token-" + phase},
+			Env:       []mcp.NamedValue{mcp.Literal("FIXTURE_TOKEN", "fixture-token-"+phase)},
 			Cwd:       "/synthetic/mcp",
 		},
 		{
 			Name:              "remote",
 			Transport:         mcp.TransportHTTP,
 			URL:               "https://example.invalid/mcp/" + phase,
-			Headers:           map[string]string{"Authorization": "Bearer fixture-" + phase},
+			Headers:           []mcp.NamedValue{mcp.Literal("Authorization", "Bearer fixture-"+phase)},
 			EnvHeaders:        map[string]string{"X-API-Key": "REMOTE_API_KEY_" + strings.ToUpper(phase)},
 			BearerTokenEnvVar: "REMOTE_BEARER_" + strings.ToUpper(phase),
 		},
@@ -239,10 +247,10 @@ func codexMCPTestServers(phase string) []mcp.Server {
 func mutateCodexMCPServers(servers []mcp.Server) {
 	servers[0].Command = "mutated-command"
 	servers[0].Args[0] = "mutated-arg"
-	servers[0].Env["FIXTURE_TOKEN"] = "mutated-token"
+	*servers[0].Env[0].Value = "mutated-token"
 	servers[0].Cwd = "/synthetic/mutated"
 	servers[1].URL = "https://mutated.invalid/mcp"
-	servers[1].Headers["Authorization"] = "Bearer mutated"
+	*servers[1].Headers[0].Value = "Bearer mutated"
 	servers[1].EnvHeaders["X-API-Key"] = "MUTATED_API_KEY"
 	servers[1].BearerTokenEnvVar = "MUTATED_BEARER_TOKEN"
 }

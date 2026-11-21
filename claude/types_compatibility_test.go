@@ -53,7 +53,7 @@ func TestCallbackFreeOptionsRoundTrip(t *testing.T) {
 		ClaimSession:       true,
 		MCPServers: []mcp.Server{{
 			Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
-			Headers: map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+			Headers: []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")},
 		}},
 		StrictMCPConfig: true,
 		Env:             []string{"FIXTURE=1"}, InitializeTimeout: 13 * time.Second, ShutdownTimeout: 7 * time.Second,

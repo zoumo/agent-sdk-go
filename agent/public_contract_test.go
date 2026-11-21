@@ -142,14 +142,14 @@ func TestPublicMCPContract(t *testing.T) {
 		Transport: mcp.TransportStdio,
 		Command:   "mcp-local",
 		Args:      []string{"--stdio"},
-		Env:       map[string]string{"LOCAL_MODE": "read-only"},
+		Env:       []mcp.NamedValue{mcp.Literal("LOCAL_MODE", "read-only")},
 		Cwd:       "/synthetic/workspace",
 	}
 	http := mcp.Server{
 		Name:              "remote",
 		Transport:         mcp.TransportHTTP,
 		URL:               "https://mcp.example.invalid/tools",
-		Headers:           map[string]string{"X-Workspace": "sdk"},
+		Headers:           []mcp.NamedValue{mcp.Literal("X-Workspace", "sdk")},
 		EnvHeaders:        map[string]string{"Authorization": "REMOTE_AUTHORIZATION"},
 		BearerTokenEnvVar: "REMOTE_TOKEN",
 	}

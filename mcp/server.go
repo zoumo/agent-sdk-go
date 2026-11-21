@@ -26,20 +26,22 @@ const (
 // configuration-local key. Transport is required, and every entry point rejects
 // a transport it cannot represent instead of inferring or rewriting it.
 //
-// Stdio uses Command, Args, Env, and Cwd. HTTP and SSE use URL and Headers.
-// EnvHeaders and BearerTokenEnvVar are HTTP-only Codex extensions. Values are
-// forwarded without resolving secrets.
+// Stdio uses Command, Args, Env, EnvFrom, and Cwd. HTTP and SSE use URL,
+// Headers, and HeadersFrom. EnvHeaders and BearerTokenEnvVar are HTTP-only
+// Codex extensions.
 type Server struct {
 	Name      string
 	Transport Transport
 
 	Command string
 	Args    []string
-	Env     map[string]string
+	Env     []NamedValue
+	EnvFrom []ImportSource
 	Cwd     string
 
 	URL               string
-	Headers           map[string]string
+	Headers           []NamedValue
+	HeadersFrom       []ImportSource
 	EnvHeaders        map[string]string
 	BearerTokenEnvVar string
 }
@@ -103,8 +105,10 @@ func CloneServers(servers []Server) []Server {
 	for index, server := range servers {
 		cloned[index] = server
 		cloned[index].Args = slices.Clone(server.Args)
-		cloned[index].Env = maps.Clone(server.Env)
-		cloned[index].Headers = maps.Clone(server.Headers)
+		cloned[index].Env = cloneValues(server.Env)
+		cloned[index].EnvFrom = cloneImports(server.EnvFrom)
+		cloned[index].Headers = cloneValues(server.Headers)
+		cloned[index].HeadersFrom = cloneImports(server.HeadersFrom)
 		cloned[index].EnvHeaders = maps.Clone(server.EnvHeaders)
 	}
 	return cloned
@@ -119,6 +123,8 @@ func validateStdio(index int, server Server) error {
 		return invalidArgument(index, "url", "forbidden", "is not allowed for stdio")
 	case len(server.Headers) != 0:
 		return invalidArgument(index, "headers", "forbidden", "is not allowed for stdio")
+	case len(server.HeadersFrom) != 0:
+		return invalidArgument(index, "headersFrom", "forbidden", "is not allowed for stdio")
 	case len(server.EnvHeaders) != 0:
 		return invalidArgument(index, "env_headers", "forbidden", "is not allowed for stdio")
 	case server.BearerTokenEnvVar != "":
@@ -137,7 +143,7 @@ func validateStdio(index int, server Server) error {
 			return err
 		}
 	}
-	if err := validateStringMap(index, "env", server.Env); err != nil {
+	if err := validateValues(index, "env", server.Env, server.EnvFrom); err != nil {
 		return err
 	}
 	return validateString(index, "cwd", server.Cwd)
@@ -154,13 +160,15 @@ func validateRemote(index int, server Server) error {
 		return invalidArgument(index, "args", "forbidden", "is not allowed for HTTP or SSE")
 	case len(server.Env) != 0:
 		return invalidArgument(index, "env", "forbidden", "is not allowed for HTTP or SSE")
+	case len(server.EnvFrom) != 0:
+		return invalidArgument(index, "envFrom", "forbidden", "is not allowed for HTTP or SSE")
 	case server.Cwd != "":
 		return invalidArgument(index, "cwd", "forbidden", "is not allowed for HTTP or SSE")
 	}
 	if err := validateString(index, "url", server.URL); err != nil {
 		return err
 	}
-	if err := validateStringMap(index, "headers", server.Headers); err != nil {
+	if err := validateValues(index, "headers", server.Headers, server.HeadersFrom); err != nil {
 		return err
 	}
 	if err := validateStringMap(index, "env_headers", server.EnvHeaders); err != nil {

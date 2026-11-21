@@ -254,16 +254,17 @@ and limitation contract is in the
 | `Name` | `mcp_servers.<name>` key |
 | `Command` | `command` |
 | `Args` | `args` |
-| `Env` | `env` |
+| `Env`, `EnvFrom` | `env` |
 | `Cwd` | `cwd` |
 | `URL` | `url` |
-| `Headers` | `http_headers` |
+| `Headers`, `HeadersFrom` | `http_headers` |
 | `EnvHeaders` | `env_http_headers` |
 | `BearerTokenEnvVar` | `bearer_token_env_var` |
 
-`Transport` is required: `mcp.TransportStdio` permits `Command`, `Args`, `Env`
-and `Cwd`; `mcp.TransportHTTP` permits `URL`, `Headers`, `EnvHeaders` and
-`BearerTokenEnvVar`. The SDK rejects `mcp.TransportSSE` before the thread RPC.
+`mcp.TransportStdio` permits `Command`, `Args`, `Env`, `EnvFrom`, and `Cwd`.
+`mcp.TransportHTTP` permits `URL`, `Headers`, `HeadersFrom`, `EnvHeaders`, and
+`BearerTokenEnvVar`. Provide `SessionOptions.MCPFiles` when using file sources.
+The SDK reads the files before each start or resume RPC.
 `EnvHeaders` maps header names to environment-variable names.
 `BearerTokenEnvVar` is also an environment-variable name, not the secret itself.
 
@@ -294,9 +295,9 @@ the thread RPC. Errors name paths and fields but do not include configuration
 values. The SDK copies the server slices/maps and raw `Config` map; callers can
 reuse or modify their inputs after `Open` returns.
 
-Prefer `EnvHeaders` or `BearerTokenEnvVar` for credentials. Literal `Headers` and
-`Env` values become part of the native configuration and may be visible to
-process inspection or protocol diagnostics; validation errors omit those values.
+Literal and file-backed values become part of the native configuration and may
+be visible to process inspection or protocol diagnostics. `EnvHeaders` and
+`BearerTokenEnvVar` pass references to the app-server environment instead.
 
 Codex has no equivalent of Claude's `--strict-mcp-config`. This wrapper adds or
 replaces only the servers named in `MCPServers`; it cannot remove MCP servers

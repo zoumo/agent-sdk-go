@@ -16,21 +16,21 @@ func TestValidateServersAcceptsAllSharedTransportShapes(t *testing.T) {
 			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 			Args:      []string{"--stdio"},
-			Env:       map[string]string{"TOKEN": "${TOKEN}"},
+			Env:       []mcp.NamedValue{mcp.Literal("TOKEN", "${TOKEN}")},
 			Cwd:       "/synthetic",
 		},
 		{
 			Name:       "remote",
 			Transport:  mcp.TransportHTTP,
 			URL:        "https://example.invalid/mcp",
-			Headers:    map[string]string{"Authorization": "Bearer ${TOKEN}"},
+			Headers:    []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${TOKEN}")},
 			EnvHeaders: map[string]string{"X-API-Key": "API_KEY"},
 		},
 		{
 			Name:      "legacy",
 			Transport: mcp.TransportSSE,
 			URL:       "https://example.invalid/sse",
-			Headers:   map[string]string{"Authorization": "Bearer ${TOKEN}"},
+			Headers:   []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${TOKEN}")},
 		},
 	}
 
@@ -142,8 +142,12 @@ func TestValidateServersRejectsInvalidNamesWithoutLeakingValues(t *testing.T) {
 
 func TestCloneServersCopiesNestedValues(t *testing.T) {
 	args := []string{"--stdio"}
-	env := map[string]string{"TOKEN": "${TOKEN}"}
-	headers := map[string]string{"Authorization": "Bearer ${TOKEN}"}
+	env := []mcp.NamedValue{mcp.Literal("TOKEN", "${TOKEN}")}
+	headers := []mcp.NamedValue{
+		mcp.Literal("Authorization", "Bearer ${TOKEN}"),
+		mcpFileKey("X-API-Key", "key.env", "KEY"),
+	}
+	envFrom := []mcp.ImportSource{mcpImport("environment.env")}
 	envHeaders := map[string]string{"X-API-Key": "API_KEY"}
 	servers := []mcp.Server{{
 		Name:       "server",
@@ -151,6 +155,7 @@ func TestCloneServersCopiesNestedValues(t *testing.T) {
 		Command:    "fixture-mcp",
 		Args:       args,
 		Env:        env,
+		EnvFrom:    envFrom,
 		Headers:    headers,
 		EnvHeaders: envHeaders,
 	}}
@@ -158,14 +163,18 @@ func TestCloneServersCopiesNestedValues(t *testing.T) {
 	cloned := mcp.CloneServers(servers)
 	require.Len(t, cloned, 1)
 	args[0] = "--changed"
-	env["TOKEN"] = "changed"
-	headers["Authorization"] = "changed"
+	*env[0].Value = "changed"
+	*headers[0].Value = "changed"
+	headers[1].ValueFrom.FileKeyRef.Path = "changed.env"
+	envFrom[0].FileRef.Path = "changed.env"
 	envHeaders["X-API-Key"] = "changed"
 	servers[0].Name = "changed"
 
 	assert.Equal(t, []string{"--stdio"}, cloned[0].Args)
-	assert.Equal(t, "${TOKEN}", cloned[0].Env["TOKEN"])
-	assert.Equal(t, "Bearer ${TOKEN}", cloned[0].Headers["Authorization"])
+	assert.Equal(t, "${TOKEN}", *cloned[0].Env[0].Value)
+	assert.Equal(t, "Bearer ${TOKEN}", *cloned[0].Headers[0].Value)
+	assert.Equal(t, "key.env", cloned[0].Headers[1].ValueFrom.FileKeyRef.Path)
+	assert.Equal(t, "environment.env", cloned[0].EnvFrom[0].FileRef.Path)
 	assert.Equal(t, "API_KEY", cloned[0].EnvHeaders["X-API-Key"])
 	assert.Equal(t, "server", cloned[0].Name)
 	assert.Nil(t, mcp.CloneServers(nil))

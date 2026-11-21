@@ -115,7 +115,7 @@ func (p *Core) OpenWithPermissions(
 	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
 		if p.newSessionID == nil {
-			return p.openNativeSession(ctx, options, permissions, "", "", nil, mcpServers, env, true)
+			return p.openNativeSession(ctx, options, permissions, "", "", mcpServers, env, true)
 		}
 		sessionID, err := p.newSessionID()
 		if err != nil || sessionID == "" {
@@ -126,7 +126,7 @@ func (p *Core) OpenWithPermissions(
 				err,
 			)
 		}
-		return p.openNativeSession(ctx, options, permissions, "", sessionID, nil, mcpServers, env, false)
+		return p.openNativeSession(ctx, options, permissions, "", sessionID, mcpServers, env, false)
 	})
 }
 
@@ -179,17 +179,12 @@ func (p *Core) ResumeWithPermissions(
 	}
 	env := effectiveProcessEnvironment(p.config.Env, options.ProcessEnv)
 	return p.openLifecycle(ctx, func(ctx context.Context) (*session, error) {
-		attempt, err := p.prepareResume(ctx, options, env)
-		if err != nil {
-			return nil, err
-		}
 		return p.openNativeSession(
 			ctx,
 			options.OpenOptions,
 			permissions,
 			options.SessionID,
 			"",
-			attempt,
 			mcpServers,
 			env,
 			false,
@@ -220,7 +215,6 @@ func (p *Core) openNativeSession(
 	permissions Permissions,
 	resumeID string,
 	sessionID string,
-	resume *resumeAttempt,
 	mcpServers []mcp.Server,
 	env []string,
 	claim bool,
@@ -232,6 +226,7 @@ func (p *Core) openNativeSession(
 		mcpServers,
 		options.Config,
 	)
+	nativeOptions.MCPFiles = options.MCPFiles
 	nativeOptions.SessionID = sessionID
 	nativeOptions.ClaimSession = claim
 	nativeOptions.Env = slices.Clone(env)
@@ -239,9 +234,22 @@ func (p *Core) openNativeSession(
 	nativeOptions.PermissionMode = permissions.PermissionMode
 	nativeOptions.AllowDangerouslySkipPermissions = permissions.AllowDangerouslySkipPermissions
 	nativeOptions.Sandbox = permissions.Sandbox
+	prepared, err := claude.PrepareMCP(claude.SessionOptions(nativeOptions))
+	if err != nil {
+		return nil, nativeOperationError("open", err)
+	}
+	var resume *resumeAttempt
+	if resumeID != "" {
+		resume, err = p.prepareResume(ctx, agent.ResumeOptions{
+			SessionID: resumeID, OpenOptions: options,
+		}, env)
+		if err != nil {
+			return nil, err
+		}
+	}
 	var stream *streamOpen
 	if p.streams != nil {
-		opened, err := p.streams(ctx, claude.SessionOptions(nativeOptions))
+		opened, err := p.streams(ctx, prepared)
 		if err != nil {
 			return nil, nativeOperationError("open", err)
 		}
@@ -249,18 +257,17 @@ func (p *Core) openNativeSession(
 	}
 	if stream != nil {
 		if stream.Workspace != "" {
-			nativeOptions.WorkDir = stream.Workspace
+			prepared.WorkDir = stream.Workspace
 		}
 		if stream.Env != nil {
-			nativeOptions.Env = slices.Clone(stream.Env)
+			prepared.Env = slices.Clone(stream.Env)
 		}
 	}
 	var native *claude.Session
-	var err error
 	if stream == nil {
-		native, err = claude.Open(ctx, claude.SessionOptions(nativeOptions))
+		native, err = claude.Open(ctx, prepared)
 	} else {
-		native, err = claude.OpenStreams(ctx, claude.SessionOptions(nativeOptions), stream.Transport)
+		native, err = claude.OpenStreams(ctx, prepared, stream.Transport)
 	}
 	if err != nil {
 		return nil, permissionOpenError(err)

@@ -3,14 +3,99 @@ package claude
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
+
+const mcpValueEnvPrefix = "AGENT_SDK_MCP_VALUE_"
+
+// PrepareMCP resolves external MCP files and returns a startup snapshot.
+// Stream callers should use the returned Env to start the peer, NativeArgs to
+// build its arguments, and pass the same options to OpenStreams. Prepare the
+// original declarations again for each open or resume.
+func PrepareMCP(options SessionOptions) (SessionOptions, error) {
+	prepared := Options(options)
+	if err := prepared.prepareMCP(); err != nil {
+		return SessionOptions{}, err
+	}
+	return SessionOptions(prepared), nil
+}
+
+func (o *Options) prepareMCP() error {
+	if err := validateSDKMCPServers(o.SDKMCPServers); err != nil {
+		return err
+	}
+	if err := validateMCPServers(o.MCPServers, o.SDKMCPServers); err != nil {
+		return err
+	}
+	resolved, err := mcp.ResolveServers(o.MCPServers, o.MCPFiles)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+	var injected []string
+	for i, server := range resolved {
+		original := o.MCPServers[i]
+		if err := prepareMCPValues(i, "env", original.Env, server.Env, &injected); err != nil {
+			return err
+		}
+		if err := prepareMCPValues(i, "headers", original.Headers, server.Headers, &injected); err != nil {
+			return err
+		}
+	}
+	if len(injected) != 0 {
+		if o.Env == nil {
+			o.Env = os.Environ()
+		} else {
+			o.Env = slices.Clone(o.Env)
+		}
+		o.Env = append(o.Env, injected...)
+	}
+	o.MCPServers = resolved
+	o.MCPFiles = nil
+	return nil
+}
+
+func prepareMCPValues(index int, field string, declarations, resolved []mcp.NamedValue, env *[]string) error {
+	explicit := make(map[string]struct{}, len(declarations))
+	for _, entry := range declarations {
+		if entry.Value != nil {
+			// The resolver retains the spelling of the explicit entry that replaced an import.
+			explicit[entry.Name] = struct{}{}
+		}
+	}
+	for i, entry := range resolved {
+		value := *entry.Value
+		if _, ok := explicit[entry.Name]; ok || value == "" {
+			continue
+		}
+		if strings.Contains(value, "${") {
+			return fmt.Errorf("%w: mcp server %d: file-backed %s contains Claude interpolation syntax", ErrInvalidInput, index, field)
+		}
+		name := mcpValueEnvPrefix + rand.Text()
+		*env = append(*env, name+"="+value)
+		resolved[i] = mcp.Literal(entry.Name, "${"+name+"}")
+	}
+	return nil
+}
+
+func hasMCPFileSources(servers []mcp.Server) bool {
+	hasSource := func(entry mcp.NamedValue) bool { return entry.ValueFrom != nil }
+	for _, server := range servers {
+		if len(server.EnvFrom) != 0 || len(server.HeadersFrom) != 0 ||
+			slices.ContainsFunc(server.Env, hasSource) || slices.ContainsFunc(server.Headers, hasSource) {
+			return true
+		}
+	}
+	return false
+}
 
 // SDKMCPRequest preserves the original native server name and JSON-RPC message.
 // Metadata does not grant authority: only IncomingRequest.ReplyMCP can answer it.
@@ -19,7 +104,7 @@ type SDKMCPRequest struct {
 	Message    json.RawMessage
 }
 
-func nativeMCPServerConfig(server mcp.Server) map[string]any {
+func nativeMCPServerConfig(server mcp.Server) (map[string]any, error) {
 	config := map[string]any{"type": string(server.Transport)}
 	switch server.Transport {
 	case mcp.TransportStdio:
@@ -28,15 +113,23 @@ func nativeMCPServerConfig(server mcp.Server) map[string]any {
 			config["args"] = server.Args
 		}
 		if len(server.Env) > 0 {
-			config["env"] = server.Env
+			values, err := mcp.LiteralValues(server.Env)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+			}
+			config["env"] = values
 		}
 	case mcp.TransportHTTP, mcp.TransportSSE:
 		config["url"] = server.URL
 		if len(server.Headers) > 0 {
-			config["headers"] = server.Headers
+			values, err := mcp.LiteralValues(server.Headers)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+			}
+			config["headers"] = values
 		}
 	}
-	return config
+	return config, nil
 }
 
 func validateSDKMCPServers(names []string) error {

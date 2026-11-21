@@ -69,7 +69,13 @@ func runFixture(mode string) {
 	}
 	if path := os.Getenv("CLAUDE_GO_CAPTURE"); path != "" {
 		cwd, _ := os.Getwd()
-		data, err := json.Marshal(map[string]any{"argv": os.Args[1:], "init": init, "cwd": cwd, "home": os.Getenv("HOME"), "pid": os.Getpid()})
+		var mcpEnv []string
+		for _, entry := range os.Environ() {
+			if strings.HasPrefix(entry, mcpValueEnvPrefix) {
+				mcpEnv = append(mcpEnv, entry)
+			}
+		}
+		data, err := json.Marshal(map[string]any{"argv": os.Args[1:], "init": init, "cwd": cwd, "home": os.Getenv("HOME"), "pid": os.Getpid(), "mcpEnv": mcpEnv})
 		if err != nil {
 			os.Exit(8)
 		}

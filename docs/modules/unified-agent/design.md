@@ -56,7 +56,7 @@ MASS Runtime adapter 可以消费统一层，而 MASS Service、Store 和 transp
 ## SDK 构造与 Core
 
 调用方通过具体 adapter 构造 Core，并显式提供原生配置。上层应用负责解析环境继承策略、
-secret 引用及最终的 MCP 列表。Core 在构造时固定 `Tracer`。实现须支持并发调用并及时返回。
+MCP 文件访问范围及最终的 MCP 列表。Core 在构造时固定 `Tracer`。实现须支持并发调用并及时返回。
 SDK 隔离回调 panic，也不会配置 exporter 或等待导出。
 [Codex Core 源码](../../../agent/codex/core.go) · [Claude Core 源码](../../../agent/claude/core.go)
 
@@ -108,7 +108,7 @@ Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
 - `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
-  external MCP 列表；adapter 不再解释来源或执行第二种合并策略。
+  external MCP 列表。原生 SDK 在可选的 `MCPFiles` 文件系统内解析各 server 的文件来源。
 - Core 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
 - Core 的基础 `Capabilities` 由 adapter 在构造时供给，`corelease` 复制并
   冻结；`Start` 每次返回副本。Session 的有效能力和功能降级仍由 adapter 按
@@ -454,10 +454,10 @@ merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企
 |---|---|---|---|
 | `Name` | 非空、合法 UTF-8、无 `.`、列表内唯一 | `mcp_servers.<name>` key | `mcpServers.<name>` key |
 | `Transport` | 必须显式提供；统一层拒绝 `sse` | 只接受 `stdio` 或 `http` | 接受 `stdio`、`http` 或 `sse` |
-| `Command` / `Args` / `Env` | 只用于 stdio | 同名字段 | 同名字段 |
+| `Command` / `Args` / `Env` / `EnvFrom` | 只用于 stdio | 合成 `env` 并传递 `command` 和 `args` | 合成 `env` 并传递 `command` 和 `args` |
 | `Cwd` | 只用于 stdio | `cwd` | 不支持 |
 | `URL` | 只用于 HTTP | `url` | `url` |
-| `Headers` | 只用于 HTTP | `http_headers` | `headers` |
+| `Headers` / `HeadersFrom` | 统一层只用于 HTTP | 合成 `http_headers` | 合成 `headers` |
 | `EnvHeaders` | 只用于 HTTP；值是环境变量名 | `env_http_headers` | 不支持 |
 | `BearerTokenEnvVar` | 只用于 HTTP；值是环境变量名 | `bearer_token_env_var` | 不支持 |
 | 旧式 HTTP+SSE | `mcp.TransportSSE` 只供原生 Claude | 不支持 | 原生包支持，统一层不暴露 |
@@ -470,18 +470,24 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 
 - `Transport` 不能由 `Command`/`URL` 推断；缺失、未知或统一层不支持的
   transport 返回 `invalid_argument`。
-- stdio 必须有非空 `Command`，禁止 `URL`、`Headers`、`EnvHeaders` 和
-  `BearerTokenEnvVar`。
-- HTTP 必须有非空 `URL`，禁止 `Command`、`Args`、`Env` 和 `Cwd`。
+- stdio 必须有非空 `Command`，可配置 `Env` 和 `EnvFrom`。
+  HTTP 必须有非空 `URL`，可配置 `Headers` 和 `HeadersFrom`。两组字段按 transport 校验。
 - 文本、名称、map key 与 value 必须是合法 UTF-8。结构校验和 provider 字段
   支持检查都在原生进程启动或 thread RPC 前完成。
 - slice 和 map 在进入 Core 时复制；调用方后续 mutation 不影响已经开始的
   Open/Resume。
-- SDK 不解析、展开或持久化 Env/Header secret。错误只包含 server 序号、字段名、
-  provider 和 reason，不包含配置值；MCP 配置不进入统一 Event、Meta 或日志。
-- Claude 的 `--mcp-config` 位于进程 argv，调用方应使用原生环境引用；SDK 不能
-  承诺 argv 保密。Codex literal `Env`/`Headers` 会成为 native config，优先使用
-  `EnvHeaders` 或 `BearerTokenEnvVar`。
+- `Env` 与 `Headers` 使用同一种条目。每个条目指定 `name`，再用 `value` 指定字面值，
+  或用 `valueFrom.fileKeyRef` 从文件读取一个键。显式空值用 `value: ""`。
+- `EnvFrom` 与 `HeadersFrom` 使用 `fileRef` 导入整个文件。列表中靠后的来源覆盖
+  靠前来源，显式条目覆盖批量导入。同一显式列表内重复的名称会报错。环境变量名
+  按原样比较，HTTP Header 名按大小写不敏感比较。
+- 文件引用通过调用方显式提供的 `MCPFiles` 读取。使用 `os.Root.FS()` 约束配置引用的
+  路径。每次打开或恢复时读取当前内容。文件使用 `KEY='value'`，支持空行、全行注释
+  和多行值。SDK 按字面量解析引号内的内容，原生 CLI 仍可按自己的配置规则处理变量。
+- 文件错误和配置错误不包含值。解析后的值会进入原生配置，包括 Claude 的 `--mcp-config`
+  argv、进程环境或 Codex 的 thread config。Claude 的传递规则见
+  [原生 MCP 配置](../../../claude/README.md#external-mcp-servers)。
+  调用方负责保护原生进程及诊断记录。
 - `Open`/`Resume` 成功不等于 MCP server 已连接、认证成功或暴露了工具，也不
   新增统一 Capability 或 tool discovery 结果。
 - Resume 必须重新提供完整最终列表；SDK 不保存上次 Session 的 MCP 配置。
@@ -1343,7 +1349,7 @@ wire、EventStore 及发布。SDK adapter 拥有单 Session 的原生工作归�
 ### 实时观察与关闭
 
 1. MASS 先接收 Driver 的唯一事件流，再通过 Driver 调用 `Core.Start`。
-2. 打开或恢复前，上层解析配置和凭据引用，合成最终 MCP 列表。
+2. 打开或恢复前，上层合成最终 MCP 列表，并为文件引用提供文件系统。
    [Runtime 与 Session 合成](#mcp-runtime-overlay)
 3. `Core.Open` 或 `Core.Resume` 成功后，MASS 固定新的运行来源。每个 Session 只有一个
    relay 获取 `Session.Events()`。relay 保留已接纳事件的顺序，将 SDK 事件的 ID、时间、

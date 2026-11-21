@@ -399,9 +399,9 @@ func answerQuestions(request *claude.IncomingRequest,answers map[string]string)e
 Set `SessionOptions.MCPServers []mcp.Server` to declare native stdio, HTTP or SSE
 servers for one Session. The shared `mcp` package is the single configuration
 type used here, by Codex, and by the unified `agent` layer. `Transport` is
-required: `mcp.TransportStdio` accepts `Command`, `Args` and `Env`;
-`mcp.TransportHTTP` and `mcp.TransportSSE` accept `URL` and `Headers`. Fields
-from the other transport shape are rejected at Open. All names must be nonempty,
+required. Stdio accepts `Command`, `Args`, `Env`, and `EnvFrom`. HTTP and SSE
+accept `URL`, `Headers`, and `HeadersFrom`. Provide `SessionOptions.MCPFiles`
+when using file sources. The SDK reads them for each open or resume. All names must be nonempty,
 valid UTF-8 and unique across both `MCPServers` and `SDKMCPServers`. External
 server names must also contain no dot. The SDK copies the nested slices and maps
 at Open, so later caller mutation does not change the launched configuration.
@@ -415,11 +415,16 @@ permission checks and the actual operations belong to Claude CLI and the
 service. A successful `Open` does not prove that a server connected,
 authenticated, exposed a particular tool or executed it.
 
-`--mcp-config` is embedded directly in process argv, so literal environment and
-header values are visible to other processes that can inspect argv. Put secrets
-in `Env` or `Headers` through native environment references such as
-`${REMOTE_TOKEN}` or `${REMOTE_TOKEN:-default}` rather than literal values. The
-SDK forwards these references unchanged and does not redact the resulting argv.
+`--mcp-config` is embedded in process argv. Explicit `value` entries can expose
+credentials through argv and support Claude references such as `${REMOTE_TOKEN}`
+or `${REMOTE_TOKEN:-default}`. For file sources, the SDK passes nonempty values
+in the Claude process environment and puts only the variable references in argv.
+Claude file values containing `${` are rejected before startup. Process
+environment access can expose file-backed credentials.
+
+For a caller-launched peer, call `PrepareMCP` once per launch and use its
+returned `Env` and `NativeArgs` output together. Pass the same prepared
+options to `OpenStreams`.
 
 ```go
 claude.SessionOptions{
@@ -428,7 +433,7 @@ claude.SessionOptions{
         Name:      "remote",
         Transport: mcp.TransportHTTP,
         URL:       "https://example.invalid/mcp",
-        Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+        Headers:   []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")},
     }},
     StrictMCPConfig: true,
 }

@@ -62,7 +62,7 @@ func generatedSessionConfig(options *SessionOptions) (map[string]json.RawMessage
 	for tool, enabled := range options.Tools {
 		generated["tools."+string(tool)+".enabled"] = json.RawMessage(strconv.FormatBool(enabled))
 	}
-	if err := addMCPServerConfig(generated, options.MCPServers); err != nil {
+	if err := addMCPServerConfig(generated, options.MCPServers, options.MCPFiles); err != nil {
 		return nil, err
 	}
 	if len(options.ShellEnv) != 0 {

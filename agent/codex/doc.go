@@ -67,9 +67,9 @@
 // live unified events.
 //
 // Open and Resume pass the final adapter-neutral external MCP list to the native
-// thread config. Stdio maps Command, Args, Env, and Cwd; Streamable HTTP maps URL,
-// Headers, EnvHeaders, and BearerTokenEnvVar to the native header and bearer
-// environment-variable fields. Codex ambient configuration is field-level
+// thread config. Stdio maps Command, Args, resolved Env/EnvFrom, and Cwd.
+// Streamable HTTP maps URL, resolved Headers/HeadersFrom, EnvHeaders, and
+// BearerTokenEnvVar to their respective native fields. Codex ambient configuration is field-level
 // recursively merged with these declarations instead of replaced as a whole, and
 // a warm loaded thread may ignore new resume config. The adapter does not promise
 // ambient replacement or live MCP tool-set changes. A successful Open or Resume

@@ -97,7 +97,7 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 	for name, want := range map[string][]string{
 		"OpenOptions": {
 			"Cwd", "PermissionPreset", "ProcessEnv", "ShellEnv", "AdditionalSystemPrompt",
-			"AdditionalDirs", "Features", "MCPServers", "Config",
+			"AdditionalDirs", "Features", "MCPServers", "MCPFiles", "Config",
 		},
 		"ResumeOptions": {"SessionID", "OpenOptions"},
 		"SessionConfig": {"Model", "Effort"},

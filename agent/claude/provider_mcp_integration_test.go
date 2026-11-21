@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -41,10 +42,10 @@ func TestProviderOpenPassesFinalMCPListToClaudeOptions(t *testing.T) {
 	_, err := provider.Start(ctx)
 	require.NoError(t, err)
 	args := []string{"--stdio", "literal value"}
-	envValues := map[string]string{"LOCAL_TOKEN": "${LOCAL_TOKEN}"}
-	headers := map[string]string{
-		"Authorization": "Bearer ${REMOTE_TOKEN}",
-		"X-Workspace":   "synthetic",
+	envValues := []mcp.NamedValue{mcp.Literal("LOCAL_TOKEN", "${LOCAL_TOKEN}")}
+	headers := []mcp.NamedValue{
+		mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}"),
+		mcp.Literal("X-Workspace", "synthetic"),
 	}
 	servers := []mcp.Server{
 		{
@@ -96,8 +97,8 @@ func TestProviderOpenPassesFinalMCPListToClaudeOptions(t *testing.T) {
 	before := claudeMCPConfig(t, argv)
 	servers[0].Command = "mutated"
 	args[0] = "--mutated"
-	envValues["LOCAL_TOKEN"] = "mutated"
-	headers["Authorization"] = "mutated"
+	*envValues[0].Value = "mutated"
+	*headers[0].Value = "mutated"
 	servers[1].Name = "mutated"
 	after, err := claude.NativeArgs(observed[0])
 	require.NoError(t, err)
@@ -170,19 +171,26 @@ func TestProviderResumeRepassesProvidedMCPList(t *testing.T) {
 	second, err := resumeProvider.Resume(ctx, agent.ResumeOptions{
 		SessionID: claudeResumePeerSessionID,
 		OpenOptions: agent.OpenOptions{
-			Cwd: cwd,
+			Cwd:      cwd,
+			MCPFiles: fstest.MapFS{"binding.env": {Data: []byte("AUTH='Bearer resumed'\n")}},
 			MCPServers: []mcp.Server{{
 				Name:      "resume-only",
 				Transport: mcp.TransportHTTP,
 				URL:       "https://example.invalid/resume",
+				Headers: []mcp.NamedValue{{
+					Name: "Authorization",
+					ValueFrom: &mcp.ValueSource{FileKeyRef: &mcp.FileKeyRef{
+						Path: "binding.env", Key: "AUTH",
+					}},
+				}},
 			}},
 		},
 	})
 	require.NoError(t, err)
 	closeSessionOnCleanup(t, second)
-	require.JSONEq(t, `{"mcpServers":{"resume-only":{
-		"type":"http","url":"https://example.invalid/resume"
-	}}}`, claudeMCPConfig(t, readClaudeArgv(t, resumeArgv)))
+	config := claudeMCPConfig(t, readClaudeArgv(t, resumeArgv))
+	require.NotContains(t, config, "Bearer resumed")
+	require.Regexp(t, `^\{"mcpServers":\{"resume-only":\{"headers":\{"Authorization":"\$\{AGENT_SDK_MCP_VALUE_[A-Z2-7]+\}"\},"type":"http","url":"https://example.invalid/resume"\}\}\}$`, config)
 }
 
 func TestProviderOpenOmitsMCPConfigForEmptyFinalList(t *testing.T) {

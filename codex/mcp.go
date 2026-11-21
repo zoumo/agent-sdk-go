@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"maps"
 	"slices"
 
@@ -20,11 +21,12 @@ type nativeMCPServerConfig struct {
 	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
 }
 
-func addMCPServerConfig(generated map[string]json.RawMessage, servers []mcp.Server) error {
-	if err := mcp.ValidateServers(servers); err != nil {
+func addMCPServerConfig(generated map[string]json.RawMessage, servers []mcp.Server, files fs.FS) error {
+	resolved, err := mcp.ResolveServers(servers, files)
+	if err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
-	for index, server := range servers {
+	for index, server := range resolved {
 		if server.Transport == mcp.TransportSSE {
 			return fmt.Errorf(
 				"%w: mcp server %d: transport sse is not supported",
@@ -32,13 +34,21 @@ func addMCPServerConfig(generated map[string]json.RawMessage, servers []mcp.Serv
 				index,
 			)
 		}
+		env, err := mcp.LiteralValues(server.Env)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		}
+		headers, err := mcp.LiteralValues(server.Headers)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		}
 		config := nativeMCPServerConfig{
 			Command:           server.Command,
 			Args:              slices.Clone(server.Args),
-			Env:               maps.Clone(server.Env),
+			Env:               env,
 			Cwd:               server.Cwd,
 			URL:               server.URL,
-			Headers:           maps.Clone(server.Headers),
+			Headers:           headers,
 			EnvHeaders:        maps.Clone(server.EnvHeaders),
 			BearerTokenEnvVar: server.BearerTokenEnvVar,
 		}

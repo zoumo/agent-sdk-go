@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"maps"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestSessionExternalMCPStdioStart(t *testing.T) {
 		Transport: mcp.TransportStdio,
 		Command:   "fixture-mcp",
 		Args:      []string{"--stdio", "literal value"},
-		Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+		Env:       []mcp.NamedValue{mcp.Literal("FIXTURE_TOKEN", "${FIXTURE_TOKEN}")},
 		Cwd:       "/synthetic/mcp",
 	}}
 	wantRawConfig := maps.Clone(rawConfig)
@@ -33,7 +34,7 @@ func TestSessionExternalMCPStdioStart(t *testing.T) {
 		Transport: mcp.TransportStdio,
 		Command:   "fixture-mcp",
 		Args:      []string{"--stdio", "literal value"},
-		Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+		Env:       []mcp.NamedValue{mcp.Literal("FIXTURE_TOKEN", "${FIXTURE_TOKEN}")},
 		Cwd:       "/synthetic/mcp",
 	}}
 
@@ -72,7 +73,7 @@ func TestSessionExternalMCPHTTPResume(t *testing.T) {
 		Name:              "remote",
 		Transport:         mcp.TransportHTTP,
 		URL:               "https://example.invalid/mcp",
-		Headers:           map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+		Headers:           []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")},
 		EnvHeaders:        map[string]string{"X-API-Key": "REMOTE_API_KEY"},
 		BearerTokenEnvVar: "REMOTE_BEARER_TOKEN",
 	}}
@@ -81,7 +82,7 @@ func TestSessionExternalMCPHTTPResume(t *testing.T) {
 		Name:              "remote",
 		Transport:         mcp.TransportHTTP,
 		URL:               "https://example.invalid/mcp",
-		Headers:           map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+		Headers:           []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")},
 		EnvHeaders:        map[string]string{"X-API-Key": "REMOTE_API_KEY"},
 		BearerTokenEnvVar: "REMOTE_BEARER_TOKEN",
 	}}
@@ -109,6 +110,41 @@ func TestSessionExternalMCPHTTPResume(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, wantRawConfig, callerConfig)
 	assert.Equal(t, wantServers, servers)
+}
+
+func TestSessionExternalMCPReadsCurrentHeaderFileOnResume(t *testing.T) {
+	files := fstest.MapFS{"binding.env": {Data: []byte("AUTH='Bearer first'\n")}}
+	options := codex.SessionOptions{
+		MCPFiles: files,
+		MCPServers: []mcp.Server{{
+			Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
+			Headers: []mcp.NamedValue{{
+				Name: "Authorization",
+				ValueFrom: &mcp.ValueSource{FileKeyRef: &mcp.FileKeyRef{
+					Path: "binding.env", Key: "AUTH",
+				}},
+			}},
+		}},
+	}
+
+	started := startFake(t, "normal", codex.Limits{})
+	options.Client = started.c
+	session, err := codex.Open(t.Context(), options)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+	config := configFromFrame(t, requireFrame(t, started, "thread/start"))
+	assert.JSONEq(t, `{"url":"https://example.invalid/mcp","http_headers":{"Authorization":"Bearer first"}}`, string(config["mcp_servers.remote"]))
+	require.NoError(t, session.Close())
+
+	files["binding.env"].Data = []byte("AUTH='Bearer second'\n")
+	resumed := startFake(t, "resume-normal", codex.Limits{})
+	options.Client = resumed.c
+	options.Resume = &types.ThreadResumeParams{ThreadID: resumedNativeID}
+	restored, err := codex.Open(t.Context(), options)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = restored.Close() })
+	config = configFromFrame(t, requireFrame(t, resumed, "thread/resume"))
+	assert.JSONEq(t, `{"url":"https://example.invalid/mcp","http_headers":{"Authorization":"Bearer second"}}`, string(config["mcp_servers.remote"]))
 }
 
 func TestSessionExternalMCPRejectsInvalidConfiguration(t *testing.T) {
@@ -162,7 +198,7 @@ func TestSessionExternalMCPRejectsInvalidConfiguration(t *testing.T) {
 		{
 			name: "stdio with headers",
 			servers: []mcp.Server{{
-				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Headers: map[string]string{"Authorization": secret},
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Headers: []mcp.NamedValue{mcp.Literal("Authorization", secret)},
 			}},
 			wantFields: []string{"stdio", "headers"},
 		},
@@ -190,7 +226,7 @@ func TestSessionExternalMCPRejectsInvalidConfiguration(t *testing.T) {
 		{
 			name: "HTTP with environment",
 			servers: []mcp.Server{{
-				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp", Env: map[string]string{"TOKEN": secret},
+				Name: "server", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp", Env: []mcp.NamedValue{mcp.Literal("TOKEN", secret)},
 			}},
 			wantFields: []string{"HTTP", "env"},
 		},
@@ -244,7 +280,7 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 			server: mcp.Server{
 				Transport: mcp.TransportStdio,
 				Command:   "fixture-mcp",
-				Env:       map[string]string{bad: "VALUE"},
+				Env:       []mcp.NamedValue{mcp.Literal(bad, "VALUE")},
 			},
 			wantFields: []string{"env key"},
 		},
@@ -253,7 +289,7 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 			server: mcp.Server{
 				Transport: mcp.TransportStdio,
 				Command:   "fixture-mcp",
-				Env:       map[string]string{"TOKEN": bad},
+				Env:       []mcp.NamedValue{mcp.Literal("TOKEN", bad)},
 			},
 			wantFields: []string{"env value"},
 		},
@@ -272,7 +308,7 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 			server: mcp.Server{
 				Transport: mcp.TransportHTTP,
 				URL:       "https://example.invalid/mcp",
-				Headers:   map[string]string{bad: "VALUE"},
+				Headers:   []mcp.NamedValue{mcp.Literal(bad, "VALUE")},
 			},
 			wantFields: []string{"headers key"},
 		},
@@ -281,7 +317,7 @@ func TestSessionExternalMCPRejectsInvalidUTF8(t *testing.T) {
 			server: mcp.Server{
 				Transport: mcp.TransportHTTP,
 				URL:       "https://example.invalid/mcp",
-				Headers:   map[string]string{"Authorization": bad},
+				Headers:   []mcp.NamedValue{mcp.Literal("Authorization", bad)},
 			},
 			wantFields: []string{"headers value"},
 		},
@@ -352,7 +388,7 @@ func TestSessionExternalMCPRejectsRawConfigConflicts(t *testing.T) {
 		Name:      "remote",
 		Transport: mcp.TransportHTTP,
 		URL:       "https://example.invalid/mcp",
-		Headers:   map[string]string{"Authorization": "Bearer " + serverSecret},
+		Headers:   []mcp.NamedValue{mcp.Literal("Authorization", "Bearer "+serverSecret)},
 	}}
 	for _, rawPath := range []string{
 		"mcp_servers",
@@ -413,7 +449,7 @@ func TestSessionExternalMCPConfigIsolationAndCopies(t *testing.T) {
 		"mcp_servers.ambient":    json.RawMessage(`{"url":"https://ambient.invalid/mcp"}`),
 	}
 	args := []string{"--stdio"}
-	env := map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"}
+	env := []mcp.NamedValue{mcp.Literal("FIXTURE_TOKEN", "${FIXTURE_TOKEN}")}
 	servers := []mcp.Server{{
 		Name:      "first",
 		Transport: mcp.TransportStdio,
@@ -438,15 +474,15 @@ func TestSessionExternalMCPConfigIsolationAndCopies(t *testing.T) {
 		Transport: mcp.TransportStdio,
 		Command:   "fixture-mcp",
 		Args:      []string{"--stdio"},
-		Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+		Env:       []mcp.NamedValue{mcp.Literal("FIXTURE_TOKEN", "${FIXTURE_TOKEN}")},
 	}}, servers)
 
 	args[0] = "--changed"
-	env["FIXTURE_TOKEN"] = "changed"
+	*env[0].Value = "changed"
 	servers[0].Name = "changed"
 	rawConfig["model_reasoning_effort"] = json.RawMessage(`"changed"`)
 	rawConfig["mcp_servers.ambient"] = json.RawMessage(`{"url":"https://changed.invalid/mcp"}`)
-	headers := map[string]string{"Authorization": "Bearer ${SECOND_TOKEN}"}
+	headers := []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${SECOND_TOKEN}")}
 	envHeaders := map[string]string{"X-API-Key": "SECOND_API_KEY"}
 	secondServers := []mcp.Server{{
 		Name:              "second",
@@ -462,7 +498,7 @@ func TestSessionExternalMCPConfigIsolationAndCopies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = second.Close() })
-	headers["Authorization"] = "changed"
+	*headers[0].Value = "changed"
 	envHeaders["X-API-Key"] = "changed"
 	secondServers[0].Name = "changed"
 	assert.NotEqual(t, first.ThreadID(), second.ThreadID())

@@ -65,7 +65,7 @@ func run(output io.Writer) error {
 			Name:      "remote",
 			Transport: mcp.TransportHTTP,
 			URL:       "https://example.invalid/mcp",
-			Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+			Headers:   []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")},
 		}},
 		StrictMCPConfig: true,
 	})

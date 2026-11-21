@@ -76,9 +76,10 @@
 // The unified contract accepts only explicit mcp.TransportStdio and
 // mcp.TransportHTTP and rejects mcp.TransportSSE. It has no MCPConfigMode,
 // StrictMCPConfig, SDKMCPServers, or ambient-clear control. Adapter-specific
-// field restrictions are rejected before native side effects. The SDK forwards
-// environment and header values without resolving them; it does not persist MCP
-// configuration or include its values in unified Events, Meta, or logs. MCP
+// field restrictions are rejected before native side effects. The native SDK
+// resolves file-backed environment and header values on each operation from
+// local absolute paths or relative paths in OpenOptions.MCPFiles. The SDK does not persist MCP configuration or include its
+// values in unified Events, Meta, or logs. MCP
 // validation and adapter field-support errors do not echo those values. Open or
 // Resume errors can wrap native diagnostics as a cause, which callers must protect
 // separately. Open or Resume success does not prove MCP connectivity,

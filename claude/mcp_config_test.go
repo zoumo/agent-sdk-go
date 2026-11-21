@@ -4,10 +4,12 @@ package claude
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 
@@ -21,7 +23,7 @@ func TestExternalMCPStdioArguments(t *testing.T) {
 			Transport: mcp.TransportStdio,
 			Command:   "fixture-mcp",
 			Args:      []string{"--stdio", "literal value"},
-			Env:       map[string]string{"FIXTURE_TOKEN": "${FIXTURE_TOKEN}"},
+			Env:       []mcp.NamedValue{mcp.Literal("FIXTURE_TOKEN", "${FIXTURE_TOKEN}")},
 		}}
 	})
 
@@ -45,7 +47,7 @@ func TestExternalMCPRemoteArgumentsAndStrictOption(t *testing.T) {
 					Name:      "remote",
 					Transport: tc.transport,
 					URL:       "https://example.invalid/mcp",
-					Headers:   map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"},
+					Headers:   []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")},
 				}}
 			})
 
@@ -54,6 +56,89 @@ func TestExternalMCPRemoteArgumentsAndStrictOption(t *testing.T) {
 			require.Equal(t, want, argv)
 		})
 	}
+}
+
+func TestExternalMCPFilesBecomeNativeArgumentMaps(t *testing.T) {
+	options := fixtureOptions(t, "echo")
+	capture := filepath.Join(options.WorkDir, "mcp-capture.json")
+	options.Env = append(options.Env, "CLAUDE_GO_CAPTURE="+capture)
+	options.MCPFiles = fstest.MapFS{
+		"env":     {Data: []byte("TOKEN='synthetic-env'\nEMPTY=''\n")},
+		"headers": {Data: []byte("AUTH='Bearer synthetic-header'\n")},
+	}
+	options.MCPServers = []mcp.Server{
+		{
+			Name: "local", Transport: mcp.TransportStdio, Command: "fixture-mcp",
+			EnvFrom: []mcp.ImportSource{{FileRef: &mcp.FileRef{Path: "env"}}},
+		},
+		{
+			Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
+			Headers: []mcp.NamedValue{{
+				Name: "Authorization",
+				ValueFrom: &mcp.ValueSource{FileKeyRef: &mcp.FileKeyRef{
+					Path: "headers", Key: "AUTH",
+				}},
+			}},
+		},
+	}
+	peer, err := openTestInteraction(t.Context(), options)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = peer.Abort() })
+	data, err := os.ReadFile(capture)
+	require.NoError(t, err)
+	var captured struct {
+		Argv   []string
+		MCPEnv []string
+	}
+	require.NoError(t, json.Unmarshal(data, &captured))
+	config, ok := strings.CutPrefix(captured.Argv[len(captured.Argv)-1], "--mcp-config=")
+	require.True(t, ok)
+	require.NotContains(t, config, "synthetic")
+	var native struct {
+		Servers map[string]struct {
+			Env     map[string]string
+			Headers map[string]string
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(config), &native))
+	require.Empty(t, native.Servers["local"].Env["EMPTY"])
+	require.Contains(t, native.Servers["local"].Env, "EMPTY")
+	require.ElementsMatch(t, []string{
+		strings.Trim(native.Servers["local"].Env["TOKEN"], "${}") + "=synthetic-env",
+		strings.Trim(native.Servers["remote"].Headers["Authorization"], "${}") + "=Bearer synthetic-header",
+	}, captured.MCPEnv)
+
+	_, err = NativeArgs(SessionOptions(options))
+	require.ErrorIs(t, err, ErrInvalidInput)
+	prepared, err := PrepareMCP(SessionOptions(options))
+	require.NoError(t, err)
+	args, err := NativeArgs(prepared)
+	require.NoError(t, err)
+	require.Contains(t, args[len(args)-1], *prepared.MCPServers[1].Headers[0].Value)
+}
+
+func TestExternalMCPRejectsFileExpansionBeforeLaunch(t *testing.T) {
+	const source = "secret-${AMBIENT}"
+	options := fixtureOptions(t, "echo")
+	options.CLIPath = filepath.Join(options.WorkDir, "must-not-exist")
+	options.MCPFiles = fstest.MapFS{
+		"headers": {Data: []byte("AUTHORIZATION='" + source + "'\n")},
+	}
+	options.MCPServers = []mcp.Server{{
+		Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp",
+		HeadersFrom: []mcp.ImportSource{{FileRef: &mcp.FileRef{Path: "headers"}}},
+	}}
+	session, err := Open(t.Context(), SessionOptions(options))
+	require.Nil(t, session)
+	require.ErrorIs(t, err, ErrInvalidInput)
+	require.ErrorContains(t, err, "file-backed headers contains Claude interpolation syntax")
+	require.NotContains(t, err.Error(), source)
+
+	options.MCPServers[0].Headers = []mcp.NamedValue{mcp.Literal("Authorization", "${AMBIENT}")}
+	prepared, err := PrepareMCP(SessionOptions(options))
+	require.NoError(t, err)
+	require.Equal(t, options.Env, prepared.Env)
+	require.Equal(t, "${AMBIENT}", *prepared.MCPServers[0].Headers[0].Value)
 }
 
 func TestExternalMCPMergesWithSDKMCPServers(t *testing.T) {
@@ -103,7 +188,7 @@ func TestExternalMCPRejectsInvalidConfigurationBeforeLaunch(t *testing.T) {
 		{
 			name: "stdio with headers",
 			servers: []mcp.Server{{
-				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Headers: map[string]string{"Authorization": "secret"},
+				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp", Headers: []mcp.NamedValue{mcp.Literal("Authorization", "secret")},
 			}},
 		},
 		{
@@ -145,13 +230,13 @@ func TestExternalMCPRejectsInvalidConfigurationBeforeLaunch(t *testing.T) {
 		{
 			name: "http with env",
 			servers: []mcp.Server{{
-				Name: "server", Transport: mcp.TransportHTTP, Env: map[string]string{"TOKEN": "secret"}, URL: "https://example.invalid/mcp",
+				Name: "server", Transport: mcp.TransportHTTP, Env: []mcp.NamedValue{mcp.Literal("TOKEN", "secret")}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "sse with stdio fields",
 			servers: []mcp.Server{{
-				Name: "server", Transport: mcp.TransportSSE, Command: "fixture-mcp", Args: []string{"--stdio"}, Env: map[string]string{"TOKEN": "secret"}, URL: "https://example.invalid/mcp",
+				Name: "server", Transport: mcp.TransportSSE, Command: "fixture-mcp", Args: []string{"--stdio"}, Env: []mcp.NamedValue{mcp.Literal("TOKEN", "secret")}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
@@ -191,14 +276,14 @@ func TestExternalMCPValidationDoesNotExposeSecretValues(t *testing.T) {
 			name: "stdio environment",
 			servers: []mcp.Server{{
 				Name: "server", Transport: mcp.TransportStdio, Command: "fixture-mcp",
-				Env: map[string]string{"TOKEN": secret}, URL: "https://example.invalid/mcp",
+				Env: []mcp.NamedValue{mcp.Literal("TOKEN", secret)}, URL: "https://example.invalid/mcp",
 			}},
 		},
 		{
 			name: "http headers",
 			servers: []mcp.Server{{
 				Name: "server", Transport: mcp.TransportHTTP, Command: "fixture-mcp",
-				Headers: map[string]string{"Authorization": "Bearer " + secret}, URL: "https://example.invalid/mcp",
+				Headers: []mcp.NamedValue{mcp.Literal("Authorization", "Bearer "+secret)}, URL: "https://example.invalid/mcp",
 			}},
 		},
 	} {
@@ -211,8 +296,8 @@ func TestExternalMCPValidationDoesNotExposeSecretValues(t *testing.T) {
 
 func TestExternalMCPOptionsCopyCallerData(t *testing.T) {
 	args := []string{"--stdio"}
-	env := map[string]string{"LOCAL_TOKEN": "${LOCAL_TOKEN}"}
-	headers := map[string]string{"Authorization": "Bearer ${REMOTE_TOKEN}"}
+	env := []mcp.NamedValue{mcp.Literal("LOCAL_TOKEN", "${LOCAL_TOKEN}")}
+	headers := []mcp.NamedValue{mcp.Literal("Authorization", "Bearer ${REMOTE_TOKEN}")}
 	servers := []mcp.Server{
 		{
 			Name:      "local",
@@ -234,15 +319,15 @@ func TestExternalMCPOptionsCopyCallerData(t *testing.T) {
 
 	servers[0].Name = "changed"
 	args[0] = "--changed"
-	env["LOCAL_TOKEN"] = "changed"
-	headers["Authorization"] = "changed"
+	*env[0].Value = "changed"
+	*headers[0].Value = "changed"
 	servers[1].Name = "changed"
 
 	require.Equal(t, "local", c.opts.MCPServers[0].Name)
 	require.Equal(t, []string{"--stdio"}, c.opts.MCPServers[0].Args)
-	require.Equal(t, "${LOCAL_TOKEN}", c.opts.MCPServers[0].Env["LOCAL_TOKEN"])
+	require.Equal(t, "${LOCAL_TOKEN}", *c.opts.MCPServers[0].Env[0].Value)
 	require.Equal(t, "remote", c.opts.MCPServers[1].Name)
-	require.Equal(t, "Bearer ${REMOTE_TOKEN}", c.opts.MCPServers[1].Headers["Authorization"])
+	require.Equal(t, "Bearer ${REMOTE_TOKEN}", *c.opts.MCPServers[1].Headers[0].Value)
 }
 
 func requireMCPLaunchRejected(t *testing.T, sdk []string, servers []mcp.Server) error {

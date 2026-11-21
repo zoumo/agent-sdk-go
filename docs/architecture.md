@@ -34,11 +34,11 @@ and dependency boundaries.
 - `internal/tracecontext` shares only standard-library W3C carrier validation
   between `agent`, `claude` and `codex`; public types and context keys remain
   package-owned and independent.
-- `mcp` shares only the external MCP server value and structural validation
-  between `agent`, `codex` and `claude`. It uses only the standard library and
-  does not connect to servers, resolve secrets, serialize native configuration,
-  or decide provider capabilities. Each entry point validates its supported
-  transports and fields before native side effects.
+- `mcp` shares the external MCP server configuration, structural validation,
+  and file value resolution between `agent`, `codex` and `claude`. It uses only
+  the standard library and reads files through a caller-supplied filesystem.
+  Native SDKs own native serialization and provider capability checks. Each
+  entry point validates supported transports and fields before native side effects.
 - The unified adapters use the OpenTelemetry Go trace and metric APIs.
   `agent/internal/telemetry` owns their shared instruments and result
   attributes. The adapters use `Config.TracerProvider` and
@@ -115,7 +115,7 @@ Both native SDKs use the same separation of responsibilities:
 |---|---|
 | `codex/`, `claude/` | Independent native SDK runtime and native types |
 | `agent/` | Adapter-neutral Agent Core and live Session contracts, values, validation and event encoding |
-| `mcp/` | Shared external MCP server value and structural validation, with standard-library-only implementation |
+| `mcp/` | Shared external MCP configuration, validation, and file value resolution |
 | `tests/simulation/simulate/` | Direct Go-test simulation, strict coverage gate, independent policy hosts, cancellation, evidence archival and authenticated loopback bridge |
 | `tests/simulation/drivers/` | Go simulation process entry and driver documentation |
 | `tests/simulation/drivers/codex/go/`, `tests/simulation/drivers/claude/go/` | Agent-owned Go SDK simulation flows, history, child and remote assertions and regression tests |

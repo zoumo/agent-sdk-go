@@ -24,8 +24,11 @@ type StreamTransport struct {
 
 // NativeArgs returns the exact native Claude argument vector Open and
 // OpenStreams use for options. It performs no executable lookup or process
-// start.
+// start. Call PrepareMCP first if options contain MCP file sources.
 func NativeArgs(options SessionOptions) ([]string, error) {
+	if hasMCPFileSources(options.MCPServers) {
+		return nil, fmt.Errorf("%w: prepare MCP file sources before building native arguments", ErrInvalidInput)
+	}
 	o := Options(options)
 	if err := o.defaults(); err != nil {
 		return nil, err
@@ -35,13 +38,17 @@ func NativeArgs(options SessionOptions) ([]string, error) {
 
 // OpenStreams connects an owned Session to caller-provided protocol streams.
 // It performs the same startup exchanges as Open without resolving CLIPath,
-// starting a process or changing the host cwd or environment.
+// starting a process or changing the host cwd or environment. Call PrepareMCP
+// before launching the peer when using MCP file sources.
 func OpenStreams(ctx context.Context, options SessionOptions, transport StreamTransport) (*Session, error) {
 	if ctx == nil {
 		return nil, queue.ErrNilContext
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if hasMCPFileSources(options.MCPServers) {
+		return nil, fmt.Errorf("%w: prepare MCP file sources before opening streams", ErrInvalidInput)
 	}
 	o := Options(options)
 	if o.Env == nil {
@@ -75,9 +82,6 @@ func openStreamInteraction(ctx context.Context, options Options, session *Sessio
 	}
 	if sameStreamEndpoint(transport.Reader, transport.Writer) {
 		return nil, &Error{Op: "stream", Err: fmt.Errorf("%w: stream reader and writer must differ", ErrInvalidInput)}
-	}
-	if err := options.defaults(); err != nil {
-		return nil, err
 	}
 	if _, err := interactionArgs(options); err != nil {
 		return nil, &Error{Op: "arguments", Err: err}

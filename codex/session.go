@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"sync"
 
 	"github.com/zoumo/agent-sdk-go/codex/types"
@@ -33,6 +34,8 @@ type SessionOptions struct {
 	// MCPServers adds shared mcp.Server values to this Session's native thread
 	// config.
 	MCPServers []mcp.Server
+	// MCPFiles provides relative files for MCP value sources during this operation.
+	MCPFiles fs.FS
 	// ShellEnv adds set-only variables to shell/unified-exec child environments.
 	// Empty values set empty strings. It does not change the app-server environment.
 	ShellEnv map[string]string

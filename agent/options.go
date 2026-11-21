@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -36,6 +37,8 @@ type OpenOptions struct {
 	// provider, which does not merge them again. Resume callers must repeat the
 	// complete list because the SDK does not persist it.
 	MCPServers []mcp.Server
+	// MCPFiles provides relative files for MCP value sources during this operation.
+	MCPFiles fs.FS
 
 	Config SessionConfig
 }

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,6 +52,8 @@ type Options struct {
 	// MCPServers declares shared mcp.Server values for stdio, HTTP or SSE. The
 	// SDK copies these values when opening the Session.
 	MCPServers []mcp.Server
+	// MCPFiles provides relative files for external MCP value sources.
+	MCPFiles fs.FS
 	// StrictMCPConfig adds --strict-mcp-config, asking the CLI to ignore MCP
 	// servers from other settings, only when true.
 	StrictMCPConfig bool
@@ -144,10 +147,7 @@ func (o *Options) defaults() error {
 	if err := validateThinkingConfig(o.Thinking); err != nil {
 		return dispatchFailure("open", err)
 	}
-	if err := validateSDKMCPServers(o.SDKMCPServers); err != nil {
-		return dispatchFailure("open", err)
-	}
-	if err := validateMCPServers(o.MCPServers, o.SDKMCPServers); err != nil {
+	if err := o.prepareMCP(); err != nil {
 		return dispatchFailure("open", err)
 	}
 	if err := o.applySessionStartProbe(); err != nil {
@@ -170,7 +170,6 @@ func (o *Options) defaults() error {
 	}
 	o.SDKMCPServers = append([]string(nil), o.SDKMCPServers...)
 	o.Tools = slices.Clone(o.Tools)
-	o.MCPServers = mcp.CloneServers(o.MCPServers)
 	if o.CLIPath == "" {
 		o.CLIPath = "claude"
 	}
@@ -290,9 +289,6 @@ func openInteraction(ctx context.Context, options Options, session *Session) (*i
 		return nil, queue.ErrNilContext
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := options.defaults(); err != nil {
 		return nil, err
 	}
 	args, err := interactionArgs(options)
@@ -1145,7 +1141,11 @@ func interactionArgs(options Options) ([]string, error) {
 			servers[name] = map[string]string{"type": "sdk", "name": name}
 		}
 		for _, server := range options.MCPServers {
-			servers[server.Name] = nativeMCPServerConfig(server)
+			config, err := nativeMCPServerConfig(server)
+			if err != nil {
+				return nil, err
+			}
+			servers[server.Name] = config
 		}
 		config, err := json.Marshal(map[string]any{"mcpServers": servers})
 		if err != nil {

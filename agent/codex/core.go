@@ -157,6 +157,7 @@ func (p *Core) OpenWithPermissions(
 		native, err := codex.Open(ctx, codex.SessionOptions{
 			Client:     client,
 			MCPServers: mcpServers,
+			MCPFiles:   options.MCPFiles,
 			ShellEnv:   maps.Clone(options.ShellEnv),
 			Thread: codextypes.ThreadStartParams{
 				ApprovalPolicy:        permissions.ApprovalPolicy,
@@ -230,6 +231,7 @@ func (p *Core) ResumeWithPermissions(
 		native, err := codex.Open(ctx, codex.SessionOptions{
 			Client:     client,
 			MCPServers: mcpServers,
+			MCPFiles:   options.MCPFiles,
 			ShellEnv:   maps.Clone(options.ShellEnv),
 			Resume: &codextypes.ThreadResumeParams{
 				ApprovalPolicy:    permissions.ApprovalPolicy,

@@ -172,7 +172,7 @@ revision, not uncommitted changes in the working checkout.
 ## Hosted gates
 
 The [workflow](../.github/workflows/ci.yml) defines three independent
-`ubuntu-24.04` jobs. `checks` installs Go and downloads the pinned
+validation jobs on `ubuntu-24.04`. `checks` installs Go and downloads the pinned
 formatter/linter's official precompiled archive, verifying its SHA-256 before
 extraction. Source scans use the Python standard library. The job checks source
 ancestry, module cleanliness and whitespace, then runs `quality`, `test` and
@@ -321,5 +321,10 @@ One version covers all four native imports. Before an authorized publication:
    coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
 4. Record the exact commit, CI URLs and remaining limits in the release review.
    Resolve failed/skipped required gates before creating a tag/release.
+
+GitHub requires `Release / verified main SHA` when you create a `v*` tag. The
+check records success on the exact commit only when all three jobs succeed on
+a push to `main`. Open the check's details to see the run that verified the
+commit.
 
 Real agent checks remain opt-in. These commands do not publish anything.

@@ -263,7 +263,8 @@ and limitation contract is in the
 
 `mcp.TransportStdio` permits `Command`, `Args`, `Env`, `EnvFrom`, and `Cwd`.
 `mcp.TransportHTTP` permits `URL`, `Headers`, `HeadersFrom`, `EnvHeaders`, and
-`BearerTokenEnvVar`. Provide `SessionOptions.MCPFiles` when using file sources.
+`BearerTokenEnvVar`. Use absolute paths for local file sources or supply
+`SessionOptions.MCPFiles` for relative paths within a restricted filesystem.
 The SDK reads the files before each start or resume RPC.
 `EnvHeaders` maps header names to environment-variable names.
 `BearerTokenEnvVar` is also an environment-variable name, not the secret itself.

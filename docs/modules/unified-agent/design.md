@@ -108,7 +108,7 @@ Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具
 - 创建时的原生专用选项不进入共享 `OpenOptions`。具体 adapter 可以提供额外
   的创建方法，但必须返回同一个 `agent.Session`，不能形成第二套通用接口。
 - `OpenOptions.MCPServers` 是 Runtime 默认项与本次 Session 声明合成后的最终
-  external MCP 列表。原生 SDK 在可选的 `MCPFiles` 文件系统内解析各 server 的文件来源。
+  external MCP 列表。原生 SDK 从本地绝对路径或 `MCPFiles` 内的相对路径解析各 server 的文件来源。
 - Core 配置在构造时复制并固定，调用方后续修改原对象不影响运行。
 - Core 的基础 `Capabilities` 由 adapter 在构造时供给，`corelease` 复制并
   冻结；`Start` 每次返回副本。Session 的有效能力和功能降级仍由 adapter 按
@@ -481,8 +481,8 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
 - `EnvFrom` 与 `HeadersFrom` 使用 `fileRef` 导入整个文件。列表中靠后的来源覆盖
   靠前来源，显式条目覆盖批量导入。同一显式列表内重复的名称会报错。环境变量名
   按原样比较，HTTP Header 名按大小写不敏感比较。
-- 文件引用通过调用方显式提供的 `MCPFiles` 读取。使用 `os.Root.FS()` 约束配置引用的
-  路径。每次打开或恢复时读取当前内容。文件使用 `KEY='value'`，支持空行、全行注释
+- 文件引用默认使用本地绝对路径。调用方可以提供 `MCPFiles` 和相对路径。使用
+  `os.Root.FS()` 限制调用方提供的文件访问。每次打开或恢复时读取当前内容。文件使用 `KEY='value'`，支持空行、全行注释
   和多行值。SDK 按字面量解析引号内的内容，原生 CLI 仍可按自己的配置规则处理变量。
 - 文件错误和配置错误不包含值。解析后的值会进入原生配置，包括 Claude 的 `--mcp-config`
   argv、进程环境或 Codex 的 thread config。Claude 的传递规则见

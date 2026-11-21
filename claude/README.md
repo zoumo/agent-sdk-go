@@ -400,8 +400,9 @@ Set `SessionOptions.MCPServers []mcp.Server` to declare native stdio, HTTP or SS
 servers for one Session. The shared `mcp` package is the single configuration
 type used here, by Codex, and by the unified `agent` layer. `Transport` is
 required. Stdio accepts `Command`, `Args`, `Env`, and `EnvFrom`. HTTP and SSE
-accept `URL`, `Headers`, and `HeadersFrom`. Provide `SessionOptions.MCPFiles`
-when using file sources. The SDK reads them for each open or resume. All names must be nonempty,
+accept `URL`, `Headers`, and `HeadersFrom`. Use absolute paths for local file
+sources or supply `SessionOptions.MCPFiles` for relative paths within a restricted
+filesystem. The SDK reads the files on each open or resume. All names must be nonempty,
 valid UTF-8 and unique across both `MCPServers` and `SDKMCPServers`. External
 server names must also contain no dot. The SDK copies the nested slices and maps
 at Open, so later caller mutation does not change the launched configuration.

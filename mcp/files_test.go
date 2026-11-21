@@ -82,6 +82,18 @@ func (f *countingFiles) Open(path string) (fs.File, error) {
 	return f.files.Open(path)
 }
 
+func TestResolveMCPFilesFromLocalAbsolutePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.env")
+	require.NoError(t, os.WriteFile(path, []byte("TOKEN='fixture'\n"), 0o600))
+	servers, err := mcp.ResolveServers([]mcp.Server{
+		{Name: "local", Transport: mcp.TransportStdio, Command: "fixture-mcp", EnvFrom: []mcp.ImportSource{mcpImport(path)}},
+		{Name: "remote", Transport: mcp.TransportHTTP, URL: "https://example.invalid/mcp", Headers: []mcp.NamedValue{mcpFileKey("Authorization", path, "TOKEN")}},
+	}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []mcp.NamedValue{mcp.Literal("TOKEN", "fixture")}, servers[0].Env)
+	assert.Equal(t, []mcp.NamedValue{mcp.Literal("Authorization", "fixture")}, servers[1].Headers)
+}
+
 func TestResolveMCPFilesRejectsInvalidFilesAndEntries(t *testing.T) {
 	const secret = "MCP-SENSITIVE-SENTINEL"
 	for _, tc := range []struct {
@@ -107,7 +119,7 @@ func TestResolveMCPFilesRejectsInvalidFilesAndEntries(t *testing.T) {
 		{name: "newline in header", file: "AUTH='" + secret + "\nother'\n", entries: []mcp.NamedValue{mcpFileKey("Authorization", "values.env", "AUTH")}, want: "value_invalid"},
 		{name: "bad header name", entries: []mcp.NamedValue{mcp.Literal("X-invalid:header", secret)}, want: "key_invalid"},
 		{name: "parent path", entries: []mcp.NamedValue{mcpFileKey("Authorization", "../values.env", "AUTH")}, want: "file_key_ref"},
-		{name: "absolute path", imports: []mcp.ImportSource{mcpImport("/values.env")}, want: "file_ref"},
+		{name: "absolute path with supplied filesystem", imports: []mcp.ImportSource{mcpImport(filepath.Join(t.TempDir(), "values.env"))}, files: fstest.MapFS{}, want: "file_ref"},
 		{name: "nonregular path", imports: []mcp.ImportSource{mcpImport("nested")}, files: fstest.MapFS{"nested/values.env": {}}, want: "file_invalid"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

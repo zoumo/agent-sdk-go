@@ -5,6 +5,8 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -17,11 +19,11 @@ const maxValueFileSize = 64 * 1024
 // file once per invocation. Re-run it when opening or resuming a Session to use
 // current file contents.
 //
-// The caller supplies the filesystem and owns its access boundary. Use a
-// rooted filesystem such as os.Root.FS for references from outside the process
-// trust boundary. A nil filesystem permits only literal entries. Native MCP
-// configuration carries the resolved values, so protect the native transport
-// and diagnostics as needed.
+// A nil filesystem reads absolute paths on the local host. Accept absolute
+// paths only from callers trusted to read files as the SDK process. Supply a
+// rooted filesystem such as os.Root.FS to restrict references to relative
+// paths within that filesystem. Native MCP configuration carries the resolved
+// values, so protect the native transport and diagnostics as needed.
 func ResolveServers(servers []Server, files fs.FS) ([]Server, error) {
 	if err := ValidateServers(servers); err != nil {
 		return nil, err
@@ -49,10 +51,16 @@ func resolveValues(index int, field string, values []NamedValue, imports []Impor
 		if data, ok := cache[path]; ok {
 			return data, nil
 		}
-		if files == nil {
-			return nil, invalidArgument(index, field, "file_system_required", "requires an MCP file system")
+		source, name := files, path
+		if source == nil {
+			if !filepath.IsAbs(path) {
+				return nil, invalidArgument(index, field, "file_system_required", "relative paths require an MCP file system")
+			}
+			source, name = os.DirFS(filepath.Dir(path)), filepath.Base(path)
+		} else if filepath.IsAbs(path) {
+			return nil, invalidArgument(index, field, "file_ref", "absolute paths require local file access")
 		}
-		data, err := readValues(files, path)
+		data, err := readValues(source, name)
 		if err != nil {
 			return nil, invalidArgument(index, field, "file_invalid", "references an unreadable or invalid file")
 		}

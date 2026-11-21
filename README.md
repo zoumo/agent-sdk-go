@@ -91,10 +91,10 @@ settings, compose the list before calling the Core. Match names case-sensitively
 and replace a same-name server as a whole. Send the full list again on resume.
 
 Use `mcp.Literal(name, value)` for explicit entries in `Env` or `Headers`. To
-read a value from a file, use `ValueFrom.FileKeyRef` and pass the filesystem
-through `OpenOptions.MCPFiles`. `EnvFrom` and `HeadersFrom` import all entries
-from a file. Supply a restricted filesystem such as `os.Root.FS()` for
-references from other callers. The SDK resolves files again on each open or
+read a value from a file, set `ValueFrom.FileKeyRef` to an absolute path and
+key. `EnvFrom` and `HeadersFrom` import all entries from a file. For paths from
+other callers, pass a restricted filesystem such as `os.Root.FS()` through
+`OpenOptions.MCPFiles` and use relative paths. The SDK resolves files again on each open or
 resume and passes the resolved values through the native MCP configuration.
 
 Run the offline configuration example from the repository root. The test

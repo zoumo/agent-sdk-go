@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"io/fs"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -24,7 +25,7 @@ type ValueSource struct {
 	FileKeyRef *FileKeyRef `json:"fileKeyRef,omitempty" yaml:"fileKeyRef,omitempty"`
 }
 
-// FileKeyRef reads a case-sensitive key from a relative file path.
+// FileKeyRef reads a case-sensitive key from a file.
 type FileKeyRef struct {
 	Path string `json:"path" yaml:"path"`
 	Key  string `json:"key" yaml:"key"`
@@ -35,7 +36,7 @@ type ImportSource struct {
 	FileRef *FileRef `json:"fileRef,omitempty" yaml:"fileRef,omitempty"`
 }
 
-// FileRef names a file relative to the caller-supplied filesystem.
+// FileRef names a local absolute path or a path relative to a supplied filesystem.
 type FileRef struct {
 	Path string `json:"path" yaml:"path"`
 }
@@ -108,18 +109,21 @@ func validateValues(index int, field string, values []NamedValue, imports []Impo
 		}
 		ref := entry.ValueFrom.FileKeyRef
 		if ref == nil || !validFilePath(ref.Path) || !validFileKey(ref.Key) {
-			return invalidArgument(index, field, "file_key_ref", "requires a fileKeyRef with a relative file path and a valid key")
+			return invalidArgument(index, field, "file_key_ref", "requires a fileKeyRef with a valid file path and key")
 		}
 	}
 	for _, source := range imports {
 		if source.FileRef == nil || !validFilePath(source.FileRef.Path) {
-			return invalidArgument(index, field+"From", "file_ref", "requires a fileRef with a relative file path")
+			return invalidArgument(index, field+"From", "file_ref", "requires a fileRef with a valid file path")
 		}
 	}
 	return nil
 }
 
 func validFilePath(path string) bool {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path) == path && filepath.Dir(path) != path && !strings.ContainsRune(path, 0)
+	}
 	return fs.ValidPath(path) && path != "." && !strings.ContainsAny(path, "\\:\x00")
 }
 

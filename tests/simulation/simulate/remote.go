@@ -27,7 +27,7 @@ var remoteConnectionIDs = [...]string{"main", "probe"}
 
 type remotePeerEndpoint struct {
 	URL         string `json:"url"`
-	BearerToken string `json:"bearerToken"`
+	BearerToken string `json:"-"`
 }
 
 type remoteEndpoint struct {

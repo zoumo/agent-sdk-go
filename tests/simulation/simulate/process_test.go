@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -266,7 +267,17 @@ func controlledChildCapture(t *testing.T) string {
 
 func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "run")
-	cmd := simulationCommand(t.Context(), "--provider", "codex", "--case", "SDK-CASE-032", "--output", output, "--driver", driverBinary)
+	driver := filepath.Join(t.TempDir(), "driver")
+	require.NoError(t, os.WriteFile(driver, []byte(`#!/bin/sh
+if [ "${SIMULATION_HOST_ONLY+x}" = x ]; then
+    echo "simulation driver inherited a host-only variable" >&2
+    exit 1
+fi
+exec `+quote(driverBinary)+` "$@"
+`), 0o700))
+	const marker = "simulation-host-only-marker"
+	t.Setenv("SIMULATION_HOST_ONLY", marker)
+	cmd := simulationCommand(t.Context(), "--provider", "codex", "--case", "SDK-CASE-032", "--output", output, "--driver", driver)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 
@@ -291,8 +302,12 @@ func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
 		require.Emptyf(t, connection.Failure, connection.ID)
 	}
 
-	var request struct{ Peer map[string]any }
+	var request struct {
+		Env  json.RawMessage
+		Peer map[string]any
+	}
 	require.NoError(t, readJSON(filepath.Join(output, "preserve", "sdk", "request.json"), &request))
+	require.Empty(t, request.Env)
 	require.Len(t, request.Peer, 1)
 	remote, ok := request.Peer["remote"].(map[string]any)
 	require.True(t, ok)
@@ -302,12 +317,21 @@ func TestCodexRemoteCaseRunsDeclaredMainAndProbe(t *testing.T) {
 	for _, id := range remoteConnectionIDs {
 		endpoint, ok := connections[id].(map[string]any)
 		require.True(t, ok)
-		require.Len(t, endpoint, 2)
+		require.Len(t, endpoint, 1)
 		require.NotEmpty(t, endpoint["url"])
-		require.NotEmpty(t, endpoint["bearerToken"])
 		require.Contains(t, endpoint["url"], "ws://127.0.0.1:")
 		require.True(t, strings.HasSuffix(endpoint["url"].(string), "/"+id))
 	}
+	require.NoError(t, filepath.WalkDir(output, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || !entry.Type().IsRegular() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err == nil && bytes.Contains(data, []byte(marker)) {
+			return fmt.Errorf("host-only marker persisted in %s", path)
+		}
+		return err
+	}))
 }
 
 func TestSelectedRunsRetainProcessAndFinishFailures(t *testing.T) {

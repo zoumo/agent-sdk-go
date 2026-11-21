@@ -1,6 +1,7 @@
 package simulate
 
 import (
+	"bytes"
 	"context"
 	"debug/buildinfo"
 	"encoding/json"
@@ -223,14 +224,25 @@ func runHost(parent context.Context, tool toolIdentity, o options, source source
 		"output":    hostRoot,
 		"peer":      peer,
 		"policy":    policy,
-		"env":       session.HostEnv(),
 	}
 	if err := writeJSON(request, req); err != nil {
 		return r, err
 	}
 	cmd := exec.CommandContext(ctx, o.Driver, "--request", request)
 	cmd.Dir = session.Mock.Workspace
-	cmd.Env = session.HostEnv()
+	cmd.Env = session.driverEnvironment()
+	if remote != nil {
+		// Keep authentication out of the archived request and the process environment.
+		tokens := make(map[string]string, len(remote.endpoint.Connections))
+		for id, endpoint := range remote.endpoint.Connections {
+			tokens[id] = endpoint.BearerToken
+		}
+		data, err := json.Marshal(tokens)
+		if err != nil {
+			return r, err
+		}
+		cmd.Stdin = bytes.NewReader(data)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 3 * time.Second
 	cmd.Cancel = func() error {
@@ -313,20 +325,6 @@ func isMaterialUnavailable(err error) bool {
 func businessPassed(raw json.RawMessage) bool {
 	var business struct{ Status string }
 	return len(raw) > 0 && json.Unmarshal(raw, &business) == nil && business.Status == "passed"
-}
-
-func hostEnvironment(overrides map[string]string) []string {
-	env := []string{}
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if _, ok := overrides[key]; !ok {
-			env = append(env, entry)
-		}
-	}
-	for key, value := range overrides {
-		env = append(env, key+"="+value)
-	}
-	return env
 }
 
 func sdkIdentity(driver string) any {

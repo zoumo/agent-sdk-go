@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 // operations and assertions. The process runner sees only its final result.
 type remoteConnection struct {
 	URL         string `json:"url"`
-	BearerToken string `json:"bearerToken"`
+	BearerToken string `json:"-"`
 }
 type driverPeer struct {
 	FixtureDir string `json:"fixtureDir"`
@@ -26,7 +27,7 @@ type driverPeer struct {
 	} `json:"remote"`
 }
 
-func runRequest(path string) error {
+func runRequest(path string, credentials io.Reader) error {
 	var req struct {
 		Case, Materials, Workspace, Output, Policy string
 		Peer                                       driverPeer
@@ -55,6 +56,19 @@ func runRequest(path string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if plan.DriverProfile == "remote-close" && req.Peer.Remote != nil {
+		var tokens map[string]string
+		if err := json.NewDecoder(io.LimitReader(credentials, 4096)).Decode(&tokens); err != nil {
+			return errors.New("read remote replay credentials")
+		}
+		for id, endpoint := range req.Peer.Remote.Connections {
+			endpoint.BearerToken = tokens[id]
+			if endpoint.BearerToken == "" {
+				return errors.New("missing remote replay credential")
+			}
+			req.Peer.Remote.Connections[id] = endpoint
+		}
+	}
 	var caseErr error
 	executionID := ""
 	if req.Case != plan.CaseID {

@@ -382,8 +382,15 @@ func (s *preparedSession) ConnectionIDs() []string {
 	return ids
 }
 
-func (s *preparedSession) HostEnv() []string {
-	return hostEnvironment(s.Mock.Env)
+func (s *preparedSession) driverEnvironment() []string {
+	// Shell wrappers used by integration tests need standard system tools.
+	env := []string{"PATH=/usr/bin:/bin"}
+	for _, key := range []string{"HOME", "TMPDIR", "CODEX_HOME", "CLAUDE_CONFIG_DIR"} {
+		if value, ok := s.Mock.Env[key]; ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
 }
 
 func exportPreparedSession(ctx context.Context, session *preparedSession, output string) error {

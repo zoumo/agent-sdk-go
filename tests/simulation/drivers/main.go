@@ -28,7 +28,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "use --request /path/to/request.json")
 		os.Exit(2)
 	}
-	if err := runRequest(os.Args[2]); err != nil {
+	if err := runRequest(os.Args[2], os.Stdin); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

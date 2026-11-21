@@ -654,10 +654,9 @@ type sdkAssertionInputs struct {
 }
 
 type runtimePaths struct {
-	Workspace   string   `json:"workspace"`
-	ProtocolCwd string   `json:"protocolCwd"`
-	Config      string   `json:"config"`
-	Env         []string `json:"env"`
+	Workspace   string `json:"workspace"`
+	ProtocolCwd string `json:"protocolCwd"`
+	Config      string `json:"config"`
 }
 
 func projectAssertions(root string, pkg *materialPackage, session *preparedSession, policy string) error {
@@ -782,7 +781,6 @@ func projectAssertions(root string, pkg *materialPackage, session *preparedSessi
 		Workspace:   session.Mock.Workspace,
 		ProtocolCwd: session.Mock.ProtocolCwd,
 		Config:      config,
-		Env:         session.HostEnv(),
 	}
 	if err := writeJSON(filepath.Join(root, "runtime.json"), runtime); err != nil {
 		return err

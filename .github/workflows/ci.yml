@@ -161,3 +161,33 @@ jobs:
           Same-repository PRs fetch their published head SHA; synthetic PR merge
           commits and fork-only heads are outside this remote retrieval gate.
           SUMMARY
+
+  release-readiness:
+    name: Record version tag readiness
+    # Tag protection requires the separate check below on an actual main SHA.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [checks, race, consumer]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      checks: write
+    steps:
+      - name: Record the three required job results on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          RACE_RESULT: ${{ needs.race.result }}
+          CONSUMER_RESULT: ${{ needs.consumer.result }}
+        run: |
+          conclusion=failure
+          if [[ "$CHECKS_RESULT" == success && "$RACE_RESULT" == success && "$CONSUMER_RESULT" == success ]]; then
+            conclusion=success
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='Release / verified main SHA' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status=completed \
+            -f conclusion="$conclusion" \
+            -f details_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -f external_id="$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT" \
+            --jq '{name, head_sha, conclusion}'

@@ -34,6 +34,8 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		`<{"method":"item/started","params":{"threadId":"root-a","turnId":"turn-a","startedAtMs":1700000100400,"item":{"type":"fileChange","id":"file","changes":[{"path":"/synthetic/a.txt","kind":{"type":"add"},"diff":"hello\n"}],"status":"inProgress"}}}`,
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100500,"item":{"type":"fileChange","id":"file","changes":[{"path":"/synthetic/a.txt","kind":{"type":"add"},"diff":"hello\n"}],"status":"completed"}}}`,
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100600,"item":{"type":"reasoning","id":"reason","summary":["think-1","think-2"],"content":["raw thought"]}}}`,
+		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100610,"item":{"type":"reasoning","id":"empty-reasoning","summary":[],"content":[]}}}`,
+		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100620,"item":{"type":"reasoning","id":"omitted-reasoning"}}}`,
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100700,"item":{"type":"agentMessage","id":"agent","text":"answer complete","phase":"final_answer","future":{"big":9007199254740993}}}}`,
 		`<{"method":"turn/plan/updated","params":{"threadId":"root-a","turnId":"turn-a","explanation":"working","plan":[{"step":"inspect","status":"completed"},{"step":"change","status":"inProgress"}]}}`,
 		`<{"method":"thread/name/updated","params":{"threadId":"root-a","threadName":"Synthetic title"}}`,

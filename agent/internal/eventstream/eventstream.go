@@ -19,6 +19,7 @@ type Hooks struct {
 	CloseNative func() error
 	FinalCause  func() error
 	Release     func()
+	Published   func([]agent.Event)
 }
 
 type Stream struct {
@@ -73,7 +74,13 @@ func (s *Stream) Publish(events []agent.Event) error {
 	for _, event := range events {
 		items = append(items, queue.Item[agent.Event]{Value: event, Bytes: 1})
 	}
-	return s.events.PushBatch(items)
+	if err := s.events.PushBatch(items); err != nil {
+		return err
+	}
+	if s.hooks.Published != nil {
+		s.hooks.Published(events)
+	}
+	return nil
 }
 
 // Close waits for cleanup and reports whether cleanup had already begun.

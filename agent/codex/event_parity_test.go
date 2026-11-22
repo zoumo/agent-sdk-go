@@ -7,8 +7,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
 func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
@@ -18,7 +25,7 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	frames = append(frames,
 		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
-		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"run","type":"text"}],"threadId":"root-a"}}`,
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"run","type":"text"}],"threadId":"root-a"},"trace":{"traceparent":"00-01000000000000000000000000000000-0000000000000003-01"}}`,
 		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
 		`<{"method":"turn/started","params":{"threadId":"root-a","turn":{"id":"turn-a","rootTurnId":"root-turn","items":[],"status":"inProgress","startedAt":1700000100},"future":true}}`,
 		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100123,"item":{"type":"userMessage","id":"user","content":[{"type":"text","text":"question"}]}}}`,
@@ -44,13 +51,29 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		`<{"method":"thread/archived","params":{"threadId":"root-a"}}`,
 		`<{"method":"item/started","params":{"threadId":"root-a","turnId":"turn-a","startedAtMs":1700000100800,"item":{"type":"futureTool","id":"future","payload":7}}}`,
 		`<{"method":"future/notification","params":{"threadId":"root-a"}}`,
+		`<{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100900,"item":{"type":"userMessage","id":"image-input","content":[{"type":"text","text":"partial"},{"type":"image","url":"https://example.test/image"}]}}}`,
 		`<{"method":"error","params":{"threadId":"root-a","turnId":"turn-a","willRetry":false,"error":{"message":"native failure"}}}`,
 		`<{"method":"turn/completed","params":{"threadId":"root-a","turn":{"id":"turn-a","rootTurnId":"root-turn","items":[],"status":"completed","startedAt":1700000100,"completedAt":1700000102}}}`,
 		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
 		`<{"id":94,"result":{"status":"unsubscribed"}}`,
 	)
 	peerSession := prepareCodexPeer(t, frames...)
-	provider := newTestProvider(t, peerSession)
+	recorder := tracetest.NewSpanRecorder()
+	traces := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(recorder),
+		sdktrace.WithIDGenerator(&telemetryIDs{}),
+	)
+	reader := sdkmetric.NewManualReader()
+	meters := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	provider := newTestProviderWithWrappers(t, peerSession, codextypes.InitializeParams{
+		ClientInfo: codextypes.ClientInfo{Name: "agent-codex-test", Version: "1"},
+		Capabilities: codextypes.Some(codextypes.InitializeCapabilities{
+			ExperimentalAPI: codextypes.Some(true),
+		}),
+	}, testStreamWrappers{configure: func(config *agentcodex.Config) {
+		config.TracerProvider = traces
+		config.MeterProvider = meters
+	}})
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -84,8 +107,9 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 		agent.EventSessionUsageUpdate,
 		agent.EventSessionError,
 		agent.EventSessionError,
-		agent.EventSessionError,
-		agent.EventSessionError,
+		agent.EventSessionUnsupportedNativeEvent,
+		agent.EventSessionUnsupportedNativeEvent,
+		agent.EventSessionUnsupportedNativeEvent,
 		agent.EventSessionError,
 		agent.EventSessionStateUpdate,
 	}
@@ -168,20 +192,83 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	assert.Equal(t, "reasoning_part_boundary_unsupported", sessionErrorReason(t, events[5]))
 	assert.Equal(t, "config_options_unsupported", sessionErrorReason(t, events[16]))
 	assert.Equal(t, "archive_state_unsupported", sessionErrorReason(t, events[17]))
-	assert.Equal(t, "unsupported_native_item", sessionErrorReason(t, events[18]))
+	assert.Equal(t, agent.UnsupportedNativeEventPayload{
+		Provider: "codex", NativeMethod: "item/started", NativeType: "futureTool",
+	}, events[18].Payload)
 	assert.Equal(t, "future", events[18].ItemID)
-	assert.Equal(t, "unsupported_native_notification", sessionErrorReason(t, events[19]))
-	assert.Equal(t, "native_error", sessionErrorReason(t, events[20]))
+	assert.Equal(t, agent.UnsupportedNativeEventPayload{
+		Provider: "codex", NativeMethod: "future/notification", NativeType: "future/notification",
+	}, events[19].Payload)
+	assert.Equal(t, agent.UnsupportedNativeEventPayload{
+		Provider: "codex", NativeMethod: "item/completed", NativeType: "userMessage", NativeSubtype: "image",
+	}, events[20].Payload)
+	assert.Equal(t, "image-input", events[20].ItemID)
+	assert.Equal(t, "native_error", sessionErrorReason(t, events[21]))
 
 	idle := agent.StateIdle
 	assert.Equal(t, agent.StateUpdatePayload{
 		PreviousState: new(agent.StateRunning),
 		State:         &idle,
 		StopReason:    "completed",
-	}, events[21].Payload)
-	assert.Contains(t, rawCodexEvent(t, events[21]), `"rootTurnId":"root-turn"`)
+	}, events[22].Payload)
+	assert.Contains(t, rawCodexEvent(t, events[22]), `"rootTurnId":"root-turn"`)
 	assert.Contains(t, rawCodexEvent(t, events[13]), `"big":9007199254740993`)
 	assert.Equal(t, true, eventCodexMeta(t, events[15])["modelContextWindowAbsent"])
+
+	require.NoError(t, session.Close(ctx))
+	require.NoError(t, session.Err())
+	assertPublishedCodexEvents(t, ctx, reader, wantTypes)
+	require.Len(t, recorder.Ended(), 7) // Four operation spans and three diagnostic spans.
+	var diagnosticAttrs [][]attribute.KeyValue
+	for _, span := range recorder.Ended() {
+		if span.Name() == "agent.unsupported_native_event" {
+			assert.False(t, span.Parent().IsValid())
+			diagnosticAttrs = append(diagnosticAttrs, span.Attributes())
+		}
+	}
+	require.Len(t, diagnosticAttrs, 3)
+	for _, attrs := range diagnosticAttrs {
+		assert.Contains(t, attrs, attribute.String("provider", "codex"))
+		assert.Contains(t, attrs, attribute.String("session.id", session.ID()))
+	}
+	assert.Len(t, diagnosticAttrs[0], 4)
+	assert.Contains(t, diagnosticAttrs[0], attribute.String("native.method", "item/started"))
+	assert.Contains(t, diagnosticAttrs[0], attribute.String("native.type", "futureTool"))
+	assert.Len(t, diagnosticAttrs[1], 4)
+	assert.Contains(t, diagnosticAttrs[1], attribute.String("native.method", "future/notification"))
+	assert.Contains(t, diagnosticAttrs[1], attribute.String("native.type", "future/notification"))
+	assert.Len(t, diagnosticAttrs[2], 5)
+	assert.Contains(t, diagnosticAttrs[2], attribute.String("native.method", "item/completed"))
+	assert.Contains(t, diagnosticAttrs[2], attribute.String("native.type", "userMessage"))
+	assert.Contains(t, diagnosticAttrs[2], attribute.String("native.subtype", "image"))
+}
+
+func assertPublishedCodexEvents(t *testing.T, ctx context.Context, reader *sdkmetric.ManualReader, wantTypes []agent.EventType) {
+	t.Helper()
+	want := make(map[agent.EventType]int64)
+	for _, kind := range wantTypes {
+		want[kind]++
+	}
+	var data metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &data))
+	require.Len(t, data.ScopeMetrics, 1)
+	got := make(map[agent.EventType]int64)
+	for _, m := range data.ScopeMetrics[0].Metrics {
+		if m.Name != "agent.sdk.event.published" {
+			continue
+		}
+		sum, ok := m.Data.(metricdata.Sum[int64])
+		require.True(t, ok)
+		assert.True(t, sum.IsMonotonic)
+		for _, point := range sum.DataPoints {
+			assert.Len(t, point.Attributes.ToSlice(), 2)
+			assert.Contains(t, point.Attributes.ToSlice(), attribute.String("provider", "codex"))
+			kind, ok := point.Attributes.Value("event.type")
+			require.True(t, ok)
+			got[agent.EventType(kind.AsString())] += point.Value
+		}
+	}
+	assert.Equal(t, want, got)
 }
 
 func TestThreadStatusChangeExpiresInteractions(t *testing.T) {

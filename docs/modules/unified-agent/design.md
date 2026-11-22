@@ -1065,6 +1065,10 @@ lease release 和 Done 都只执行一次。
 `agent.tool_result` 是 MASS 可能持久化的完整事实；SDK 只提供事实，不决定
 MASS 是否持久化。
 
+`session.unsupported_native_event` 记录无法映射的原生事件。Payload 包含 `provider`
+和可取得的 `nativeMethod`、`nativeType`、`nativeSubtype`。当通知只有方法名可区分时，
+`nativeType` 使用方法名。诊断事件发布后，adapter 继续消费原生事件流。
+
 `*_chunk` 只追加，不是累计快照。adapter 不跨事件拼接完整历史，也不用结束后
 补造完整消息。工具调用和结果共享 `itemId`，但事件身份不同。完整消息与 chunk
 使用相同的 item/message 身份。工具分块不携带完整工具身份，具体例外见

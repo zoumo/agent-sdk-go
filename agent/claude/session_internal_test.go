@@ -294,9 +294,9 @@ func TestMixedUserContentReportsUnsupportedBlockWithoutDroppingText(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	assert.Equal(t, agent.EventUserMessage, events[0].Type())
-	payload, ok := events[1].Payload.(agent.SessionErrorPayload)
-	require.True(t, ok)
-	assert.Equal(t, "user_message_content_unsupported", payload.Reason)
+	assert.Equal(t, agent.UnsupportedNativeEventPayload{
+		Provider: "claude", NativeType: "user", NativeSubtype: "image",
+	}, events[1].Payload)
 	meta := requireClaudeEventMeta(t, events[1])
 	assert.Equal(t, "image", meta["blockType"])
 }
@@ -532,9 +532,9 @@ func TestZeroLengthAssistantTextDoesNotCreateEvent(t *testing.T) {
 	assert.Empty(t, events)
 }
 
-func TestSemanticSystemNotificationBecomesGap(t *testing.T) {
+func TestSemanticSystemNotificationBecomesUnsupportedNativeEvent(t *testing.T) {
 	session := &session{id: "native-session"}
-	for _, subtype := range []string{"api_retry", "compact_boundary"} {
+	for _, subtype := range []string{"api_retry", "compact_boundary", "elicitation_complete"} {
 		t.Run(subtype, func(t *testing.T) {
 			raw := json.RawMessage(
 				`{"type":"system","subtype":"` + subtype + `","session_id":"native-session"}`,
@@ -550,11 +550,12 @@ func TestSemanticSystemNotificationBecomesGap(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Len(t, events, 1)
-			payload, ok := events[0].Payload.(agent.SessionErrorPayload)
-			require.True(t, ok)
-			assert.Equal(t, "native_event_unsupported", payload.Reason)
+			assert.Equal(t, agent.UnsupportedNativeEventPayload{
+				Provider: "claude", NativeType: "system", NativeSubtype: subtype,
+			}, events[0].Payload)
 			meta := requireClaudeEventMeta(t, events[0])
 			assert.Equal(t, subtype, meta["subtype"])
+			assert.Equal(t, raw, meta["raw"])
 		})
 	}
 }

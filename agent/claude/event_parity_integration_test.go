@@ -11,6 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
@@ -25,6 +30,11 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	frames = append(frames,
 		`<{"type":"system","subtype":"init","session_id":"native-parity","cwd":`+
 			jsonString(t, cwd)+`,"claude_code_version":"2.1.293"}`,
+	)
+	frames = append(frames, claudePromptTraceFrames(t, "go_1", agent.TraceContext{
+		Traceparent: "00-01000000000000000000000000000000-0000000000000003-01",
+	}, false)...)
+	frames = append(frames,
 		claudeStartOrSteerFrame(t, "inspect"),
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-parity","state":"running","timestamp":"2026-11-07T13:00:00Z"}`,
 		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"message_start","message":{"id":"response-1","model":"synthetic-model","content":[]}}}`,
@@ -44,11 +54,21 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":15,"output_tokens":7,"cache_read_input_tokens":2,"cache_creation_input_tokens":1}}}`,
 		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"message_stop"}}`,
 		`<{"type":"user","session_id":"native-parity","parent_tool_use_id":null,"uuid":"result-1","timestamp":"2026-11-07T13:00:04Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","content":"file contents","is_error":false}]},"tool_use_result":{"stdout":"file contents","precise":9007199254740993}}`,
+		`<{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"future_stream_event"}}`,
 		`<{"type":"result","subtype":"success","session_id":"native-parity","is_error":false,"timestamp":"2026-11-07T13:00:05Z","total_cost_usd":0.25,"usage":{"input_tokens":15,"output_tokens":7,"cache_read_input_tokens":2,"cache_creation_input_tokens":1},"modelUsage":{"synthetic-model":{"inputTokens":15,"outputTokens":7,"cacheReadInputTokens":2,"cacheCreationInputTokens":1,"costUSD":0.25,"contextWindow":1000000},"other-model":{"inputTokens":100,"outputTokens":50,"costUSD":1.5,"contextWindow":200000}}}`,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"native-parity","state":"idle","timestamp":"2026-11-07T13:00:06Z"}`,
 	)
 	peerSession := prepareClaudePeer(t, "passed", frames...)
-	provider := newTestClaudeProvider(t, peerSession)
+	recorder := tracetest.NewSpanRecorder()
+	traces := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(recorder),
+		sdktrace.WithIDGenerator(&telemetryIDs{}),
+	)
+	reader := sdkmetric.NewManualReader()
+	meters := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	provider := newTestClaudeProviderWithConfig(t, agentclaude.Config{
+		TracerProvider: traces, MeterProvider: meters,
+	}, peerSession)
 	t.Cleanup(func() { assert.NoError(t, provider.Stop(context.Background())) })
 
 	_, err := provider.Start(ctx)
@@ -160,6 +180,11 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	assert.Equal(t, "file contents", rawOutput["stdout"])
 	assert.Equal(t, json.Number("9007199254740993"), rawOutput["precise"])
 
+	diagnostic := nextEvent(t, ctx, stream)
+	require.Equal(t, agent.EventSessionUnsupportedNativeEvent, diagnostic.Type())
+	assert.Equal(t, agent.UnsupportedNativeEventPayload{
+		Provider: "claude", NativeType: "future_stream_event",
+	}, diagnostic.Payload)
 	usage := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventSessionUsageUpdate, usage.Type())
 	assert.Equal(t, time.Date(2026, 11, 7, 13, 0, 5, 0, time.UTC), usage.Time)
@@ -175,6 +200,56 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	require.NoError(t, session.Close(ctx))
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
+	assertPublishedClaudeEvents(t, ctx, reader, map[agent.EventType]int64{
+		agent.EventSessionStateUpdate:            2,
+		agent.EventAgentThinkingChunk:            1,
+		agent.EventAgentThinking:                 1,
+		agent.EventAgentMessageChunk:             1,
+		agent.EventAgentMessage:                  1,
+		agent.EventAgentToolCallChunk:            2,
+		agent.EventAgentToolCall:                 1,
+		agent.EventAgentToolResult:               1,
+		agent.EventSessionUnsupportedNativeEvent: 1,
+		agent.EventSessionUsageUpdate:            1,
+	})
+	require.Len(t, recorder.Ended(), 5) // Four operation spans and one diagnostic span.
+	var diagnostics []sdktrace.ReadOnlySpan
+	for _, span := range recorder.Ended() {
+		if span.Name() == "agent.unsupported_native_event" {
+			diagnostics = append(diagnostics, span)
+		}
+	}
+	require.Len(t, diagnostics, 1)
+	assert.False(t, diagnostics[0].Parent().IsValid())
+	assert.ElementsMatch(t, []attribute.KeyValue{
+		attribute.String("provider", "claude"),
+		attribute.String("session.id", session.ID()),
+		attribute.String("native.type", "future_stream_event"),
+	}, diagnostics[0].Attributes())
+}
+
+func assertPublishedClaudeEvents(t *testing.T, ctx context.Context, reader *sdkmetric.ManualReader, want map[agent.EventType]int64) {
+	t.Helper()
+	var data metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &data))
+	require.Len(t, data.ScopeMetrics, 1)
+	got := make(map[agent.EventType]int64)
+	for _, m := range data.ScopeMetrics[0].Metrics {
+		if m.Name != "agent.sdk.event.published" {
+			continue
+		}
+		sum, ok := m.Data.(metricdata.Sum[int64])
+		require.True(t, ok)
+		assert.True(t, sum.IsMonotonic)
+		for _, point := range sum.DataPoints {
+			assert.Len(t, point.Attributes.ToSlice(), 2)
+			assert.Contains(t, point.Attributes.ToSlice(), attribute.String("provider", "claude"))
+			kind, ok := point.Attributes.Value("event.type")
+			require.True(t, ok)
+			got[agent.EventType(kind.AsString())] += point.Value
+		}
+	}
+	assert.Equal(t, want, got)
 }
 
 func TestClaudeToolIdentityMapping(t *testing.T) {

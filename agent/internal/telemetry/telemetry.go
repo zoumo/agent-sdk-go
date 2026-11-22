@@ -32,9 +32,10 @@ const (
 )
 
 type Telemetry struct {
-	provider attribute.KeyValue
-	tracer   trace.Tracer
-	duration metric.Float64Histogram
+	provider  attribute.KeyValue
+	tracer    trace.Tracer
+	duration  metric.Float64Histogram
+	published metric.Int64Counter
 }
 
 func New(provider string, traces trace.TracerProvider, meters metric.MeterProvider) Telemetry {
@@ -44,16 +45,54 @@ func New(provider string, traces trace.TracerProvider, meters metric.MeterProvid
 	if meters == nil {
 		meters = otel.GetMeterProvider()
 	}
-	duration, _ := meters.Meter(scope).Float64Histogram(
+	meter := meters.Meter(scope)
+	duration, _ := meter.Float64Histogram(
 		"agent.sdk.operation.duration",
 		metric.WithUnit("s"),
 		metric.WithDescription("Duration of an Agent SDK operation"),
 	)
+	published, _ := meter.Int64Counter(
+		"agent.sdk.event.published",
+		metric.WithUnit("{event}"),
+		metric.WithDescription("Unified events accepted by the Agent SDK event stream"),
+	)
 	return Telemetry{
-		provider: attribute.String("provider", provider),
-		tracer:   traces.Tracer(scope),
-		duration: duration,
+		provider:  attribute.String("provider", provider),
+		tracer:    traces.Tracer(scope),
+		duration:  duration,
+		published: published,
 	}
+}
+
+// RecordPublished records events after the stream accepts the whole batch.
+func (t Telemetry) RecordPublished(events []agent.Event) {
+	ctx := context.Background()
+	for _, event := range events {
+		if t.published != nil {
+			t.published.Add(ctx, 1, metric.WithAttributes(
+				t.provider,
+				attribute.String("event.type", string(event.Type())),
+			))
+		}
+		if payload, ok := event.Payload.(agent.UnsupportedNativeEventPayload); ok && t.tracer != nil {
+			t.recordUnsupportedEvent(ctx, event.SessionID, payload)
+		}
+	}
+}
+
+func (t Telemetry) recordUnsupportedEvent(ctx context.Context, sessionID string, payload agent.UnsupportedNativeEventPayload) {
+	attrs := []attribute.KeyValue{t.provider, attribute.String("session.id", sessionID)}
+	if payload.NativeMethod != "" {
+		attrs = append(attrs, attribute.String("native.method", payload.NativeMethod))
+	}
+	if payload.NativeType != "" {
+		attrs = append(attrs, attribute.String("native.type", payload.NativeType))
+	}
+	if payload.NativeSubtype != "" {
+		attrs = append(attrs, attribute.String("native.subtype", payload.NativeSubtype))
+	}
+	_, span := t.tracer.Start(ctx, "agent.unsupported_native_event", trace.WithAttributes(attrs...))
+	span.End()
 }
 
 type Observation struct {

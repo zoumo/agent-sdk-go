@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,9 +116,12 @@ func assertDurationCounts(
 	var data metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &data))
 	require.Len(t, data.ScopeMetrics, 1)
-	require.Len(t, data.ScopeMetrics[0].Metrics, 1)
-	duration := data.ScopeMetrics[0].Metrics[0]
-	assert.Equal(t, "agent.sdk.operation.duration", duration.Name)
+	metrics := data.ScopeMetrics[0].Metrics
+	index := slices.IndexFunc(metrics, func(m metricdata.Metrics) bool {
+		return m.Name == "agent.sdk.operation.duration"
+	})
+	require.NotEqual(t, -1, index)
+	duration := metrics[index]
 	assert.Equal(t, "s", duration.Unit)
 	points := duration.Data.(metricdata.Histogram[float64]).DataPoints
 	got := make(map[[2]string]uint64)

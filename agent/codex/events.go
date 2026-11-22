@@ -118,11 +118,7 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 	case "error":
 		return s.nativeError(received)
 	default:
-		return s.notificationGap(
-			received,
-			"unsupported_native_notification",
-			"Codex native notification is not mapped to a unified event",
-		)
+		return s.unsupportedNativeEvent(received, "", event.Method, "")
 	}
 }
 
@@ -561,7 +557,7 @@ func (s *session) userMessage(
 	content := make([]agent.ContentBlock, 0, len(item.Content))
 	for _, input := range item.Content {
 		if input.Text == nil || len(input.Unknown) != 0 {
-			return s.itemGap(received, codextypes.ThreadItem{UserMessage: item})
+			return s.unsupportedNativeEvent(received, item.ID, "userMessage", userInputType(input))
 		}
 		content = append(content, agent.ContentBlock{
 			Text: &agent.ContentBlockText{Text: input.Text.Text},
@@ -738,21 +734,32 @@ func (s *session) itemGap(
 	item codextypes.ThreadItem,
 ) ([]agent.Event, error) {
 	itemType, itemID := threadItemIdentity(item)
-	message := "Codex item variant has no unified payload"
-	if itemType != "" {
-		message = "Codex item variant " + itemType + " has no unified payload"
-	}
-	event, err := s.sessionErrorEvent(
+	return s.unsupportedNativeEvent(received, itemID, itemType, "")
+}
+
+func (s *session) unsupportedNativeEvent(
+	received codex.Received,
+	itemID string,
+	nativeType string,
+	nativeSubtype string,
+) ([]agent.Event, error) {
+	method := requestMethod(received)
+	event, err := s.newEvent(
 		received,
-		requestMethod(received),
-		"unsupported_native_item",
-		message,
+		method,
+		itemID,
+		agent.UnsupportedNativeEventPayload{
+			Provider:      "codex",
+			NativeMethod:  method,
+			NativeType:    nativeType,
+			NativeSubtype: nativeSubtype,
+		},
+		time.Now().UTC(),
 		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
-	event.ItemID = itemID
 	return []agent.Event{event}, nil
 }
 
@@ -891,6 +898,29 @@ func toolStatus(value string) string {
 		return value
 	default:
 		return "unknown"
+	}
+}
+
+func userInputType(input codextypes.UserInput) string {
+	switch {
+	case input.Image != nil:
+		return string(input.Image.Type)
+	case input.LocalImage != nil:
+		return string(input.LocalImage.Type)
+	case input.Audio != nil:
+		return string(input.Audio.Type)
+	case input.LocalAudio != nil:
+		return string(input.LocalAudio.Type)
+	case input.Skill != nil:
+		return string(input.Skill.Type)
+	case input.Mention != nil:
+		return string(input.Mention.Type)
+	default:
+		var tagged struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(input.Unknown, &tagged)
+		return tagged.Type
 	}
 }
 

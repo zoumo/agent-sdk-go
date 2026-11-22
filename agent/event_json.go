@@ -122,6 +122,12 @@ func unmarshalPayload(eventType EventType, data []byte) (Payload, error) {
 			return nil, err
 		}
 		return payload, nil
+	case EventSessionUnsupportedNativeEvent:
+		var payload UnsupportedNativeEventPayload
+		if err := decodeStrictJSON(data, &payload); err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case EventSessionInfoUpdate:
 		var payload InfoUpdatePayload
 		if err := decodeStrictJSON(data, &payload); err != nil {

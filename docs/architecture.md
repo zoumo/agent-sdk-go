@@ -44,6 +44,10 @@ and dependency boundaries.
   attributes. The adapters use `Config.TracerProvider` and
   `Config.MeterProvider` when set. Each unset field uses the corresponding
   global provider. The host owns provider setup, sampling, and export.
+  The `agent.sdk.event.published` counter records each event accepted by the
+  unified stream with `provider` and `event.type`. An unsupported native event
+  also emits `agent.unsupported_native_event` with the provider, Session ID, and
+  the available native discriminators. This span uses its own trace.
   The boundary check limits OpenTelemetry API imports to the adapters and
   shared instrumentation. The `go.opentelemetry.io/otel/sdk` packages and
   exporters are test-only.

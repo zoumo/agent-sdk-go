@@ -82,6 +82,11 @@ func TestNaturalTerminationKeepsEventsClaimableAndReleasesBeforeDone(t *testing.
 						order = append(order, "closures")
 						return []agent.Event{{EventID: "closed-first"}, {EventID: "closed-second"}}
 					},
+					Published: func(events []agent.Event) {
+						for _, event := range events {
+							order = append(order, event.EventID)
+						}
+					},
 					Release: func() {
 						order = append(order, "release")
 						close(releasing)
@@ -106,7 +111,10 @@ func TestNaturalTerminationKeepsEventsClaimableAndReleasesBeforeDone(t *testing.
 				require.ErrorIs(t, stream.Publish([]agent.Event{{EventID: "too-late"}}), queue.ErrClosed)
 				close(release)
 				<-stream.Done()
-				assert.Equal(t, []string{"begin", "native", "closures", "release"}, order)
+				assert.Equal(t, []string{
+					"accepted-first", "accepted-second", "begin", "native",
+					"closures", "closed-first", "closed-second", "release",
+				}, order)
 				assert.Equal(t, eventstream.End{Cause: test.cause}, begin)
 				assert.Equal(t, begin, end)
 				assert.Equal(t, test.cause, stream.Err())

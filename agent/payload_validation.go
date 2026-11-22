@@ -92,6 +92,10 @@ func validatePayload(payload Payload) error {
 		if value.Message == "" {
 			return invalidArgument("empty_session_error", "session error message is required")
 		}
+	case UnsupportedNativeEventPayload:
+		if value.Provider == "" {
+			return invalidArgument("missing_event_provider", "unsupported native event provider is required")
+		}
 	case InfoUpdatePayload:
 		if value.Title == nil && value.UpdatedAt == nil {
 			return invalidArgument("empty_info_update", "info update requires a changed field")

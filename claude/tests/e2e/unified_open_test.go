@@ -109,9 +109,12 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 				break
 			}
 		}
-		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok {
-			require.Equal(t, "native_event_unsupported", payload.Reason)
+		if payload, ok := event.Payload.(agent.UnsupportedNativeEventPayload); ok {
+			require.Equal(t, "claude", payload.Provider)
 			t.Logf("unified mapping gap: type=%s subtype=%s", nativeType, nativeSubtype)
+		}
+		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok {
+			t.Fatalf("unexpected unified session error: %s (%s)", payload.Message, payload.Reason)
 		}
 	}
 	interrupt, err := session.Interrupt(ctx, agent.InterruptOptions{})

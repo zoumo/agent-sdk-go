@@ -113,6 +113,16 @@ func TestEventTypeIsDerivedFromEveryPayloadBranch(t *testing.T) {
 			want:    agent.EventSessionError,
 		},
 		{
+			name: "unsupported native event",
+			payload: agent.UnsupportedNativeEventPayload{
+				Provider:      "codex",
+				NativeMethod:  "item/completed",
+				NativeType:    "userMessage",
+				NativeSubtype: "image",
+			},
+			want: agent.EventSessionUnsupportedNativeEvent,
+		},
+		{
 			name:    "info update",
 			payload: agent.InfoUpdatePayload{Title: &title, UpdatedAt: &now},
 			want:    agent.EventSessionInfoUpdate,
@@ -304,6 +314,10 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 		{
 			name:  "empty session error",
 			event: validEvent("", agent.SessionErrorPayload{}),
+		},
+		{
+			name:  "unsupported native event missing provider",
+			event: validEvent("", agent.UnsupportedNativeEventPayload{NativeType: "future"}),
 		},
 		{
 			name:  "empty info update",
@@ -738,6 +752,12 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 		{
 			name:  "session error",
 			value: agent.SessionErrorPayload{Message: "failed", Reason: "native"},
+		},
+		{
+			name: "unsupported native event",
+			value: agent.UnsupportedNativeEventPayload{
+				Provider: "claude", NativeType: "system", NativeSubtype: "future_event",
+			},
 		},
 		{
 			name:  "info update",

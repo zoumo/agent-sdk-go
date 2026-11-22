@@ -89,10 +89,10 @@ func (s *session) convertEvent(received claude.Received) ([]agent.Event, error) 
 	case protocolControlEvent(event):
 		return nil, nil
 	default:
-		events, err = s.gap(
+		events, err = s.unsupportedNativeEvent(
 			received,
-			"native_event_unsupported",
-			"Claude native event cannot be represented as a unified event",
+			event.Type,
+			event.Subtype,
 			map[string]any{"eventType": event.Type, "eventSubtype": event.Subtype},
 		)
 	}
@@ -206,10 +206,10 @@ func (s *session) streamEvent(received claude.Received) ([]agent.Event, error) {
 	case "message_delta", "message_stop":
 		return nil, nil
 	default:
-		return s.gap(
+		return s.unsupportedNativeEvent(
 			received,
-			"stream_event_unsupported",
-			"Claude stream event type is not supported by this adapter",
+			frame.Type,
+			"",
 			map[string]any{"streamType": frame.Type},
 		)
 	}
@@ -258,10 +258,10 @@ func (s *session) streamDelta(
 	case "input_json_delta":
 		kind = "tool_use"
 	default:
-		return s.gap(
+		return s.unsupportedNativeEvent(
 			received,
-			"stream_delta_unsupported",
-			"Claude content delta type is not supported by this adapter",
+			frame.Type,
+			frame.Delta.Type,
 			map[string]any{"deltaType": frame.Delta.Type},
 		)
 	}
@@ -535,11 +535,12 @@ func (s *session) assistantEvent(received claude.Received) ([]agent.Event, error
 				state.completed = true
 			}
 		default:
-			gapEvents, gapErr := s.gap(
+			blockType := rawString(block, "type")
+			gapEvents, gapErr := s.unsupportedNativeEvent(
 				received,
-				"assistant_block_unsupported",
-				"Claude assistant content block is not supported by this adapter",
-				map[string]any{"blockType": rawString(block, "type")},
+				received.Event.Type,
+				blockType,
+				map[string]any{"blockType": blockType},
 			)
 			if gapErr != nil {
 				return nil, gapErr
@@ -760,13 +761,19 @@ func (s *session) userEvent(received claude.Received) ([]agent.Event, error) {
 			}
 			events = append(events, resultEvents...)
 		default:
-			if err := appendGap(
-				"user_message_content_unsupported",
-				"Claude user message content block is not supported by this adapter",
-				map[string]any{"blockType": block.Type, "blockIndex": index},
-			); err != nil {
+			if err := flushText(); err != nil {
 				return nil, err
 			}
+			gapEvents, gapErr := s.unsupportedNativeEvent(
+				received,
+				received.Event.Type,
+				block.Type,
+				map[string]any{"blockType": block.Type, "blockIndex": index},
+			)
+			if gapErr != nil {
+				return nil, gapErr
+			}
+			events = append(events, gapEvents...)
 		}
 	}
 	if err := flushText(); err != nil {
@@ -1266,6 +1273,29 @@ func (s *session) envelopeErrorEvent(
 		return nil, err
 	}
 	return []agent.Event{unified}, nil
+}
+
+func (s *session) unsupportedNativeEvent(
+	received claude.Received,
+	nativeType string,
+	nativeSubtype string,
+	extras map[string]any,
+) ([]agent.Event, error) {
+	event, err := s.newEvent(
+		received,
+		"",
+		agent.UnsupportedNativeEventPayload{
+			Provider:      "claude",
+			NativeType:    nativeType,
+			NativeSubtype: nativeSubtype,
+		},
+		nativeEventTime(received.Raw),
+		extras,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return []agent.Event{event}, nil
 }
 
 func (s *session) gap(

@@ -277,12 +277,15 @@ func (p *Core) NativeClient() (*codex.Client, error) {
 
 func providerCapabilities() agent.Capabilities {
 	return agent.Capabilities{
-		agent.CapabilityShellEnv:    true,
-		agent.CapabilityTextInput:   true,
-		agent.CapabilityPermission:  true,
-		agent.CapabilityPromptTrace: true,
-		agent.CapabilityForm:        true,
-		agent.CapabilityURL:         true,
+		agent.CapabilityShellEnv:          true,
+		agent.CapabilityTextInput:         true,
+		agent.CapabilityImageInput:        true,
+		agent.CapabilityAudioInput:        true,
+		agent.CapabilityResourceLinkInput: true,
+		agent.CapabilityPermission:        true,
+		agent.CapabilityPromptTrace:       true,
+		agent.CapabilityForm:              true,
+		agent.CapabilityURL:               true,
 	}
 }
 

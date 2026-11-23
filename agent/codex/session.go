@@ -126,7 +126,7 @@ func (s *session) StartOrSteer(
 ) (receipt agent.InputReceipt, err error) {
 	ctx, observation := s.provider.telemetry.BeginSubmission(ctx, s.provider.tracer != nil)
 	defer func() { observation.End(string(receipt.Result), err) }()
-	nativeInput, err := textInput(input)
+	nativeInput, err := encodeInput(input, true)
 	if err != nil {
 		return agent.InputReceipt{}, err
 	}
@@ -425,35 +425,6 @@ func (s *session) closeForOperations() []*pendingInteraction {
 	defer s.mu.Unlock()
 	s.closed = true
 	return s.clearInteractionsLocked()
-}
-
-func textInput(input agent.Input) (codex.Input, error) {
-	if err := input.Validate(); err != nil {
-		return codex.Input{}, err
-	}
-	parts := make([]codextypes.UserInput, 0, len(input.Content))
-	for _, block := range input.Content {
-		if block.Text == nil {
-			return codex.Input{}, adapterError(
-				agent.ErrorUnsupported,
-				agent.ErrorReasonContentBlockUnsupported,
-				"Codex input supports text blocks only",
-				nil,
-			)
-		}
-		if block.Text.Annotations != nil {
-			return codex.Input{}, adapterError(
-				agent.ErrorUnsupported,
-				agent.ErrorReasonTextAnnotationsUnsupported,
-				"Codex input does not support text annotations",
-				nil,
-			)
-		}
-		parts = append(parts, codextypes.UserInput{
-			Text: &codextypes.TextUserInput{Text: block.Text.Text},
-		})
-	}
-	return codex.Input{Input: parts}, nil
 }
 
 func sessionTerminationError(cause error) error {

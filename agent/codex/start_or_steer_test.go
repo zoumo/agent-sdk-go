@@ -38,6 +38,56 @@ func TestStartOrSteerStartsNewWorkWhenIdle(t *testing.T) {
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
 }
 
+func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`>{"id":93,"method":"turn/start","params":{"threadId":"root-a","input":[`+
+			`{"type":"text","text":"before"},`+
+			`{"type":"image","url":"data:image/png;base64,aGk="},`+
+			`{"type":"audio","url":"data:audio/wav;base64,aGk="},`+
+			`{"type":"image","url":"https://example.test/image.png"},`+
+			`{"type":"text","text":"after"}]}}`,
+		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"status":"unsubscribed"}}`,
+	)
+	session := openStartOrSteerSession(t, ctx, frames...)
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityImageInput))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityAudioInput))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceLinkInput))
+	assert.False(t, session.Capabilities().Supports(agent.CapabilityResourceInput))
+
+	imageMIME := "image/png"
+	sourceURI := "file:///attachment.png"
+	blocked := agent.Input{Content: []agent.ContentBlock{
+		{Text: &agent.ContentBlockText{Text: "must not be sent"}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: sourceURI, Name: "image", MIMEType: &imageMIME,
+		}},
+	}}
+	_, err := session.StartOrSteer(ctx, blocked)
+	require.Error(t, err)
+	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+
+	prompt := agent.Input{Content: []agent.ContentBlock{
+		{Text: &agent.ContentBlockText{Text: "before"}},
+		{Image: &agent.ContentBlockImage{Data: "aG\r\nk=", MIMEType: imageMIME, URI: &sourceURI}},
+		{Audio: &agent.ContentBlockAudio{Data: "aGk=", MIMEType: "audio/wav"}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "https://example.test/image.png", Name: "image", MIMEType: &imageMIME,
+		}},
+		{Text: &agent.ContentBlockText{Text: "after"}},
+	}}
+	receipt, err := session.StartOrSteer(ctx, prompt)
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedNewWork, receipt.Result)
+	assert.Equal(t, "turn-a", receipt.Submission)
+}
+
 func TestStartOrSteerJoinsActiveRegularTurn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

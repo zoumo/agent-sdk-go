@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"net/url"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -54,7 +55,7 @@ type embeddedResourceJSON struct {
 	Blob     *string `json:"blob,omitempty"`
 }
 
-type resourceBlockJSON struct {
+type embeddedResourceBlockJSON struct {
 	Type        string               `json:"type"`
 	Resource    embeddedResourceJSON `json:"resource"`
 	Annotations *annotationsJSON     `json:"annotations,omitempty"`
@@ -68,6 +69,7 @@ type resourceLinkBlockJSON struct {
 	Title       *string          `json:"title,omitempty"`
 	Description *string          `json:"description,omitempty"`
 	Size        *int64           `json:"size,omitempty"`
+	Icons       []ResourceIcon   `json:"icons,omitempty"`
 	Annotations *annotationsJSON `json:"annotations,omitempty"`
 }
 
@@ -102,7 +104,7 @@ func (b ContentBlock) Validate() error {
 	if b.ResourceLink != nil {
 		branches++
 	}
-	if b.Resource != nil {
+	if b.EmbeddedResource != nil {
 		branches++
 	}
 	switch branches {
@@ -125,8 +127,8 @@ func (b ContentBlock) Validate() error {
 		return b.Audio.Validate()
 	case b.ResourceLink != nil:
 		return b.ResourceLink.Validate()
-	case b.Resource != nil:
-		return b.Resource.Validate()
+	case b.EmbeddedResource != nil:
+		return b.EmbeddedResource.Validate()
 	default:
 		panic("validated content block has no branch")
 	}
@@ -189,14 +191,14 @@ func (r EmbeddedResource) Validate() error {
 }
 
 // Validate checks the embedded resource and annotations.
-func (b ContentBlockResource) Validate() error {
+func (b ContentBlockEmbeddedResource) Validate() error {
 	if err := b.Resource.Validate(); err != nil {
 		return err
 	}
 	return validateAnnotations(b.Annotations)
 }
 
-// Validate checks required link fields, nonnegative size, and annotations.
+// Validate checks required link fields, nonnegative size, icons, and annotations.
 func (b ContentBlockResourceLink) Validate() error {
 	if b.URI == "" || !utf8.ValidString(b.URI) {
 		return invalidArgument("missing_resource_uri", "resource link URI is required")
@@ -216,7 +218,31 @@ func (b ContentBlockResourceLink) Validate() error {
 	if b.Size != nil && *b.Size < 0 {
 		return invalidArgument("invalid_resource_size", "resource link size must not be negative")
 	}
+	for _, icon := range b.Icons {
+		if err := validateResourceIcon(icon); err != nil {
+			return err
+		}
+	}
 	return validateAnnotations(b.Annotations)
+}
+
+func validateResourceIcon(icon ResourceIcon) error {
+	src, err := url.Parse(icon.Src)
+	if err != nil || !src.IsAbs() || !utf8.ValidString(icon.Src) {
+		return invalidArgument("invalid_icon_src", "resource icon src must be an absolute URI")
+	}
+	if icon.MIMEType != nil && (*icon.MIMEType == "" || !utf8.ValidString(*icon.MIMEType)) {
+		return invalidArgument("invalid_mime_type", "resource icon MIME type must be nonempty UTF-8")
+	}
+	for _, size := range icon.Sizes {
+		if size == "" || !utf8.ValidString(size) {
+			return invalidArgument("invalid_icon_size", "resource icon size must be nonempty UTF-8")
+		}
+	}
+	if icon.Theme != nil && *icon.Theme != "light" && *icon.Theme != "dark" {
+		return invalidArgument("invalid_icon_theme", "resource icon theme must be light or dark")
+	}
+	return nil
 }
 
 func (b ContentBlock) MarshalJSON() ([]byte, error) {
@@ -232,8 +258,8 @@ func (b ContentBlock) MarshalJSON() ([]byte, error) {
 		return json.Marshal(b.Audio)
 	case b.ResourceLink != nil:
 		return json.Marshal(b.ResourceLink)
-	case b.Resource != nil:
-		return json.Marshal(b.Resource)
+	case b.EmbeddedResource != nil:
+		return json.Marshal(b.EmbeddedResource)
 	default:
 		panic("validated content block has no branch")
 	}
@@ -275,11 +301,11 @@ func (b ContentBlockAudio) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (b ContentBlockResource) MarshalJSON() ([]byte, error) {
+func (b ContentBlockEmbeddedResource) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	return json.Marshal(resourceBlockJSON{
+	return json.Marshal(embeddedResourceBlockJSON{
 		Type: contentTypeResource,
 		Resource: embeddedResourceJSON{
 			URI:      b.Resource.URI,
@@ -303,6 +329,7 @@ func (b ContentBlockResourceLink) MarshalJSON() ([]byte, error) {
 		Title:       b.Title,
 		Description: b.Description,
 		Size:        b.Size,
+		Icons:       b.Icons,
 		Annotations: annotationsToJSON(b.Annotations),
 	})
 }
@@ -389,11 +416,11 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 			Annotations: annotationsFromJSON(wire.Annotations),
 		}
 	case contentTypeResource:
-		var wire resourceBlockJSON
+		var wire embeddedResourceBlockJSON
 		if err := decodeStrictJSON(data, &wire); err != nil {
 			return err
 		}
-		decoded.Resource = &ContentBlockResource{
+		decoded.EmbeddedResource = &ContentBlockEmbeddedResource{
 			Resource: EmbeddedResource{
 				URI:      wire.Resource.URI,
 				MIMEType: wire.Resource.MIMEType,
@@ -414,6 +441,7 @@ func (b *ContentBlock) UnmarshalJSON(data []byte) error {
 			Title:       wire.Title,
 			Description: wire.Description,
 			Size:        wire.Size,
+			Icons:       wire.Icons,
 			Annotations: annotationsFromJSON(wire.Annotations),
 		}
 	default:

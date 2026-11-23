@@ -380,12 +380,15 @@ func (p *Core) sessionClosed(closed *session) {
 
 func providerCapabilities() agent.Capabilities {
 	return agent.Capabilities{
-		agent.CapabilityProcessEnv:  true,
-		agent.CapabilityTextInput:   true,
-		agent.CapabilityPromptTrace: true,
-		agent.CapabilityPermission:  true,
-		agent.CapabilityForm:        true,
-		agent.CapabilityURL:         true,
+		agent.CapabilityProcessEnv:        true,
+		agent.CapabilityTextInput:         true,
+		agent.CapabilityImageInput:        true,
+		agent.CapabilityResourceInput:     true,
+		agent.CapabilityResourceLinkInput: true,
+		agent.CapabilityPromptTrace:       true,
+		agent.CapabilityPermission:        true,
+		agent.CapabilityForm:              true,
+		agent.CapabilityURL:               true,
 	}
 }
 

@@ -14,11 +14,11 @@ type Input struct {
 //
 //nolint:recvcheck // JSON decoding mutates blocks; reads and encoding accept values.
 type ContentBlock struct {
-	Text         *ContentBlockText         `json:"-"`
-	Image        *ContentBlockImage        `json:"-"`
-	Audio        *ContentBlockAudio        `json:"-"`
-	ResourceLink *ContentBlockResourceLink `json:"-"`
-	Resource     *ContentBlockResource     `json:"-"`
+	Text             *ContentBlockText             `json:"-"`
+	Image            *ContentBlockImage            `json:"-"`
+	Audio            *ContentBlockAudio            `json:"-"`
+	EmbeddedResource *ContentBlockEmbeddedResource `json:"-"`
+	ResourceLink     *ContentBlockResourceLink     `json:"-"`
 }
 
 type ContentBlockText struct {
@@ -46,7 +46,8 @@ type EmbeddedResource struct {
 	Blob     *string
 }
 
-type ContentBlockResource struct {
+// ContentBlockEmbeddedResource carries the resource body in the block.
+type ContentBlockEmbeddedResource struct {
 	Resource    EmbeddedResource
 	Annotations *Annotations
 }
@@ -58,7 +59,16 @@ type ContentBlockResourceLink struct {
 	Title       *string
 	Description *string
 	Size        *int64
+	Icons       []ResourceIcon
 	Annotations *Annotations
+}
+
+// ResourceIcon describes an optional display icon for a resource link.
+type ResourceIcon struct {
+	Src      string   `json:"src"`
+	MIMEType *string  `json:"mimeType,omitempty"`
+	Sizes    []string `json:"sizes,omitempty"`
+	Theme    *string  `json:"theme,omitempty"`
 }
 
 type Annotations struct {

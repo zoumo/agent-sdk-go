@@ -613,7 +613,7 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
   false 时 context carrier 不返回 `unsupported`，只是不进入 provider request。
   它也不保证每次调用产生新的 provider span，或隔离 provider turn、进程环境
   和后续工具；这些 provider 差异以 [Prompt trace](#prompt-trace) 为准。
-- Codex 与 Claude 都支持文本输入、权限、表单、URL 和 `promptTrace`。`AgentQuestions`
+- Codex 与 Claude 都支持权限、表单、URL 和 `promptTrace`。`AgentQuestions`
   只控制原生模型提问工具。独立 MCP 表单与 URL 请求有各自的交互入口。
   [Codex 包合同](../../../agent/codex/doc.go) · [Claude 包合同](../../../agent/claude/doc.go)
 - Codex 支持 `shellEnv`，Claude 支持 `processEnv`。调用方依据当前 Session 的能力判断
@@ -730,9 +730,27 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 判别字段和对应分支字段。数组顺序
 是内容顺序；`image`、`audio` 的 `Data` 和资源的 `Blob` 是不带 data URI 前缀的
 Base64 原文。`resource` 必须且只能在 `Text`、`Blob` 中提供一种正文。
+Go 的 `ContentBlock.EmbeddedResource` 分支对应 JSON 的 `type: "resource"`，
+正文仍位于 `resource` 字段。
 
-`Input.Content` 不能为空。调用时会复制并校验内容；已知不支持的类型在原生写入
-前拒绝。两个 adapter 的统一输入当前支持文本。
+`Input.Content` 不能为空。`StartOrSteer` 在写入前校验所有块，并按原顺序编码。
+任一块缺少原生映射时，整个输入返回 `unsupported`。两端均拒绝带 annotations 的块。
+
+| 内容块 | Codex | Claude |
+|---|---|---|
+| `text` | 原生文本块 | 单块使用原生文本字符串。多块使用原生内容数组。 |
+| `image` | `image/*` 的 Base64 data URI | JPEG、PNG、GIF、WebP 的原生 Base64 图片 |
+| `audio` | `audio/*` 的 Base64 data URI | `unsupported` |
+| `resource` | `unsupported` | `Text` 可映射为纯文本文档，MIME 类型可省略或填 `text/plain`。`application/pdf` 的 `Blob` 映射为 Base64 PDF 文档。 |
+| `resource_link` | 带图片 MIME 类型的 HTTP(S) 链接映射为原生图片 URL。 | 带受支持图片 MIME 类型或 `application/pdf` 的 HTTP(S) 链接映射为原生 URL。 |
+
+`image` 和 `resource` 使用块内数据。其 `uri` 用于标识来源。
+`resource_link` 的读取由原生端决定。SDK 提交引用时不打开文件或请求 URL。
+`resource_link.icons` 提供客户端展示用的图标，随内容块保留。每个图标须包含
+`src` URI，可选 `mimeType`、`sizes` 和 `theme`（`light` 或 `dark`）。
+Claude 的 PDF 链接用 `title` 作为原生文档标题，缺省时使用 `name`，并将
+`description` 映射为文档 `context`。其他链接元数据留在调用方。
+能力位表示 adapter 能按上表编码该类内容。原生端及其模型决定是否接受和读取内容。
 
 Claude 观察到同时含文本和 `tool_result` 的原生 user frame 时，整帧报告
 `user_message_mixed_content_unsupported`。纯文本数组作为一个 `UserMessage.Content`

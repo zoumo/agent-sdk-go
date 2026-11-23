@@ -83,9 +83,11 @@ func TestInjectRejectsLocalInvalidCanceledAndClosedClaudeInput(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 	assert.Equal(t, agent.Acceptance{Sent: new(false)}, receipt.Acceptance)
-	multiple := claudeTextInput("first")
-	multiple.Content = append(multiple.Content, agent.ContentBlock{Text: &agent.ContentBlockText{Text: "second"}})
-	receipt, err = injector.Inject(ctx, multiple)
+	unsupported := claudeTextInput("first")
+	unsupported.Content = append(unsupported.Content, agent.ContentBlock{
+		Audio: &agent.ContentBlockAudio{Data: "aGk=", MIMEType: "audio/wav"},
+	})
+	receipt, err = injector.Inject(ctx, unsupported)
 	require.Error(t, err)
 	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
 	assert.Equal(t, agent.Acceptance{Sent: new(false)}, receipt.Acceptance)

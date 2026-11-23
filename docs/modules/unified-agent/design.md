@@ -699,9 +699,8 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 - `Injector` 是 Session 的可选接口。它把用户上下文追加到本 Session，不请求
   新的模型响应；不调用启动、steer 或 interrupt，不建立平台输入队列，不等待
   idle，也不自动重试。不支持时返回 `unsupported`，不得降级成普通 prompt。
-- 输入在原生写入前完成校验和复制。初版沿用各 adapter 的文本限制：Codex
-  接受有序文本块，Claude 接受单个文本块；均拒绝 annotations 及非文本内容。
-  注入内容是 user context，不提升为 system 或 developer 指令。
+- `Inject` 与 `StartOrSteer` 使用相同的输入校验和 provider 内容块规则。
+  Adapter 在原生写入前转换内容，保留块顺序。注入内容使用 `user` 角色。
 - `Inject` 与 `StartOrSteer` 共用本地写入准入；已有输入正在写入，或前次
   `StartOrSteer` 结果未知时，`Inject` 返回 `failed_precondition` 和
   `Sent=false`，不写入。`Inject` 在途时的 `StartOrSteer` 仍返回
@@ -715,7 +714,7 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 
 | Provider | 原生操作与版本边界 | 成功回执与消费边界 |
 |---|---|---|
-| Codex | `thread/inject_items`，将文本编码为 Responses API 的 user message / `input_text`。固定 0.162.1 schema 已声明该方法；0.166.0 来源说明追加历史且不启动 user turn。以实际 RPC 为准，method-not-found 映射为 `unsupported`，不猜测 server user-agent 版本。 | `Sent=true`、`NativeAccepted=true`；不填 `NativeRecorded`。idle 时留待后续模型请求；running 时由原生 pending input 机制决定消费时机，不保证某个 tool call 或模型步骤之前可见。 |
+| Codex | `thread/inject_items` 接收 Responses API 的 `user` message。消息使用 `input_text`、`input_image` 和 `input_audio`。固定 0.162.1 schema 已声明该方法。0.166.0 源码定义向历史追加内容且不启动 turn。method-not-found 映射为 `unsupported`。 | `Sent=true`、`NativeAccepted=true`；不填 `NativeRecorded`。idle 时留待后续模型请求；running 时由原生 pending input 机制决定消费时机，不保证某个 tool call 或模型步骤之前可见。 |
 | Claude | user envelope 的 `shouldQuery=false`，不附加 query priority。依据官方 TypeScript 的该字段合同，要求原生 live init 确认符合 SDK 最低 CLI 版本要求；缺少版本、旧版本和预发布版均返回 `unsupported`，不另设功能级版本白名单。仅以 callback 确认身份且尚无 live init 的恢复 Session 也不启用。 | 成功只填 `Sent=true`；官方类型描述为 transcript append，并入后续会 query 的 user message。写入成功不证明 CLI 接受、记录或消费，也不保证运行中当前 turn 消费。 |
 
 原生来源、具体测试命令与录制证据分别维护在对应 SDK 的来源说明和测试入口；

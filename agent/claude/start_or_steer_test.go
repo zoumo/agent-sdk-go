@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
 )
 
 func TestStartOrSteerWritesBestEffortWhenIdle(t *testing.T) {
@@ -46,28 +47,36 @@ func TestStartOrSteerWritesBestEffortWhenIdle(t *testing.T) {
 	require.Equal(t, agent.StateIdle, nextStateValue(t, ctx, stream))
 }
 
-func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
+func TestInjectAndStartOrSteerSendStructuredInputInOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cwd := t.TempDir()
+	content := `[{"type":"text","text":"before"},` +
+		`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},` +
+		`{"type":"text","text":"file:///notes"},` +
+		`{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGk="}},` +
+		`{"type":"document","source":{"type":"text","media_type":"text/plain","data":"document body"}},` +
+		`{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"aGk="}},` +
+		`{"type":"image","source":{"type":"url","url":"https://example.test/image.png"}},` +
+		`{"type":"document","source":{"type":"url","url":"https://example.test/document.pdf"},"title":"Report","context":"Quarterly figures"},` +
+		`{"type":"text","text":"http://example.test/docs"},` +
+		`{"type":"text","text":"after"}]`
 	frames := []string{
 		claudeSessionInitFrame(t, "native-structured", cwd),
-		`>{"message":{"role":"user","content":[` +
-			`{"type":"text","text":"before"},` +
-			`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},` +
-			`{"type":"text","text":"file:///notes"},` +
-			`{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGk="}},` +
-			`{"type":"document","source":{"type":"text","media_type":"text/plain","data":"document body"}},` +
-			`{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"aGk="}},` +
-			`{"type":"image","source":{"type":"url","url":"https://example.test/image.png"}},` +
-			`{"type":"document","source":{"type":"url","url":"https://example.test/document.pdf"},"title":"Report","context":"Quarterly figures"},` +
-			`{"type":"text","text":"http://example.test/docs"},` +
-			`{"type":"text","text":"after"}]},"parent_tool_use_id":null,"priority":"next","session_id":"","shouldQuery":true,"type":"user","uuid":` +
+		`>{"message":{"role":"user","content":` + content +
+			`},"parent_tool_use_id":null,"session_id":"","shouldQuery":false,"type":"user"}`,
+		`<{"type":"result","subtype":"success","session_id":"native-structured","num_turns":0,"is_error":false,"result":""}`,
+		`>{"message":{"role":"user","content":` + content +
+			`},"parent_tool_use_id":null,"priority":"next","session_id":"","shouldQuery":true,"type":"user","uuid":` +
 			jsonString(t, claudeFixtureSubmissionID(1)) + `}`,
 		claudeStateFrame("native-structured", "running", "2026-11-09T10:00:00Z"),
 		claudeStateFrame("native-structured", "idle", "2026-11-09T10:00:01Z"),
 	}
 	session, stream := openClaudeInteractionSession(t, ctx, cwd, "passed", agent.Features{}, frames...)
+	require.Eventually(t, func() bool {
+		return agentclaude.InjectSupportedForTest(session)
+	}, 3*time.Second, time.Millisecond)
+	injector := session.(agent.Injector)
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityImageInput))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceInput))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceLinkInput))
@@ -86,6 +95,10 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		_, err := session.StartOrSteer(ctx, blocked)
 		require.Error(t, err, "URI %s", link.URI)
 		assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+		rejected, err := injector.Inject(ctx, blocked)
+		require.Error(t, err, "URI %s", link.URI)
+		assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+		assert.Equal(t, agent.Acceptance{Sent: new(false)}, rejected.Acceptance)
 	}
 
 	body, pdf, description := "document body", "aGk=", "Quarterly figures"
@@ -109,6 +122,12 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		}},
 		{Text: &agent.ContentBlockText{Text: "after"}},
 	}}
+	injected, err := injector.Inject(ctx, prompt)
+	require.NoError(t, err)
+	assert.Equal(t, agent.Acceptance{Sent: new(true)}, injected.Acceptance)
+	interrupted, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptNoActiveWork, interrupted.Result)
 	receipt, err := session.StartOrSteer(ctx, prompt)
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedBestEffort, receipt.Result)

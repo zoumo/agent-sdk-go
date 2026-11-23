@@ -2,6 +2,7 @@ package agentclaude
 
 import (
 	"encoding/json"
+	"mime"
 	"net/url"
 	"strings"
 
@@ -58,22 +59,26 @@ func encodePromptBlock(block agent.ContentBlock) (claudetypes.ContentBlock, erro
 }
 
 func resourceLinkBlock(link *agent.ContentBlockResourceLink) (claudetypes.ContentBlock, error) {
-	if link.Annotations != nil {
+	uri, err := url.Parse(link.URI)
+	if link.Annotations != nil || err != nil || uri.Hostname() == "" || (uri.Scheme != "https" && uri.Scheme != "http") {
 		return claudetypes.ContentBlock{}, unsupportedPromptBlock()
 	}
-	uri, err := url.Parse(link.URI)
-	if err == nil && uri.Hostname() != "" && (uri.Scheme == "https" || uri.Scheme == "http") && link.MIMEType != nil {
-		source := mediaSource{Type: "url", URL: link.URI}
-		if imageMediaType(*link.MIMEType) {
-			return mediaBlock("image", source, nil, nil)
+	if link.MIMEType == nil {
+		return claudetypes.ContentBlock{Type: "text", Text: &claudetypes.TextBlock{Text: link.URI}}, nil
+	}
+	source := mediaSource{Type: "url", URL: link.URI}
+	switch {
+	case imageMediaType(*link.MIMEType):
+		return mediaBlock("image", source, nil, nil)
+	case *link.MIMEType == "application/pdf":
+		title := link.Title
+		if title == nil {
+			title = &link.Name
 		}
-		if *link.MIMEType == "application/pdf" {
-			title := link.Title
-			if title == nil {
-				title = &link.Name
-			}
-			return mediaBlock("document", source, title, link.Description)
-		}
+		return mediaBlock("document", source, title, link.Description)
+	}
+	if media, _, err := mime.ParseMediaType(*link.MIMEType); err == nil && media == "text/html" {
+		return claudetypes.ContentBlock{Type: "text", Text: &claudetypes.TextBlock{Text: link.URI}}, nil
 	}
 	return claudetypes.ContentBlock{}, unsupportedPromptBlock()
 }

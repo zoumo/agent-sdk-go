@@ -745,7 +745,9 @@ Go 的 `ContentBlock.EmbeddedResource` 分支对应 JSON 的 `type: "resource"`�
 | `resource_link` | 带图片 MIME 类型的 HTTP(S) 链接映射为原生图片 URL。 | 带受支持图片 MIME 类型或 `application/pdf` 的 HTTP(S) 链接映射为原生 URL。 |
 
 `image` 和 `resource` 使用块内数据。其 `uri` 用于标识来源。
-`resource_link` 的读取由原生端决定。SDK 提交引用时不打开文件或请求 URL。
+对带主机名的 HTTP(S) 链接，`mimeType` 省略或为 `text/html`（可带参数）时，
+两个适配器都在原位置将原始 `uri` 编码为文本块。原生端决定是否读取附件引用。
+SDK 编码输入时不访问 URL，也不根据扩展名推断类型。
 `resource_link.icons` 提供客户端展示用的图标，随内容块保留。每个图标须包含
 `src` URI，可选 `mimeType`、`sizes` 和 `theme`（`light` 或 `dark`）。
 Claude 的 PDF 链接用 `title` 作为原生文档标题，缺省时使用 `name`，并将

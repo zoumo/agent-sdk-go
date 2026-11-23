@@ -47,9 +47,11 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
 		`>{"id":93,"method":"turn/start","params":{"threadId":"root-a","input":[`+
 			`{"type":"text","text":"before"},`+
+			`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},`+
 			`{"type":"image","url":"data:image/png;base64,aGk="},`+
 			`{"type":"audio","url":"data:audio/wav;base64,aGk="},`+
 			`{"type":"image","url":"https://example.test/image.png"},`+
+			`{"type":"text","text":"http://example.test/docs"},`+
 			`{"type":"text","text":"after"}]}}`,
 		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
 		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
@@ -61,24 +63,34 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceLinkInput))
 	assert.False(t, session.Capabilities().Supports(agent.CapabilityResourceInput))
 
-	imageMIME := "image/png"
+	imageMIME, pdfMIME, htmlMIME := "image/png", "application/pdf", "text/html; charset=utf-8"
 	sourceURI := "file:///attachment.png"
-	blocked := agent.Input{Content: []agent.ContentBlock{
-		{Text: &agent.ContentBlockText{Text: "must not be sent"}},
-		{ResourceLink: &agent.ContentBlockResourceLink{
-			URI: sourceURI, Name: "image", MIMEType: &imageMIME,
-		}},
-	}}
-	_, err := session.StartOrSteer(ctx, blocked)
-	require.Error(t, err)
-	assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+	for _, link := range []*agent.ContentBlockResourceLink{
+		{URI: sourceURI, Name: "local image", MIMEType: &imageMIME},
+		{URI: "file:///notes", Name: "local file"},
+		{URI: "https://example.test/report.pdf", Name: "report", MIMEType: &pdfMIME},
+	} {
+		blocked := agent.Input{Content: []agent.ContentBlock{
+			{Text: &agent.ContentBlockText{Text: "must not be sent"}},
+			{ResourceLink: link},
+		}}
+		_, err := session.StartOrSteer(ctx, blocked)
+		require.Error(t, err, "URI %s", link.URI)
+		assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+	}
 
 	prompt := agent.Input{Content: []agent.ContentBlock{
 		{Text: &agent.ContentBlockText{Text: "before"}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "https://example.test/guides%2Fsetup?q=one#start", Name: "setup",
+		}},
 		{Image: &agent.ContentBlockImage{Data: "aG\r\nk=", MIMEType: imageMIME, URI: &sourceURI}},
 		{Audio: &agent.ContentBlockAudio{Data: "aGk=", MIMEType: "audio/wav"}},
 		{ResourceLink: &agent.ContentBlockResourceLink{
 			URI: "https://example.test/image.png", Name: "image", MIMEType: &imageMIME,
+		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "http://example.test/docs", Name: "docs", MIMEType: &htmlMIME,
 		}},
 		{Text: &agent.ContentBlockText{Text: "after"}},
 	}}

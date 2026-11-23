@@ -47,12 +47,19 @@ func encodeInputBlock(block agent.ContentBlock, allowMedia bool) (codextypes.Use
 		}
 	case allowMedia && block.ResourceLink != nil:
 		link := block.ResourceLink
-		if link.Annotations == nil && link.MIMEType != nil && mediaType("image/", *link.MIMEType) != "" {
-			uri, err := url.Parse(link.URI)
-			if err == nil && uri.Hostname() != "" && (uri.Scheme == "https" || uri.Scheme == "http") {
+		uri, err := url.Parse(link.URI)
+		if link.Annotations != nil || err != nil || uri.Hostname() == "" || (uri.Scheme != "https" && uri.Scheme != "http") {
+			break
+		}
+		if link.MIMEType != nil {
+			if mediaType("image/", *link.MIMEType) != "" {
 				return imageInput(link.URI), nil
 			}
+			if media, _, err := mime.ParseMediaType(*link.MIMEType); err != nil || media != "text/html" {
+				break
+			}
 		}
+		return codextypes.UserInput{Text: &codextypes.TextUserInput{Text: link.URI}}, nil
 	}
 	return codextypes.UserInput{}, adapterError(
 		agent.ErrorUnsupported, agent.ErrorReasonContentBlockUnsupported,

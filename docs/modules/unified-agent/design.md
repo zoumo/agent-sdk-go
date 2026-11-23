@@ -725,7 +725,7 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 
 [输入与内容块源码](../../../agent/input.go) · [内容块 JSON 编码](../../../agent/content.go)
 
-内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。
+内容块采用源自 MCP `ContentBlock` 的五种类型，与 MASS 共享类型集合。
 `ContentBlock` 的五个指针分支必须且只能有一个非 nil；JSON 继续使用原有 `type`
 判别字段和对应分支字段。数组顺序
 是内容顺序；`image`、`audio` 的 `Data` 和资源的 `Blob` 是不带 data URI 前缀的
@@ -736,23 +736,8 @@ Go 的 `ContentBlock.EmbeddedResource` 分支对应 JSON 的 `type: "resource"`�
 `Input.Content` 不能为空。`StartOrSteer` 在写入前校验所有块，并按原顺序编码。
 任一块缺少原生映射时，整个输入返回 `unsupported`。两端均拒绝带 annotations 的块。
 
-| 内容块 | Codex | Claude |
-|---|---|---|
-| `text` | 原生文本块 | 单块使用原生文本字符串。多块使用原生内容数组。 |
-| `image` | `image/*` 的 Base64 data URI | JPEG、PNG、GIF、WebP 的原生 Base64 图片 |
-| `audio` | `audio/*` 的 Base64 data URI | `unsupported` |
-| `resource` | `unsupported` | `Text` 可映射为纯文本文档，MIME 类型可省略或填 `text/plain`。`application/pdf` 的 `Blob` 映射为 Base64 PDF 文档。 |
-| `resource_link` | 带图片 MIME 类型的 HTTP(S) 链接映射为原生图片 URL。 | 带受支持图片 MIME 类型或 `application/pdf` 的 HTTP(S) 链接映射为原生 URL。 |
-
-`image` 和 `resource` 使用块内数据。其 `uri` 用于标识来源。
-对带主机名的 HTTP(S) 链接，`mimeType` 省略或为 `text/html`（可带参数）时，
-两个适配器都在原位置将原始 `uri` 编码为文本块。原生端决定是否读取附件引用。
-SDK 编码输入时不访问 URL，也不根据扩展名推断类型。
-`resource_link.icons` 提供客户端展示用的图标，随内容块保留。每个图标须包含
-`src` URI，可选 `mimeType`、`sizes` 和 `theme`（`light` 或 `dark`）。
-Claude 的 PDF 链接用 `title` 作为原生文档标题，缺省时使用 `name`，并将
-`description` 映射为文档 `context`。其他链接元数据留在调用方。
-能力位表示 adapter 能按上表编码该类内容。原生端及其模型决定是否接受和读取内容。
+各类型的原生输入映射和链接默认行为见 [ADR 0006](../../adr/0006-structured-prompt-content.md)。
+能力位表示适配器可以编码该类内容。原生端及其模型决定是否接受和读取内容。
 
 Claude 观察到同时含文本和 `tool_result` 的原生 user frame 时，整帧报告
 `user_message_mixed_content_unsupported`。纯文本数组作为一个 `UserMessage.Content`

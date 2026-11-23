@@ -55,6 +55,7 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		`>{"message":{"role":"user","content":[` +
 			`{"type":"text","text":"before"},` +
 			`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},` +
+			`{"type":"text","text":"file:///notes"},` +
 			`{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGk="}},` +
 			`{"type":"document","source":{"type":"text","media_type":"text/plain","data":"document body"}},` +
 			`{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"aGk="}},` +
@@ -76,7 +77,6 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 	htmlMIME, zipMIME := "text/html; charset=utf-8", "application/zip"
 	for _, link := range []*agent.ContentBlockResourceLink{
 		{URI: "file:///report.pdf", Name: "local report", MIMEType: &pdfMIME},
-		{URI: "file:///notes", Name: "local file"},
 		{URI: "https://example.test/archive.zip", Name: "archive", MIMEType: &zipMIME},
 	} {
 		blocked := agent.Input{Content: []agent.ContentBlock{
@@ -94,6 +94,7 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		{ResourceLink: &agent.ContentBlockResourceLink{
 			URI: "https://example.test/guides%2Fsetup?q=one#start", Name: "setup",
 		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{URI: "file:///notes", Name: "notes"}},
 		{Image: &agent.ContentBlockImage{Data: "aG\r\nk=", MIMEType: imageMIME}},
 		{EmbeddedResource: &agent.ContentBlockEmbeddedResource{Resource: agent.EmbeddedResource{URI: "file:///note.txt", Text: &body}}},
 		{EmbeddedResource: &agent.ContentBlockEmbeddedResource{Resource: agent.EmbeddedResource{URI: "file:///report.pdf", MIMEType: &pdfMIME, Blob: &pdf}}},

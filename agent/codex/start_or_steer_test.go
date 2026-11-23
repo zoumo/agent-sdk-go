@@ -48,6 +48,7 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		`>{"id":93,"method":"turn/start","params":{"threadId":"root-a","input":[`+
 			`{"type":"text","text":"before"},`+
 			`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},`+
+			`{"type":"text","text":"file:///notes"},`+
 			`{"type":"image","url":"data:image/png;base64,aGk="},`+
 			`{"type":"audio","url":"data:audio/wav;base64,aGk="},`+
 			`{"type":"image","url":"https://example.test/image.png"},`+
@@ -67,7 +68,6 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 	sourceURI := "file:///attachment.png"
 	for _, link := range []*agent.ContentBlockResourceLink{
 		{URI: sourceURI, Name: "local image", MIMEType: &imageMIME},
-		{URI: "file:///notes", Name: "local file"},
 		{URI: "https://example.test/report.pdf", Name: "report", MIMEType: &pdfMIME},
 	} {
 		blocked := agent.Input{Content: []agent.ContentBlock{
@@ -84,6 +84,7 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		{ResourceLink: &agent.ContentBlockResourceLink{
 			URI: "https://example.test/guides%2Fsetup?q=one#start", Name: "setup",
 		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{URI: "file:///notes", Name: "notes"}},
 		{Image: &agent.ContentBlockImage{Data: "aG\r\nk=", MIMEType: imageMIME, URI: &sourceURI}},
 		{Audio: &agent.ContentBlockAudio{Data: "aGk=", MIMEType: "audio/wav"}},
 		{ResourceLink: &agent.ContentBlockResourceLink{

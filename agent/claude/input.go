@@ -59,12 +59,15 @@ func encodePromptBlock(block agent.ContentBlock) (claudetypes.ContentBlock, erro
 }
 
 func resourceLinkBlock(link *agent.ContentBlockResourceLink) (claudetypes.ContentBlock, error) {
-	uri, err := url.Parse(link.URI)
-	if link.Annotations != nil || err != nil || uri.Hostname() == "" || (uri.Scheme != "https" && uri.Scheme != "http") {
+	if link.Annotations != nil {
 		return claudetypes.ContentBlock{}, unsupportedPromptBlock()
 	}
 	if link.MIMEType == nil {
 		return claudetypes.ContentBlock{Type: "text", Text: &claudetypes.TextBlock{Text: link.URI}}, nil
+	}
+	uri, err := url.Parse(link.URI)
+	if err != nil || uri.Hostname() == "" || (uri.Scheme != "https" && uri.Scheme != "http") {
+		return claudetypes.ContentBlock{}, unsupportedPromptBlock()
 	}
 	source := mediaSource{Type: "url", URL: link.URI}
 	switch {

@@ -28,7 +28,8 @@
 // support accepted answers; decline and cancel are rejected because their native
 // settlement is not proven. Interaction references are opaque, session-scoped,
 // one-shot, and remain pending until a native lifecycle fact closes them.
-// StartOrSteer calls native turn/start only: the response turn identity decides
+// StartOrSteer accepts ordered text, image, audio, and supported image links.
+// It calls native turn/start. The response turn identity decides
 // current versus new work, a recognized native refusal returns not_applied, and
 // an unknown outcome remains unsettled until native turn evidence arrives.
 //

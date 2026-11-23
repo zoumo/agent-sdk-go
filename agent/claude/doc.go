@@ -37,7 +37,9 @@
 // result-copy rule and status projection are defined in
 // docs/modules/unified-agent/design.md. Tool chunks remain {id, content}.
 //
-// Input is one plain text block without annotations. StartOrSteer writes with
+// StartOrSteer accepts ordered text, image, and supported document blocks.
+// See docs/modules/unified-agent/design.md for the resource and link mappings.
+// StartOrSteer writes with
 // priority="next" and shouldQuery=true and reports only best-effort local write
 // success. Internally it retains the submission as a possible interaction and
 // interrupt target until native idle; that candidate does not claim the input

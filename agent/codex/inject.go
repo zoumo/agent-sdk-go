@@ -14,7 +14,7 @@ func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.
 	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Inject)
 	defer func() { observation.EndAcceptance(receipt.Acceptance, err) }()
 	receipt = agent.InjectReceipt{Acceptance: configNotSent()}
-	nativeInput, err := textInput(input)
+	nativeInput, err := encodeInput(input, false)
 	if err != nil {
 		return receipt, err
 	}

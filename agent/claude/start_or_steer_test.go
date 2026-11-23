@@ -46,6 +46,77 @@ func TestStartOrSteerWritesBestEffortWhenIdle(t *testing.T) {
 	require.Equal(t, agent.StateIdle, nextStateValue(t, ctx, stream))
 }
 
+func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cwd := t.TempDir()
+	frames := []string{
+		claudeSessionInitFrame(t, "native-structured", cwd),
+		`>{"message":{"role":"user","content":[` +
+			`{"type":"text","text":"before"},` +
+			`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},` +
+			`{"type":"text","text":"file:///notes"},` +
+			`{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGk="}},` +
+			`{"type":"document","source":{"type":"text","media_type":"text/plain","data":"document body"}},` +
+			`{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"aGk="}},` +
+			`{"type":"image","source":{"type":"url","url":"https://example.test/image.png"}},` +
+			`{"type":"document","source":{"type":"url","url":"https://example.test/document.pdf"},"title":"Report","context":"Quarterly figures"},` +
+			`{"type":"text","text":"http://example.test/docs"},` +
+			`{"type":"text","text":"after"}]},"parent_tool_use_id":null,"priority":"next","session_id":"","shouldQuery":true,"type":"user","uuid":` +
+			jsonString(t, claudeFixtureSubmissionID(1)) + `}`,
+		claudeStateFrame("native-structured", "running", "2026-11-09T10:00:00Z"),
+		claudeStateFrame("native-structured", "idle", "2026-11-09T10:00:01Z"),
+	}
+	session, stream := openClaudeInteractionSession(t, ctx, cwd, "passed", agent.Features{}, frames...)
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityImageInput))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceInput))
+	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceLinkInput))
+	assert.False(t, session.Capabilities().Supports(agent.CapabilityAudioInput))
+
+	imageMIME, pdfMIME := "image/png", "application/pdf"
+	htmlMIME, zipMIME := "text/html; charset=utf-8", "application/zip"
+	for _, link := range []*agent.ContentBlockResourceLink{
+		{URI: "file:///report.pdf", Name: "local report", MIMEType: &pdfMIME},
+		{URI: "https://example.test/archive.zip", Name: "archive", MIMEType: &zipMIME},
+	} {
+		blocked := agent.Input{Content: []agent.ContentBlock{
+			{Text: &agent.ContentBlockText{Text: "must not be sent"}},
+			{ResourceLink: link},
+		}}
+		_, err := session.StartOrSteer(ctx, blocked)
+		require.Error(t, err, "URI %s", link.URI)
+		assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+	}
+
+	body, pdf, description := "document body", "aGk=", "Quarterly figures"
+	prompt := agent.Input{Content: []agent.ContentBlock{
+		{Text: &agent.ContentBlockText{Text: "before"}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "https://example.test/guides%2Fsetup?q=one#start", Name: "setup",
+		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{URI: "file:///notes", Name: "notes"}},
+		{Image: &agent.ContentBlockImage{Data: "aG\r\nk=", MIMEType: imageMIME}},
+		{EmbeddedResource: &agent.ContentBlockEmbeddedResource{Resource: agent.EmbeddedResource{URI: "file:///note.txt", Text: &body}}},
+		{EmbeddedResource: &agent.ContentBlockEmbeddedResource{Resource: agent.EmbeddedResource{URI: "file:///report.pdf", MIMEType: &pdfMIME, Blob: &pdf}}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "https://example.test/image.png", Name: "Image", MIMEType: &imageMIME,
+		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "https://example.test/document.pdf", Name: "Report", MIMEType: &pdfMIME, Description: &description,
+		}},
+		{ResourceLink: &agent.ContentBlockResourceLink{
+			URI: "http://example.test/docs", Name: "docs", MIMEType: &htmlMIME,
+		}},
+		{Text: &agent.ContentBlockText{Text: "after"}},
+	}}
+	receipt, err := session.StartOrSteer(ctx, prompt)
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedBestEffort, receipt.Result)
+	assert.Equal(t, claudeFixtureSubmissionID(1), receipt.Submission)
+	require.Equal(t, agent.StateRunning, nextStateValue(t, ctx, stream))
+	require.Equal(t, agent.StateIdle, nextStateValue(t, ctx, stream))
+}
+
 func TestStartOrSteerWritesBestEffortWhileBusy(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

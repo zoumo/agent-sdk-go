@@ -613,7 +613,7 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
   false 时 context carrier 不返回 `unsupported`，只是不进入 provider request。
   它也不保证每次调用产生新的 provider span，或隔离 provider turn、进程环境
   和后续工具；这些 provider 差异以 [Prompt trace](#prompt-trace) 为准。
-- Codex 与 Claude 都支持文本输入、权限、表单、URL 和 `promptTrace`。`AgentQuestions`
+- Codex 与 Claude 都支持权限、表单、URL 和 `promptTrace`。`AgentQuestions`
   只控制原生模型提问工具。独立 MCP 表单与 URL 请求有各自的交互入口。
   [Codex 包合同](../../../agent/codex/doc.go) · [Claude 包合同](../../../agent/claude/doc.go)
 - Codex 支持 `shellEnv`，Claude 支持 `processEnv`。调用方依据当前 Session 的能力判断
@@ -725,14 +725,19 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 
 [输入与内容块源码](../../../agent/input.go) · [内容块 JSON 编码](../../../agent/content.go)
 
-内容块采用与 MASS 共享合同相同的 ACP 五种类型，不增加任意 JSON 块。
+内容块采用源自 MCP `ContentBlock` 的五种类型，与 MASS 共享类型集合。
 `ContentBlock` 的五个指针分支必须且只能有一个非 nil；JSON 继续使用原有 `type`
 判别字段和对应分支字段。数组顺序
 是内容顺序；`image`、`audio` 的 `Data` 和资源的 `Blob` 是不带 data URI 前缀的
 Base64 原文。`resource` 必须且只能在 `Text`、`Blob` 中提供一种正文。
+Go 的 `ContentBlock.EmbeddedResource` 分支对应 JSON 的 `type: "resource"`，
+正文仍位于 `resource` 字段。
 
-`Input.Content` 不能为空。调用时会复制并校验内容；已知不支持的类型在原生写入
-前拒绝。两个 adapter 的统一输入当前支持文本。
+`Input.Content` 不能为空。`StartOrSteer` 在写入前校验所有块，并按原顺序编码。
+任一块缺少原生映射时，整个输入返回 `unsupported`。两端均拒绝带 annotations 的块。
+
+各类型的原生输入映射和链接默认行为见 [ADR 0006](../../adr/0006-structured-prompt-content.md)。
+能力位表示适配器可以编码该类内容。原生端及其模型决定是否接受和读取内容。
 
 Claude 观察到同时含文本和 `tool_result` 的原生 user frame 时，整帧报告
 `user_message_mixed_content_unsupported`。纯文本数组作为一个 `UserMessage.Content`

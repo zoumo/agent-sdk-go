@@ -40,7 +40,7 @@ func TestInputValidationRejectsEmptyAndInvalidContent(t *testing.T) {
 		{
 			name: "resource without body",
 			input: agent.Input{Content: []agent.ContentBlock{
-				{Resource: &agent.ContentBlockResource{
+				{EmbeddedResource: &agent.ContentBlockEmbeddedResource{
 					Resource: agent.EmbeddedResource{URI: "file:///tmp/a"},
 				}},
 			}},
@@ -48,7 +48,7 @@ func TestInputValidationRejectsEmptyAndInvalidContent(t *testing.T) {
 		{
 			name: "resource with both bodies",
 			input: agent.Input{Content: []agent.ContentBlock{
-				{Resource: &agent.ContentBlockResource{
+				{EmbeddedResource: &agent.ContentBlockEmbeddedResource{
 					Resource: agent.EmbeddedResource{
 						URI:  "file:///tmp/a",
 						Text: &text,
@@ -165,6 +165,8 @@ func TestInputAndContentBlocksRoundTripJSON(t *testing.T) {
 	title := "Example"
 	description := "Example resource"
 	size := int64(42)
+	iconMIME := "image/png"
+	iconTheme := "dark"
 	priority := 0.5
 	lastModified := time.Date(2026, 11, 7, 8, 30, 0, 0, time.UTC)
 
@@ -186,7 +188,7 @@ func TestInputAndContentBlocksRoundTripJSON(t *testing.T) {
 			Data:     "aGVsbG8=",
 			MIMEType: "audio/wav",
 		}},
-		{Resource: &agent.ContentBlockResource{
+		{EmbeddedResource: &agent.ContentBlockEmbeddedResource{
 			Resource: agent.EmbeddedResource{
 				URI:      "file:///tmp/example.txt",
 				MIMEType: &mimeType,
@@ -200,6 +202,15 @@ func TestInputAndContentBlocksRoundTripJSON(t *testing.T) {
 			Title:       &title,
 			Description: &description,
 			Size:        &size,
+			Icons: []agent.ResourceIcon{
+				{
+					Src:      "https://example.test/icons/text.png",
+					MIMEType: &iconMIME,
+					Sizes:    []string{"48x48", "96x96"},
+					Theme:    &iconTheme,
+				},
+				{Src: "data:image/png;base64,aGVsbG8="},
+			},
 		}},
 	}}
 	require.NoError(t, original.Validate())
@@ -243,7 +254,16 @@ func TestInputAndContentBlocksRoundTripJSON(t *testing.T) {
 				"mimeType": "text/plain",
 				"title": "Example",
 				"description": "Example resource",
-				"size": 42
+				"size": 42,
+				"icons": [
+					{
+						"src": "https://example.test/icons/text.png",
+						"mimeType": "image/png",
+						"sizes": ["48x48", "96x96"],
+						"theme": "dark"
+					},
+					{"src": "data:image/png;base64,aGVsbG8="}
+				]
 			}
 		]
 	}`, string(encoded))
@@ -291,6 +311,10 @@ func TestInputJSONRejectsMissingOrNullRequiredContentFields(t *testing.T) {
 			name: "null audio data",
 			raw:  `{"content":[{"type":"audio","data":null,"mimeType":"audio/wav"}]}`,
 		},
+		{
+			name: "missing resource icon src",
+			raw:  `{"content":[{"type":"resource_link","uri":"file:///tmp/a","name":"a","icons":[{}]}]}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -299,6 +323,35 @@ func TestInputJSONRejectsMissingOrNullRequiredContentFields(t *testing.T) {
 
 			err := json.Unmarshal([]byte(tt.raw), &input)
 
+			require.Error(t, err)
+			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
+		})
+	}
+}
+
+func TestInputValidationRejectsInvalidResourceIcons(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		icon agent.ResourceIcon
+	}{
+		{
+			name: "relative src",
+			icon: agent.ResourceIcon{Src: "/icons/text.png"},
+		},
+		{
+			name: "unknown theme",
+			icon: agent.ResourceIcon{Src: "https://example.test/icons/text.png", Theme: new("other")},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			input := agent.Input{Content: []agent.ContentBlock{
+				{ResourceLink: &agent.ContentBlockResourceLink{
+					URI:   "file:///tmp/a",
+					Name:  "a",
+					Icons: []agent.ResourceIcon{tt.icon},
+				}},
+			}}
+			err := input.Validate()
 			require.Error(t, err)
 			assert.Equal(t, agent.ErrorInvalidArgument, agent.CodeOf(err))
 		})

@@ -150,7 +150,7 @@ func (s *session) StartOrSteer(
 ) (receipt agent.InputReceipt, err error) {
 	ctx, observation := s.provider.telemetry.BeginSubmission(ctx, s.provider.config.Tracer != nil)
 	defer func() { observation.End(string(receipt.Result), err) }()
-	text, err := textInput(input)
+	content, err := promptContent(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
 	}
@@ -204,7 +204,7 @@ func (s *session) StartOrSteer(
 		User: &claudetypes.UserInput{
 			Message: claudetypes.InputMessage{
 				Role:    "user",
-				Content: claudetypes.Content{Text: &text},
+				Content: content,
 			},
 			UUID:        &submissionID,
 			Priority:    &priority,
@@ -420,38 +420,6 @@ func (s *session) markUnknownState() *agent.SessionState {
 	s.workActive = true
 	s.stateVersion++
 	return previous
-}
-
-func textInput(input agent.Input) (string, error) {
-	if err := input.Validate(); err != nil {
-		return "", err
-	}
-	if len(input.Content) != 1 {
-		return "", adapterError(
-			agent.ErrorUnsupported,
-			ErrorReasonMultipleContentBlocksUnsupported,
-			"Claude text input supports exactly one content block",
-			nil,
-		)
-	}
-	block := input.Content[0]
-	if block.Text == nil {
-		return "", adapterError(
-			agent.ErrorUnsupported,
-			agent.ErrorReasonContentBlockUnsupported,
-			"Claude input supports text blocks only",
-			nil,
-		)
-	}
-	if block.Text.Annotations != nil {
-		return "", adapterError(
-			agent.ErrorUnsupported,
-			agent.ErrorReasonTextAnnotationsUnsupported,
-			"Claude input does not support text annotations",
-			nil,
-		)
-	}
-	return block.Text.Text, nil
 }
 
 func effectiveFeatures(features agent.Features) agent.EffectiveFeatures {

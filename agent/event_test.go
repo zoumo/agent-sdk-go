@@ -627,7 +627,7 @@ func TestToolPayloadContentAcceptsEveryContentBlock(t *testing.T) {
 		{Text: &agent.ContentBlockText{Text: "hello"}},
 		{Image: &agent.ContentBlockImage{Data: "aGVsbG8=", MIMEType: "image/png"}},
 		{Audio: &agent.ContentBlockAudio{Data: "aGVsbG8=", MIMEType: "audio/wav"}},
-		{Resource: &agent.ContentBlockResource{Resource: agent.EmbeddedResource{
+		{EmbeddedResource: &agent.ContentBlockEmbeddedResource{Resource: agent.EmbeddedResource{
 			URI:  "file:///tmp/example.txt",
 			Text: new("embedded"),
 		}}},
@@ -635,6 +635,9 @@ func TestToolPayloadContentAcceptsEveryContentBlock(t *testing.T) {
 			URI:  "file:///tmp/example.txt",
 			Name: "example.txt",
 			Size: ptr[int64](42),
+			Icons: []agent.ResourceIcon{
+				{Src: "https://example.test/icons/text.png", Sizes: []string{"any"}},
+			},
 		}},
 	}
 	payloads := []struct {

@@ -118,22 +118,6 @@ func imageMediaType(mimeType string) bool {
 	}
 }
 
-func textInput(input agent.Input) (string, error) {
-	if err := input.Validate(); err != nil {
-		return "", err
-	}
-	if len(input.Content) != 1 {
-		return "", adapterError(
-			agent.ErrorUnsupported, ErrorReasonMultipleContentBlocksUnsupported,
-			"Claude context injection supports exactly one content block", nil,
-		)
-	}
-	if input.Content[0].Text == nil {
-		return "", unsupportedPromptBlock()
-	}
-	return plainText(input.Content[0].Text)
-}
-
 func plainText(block *agent.ContentBlockText) (string, error) {
 	if block.Annotations != nil {
 		return "", adapterError(

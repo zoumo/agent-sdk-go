@@ -126,7 +126,7 @@ func (s *session) StartOrSteer(
 ) (receipt agent.InputReceipt, err error) {
 	ctx, observation := s.provider.telemetry.BeginSubmission(ctx, s.provider.tracer != nil)
 	defer func() { observation.End(string(receipt.Result), err) }()
-	nativeInput, err := encodeInput(input, true)
+	nativeInput, err := encodeInput(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
 	}

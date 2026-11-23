@@ -38,14 +38,24 @@ func TestStartOrSteerStartsNewWorkWhenIdle(t *testing.T) {
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
 }
 
-func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
+func TestInjectAndStartOrSteerSendStructuredInputInOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	frames := append([]string(nil), mockCodexInit...)
 	frames = append(frames,
 		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
-		`>{"id":93,"method":"turn/start","params":{"threadId":"root-a","input":[`+
+		`>{"id":93,"method":"thread/inject_items","params":{"threadId":"root-a","items":[{"type":"message","role":"user","content":[`+
+			`{"type":"input_text","text":"before"},`+
+			`{"type":"input_text","text":"https://example.test/guides%2Fsetup?q=one#start"},`+
+			`{"type":"input_text","text":"file:///notes"},`+
+			`{"type":"input_image","image_url":"data:image/png;base64,aGk=","detail":"high"},`+
+			`{"type":"input_audio","audio_url":"data:audio/wav;base64,aGk="},`+
+			`{"type":"input_image","image_url":"https://example.test/image.png","detail":"high"},`+
+			`{"type":"input_text","text":"http://example.test/docs"},`+
+			`{"type":"input_text","text":"after"}]}]}}`,
+		`<{"id":93,"result":{}}`,
+		`>{"id":94,"method":"turn/start","params":{"threadId":"root-a","input":[`+
 			`{"type":"text","text":"before"},`+
 			`{"type":"text","text":"https://example.test/guides%2Fsetup?q=one#start"},`+
 			`{"type":"text","text":"file:///notes"},`+
@@ -54,11 +64,12 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 			`{"type":"image","url":"https://example.test/image.png"},`+
 			`{"type":"text","text":"http://example.test/docs"},`+
 			`{"type":"text","text":"after"}]}}`,
-		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
-		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
-		`<{"id":94,"result":{"status":"unsubscribed"}}`,
+		`<{"id":94,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`>{"id":95,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
+		`<{"id":95,"result":{"status":"unsubscribed"}}`,
 	)
 	session := openStartOrSteerSession(t, ctx, frames...)
+	injector := session.(agent.Injector)
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityImageInput))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityAudioInput))
 	assert.True(t, session.Capabilities().Supports(agent.CapabilityResourceLinkInput))
@@ -77,6 +88,10 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		_, err := session.StartOrSteer(ctx, blocked)
 		require.Error(t, err, "URI %s", link.URI)
 		assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+		rejected, err := injector.Inject(ctx, blocked)
+		require.Error(t, err, "URI %s", link.URI)
+		assert.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+		assert.Equal(t, agent.Acceptance{Sent: new(false)}, rejected.Acceptance)
 	}
 
 	prompt := agent.Input{Content: []agent.ContentBlock{
@@ -95,6 +110,12 @@ func TestStartOrSteerSendsStructuredPromptInOrder(t *testing.T) {
 		}},
 		{Text: &agent.ContentBlockText{Text: "after"}},
 	}}
+	injected, err := injector.Inject(ctx, prompt)
+	require.NoError(t, err)
+	assert.Equal(t, agent.Acceptance{Sent: new(true), NativeAccepted: new(true)}, injected.Acceptance)
+	interrupted, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptNoActiveWork, interrupted.Result)
 	receipt, err := session.StartOrSteer(ctx, prompt)
 	require.NoError(t, err)
 	assert.Equal(t, agent.InputAppliedNewWork, receipt.Result)

@@ -13,7 +13,7 @@ func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.
 	ctx, observation := s.provider.telemetry.Begin(ctx, telemetry.Inject)
 	defer func() { observation.EndAcceptance(receipt.Acceptance, err) }()
 	receipt = agent.InjectReceipt{Acceptance: configNotSent()}
-	text, err := textInput(input)
+	content, err := promptContent(input)
 	if err != nil {
 		return receipt, err
 	}
@@ -44,7 +44,7 @@ func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.
 	shouldQuery := false
 	submission, submitErr := s.native.Submit(ctx, claude.Input{User: &claudetypes.UserInput{
 		Message: claudetypes.InputMessage{
-			Role: "user", Content: claudetypes.Content{Text: &text},
+			Role: "user", Content: content,
 		},
 		ShouldQuery: &shouldQuery,
 	}})

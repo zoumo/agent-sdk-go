@@ -4,6 +4,7 @@ import "context"
 
 // Injector is an optional Session operation that appends user context without
 // requesting a model response. Native consumption timing is provider-specific.
+// Input follows the Session's StartOrSteer content rules.
 // Inject never starts, steers, interrupts, queues or retries work on the caller's
 // behalf. Callers must serialize it with other input operations for ordering.
 type Injector interface {

@@ -10,13 +10,13 @@ import (
 	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
 )
 
-func encodeInput(input agent.Input, allowMedia bool) (codex.Input, error) {
+func encodeInput(input agent.Input) (codex.Input, error) {
 	if err := input.Validate(); err != nil {
 		return codex.Input{}, err
 	}
 	parts := make([]codextypes.UserInput, 0, len(input.Content))
 	for _, block := range input.Content {
-		part, err := encodeInputBlock(block, allowMedia)
+		part, err := encodeInputBlock(block)
 		if err != nil {
 			return codex.Input{}, err
 		}
@@ -25,7 +25,7 @@ func encodeInput(input agent.Input, allowMedia bool) (codex.Input, error) {
 	return codex.Input{Input: parts}, nil
 }
 
-func encodeInputBlock(block agent.ContentBlock, allowMedia bool) (codextypes.UserInput, error) {
+func encodeInputBlock(block agent.ContentBlock) (codextypes.UserInput, error) {
 	switch {
 	case block.Text != nil:
 		if block.Text.Annotations != nil {
@@ -35,17 +35,17 @@ func encodeInputBlock(block agent.ContentBlock, allowMedia bool) (codextypes.Use
 			)
 		}
 		return codextypes.UserInput{Text: &codextypes.TextUserInput{Text: block.Text.Text}}, nil
-	case allowMedia && block.Image != nil:
+	case block.Image != nil:
 		image := block.Image
 		if uri := dataURL("image/", image.MIMEType, image.Data); uri != "" && image.Annotations == nil {
 			return imageInput(uri), nil
 		}
-	case allowMedia && block.Audio != nil:
+	case block.Audio != nil:
 		audio := block.Audio
 		if uri := dataURL("audio/", audio.MIMEType, audio.Data); uri != "" && audio.Annotations == nil {
 			return codextypes.UserInput{Audio: &codextypes.AudioUserInput{URL: uri}}, nil
 		}
-	case allowMedia && block.ResourceLink != nil:
+	case block.ResourceLink != nil:
 		link := block.ResourceLink
 		if link.Annotations != nil {
 			break

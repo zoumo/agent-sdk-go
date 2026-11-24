@@ -142,7 +142,8 @@ func AcceptExistingChildren(
 		if frame.Wire.Type != "control_request" || request.Subtype != "initialize" {
 			return errors.New("existing-child observation contains new work")
 		}
-		if err := json.Unmarshal(frame.Wire.Request, &initialize); err != nil {
+		initialize, err = decodeInitialize(frame.Wire.Request)
+		if err != nil {
 			return err
 		}
 	}
@@ -169,7 +170,7 @@ func AcceptExistingChildren(
 	s, run, inputClosed, err := openStreamSessionOnConnection(ctx, mock, "probe", setupStart.ExecutionID, claude.SessionOptions{
 		ResumeID:   setup.SessionID,
 		Initialize: &initialize,
-	})
+	}, nil)
 	if err != nil {
 		return err
 	}

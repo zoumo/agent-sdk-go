@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
@@ -16,6 +17,13 @@ type Host struct {
 	Workspace string
 	Config    string
 	Env       []string
+}
+
+func decodeInitialize(raw json.RawMessage) (types.InitializeOptions, error) {
+	var options types.InitializeOptions
+	err := json.Unmarshal(raw, &options)
+	options.OmitHooks = options.Hooks == nil
+	return options, err
 }
 
 // runtimePaths applies a prepared host configuration without mutating source plan.

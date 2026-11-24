@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"sync"
@@ -20,6 +21,11 @@ import (
 func sessionPermission(t *testing.T, s *Session, id, tool, input string) *IncomingRequest {
 	t.Helper()
 	submitFrame(t, s, `{"type":"control_request","request_id":"`+id+`","future":null,"request":{"subtype":"can_use_tool","tool_name":"`+tool+`","input":`+input+`,"agent_id":"unverified"}}`)
+	return receiveSessionPermission(t, s, id)
+}
+
+func receiveSessionPermission(t *testing.T, s *Session, id string) *IncomingRequest {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	for {
@@ -58,6 +64,62 @@ func TestSessionPermissionExtensionsAndQuestions(t *testing.T) {
 		data, err := json.Marshal(response["response"].(map[string]any)["response"])
 		require.NoError(t, err)
 		require.JSONEq(t, want[i], string(data))
+	}
+}
+
+func TestSessionPermissionEchoesOnlyOriginalToolUseID(t *testing.T) {
+	const toolUseID = "native-tool"
+	path := filepath.Join(t.TempDir(), "wire.jsonl")
+	s := openSessionFixture(t, func(o *SessionOptions) { o.Env = append(o.Env, "CLAUDE_GO_TRANSCRIPT="+path) })
+	cases := []struct {
+		name, tool, input, want string
+		reply                   func(*IncomingRequest, context.Context, string) error
+	}{
+		{
+			"approve", "Read", `{"file_path":"numbers.txt"}`, `{"behavior":"allow","updatedInput":{"file_path":"numbers.txt"},"toolUseID":"native-tool"}`,
+			func(r *IncomingRequest, ctx context.Context, id string) error {
+				return r.Approve(ctx, ApprovalOptions{ToolUseID: id})
+			},
+		},
+		{
+			"deny", "Write", `{}`, `{"behavior":"deny","message":"declined","toolUseID":"native-tool"}`,
+			func(r *IncomingRequest, ctx context.Context, id string) error {
+				return r.Deny(ctx, DenialOptions{Message: "declined", ToolUseID: id})
+			},
+		},
+		{
+			"question", "AskUserQuestion", `{"questions":[{"question":"Which?","options":[{"label":"Blue"}]}]}`, `{"behavior":"allow","updatedInput":{"questions":[{"question":"Which?","options":[{"label":"Blue"}]}],"answers":{"Which?":"Blue"}},"toolUseID":"native-tool"}`,
+			func(r *IncomingRequest, ctx context.Context, id string) error {
+				return r.AnswerWithToolUseID(ctx, QuestionAnswers{Answers: map[string]string{"Which?": "Blue"}}, id)
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			submitFrame(t, s, fmt.Sprintf(`{"type":"control_request","request_id":%q,"request":{"subtype":"can_use_tool","tool_name":%q,"input":%s,"tool_use_id":%q}}`, tc.name, tc.tool, tc.input, toolUseID))
+			request := receiveSessionPermission(t, s, tc.name)
+			require.Equal(t, toolUseID, request.Handle().ToolUseID())
+			err := tc.reply(request, ctx, "other-tool")
+			var dispatch *DispatchError
+			require.ErrorAs(t, err, &dispatch)
+			require.Equal(t, NotSent, dispatch.State)
+			require.ErrorIs(t, err, ErrUnsupported)
+			require.NoError(t, request.Context().Err())
+			require.NoError(t, tc.reply(request, ctx, toolUseID))
+			require.ErrorIs(t, tc.reply(request, ctx, toolUseID), ErrPermissionUsed)
+		})
+	}
+	require.NoError(t, s.Interrupt(t.Context(), InterruptOptions{}))
+	require.NoError(t, s.Close())
+	responses := permissionResponses(t, permissionTranscript(t, path))
+	require.Len(t, responses, len(cases))
+	for i, tc := range cases {
+		response := responses[i]["response"].(map[string]any)
+		require.Equal(t, tc.name, response["request_id"])
+		payload, err := json.Marshal(response["response"])
+		require.NoError(t, err)
+		require.JSONEq(t, tc.want, string(payload))
 	}
 }
 

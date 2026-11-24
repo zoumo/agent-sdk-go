@@ -41,8 +41,10 @@ type PermissionAnswer struct {
 	UpdatedPermissions []types.PermissionUpdate
 	Message            string
 	Interrupt          *bool
-	// These native extensions are not connected to the runtime answer contract.
-	ToolUseID              string
+	// ToolUseID optionally echoes the identifier on this request. It cannot
+	// select a different tool call or grant answer authority.
+	ToolUseID string
+	// DecisionClassification is reserved and cannot be set on an answer.
 	DecisionClassification string
 }
 
@@ -271,8 +273,12 @@ func (p *PermissionRequest) failAnswerLocked(err error) error {
 }
 
 func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any, error) {
-	if answer.ToolUseID != "" || answer.DecisionClassification != "" {
+	if answer.DecisionClassification != "" || (answer.ToolUseID != "" && answer.ToolUseID != p.ToolUseID()) {
 		return nil, ErrUnsupported
+	}
+	data := map[string]any{"behavior": answer.Behavior}
+	if answer.ToolUseID != "" {
+		data["toolUseID"] = p.ToolUseID()
 	}
 	switch answer.Behavior {
 	case PermissionAllow:
@@ -304,7 +310,7 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 				}
 			}
 		}
-		data := map[string]any{"behavior": "allow", "updatedInput": json.RawMessage(bytes.Clone(input))}
+		data["updatedInput"] = json.RawMessage(bytes.Clone(input))
 		if answer.UpdatedPermissions != nil {
 			if err := validatePermissionUpdates(answer.UpdatedPermissions); err != nil {
 				return nil, err
@@ -319,7 +325,7 @@ func (p *PermissionRequest) answerData(answer PermissionAnswer) (map[string]any,
 		if len(answer.Message) > p.state.owner.opts.Limits.FrameBytes {
 			return nil, &ResourceLimitError{Resource: "outbound frame bytes", Limit: p.state.owner.opts.Limits.FrameBytes}
 		}
-		data := map[string]any{"behavior": "deny", "message": answer.Message}
+		data["message"] = answer.Message
 		if answer.Interrupt != nil {
 			data["interrupt"] = *answer.Interrupt
 		}

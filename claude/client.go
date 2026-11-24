@@ -154,6 +154,9 @@ func (o *Options) defaults() error {
 		return dispatchFailure("initialize", err)
 	}
 	if o.Initialize != nil {
+		if err := validateSDKMCPServerManifests(o.SDKMCPServers, o.Initialize.SDKMCPServerManifests); err != nil {
+			return dispatchFailure("initialize", err)
+		}
 		data, err := json.Marshal(o.Initialize)
 		if err != nil {
 			return dispatchFailure("initialize", err)
@@ -383,8 +386,9 @@ func (c *interaction) initialize(ctx context.Context) error {
 	defer cancel()
 	forward := true
 	initialize := struct {
-		Subtype string          `json:"subtype"`
-		Hooks   json.RawMessage `json:"hooks,omitempty"`
+		Subtype       string          `json:"subtype"`
+		Hooks         json.RawMessage `json:"hooks,omitempty"`
+		SDKMCPServers []string        `json:"sdkMcpServers,omitempty"`
 		types.InitializeOptions
 	}{Subtype: "initialize", InitializeOptions: types.InitializeOptions{ForwardSubagentText: &forward}}
 	if c.opts.Initialize != nil {
@@ -393,6 +397,9 @@ func (c *interaction) initialize(ctx context.Context) error {
 	initialize.Hooks = initialize.InitializeOptions.Hooks
 	if initialize.Hooks == nil && !initialize.OmitHooks {
 		initialize.Hooks = json.RawMessage(`null`)
+	}
+	if len(initialize.SDKMCPServerManifests) != 0 {
+		initialize.SDKMCPServers = c.opts.SDKMCPServers
 	}
 	raw, err := c.control(initCtx, "initialize", initialize)
 	if err != nil {

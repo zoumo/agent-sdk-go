@@ -48,7 +48,7 @@ func TestJoinInputCloseError(t *testing.T) {
 }
 
 func TestRecordedContinuationWithoutHistoryQueries(t *testing.T) {
-	runRecordedContinuation(t, false)
+	runRecordedContinuation(t, `{"subtype":"initialize","hooks":null}`)
 }
 
 func TestRecordedEffortPreflightMatchesSetEffort(t *testing.T) {
@@ -83,27 +83,26 @@ func TestRecordedEffortPreflightMatchesSetEffort(t *testing.T) {
 	require.NoError(t, AcceptFlow(ctx, session, root, preparedHost(t, session), claude.ChildDetailPreserve, io.Discard))
 }
 
-func runRecordedContinuation(t *testing.T, mcp bool) {
+func runRecordedContinuation(t *testing.T, initialize string, startupMCP ...string) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, "raw"), 0o700))
 	plan, err := json.Marshal(map[string]string{"Project": root, "Config": root, "DriverProfile": "continuation"})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "plan.json"), plan, 0o600))
-	rows := []string{`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null}}`}
-	if mcp {
-		rows = append(rows,
-			`<{"type":"control_request","request_id":"mcp","request":{"subtype":"mcp_message","server_name":"fixture","message":{"jsonrpc":"2.0","id":0,"method":"initialize"}}}`,
-			`>{"type":"control_response","response":{"subtype":"success","request_id":"mcp","response":{"mcp_response":{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-11-25"}}}}}`)
-	}
+	rows := []string{`>{"type":"control_request","request_id":"init","request":` + initialize + `}`}
+	rows = append(rows, startupMCP...)
 	rows = append(rows,
 		`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}`,
 		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"first"}}`,
 		`<{"type":"system","subtype":"init","session_id":"root","claude_code_version":"2.1.293"}`,
 		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"first"}`,
 		`<{"type":"system","subtype":"session_state_changed","session_id":"root","state":"idle"}`,
-		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"message":{"role":"user","content":"second"}}`,
-		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"second"}`)
+		`>{"type":"user","session_id":"default","parent_tool_use_id":null,"uuid":"second-command","message":{"role":"user","content":"second"}}`,
+		`<{"type":"command_lifecycle","session_id":"root","command_uuid":"second-command","uuid":"queued","state":"queued"}`,
+		`<{"type":"command_lifecycle","session_id":"root","command_uuid":"second-command","uuid":"started","state":"started"}`,
+		`<{"type":"result","session_id":"root","subtype":"success","is_error":false,"result":"second"}`,
+		`<{"type":"command_lifecycle","session_id":"root","command_uuid":"second-command","uuid":"completed","state":"completed"}`)
 	capture := recordedCapture(t, rows)
 	source := filepath.Join(root, "raw", "raw.jsonl")
 	require.NoError(t, os.WriteFile(source, []byte(capture), 0o600))

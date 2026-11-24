@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,7 +77,6 @@ func acceptFlow(
 	scanner.Buffer(make([]byte, 4096), 16<<20)
 	var frames []frame
 	var init types.InitializeOptions
-	answers := map[string]json.RawMessage{}
 	nativeRequests := map[string]json.RawMessage{}
 	var servers []string
 	var receiveElicitation bool
@@ -94,14 +94,11 @@ func acceptFlow(
 			var r struct{ Subtype string }
 			_ = json.Unmarshal(w.Request, &r)
 			if r.Subtype == "initialize" {
-				if err := json.Unmarshal(w.Request, &init); err != nil {
+				init, err = decodeInitialize(w.Request)
+				if err != nil {
 					return err
 				}
-				init.OmitHooks = init.Hooks == nil
 			}
-		}
-		if v.Direction == "c2s" && w.Type == "control_response" {
-			answers[w.Response.RequestID] = w.Response.Response
 		}
 		if v.Direction == "s2c" && w.Type == "control_request" {
 			nativeRequests[w.RequestID] = v.Wire
@@ -115,11 +112,7 @@ func acceptFlow(
 					ServerName string `json:"server_name"`
 				}
 				_ = json.Unmarshal(w.Request, &metadata)
-				found := false
-				for _, s := range servers {
-					found = found || s == metadata.ServerName
-				}
-				if !found {
+				if !slices.Contains(servers, metadata.ServerName) {
 					servers = append(servers, metadata.ServerName)
 				}
 			}
@@ -208,24 +201,31 @@ func acceptFlow(
 			options.Thinking = &types.ThinkingConfig{Type: "enabled", BudgetTokens: &budget}
 		}
 	}
-	if len(servers) > 0 {
-		options.HandleSDKMCP = func(ctx context.Context, r claude.IncomingRequest) error {
-			if !sameJSON(r.Raw(), nativeRequests[r.ID()]) {
-				return errors.New("MCP request differs from recording")
+	var configure func(*claude.SessionOptions)
+	if len(servers) != 0 || len(init.SDKMCPServerManifests) != 0 {
+		if len(servers) != 0 && !slices.Equal(servers, []string{fixtureMCPName}) {
+			return errors.New("unsupported SDK MCP fixture server")
+		}
+		usesManifest := len(init.SDKMCPServerManifests) != 0
+		fixture := newFixtureMCP(usesManifest)
+		options.SDKMCPServers = []string{fixtureMCPName}
+		if usesManifest {
+			init.SDKMCPServerManifests = map[string]types.SDKMCPServerManifest{fixtureMCPName: fixture.manifest}
+		}
+		configure = func(o *claude.SessionOptions) {
+			workspace := o.WorkDir
+			o.HandleSDKMCP = func(ctx context.Context, r claude.IncomingRequest) error {
+				if !sameJSON(r.Raw(), nativeRequests[r.ID()]) {
+					return errors.New("MCP request differs from recording")
+				}
+				if err := observe(claude.Received{Kind: claude.ReceivedRequest, Request: &r, Raw: r.Raw(), Origin: "live"}); err != nil {
+					return err
+				}
+				return fixture.reply(ctx, workspace, r)
 			}
-			var answer struct {
-				MCPResponse json.RawMessage `json:"mcp_response"`
-			}
-			if err := json.Unmarshal(answers[r.ID()], &answer); err != nil {
-				return err
-			}
-			if err := observe(claude.Received{Kind: claude.ReceivedRequest, Request: &r, Raw: r.Raw(), Origin: "live"}); err != nil {
-				return err
-			}
-			return r.ReplyMCP(ctx, answer.MCPResponse)
 		}
 	}
-	s, run, inputClosed, err := openStreamSession(ctx, mock, options)
+	s, run, inputClosed, err := openStreamSession(ctx, mock, options, configure)
 	if err != nil {
 		return err
 	}
@@ -500,24 +500,39 @@ func acceptFlow(
 				Behavior, Message  string
 				UpdatedInput       json.RawMessage          `json:"updatedInput"`
 				UpdatedPermissions []types.PermissionUpdate `json:"updatedPermissions"`
+				ToolUseID          *string                  `json:"toolUseID"`
 				Interrupt          *bool
 			}
 			if err := json.Unmarshal(w.Response.Response, &answer); err != nil {
 				return err
 			}
-			if answer.Behavior == "deny" {
-				err = r.Deny(ctx, claude.DenialOptions{Message: answer.Message, Interrupt: answer.Interrupt})
-			} else if r.Handle().ToolName() == "AskUserQuestion" {
+			var toolUseID string
+			if answer.ToolUseID != nil {
+				toolUseID = r.Handle().ToolUseID()
+				if toolUseID == "" || toolUseID != *answer.ToolUseID {
+					return fmt.Errorf("ordinal %d permission reply does not echo the request tool-use ID", v.Ordinal)
+				}
+			}
+			switch {
+			case answer.Behavior == "deny":
+				err = r.Deny(ctx, claude.DenialOptions{Message: answer.Message, Interrupt: answer.Interrupt, ToolUseID: toolUseID})
+			case answer.Behavior != "allow":
+				return fmt.Errorf("ordinal %d unsupported permission decision %q", v.Ordinal, answer.Behavior)
+			case r.Handle().ToolName() == "AskUserQuestion":
 				var input struct{ Answers map[string]string }
 				if err := json.Unmarshal(answer.UpdatedInput, &input); err != nil {
 					return err
 				}
-				err = r.Answer(ctx, claude.QuestionAnswers{Answers: input.Answers})
-			} else {
-				err = r.Approve(ctx, claude.ApprovalOptions{UpdatedInput: answer.UpdatedInput, UpdatedPermissions: answer.UpdatedPermissions})
+				err = r.AnswerWithToolUseID(ctx, claude.QuestionAnswers{Answers: input.Answers}, toolUseID)
+			default:
+				updatedInput := answer.UpdatedInput
+				if sameJSON(updatedInput, r.Handle().Input()) {
+					updatedInput = nil
+				}
+				err = r.Approve(ctx, claude.ApprovalOptions{UpdatedInput: updatedInput, UpdatedPermissions: answer.UpdatedPermissions, ToolUseID: toolUseID})
 			}
 			if err != nil {
-				return err
+				return fmt.Errorf("ordinal %d permission reply: %w", v.Ordinal, err)
 			}
 		default:
 			return fmt.Errorf("unsupported client frame %s", w.Type)

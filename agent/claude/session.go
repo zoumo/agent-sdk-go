@@ -43,6 +43,7 @@ type session struct {
 	interactions      map[agent.InteractionRef]*pendingInteraction
 	interactionRefs   map[string]agent.InteractionRef
 	interactionLedger *interactionledger.Ledger
+	completedURLs     map[elicitationKey]struct{}
 	resume            *resumeIdentityGuard
 	injectSupported   bool
 

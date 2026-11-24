@@ -75,21 +75,22 @@ func (t Telemetry) RecordPublished(events []agent.Event) {
 			))
 		}
 		if payload, ok := event.Payload.(agent.UnsupportedNativeEventPayload); ok && t.tracer != nil {
-			t.recordUnsupportedEvent(ctx, event.SessionID, payload)
+			t.recordUnsupportedEvent(ctx, event, payload.AgentType)
 		}
 	}
 }
 
-func (t Telemetry) recordUnsupportedEvent(ctx context.Context, sessionID string, payload agent.UnsupportedNativeEventPayload) {
-	attrs := []attribute.KeyValue{t.provider, attribute.String("session.id", sessionID)}
-	if payload.NativeMethod != "" {
-		attrs = append(attrs, attribute.String("native.method", payload.NativeMethod))
+func (t Telemetry) recordUnsupportedEvent(ctx context.Context, event agent.Event, agentType string) {
+	attrs := []attribute.KeyValue{t.provider, attribute.String("session.id", event.SessionID)}
+	meta, _ := event.Meta[agentType].(map[string]any)
+	if method, _ := meta["method"].(string); method != "" {
+		attrs = append(attrs, attribute.String("native.method", method))
 	}
-	if payload.NativeType != "" {
-		attrs = append(attrs, attribute.String("native.type", payload.NativeType))
+	if kind, _ := meta["nativeType"].(string); kind != "" {
+		attrs = append(attrs, attribute.String("native.type", kind))
 	}
-	if payload.NativeSubtype != "" {
-		attrs = append(attrs, attribute.String("native.subtype", payload.NativeSubtype))
+	if subtype, _ := meta["nativeSubtype"].(string); subtype != "" {
+		attrs = append(attrs, attribute.String("native.subtype", subtype))
 	}
 	_, span := t.tracer.Start(ctx, "agent.unsupported_native_event", trace.WithAttributes(attrs...))
 	span.End()

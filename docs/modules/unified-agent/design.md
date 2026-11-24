@@ -963,7 +963,10 @@ settings 更新，不证明目标 CLI 版本导出正确关联的 provider span�
   多选问题可接受字符串或字符串数组；
   adapter 将字符串数组以 `", "` 连接成字符串后再写回原生。原生数组答案仍拒绝，
   不能把统一层的兼容编码当成原生数组支持。
-- `url` 只表达外部流程入口；URL 的完成仍由原生事实结算。
+- `url` 提供外部流程入口。Claude 接受后等待同一 Session、MCP 服务和
+  elicitation ID 的 `elicitation_complete` 通知，并用 `completed` 结算一次。
+  等待期间关闭 Session 时以 `expired` 结算。Codex 在 `serverRequest/resolved`
+  确认答复时以 `answered` 结算接受的请求。
 
 `MatchAnswer` 和 `ValidateAnswer` 只作本地校验。Adapter 在取得回答权限前继续核对
 原生选项及表单 schema。校验失败保留原回答权限和具体错误原因。
@@ -1074,9 +1077,9 @@ lease release 和 Done 都只执行一次。
 `agent.tool_result` 是 MASS 可能持久化的完整事实；SDK 只提供事实，不决定
 MASS 是否持久化。
 
-`session.unsupported_native_event` 记录无法映射的原生事件。Payload 包含 `provider`
-和可取得的 `nativeMethod`、`nativeType`、`nativeSubtype`。当通知只有方法名可区分时，
-`nativeType` 使用方法名。诊断事件发布后，adapter 继续消费原生事件流。
+`session.unsupported_native_event` 记录无法映射的实时原生事件。Payload 包含
+`agentType` 和完整原生 JSON 对象 `raw`。对象保留未知字段、显式 `null` 和数字精度。
+诊断事件发布后，adapter 继续消费原生事件流。
 
 `*_chunk` 只追加，不是累计快照。adapter 不跨事件拼接完整历史，也不用结束后
 补造完整消息。工具调用和结果共享 `itemId`，但事件身份不同。完整消息与 chunk

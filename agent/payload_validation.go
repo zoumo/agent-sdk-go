@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 )
@@ -93,8 +94,12 @@ func validatePayload(payload Payload) error {
 			return invalidArgument("empty_session_error", "session error message is required")
 		}
 	case UnsupportedNativeEventPayload:
-		if value.Provider == "" {
-			return invalidArgument("missing_event_provider", "unsupported native event provider is required")
+		if value.AgentType == "" {
+			return invalidArgument("missing_event_agent_type", "unsupported native event agent type is required")
+		}
+		raw := bytes.TrimSpace(value.Raw)
+		if len(raw) == 0 || raw[0] != '{' || !json.Valid(raw) {
+			return invalidArgument("invalid_native_event", "unsupported native event raw must be a JSON object")
 		}
 	case InfoUpdatePayload:
 		if value.Title == nil && value.UpdatedAt == nil {

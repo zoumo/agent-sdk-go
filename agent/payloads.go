@@ -187,10 +187,8 @@ func (SessionErrorPayload) eventType() EventType { return EventSessionError }
 // UnsupportedNativeEventPayload describes a live native event that the adapter
 // could not map. The adapter can continue publishing subsequent events.
 type UnsupportedNativeEventPayload struct {
-	Provider      string `json:"provider"`
-	NativeMethod  string `json:"nativeMethod,omitempty"`
-	NativeType    string `json:"nativeType,omitempty"`
-	NativeSubtype string `json:"nativeSubtype,omitempty"`
+	AgentType string          `json:"agentType"`
+	Raw       json.RawMessage `json:"raw"`
 }
 
 func (UnsupportedNativeEventPayload) eventType() EventType { return EventSessionUnsupportedNativeEvent }

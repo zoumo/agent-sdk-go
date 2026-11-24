@@ -744,18 +744,20 @@ func (s *session) unsupportedNativeEvent(
 	nativeSubtype string,
 ) ([]agent.Event, error) {
 	method := requestMethod(received)
+	raw := received.Raw
+	if len(raw) == 0 && received.Event != nil {
+		raw = received.Event.Raw
+	}
 	event, err := s.newEvent(
 		received,
 		method,
 		itemID,
 		agent.UnsupportedNativeEventPayload{
-			Provider:      "codex",
-			NativeMethod:  method,
-			NativeType:    nativeType,
-			NativeSubtype: nativeSubtype,
+			AgentType: "codex",
+			Raw:       append(json.RawMessage(nil), raw...),
 		},
 		time.Now().UTC(),
-		nil,
+		map[string]any{"nativeType": nativeType, "nativeSubtype": nativeSubtype},
 	)
 	if err != nil {
 		return nil, err
@@ -815,7 +817,9 @@ func (s *session) newEvent(
 	}
 	codexMeta := map[string]any{
 		"method": method,
-		"raw":    append(json.RawMessage(nil), raw...),
+	}
+	if _, unsupported := payload.(agent.UnsupportedNativeEventPayload); !unsupported {
+		codexMeta["raw"] = append(json.RawMessage(nil), raw...)
 	}
 	sessionID := s.ID()
 	if received.Source.ThreadID != "" && received.Source.ThreadID != sessionID {

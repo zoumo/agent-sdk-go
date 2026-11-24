@@ -115,10 +115,8 @@ func TestEventTypeIsDerivedFromEveryPayloadBranch(t *testing.T) {
 		{
 			name: "unsupported native event",
 			payload: agent.UnsupportedNativeEventPayload{
-				Provider:      "codex",
-				NativeMethod:  "item/completed",
-				NativeType:    "userMessage",
-				NativeSubtype: "image",
+				AgentType: "codex",
+				Raw:       json.RawMessage(`{"method":"item/completed","params":{"unknown":[null,9007199254740993]}}`),
 			},
 			want: agent.EventSessionUnsupportedNativeEvent,
 		},
@@ -316,8 +314,12 @@ func TestEventValidationRejectsInvalidEnvelopeAndPayloadFacts(t *testing.T) {
 			event: validEvent("", agent.SessionErrorPayload{}),
 		},
 		{
-			name:  "unsupported native event missing provider",
-			event: validEvent("", agent.UnsupportedNativeEventPayload{NativeType: "future"}),
+			name:  "unsupported native event missing agent type",
+			event: validEvent("", agent.UnsupportedNativeEventPayload{Raw: json.RawMessage(`{}`)}),
+		},
+		{
+			name:  "unsupported native event requires a JSON object",
+			event: validEvent("", agent.UnsupportedNativeEventPayload{AgentType: "codex", Raw: json.RawMessage(`null`)}),
 		},
 		{
 			name:  "empty info update",
@@ -759,7 +761,7 @@ func TestEventJSONRoundTripsEveryPayloadBranch(t *testing.T) {
 		{
 			name: "unsupported native event",
 			value: agent.UnsupportedNativeEventPayload{
-				Provider: "claude", NativeType: "system", NativeSubtype: "future_event",
+				AgentType: "claude", Raw: json.RawMessage(`{"type":"system","subtype":"future_event"}`),
 			},
 		},
 		{

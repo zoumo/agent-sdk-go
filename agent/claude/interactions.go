@@ -33,6 +33,9 @@ type pendingInteraction struct {
 	slot          interactionledger.Slot
 	sequence      uint64
 	startedAt     time.Time
+	elicitation   elicitationKey
+	acceptedURL   bool
+	urlAnswerDone chan struct{}
 }
 
 func (s *session) convertRequest(received claude.Received) ([]agent.Event, error) {
@@ -357,6 +360,9 @@ func (s *session) registerInteraction(
 	}
 	s.interactions[interaction.ref] = interaction
 	s.interactionRefs[interaction.requestID] = interaction.ref
+	if interaction.elicitation.id != "" {
+		delete(s.completedURLs, interaction.elicitation)
+	}
 	s.mu.Unlock()
 	if stateEvent == nil {
 		return []agent.Event{requestedEvent}, nil
@@ -458,12 +464,20 @@ func (s *session) Answer(
 			nil,
 		)
 	}
+	if url, ok := matched.(agent.URLAnswer); ok && url.Outcome == agent.URLAccept {
+		interaction.urlAnswerDone = make(chan struct{})
+	}
 	s.mu.Unlock()
 
 	answerErr := reply(ctx)
 
 	s.mu.Lock()
 	owned := s.interactions[ref] == interaction
+	if interaction.urlAnswerDone != nil {
+		interaction.acceptedURL = answerErr == nil
+		close(interaction.urlAnswerDone)
+		interaction.urlAnswerDone = nil
+	}
 	if answerErr == nil {
 		interaction.slot.CompleteSent(outcome)
 		s.mu.Unlock()
@@ -779,29 +793,36 @@ func (s *session) interactionClosedEvent(
 	)
 }
 
-func (s *session) takeAllInteractionsLocked() []*pendingInteraction {
-	interactions := make([]*pendingInteraction, 0, len(s.interactions))
-	for _, interaction := range s.interactions {
-		interactions = append(interactions, interaction)
-	}
-	s.interactions = make(map[agent.InteractionRef]*pendingInteraction)
-	s.interactionRefs = make(map[string]agent.InteractionRef)
-	sort.Slice(interactions, func(left, right int) bool {
-		return interactions[left].sequence < interactions[right].sequence
-	})
-	return interactions
-}
-
 func (s *session) settleInteractionsForState(
 	state agent.SessionState,
 ) []*pendingInteraction {
 	if state == agent.StateRequiresAction {
 		return nil
 	}
-	s.mu.Lock()
-	settled := s.takeAllInteractionsLocked()
-	s.mu.Unlock()
-	return settled
+	for {
+		s.mu.Lock()
+		var answering <-chan struct{}
+		for _, interaction := range s.interactions {
+			if interaction.urlAnswerDone != nil {
+				answering = interaction.urlAnswerDone
+				break
+			}
+		}
+		if answering != nil {
+			s.mu.Unlock()
+			<-answering
+			continue
+		}
+		settled := make([]*pendingInteraction, 0, len(s.interactions))
+		for _, interaction := range s.interactions {
+			if !interaction.acceptedURL {
+				s.deleteInteractionLocked(interaction)
+				settled = append(settled, interaction)
+			}
+		}
+		s.mu.Unlock()
+		return settled
+	}
 }
 
 func (s *session) closeInteractionEvents(
@@ -836,6 +857,15 @@ func (s *session) closedInteractionEvents(
 			},
 			answeredReason,
 		)
+		s.mu.Lock()
+		acceptedURL := interaction.acceptedURL
+		s.mu.Unlock()
+		if acceptedURL && result.Outcome == agent.InteractionAnswered {
+			result = interactionledger.Result{Outcome: fallbackOutcome, Reason: fallbackReason}
+			if fallbackReason == agent.ErrorReasonSessionClosed {
+				result.Outcome = agent.InteractionExpired
+			}
+		}
 		event, err := s.interactionClosedEvent(
 			interaction.received,
 			interaction,

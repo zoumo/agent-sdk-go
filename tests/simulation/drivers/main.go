@@ -14,6 +14,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	claudesim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
 	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
+	pisim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/pi/go"
 )
 
 func main() {
@@ -77,6 +78,8 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, mo
 		default:
 			err = claudesim.AcceptFlow(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		}
+	case "pi":
+		err = pisim.AcceptContinuation(ctx, mock, root, out)
 	default:
 		err = errors.New("unsupported provider")
 	}

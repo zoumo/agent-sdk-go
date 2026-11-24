@@ -233,7 +233,9 @@ func validatePreparedSession(session *preparedSession, tool toolIdentity, source
 	if source.Provider != "" && session.AgentType != source.Provider {
 		return fmt.Errorf("prepared agent %s differs from requested %s", session.AgentType, source.Provider)
 	}
-	if session.AgentType != "codex" && session.AgentType != "claude" {
+	switch session.AgentType {
+	case "codex", "claude", "pi":
+	default:
 		return fmt.Errorf("unsupported prepared agent %q", session.AgentType)
 	}
 	if err := validateSource(session, source); err != nil {
@@ -288,8 +290,9 @@ func validateSource(session *preparedSession, requested sourceSelection) error {
 	}
 	switch {
 	case requested.Recording != "":
-		if source.Kind != "recording" || source.Provenance != "external" {
-			return errors.New("recording prepare did not produce an external recording source")
+		// An explicitly supplied export can retain its official recording origin.
+		if source.Kind != "recording" || (source.Provenance != "external" && source.Provenance != "official") {
+			return errors.New("recording prepare did not produce a supported recording source")
 		}
 		if hash, err := digestPath(sourcePath); err != nil || hash != source.SHA256 {
 			return errors.New("prepared recording source changed after prepare")
@@ -322,7 +325,7 @@ func validateRoute(session *preparedSession) error {
 			return errors.New("builtin case mock route is not official")
 		}
 	case "recording":
-		if route.Provenance != "external" {
+		if route.Provenance != session.Source.Provenance {
 			return errors.New("recording session mock route has the wrong provenance")
 		}
 	default:

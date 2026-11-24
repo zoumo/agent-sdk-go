@@ -2,6 +2,7 @@ package agentcodex_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -193,15 +194,19 @@ func TestSessionConvertsCodexEventSurfaceInNativeOrder(t *testing.T) {
 	assert.Equal(t, "config_options_unsupported", sessionErrorReason(t, events[16]))
 	assert.Equal(t, "archive_state_unsupported", sessionErrorReason(t, events[17]))
 	assert.Equal(t, agent.UnsupportedNativeEventPayload{
-		Provider: "codex", NativeMethod: "item/started", NativeType: "futureTool",
+		AgentType: "codex",
+		Raw:       json.RawMessage(`{"method":"item/started","params":{"threadId":"root-a","turnId":"turn-a","startedAtMs":1700000100800,"item":{"type":"futureTool","id":"future","payload":7}}}`),
 	}, events[18].Payload)
 	assert.Equal(t, "future", events[18].ItemID)
 	assert.Equal(t, agent.UnsupportedNativeEventPayload{
-		Provider: "codex", NativeMethod: "future/notification", NativeType: "future/notification",
+		AgentType: "codex",
+		Raw:       json.RawMessage(`{"method":"future/notification","params":{"threadId":"root-a"}}`),
 	}, events[19].Payload)
 	assert.Equal(t, agent.UnsupportedNativeEventPayload{
-		Provider: "codex", NativeMethod: "item/completed", NativeType: "userMessage", NativeSubtype: "image",
+		AgentType: "codex",
+		Raw:       json.RawMessage(`{"method":"item/completed","params":{"threadId":"root-a","turnId":"turn-a","completedAtMs":1700000100900,"item":{"type":"userMessage","id":"image-input","content":[{"type":"text","text":"partial"},{"type":"image","url":"https://example.test/image"}]}}}`),
 	}, events[20].Payload)
+	assert.NotContains(t, eventCodexMeta(t, events[20]), "raw")
 	assert.Equal(t, "image-input", events[20].ItemID)
 	assert.Equal(t, "native_error", sessionErrorReason(t, events[21]))
 

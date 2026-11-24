@@ -183,7 +183,8 @@ func TestClaudeLiveStreamPreservesBlockIdentityAndToolLifecycle(t *testing.T) {
 	diagnostic := nextEvent(t, ctx, stream)
 	require.Equal(t, agent.EventSessionUnsupportedNativeEvent, diagnostic.Type())
 	assert.Equal(t, agent.UnsupportedNativeEventPayload{
-		Provider: "claude", NativeType: "future_stream_event",
+		AgentType: "claude",
+		Raw:       json.RawMessage(`{"type":"stream_event","session_id":"native-parity","parent_tool_use_id":null,"event":{"type":"future_stream_event"}}`),
 	}, diagnostic.Payload)
 	usage := nextEvent(t, ctx, stream)
 	assert.Equal(t, agent.EventSessionUsageUpdate, usage.Type())

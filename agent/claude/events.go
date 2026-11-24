@@ -82,6 +82,8 @@ func (s *session) convertEvent(received claude.Received) ([]agent.Event, error) 
 		events, err = s.stateEvent(received)
 	case event.Type == "system" && event.Subtype == "commands_changed":
 		events, err = s.commandsChangedEvent(received)
+	case event.Type == "system" && event.Subtype == "elicitation_complete":
+		events, err = s.completeElicitation(received)
 	case event.Result != nil:
 		events, err = s.resultEvent(received)
 	case event.Cancel != nil:
@@ -1281,13 +1283,18 @@ func (s *session) unsupportedNativeEvent(
 	nativeSubtype string,
 	extras map[string]any,
 ) ([]agent.Event, error) {
+	raw := received.Event.Raw
+	if len(raw) == 0 {
+		raw = received.Raw
+	}
+	extras["nativeType"] = nativeType
+	extras["nativeSubtype"] = nativeSubtype
 	event, err := s.newEvent(
 		received,
 		"",
 		agent.UnsupportedNativeEventPayload{
-			Provider:      "claude",
-			NativeType:    nativeType,
-			NativeSubtype: nativeSubtype,
+			AgentType: "claude",
+			Raw:       append(json.RawMessage(nil), raw...),
 		},
 		nativeEventTime(received.Raw),
 		extras,
@@ -1339,7 +1346,7 @@ func (s *session) newEvent(
 	}
 
 	claudeMeta := map[string]any{}
-	if len(raw) != 0 {
+	if _, unsupported := payload.(agent.UnsupportedNativeEventPayload); !unsupported && len(raw) != 0 {
 		claudeMeta["raw"] = append(json.RawMessage(nil), raw...)
 	}
 	if eventType != "" {

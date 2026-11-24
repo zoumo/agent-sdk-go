@@ -110,7 +110,7 @@ func TestUnifiedOpenBeforeInput(t *testing.T) {
 			}
 		}
 		if payload, ok := event.Payload.(agent.UnsupportedNativeEventPayload); ok {
-			require.Equal(t, "claude", payload.Provider)
+			require.Equal(t, "claude", payload.AgentType)
 			t.Logf("unified mapping gap: type=%s subtype=%s", nativeType, nativeSubtype)
 		}
 		if payload, ok := event.Payload.(agent.SessionErrorPayload); ok {
@@ -131,10 +131,15 @@ func claudeNativeEventEvidence(t *testing.T, event agent.Event) (string, string,
 	t.Helper()
 	meta, ok := event.Meta["claude"].(map[string]any)
 	require.True(t, ok)
-	raw, ok := meta["raw"].(json.RawMessage)
-	require.True(t, ok)
 	eventType, _ := meta["type"].(string)
 	subtype, _ := meta["subtype"].(string)
+	if payload, unsupported := event.Payload.(agent.UnsupportedNativeEventPayload); unsupported {
+		require.NotContains(t, meta, "raw")
+		require.NotEmpty(t, payload.Raw)
+		return eventType, subtype, payload.Raw
+	}
+	raw, ok := meta["raw"].(json.RawMessage)
+	require.True(t, ok)
 	return eventType, subtype, raw
 }
 

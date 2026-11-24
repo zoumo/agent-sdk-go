@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,10 +276,12 @@ func TestMixedUserContentIsUnsupported(t *testing.T) {
 
 func TestMixedUserContentReportsUnsupportedBlockWithoutDroppingText(t *testing.T) {
 	session := &session{id: "native-session"}
+	raw := json.RawMessage(`{"type":"user","uuid":"event-uuid","message":{"id":"mixed-message","content":[{"type":"text","text":"describe this"},{"type":"image"}]}}`)
 	events, err := session.userEvent(claude.Received{
 		Event: &claude.Event{
 			Type: "user",
 			UUID: "event-uuid",
+			Raw:  raw,
 			User: &claude.Message{
 				ID: "mixed-message",
 				Content: claude.Content{Blocks: []claude.ContentBlock{
@@ -295,7 +298,7 @@ func TestMixedUserContentReportsUnsupportedBlockWithoutDroppingText(t *testing.T
 	require.Len(t, events, 2)
 	assert.Equal(t, agent.EventUserMessage, events[0].Type())
 	assert.Equal(t, agent.UnsupportedNativeEventPayload{
-		Provider: "claude", NativeType: "user", NativeSubtype: "image",
+		AgentType: "claude", Raw: raw,
 	}, events[1].Payload)
 	meta := requireClaudeEventMeta(t, events[1])
 	assert.Equal(t, "image", meta["blockType"])
@@ -551,13 +554,39 @@ func TestSemanticSystemNotificationBecomesUnsupportedNativeEvent(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, events, 1)
 			assert.Equal(t, agent.UnsupportedNativeEventPayload{
-				Provider: "claude", NativeType: "system", NativeSubtype: subtype,
+				AgentType: "claude", Raw: raw,
 			}, events[0].Payload)
 			meta := requireClaudeEventMeta(t, events[0])
 			assert.Equal(t, subtype, meta["subtype"])
-			assert.Equal(t, raw, meta["raw"])
+			assert.NotContains(t, meta, "raw")
 		})
 	}
+}
+
+func TestClaudeURLCompletionWaitsForInFlightAccept(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		key := elicitationKey{server: "mcp", id: "flow"}
+		answerDone := make(chan struct{})
+		interaction := &pendingInteraction{ref: "url", elicitation: key, urlAnswerDone: answerDone}
+		session := &session{id: "native-session", interactions: map[agent.InteractionRef]*pendingInteraction{
+			interaction.ref: interaction,
+		}}
+		matches := make(chan *pendingInteraction, 1)
+		go func() {
+			match, _ := session.claimElicitationCompletion(key)
+			matches <- match
+		}()
+		synctest.Wait()
+		assert.Empty(t, matches)
+		session.mu.Lock()
+		interaction.acceptedURL = true
+		interaction.urlAnswerDone = nil
+		close(answerDone)
+		session.mu.Unlock()
+		require.Same(t, interaction, <-matches)
+		_, duplicate := session.claimElicitationCompletion(key)
+		assert.True(t, duplicate)
+	})
 }
 
 func requireClaudeEventMeta(t *testing.T, event agent.Event) map[string]any {

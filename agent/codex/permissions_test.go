@@ -20,7 +20,7 @@ func TestNativePermissionsAreScopedToEachOpenAndResume(t *testing.T) {
 	frames := append([]string(nil), mockCodexInit...)
 	frames = append(frames,
 		`>{"id":92,"method":"thread/start","params":{"approvalPolicy":"on-request","approvalsReviewer":"auto_review","cwd":"/synthetic","sandbox":"read-only"}}`,
-		`<{"id":92,"result":`+codexThreadStartResult("root-start")+`}`,
+		`<{"id":92,"result":`+codexPermissionResult("root-start", "on-request", "auto_review", "readOnly")+`}`,
 		`>{"id":93,"method":"thread/resume","params":{"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","excludeTurns":true,"permissions":"named-profile","threadId":"root-resume"}}`,
 		`<{"id":93,"result":`+codexThreadResumeResult("root-resume")+`}`,
 		`>{"id":94,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
@@ -110,8 +110,8 @@ func TestUnifiedPermissionPresetsMapOnOpenAndResume(t *testing.T) {
 		sandbox    string
 	}{
 		{
-			"omitted", "", "", "on-request", "auto_review",
-			`"approvalPolicy":"on-request","approvalsReviewer":"auto_review","sandbox":"workspace-write"`, "workspaceWrite",
+			"omitted", "", "", "never", "user",
+			`"approvalPolicy":"never","sandbox":"danger-full-access"`, "dangerFullAccess",
 		},
 		{
 			"autoReview", agent.PermissionPresetAutoReview, "", "on-request", "auto_review",

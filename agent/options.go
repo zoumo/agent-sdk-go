@@ -16,7 +16,7 @@ import (
 type OpenOptions struct {
 	Cwd string
 	// PermissionPreset selects the approval and sandbox settings for this
-	// operation. Core.Open and Core.Resume default to PermissionPresetAutoReview.
+	// operation. Core.Open and Core.Resume use DefaultPermissionPreset when omitted.
 	PermissionPreset PermissionPreset
 	// ProcessEnv is an additive, set-only overlay for a Claude Session CLI.
 	// Nil or empty leaves the provider environment unchanged; empty values set

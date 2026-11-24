@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/pi"
 )
 
@@ -59,7 +60,7 @@ func TestPiProcessPeer(t *testing.T) {
 		os.Exit(7)
 	}
 	if marker := os.Getenv("PI_TEST_EOF_MARKER"); marker != "" {
-		if err := os.WriteFile(marker, []byte("stdin closed"), 0600); err != nil {
+		if err := os.WriteFile(marker, []byte("stdin closed"), 0o600); err != nil {
 			os.Exit(8)
 		}
 	}
@@ -74,17 +75,24 @@ func TestOpenAndExactResume(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	base := pi.Options{Cwd: work, SessionDir: work, Command: exe, Args: []string{"-test.run=^TestPiProcessPeer$", "--"}, Env: []string{"PI_TEST_PROCESS_PEER=1", "PI_TEST_PROMPT=existing.txt", "PI_TEST_EOF_MARKER=" + marker, "GORACE=atexit_sleep_ms=0"}, AdditionalSystemPrompt: "existing.txt"}
-	require.NoError(t, os.WriteFile(filepath.Join(work, "existing.txt"), []byte("different file contents"), 0600))
-	s, err := pi.Open(ctx, base)
+	require.NoError(t, os.WriteFile(filepath.Join(work, "existing.txt"), []byte("different file contents"), 0o600))
+	openCtx, cancelOpen := context.WithCancel(ctx)
+	defer cancelOpen()
+	opened, err := pi.Open(openCtx, base)
 	require.NoError(t, err)
-	assert.Equal(t, "fresh", s.ID())
-	require.NoError(t, s.Close())
+	t.Cleanup(func() { _ = opened.CloseAndDiscard() })
+	cancelOpen()
+	state, err := opened.State(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "fresh", opened.ID())
+	assert.Equal(t, opened.ID(), state.SessionID)
+	require.NoError(t, opened.Close())
 	assert.FileExists(t, marker)
 	path := filepath.Join(work, "prior.jsonl")
-	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`{"type":"session","version":3,"id":"known-id","cwd":%q}`, work)+"\n"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`{"type":"session","version":3,"id":"known-id","cwd":%q}`, work)+"\n"), 0o600))
 	o := base
 	o.ResumeID = "known-id"
-	s, err = pi.Open(ctx, o)
+	s, err := pi.Open(ctx, o)
 	require.NoError(t, err)
 	require.Equal(t, "known-id", s.ID())
 	require.NoError(t, s.Close())
@@ -104,7 +112,7 @@ func TestOpenAndExactResume(t *testing.T) {
 	_, err = pi.Open(ctx, o)
 	require.ErrorContains(t, err, "differs from requested cwd")
 	o.Cwd = work
-	require.NoError(t, os.WriteFile(filepath.Join(work, "duplicate.jsonl"), []byte(fmt.Sprintf(`{"type":"session","id":"%s","cwd":%q}`, o.ResumeID, work)+"\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(work, "duplicate.jsonl"), []byte(fmt.Sprintf(`{"type":"session","id":%q,"cwd":%q}`, o.ResumeID, work)+"\n"), 0o600))
 	_, err = pi.Open(ctx, o)
 	require.ErrorContains(t, err, "ambiguous")
 }

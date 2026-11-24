@@ -263,6 +263,7 @@ func (s *Session) request(ctx context.Context, command string, fields map[string
 		s.writeToken <- struct{}{}
 		return nil, err
 	}
+	frame = append(frame, '\n')
 	ch := make(chan response, 1)
 	s.mu.Lock()
 	err = ctx.Err()
@@ -281,9 +282,8 @@ func (s *Session) request(ctx context.Context, command string, fields map[string
 	written := make(chan error, 1)
 	go func() {
 		defer s.writes.Done()
-		packet := append(frame, '\n')
-		n, writeErr := s.input.Write(packet)
-		if writeErr == nil && n != len(packet) {
+		n, writeErr := s.input.Write(frame)
+		if writeErr == nil && n != len(frame) {
 			writeErr = io.ErrShortWrite
 		}
 		written <- writeErr

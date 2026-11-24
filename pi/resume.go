@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -90,8 +91,8 @@ func (o Options) inCwd(path string) string {
 }
 
 func (o Options) envValue(key string) string {
-	for i := len(o.Env) - 1; i >= 0; i-- {
-		if value, ok := strings.CutPrefix(o.Env[i], key+"="); ok {
+	for _, entry := range slices.Backward(o.Env) {
+		if value, ok := strings.CutPrefix(entry, key+"="); ok {
 			return value
 		}
 	}

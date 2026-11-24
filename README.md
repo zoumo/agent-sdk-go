@@ -1,13 +1,14 @@
 # agent-sdk-go
 
-Go clients for the Codex app-server and Claude Code CLI. Both SDKs use the
+Go clients for the Codex app-server, Claude Code CLI, and Pi RPC. The SDKs use the
 `github.com/zoumo/agent-sdk-go` module and require Go 1.26 or newer.
 
 | If you need | Use | Get started |
 |---|---|---|
 | Codex protocol types, turn operations, or saved thread queries | `github.com/zoumo/agent-sdk-go/codex` | [Codex SDK](codex/README.md) |
 | Claude protocol types, CLI options, or saved session queries | `github.com/zoumo/agent-sdk-go/claude` | [Claude SDK](claude/README.md) |
-| The same live session API for Codex and Claude | `github.com/zoumo/agent-sdk-go/agent` and one adapter per Core | [Run the unified session example](#optional-unified-live-layer) |
+| Pi native RPC commands, responses, and events | `github.com/zoumo/agent-sdk-go/pi` | [Pi SDK](pi/README.md) |
+| The same live session API for Codex, Claude, and Pi | `github.com/zoumo/agent-sdk-go/agent` and one adapter per Core | [Run the unified session example](#optional-unified-live-layer) |
 
 The native SDKs have separate `codex/types` and `claude/types` packages. Use the
 native SDK for protocol-specific controls and saved history even when your
@@ -23,18 +24,22 @@ application uses `agent` for live sessions. See the [dependency rules](docs/arch
 
 ## Optional unified live layer
 
+Unified `Core.Open` and `Core.Resume` default to `fullAccess`. If your Codex or
+Claude application relied on automatic review, set `PermissionPreset` to
+`autoReview` on both calls. Pi accepts only `fullAccess`.
+
 Run the example from the repository root. The example uses synthetic providers.
 
 ```sh
 go test -count=1 -v ./agent -run '^ExampleCore$'
 ```
 
-The test passes after both providers report a reply, close the session, resume
-it by its saved ID, and stop. Follow the same lifecycle in your application.
+The two example providers report a reply, close the session, resume it by its
+saved ID, and stop. Follow the same lifecycle in your application.
 [ExampleCore source and expected output](agent/core_example_test.go)
 
-1. Create a Core with `agentcodex.New` or `agentclaude.New`. Call `Core.Start`
-   to initialize it and get its capabilities.
+1. Create a Core with `agentcodex.New`, `agentclaude.New`, or `agentpi.New`.
+   Call `Core.Start` to initialize it and get its capabilities.
 2. Call `Core.Open` with an absolute `OpenOptions.Cwd`. To restore an existing
    native session, call `Core.Resume` with its saved `SessionID` and the open
    options. Use the native SDK to read saved content.
@@ -56,7 +61,7 @@ it by its saved ID, and stop. Follow the same lifecycle in your application.
    operation is in progress.
 
 Read your adapter's package docs for setup and capabilities.
-[Codex adapter](agent/codex/doc.go) · [Claude adapter](agent/claude/doc.go)
+[Codex adapter](agent/codex/doc.go) · [Claude adapter](agent/claude/doc.go) · [Pi adapter](agent/pi/core.go)
 
 Unified Claude `Open` returns the native session ID from `claim_session` before
 the first input. Local startup checks for a stable Claude CLI at version 2.1.293
@@ -72,8 +77,8 @@ acceptance. An unsupported native version returns `agent.ErrorUnsupported`.
 Set `OpenOptions.Features.RestrictLocalTools` when you open or resume a session.
 `Session.EffectiveFeatures` reports whether the adapter configured its native
 restrictions. Claude sends a tool deny list. Codex disables the shell, image
-viewing, and image generation features. The Codex mapping still permits other
-local capabilities, including `apply_patch` where the model exposes it.
+viewing, and image generation features. The Codex mapping still permits
+`apply_patch` where the model exposes it. Pi passes `--no-tools`.
 [Mappings and limits](docs/modules/unified-agent/design.md#restrict-local-tools)
 
 ### Additional system prompt

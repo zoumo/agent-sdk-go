@@ -8,5 +8,9 @@ Claude: https://github.com/zoumo/claude-agent-sdk-go
 Source main: 72041470958a0d9f2f8e6ff5c0086a66ef193745
 See claude/LICENSE and claude/NOTICE for original attribution and upstream protocol provenance.
 
+The Go Pi client implements the RPC protocol of @earendil-works/pi-coding-agent 1.6.0.
+Protocol source: https://github.com/earendil-works/pi/blob/v1.6.0/packages/coding-agent/docs/rpc.md
+Upstream revision: faac585884ae2c013a6b1400f3e9e77f10b34bac
+
 Recorded fixtures retain their original manifests and sanitization provenance.
 Import paths were migrated; historical evidence records describe source-repository runs.

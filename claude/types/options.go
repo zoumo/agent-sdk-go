@@ -20,6 +20,17 @@ type InitializeOptions struct {
 	SystemPrompt []string `json:"systemPrompt,omitempty"`
 	// OmitHooks omits the native hooks field when Hooks is nil.
 	OmitHooks bool `json:"-"`
+	// SDKMCPServerManifests optionally advertises precomputed MCP handshake
+	// results for names registered in Options.SDKMCPServers. Hosts still serve
+	// live handshake requests when the CLI does not use the advertisement.
+	SDKMCPServerManifests map[string]SDKMCPServerManifest `json:"sdkMcpServerManifests,omitempty"`
+}
+
+// SDKMCPServerManifest describes one application-hosted server at startup.
+// Both results are JSON-RPC result objects. A nil ToolsListResult omits it.
+type SDKMCPServerManifest struct {
+	InitializeResult json.RawMessage `json:"initializeResult"`
+	ToolsListResult  json.RawMessage `json:"toolsListResult,omitempty"`
 }
 
 // Limits bounds protocol and control resources. Zero fields select defaults. A bound exceeded

@@ -44,6 +44,12 @@ type DenialOptions struct {
 type QuestionAnswers struct{ Answers map[string]string }
 
 func (r IncomingRequest) Answer(ctx context.Context, answer QuestionAnswers) error {
+	return r.AnswerWithToolUseID(ctx, answer, "")
+}
+
+// AnswerWithToolUseID answers the question and optionally echoes the original
+// request's tool-use ID. An empty ID leaves it out of the response.
+func (r IncomingRequest) AnswerWithToolUseID(ctx context.Context, answer QuestionAnswers, toolUseID string) error {
 	if r.method != "can_use_tool" || r.permission.ToolName() != "AskUserQuestion" {
 		return &DispatchError{Op: "answer question", State: NotSent, Err: ErrUnsupported}
 	}
@@ -62,7 +68,7 @@ func (r IncomingRequest) Answer(ctx context.Context, answer QuestionAnswers) err
 	if err != nil {
 		return &DispatchError{Op: "answer question", State: NotSent, Err: errors.Join(ErrInvalidPermissionAnswer, err)}
 	}
-	return r.permission.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated})
+	return r.permission.Answer(ctx, PermissionAnswer{Behavior: PermissionAllow, UpdatedInput: updated, ToolUseID: toolUseID})
 }
 
 func (r IncomingRequest) Approve(ctx context.Context, options ApprovalOptions) error {

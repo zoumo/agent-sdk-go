@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/zoumo/agent-sdk-go/pi"
 )
 
@@ -162,7 +163,7 @@ func TestOutOfOrderResponses(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if err = p.reply(second, nil); err != nil {
+		if err := p.reply(second, nil); err != nil {
 			return err
 		}
 		return json.NewEncoder(p.output).Encode(map[string]any{"type": "response", "id": first.ID, "command": first.Type, "success": false, "error": "model rejected", "nativeDetail": 123})
@@ -289,7 +290,7 @@ func TestAbortAndReuseSession(t *testing.T) {
 		}
 		_, err := p.receive()
 		if !errors.Is(err, io.EOF) {
-			return fmt.Errorf("expected stdin EOF, got %v", err)
+			return fmt.Errorf("expected stdin EOF, got %w", err)
 		}
 		return nil
 	})
@@ -343,7 +344,7 @@ func TestConcurrentCloseReleasesPendingRequestAndReceive(t *testing.T) {
 		}
 		close(requestRead)
 		if _, err := p.receive(); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("expected stdin EOF, got %v", err)
+			return fmt.Errorf("expected stdin EOF, got %w", err)
 		}
 		return nil
 	})
@@ -374,7 +375,7 @@ func TestConcurrentCloseReleasesPendingRequestAndReceive(t *testing.T) {
 func TestCloseAndDiscardReleasesUnreadEvents(t *testing.T) {
 	s, ctx := runPeer(t, func(p peer) error {
 		if _, err := p.receive(); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("expected stdin EOF, got %v", err)
+			return fmt.Errorf("expected stdin EOF, got %w", err)
 		}
 		return nil
 	})

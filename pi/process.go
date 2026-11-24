@@ -82,7 +82,7 @@ func Open(ctx context.Context, options Options) (*Session, error) {
 				_ = os.Remove(promptFile)
 			}
 		}()
-		_, writeErr := io.WriteString(f, options.AdditionalSystemPrompt)
+		_, writeErr := f.WriteString(options.AdditionalSystemPrompt)
 		if err := errors.Join(writeErr, f.Close()); err != nil {
 			return nil, err
 		}
@@ -92,7 +92,8 @@ func Open(ctx context.Context, options Options) (*Session, error) {
 	if command == "" {
 		command = "pi"
 	}
-	cmd := exec.Command(command, args...)
+	// The caller's context bounds the handshake. Session.Close owns process shutdown.
+	cmd := exec.CommandContext(context.WithoutCancel(ctx), command, args...)
 	cmd.Dir = cwd
 	cmd.Env = append(cmd.Environ(), options.Env...)
 	cmd.Stderr = options.Stderr

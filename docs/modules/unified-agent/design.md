@@ -1004,7 +1004,6 @@ adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造�
 
 如果同一 Core 连接上的 thread 已有所有者，Codex 会在发出原生请求前拒绝重复恢复。
 Claude 为 `Resume` 启动新进程，恢复结果由原生 Claude CLI 决定。
-参见 [Codex 所有权检查](../../../codex/session_ownership.go)和 [Claude 恢复入口](../../../agent/claude/core.go)。
 
 ### Session 附着、关闭与原因稳定性
 

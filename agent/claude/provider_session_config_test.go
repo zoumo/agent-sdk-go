@@ -596,5 +596,5 @@ func claudeExpectedArgs(identity string, configArgs ...string) []string {
 		"--include-partial-messages",
 	}
 	args = append(args, configArgs...)
-	return append(args, "--permission-mode=auto", claudeApprovalSandbox, identity)
+	return append(args, "--permission-mode=bypassPermissions", claudeFullAccessSandbox, identity)
 }

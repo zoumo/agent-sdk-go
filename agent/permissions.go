@@ -8,4 +8,7 @@ const (
 	PermissionPresetManualReview PermissionPreset = "manualReview"
 	PermissionPresetAutoReview   PermissionPreset = "autoReview"
 	PermissionPresetFullAccess   PermissionPreset = "fullAccess"
+
+	// DefaultPermissionPreset applies to unified Core.Open and Core.Resume when the preset is omitted.
+	DefaultPermissionPreset = PermissionPresetFullAccess
 )

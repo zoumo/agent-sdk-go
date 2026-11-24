@@ -65,33 +65,61 @@ func TestNativeArgsSessionPermissions(t *testing.T) {
 }
 
 func TestOpenLaunchesNativePermissionArgs(t *testing.T) {
-	ctx := context.Background()
-	options := fixtureOptions(t, "echo")
-	path := filepath.Join(options.WorkDir, "argv.json")
-	options.Env = append(options.Env, "CLAUDE_GO_CAPTURE="+path)
-	options.ResumeID = "11111111-1111-4111-8111-111111111111"
-	options.PermissionMode = PermissionModeAuto
-	options.Sandbox = &SandboxOptions{
-		Enabled:                  new(true),
-		FailIfUnavailable:        new(true),
-		AllowUnsandboxedCommands: new(false),
-	}
-	expected, err := NativeArgs(SessionOptions(options))
-	require.NoError(t, err)
-	require.Contains(t, expected, "--permission-mode=auto")
-	require.Contains(t, expected, `--settings={"sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}`)
-	require.Contains(t, expected, "--resume="+options.ResumeID)
+	const resumeID = "11111111-1111-4111-8111-111111111111"
+	for _, tc := range []struct {
+		name       string
+		resumeID   string
+		mode       PermissionMode
+		sandbox    *SandboxOptions
+		permission []string
+	}{
+		{name: "omitted on start"},
+		{name: "omitted on resume", resumeID: resumeID},
+		{
+			name:       "explicit on start",
+			mode:       PermissionModePlan,
+			permission: []string{"--permission-mode=plan"},
+		},
+		{
+			name:     "explicit on resume",
+			resumeID: resumeID,
+			mode:     PermissionModeAuto,
+			sandbox: &SandboxOptions{
+				Enabled:                  new(true),
+				FailIfUnavailable:        new(true),
+				AllowUnsandboxedCommands: new(false),
+			},
+			permission: []string{
+				"--permission-mode=auto",
+				`--settings={"sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}`,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := fixtureOptions(t, "echo")
+			path := filepath.Join(options.WorkDir, "argv.json")
+			options.Env = append(options.Env, "CLAUDE_GO_CAPTURE="+path)
+			options.ResumeID = tc.resumeID
+			options.PermissionMode = tc.mode
+			options.Sandbox = tc.sandbox
 
-	session, err := Open(ctx, SessionOptions(options))
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, session.Close()) })
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var launched struct {
-		Argv []string `json:"argv"`
+			session, err := Open(t.Context(), SessionOptions(options))
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, session.Close()) })
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			var launched struct {
+				Argv []string `json:"argv"`
+			}
+			require.NoError(t, json.Unmarshal(data, &launched))
+
+			want := append(slices.Clone(baseInteractionArgs), tc.permission...)
+			if tc.resumeID != "" {
+				want = append(want, "--resume="+tc.resumeID)
+			}
+			assert.Equal(t, want, launched.Argv)
+		})
 	}
-	require.NoError(t, json.Unmarshal(data, &launched))
-	assert.Equal(t, expected, launched.Argv)
 }
 
 func TestInvalidInitialPermissionModeRejectedBeforeLaunch(t *testing.T) {

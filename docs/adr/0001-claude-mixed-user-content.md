@@ -30,7 +30,7 @@ Claude 官方 TypeScript 0.3.302 声明中的 `sdk.d.ts:6342` 显示
 `SDKUserMessage.message` 是 `MessageParam`；其 `content` 允许字符串或包含
 `text`、`tool_result` 等块的数组。协议类型因此允许 `text` 与 `tool_result`
 出现在同一个 user content 数组中。类型来源与版本固定记录见
-`claude/docs/type-sources.md`。
+`client/claude/docs/type-sources.md`。
 
 此前 adapter 为该形状构造了逐 text segment 的拆分：每个 text segment 生成一个
 `user.message`，所有 segment 复用同一 message identity，并附加
@@ -87,4 +87,4 @@ segment 的原生身份，而不是把同一个 message ID 重复用于多个 it
 
 - [统一 Agent 设计](../../agent/docs/session.md)
 - Claude adapter 包文档：`agent/claude/doc.go`
-- Claude 类型来源：`claude/docs/type-sources.md`
+- Claude 类型来源：`client/claude/docs/type-sources.md`

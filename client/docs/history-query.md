@@ -16,7 +16,7 @@ tags: [codex, claude, history]
 
 ## Codex 原生接口
 
-`codex.Client` 提供以下独立方法，参数和结果是 `codex/types` 的原生绑定：
+`codex.Client` 提供以下独立方法，参数和结果是 `client/codex/types` 的原生绑定：
 
 ```go
 ListThreads(context.Context, types.ThreadListParams) (types.ThreadListResponse, error)

@@ -10,43 +10,19 @@ tags: [unified-agent, session, events]
 
 # 统一 Agent Core、Session 与事件流
 
-`agent` 为单个 Codex 或 Claude Session 提供统一的操作和实时事件。具体 adapter
+`agent` 为单个 Codex、Claude 或 Pi Session 提供统一的操作和实时事件。具体 adapter
 管理原生资源、工作归属和回答权限。原生 SDK 提供各自的协议与历史查询。MASS 负责
 应用侧的 Session 身份、多 Session 汇聚、历史导入和持久化。
 [原生 Session 合同](../../client/docs/session.md) · [独立历史查询](../../client/docs/history-query.md)
 
-从 [SDK 接入示例](../../README.md) 开始使用统一接口。依赖边界见[开发规范](../../docs/architecture.md)。
+从 [SDK 接入示例](../README.md) 开始使用统一接口。依赖边界见[开发规范](../../docs/architecture.md)。
 
 ## 分层与依赖
 
-```text
-MASS Runtime adapters -> agent.Core / agent.Session
-                           ^             ^
-                           | implements  |
-                    agent/codex     agent/claude
-                        |                 |
-                        v                 v
-                      codex             claude
-                        |                 |
-                        v                 v
-                    codex/types      claude/types
-
-agent/codex, agent/claude
-    -> agent/internal/corelease         -> agent
-    -> agent/internal/eventstream       -> agent, internal/queue
-    -> agent/internal/interactionledger -> agent, internal/uuidv4
-    -> agent/internal/eventenvelope     -> agent, internal/uuidv4
-    -> agent/internal/submissiontrace   -> agent
-
-agent, codex, claude, claude/types -> mcp
-agent          -> internal/tracecontext
-internal/queue -> github.com/zoumo/golib/channx
-```
-
-目录、import 方向和依赖门禁由[开发规范](../../docs/architecture.md)维护。上图展示
-公开合同、实现关系与生产依赖；原生 SDK 不反向依赖统一 `agent`。
-两个 adapter 只适配各自原生 SDK，共同使用 `corelease` 管理 Core 准入、共享资源
-和 Session lease，使用 `eventstream` 管理每个 Session 的事件队列、取流与清理
+每个 adapter 实现 `agent.Core` 和 `agent.Session`，并调用对应的
+`client/<provider>`。依赖方向和生产依赖由[包归属决策](../../docs/adr/0007-sdk-replay-package-ownership.md)
+及[开发规范](../../docs/architecture.md)维护。各 adapter 使用
+`corelease` 管理 Core 准入、共享资源和 Session lease，使用 `eventstream` 管理每个 Session 的事件队列、取流与清理
 顺序。两者都不拥有原生观察、转换或交互状态机。`interactionledger` 另行保存
 统一回答准入状态；adapter 私有 registry 独占原生回答句柄与结算逻辑。
 MASS Runtime adapter 可以消费统一层，而 MASS Service、Store 和 transport 仍
@@ -172,7 +148,7 @@ provider 内置或默认指令之后增加一段调用方指令。统一层不�
 | 非空 `AdditionalSystemPrompt` | `thread/start` 与 `thread/resume` 的 `developerInstructions` | `AppendSystemPrompt` 映射为 `--append-system-prompt=<text>` |
 | 替换内置系统提示 | 不提供；不设置 `baseInstructions` | 不提供；不设置 `--system-prompt` |
 
-Claude 原生包在 `claude.Options` 与 `claude/types.Options` 增加
+Claude 原生包在 `claude.Options` 与 `client/claude/types` 的 `Options` 增加
 `AppendSystemPrompt string`，并由 `OptionsFromTypes` 和 `Types()` 原样往返。
 该字段只接受 inline 文本；非空时生成一个 `--append-system-prompt=<text>` argv
 元素，空串省略。使用 `=` 绑定值，避免以 `-` 开头的文本被当成另一个 CLI 选项。

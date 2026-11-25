@@ -251,7 +251,7 @@ bound. See [compatibility](#compatibility) for native and evidence limits.
 
 ## Types, licensing and offline checks
 
-Native pure data and codecs live in `claude/types` with standard-library-only
+Native pure data and codecs live in `client/claude/types` with standard-library-only
 production dependencies. Unknown JSON fields/blocks are retained; handwritten
 types do not imply full official SDK parity. Original code uses Apache-2.0; see
 [NOTICE](NOTICE), [LICENSE](LICENSE) and [type provenance](docs/type-sources.md).

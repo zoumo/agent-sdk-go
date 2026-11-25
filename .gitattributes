@@ -1,0 +1,2 @@
+# Recorded stderr is byte-exact, including trailing blank lines.
+replay/data/**/stderr.raw -whitespace

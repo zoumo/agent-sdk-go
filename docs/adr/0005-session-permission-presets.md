@@ -38,4 +38,4 @@ tags: [session, permissions, approvals, sandbox]
 
 统一预设定义启动和恢复配置的意图。Codex 沙箱和 Claude Bash 沙箱的覆盖范围由各自原生实现决定。未来 Adapter 只有能兑现对应预设时才声明支持。Pi 的人工和自动审批需要执行前拦截能力，Pi 的进程隔离由宿主配置。
 
-[预设定义](../../agent/permissions.go) · [Codex 映射](../../agent/codex/permissions.go) · [Claude 映射](../../agent/claude/permissions.go) · [统一 Agent 设计](../modules/unified-agent/design.md) · [原生 Session 合同](../modules/native-session/design.md)
+[预设定义](../../agent/permissions.go) · [Codex 映射](../../agent/codex/permissions.go) · [Claude 映射](../../agent/claude/permissions.go) · [统一 Agent 设计](../../agent/docs/session.md) · [原生 Session 合同](../../client/docs/session.md)

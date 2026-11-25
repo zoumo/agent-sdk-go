@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 const mcpElicitationMethod = "mcpServer/elicitation/request"

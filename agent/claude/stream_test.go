@@ -6,7 +6,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 

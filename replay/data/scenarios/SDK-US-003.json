@@ -1,0 +1,503 @@
+{
+  "version": 4,
+  "id": "SDK-US-003",
+  "goal": "接收、等待并批准或拒绝权限请求",
+  "cases": [
+    {
+      "id": "SDK-CASE-008",
+      "storyId": "SDK-US-003",
+      "goal": "拒绝文件写入审批并观察后续结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-008",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Use Write exactly once to create denied.txt containing exactly denied followed by a newline. If denied, finish without retrying."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.deny"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "拒绝文件写入审批并观察后续结果。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "approval",
+      "parameters": {
+        "approvalKind": "file",
+        "approvalDecision": "deny"
+      }
+    },
+    {
+      "id": "SDK-CASE-009",
+      "storyId": "SDK-US-003",
+      "goal": "批准文件写入审批并观察后续结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-009",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Use the native file change tool to write approved.txt with content SYNTHETIC_APPROVED. Do not retry if permission is denied."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.answer"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "批准文件写入审批并观察后续结果。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "approval",
+      "parameters": {
+        "approvalKind": "file",
+        "approvalDecision": "allow"
+      }
+    },
+    {
+      "id": "SDK-CASE-010",
+      "storyId": "SDK-US-003",
+      "goal": "批准命令审批并观察后续结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-010",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Run the shell command printf SYNTHETIC_COMMAND exactly once. Request execution outside the sandbox so the application can approve it. Do not retry if permission is denied."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.answer"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "批准命令审批并观察后续结果。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "approval",
+      "parameters": {
+        "approvalKind": "command",
+        "approvalDecision": "allow"
+      }
+    },
+    {
+      "id": "SDK-CASE-011",
+      "storyId": "SDK-US-003",
+      "goal": "拒绝命令审批并观察后续结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-011",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Run the shell command printf SYNTHETIC_COMMAND exactly once. Request execution outside the sandbox so the application can approve it. Do not retry if permission is denied."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.answer"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "拒绝命令审批并观察后续结果。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "approval",
+      "parameters": {
+        "approvalKind": "command",
+        "approvalDecision": "deny"
+      }
+    },
+    {
+      "id": "SDK-CASE-012",
+      "storyId": "SDK-US-003",
+      "goal": "持有审批期间观察事件与控制回执",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-012",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "numbers.txt": "7\n11\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Use Read exactly once to read numbers.txt. Then report the two integers briefly. Do not use other tools."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "permission.read",
+          "permission.held-control",
+          "permission.held-event"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "审批未回答期间，既接收独立原生事件，也发出控制操作并收到关联回执；随后回答审批并观察结束。",
+        "outOfScope": [
+          "其他 case 的使用流程",
+          "人工构造的协议错误和精确竞态"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "deferred-approval"
+    },
+    {
+      "id": "SDK-CASE-039",
+      "storyId": "SDK-US-003",
+      "goal": "核对 Codex root Thread 的默认 MCP 工具审批和工具结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-039",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {}
+      },
+      "inputs": {
+        "input-1": "Call the approval_fixture MCP tool token exactly once. Report its returned token. Do not use any other tool."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.mcp"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "确认 root Thread 的一次默认 MCP 工具审批、原始请求 ID 及工具结果。",
+        "outOfScope": [
+          "持久授权"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "mcp-tool-approval",
+      "parameters": {
+        "approvalThread": "root"
+      }
+    },
+    {
+      "id": "SDK-CASE-040",
+      "storyId": "SDK-US-003",
+      "goal": "核对 Codex child Thread 的默认 MCP 工具审批和工具结果",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-040",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {}
+      },
+      "inputs": {
+        "input-1": "Spawn one default agent. Tell that agent to call the approval_fixture MCP tool token exactly once and report its returned token. Wait for the agent and report its token. You must not call the MCP tool yourself."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.mcp"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "确认 child Thread 的一次默认 MCP 工具审批、原始请求 ID 及工具结果。",
+        "outOfScope": [
+          "持久授权"
+        ]
+      },
+      "limits": {
+        "inputs": 1,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "mcp-tool-approval",
+      "parameters": {
+        "approvalThread": "child"
+      }
+    },
+    {
+      "id": "SDK-CASE-041",
+      "storyId": "SDK-US-003",
+      "goal": "回应 Codex 本轮、本会话和拒绝三种额外沙箱权限决定",
+      "required": true,
+      "implementation": "implemented",
+      "name": "simulation-041",
+      "execution": {
+        "mode": "live-selected-path",
+        "reason": ""
+      },
+      "setup": {
+        "files": {
+          "grant-turn/fixture.txt": "SYNTHETIC\n",
+          "grant-session/fixture.txt": "SYNTHETIC\n",
+          "grant-deny/fixture.txt": "SYNTHETIC\n"
+        }
+      },
+      "inputs": {
+        "input-1": "Call the built-in request_permissions tool exactly once requesting file_system.write for exactly the relative directory grant-turn in the current working directory. Provide a synthetic reason. Do not request read or network permissions. After the decision, acknowledge it and finish. Do not invoke any other tool.",
+        "input-2": "Call the built-in request_permissions tool exactly once requesting file_system.write for exactly the relative directory grant-session in the current working directory. Provide a synthetic reason. Do not request read or network permissions. After the decision, acknowledge it and finish. Do not invoke any other tool.",
+        "input-3": "Call the built-in request_permissions tool exactly once requesting file_system.write for exactly the relative directory grant-deny in the current working directory. Provide a synthetic reason. Do not request read or network permissions. After the decision, acknowledge it and finish. Do not invoke any other tool."
+      },
+      "steps": [
+        {
+          "op": "session.open"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-1"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-2"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "input.submit",
+          "input": "input-3"
+        },
+        {
+          "op": "event.wait",
+          "event": "execution.result",
+          "onMissing": "untriggered"
+        },
+        {
+          "op": "session.close"
+        }
+      ],
+      "expect": {
+        "requests": [
+          "approval.permissions-turn",
+          "approval.permissions-session",
+          "approval.permissions-deny"
+        ],
+        "missingEvidence": "untriggered",
+        "scope": "用原生请求 ID 核对三个额外权限决定与处理结果。",
+        "outOfScope": [
+          "跨轮执行权限效果"
+        ]
+      },
+      "limits": {
+        "inputs": 3,
+        "activitySeconds": 0,
+        "transportSeconds": 0,
+        "protocolBytes": 0,
+        "stderrBytes": 0
+      },
+      "driverProfile": "sandbox-permissions",
+      "parameters": {
+        "approvalScopes": [
+          "turn",
+          "session",
+          "deny"
+        ]
+      }
+    }
+  ]
+}

@@ -18,7 +18,7 @@ required coverage by test level in the [testing standards](testing-standards.md)
 | If you need to check | Run | Read the result |
 |---|---|---|
 | The shared session API or an MCP declaration | [Run an offline example](#code-integration-tests) | Go checks the examples' expected output. |
-| The native public interfaces against synthetic peers | `go test -count=1 ./tests/integration ./codex ./claude` | Go reports test results by package. [Integration tests](#code-integration-tests) |
+| The native public interfaces against synthetic peers | `go test -count=1 ./client/... ./agent/... ./tests/replay` | Go reports test results by package. [Integration tests](#code-integration-tests) |
 | All required cases against fixed native recordings | [Run the simulation gate](#run-the-fixed-recording-gate) | Read `coverage.json` and the per-run results in the reported output directory. |
 | The repository's offline gates | [Run the offline checks](#run-the-offline-checks) | The command exits successfully when every selected check passes. |
 | A real installed CLI or model | [Select an opt-in real CLI check](#opt-in-real-cli-checks) | Read the result for that specific CLI, version, and scenario. |
@@ -56,18 +56,18 @@ The script takes one optional task argument.
 ## Run the fixed recording gate
 
 ```sh
-go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$'
+bash scripts/check-offline.sh e2e
 ```
 
 The test runs the gate in process. `TestMain` builds the SDK driver, which runs
 in a separate process with its own environment and workspace. Both link the
-fixed Testify Go module. The test reads the typed execution report before
-removing its fixture. [Testify library contract](modules/agent-sdk-testify/library-mode.md)
+Replay package. The test reads the typed execution report before
+removing its fixture. [Replay integration contract](../tests/simulation/docs/library-mode.md)
 
 Inspect `coverage.json` for each provider and case's requirement, material,
 source verification, and SDK result. Per-run `summary.json` records business,
 protocol, evidence, and cleanup outcomes. Use the
-[simulation guide](../tests/simulation/drivers/README.md) to select a single case
+[simulation guide](../tests/simulation/README.md) to select a single case
 or an external recording.
 
 The test runs in a short private directory under `/tmp` and resolves its
@@ -85,8 +85,8 @@ the test returns an error and reports the retained temporary output location.
 
 ## Opt-in real CLI checks
 
-Real CLI/agent checks live in [`codex/tests/e2e`](../codex/tests/e2e) and
-[`claude/tests/e2e`](../claude/tests/e2e). Codex covers stdio lifecycle/history,
+Real CLI checks live in each client or adapter’s `tests/e2e` directory.
+[Codex](../client/codex/tests/e2e) covers stdio lifecycle and history,
 interaction/interrupt scenarios and WebSocket authentication/lifecycle. Its
 WebSocket harness requires Unix process groups for bounded server cleanup.
 It checks authentication, reconnection and client/server lifecycle through the
@@ -117,7 +117,7 @@ Run the assigned-session model probes only with explicit opt-in:
 SDK_REAL_AGENT_E2E=1 CLAUDE_E2E=1 \
 CLAUDE_E2E_CLI=/absolute/path/to/claude \
 CLAUDE_E2E_MODEL=your-model \
-go test ./claude/tests/e2e -run 'TestUnifiedOpenBeforeInput|TestNativeAssignedSessionIdentityAcrossFirstTurn|TestNativeSubagentRelationship293' -v -count=1
+go test ./client/claude/tests/e2e ./agent/claude/tests/e2e -run 'TestUnifiedOpenBeforeInput|TestNativeAssignedSessionIdentityAcrossFirstTurn|TestNativeSubagentRelationship293' -v -count=1
 ```
 
 These probes use temporary HOME/config directories. The relationship check
@@ -137,16 +137,25 @@ CLAUDE_RESUME_E2E_CLI=/absolute/path/to/isolated-claude \
 CLAUDE_RESUME_E2E_CONFIG_DIR=/absolute/native/config \
 CLAUDE_RESUME_E2E_CWD=/absolute/owned/project \
 CLAUDE_RESUME_E2E_SESSION_ID=your-owned-session-uuid \
-go test ./claude/tests/e2e -run '^TestUnifiedResumeIdentityWithoutInput$' -v -count=1
+go test ./agent/claude/tests/e2e -run '^TestUnifiedResumeIdentityWithoutInput$' -v -count=1
 ```
 
 The check verifies the same native ID and transcript file identity before and
 after promptless resume. It does not establish a resumed business workflow or
 MCP connectivity; those require separate acceptance evidence.
 
-Small fixture embedding packages under each native `tests/testdata`
-contain code-owned synthetic inputs from `integration/`. Replay adapters share those bytes without
-depending on the caller's working directory. External consumers verify their packaging.
+SDK tests share embedded synthetic inputs from `internal/testsupport/`. The
+fixture packages resolve their inputs independently of the working directory.
+
+### Pi against a loopback model endpoint
+
+Supply the absolute path to Pi 1.6.0. The tests run an installed Pi CLI against
+local endpoints with authored model responses.
+
+```sh
+PI_E2E_CLI=/absolute/path/to/pi AGENT_SDK_TEST_PI_CLI=/absolute/path/to/pi \
+  go test -count=1 -v ./client/pi/tests/e2e ./agent/pi/tests/e2e
+```
 
 ## External consumers
 
@@ -155,16 +164,15 @@ consumer modules using its full SHA:
 
 ```sh
 bash scripts/check-consumers.sh "$(git rev-parse HEAD)"
-bash claude/scripts/check-managed-consumer.sh "$(git rev-parse HEAD)"
+bash client/claude/scripts/check-managed-consumer.sh "$(git rev-parse HEAD)"
 ```
 
 Both scripts create their modules and module caches in private temporary directories, disable
 `go.work` and inherited Go overlays/modfiles, and fetch from the new repository
-without `replace`. The root script resolves the exact SHA directly from GitHub,
-checks its full VCS origin hash, compiles all four public imports, copied public
-examples and documented configuration/approval snippets, and runs synthetic
-value/configuration and embedded fixture packaging smoke checks. It does not copy
-or rerun the SDK interaction suites. The retained Claude script separately compiles
+without `replace`. The root script checks the downloaded module’s VCS origin hash. It
+compiles native imports, unified imports, and both layers in a single Go file.
+It also compiles public examples and documentation snippets and runs offline
+configuration checks. The retained Claude script separately compiles
 its native consumer and configuration snippet. Dependency download requires network
 access; compilation/runtime checks then use `GOPROXY=off` and `GOSUMDB=off`.
 Neither script invokes a real agent CLI or model. These checks validate a published
@@ -183,7 +191,7 @@ Both jobs include the strict fixed-recording gate through `go test ./...`;
 there is no separate simulation-gate job. Failures and logs remain isolated while
 the jobs run concurrently.
 The offline tasks build the tests and SDK-owned driver; the
-in-process testify module is fetched by the normal Go module graph.
+Replay library builds in the same Go module.
 External consumer CI runs for pushed `main` commits, manual workflow runs and
 same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
@@ -197,9 +205,9 @@ execution is added. Configured coverage does not prove that any runner executed.
 
 ## Code integration tests
 
-[Codex public API tests](../codex/public_api_test.go) check API signatures, import
+[Codex public API tests](../client/codex/public_api_test.go) check API signatures, import
 identity and configuration during ordinary package tests. Mock integration
-lives in [Codex](../codex/mock_cli_test.go) and [Claude](../claude/mock_cli_test.go)
+lives in [Codex](../client/codex/mock_cli_test.go) and [Claude](../client/claude/mock_cli_test.go)
 package tests: each SDK opens the in-process mock through closeable SDK streams and
 checks question/permission answers, interrupts, cancellation, disconnects and
 mismatches. Both tests also pause consumption during 2,048-event bursts, complete
@@ -207,11 +215,12 @@ control and answer operations, then verify ordered drain after disconnection.
 Typed execution reports check strict replay, full consumption, client EOF and the
 absence of a native launch. Shared FIFO tests cover cancellation, atomic batches,
 concurrent producers, close/abort races and reference release. See the
-[event delivery contract](modules/native-session/design.md#delivery-event-delivery).
+[event delivery contract](../client/docs/session.md#delivery-event-delivery).
 
-`TestNativeIntegration` in `tests/integration` exercises both native SDK public
-interfaces through synthetic protocol peers. It retains original-handle authority,
-unknown fields, cancellation, ordering, drain, backpressure and error classification.
+[The native adapter matrix](../client/tests/native_adapters_test.go) checks
+shared native behavior using synthetic peers. Provider tests cover session
+operations, history, and child detail. [Unified configuration tests](../agent/tests/session_config_test.go)
+check the SessionConfig contract across adapters.
 Testify suites run sequentially; worker outcomes return to the owning test goroutine.
 
 The optional unified layer has separate public-contract, Core lease, event, interaction
@@ -244,7 +253,7 @@ The additional-system-prompt contract uses the same offline synthetic boundary:
 
 ```sh
 go test -run 'AdditionalSystemPrompt' ./agent ./agent/codex ./agent/claude
-go test ./agent ./agent/codex ./agent/claude ./claude/...
+go test ./agent ./agent/codex ./agent/claude ./client/claude/...
 ```
 
 These checks cover empty omission, exact Codex request and Claude argv mapping,
@@ -255,17 +264,17 @@ Agent or model.
 Context injection has dedicated offline protocol checks:
 
 ```sh
-go test ./agent ./agent/codex ./agent/claude ./codex ./codex/types -run Inject -count=1
+go test ./agent ./agent/codex ./agent/claude ./client/codex ./client/codex/types -run Inject -count=1
 ```
 
 They cover exact context-only envelopes, idle/active input routing, unchanged
 interrupt targets, version/native rejection, local admission, cancellation,
 close and unknown Codex outcomes. These synthetic checks do not establish
 real-provider consumption. Official recordings and their strict replay remain
-owned by `agent-sdk-testify`; a new recording must be adopted and exercised
+owned by Replay. Adopt and exercise recordings
 through the public Go SDK before it constitutes SDK simulation evidence.
 
-`NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
+`TestIndependentHistoryBrowser` uses a strict synthetic Codex
 app-server trace and Claude temporary saved storage. Native focused tests retain
 transport, live coexistence, cancellation, unknown, resource and integrity checks.
 The offline examples show both native history workflows. None of these checks
@@ -273,38 +282,38 @@ establishes real recording or model execution.
 
 ## Simulation coverage
 
-The [SDK acceptance matrix](../tests/simulation/simulate/coverage.go) defines
-which provider and case combinations are required. The Testify module supplies
+The [SDK acceptance matrix](../tests/simulation/coverage.go) defines
+which provider and case combinations are required. Replay supplies
 the fixed recording corpus. The gate reports missing required material as a
 failure. For business evidence and pass criteria, see the
 [SDK acceptance guide](sdk/validation-cases.md). Check the matrix independently
 of any recording with the existing policy test.
 
 ```sh
-go test -count=1 ./tests/simulation/simulate -run '^TestAcceptanceMatrixMatchesSharedPolicy$'
+go test -count=1 ./tests/simulation -run '^TestAcceptanceMatrixMatchesSharedPolicy$'
 ```
 
 SDK simulation evidence combines reviewed native recordings, public SDK
 assertions, strict replay, full consumption, and cleanup. Official verification
-belongs to the [Testify library](https://github.com/zoumo/agent-sdk-testify).
-Go simulation flows live under `tests/simulation/drivers/`; synthetic native
-replay fixtures support the [code integration tests](#code-integration-tests).
+belongs to the [Replay library](../replay/README.md).
+The runner starts `tests/simulation/driver/` to dispatch provider scenarios.
+Synthetic fixtures support the [code integration tests](#code-integration-tests).
 
 ## Focused checks
 
 Run these from the repository root; default live gates remain disabled:
 
 ```sh
-python3 codex/docs/protocol/verify_inventory.py
-(cd codex && bash scripts/check_generated.sh)
-go test -count=1 ./tests/integration ./codex ./claude
+python3 client/codex/docs/protocol/verify_inventory.py
+(cd client/codex && bash scripts/check_generated.sh)
+go test -count=1 ./client/... ./agent/... ./tests/replay
 ```
 
 Codex generation uses the checked-in schema without downloading upstream sources;
 consistency does not prove live compatibility. CI whitespace checks compare Git
 objects: push before→HEAD, PR merge-base→head, manual first-parent→HEAD, with an
 empty-tree baseline for an initial/root commit. Missing commits fail closed.
-[check_whitespace.py](../codex/scripts/check_whitespace.py) uses
+[check_whitespace.py](../client/codex/scripts/check_whitespace.py) uses
 `GITHUB_EVENT_NAME` and `GITHUB_EVENT_PATH`; negative fixtures verify actual failures.
 CI uses pinned action commits, read-only permissions and no persisted credentials
 or service secrets. Concurrency cancellation stays within workflow/event/ref lanes.
@@ -312,7 +321,8 @@ No Windows runtime support is claimed.
 
 ## Release preparation
 
-One version covers all four native imports. Before an authorized publication:
+One SDK tag versions the native clients, unified adapters, Replay library, and
+`agent-replay` CLI. Before an authorized publication, complete these checks.
 
 1. Confirm the intended main SHA and both imported source histories.
 2. Require the exact SHA's `checks` and `race` CI jobs and the External
@@ -328,4 +338,36 @@ check records success on the exact commit only when all three jobs succeed on
 a push to `main`. Open the check's details to see the run that verified the
 commit.
 
-Real agent checks remain opt-in. These commands do not publish anything.
+### Build and validate the Replay release
+
+Run `make replay-build` to build the CLI using only the Go toolchain and the
+prepared Go module cache. The output is `.artifacts/replay/bin/agent-replay`.
+Run `make replay-check` to validate the case catalog, documentation links,
+build checkout, and Replay dependency boundaries.
+
+Prepare the [official driver build dependencies](../replay/drivers/README.md#构建与测试)
+before building a native distribution. Set `SDK_TAG` to the local Git tag at
+`HEAD`. Use a new output directory.
+
+```sh
+make replay-release SDK_TAG="$SDK_TAG" OUTPUT=/absolute/new-dist
+make replay-check-package OUTPUT=/absolute/new-dist
+```
+
+A push of the SDK tag starts the release workflow.
+The workflow verifies the installed CLI and drivers on Linux and macOS for amd64
+and arm64. It also imports `replay` and installs the CLI from the same tag in an
+independent Go module. [Release workflow](../.github/workflows/release.yml)
+
+Pull requests run the same package checks on Ubuntu in a separate workflow.
+SDK Go checks can run without the Rust and Node.js toolchains. [Package checks](../.github/workflows/replay-package.yml)
+
+The release includes `agent-replay_<tag>_<os>_<arch>.tar.gz` for each platform.
+Each archive contains `agent-replay`, `agent-sdk-testify-codex`, the builtin
+material manifest, and usage and license files. The Claude and Pi driver
+tarballs keep their npm package names and versions. Verify the downloaded files
+with `SHA256SUMS`. `manifest.json` records the SDK tag and commit, the builtin
+material identity, and the artifact hashes.
+
+Installed package checks use sealed recordings and controlled peers. Real Agent
+checks remain opt-in.

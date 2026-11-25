@@ -77,6 +77,6 @@ Codex Plan 通知不进入统一流，因此不会产生跨 adapter 的 Plan 状
 
 ## 相关合同
 
-- [统一 Agent 设计](../modules/unified-agent/design.md)
+- [统一 Agent 设计](../../agent/docs/session.md)
 - Codex adapter 包文档：`agent/codex/doc.go`
 - Claude adapter 包文档：`agent/claude/doc.go`

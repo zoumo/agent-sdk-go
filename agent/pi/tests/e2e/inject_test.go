@@ -20,7 +20,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentpi "github.com/zoumo/agent-sdk-go/agent/pi"
-	"github.com/zoumo/agent-sdk-go/pi"
+	"github.com/zoumo/agent-sdk-go/client/pi"
 )
 
 func TestOfficialPiSilentInject(t *testing.T) {

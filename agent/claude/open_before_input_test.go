@@ -15,8 +15,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	"github.com/zoumo/agent-sdk-go/claude"
-	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 func TestOpenClaimsNativeIdentityBeforeAnyUserInput(t *testing.T) {

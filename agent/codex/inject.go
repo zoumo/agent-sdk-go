@@ -7,8 +7,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
-	"github.com/zoumo/agent-sdk-go/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.InjectReceipt, err error) {

@@ -8,8 +8,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope"
+	"github.com/zoumo/agent-sdk-go/client/pi"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
-	"github.com/zoumo/agent-sdk-go/pi"
 )
 
 // project runs on the single native reader. Each supported frame yields its

@@ -14,7 +14,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 func TestProviderResumeRequiresExplicitConfigDir(t *testing.T) {

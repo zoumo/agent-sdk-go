@@ -92,6 +92,28 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 					payloads = append(payloads, agent.SessionErrorPayload{Message: message, Reason: "assistant_error"})
 				}
 			}
+		case "extension_error":
+			if !s.core.config.EnableInject {
+				break
+			}
+			var failure struct {
+				Path  string `json:"extensionPath"`
+				Event string `json:"event"`
+			}
+			if json.Unmarshal(native.Raw, &failure) != nil {
+				break
+			}
+			switch {
+			case failure.Path == "command:"+sessionInjectCommand:
+				payloads = append(payloads, agent.SessionErrorPayload{
+					Reason: "pi_inject_extension_failed", Message: "Pi reported an error in the injection command",
+				}, fallback)
+			case failure.Event == "send_message":
+				// Runtime errors omit the command and cannot be tied to an Inject receipt.
+				payloads = append(payloads, agent.SessionErrorPayload{
+					Reason: "pi_extension_send_message_failed", Message: "Pi failed to append an extension message",
+				}, fallback)
+			}
 		case "tool_execution_start", "tool_execution_end":
 			kind, known := toolKind(f.ToolName)
 			if !known || f.ToolCallID == "" {

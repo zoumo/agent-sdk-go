@@ -28,6 +28,7 @@ type session struct {
 	mu            sync.Mutex
 	closed        bool
 	submitting    bool
+	injecting     bool
 	interrupting  bool
 	state         agent.SessionState
 	submitUnknown bool
@@ -112,7 +113,7 @@ func (s *session) StartOrSteer(ctx context.Context, input agent.Input) (receipt 
 		s.mu.Unlock()
 		return receipt, closedError()
 	}
-	if s.submitting || s.submitUnknown || s.interrupting {
+	if s.submitting || s.injecting || s.submitUnknown || s.interrupting {
 		s.mu.Unlock()
 		return agent.InputReceipt{Result: agent.InputNotApplied, Acceptance: agent.Acceptance{Sent: new(false)}}, nil
 	}

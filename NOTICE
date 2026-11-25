@@ -10,3 +10,11 @@ See claude/LICENSE and claude/NOTICE for original attribution and upstream proto
 
 Recorded fixtures retain their original manifests and sanitization provenance.
 Import paths were migrated; historical evidence records describe source-repository runs.
+
+Agent SDK Replay incorporates Agent SDK Testify under the Apache License 2.0.
+Source: https://github.com/zoumo/agent-sdk-testify
+Source tag: v0.4.0
+Source commit: c7e461cc541d44473589d01c16e4a33f29115058
+See internal/replay/LICENSE for the imported license. Official driver source
+retains its original upstream references. The fixed index and embedded
+snapshot retain their original contents and recording provenance.

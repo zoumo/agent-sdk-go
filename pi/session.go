@@ -279,19 +279,7 @@ func (s *Session) request(ctx context.Context, command string, fields map[string
 	s.writes.Add(1)
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.pending, id); s.mu.Unlock() }()
-	written := make(chan error, 1)
-	go func() {
-		defer s.writes.Done()
-		n, writeErr := s.input.Write(frame)
-		if writeErr == nil && n != len(frame) {
-			writeErr = io.ErrShortWrite
-		}
-		written <- writeErr
-		if writeErr != nil {
-			s.fail(writeErr)
-		}
-		s.writeToken <- struct{}{}
-	}()
+	written := s.writeFrame(frame)
 	sent := false
 	for {
 		select {
@@ -323,6 +311,25 @@ func (s *Session) request(ctx context.Context, command string, fields map[string
 			return nil, dispatchError(written, sent, cause)
 		}
 	}
+}
+
+// writeFrame starts a write after its caller acquires writeToken and registers
+// it with writes. Close can unblock the write through the owned input stream.
+func (s *Session) writeFrame(frame []byte) <-chan error {
+	written := make(chan error, 1)
+	go func() {
+		defer s.writes.Done()
+		n, writeErr := s.input.Write(frame)
+		if writeErr == nil && n != len(frame) {
+			writeErr = io.ErrShortWrite
+		}
+		written <- writeErr
+		if writeErr != nil {
+			s.fail(writeErr)
+		}
+		s.writeToken <- struct{}{}
+	}()
+	return written
 }
 
 // A write may have finished before the caller selects cancellation or Done.

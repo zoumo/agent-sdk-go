@@ -21,19 +21,24 @@ const (
 var sessionExtensionSource []byte
 
 type sessionExtensionConfig struct {
-	ShellEnv   map[string]string  `json:"shellEnv,omitempty"`
-	MCPServers []sessionMCPServer `json:"mcpServers,omitempty"`
-	Inject     bool               `json:"inject,omitempty"`
+	ShellEnv             map[string]string  `json:"shellEnv,omitempty"`
+	MCPServers           []sessionMCPServer `json:"mcpServers,omitempty"`
+	Inject               bool               `json:"inject,omitempty"`
+	ToolApproval         bool               `json:"toolApproval,omitempty"`
+	AgentQuestions       bool               `json:"agentQuestions,omitempty"`
+	InteractionTimeoutMS int64              `json:"interactionTimeoutMs,omitempty"`
 }
 
 type sessionExtension struct {
-	path     string
-	shellEnv bool
-	inject   bool
+	path           string
+	shellEnv       bool
+	toolApproval   bool
+	agentQuestions bool
+	inject         bool
 }
 
 func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtension, error) {
-	if len(config.ShellEnv) == 0 && len(config.MCPServers) == 0 && !config.Inject {
+	if len(config.ShellEnv) == 0 && len(config.MCPServers) == 0 && !config.Inject && !config.ToolApproval && !config.AgentQuestions {
 		return nil, nil
 	}
 	input, err := json.Marshal(config)
@@ -44,7 +49,10 @@ func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtensi
 	if err != nil {
 		return nil, err
 	}
-	extension := &sessionExtension{path: filepath.Join(dir, "session.ts"), shellEnv: len(config.ShellEnv) != 0, inject: config.Inject}
+	extension := &sessionExtension{
+		path: filepath.Join(dir, "session.ts"), shellEnv: len(config.ShellEnv) != 0,
+		toolApproval: config.ToolApproval, agentQuestions: config.AgentQuestions, inject: config.Inject,
+	}
 	if err := os.WriteFile(extension.path, sessionExtensionSource, 0o600); err != nil {
 		return nil, errors.Join(err, extension.remove())
 	}

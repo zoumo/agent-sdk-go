@@ -19,6 +19,10 @@ Set `Options.ExtensionPaths` to load extensions explicitly with `-e`.
 `Session.Commands` reports the commands, prompt templates, and skills Pi
 currently exposes.
 
+Decode an extension UI event with `Event.UIRequest`. Use its original dialog
+ID with `Session.RespondUI`. Pi uses a one-way response, so a successful call
+confirms the complete frame write. The next native events carry the outcome.
+
 ## MCP servers in the unified adapter
 
 Pass the complete list of application-managed MCP servers in

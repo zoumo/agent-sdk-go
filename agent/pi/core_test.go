@@ -36,6 +36,8 @@ func TestPermissionPresetsBeforeLaunch(t *testing.T) {
 			require.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
 			_, err = core.Resume(ctx, agent.ResumeOptions{SessionID: "old", OpenOptions: options})
 			require.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
+			_, err = core.OpenWithOptions(ctx, options, agentpi.SessionOptions{ToolApproval: true})
+			require.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
 			assert.NoFileExists(t, marker)
 			require.NoError(t, core.Stop(ctx))
 		})

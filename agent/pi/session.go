@@ -8,6 +8,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
@@ -20,18 +21,21 @@ var (
 )
 
 type session struct {
-	core          *Core
-	native        *pi.Session
-	stream        *eventstream.Stream
-	features      agent.EffectiveFeatures
-	shellEnv      bool
-	mu            sync.Mutex
-	closed        bool
-	submitting    bool
-	injecting     bool
-	interrupting  bool
-	state         agent.SessionState
-	submitUnknown bool
+	core           *Core
+	native         *pi.Session
+	stream         *eventstream.Stream
+	features       agent.EffectiveFeatures
+	shellEnv       bool
+	toolApproval   bool
+	interactionIDs *interactionledger.Ledger
+	interactions   map[agent.InteractionRef]*piInteraction
+	mu             sync.Mutex
+	closed         bool
+	submitting     bool
+	interrupting   bool
+	state          agent.SessionState
+	submitUnknown  bool
+	injecting      bool
 	// Monotonically changing generations prevent a late command reply from
 	// reactivating work that agent_settled has already ended.
 	settled uint64
@@ -47,10 +51,17 @@ type session struct {
 func newSession(core *Core, native *pi.Session, restricted bool, extension *sessionExtension) *session {
 	s := &session{
 		core: core, native: native, features: agent.EffectiveFeatures{RestrictLocalTools: restricted},
-		shellEnv: extension != nil && extension.shellEnv,
+		shellEnv:     extension != nil && extension.shellEnv,
+		toolApproval: extension != nil && extension.toolApproval,
+	}
+	s.features.AgentQuestions = extension != nil && extension.agentQuestions
+	if s.toolApproval || s.features.AgentQuestions {
+		s.interactionIDs = interactionledger.New("pi-")
+		s.interactions = make(map[agent.InteractionRef]*piInteraction)
 	}
 	s.stream = eventstream.New(eventstream.Hooks{
 		BeginClose:  func(eventstream.End) { s.mu.Lock(); s.closed = true; s.mu.Unlock() },
+		CloseEvents: s.closeInteractionEvents,
 		CloseNative: func() error { return operationError("close", errors.Join(native.Close(), extension.remove())) },
 		Release:     func() { core.release(s.ID()); core.leases.SessionClosed(s) },
 		Published:   core.telemetry.RecordPublished,
@@ -58,8 +69,10 @@ func newSession(core *Core, native *pi.Session, restricted bool, extension *sess
 	return s
 }
 
-func (s *session) ID() string                                 { return s.native.ID() }
-func (s *session) Capabilities() agent.Capabilities           { return capabilities(s.shellEnv) }
+func (s *session) ID() string { return s.native.ID() }
+func (s *session) Capabilities() agent.Capabilities {
+	return capabilities(s.shellEnv, s.toolApproval, s.features.AgentQuestions)
+}
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures { return s.features }
 func (s *session) Events() (agent.EventStream, error)         { return s.stream.Claim() }
 func (s *session) Done() <-chan struct{}                      { return s.stream.Done() }
@@ -192,17 +205,6 @@ func (s *session) Interrupt(ctx context.Context, _ agent.InterruptOptions) (rece
 		return receipt, operationError("interrupt", err)
 	}
 	return agent.InterruptReceipt{Result: agent.InterruptAcknowledged, Target: target}, nil
-}
-
-func (s *session) Answer(ctx context.Context, _ agent.InteractionRef, _ agent.Answer) (receipt agent.InteractionReceipt, err error) {
-	_, observation := s.core.telemetry.Begin(ctx, telemetry.Answer)
-	defer func() { observation.EndAcceptance(receipt.Acceptance, err) }()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return receipt, closedError()
-	}
-	return receipt, unsupported(agent.ErrorReasonUnsupportedAnswer, "Pi does not expose answerable interactions on this adapter")
 }
 
 func (s *session) SetConfig(ctx context.Context, change agent.ConfigChange) (agent.ConfigReceipt, error) {

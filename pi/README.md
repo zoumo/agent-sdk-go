@@ -8,6 +8,11 @@ Command IDs correlate concurrent responses. The `Prompt` disposition records whe
 
 Set `ResumeID` to the complete native ID. The launcher checks the ID and workspace in the existing session header, passes the full filename to Pi, and verifies the ID in `get_state`. Set `SessionDir` when Pi settings select custom storage, or give the exact `SessionFile`. Resume requires a persisted session file. [Resume lookup](resume.go)
 
+Set `Options.ExtensionPaths` to load extensions explicitly with `-e`.
+`NoExtensions` disables automatic discovery and leaves explicit paths available.
+`Session.Commands` reports the commands, prompt templates, and skills Pi
+currently exposes.
+
 ## Protocol source
 
 The bindings use the MIT-licensed Pi v1.6.0 protocol at Git commit `faac585884ae2c013a6b1400f3e9e77f10b34bac`. [Pi release](https://github.com/earendil-works/pi/releases/tag/v1.6.0), [MIT license](https://github.com/earendil-works/pi/blob/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE)

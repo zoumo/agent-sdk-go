@@ -30,6 +30,7 @@ type Options struct {
 	AdditionalSystemPrompt string // literal text
 	NoTools                bool
 	NoExtensions           bool
+	ExtensionPaths         []string // explicit -e paths or builtin:<name>
 	ExtraArgs              []string
 	Stderr                 io.Writer // diagnostics; nil discards output
 }
@@ -143,6 +144,12 @@ func (o Options) arguments() ([]string, error) {
 	}
 	if o.NoExtensions {
 		args = append(args, "--no-extensions")
+	}
+	for _, path := range o.ExtensionPaths {
+		if path == "" || strings.ContainsRune(path, 0) {
+			return nil, errors.New("pi: invalid extension path")
+		}
+		args = append(args, "-e", path)
 	}
 	if o.NoTools {
 		args = append(args, "--no-tools")

@@ -24,6 +24,7 @@ type session struct {
 	native        *pi.Session
 	stream        *eventstream.Stream
 	features      agent.EffectiveFeatures
+	shellEnv      bool
 	mu            sync.Mutex
 	closed        bool
 	submitting    bool
@@ -42,11 +43,14 @@ type session struct {
 	runError     *agent.ObservedError
 }
 
-func newSession(core *Core, native *pi.Session, restricted bool) *session {
-	s := &session{core: core, native: native, features: agent.EffectiveFeatures{RestrictLocalTools: restricted}}
+func newSession(core *Core, native *pi.Session, restricted bool, extension *sessionExtension) *session {
+	s := &session{
+		core: core, native: native, features: agent.EffectiveFeatures{RestrictLocalTools: restricted},
+		shellEnv: extension != nil && extension.shellEnv,
+	}
 	s.stream = eventstream.New(eventstream.Hooks{
 		BeginClose:  func(eventstream.End) { s.mu.Lock(); s.closed = true; s.mu.Unlock() },
-		CloseNative: func() error { return operationError("close", native.Close()) },
+		CloseNative: func() error { return operationError("close", errors.Join(native.Close(), extension.remove())) },
 		Release:     func() { core.release(s.ID()); core.leases.SessionClosed(s) },
 		Published:   core.telemetry.RecordPublished,
 	})
@@ -54,7 +58,7 @@ func newSession(core *Core, native *pi.Session, restricted bool) *session {
 }
 
 func (s *session) ID() string                                 { return s.native.ID() }
-func (s *session) Capabilities() agent.Capabilities           { return capabilities() }
+func (s *session) Capabilities() agent.Capabilities           { return capabilities(s.shellEnv) }
 func (s *session) EffectiveFeatures() agent.EffectiveFeatures { return s.features }
 func (s *session) Events() (agent.EventStream, error)         { return s.stream.Claim() }
 func (s *session) Done() <-chan struct{}                      { return s.stream.Done() }

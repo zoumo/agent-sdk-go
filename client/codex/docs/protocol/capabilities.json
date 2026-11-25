@@ -1,11 +1,11 @@
 {
-  "format_version": 1,
+  "format_version": 2,
   "protocol_commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
   "version_label": "0.162.1",
   "scope": "All methods declared by the pinned app-server protocol registries, including legacy, experimental, and internal entries; transport and capability controls below. This is not the entire Codex CLI, model API, or MCP protocol.",
   "sources": "sources.json",
   "status_definitions": {
-    "supported": "Exported or automatic behavior implemented for this slice; test and live evidence are independently recorded.",
+    "supported": "The SDK implements the stated scope. The check files identify runnable tests; results depend on the tested SDK revision and environment.",
     "partial": "Only the explicitly stated subset is implemented.",
     "unsupported": "No certified SDK workflow. Raw invocation or generated type availability does not change this status."
   },
@@ -27,29 +27,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket01-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket01-model-race",
-          "ticket01-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v1::InitializeParams",
       "response_rust_type": "v1::InitializeResponse",
       "stable_schema_params": {
@@ -58,7 +35,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/InitializeParams"
-      }
+      },
+      "checks": [
+        "client/codex/client_contract_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -71,12 +52,6 @@
       "experimental_gate": "server/diagnostics",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ServerDiagnosticsParams",
       "response_rust_type": "v2::ServerDiagnosticsResponse",
       "in_experimental_schema": true,
@@ -95,12 +70,6 @@
       "experimental_gate": "userVerification/status",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::UserVerificationStatusParams",
       "response_rust_type": "v2::UserVerificationStatusResponse",
       "in_experimental_schema": true,
@@ -119,12 +88,6 @@
       "experimental_gate": "userVerification/enroll",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::UserVerificationEnrollParams",
       "response_rust_type": "v2::UserVerificationEnrollResponse",
       "in_experimental_schema": true,
@@ -143,12 +106,6 @@
       "experimental_gate": "userVerification/delete",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::UserVerificationDeleteParams",
       "response_rust_type": "v2::UserVerificationDeleteResponse",
       "in_experimental_schema": true,
@@ -167,12 +124,6 @@
       "experimental_gate": "userVerification/verify",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::UserVerificationVerifyParams",
       "response_rust_type": "v2::UserVerificationVerifyResponse",
       "in_experimental_schema": true,
@@ -191,12 +142,6 @@
       "experimental_gate": "userVerification/cancel",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::UserVerificationCancelParams",
       "response_rust_type": "v2::UserVerificationCancelResponse",
       "in_experimental_schema": true,
@@ -215,29 +160,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket01-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket01-model-race",
-          "ticket01-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::ThreadStartParams",
       "response_rust_type": "v2::ThreadStartResponse",
       "stable_schema_params": {
@@ -246,7 +168,12 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadStartParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/protocol_test.go",
+        "client/codex/session_resume_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -259,28 +186,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket03-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket03-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket03-model-race",
-          "ticket03-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::ThreadResumeParams",
       "response_rust_type": "v2::ThreadResumeResponse",
       "stable_schema_params": {
@@ -289,7 +194,12 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadResumeParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/resume_test.go",
+        "client/codex/resume_contract_test.go",
+        "client/codex/session_resume_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -302,12 +212,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadForkParams",
       "response_rust_type": "v2::ThreadForkResponse",
       "stable_schema_params": {
@@ -329,18 +233,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "session09-archive-model"
-        ],
-        "mock": [
-          "session09-archive-peer"
-        ],
-        "race": [
-          "session09-archive-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadArchiveParams",
       "response_rust_type": "v2::ThreadArchiveResponse",
       "stable_schema_params": {
@@ -349,7 +241,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadArchiveParams"
-      }
+      },
+      "checks": [
+        "client/codex/session_archive_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -362,12 +257,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadDeleteParams",
       "response_rust_type": "v2::ThreadDeleteResponse",
       "stable_schema_params": {
@@ -389,29 +278,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket03-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket03-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket03-model-race",
-          "ticket03-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::ThreadUnsubscribeParams",
       "response_rust_type": "v2::ThreadUnsubscribeResponse",
       "stable_schema_params": {
@@ -420,7 +286,12 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadUnsubscribeParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/resume_test.go",
+        "client/codex/session_ownership_test.go",
+        "client/codex/resume_contract_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -433,12 +304,6 @@
       "experimental_gate": "thread/increment_elicitation",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadIncrementElicitationParams",
       "response_rust_type": "v2::ThreadIncrementElicitationResponse",
       "in_experimental_schema": true,
@@ -457,12 +322,6 @@
       "experimental_gate": "thread/decrement_elicitation",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadDecrementElicitationParams",
       "response_rust_type": "v2::ThreadDecrementElicitationResponse",
       "in_experimental_schema": true,
@@ -481,12 +340,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSetNameParams",
       "response_rust_type": "v2::ThreadSetNameResponse",
       "stable_schema_params": {
@@ -504,12 +357,6 @@
       "scope": "No SDK wrapper; raw Call reachability is not workflow support.",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "field_experimental_gates": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "source_variant": "ThreadPredictionRequest",
       "source_line": 610,
       "experimental_gate": "thread/prediction/request",
@@ -532,12 +379,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadGoalSetParams",
       "response_rust_type": "v2::ThreadGoalSetResponse",
       "stable_schema_params": {
@@ -559,12 +400,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadGoalGetParams",
       "response_rust_type": "v2::ThreadGoalGetResponse",
       "stable_schema_params": {
@@ -586,12 +421,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadGoalClearParams",
       "response_rust_type": "v2::ThreadGoalClearResponse",
       "stable_schema_params": {
@@ -613,12 +442,6 @@
       "experimental_gate": "thread/queue/add",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueAddParams",
       "response_rust_type": "v2::ThreadQueueAddResponse",
       "in_experimental_schema": true,
@@ -637,12 +460,6 @@
       "experimental_gate": "thread/queue/list",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueListParams",
       "response_rust_type": "v2::ThreadQueueListResponse",
       "in_experimental_schema": true,
@@ -661,12 +478,6 @@
       "experimental_gate": "thread/queue/update",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueUpdateParams",
       "response_rust_type": "v2::ThreadQueueUpdateResponse",
       "in_experimental_schema": true,
@@ -685,12 +496,6 @@
       "experimental_gate": "thread/queue/delete",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueDeleteParams",
       "response_rust_type": "v2::ThreadQueueDeleteResponse",
       "in_experimental_schema": true,
@@ -709,12 +514,6 @@
       "experimental_gate": "thread/queue/reorder",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueReorderParams",
       "response_rust_type": "v2::ThreadQueueReorderResponse",
       "in_experimental_schema": true,
@@ -733,12 +532,6 @@
       "experimental_gate": "thread/queue/start",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueStartParams",
       "response_rust_type": "v2::ThreadQueueStartResponse",
       "in_experimental_schema": true,
@@ -757,12 +550,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadMetadataUpdateParams",
       "response_rust_type": "v2::ThreadMetadataUpdateResponse",
       "stable_schema_params": {
@@ -784,12 +571,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadAttachmentAddParams",
       "response_rust_type": "v2::ThreadAttachmentAddResponse",
       "stable_schema_params": {
@@ -811,12 +592,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadAttachmentListParams",
       "response_rust_type": "v2::ThreadAttachmentListResponse",
       "stable_schema_params": {
@@ -834,12 +609,6 @@
       "scope": "No SDK wrapper; raw Call reachability is not workflow support.",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "field_experimental_gates": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "source_variant": "ThreadAttachmentOwnerList",
       "source_line": 682,
       "experimental_gate": null,
@@ -865,12 +634,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadAttachmentRemoveParams",
       "response_rust_type": "v2::ThreadAttachmentRemoveResponse",
       "stable_schema_params": {
@@ -892,12 +655,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSectionMoveParams",
       "response_rust_type": "v2::ThreadSectionMoveResponse",
       "stable_schema_params": {
@@ -919,24 +676,15 @@
       "experimental_gate": "thread/settings/update",
       "field_experimental_gates": true,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [
-          "session06-settings-model"
-        ],
-        "mock": [
-          "session06-settings-peer"
-        ],
-        "race": [
-          "session06-settings-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSettingsUpdateParams",
       "response_rust_type": "v2::ThreadSettingsUpdateResponse",
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadSettingsUpdateParams"
-      }
+      },
+      "checks": [
+        "client/codex/session_config_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -949,12 +697,6 @@
       "experimental_gate": "thread/memoryMode/set",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadMemoryModeSetParams",
       "response_rust_type": "v2::ThreadMemoryModeSetResponse",
       "in_experimental_schema": true,
@@ -973,12 +715,6 @@
       "experimental_gate": "memory/status",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::MemoryStatusParams",
       "response_rust_type": "v2::MemoryStatusResponse",
       "in_experimental_schema": true,
@@ -997,12 +733,6 @@
       "experimental_gate": "memory/reset",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::MemoryResetResponse",
       "in_experimental_schema": true,
@@ -1021,12 +751,6 @@
       "experimental_gate": "rollout/compress",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::RolloutCompressResponse",
       "in_experimental_schema": true,
@@ -1045,18 +769,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "session09-archive-model"
-        ],
-        "mock": [
-          "session09-archive-peer"
-        ],
-        "race": [
-          "session09-archive-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadUnarchiveParams",
       "response_rust_type": "v2::ThreadUnarchiveResponse",
       "stable_schema_params": {
@@ -1065,7 +777,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadUnarchiveParams"
-      }
+      },
+      "checks": [
+        "client/codex/session_archive_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -1078,12 +793,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadCompactStartParams",
       "response_rust_type": "v2::ThreadCompactStartResponse",
       "stable_schema_params": {
@@ -1105,12 +814,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadShellCommandParams",
       "response_rust_type": "v2::ThreadShellCommandResponse",
       "stable_schema_params": {
@@ -1132,12 +835,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadApproveGuardianDeniedActionParams",
       "response_rust_type": "v2::ThreadApproveGuardianDeniedActionResponse",
       "stable_schema_params": {
@@ -1159,12 +856,6 @@
       "experimental_gate": "thread/backgroundTerminals/clean",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadBackgroundTerminalsCleanParams",
       "response_rust_type": "v2::ThreadBackgroundTerminalsCleanResponse",
       "in_experimental_schema": true,
@@ -1183,12 +874,6 @@
       "experimental_gate": "thread/backgroundTerminals/list",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadBackgroundTerminalsListParams",
       "response_rust_type": "v2::ThreadBackgroundTerminalsListResponse",
       "in_experimental_schema": true,
@@ -1207,12 +892,6 @@
       "experimental_gate": "thread/backgroundTerminals/terminate",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadBackgroundTerminalsTerminateParams",
       "response_rust_type": "v2::ThreadBackgroundTerminalsTerminateResponse",
       "in_experimental_schema": true,
@@ -1231,12 +910,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRevertParams",
       "response_rust_type": "v2::ThreadRevertResponse",
       "stable_schema_params": {
@@ -1258,19 +931,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "session08-list-model"
-        ],
-        "mock": [
-          "session08-list-peer",
-          "phase1-story-audit-history-entrypoints"
-        ],
-        "race": [
-          "session08-list-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadListParams",
       "response_rust_type": "v2::ThreadListResponse",
       "stable_schema_params": {
@@ -1279,7 +939,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadListParams"
-      }
+      },
+      "checks": [
+        "client/codex/history_query_test.go",
+        "client/codex/session_discovery_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -1292,12 +956,6 @@
       "experimental_gate": "project/list",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectListParams",
       "response_rust_type": "v2::ProjectListResponse",
       "in_experimental_schema": true,
@@ -1316,12 +974,6 @@
       "experimental_gate": "project/read",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectReadParams",
       "response_rust_type": "v2::ProjectReadResponse",
       "in_experimental_schema": true,
@@ -1340,12 +992,6 @@
       "experimental_gate": "project/create",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectCreateParams",
       "response_rust_type": "v2::ProjectCreateResponse",
       "in_experimental_schema": true,
@@ -1364,12 +1010,6 @@
       "experimental_gate": "project/import",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectImportParams",
       "response_rust_type": "v2::ProjectImportResponse",
       "in_experimental_schema": true,
@@ -1388,12 +1028,6 @@
       "experimental_gate": "project/update",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectUpdateParams",
       "response_rust_type": "v2::ProjectUpdateResponse",
       "in_experimental_schema": true,
@@ -1412,12 +1046,6 @@
       "experimental_gate": "project/move",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectMoveParams",
       "response_rust_type": "v2::ProjectMoveResponse",
       "in_experimental_schema": true,
@@ -1436,12 +1064,6 @@
       "experimental_gate": "project/delete",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectDeleteParams",
       "response_rust_type": "v2::ProjectDeleteResponse",
       "in_experimental_schema": true,
@@ -1460,12 +1082,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSectionListParams",
       "response_rust_type": "v2::ThreadSectionListResponse",
       "stable_schema_params": {
@@ -1487,12 +1103,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSectionCreateParams",
       "response_rust_type": "v2::ThreadSectionCreateResponse",
       "stable_schema_params": {
@@ -1514,12 +1124,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSectionUpdateParams",
       "response_rust_type": "v2::ThreadSectionUpdateResponse",
       "stable_schema_params": {
@@ -1541,12 +1145,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSectionDeleteParams",
       "response_rust_type": "v2::ThreadSectionDeleteResponse",
       "stable_schema_params": {
@@ -1568,12 +1166,6 @@
       "experimental_gate": "thread/search",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSearchParams",
       "response_rust_type": "v2::ThreadSearchResponse",
       "in_experimental_schema": true,
@@ -1592,12 +1184,6 @@
       "experimental_gate": "thread/searchOccurrences",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSearchOccurrencesParams",
       "response_rust_type": "v2::ThreadSearchOccurrencesResponse",
       "in_experimental_schema": true,
@@ -1616,12 +1202,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadLoadedListParams",
       "response_rust_type": "v2::ThreadLoadedListResponse",
       "stable_schema_params": {
@@ -1643,29 +1223,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket01-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket01-model-race",
-          "ticket01-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::ThreadReadParams",
       "response_rust_type": "v2::ThreadReadResponse",
       "stable_schema_params": {
@@ -1674,7 +1231,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadReadParams"
-      }
+      },
+      "checks": [
+        "client/codex/history_query_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -1687,14 +1247,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "phase1-story-audit-history-entrypoints"
-        ],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadTurnsListParams",
       "response_rust_type": "v2::ThreadTurnsListResponse",
       "stable_schema_params": {
@@ -1703,7 +1255,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadTurnsListParams"
-      }
+      },
+      "checks": [
+        "client/codex/history_query_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -1716,14 +1271,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "phase1-story-audit-history-entrypoints"
-        ],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadItemsListParams",
       "response_rust_type": "v2::ThreadItemsListResponse",
       "stable_schema_params": {
@@ -1732,7 +1279,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadItemsListParams"
-      }
+      },
+      "checks": [
+        "client/codex/history_query_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -1745,14 +1295,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "context-inject-mock"
-        ],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadInjectItemsParams",
       "response_rust_type": "v2::ThreadInjectItemsResponse",
       "stable_schema_params": {
@@ -1761,7 +1303,12 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadInjectItemsParams"
-      }
+      },
+      "checks": [
+        "client/codex/session_inject_test.go",
+        "agent/codex/inject_test.go",
+        "agent/codex/inject_internal_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -1774,12 +1321,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::SkillsListParams",
       "response_rust_type": "v2::SkillsListResponse",
       "stable_schema_params": {
@@ -1801,12 +1342,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::SkillsExtraRootsSetParams",
       "response_rust_type": "v2::SkillsExtraRootsSetResponse",
       "stable_schema_params": {
@@ -1828,12 +1363,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::HooksListParams",
       "response_rust_type": "v2::HooksListResponse",
       "stable_schema_params": {
@@ -1855,12 +1384,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::MarketplaceAddParams",
       "response_rust_type": "v2::MarketplaceAddResponse",
       "stable_schema_params": {
@@ -1882,12 +1405,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::MarketplaceRemoveParams",
       "response_rust_type": "v2::MarketplaceRemoveResponse",
       "stable_schema_params": {
@@ -1909,12 +1426,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::MarketplaceUpgradeParams",
       "response_rust_type": "v2::MarketplaceUpgradeResponse",
       "stable_schema_params": {
@@ -1936,12 +1447,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginListParams",
       "response_rust_type": "v2::PluginListResponse",
       "stable_schema_params": {
@@ -1963,12 +1468,6 @@
       "experimental_gate": "plugin/search",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginSearchParams",
       "response_rust_type": "v2::PluginSearchResponse",
       "in_experimental_schema": true,
@@ -1987,12 +1486,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginInstalledParams",
       "response_rust_type": "v2::PluginInstalledResponse",
       "stable_schema_params": {
@@ -2014,12 +1507,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginReconcileParams",
       "response_rust_type": "v2::PluginReconcileResponse",
       "stable_schema_params": {
@@ -2041,12 +1528,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginReadParams",
       "response_rust_type": "v2::PluginReadResponse",
       "stable_schema_params": {
@@ -2068,12 +1549,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginSkillReadParams",
       "response_rust_type": "v2::PluginSkillReadResponse",
       "stable_schema_params": {
@@ -2095,12 +1570,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginShareSaveParams",
       "response_rust_type": "v2::PluginShareSaveResponse",
       "stable_schema_params": {
@@ -2122,12 +1591,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginShareUpdateTargetsParams",
       "response_rust_type": "v2::PluginShareUpdateTargetsResponse",
       "stable_schema_params": {
@@ -2149,12 +1612,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginShareListParams",
       "response_rust_type": "v2::PluginShareListResponse",
       "stable_schema_params": {
@@ -2176,12 +1633,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginShareCheckoutParams",
       "response_rust_type": "v2::PluginShareCheckoutResponse",
       "stable_schema_params": {
@@ -2203,12 +1654,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginShareDeleteParams",
       "response_rust_type": "v2::PluginShareDeleteResponse",
       "stable_schema_params": {
@@ -2230,12 +1675,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AppsReadParams",
       "response_rust_type": "v2::AppsReadResponse",
       "stable_schema_params": {
@@ -2257,12 +1696,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AppsListParams",
       "response_rust_type": "v2::AppsListResponse",
       "stable_schema_params": {
@@ -2284,12 +1717,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AppsInstalledParams",
       "response_rust_type": "v2::AppsInstalledResponse",
       "stable_schema_params": {
@@ -2311,12 +1738,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsReadFileParams",
       "response_rust_type": "v2::FsReadFileResponse",
       "stable_schema_params": {
@@ -2338,12 +1759,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsWriteFileParams",
       "response_rust_type": "v2::FsWriteFileResponse",
       "stable_schema_params": {
@@ -2365,12 +1780,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsCreateDirectoryParams",
       "response_rust_type": "v2::FsCreateDirectoryResponse",
       "stable_schema_params": {
@@ -2392,12 +1801,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsGetMetadataParams",
       "response_rust_type": "v2::FsGetMetadataResponse",
       "stable_schema_params": {
@@ -2419,12 +1822,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsReadDirectoryParams",
       "response_rust_type": "v2::FsReadDirectoryResponse",
       "stable_schema_params": {
@@ -2446,12 +1843,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsRemoveParams",
       "response_rust_type": "v2::FsRemoveResponse",
       "stable_schema_params": {
@@ -2473,12 +1864,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsCopyParams",
       "response_rust_type": "v2::FsCopyResponse",
       "stable_schema_params": {
@@ -2500,12 +1885,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsWatchParams",
       "response_rust_type": "v2::FsWatchResponse",
       "stable_schema_params": {
@@ -2527,12 +1906,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsUnwatchParams",
       "response_rust_type": "v2::FsUnwatchResponse",
       "stable_schema_params": {
@@ -2554,12 +1927,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::SkillsConfigWriteParams",
       "response_rust_type": "v2::SkillsConfigWriteResponse",
       "stable_schema_params": {
@@ -2581,12 +1948,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginInstallParams",
       "response_rust_type": "v2::PluginInstallResponse",
       "stable_schema_params": {
@@ -2608,12 +1969,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PluginUninstallParams",
       "response_rust_type": "v2::PluginUninstallResponse",
       "stable_schema_params": {
@@ -2635,29 +1990,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::TurnStartParams",
       "response_rust_type": "v2::TurnStartResponse",
       "stable_schema_params": {
@@ -2666,7 +1998,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/TurnStartParams"
-      }
+      },
+      "checks": [
+        "client/codex/turn_contract_test.go",
+        "client/codex/types/turn_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -2679,12 +2015,6 @@
       "experimental_gate": "turn/settings/update",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::TurnSettingsUpdateParams",
       "response_rust_type": "v2::TurnSettingsUpdateResponse",
       "in_experimental_schema": true,
@@ -2703,12 +2033,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::TurnSteerParams",
       "response_rust_type": "v2::TurnSteerResponse",
       "stable_schema_params": {
@@ -2730,26 +2054,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::TurnInterruptParams",
       "response_rust_type": "v2::TurnInterruptResponse",
       "stable_schema_params": {
@@ -2758,7 +2062,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/TurnInterruptParams"
-      }
+      },
+      "checks": [
+        "client/codex/turn_contract_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     },
     {
       "kind": "client_request",
@@ -2771,12 +2079,6 @@
       "experimental_gate": "thread/realtime/start",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeStartParams",
       "response_rust_type": "v2::ThreadRealtimeStartResponse",
       "in_experimental_schema": true,
@@ -2795,12 +2097,6 @@
       "experimental_gate": "thread/realtime/appendAudio",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeAppendAudioParams",
       "response_rust_type": "v2::ThreadRealtimeAppendAudioResponse",
       "in_experimental_schema": true,
@@ -2819,12 +2115,6 @@
       "experimental_gate": "thread/realtime/appendText",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeAppendTextParams",
       "response_rust_type": "v2::ThreadRealtimeAppendTextResponse",
       "in_experimental_schema": true,
@@ -2843,12 +2133,6 @@
       "experimental_gate": "thread/realtime/appendSpeech",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeAppendSpeechParams",
       "response_rust_type": "v2::ThreadRealtimeAppendSpeechResponse",
       "in_experimental_schema": true,
@@ -2867,12 +2151,6 @@
       "experimental_gate": "thread/realtime/stop",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeStopParams",
       "response_rust_type": "v2::ThreadRealtimeStopResponse",
       "in_experimental_schema": true,
@@ -2891,12 +2169,6 @@
       "experimental_gate": "thread/timeline/list",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadTimelineListParams",
       "response_rust_type": "v2::ThreadTimelineListResponse",
       "in_experimental_schema": true,
@@ -2915,12 +2187,6 @@
       "experimental_gate": "thread/realtime/listVoices",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeListVoicesParams",
       "response_rust_type": "v2::ThreadRealtimeListVoicesResponse",
       "in_experimental_schema": true,
@@ -2939,12 +2205,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ReviewStartParams",
       "response_rust_type": "v2::ReviewStartResponse",
       "stable_schema_params": {
@@ -2966,12 +2226,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ModelListParams",
       "response_rust_type": "v2::ModelListResponse",
       "stable_schema_params": {
@@ -2993,12 +2247,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::GatewayOAuthReadResponse",
       "stable_schema_params": {
@@ -3020,12 +2268,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::GatewayOAuthLoginResponse",
       "stable_schema_params": {
@@ -3047,12 +2289,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::GatewayOAuthCancelResponse",
       "stable_schema_params": {
@@ -3074,12 +2310,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ModelProviderCapabilitiesReadParams",
       "response_rust_type": "v2::ModelProviderCapabilitiesReadResponse",
       "stable_schema_params": {
@@ -3101,12 +2331,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExperimentalFeatureListParams",
       "response_rust_type": "v2::ExperimentalFeatureListResponse",
       "stable_schema_params": {
@@ -3128,12 +2352,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PermissionProfileListParams",
       "response_rust_type": "v2::PermissionProfileListResponse",
       "stable_schema_params": {
@@ -3155,12 +2373,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExperimentalFeatureEnablementSetParams",
       "response_rust_type": "v2::ExperimentalFeatureEnablementSetResponse",
       "stable_schema_params": {
@@ -3182,12 +2394,6 @@
       "experimental_gate": "remoteControl/enable",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[serde(skip_serializing_if = \"Option::is_none\")] v2::NullableRemoteControlEnableParams",
       "response_rust_type": "v2::RemoteControlEnableResponse",
       "in_experimental_schema": true,
@@ -3213,12 +2419,6 @@
       "experimental_gate": "remoteControl/disable",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[serde(skip_serializing_if = \"Option::is_none\")] v2::NullableRemoteControlDisableParams",
       "response_rust_type": "v2::RemoteControlDisableResponse",
       "in_experimental_schema": true,
@@ -3244,12 +2444,6 @@
       "experimental_gate": "remoteControl/status/read",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::RemoteControlStatusReadResponse",
       "in_experimental_schema": true,
@@ -3268,12 +2462,6 @@
       "experimental_gate": "remoteControl/pairing/start",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RemoteControlPairingStartParams",
       "response_rust_type": "v2::RemoteControlPairingStartResponse",
       "in_experimental_schema": true,
@@ -3292,12 +2480,6 @@
       "experimental_gate": "remoteControl/pairing/status",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RemoteControlPairingStatusParams",
       "response_rust_type": "v2::RemoteControlPairingStatusResponse",
       "in_experimental_schema": true,
@@ -3316,12 +2498,6 @@
       "experimental_gate": "remoteControl/client/list",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RemoteControlClientsListParams",
       "response_rust_type": "v2::RemoteControlClientsListResponse",
       "in_experimental_schema": true,
@@ -3340,12 +2516,6 @@
       "experimental_gate": "remoteControl/client/revoke",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RemoteControlClientsRevokeParams",
       "response_rust_type": "v2::RemoteControlClientsRevokeResponse",
       "in_experimental_schema": true,
@@ -3364,12 +2534,6 @@
       "experimental_gate": "collaborationMode/list",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CollaborationModeListParams",
       "response_rust_type": "v2::CollaborationModeListResponse",
       "in_experimental_schema": true,
@@ -3388,12 +2552,6 @@
       "experimental_gate": "mock/experimentalMethod",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::MockExperimentalMethodParams",
       "response_rust_type": "v2::MockExperimentalMethodResponse",
       "in_experimental_schema": true,
@@ -3412,12 +2570,6 @@
       "experimental_gate": "environment/add",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::EnvironmentAddParams",
       "response_rust_type": "v2::EnvironmentAddResponse",
       "in_experimental_schema": true,
@@ -3436,12 +2588,6 @@
       "experimental_gate": "environment/info",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::EnvironmentInfoParams",
       "response_rust_type": "v2::EnvironmentInfoResponse",
       "in_experimental_schema": true,
@@ -3460,12 +2606,6 @@
       "experimental_gate": "environment/status",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::EnvironmentStatusParams",
       "response_rust_type": "v2::EnvironmentStatusResponse",
       "in_experimental_schema": true,
@@ -3484,12 +2624,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerOauthLoginParams",
       "response_rust_type": "v2::McpServerOauthLoginResponse",
       "stable_schema_params": {
@@ -3511,12 +2645,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::McpServerRefreshResponse",
       "stable_schema_params": {
@@ -3538,12 +2666,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ListMcpServerStatusParams",
       "response_rust_type": "v2::ListMcpServerStatusResponse",
       "stable_schema_params": {
@@ -3565,12 +2687,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpResourceReadParams",
       "response_rust_type": "v2::McpResourceReadResponse",
       "stable_schema_params": {
@@ -3592,12 +2708,6 @@
       "experimental_gate": "mcpServer/event/stream/start",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerEventStreamStartParams",
       "response_rust_type": "v2::McpServerEventStreamStartResponse",
       "in_experimental_schema": true,
@@ -3616,12 +2726,6 @@
       "experimental_gate": "mcpServer/event/stream/stop",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerEventStreamStopParams",
       "response_rust_type": "v2::McpServerEventStreamStopResponse",
       "in_experimental_schema": true,
@@ -3640,12 +2744,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerToolCallParams",
       "response_rust_type": "v2::McpServerToolCallResponse",
       "stable_schema_params": {
@@ -3667,12 +2765,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::WindowsSandboxSetupStartParams",
       "response_rust_type": "v2::WindowsSandboxSetupStartResponse",
       "stable_schema_params": {
@@ -3694,12 +2786,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::WindowsSandboxReadinessResponse",
       "stable_schema_params": {
@@ -3721,12 +2807,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::LoginAccountParams",
       "response_rust_type": "v2::LoginAccountResponse",
       "stable_schema_params": {
@@ -3748,12 +2828,6 @@
       "experimental_gate": "account/bedrock/discover",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::BedrockDiscoverParams",
       "response_rust_type": "v2::BedrockDiscoverResponse",
       "in_experimental_schema": true,
@@ -3772,12 +2846,6 @@
       "experimental_gate": "account/bedrock/setup",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::BedrockSetupParams",
       "response_rust_type": "v2::BedrockSetupResponse",
       "in_experimental_schema": true,
@@ -3792,12 +2860,6 @@
       "scope": "No SDK wrapper; raw Call reachability is not workflow support.",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "field_experimental_gates": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "source_variant": "BedrockCheckGovCloudRequirements",
       "source_line": 1310,
       "experimental_gate": "account/bedrock/checkGovCloudRequirements",
@@ -3820,12 +2882,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CancelLoginAccountParams",
       "response_rust_type": "v2::CancelLoginAccountResponse",
       "stable_schema_params": {
@@ -3847,12 +2903,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::LogoutAccountResponse",
       "stable_schema_params": {
@@ -3874,12 +2924,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(optional",
       "response_rust_type": "v2::GetAccountRateLimitsResponse",
       "stable_schema_params": {
@@ -3915,12 +2959,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ConsumeAccountRateLimitResetCreditParams",
       "response_rust_type": "v2::ConsumeAccountRateLimitResetCreditResponse",
       "stable_schema_params": {
@@ -3942,12 +2980,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(optional",
       "response_rust_type": "v2::GetAccountTokenUsageResponse",
       "stable_schema_params": {
@@ -3983,12 +3015,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::GetWorkspaceMessagesResponse",
       "stable_schema_params": {
@@ -4010,12 +3036,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::SendAddCreditsNudgeEmailParams",
       "response_rust_type": "v2::SendAddCreditsNudgeEmailResponse",
       "stable_schema_params": {
@@ -4037,12 +3057,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FeedbackUploadParams",
       "response_rust_type": "v2::FeedbackUploadResponse",
       "stable_schema_params": {
@@ -4064,12 +3078,6 @@
       "experimental_gate": null,
       "field_experimental_gates": true,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecParams",
       "response_rust_type": "v2::CommandExecResponse",
       "stable_schema_params": {
@@ -4091,12 +3099,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecWriteParams",
       "response_rust_type": "v2::CommandExecWriteResponse",
       "stable_schema_params": {
@@ -4118,12 +3120,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecTerminateParams",
       "response_rust_type": "v2::CommandExecTerminateResponse",
       "stable_schema_params": {
@@ -4145,12 +3141,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecResizeParams",
       "response_rust_type": "v2::CommandExecResizeResponse",
       "stable_schema_params": {
@@ -4172,12 +3162,6 @@
       "experimental_gate": "process/spawn",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProcessSpawnParams",
       "response_rust_type": "v2::ProcessSpawnResponse",
       "in_experimental_schema": true,
@@ -4196,12 +3180,6 @@
       "experimental_gate": "process/writeStdin",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProcessWriteStdinParams",
       "response_rust_type": "v2::ProcessWriteStdinResponse",
       "in_experimental_schema": true,
@@ -4220,12 +3198,6 @@
       "experimental_gate": "process/kill",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProcessKillParams",
       "response_rust_type": "v2::ProcessKillResponse",
       "in_experimental_schema": true,
@@ -4244,12 +3216,6 @@
       "experimental_gate": "process/resizePty",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProcessResizePtyParams",
       "response_rust_type": "v2::ProcessResizePtyResponse",
       "in_experimental_schema": true,
@@ -4268,12 +3234,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ConfigReadParams",
       "response_rust_type": "v2::ConfigReadResponse",
       "stable_schema_params": {
@@ -4295,12 +3255,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExternalAgentConfigDetectParams",
       "response_rust_type": "v2::ExternalAgentConfigDetectResponse",
       "stable_schema_params": {
@@ -4322,12 +3276,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExternalAgentConfigImportParams",
       "response_rust_type": "v2::ExternalAgentConfigImportResponse",
       "stable_schema_params": {
@@ -4349,12 +3297,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExternalAgentConfigImportHistoryRecordParams",
       "response_rust_type": "v2::ExternalAgentConfigImportHistoryRecordResponse",
       "stable_schema_params": {
@@ -4376,12 +3318,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::ExternalAgentConfigImportHistoriesReadResponse",
       "stable_schema_params": {
@@ -4403,12 +3339,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ConfigValueWriteParams",
       "response_rust_type": "v2::ConfigWriteResponse",
       "stable_schema_params": {
@@ -4430,12 +3360,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ConfigBatchWriteParams",
       "response_rust_type": "v2::ConfigWriteResponse",
       "stable_schema_params": {
@@ -4457,12 +3381,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "#[ts(type = \"undefined\")] #[serde(skip_serializing_if = \"Option::is_none\")] Option<()>",
       "response_rust_type": "v2::ConfigRequirementsReadResponse",
       "stable_schema_params": {
@@ -4484,12 +3402,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::GetAccountParams",
       "response_rust_type": "v2::GetAccountResponse",
       "stable_schema_params": {
@@ -4511,12 +3423,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v1::GetConversationSummaryParams",
       "response_rust_type": "v1::GetConversationSummaryResponse",
       "in_experimental_schema": false
@@ -4532,12 +3438,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v1::GitDiffToRemoteParams",
       "response_rust_type": "v1::GitDiffToRemoteResponse",
       "in_experimental_schema": false
@@ -4553,12 +3453,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v1::GetAuthStatusParams",
       "response_rust_type": "v1::GetAuthStatusResponse",
       "in_experimental_schema": false
@@ -4574,12 +3468,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "FuzzyFileSearchParams",
       "response_rust_type": "FuzzyFileSearchResponse",
       "stable_schema_params": {
@@ -4601,12 +3489,6 @@
       "experimental_gate": "fuzzyFileSearch/sessionStart",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "FuzzyFileSearchSessionStartParams",
       "response_rust_type": "FuzzyFileSearchSessionStartResponse",
       "in_experimental_schema": true,
@@ -4625,12 +3507,6 @@
       "experimental_gate": "fuzzyFileSearch/sessionUpdate",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "FuzzyFileSearchSessionUpdateParams",
       "response_rust_type": "FuzzyFileSearchSessionUpdateResponse",
       "in_experimental_schema": true,
@@ -4649,12 +3525,6 @@
       "experimental_gate": "fuzzyFileSearch/sessionStop",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "FuzzyFileSearchSessionStopParams",
       "response_rust_type": "FuzzyFileSearchSessionStopResponse",
       "in_experimental_schema": true,
@@ -4673,23 +3543,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecutionRequestApprovalParams",
       "response_rust_type": "v2::CommandExecutionRequestApprovalResponse",
       "stable_schema_params": {
@@ -4698,7 +3551,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/CommandExecutionRequestApprovalParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_request",
@@ -4711,23 +3568,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::FileChangeRequestApprovalParams",
       "response_rust_type": "v2::FileChangeRequestApprovalResponse",
       "stable_schema_params": {
@@ -4736,7 +3576,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/FileChangeRequestApprovalParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_request",
@@ -4749,25 +3593,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": [
-          "mac02-user-input-live"
-        ]
-      },
       "params_rust_type": "v2::ToolRequestUserInputParams",
       "response_rust_type": "v2::ToolRequestUserInputResponse",
       "stable_schema_params": {
@@ -4776,7 +3601,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/ToolRequestUserInputParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_request",
@@ -4789,12 +3618,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerElicitationRequestParams",
       "response_rust_type": "v2::McpServerElicitationRequestResponse",
       "stable_schema_params": {
@@ -4803,7 +3626,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/McpServerElicitationRequestParams"
-      }
+      },
+      "checks": [
+        "client/codex/tests/simulation/flow_approvals_test.go"
+      ]
     },
     {
       "kind": "server_request",
@@ -4816,23 +3642,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::PermissionsRequestApprovalParams",
       "response_rust_type": "v2::PermissionsRequestApprovalResponse",
       "stable_schema_params": {
@@ -4841,7 +3650,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/PermissionsRequestApprovalParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_request",
@@ -4854,12 +3667,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::DynamicToolCallParams",
       "response_rust_type": "v2::DynamicToolCallResponse",
       "stable_schema_params": {
@@ -4881,12 +3688,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ChatgptAuthTokensRefreshParams",
       "response_rust_type": "v2::ChatgptAuthTokensRefreshResponse",
       "stable_schema_params": {
@@ -4908,12 +3709,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AttestationGenerateParams",
       "response_rust_type": "v2::AttestationGenerateResponse",
       "stable_schema_params": {
@@ -4935,12 +3730,6 @@
       "experimental_gate": "currentTime/read",
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CurrentTimeReadParams",
       "response_rust_type": "v2::CurrentTimeReadResponse",
       "in_experimental_schema": true,
@@ -4959,23 +3748,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v1::ApplyPatchApprovalParams",
       "response_rust_type": "v1::ApplyPatchApprovalResponse",
       "stable_schema_params": {
@@ -4984,7 +3756,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/ApplyPatchApprovalParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_request",
@@ -4997,23 +3773,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v1::ExecCommandApprovalParams",
       "response_rust_type": "v1::ExecCommandApprovalResponse",
       "stable_schema_params": {
@@ -5022,7 +3781,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/ExecCommandApprovalParams"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5035,26 +3798,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ErrorNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ErrorNotification"
@@ -5062,7 +3805,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ErrorNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/current_test.go",
+        "client/codex/turn_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5075,18 +3822,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "subagent05-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "subagent05-contract-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadStartedNotification"
@@ -5094,7 +3829,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadStartedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/session_native_regression_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5107,18 +3845,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "subagent05-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "subagent05-contract-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadStatusChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadStatusChangedNotification"
@@ -5126,7 +3852,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadStatusChangedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/session_native_regression_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5139,12 +3868,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadArchivedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadArchivedNotification"
@@ -5165,12 +3888,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadDeletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadDeletedNotification"
@@ -5191,12 +3908,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadUnarchivedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadUnarchivedNotification"
@@ -5217,12 +3928,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadClosedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadClosedNotification"
@@ -5243,12 +3948,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRevertedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRevertedNotification"
@@ -5269,12 +3968,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::SkillsChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/SkillsChangedNotification"
@@ -5295,12 +3988,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadNameUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadNameUpdatedNotification"
@@ -5321,12 +4008,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadAttachmentUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadAttachmentUpdatedNotification"
@@ -5347,12 +4028,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadGoalUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadGoalUpdatedNotification"
@@ -5369,12 +4044,6 @@
       "scope": "Raw notification forwarding only; no typed binding or dedicated workflow validation. Session delivery requires confirmed native thread membership; connection-scoped records without an owner remain diagnostic quarantine, not Session events.",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "field_experimental_gates": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "source_variant": "ThreadPredictionUpdated",
       "source_line": 1950,
       "experimental_gate": "thread/prediction/updated",
@@ -5399,12 +4068,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadGoalClearedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadGoalClearedNotification"
@@ -5425,12 +4088,6 @@
       "experimental_gate": "thread/queue/changed",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadQueueChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadQueueChangedNotification"
@@ -5451,12 +4108,6 @@
       "experimental_gate": "project/changed",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProjectChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ProjectChangedNotification"
@@ -5477,12 +4128,6 @@
       "experimental_gate": "thread/project/updated",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadProjectUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadProjectUpdatedNotification"
@@ -5503,12 +4148,6 @@
       "experimental_gate": "thread/environment/connected",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::EnvironmentConnectionNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/EnvironmentConnectionNotification"
@@ -5529,12 +4168,6 @@
       "experimental_gate": "thread/environment/disconnected",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::EnvironmentConnectionNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/EnvironmentConnectionNotification"
@@ -5555,18 +4188,6 @@
       "experimental_gate": "thread/settings/updated",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "session06-settings-model"
-        ],
-        "mock": [
-          "session06-settings-peer"
-        ],
-        "race": [
-          "session06-settings-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadSettingsUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadSettingsUpdatedNotification"
@@ -5574,7 +4195,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadSettingsUpdatedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/session_config_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5587,18 +4211,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "subagent05-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "subagent05-contract-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadTokenUsageUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadTokenUsageUpdatedNotification"
@@ -5606,7 +4218,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ThreadTokenUsageUpdatedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/session_native_regression_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5619,29 +4234,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::TurnStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/TurnStartedNotification"
@@ -5649,7 +4241,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/TurnStartedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/turn_test.go",
+        "client/codex/turn_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5662,12 +4258,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::HookStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/HookStartedNotification"
@@ -5688,29 +4278,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::TurnCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/TurnCompletedNotification"
@@ -5718,7 +4285,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/TurnCompletedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/turn_test.go",
+        "client/codex/turn_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5731,12 +4302,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::HookCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/HookCompletedNotification"
@@ -5757,12 +4322,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::TurnDiffUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/TurnDiffUpdatedNotification"
@@ -5783,12 +4342,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::TurnPlanUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/TurnPlanUpdatedNotification"
@@ -5809,26 +4362,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ItemStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ItemStartedNotification"
@@ -5836,7 +4369,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ItemStartedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/turn_test.go",
+        "client/codex/turn_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5849,12 +4386,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ItemGuardianApprovalReviewStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ItemGuardianApprovalReviewStartedNotification"
@@ -5875,12 +4406,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ItemGuardianApprovalReviewCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ItemGuardianApprovalReviewCompletedNotification"
@@ -5901,12 +4426,6 @@
       "experimental_gate": "autoApprovalReview/strictReviewRequired",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::StrictReviewRequiredNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/StrictReviewRequiredNotification"
@@ -5927,29 +4446,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::ItemCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ItemCompletedNotification"
@@ -5957,7 +4453,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ItemCompletedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/turn_test.go",
+        "client/codex/turn_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -5970,12 +4470,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RawResponseItemCompletedNotification",
       "in_experimental_schema": false
     },
@@ -5990,12 +4484,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": false,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RawResponseCompletedNotification",
       "in_experimental_schema": false
     },
@@ -6010,29 +4498,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket02-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket02-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket02-model-race",
-          "ticket02-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
       "params_rust_type": "v2::AgentMessageDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AgentMessageDeltaNotification"
@@ -6040,7 +4505,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/AgentMessageDeltaNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/turn_test.go",
+        "client/codex/turn_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -6053,12 +4522,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::PlanDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/PlanDeltaNotification"
@@ -6079,12 +4542,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecOutputDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/CommandExecOutputDeltaNotification"
@@ -6105,12 +4562,6 @@
       "experimental_gate": "process/outputDelta",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProcessOutputDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ProcessOutputDeltaNotification"
@@ -6131,12 +4582,6 @@
       "experimental_gate": "process/exited",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ProcessExitedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ProcessExitedNotification"
@@ -6157,12 +4602,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::CommandExecutionOutputDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/CommandExecutionOutputDeltaNotification"
@@ -6183,12 +4622,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::TerminalInteractionNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/TerminalInteractionNotification"
@@ -6209,12 +4642,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FileChangeOutputDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/FileChangeOutputDeltaNotification"
@@ -6235,12 +4662,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FileChangePatchUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/FileChangePatchUpdatedNotification"
@@ -6261,28 +4682,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit",
-          "subagent05-current-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": [
-          "mac02-user-input-live"
-        ]
-      },
       "params_rust_type": "v2::ServerRequestResolvedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ServerRequestResolvedNotification"
@@ -6290,7 +4689,11 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ServerRequestResolvedNotification"
-      }
+      },
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -6303,12 +4706,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpToolCallProgressNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/McpToolCallProgressNotification"
@@ -6329,12 +4726,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerOauthLoginCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/McpServerOauthLoginCompletedNotification"
@@ -6355,12 +4746,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerStatusUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/McpServerStatusUpdatedNotification"
@@ -6381,12 +4766,6 @@
       "experimental_gate": "mcpServer/event/stream/notification",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::McpServerEventStreamNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/McpServerEventStreamNotification"
@@ -6407,12 +4786,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AccountUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AccountUpdatedNotification"
@@ -6433,12 +4806,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::GatewayOAuthChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/GatewayOAuthChangedNotification"
@@ -6459,12 +4826,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AccountRateLimitsUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AccountRateLimitsUpdatedNotification"
@@ -6485,12 +4846,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AppListUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AppListUpdatedNotification"
@@ -6511,12 +4866,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::RemoteControlStatusChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/RemoteControlStatusChangedNotification"
@@ -6537,12 +4886,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExternalAgentConfigImportProgressNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ExternalAgentConfigImportProgressNotification"
@@ -6563,12 +4906,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ExternalAgentConfigImportCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ExternalAgentConfigImportCompletedNotification"
@@ -6589,12 +4926,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::FsChangedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/FsChangedNotification"
@@ -6615,12 +4946,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ReasoningSummaryTextDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ReasoningSummaryTextDeltaNotification"
@@ -6641,12 +4966,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ReasoningSummaryPartAddedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ReasoningSummaryPartAddedNotification"
@@ -6667,18 +4986,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "subagent05-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "subagent05-contract-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      },
       "params_rust_type": "v2::ReasoningTextDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ReasoningTextDeltaNotification"
@@ -6686,7 +4993,10 @@
       "in_experimental_schema": true,
       "experimental_schema_params": {
         "$ref": "#/definitions/v2/ReasoningTextDeltaNotification"
-      }
+      },
+      "checks": [
+        "client/codex/session_native_regression_test.go"
+      ]
     },
     {
       "kind": "server_notification",
@@ -6699,12 +5009,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ContextCompactedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ContextCompactedNotification"
@@ -6725,12 +5029,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ModelReroutedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ModelReroutedNotification"
@@ -6751,12 +5049,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ModelVerificationNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ModelVerificationNotification"
@@ -6777,12 +5069,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AuthRecoveryNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AuthRecoveryNotification"
@@ -6803,12 +5089,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AuthRecoveryNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AuthRecoveryNotification"
@@ -6829,12 +5109,6 @@
       "experimental_gate": "turn/moderationMetadata",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::TurnModerationMetadataNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/TurnModerationMetadataNotification"
@@ -6855,12 +5129,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ModelSafetyBufferingUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ModelSafetyBufferingUpdatedNotification"
@@ -6881,12 +5149,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::WarningNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/WarningNotification"
@@ -6907,12 +5169,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::GuardianWarningNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/GuardianWarningNotification"
@@ -6933,12 +5189,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::DeprecationNoticeNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/DeprecationNoticeNotification"
@@ -6959,12 +5209,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ConfigWarningNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ConfigWarningNotification"
@@ -6985,12 +5229,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "FuzzyFileSearchSessionUpdatedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/FuzzyFileSearchSessionUpdatedNotification"
@@ -7011,12 +5249,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "FuzzyFileSearchSessionCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/FuzzyFileSearchSessionCompletedNotification"
@@ -7037,12 +5269,6 @@
       "experimental_gate": "thread/realtime/started",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeStartedNotification"
@@ -7063,12 +5289,6 @@
       "experimental_gate": "thread/realtime/itemAdded",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeItemAddedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeItemAddedNotification"
@@ -7089,12 +5309,6 @@
       "experimental_gate": "thread/realtime/item/started",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeItemStartedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeItemStartedNotification"
@@ -7115,12 +5329,6 @@
       "experimental_gate": "thread/realtime/item/transcript/delta",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeItemTranscriptDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeItemTranscriptDeltaNotification"
@@ -7141,12 +5349,6 @@
       "experimental_gate": "thread/realtime/item/completed",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeItemCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeItemCompletedNotification"
@@ -7167,12 +5369,6 @@
       "experimental_gate": "thread/realtime/transcript/delta",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeTranscriptDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeTranscriptDeltaNotification"
@@ -7193,12 +5389,6 @@
       "experimental_gate": "thread/realtime/transcript/done",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeTranscriptDoneNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeTranscriptDoneNotification"
@@ -7219,12 +5409,6 @@
       "experimental_gate": "thread/realtime/outputAudio/delta",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeOutputAudioDeltaNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeOutputAudioDeltaNotification"
@@ -7245,12 +5429,6 @@
       "experimental_gate": "thread/realtime/sdp",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeSdpNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeSdpNotification"
@@ -7271,12 +5449,6 @@
       "experimental_gate": "thread/realtime/error",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeErrorNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeErrorNotification"
@@ -7297,12 +5469,6 @@
       "experimental_gate": "thread/realtime/closed",
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::ThreadRealtimeClosedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/ThreadRealtimeClosedNotification"
@@ -7323,12 +5489,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::WindowsWorldWritableWarningNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/WindowsWorldWritableWarningNotification"
@@ -7349,12 +5509,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::WindowsSandboxSetupCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/WindowsSandboxSetupCompletedNotification"
@@ -7375,12 +5529,6 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      },
       "params_rust_type": "v2::AccountLoginCompletedNotification",
       "stable_schema_params": {
         "$ref": "#/definitions/v2/AccountLoginCompletedNotification"
@@ -7401,22 +5549,11 @@
       "experimental_gate": null,
       "field_experimental_gates": false,
       "in_stable_schema": true,
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket01-contract-race",
-          "ticket05-remote-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live",
-          "mac03-loopback-ws-live"
-        ]
-      },
-      "in_experimental_schema": true
+      "in_experimental_schema": true,
+      "checks": [
+        "client/codex/client_contract_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     }
   ],
   "controls": [
@@ -7426,20 +5563,10 @@
       "source_path": "codex-rs/app-server-protocol/src/rpc.rs",
       "source_line": 1,
       "description": "One request, response, error, or notification object. No jsonrpc member is emitted. Batch messages are not supported.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket01-contract-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/client_contract_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     },
     {
       "name": "rpc-id-string-or-i64",
@@ -7447,20 +5574,10 @@
       "source_path": "codex-rs/app-server-protocol/src/rpc.rs",
       "source_line": 14,
       "description": "Exact tagged string and signed 64-bit integer identifiers. Null, fractional, out-of-range, or malformed IDs are rejected.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket01-contract-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/client_contract_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     },
     {
       "name": "rpc-error",
@@ -7468,20 +5585,10 @@
       "source_path": "codex-rs/app-server-protocol/src/rpc.rs",
       "source_line": 83,
       "description": "Preserve error code, message, and optional data without retry. Remote security exception: reflected explicitly supplied bearer credentials are redacted from diagnostic message/data/raw errors; affected raw JSON may be re-encoded. Unaffected raw errors, native error code and correlation remain unchanged.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket01-contract-mock",
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket01-contract-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/client_contract_test.go",
+        "client/codex/remote_contract_test.go"
+      ]
     },
     {
       "name": "request-trace-context",
@@ -7489,33 +5596,18 @@
       "source_path": "codex-rs/app-server-protocol/src/rpc.rs",
       "source_line": 51,
       "description": "Session.Submit alone reads codex.WithTraceContext and writes a valid W3C carrier to the turn/start request envelope. Invalid or incomplete carriers are omitted without rejecting input. Raw Client.Call, StartThread and ResumeThread remain trace-free; provider span attribution and explicit turn/steer propagation are not certified.",
-      "evidence": {
-        "unit": [
-          "TestW3cTraceContextRoundTrip",
-          "TestTraceContextHelpers"
-        ],
-        "mock": [
-          "TestSessionSubmitTraceEnvelope",
-          "TestRawCallsIgnorePromptTraceContext",
-          "TestTraceStartOrSteerSynthetic",
-          "TestPromptTraceConsecutiveCodexSynthetic"
-        ],
-        "race": [],
-        "live": []
-      }
+      "checks": [
+        "client/codex/types/trace_context_test.go",
+        "client/codex/trace_test.go",
+        "agent/codex/trace_test.go"
+      ]
     },
     {
       "name": "notification-emittedAtMs",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 2069,
-      "description": "Optional server notification envelope emission timestamp; local Event exposes method and raw params, not envelope-level timestamps.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Optional server notification envelope emission timestamp; local Event exposes method and raw params, not envelope-level timestamps."
     },
     {
       "name": "stdio-json-lines",
@@ -7523,18 +5615,10 @@
       "source_path": "codex-rs/app-server-transport/src/transport/stdio.rs",
       "source_line": 91,
       "description": "One JSON envelope per newline-delimited stdin/stdout frame; blank-line handling is transport-specific. SDK applies finite frame limits.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket01-contract-mock"
-        ],
-        "race": [
-          "ticket01-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live"
-        ]
-      }
+      "checks": [
+        "client/codex/frame_transport_test.go",
+        "client/codex/client_contract_test.go"
+      ]
     },
     {
       "name": "stdio-eof-and-owned-process-shutdown",
@@ -7542,18 +5626,9 @@
       "source_path": "codex-rs/app-server-transport/src/transport/stdio.rs",
       "source_line": 1,
       "description": "SDK closes owned stdin, waits a bounded grace period, then kills and reaps only its child. No guarantee that an arbitrary descendant process exits.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket01-contract-mock"
-        ],
-        "race": [
-          "ticket01-contract-race"
-        ],
-        "live": [
-          "mac01-stdio-live"
-        ]
-      }
+      "checks": [
+        "client/codex/client_contract_test.go"
+      ]
     },
     {
       "name": "websocket-text-message",
@@ -7561,18 +5636,9 @@
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 232,
       "description": "NewRemote opens WS/WSS with explicit bearer-header authentication, verified TLS and fresh initialize/initialized. Exactly one JSON envelope per complete text message; no JSONL delimiter or batch. URL credentials/query/fragment, redirects, disabled TLS verification and ambient proxies are rejected/unused; non-loopback plaintext requires opt-in. Finite payload bounds and no reconnect/replay.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket05-remote-contract-race"
-        ],
-        "live": [
-          "mac03-loopback-ws-live"
-        ]
-      }
+      "checks": [
+        "client/codex/remote_security_test.go"
+      ]
     },
     {
       "name": "websocket-ping",
@@ -7580,16 +5646,9 @@
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 363,
       "description": "WebSocket library automatically replies to received Ping with its matching Pong payload while the SDK reader is active; no application heartbeat or ping API.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket05-remote-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/remote_security_test.go"
+      ]
     },
     {
       "name": "websocket-pong",
@@ -7597,16 +5656,9 @@
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 373,
       "description": "WebSocket control Pong is handled by the transport and never delivered as a JSON protocol event.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket05-remote-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/remote_security_test.go"
+      ]
     },
     {
       "name": "websocket-close",
@@ -7614,18 +5666,10 @@
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 374,
       "description": "Received Close terminates this connection. Client Close releases only its socket and pending work, without service shutdown, process termination, reconnect or replay.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket05-remote-contract-race"
-        ],
-        "live": [
-          "mac03-loopback-ws-live"
-        ]
-      }
+      "checks": [
+        "client/codex/remote_contract_test.go",
+        "client/codex/remote_security_test.go"
+      ]
     },
     {
       "name": "websocket-binary",
@@ -7633,68 +5677,37 @@
       "source_path": "codex-rs/app-server-transport/src/transport/websocket.rs",
       "source_line": 375,
       "description": "No binary protocol or binary-message API. Official server drops unsupported inbound binary messages; this SDK rejects received binary data with an explicit terminal ErrProtocol instead of silently discarding it.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket05-remote-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/remote_security_test.go"
+      ]
     },
     {
       "name": "unix-websocket-control-socket",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-transport/src/transport/unix_socket.rs",
       "source_line": 43,
-      "description": "Official local control socket accepts WebSocket upgrades, not a raw JSONL stream.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Official local control socket accepts WebSocket upgrades, not a raw JSONL stream."
     },
     {
       "name": "managed-daemon-shutdown",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-transport/src/transport/unix_socket.rs",
       "source_line": 180,
-      "description": "Separate /daemon/shutdown WebSocket endpoint on managed local control sockets; PID-text handshake outside JSON-RPC. Never emitted by SDK Close.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Separate /daemon/shutdown WebSocket endpoint on managed local control sockets; PID-text handshake outside JSON-RPC. Never emitted by SDK Close."
     },
     {
       "name": "remote-control-tunnel",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-transport/src/transport/mod.rs",
       "source_line": 26,
-      "description": "Official remote-control transport and pairing workflows are outside this SDK slice. Named RPCs are separately inventoried.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Official remote-control transport and pairing workflows are outside this SDK slice. Named RPCs are separately inventoried."
     },
     {
       "name": "in-process-typed-channels",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-client/README.md",
       "source_line": 28,
-      "description": "Official embedded Rust facade uses typed in-memory channels. This Go SDK does not embed the runtime.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Official embedded Rust facade uses typed in-memory channels. This Go SDK does not embed the runtime."
     },
     {
       "name": "server-request-resolution",
@@ -7702,101 +5715,52 @@
       "source_path": "codex-rs/app-server-protocol/src/protocol/common.rs",
       "source_line": 1997,
       "description": "serverRequest/resolved matches native threadId and exact tagged requestId to an unanswered handle. Local Cancel and expiry send nothing; an admitted response cannot be retracted. No invented cancellation method or success inference.",
-      "evidence": {
-        "unit": [
-          "ticket04-model-unit",
-          "ticket05-model-unit"
-        ],
-        "mock": [
-          "ticket04-contract-mock",
-          "ticket05-remote-contract-mock"
-        ],
-        "race": [
-          "ticket04-model-race",
-          "ticket04-contract-race",
-          "ticket05-remote-contract-race",
-          "ticket05-model-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/types/requests_test.go",
+        "client/codex/request_contract_test.go"
+      ]
     },
     {
       "name": "initialize-experimental-api",
       "support": "partial",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 52,
-      "description": "The native initialize capability can be encoded; experimental workflow support must be checked per method and field.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "The native initialize capability can be encoded; experimental workflow support must be checked per method and field."
     },
     {
       "name": "initialize-notification-opt-out",
       "support": "partial",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 65,
-      "description": "Native optOutNotificationMethods can be encoded; actual server filtering has not been live-validated.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Native optOutNotificationMethods can be encoded; actual server filtering has not been live-validated."
     },
     {
       "name": "initialize-extensions",
       "support": "partial",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 71,
-      "description": "Native extensions metadata can be encoded; no extension behavior is certified.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Native extensions metadata can be encoded; no extension behavior is certified."
     },
     {
       "name": "initialize-request-attestation",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 55,
-      "description": "Native flag and raw attestation/generate request/answer transport exist, but no attestation implementation or certified workflow. Do not enable without a caller-provided compatible implementation.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Native flag and raw attestation/generate request/answer transport exist, but no attestation implementation or certified workflow. Do not enable without a caller-provided compatible implementation."
     },
     {
       "name": "initialize-form-elicitation",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 60,
-      "description": "Native capability fields and raw request/answer transport exist, but typed elicitation and its interactive workflow are not certified.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Native capability fields and raw request/answer transport exist, but typed elicitation and its interactive workflow are not certified."
     },
     {
       "name": "initialize-explicit-gateway-oauth",
       "support": "unsupported",
       "source_path": "codex-rs/app-server-protocol/src/protocol/v1.rs",
       "source_line": 47,
-      "description": "Native flag exists; login and account-management workflows are unsupported.",
-      "evidence": {
-        "unit": [],
-        "mock": [],
-        "race": [],
-        "live": []
-      }
+      "description": "Native flag exists; login and account-management workflows are unsupported."
     },
     {
       "name": "sdk-managed-direct-child-observation",
@@ -7804,26 +5768,11 @@
       "source_path": "codex-rs/app-server-protocol/src/protocol/v2/item.rs",
       "source_line": 1131,
       "description": "Session.Receive preserves native order and duplicates for confirmed members independently of optional parent knowledge. Native fixed-version Thread parent/source and completed collab/Started activity evidence establish membership; communication alone does not infer parentage. Unknown ownership is bounded quarantine with coverage gaps and no later backfill. Raw/typed native values and actual IncomingRequest handles share the Session FIFO. No automatic child resume/start/recovery or aggregate completion/usage state. Shared native attachment references outlive individual overlapping observers. Source pin remains 0.162.1 / 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d. All current Session evidence is offline/synthetic; original live/capture scopes remain unchanged. See ../../session.md.",
-      "evidence": {
-        "unit": [],
-        "mock": [
-          "subagent01-contract-mock",
-          "subagent02-contract-mock",
-          "subagent03-contract-mock",
-          "subagent04-contract-mock",
-          "subagent05-contract-mock",
-          "subagent05-current-contract-mock"
-        ],
-        "race": [
-          "subagent01-contract-race",
-          "subagent02-contract-race",
-          "subagent03-contract-race",
-          "subagent04-contract-race",
-          "subagent05-contract-race",
-          "subagent05-current-contract-race"
-        ],
-        "live": []
-      }
+      "checks": [
+        "client/codex/session_native_regression_test.go",
+        "client/codex/session_discovery_test.go",
+        "client/codex/examples/observe-subagents-offline/main_test.go"
+      ]
     }
   ]
 }

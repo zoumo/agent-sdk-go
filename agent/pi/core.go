@@ -9,7 +9,10 @@
 // StartOrSteer accepts one optional text block followed by inline images.
 // A queued receipt confirms native admission. Watch for an idle state update
 // after Interrupt before submitting new work that must run independently.
-// Pi sessions do not implement agent.Injector.
+// Set Config.EnableInject to load the session extension and enable agent.Injector.
+// Pi appends idle context immediately and active context after the current turn.
+// An Inject receipt reports command admission. Read native history or events to
+// observe when Pi appends the context.
 //
 // To select a model, set Config.Provider and pass the model ID in
 // agent.OpenOptions.Config. If the initial model is omitted, Pi selects its
@@ -45,7 +48,10 @@ type Config struct {
 	SessionDir string
 	// Provider qualifies the initial model when one is supplied and is required
 	// for runtime model changes.
-	Provider       string
+	Provider string
+	// EnableInject exposes agent.Injector on sessions that load and verify
+	// the private Pi 1.6.0 SDK session extension.
+	EnableInject   bool
 	Tracer         agent.Tracer
 	TracerProvider trace.TracerProvider
 	MeterProvider  metric.MeterProvider
@@ -146,7 +152,9 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 			Model: options.Config.Model, ThinkingLevel: options.Config.Effort,
 			NoExtensions: true, NoTools: options.Features.RestrictLocalTools, AdditionalSystemPrompt: options.AdditionalSystemPrompt,
 		}
-		extension, err := materializeSessionExtension(sessionExtensionConfig{ShellEnv: options.ShellEnv, MCPServers: mcpServers})
+		extension, err := materializeSessionExtension(sessionExtensionConfig{
+			ShellEnv: options.ShellEnv, MCPServers: mcpServers, Inject: p.config.EnableInject,
+		})
 		if err != nil {
 			return nil, operationError(string(op), err)
 		}
@@ -180,6 +188,9 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 	// A process that exited during the handshake can finish observation immediately.
 	// Register its lease before starting observation and its release hook.
 	go attached.observe()
+	if p.config.EnableInject {
+		return &injectSession{session: attached}, nil
+	}
 	return attached, nil
 }
 

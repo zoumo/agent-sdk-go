@@ -12,7 +12,10 @@ import (
 	"github.com/zoumo/agent-sdk-go/pi"
 )
 
-const sessionExtensionReady = "agent-sdk-session-ready"
+const (
+	sessionExtensionReady = "agent-sdk-session-ready"
+	sessionInjectCommand  = "agent-sdk-inject"
+)
 
 //go:embed extensions/session.ts
 var sessionExtensionSource []byte
@@ -20,15 +23,17 @@ var sessionExtensionSource []byte
 type sessionExtensionConfig struct {
 	ShellEnv   map[string]string  `json:"shellEnv,omitempty"`
 	MCPServers []sessionMCPServer `json:"mcpServers,omitempty"`
+	Inject     bool               `json:"inject,omitempty"`
 }
 
 type sessionExtension struct {
 	path     string
 	shellEnv bool
+	inject   bool
 }
 
 func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtension, error) {
-	if len(config.ShellEnv) == 0 && len(config.MCPServers) == 0 {
+	if len(config.ShellEnv) == 0 && len(config.MCPServers) == 0 && !config.Inject {
 		return nil, nil
 	}
 	input, err := json.Marshal(config)
@@ -39,7 +44,7 @@ func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtensi
 	if err != nil {
 		return nil, err
 	}
-	extension := &sessionExtension{path: filepath.Join(dir, "session.ts"), shellEnv: len(config.ShellEnv) != 0}
+	extension := &sessionExtension{path: filepath.Join(dir, "session.ts"), shellEnv: len(config.ShellEnv) != 0, inject: config.Inject}
 	if err := os.WriteFile(extension.path, sessionExtensionSource, 0o600); err != nil {
 		return nil, errors.Join(err, extension.remove())
 	}
@@ -57,19 +62,29 @@ func (e *sessionExtension) check(ctx context.Context, native *pi.Session) error 
 	if err != nil {
 		return err
 	}
+	ready, inject := false, !e.inject
 	for _, command := range commands {
-		if command.Name != sessionExtensionReady || command.Source != "extension" {
+		if command.Source != "extension" || (command.Name != sessionExtensionReady && command.Name != sessionInjectCommand) {
 			continue
 		}
 		var info struct{ Path string }
 		if err := json.Unmarshal(command.SourceInfo, &info); err != nil {
 			return err
 		}
-		if info.Path == e.path {
-			return nil
+		if info.Path != e.path {
+			continue
+		}
+		switch command.Name {
+		case sessionExtensionReady:
+			ready = true
+		case sessionInjectCommand:
+			inject = true
 		}
 	}
-	return unsupported("pi_session_extension_unavailable", "Pi 1.6.0 SDK session extension did not initialize")
+	if !ready || !inject {
+		return unsupported("pi_session_extension_unavailable", "Pi 1.6.0 SDK session extension did not initialize")
+	}
+	return nil
 }
 
 func (e *sessionExtension) remove() error {

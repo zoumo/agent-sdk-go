@@ -23,7 +23,14 @@ type basePlan struct {
 	HistoryBindings             []struct{ SessionID, Project, NativeTarget, SHA256 string }
 	Prompts                     []string
 	Scenario                    struct {
-		Parameters struct{ Effort, TargetEffort string }
+		Parameters struct {
+			Effort, TargetEffort, ContextValue string
+			FreeText                           bool
+		}
+		Answers struct {
+			Question, Choice string
+			Options          []string
+		}
 	}
 }
 
@@ -38,11 +45,11 @@ func AcceptBase(ctx context.Context, mock *mocktest.Session, root string, observ
 		return err
 	}
 	code, ok := strings.CutPrefix(plan.CaseID, "SDK-CASE-")
-	if !ok || !slices.Contains([]string{"002", "005", "006", "021", "022", "023", "024", "027", "030", "031", "033", "036"}, code) {
+	if !ok || !slices.Contains([]string{"002", "005", "006", "013", "014", "021", "022", "023", "024", "027", "030", "031", "033", "036", "037", "038"}, code) {
 		return fmt.Errorf("pi: unsupported base case %q", plan.CaseID)
 	}
 	count := 1
-	if slices.Contains([]string{"005", "022", "023", "027", "036"}, code) {
+	if slices.Contains([]string{"005", "022", "023", "027", "036", "037", "038"}, code) {
 		count = 2
 	}
 	if len(plan.Prompts) != count {
@@ -63,11 +70,15 @@ func AcceptBase(ctx context.Context, mock *mocktest.Session, root string, observ
 	}
 	defer func() { err = errors.Join(err, session.CloseAndDiscard()) }()
 
+	flow := baseFlow{ctx: ctx, session: session, plan: plan, code: code, output: json.NewEncoder(observations)}
+	switch code {
+	case "013", "014", "037", "038":
+		return flow.runOfficialExtension()
+	}
 	state, err := session.State(ctx)
 	if err != nil {
 		return err
 	}
-	flow := baseFlow{ctx: ctx, session: session, plan: plan, code: code, output: json.NewEncoder(observations)}
 	if err := flow.run(state); err != nil {
 		return err
 	}

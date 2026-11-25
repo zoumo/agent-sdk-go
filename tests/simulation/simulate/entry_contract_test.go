@@ -85,8 +85,8 @@ func TestGoTestGateRejectsIncompleteCoverageAndRetainsEvidence(t *testing.T) {
 	require.Contains(t, string(log), "Simulation artifacts: "+output)
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
-	require.Len(t, report.Cases, 84)
+	require.Len(t, report.Cases, 126)
 	require.Positive(t, report.RequiredBlocking)
 	require.Equal(t, 1, report.Counts["passed"])
-	require.Equal(t, 83, report.Counts["unverified"])
+	require.Equal(t, 125, report.Counts["unverified"])
 }

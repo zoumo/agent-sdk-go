@@ -96,14 +96,13 @@ notification signals when tests can half-close SDK input.
 
 ### Replay Pi extensions through the unified Go SDK
 
+The fixed recording gate replays official Pi cases through the native Go SDK.
+Use this entry point for controlled captures made through the unified Client.
 On a Unix host with a writable `/tmp`, build the driver from the repository
-root. Use a temporary Go module file that selects a Testify library version
-with native Pi replay. The verified local source revision is
-`e0c1498c20ec4128996949fc4313ceba8ac6cc71`. Use a Go module proxy to package
-that revision with its version and checksum before building the driver.
+root with the pinned Testify module.
 
 ```sh
-GOWORK=off go build -modfile=/absolute/replay.mod \
+GOWORK=off go build \
   -o /absolute/go-simulation-driver ./tests/simulation/drivers
 ```
 

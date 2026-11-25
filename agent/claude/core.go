@@ -84,7 +84,7 @@ func (p *Core) Open(
 	options agent.OpenOptions,
 ) (agent.Session, error) {
 	if options.PermissionPreset == "" {
-		options.PermissionPreset = agent.PermissionPresetAutoReview
+		options.PermissionPreset = agent.DefaultPermissionPreset
 	}
 	return p.OpenWithPermissions(ctx, options, Permissions{})
 }
@@ -138,7 +138,7 @@ func (p *Core) Resume(
 	options agent.ResumeOptions,
 ) (agent.Session, error) {
 	if options.PermissionPreset == "" {
-		options.PermissionPreset = agent.PermissionPresetAutoReview
+		options.PermissionPreset = agent.DefaultPermissionPreset
 	}
 	return p.ResumeWithPermissions(ctx, options, Permissions{})
 }

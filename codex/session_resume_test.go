@@ -15,6 +15,62 @@ import (
 	"github.com/zoumo/agent-sdk-go/codex/types"
 )
 
+func TestNativeSessionPermissionParamsOnStartAndResume(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		policy   types.Optional[types.AskForApproval]
+		reviewer types.Optional[types.ApprovalsReviewer]
+		sandbox  types.Optional[types.SandboxMode]
+		want     string
+	}{
+		{name: "omitted", want: `{}`},
+		{
+			name:     "explicit native settings",
+			policy:   types.Some(types.AskForApproval{Value: new(types.ApprovalPolicyOnRequest)}),
+			reviewer: types.Some(types.ApprovalsReviewerAutoReview),
+			sandbox:  types.Some(types.SandboxModeReadOnly),
+			want:     `{"approvalPolicy":"on-request","approvalsReviewer":"auto_review","sandbox":"read-only"}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			startPeer := startFake(t, "normal", codex.Limits{})
+			started, err := codex.Open(t.Context(), codex.SessionOptions{
+				Client: startPeer.c,
+				Thread: types.ThreadStartParams{
+					ApprovalPolicy:    tc.policy,
+					ApprovalsReviewer: tc.reviewer,
+					Sandbox:           tc.sandbox,
+				},
+			})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = started.Close() })
+			require.JSONEq(t, tc.want, string(requireFrame(t, startPeer, "thread/start").Params))
+
+			resumePeer := startFake(t, "resume-normal", codex.Limits{})
+			resumed, err := codex.Open(t.Context(), codex.SessionOptions{
+				Client: resumePeer.c,
+				Resume: &types.ThreadResumeParams{
+					ThreadID:          resumedNativeID,
+					ApprovalPolicy:    tc.policy,
+					ApprovalsReviewer: tc.reviewer,
+					Sandbox:           tc.sandbox,
+				},
+			})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = resumed.Close() })
+			var params map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(requireFrame(t, resumePeer, "thread/resume").Params, &params))
+			var threadID string
+			require.NoError(t, json.Unmarshal(params["threadId"], &threadID))
+			require.Equal(t, resumedNativeID, threadID)
+			delete(params, "threadId")
+			wire, err := json.Marshal(params)
+			require.NoError(t, err)
+			require.JSONEq(t, tc.want, string(wire))
+		})
+	}
+}
+
 func TestSessionResumePreservesIdentityLiveOrderAndSeparateResponse(t *testing.T) {
 	f := startFake(t, "resume-session", codex.Limits{})
 	s, err := codex.Open(context.Background(), codex.SessionOptions{Client: f.c, Resume: &types.ThreadResumeParams{ThreadID: resumedNativeID}})

@@ -29,7 +29,8 @@ func TestClaudePermissionPresetOpenChecksStartup(t *testing.T) {
 		wantMode    string
 		wantSandbox string
 	}{
-		{name: "default auto review", wantMode: "auto", wantSandbox: claudeApprovalSandbox},
+		{name: "omitted", wantMode: "bypassPermissions", wantSandbox: claudeFullAccessSandbox},
+		{name: "auto review", preset: agent.PermissionPresetAutoReview, wantMode: "auto", wantSandbox: claudeApprovalSandbox},
 		{name: "manual review", preset: agent.PermissionPresetManualReview, wantMode: "default", wantSandbox: claudeApprovalSandbox},
 		{name: "full access", preset: agent.PermissionPresetFullAccess, wantMode: "bypassPermissions", wantSandbox: claudeFullAccessSandbox},
 		{
@@ -68,14 +69,17 @@ func TestClaudePermissionPresetOpenChecksStartup(t *testing.T) {
 	}
 }
 
-func TestClaudePermissionPresetResumeTightensSavedBypass(t *testing.T) {
+func TestClaudePermissionPresetResumeAppliesRequestedPermissions(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		preset agent.PermissionPreset
-		mode   string
+		name    string
+		preset  agent.PermissionPreset
+		mode    string
+		sandbox string
 	}{
-		{name: "manual", preset: agent.PermissionPresetManualReview, mode: "default"},
-		{name: "default auto", mode: "auto"},
+		{name: "manual", preset: agent.PermissionPresetManualReview, mode: "default", sandbox: claudeApprovalSandbox},
+		{name: "auto", preset: agent.PermissionPresetAutoReview, mode: "auto", sandbox: claudeApprovalSandbox},
+		{name: "omitted", mode: "bypassPermissions", sandbox: claudeFullAccessSandbox},
+		{name: "full access", preset: agent.PermissionPresetFullAccess, mode: "bypassPermissions", sandbox: claudeFullAccessSandbox},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -100,7 +104,7 @@ func TestClaudePermissionPresetResumeTightensSavedBypass(t *testing.T) {
 			assert.Equal(t, claudeResumePeerSessionID, resumed.ID())
 			argv := readClaudeArgv(t, argvPath)
 			assert.Contains(t, argv, "--resume="+claudeResumePeerSessionID)
-			assert.Equal(t, []string{"--permission-mode=" + tc.mode, claudeApprovalSandbox}, claudePermissionArgv(argv))
+			assert.Equal(t, []string{"--permission-mode=" + tc.mode, tc.sandbox}, claudePermissionArgv(argv))
 			require.NoError(t, resumed.Close(ctx))
 			assert.Empty(t, readOpenPeerObservation(t, peer.Observation).UserFrames)
 		})
@@ -118,6 +122,7 @@ func TestClaudePermissionPresetRejectsUnconfirmedStartup(t *testing.T) {
 	}{
 		{
 			name:     "auto falls back to manual",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{InitialMode: new("default")},
 			code:     agent.ErrorUnsupported,
 			reason:   "permission_mode_unconfirmed",
@@ -131,6 +136,7 @@ func TestClaudePermissionPresetRejectsUnconfirmedStartup(t *testing.T) {
 		},
 		{
 			name:     "noncanonical startup mode",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{InitializeBody: `{"CURRENT_PERMISSION_MODE":"auto"}`},
 			code:     agent.ErrorUnsupported,
 			reason:   agentclaude.ErrorReasonPermissionModeUnconfirmed,
@@ -145,30 +151,35 @@ func TestClaudePermissionPresetRejectsUnconfirmedStartup(t *testing.T) {
 		},
 		{
 			name:     "missing sandbox fields",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{SandboxSettings: `{"effective":{"sandbox":{"enabled":true}}}`},
 			code:     agent.ErrorNativeRejected,
 			reason:   "sandbox_settings_unconfirmed",
 		},
 		{
 			name:     "effective settings disagree",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{SandboxSettings: `{"effective":{"sandbox":{"enabled":false,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}}`},
 			code:     agent.ErrorNativeRejected,
 			reason:   "sandbox_settings_unconfirmed",
 		},
 		{
 			name:     "ambiguous effective sandbox",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{SandboxSettings: `{"effective":{"sandbox":{"enabled":false,"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}}`},
 			code:     agent.ErrorNativeRejected,
 			reason:   agentclaude.ErrorReasonSandboxSettingsUnconfirmed,
 		},
 		{
 			name:     "noncanonical sandbox key cannot override native value",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{SandboxSettings: `{"effective":{"sandbox":{"enabled":false,"Enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}}`},
 			code:     agent.ErrorNativeRejected,
 			reason:   agentclaude.ErrorReasonSandboxSettingsUnconfirmed,
 		},
 		{
 			name:     "native sandbox startup fails",
+			preset:   agent.PermissionPresetAutoReview,
 			scenario: claudeResumePeerScenario{SandboxUnavailable: true},
 			code:     agent.ErrorUnsupported,
 			reason:   agentclaude.ErrorReasonSandboxUnavailable,

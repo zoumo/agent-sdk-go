@@ -3424,7 +3424,7 @@ func assertAgentExecutionClaudeRuntimeTrace(
 	argv := agentExecutionTraceArgv(t, entries)
 	assert.Contains(t, argv, "--model= Caller/Model v2 ")
 	assert.Contains(t, argv, "--effort= Native/High ")
-	assert.Contains(t, argv, "--permission-mode=auto")
+	assert.Contains(t, argv, "--permission-mode=bypassPermissions")
 
 	initializes := agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
 		return frame.Type == "control_request" && frame.Request.Subtype == "initialize"
@@ -3524,7 +3524,7 @@ func assertAgentExecutionResumeTrace(t *testing.T, providerName, path string) {
 		assert.Contains(t, argv, "--resume="+agentExecutionSessionID)
 		assert.Contains(t, argv, "--model= Resume/Model ")
 		assert.Contains(t, argv, "--effort= Native/Resume ")
-		assert.Contains(t, argv, "--permission-mode=auto")
+		assert.Contains(t, argv, "--permission-mode=bypassPermissions")
 		assert.Empty(t, agentExecutionFramesMatching(frames, func(frame agentExecutionTraceFrame) bool {
 			return frame.Type == "user"
 		}))

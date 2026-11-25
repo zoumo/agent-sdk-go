@@ -16,14 +16,15 @@ import (
 type OpenOptions struct {
 	Cwd string
 	// PermissionPreset selects the approval and sandbox settings for this
-	// operation. Core.Open and Core.Resume default to PermissionPresetAutoReview.
+	// operation. Core.Open and Core.Resume use DefaultPermissionPreset when omitted.
 	PermissionPreset PermissionPreset
-	// ProcessEnv is an additive, set-only overlay for a Claude Session CLI.
-	// Nil or empty leaves the provider environment unchanged; empty values set
-	// variables to empty strings. Other adapters reject nonempty declarations.
+	// ProcessEnv is an additive, set-only overlay for the Claude or Pi CLI.
+	// Nil or empty leaves the provider environment unchanged. Empty values
+	// set variables to empty strings. Codex rejects nonempty declarations.
 	ProcessEnv map[string]string
-	// ShellEnv adds variables to Codex shell/unified-exec environments. It does
-	// not change the app-server environment. Claude rejects nonempty declarations.
+	// ShellEnv adds variables to the Codex shell/unified-exec environment or to
+	// Pi's model-facing bash tool on macOS and Linux. The CLI process keeps
+	// its own environment. Claude rejects nonempty declarations.
 	ShellEnv map[string]string
 	// AdditionalSystemPrompt appends caller text after provider defaults for
 	// this Open or Resume operation. Empty omits provider-native prompt

@@ -43,11 +43,17 @@ func TestSimulationGate(t *testing.T) {
 	output := runSimulationTest(t, true)
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
-	require.Equal(t, coverageMatrix{Cases: 42, Slots: 84, Required: 70, Optional: 14}, report.Matrix)
-	require.Len(t, report.Cases, 84)
+	require.Equal(t, coverageMatrix{Cases: 42, Slots: 126, Required: 86, Optional: 40}, report.Matrix)
+	require.Len(t, report.Cases, 126)
 	require.Zero(t, report.RequiredBlocking)
 	require.Zero(t, report.OptionalBlocking)
 	require.Zero(t, report.MaterialFailed)
+	for _, row := range report.Cases {
+		if row.Provider == "pi" && row.Requirement == "required" {
+			require.Equal(t, "passed", row.SimulationStatus, row.CaseID)
+			require.True(t, row.CoverageEligible, row.CaseID)
+		}
+	}
 	t.Logf("Simulation counts: %v", report.Counts)
 }
 

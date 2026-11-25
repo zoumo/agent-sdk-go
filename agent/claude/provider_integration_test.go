@@ -22,12 +22,12 @@ import (
 
 var mockClaudeInit = []string{
 	`>{"type":"control_request","request_id":"init","request":{"subtype":"initialize","hooks":null,"forwardSubagentText":true}}`,
-	`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"current_permission_mode":"auto"}}}`,
+	`<{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"current_permission_mode":"bypassPermissions"}}}`,
 	`>{"type":"control_request","request_id":"startup_settings","request":{"subtype":"get_settings"}}`,
 	`<{"type":"control_response","response":{"subtype":"success","request_id":"startup_settings","response":` + mockClaudeStartupSettings + `}}`,
 }
 
-const mockClaudeStartupSettings = `{"effective":{"sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}}`
+const mockClaudeStartupSettings = `{"effective":{"sandbox":{"enabled":false}}}`
 
 var claudePeerSessionIDs sync.Map
 

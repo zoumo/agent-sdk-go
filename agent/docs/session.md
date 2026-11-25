@@ -138,10 +138,6 @@ provider 内置或默认指令之后增加一段调用方指令。统一层不�
 能力，也不保证追加文本相对 provider 动态段落、工具说明或子 Agent 的精确顺序和
 继承关系。
 
-原未发布的 `SystemPrompt` 字段直接改名为 `AdditionalSystemPrompt`，不保留兼容
-别名、deprecated shim 或双重字段。仓库仍处于
-`v0.1.0-rc.1 planned, unreleased`，因此这里不承担已发布 API 的兼容义务。
-
 | 统一输入 | Codex | Claude |
 |---|---|---|
 | 空 `AdditionalSystemPrompt` | 省略 `developerInstructions` | 省略 `--append-system-prompt` |
@@ -1102,11 +1098,6 @@ status。
 `agent.tool_call` 和 `agent.tool_result` 的 JSON payload 都要求 `kind`、
 `toolName` 和 `provider`。严格解码拒绝缺失或 null 的身份字段、空
 `toolName`、未知 kind、非法 provider、`mcp:` 空后缀，以及旧的 `name` 成员。
-旧任意字符串 kind 没有迁移或 alias。
-
-这是一次有意的 breaking schema 变更：新的统一 Agent JSON 不读取旧 `name`，
-也不提供 schema version 或兼容 shim。统一 Agent 面仍是未发布的候选接口，
-因此不保留双读或自动重写。
 
 #### Provider 映射
 

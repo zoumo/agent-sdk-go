@@ -18,8 +18,7 @@ SPEC.loader.exec_module(gate)
 
 class StoryEvidenceTests(unittest.TestCase):
     def test_requirements_are_independent_of_provider_routes(self):
-        root = REPLAY
-        cases, rows = gate.recording_mapping(root)
+        cases, rows = gate.recording_mapping(ROOT)
         by_id = {case['id']: case for case in cases}
         self.assertEqual(["SDK-CASE-003", "SDK-CASE-038", "SDK-CASE-025", "SDK-CASE-026"],
                          [case['id'] for case in cases if not case['required']])
@@ -39,11 +38,11 @@ class StoryEvidenceTests(unittest.TestCase):
     def test_public_gate_rejects_synthetic_route_and_unexplained_unavailability(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            shutil.copytree(REPLAY / 'data/scenarios', root / 'data/scenarios')
-            (root / 'docs').mkdir()
-            shutil.copyfile(REPLAY / 'docs/cases.md', root / 'docs/cases.md')
+            shutil.copytree(REPLAY / 'data/scenarios', root / 'replay/data/scenarios')
+            (root / 'docs/sdk').mkdir(parents=True)
+            shutil.copyfile(ROOT / 'docs/sdk/validation-cases.md', root / 'docs/sdk/validation-cases.md')
             self.assertEqual([], gate.check_catalog(root))
-            binding = root / 'data/scenarios/bindings/codex.json'
+            binding = root / 'replay/data/scenarios/bindings/codex.json'
             original = json.loads(binding.read_text())
             for mode, reason, diagnostic in [
                 ('offline-only', 'synthetic check', 'invalid simulation route'),

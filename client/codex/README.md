@@ -589,8 +589,7 @@ and the [offline example](examples/history-query-offline).
 
 Run the root offline gate with Go 1.26 or newer. The offline
 examples use explicit synthetic peers and code-owned protocol inputs, never an
-installed agent. [Migration details](../../docs/migration.md#session) distinguish
-native limitations, resource options and breaking lifecycle changes.
+installed agent. See the [Session contract](../docs/session.md) for lifecycle and resource limits.
 
 Run from the repository root:
 

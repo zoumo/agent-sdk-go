@@ -137,7 +137,7 @@ command -v agent-sdk-testify-pi
 
 上下文注入使用 `SDK-CASE-037` 检查空闲状态，使用 `SDK-CASE-038` 检查执行中状态。
 Codex 和 Claude driver 都从原始录制核对注入与后续查询的边界。下面的命令录制 Claude 的空闲场景。
-[上下文注入验收](../docs/cases.md#中断关闭与独立查询)
+[上下文注入验收](../../docs/sdk/validation-cases.md#中断关闭与独立查询)
 
 ```sh
 agent-replay prepare --agent claude --case SDK-CASE-037 \
@@ -238,7 +238,7 @@ record run 失败，不回写 material 或回滚 current。未领取 execution �
 
 driver 只执行一个请求，不实现 registry、双向命令、步骤 DSL 或 SDK 覆盖门禁。
 case 输入、agent 参数和断言边界来自 [场景目录](../data/scenarios) 与
-[共同验收](../docs/cases.md)。
+[共同验收](../../docs/sdk/validation-cases.md)。
 
 <a id="fixtures-仿真录制与测试输入"></a>
 

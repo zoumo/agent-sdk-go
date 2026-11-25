@@ -17,7 +17,6 @@ application uses `agent` for live sessions. See the [dependency rules](docs/arch
 
 | If you are | Read |
 |---|---|
-| Moving from the earlier standalone modules | [Migration guide](docs/migration.md) |
 | Testing an SDK change | [Validation guide](docs/testing.md) |
 | Running an SDK against a recorded case | [Simulation guide](tests/simulation/README.md) |
 | Looking up contracts or terms | [Documentation index](docs/index.md), [glossary](GLOSSARY.md) |

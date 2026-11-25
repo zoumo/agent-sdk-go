@@ -1,7 +1,7 @@
 ---
 okf_version: "0.3"
 title: Agent SDK Go 文档
-description: 面向 Agent SDK Go 使用者和维护者的迁移、验证、架构与设计合同。
+description: 面向 Agent SDK Go 使用者和维护者的验证、架构与设计合同。
 license: Apache-2.0
 ---
 
@@ -10,7 +10,6 @@ license: Apache-2.0
 ## 使用与维护
 
 * [测试指南](testing.md) - Explains how to run offline checks, fixed-recording simulation, and opt-in live CLI checks, and how to read the results.
-* [迁移指南](migration.md) - Explains how to migrate standalone Codex and Claude SDK imports and Session calls to the shared Go module.
 * [文档维护规则](AGENTS.md) - 规定 SDK 文档的归属、修改权限、源码引用和 OKF 维护方式。
 * [开发规范](architecture.md) - Defines repository module and dependency boundaries, code layout, and coding conventions for the native and unified SDKs.
 * [测试规范](testing-standards.md) - Defines test layers, isolation requirements, and the evidence that Go tests must provide for SDK acceptance.

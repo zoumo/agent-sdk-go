@@ -258,7 +258,6 @@ types do not imply full official SDK parity. Original code uses Apache-2.0; see
 
 Validation commands and evidence limits are maintained in [testing](../../docs/testing.md)
 and [recording provenance](../../tests/simulation/README.md#fixtures-仿真录制与测试输入).
-Breaking changes are in the [migration guide](../../docs/migration.md#session).
 
 ## Child observation
 

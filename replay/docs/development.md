@@ -107,7 +107,7 @@ go run -tags builtin_generate ./cmd/agent-replay --check
 测试分为三层，按测试范围和目录归类。单元测试和集成测试应快速完成，适合开发时频繁运行；
 完整流程只在端到端测试中验证。
 SDK 用户故事、case 和各 agent type 的能力要求由[场景目录](../data/scenarios)与 binding 定义。
-业务证据和通过标准见[共同验收](cases.md)。
+业务证据和通过标准见[共同验收](../../docs/sdk/validation-cases.md)。
 
 | 层级 | 位置 | 测什么 | 执行边界 |
 |---|---|---|---|

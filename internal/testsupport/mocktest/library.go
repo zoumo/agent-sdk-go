@@ -14,7 +14,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/replay"
 )
 
-// Session is one prepared in-process testify fixture. Callers start a Run for
+// Session is one prepared in-process Replay fixture. Callers start a Run for
 // each declared connection, construct the SDK against run.Start, and remove the
 // fixture directory after every run has reached a terminal state.
 type Session struct {
@@ -45,7 +45,7 @@ type RunOptions struct {
 // ExecutionStart is the immutable library projection used before SDK I/O.
 type ExecutionStart = replay.ExecutionStart
 
-// Run exposes the SDK-side endpoints and the testify run handle for one
+// Run exposes the SDK-side endpoints and the Replay run handle for one
 // connection. Reader is peer-to-SDK and Writer is SDK-to-peer.
 type Run struct {
 	Start  ExecutionStart
@@ -91,8 +91,7 @@ type ConnectionReport struct {
 }
 
 // Prepare imports authored synthetic material through the public in-process
-// recording lifecycle. It starts no testify executable and writes no inherited
-// descriptors.
+// Replay library.
 func Prepare(dir, provider string, scenario []byte, options Options) (result *Session, err error) {
 	if provider != "codex" && provider != "claude" {
 		return nil, fmt.Errorf("unsupported mock provider %q", provider)
@@ -214,7 +213,7 @@ func sortedEnvironment(values map[string]string) []string {
 }
 
 // NewRun starts one in-process mock connection and returns the SDK-side
-// endpoints. The fixture-side endpoints are owned by testify after Start returns.
+// endpoints. Replay owns the fixture-side endpoints after Start returns.
 func (s *Session) NewRun(ctx context.Context, options RunOptions) (*Run, error) {
 	if s == nil {
 		return nil, errors.New("prepared session required")

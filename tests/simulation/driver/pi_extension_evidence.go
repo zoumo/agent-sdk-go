@@ -143,11 +143,11 @@ func samePiRecording(candidate replay.Material, material piReplayMaterial) bool 
 func verifyPiReplayResult(fixture *replay.Fixture, runtimeDir, output, code string, material piReplayMaterial) error {
 	var start piMockStart
 	if err := readPiExtensionJSON(filepath.Join(runtimeDir, "mock-start.json"), &start); err != nil {
-		return fmt.Errorf("read Testify Pi mock start identity: %w", err)
+		return fmt.Errorf("read Replay Pi mock start identity: %w", err)
 	}
 	report, err := fixture.ExecutionReport(start.ExecutionID)
 	if err != nil {
-		return fmt.Errorf("read Testify Pi execution report: %w", err)
+		return fmt.Errorf("read Replay Pi execution report: %w", err)
 	}
 	if report == nil || report.FixtureID != fixture.FixtureID || report.ExecutionID != start.ExecutionID ||
 		start.ExecutionSHA256 == "" || report.ExecutionSHA256 != start.ExecutionSHA256 ||
@@ -172,7 +172,7 @@ func verifyPiReplayResult(fixture *replay.Fixture, runtimeDir, output, code stri
 
 func validatePiReplayCompletion(report *replay.ExecutionReport, connection replay.ConnectionReport) error {
 	if report.Status != replay.ExecutionStatusPassed || !report.Complete || connection.Status != replay.ConnectionStatusPassed {
-		return fmt.Errorf("strict Testify mock execution %s (complete=%t), connection %s (%s): %s",
+		return fmt.Errorf("strict Replay mock execution %s (complete=%t), connection %s (%s): %s",
 			report.Status, report.Complete, connection.Status, connection.Failure, connection.Error)
 	}
 	if connection.Transport != replay.MockTransportInProcess || !connection.FullConsumption || !connection.ClientEOF ||

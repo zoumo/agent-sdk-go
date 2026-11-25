@@ -1,4 +1,4 @@
-// Package mocktest bridges Go SDK fixture assertions to the in-process testify
+// Package mocktest bridges Go SDK fixture assertions to the in-process Replay
 // library. It implements no native matching or request-correlation state.
 package mocktest
 

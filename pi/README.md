@@ -8,6 +8,10 @@ Command IDs correlate concurrent responses. The `Prompt` disposition records whe
 
 Set `ResumeID` to the complete native ID. The launcher checks the ID and workspace in the existing session header, passes the full filename to Pi, and verifies the ID in `get_state`. Set `SessionDir` when Pi settings select custom storage, or give the exact `SessionFile`. Resume requires a persisted session file. [Resume lookup](resume.go)
 
+## Read saved sessions
+
+Set absolute paths for the workspace and the session directory in `HistoryScope`. Use `ListSessions` to discover IDs, `GetSessionInfo` to inspect a header, and `ReadSessionHistory` to read entries in file order. These calls read one directory without starting Pi or migrating older records. If a history page has more entries, pass its `NextOffset` to the next disk read. The live `get_entries` command uses native entry IDs as cursors. [Saved history API](history.go)
+
 ## Protocol source
 
 The bindings use the MIT-licensed Pi v1.6.0 protocol at Git commit `faac585884ae2c013a6b1400f3e9e77f10b34bac`. [Pi release](https://github.com/earendil-works/pi/releases/tag/v1.6.0), [MIT license](https://github.com/earendil-works/pi/blob/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE)

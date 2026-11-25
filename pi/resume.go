@@ -23,7 +23,7 @@ func (o Options) resumeFile() (string, error) {
 		if header.ID != o.ResumeID {
 			return "", fmt.Errorf("pi: existing session ID %q differs from %q", header.ID, o.ResumeID)
 		}
-		if err := o.checkResumeCwd(header.Cwd); err != nil {
+		if err := checkSessionCwd(o.Cwd, header.Cwd); err != nil {
 			return "", err
 		}
 		return path, nil
@@ -69,7 +69,7 @@ func (o Options) resumeFile() (string, error) {
 		if header.ID != o.ResumeID {
 			continue
 		}
-		if err := o.checkResumeCwd(header.Cwd); err != nil {
+		if err := checkSessionCwd(o.Cwd, header.Cwd); err != nil {
 			return "", err
 		}
 		if found != "" {
@@ -99,23 +99,25 @@ func (o Options) envValue(key string) string {
 	return os.Getenv(key)
 }
 
+const maxSavedHeaderBytes = 1 << 20
+
 var errInvalidHeader = errors.New("pi: invalid native session header")
 
 type sessionHeader struct{ Type, ID, Cwd string }
 
-func (o Options) checkResumeCwd(cwd string) error {
+func checkSessionCwd(requestedCwd, cwd string) error {
 	if !filepath.IsAbs(cwd) {
 		return fmt.Errorf("pi: session workspace %q is not absolute", cwd)
 	}
-	if filepath.Clean(o.Cwd) == filepath.Clean(cwd) {
+	if filepath.Clean(requestedCwd) == filepath.Clean(cwd) {
 		return nil
 	}
 	actual, err := os.Stat(cwd)
-	requested, requestErr := os.Stat(o.Cwd)
+	requested, requestErr := os.Stat(requestedCwd)
 	if err == nil && requestErr == nil && os.SameFile(actual, requested) {
 		return nil
 	}
-	return fmt.Errorf("pi: session workspace %q differs from requested cwd %q", cwd, o.Cwd)
+	return fmt.Errorf("pi: session workspace %q differs from requested cwd %q", cwd, requestedCwd)
 }
 
 func readSessionHeader(path string) (sessionHeader, error) {
@@ -140,14 +142,19 @@ func readSessionHeader(path string) (sessionHeader, error) {
 		return header, errInvalidHeader
 	}
 	sc := bufio.NewScanner(file)
-	sc.Buffer(make([]byte, 4096), 1<<20)
+	sc.Buffer(make([]byte, 4096), maxSavedHeaderBytes)
 	if !sc.Scan() {
 		if err := sc.Err(); err != nil {
 			return header, err
 		}
 		return header, errInvalidHeader
 	}
-	if err := json.Unmarshal(sc.Bytes(), &header); err != nil || header.Type != "session" || header.ID == "" {
+	return parseSessionHeader(sc.Bytes())
+}
+
+func parseSessionHeader(line []byte) (sessionHeader, error) {
+	var header sessionHeader
+	if err := json.Unmarshal(line, &header); err != nil || header.Type != "session" || header.ID == "" {
 		return header, errInvalidHeader
 	}
 	return header, nil

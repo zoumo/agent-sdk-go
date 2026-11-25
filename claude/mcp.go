@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/zoumo/agent-sdk-go/claude/types"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
@@ -137,6 +138,20 @@ func validateSDKMCPServers(names []string) error {
 	for _, name := range names {
 		if err := addMCPName(seen, name); err != nil {
 			return ErrInvalidInput
+		}
+	}
+	return nil
+}
+
+func validateSDKMCPServerManifests(names []string, manifests map[string]types.SDKMCPServerManifest) error {
+	isObject := func(raw json.RawMessage) bool {
+		raw = bytes.TrimSpace(raw)
+		return len(raw) != 0 && raw[0] == '{' && json.Valid(raw) && utf8.Valid(raw)
+	}
+	for name, manifest := range manifests {
+		if !slices.Contains(names, name) || !isObject(manifest.InitializeResult) ||
+			(manifest.ToolsListResult != nil && !isObject(manifest.ToolsListResult)) {
+			return fmt.Errorf("%w: invalid SDK MCP manifest for %q", ErrInvalidInput, name)
 		}
 	}
 	return nil

@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/coder/websocket v1.8.15
 	github.com/stretchr/testify v1.12.1
-	github.com/zoumo/agent-sdk-testify v0.2.3-0.20261124162815-5b73bd15ad9f
+	github.com/zoumo/agent-sdk-testify v0.3.0
 	github.com/zoumo/golib v0.2.3-0.20260206090047-84bfad8eef0a
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/metric v1.47.0

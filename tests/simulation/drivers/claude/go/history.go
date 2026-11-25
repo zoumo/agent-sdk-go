@@ -56,12 +56,21 @@ func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, root string
 			return err
 		}
 		if frame.Direction == "c2s" && wire.Type == "control_request" {
-			var control struct{ Request json.RawMessage }
+			var control struct {
+				Request json.RawMessage
+			}
 			if err := json.Unmarshal(frame.Wire, &control); err != nil {
 				return err
 			}
-			if err := json.Unmarshal(control.Request, &initialize); err != nil {
+			var request struct{ Subtype string }
+			if err := json.Unmarshal(control.Request, &request); err != nil {
 				return err
+			}
+			if request.Subtype == "initialize" {
+				initialize, err = decodeInitialize(control.Request)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		if frame.Direction == "c2s" && wire.Type == "user" {
@@ -94,7 +103,7 @@ func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, root string
 	s, run, inputClosed, err := openStreamSession(ctx, mock, claude.SessionOptions{
 		WorkDir: host.Workspace,
 		Env:     host.Env, Initialize: &initialize, ChildDetailPolicy: policy,
-	})
+	}, nil)
 	if err != nil {
 		return err
 	}

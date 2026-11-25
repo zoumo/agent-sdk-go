@@ -10,8 +10,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
 
-func openStreamSession(ctx context.Context, mock *mocktest.Session, options claude.SessionOptions) (*claude.Session, *mocktest.Run, <-chan error, error) {
-	return openStreamSessionOnConnection(ctx, mock, "main", "", options)
+func openStreamSession(ctx context.Context, mock *mocktest.Session, options claude.SessionOptions, configure func(*claude.SessionOptions)) (*claude.Session, *mocktest.Run, <-chan error, error) {
+	return openStreamSessionOnConnection(ctx, mock, "main", "", options, configure)
 }
 
 func openStreamSessionOnConnection(
@@ -19,6 +19,7 @@ func openStreamSessionOnConnection(
 	mock *mocktest.Session,
 	connection, executionID string,
 	options claude.SessionOptions,
+	configure func(*claude.SessionOptions),
 ) (*claude.Session, *mocktest.Run, <-chan error, error) {
 	if mock == nil {
 		return nil, nil, nil, errors.New("prepared mock session is required")
@@ -32,6 +33,9 @@ func openStreamSessionOnConnection(
 	}
 	options.WorkDir = run.Start.Workspace
 	options.Env = environment(run.Start.Env)
+	if configure != nil {
+		configure(&options)
+	}
 	session, err := claude.OpenStreams(ctx, options, claude.StreamTransport{
 		Reader: run.Reader,
 		Writer: run.Writer,

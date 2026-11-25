@@ -1,8 +1,10 @@
 // Package agentpi adapts Pi 1.6 RPC sessions to the unified agent contract.
 //
-// Each session owns a local Pi process with extension discovery disabled.
+// Each session owns a local Pi process with automatic extension discovery disabled.
 // Open and Resume use Pi's normal process permissions (fullAccess). The host
-// controls any external isolation.
+// controls any external isolation. Open and Resume accept ProcessEnv as a
+// child process overlay. On macOS and Linux, ShellEnv loads a Pi 1.6.0
+// extension that applies its overlay to the model-facing bash tool.
 //
 // StartOrSteer accepts one optional text block followed by inline images.
 // A queued receipt confirms native admission. Watch for an idle state update
@@ -16,7 +18,10 @@ package agentpi
 
 import (
 	"context"
+	"errors"
+	"maps"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sync"
 
@@ -64,13 +69,20 @@ func New(config Config) *Core {
 	return &Core{
 		config:    config,
 		telemetry: telemetry.New("pi", config.TracerProvider, config.MeterProvider),
-		leases:    corelease.New[struct{}, *session](capabilities(), nil, nil),
+		leases:    corelease.New[struct{}, *session](capabilities(shellEnvSupported()), nil, nil),
 		owners:    make(map[string]bool),
 	}
 }
 
-func capabilities() agent.Capabilities {
-	return agent.Capabilities{agent.CapabilityTextInput: true, agent.CapabilityImageInput: true}
+func capabilities(shellEnv bool) agent.Capabilities {
+	return agent.Capabilities{
+		agent.CapabilityTextInput: true, agent.CapabilityImageInput: true,
+		agent.CapabilityProcessEnv: true, agent.CapabilityShellEnv: shellEnv,
+	}
+}
+
+func shellEnvSupported() bool {
+	return runtime.GOOS == "darwin" || runtime.GOOS == "linux"
 }
 
 func (p *Core) Start(ctx context.Context) (agent.Capabilities, error) {
@@ -118,28 +130,42 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 		if resumeID != "" && !p.claim(resumeID) {
 			return nil, alreadyAttached()
 		}
-		native, err := pi.Open(ctx, pi.Options{
-			Command: p.config.CLIPath, Args: p.config.Args, Env: p.config.Env, Cwd: options.Cwd,
+		var attached bool
+		defer func() {
+			if !attached && resumeID != "" {
+				p.release(resumeID)
+			}
+		}()
+		launch := pi.Options{
+			Command: p.config.CLIPath, Args: p.config.Args, Env: p.processEnvironment(options.ProcessEnv), Cwd: options.Cwd,
 			Provider: provider, SessionDir: p.config.SessionDir, ResumeID: resumeID,
 			Model: options.Config.Model, ThinkingLevel: options.Config.Effort,
 			NoExtensions: true, NoTools: options.Features.RestrictLocalTools, AdditionalSystemPrompt: options.AdditionalSystemPrompt,
-		})
+		}
+		extension, err := materializeSessionExtension(sessionExtensionConfig{ShellEnv: options.ShellEnv})
 		if err != nil {
-			p.release(resumeID)
 			return nil, operationError(string(op), err)
+		}
+		if extension != nil {
+			launch.ExtensionPaths = []string{extension.path}
+		}
+		native, err := pi.Open(ctx, launch)
+		if err != nil {
+			return nil, operationError(string(op), errors.Join(err, extension.remove()))
+		}
+		if err := extension.check(ctx, native); err != nil {
+			return nil, errors.Join(operationError(string(op), err), native.CloseAndDiscard(), extension.remove())
 		}
 		if options.Config.Effort != "" {
 			if err := checkThinkingLevel(ctx, native, options.Config.Effort); err != nil {
-				_ = native.CloseAndDiscard()
-				p.release(resumeID)
-				return nil, operationError(string(op), err)
+				return nil, errors.Join(operationError(string(op), err), native.CloseAndDiscard(), extension.remove())
 			}
 		}
 		if resumeID == "" && !p.claim(native.ID()) {
-			_ = native.Close()
-			return nil, alreadyAttached()
+			return nil, errors.Join(alreadyAttached(), native.CloseAndDiscard(), extension.remove())
 		}
-		return newSession(p, native, options.Features.RestrictLocalTools), nil
+		attached = true
+		return newSession(p, native, options.Features.RestrictLocalTools, extension), nil
 	})
 	if err != nil {
 		return nil, err
@@ -148,6 +174,14 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 	// Register its lease before starting observation and its release hook.
 	go attached.observe()
 	return attached, nil
+}
+
+func (p *Core) processEnvironment(overlay map[string]string) []string {
+	env := slices.Clone(p.config.Env)
+	for _, key := range slices.Sorted(maps.Keys(overlay)) {
+		env = append(env, key+"="+overlay[key])
+	}
+	return env
 }
 
 func (p *Core) claim(id string) bool {
@@ -180,10 +214,8 @@ func validateOptions(o agent.OpenOptions) error {
 		return unsupported("permission_preset_unsupported", "Pi supports only fullAccess")
 	case len(o.AdditionalDirs) > 0:
 		return unsupported(agent.ErrorReasonAdditionalDirsUnsupported, "Pi additional directories are unsupported")
-	case len(o.ProcessEnv) > 0:
-		return unsupported(agent.ErrorReasonProcessEnvUnsupported, "Pi per-session process environment is unsupported")
-	case len(o.ShellEnv) > 0:
-		return unsupported(agent.ErrorReasonShellEnvUnsupported, "Pi per-session shell environment is unsupported")
+	case len(o.ShellEnv) > 0 && (!shellEnvSupported() || o.Features.RestrictLocalTools):
+		return unsupported(agent.ErrorReasonShellEnvUnsupported, "Pi ShellEnv requires the local bash tool on macOS or Linux")
 	case len(o.MCPServers) > 0 || o.MCPFiles != nil:
 		return unsupported("mcp_servers_unsupported", "Pi per-session MCP configuration is unsupported")
 	case o.Features.AgentQuestions != nil && *o.Features.AgentQuestions:

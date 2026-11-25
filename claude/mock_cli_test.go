@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 
 	"github.com/zoumo/agent-sdk-go/claude"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 type mockCLISuite struct {

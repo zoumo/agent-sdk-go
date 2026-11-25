@@ -9,7 +9,7 @@ import tempfile
 import threading
 import unittest
 
-GATE = Path(__file__).resolve().parents[2] / "internal/native/codex_child_gate.py"
+GATE = Path(__file__).resolve().parents[3] / "replay/internal/native/codex_child_gate.py"
 
 
 class ChildGateTests(unittest.TestCase):

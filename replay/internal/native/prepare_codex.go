@@ -303,7 +303,7 @@ func codexReservedCredentialEnvironment(name string) bool {
 		"LANG", "LANGUAGE", "LOCPATH", "GCONV_PATH", "TERMINFO", "TERMINFO_DIRS":
 		return true
 	}
-	for _, prefix := range []string{"CODEX_", "CLAUDE_", "XDG_", "AGENT_SDK_", "LD_", "DYLD_", "LC_", "NODE_", "NPM_", "PYTHON", "RUBY", "GEM_", "PERL", "GIT_"} {
+	for _, prefix := range []string{"CODEX_", "CLAUDE_", "XDG_", "AGENT_SDK_", "AGENT_REPLAY_", "LD_", "DYLD_", "LC_", "NODE_", "NPM_", "PYTHON", "RUBY", "GEM_", "PERL", "GIT_"} {
 		if strings.HasPrefix(name, prefix) {
 			return true
 		}

@@ -42,7 +42,7 @@ class MockTests(unittest.TestCase):
     def test_copied_binary_needs_no_python_sdk_or_checkout(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            launcher = root / 'agent-sdk-testify'
+            launcher = root / 'agent-replay'
             shutil.copyfile(BIN, launcher)
             launcher.chmod(0o700)
             for provider in ('codex', 'claude'):

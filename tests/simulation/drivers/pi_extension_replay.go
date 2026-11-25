@@ -13,7 +13,6 @@ import (
 	"time"
 
 	agenttestify "github.com/zoumo/agent-sdk-go/replay"
-
 	pisim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/pi/go"
 )
 

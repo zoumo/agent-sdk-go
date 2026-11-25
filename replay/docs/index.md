@@ -1,11 +1,11 @@
 ---
 okf_version: "0.3"
-title: Testify 文档
-description: 面向 SDK 测试使用者和 Testify 维护者的录制、回放、共同验收与开发文档。
+title: Replay 文档
+description: 面向 SDK 测试使用者和 Replay 维护者的录制、回放、共同验收与开发文档。
 license: Apache-2.0
 ---
 
-# Testify 文档
+# Replay 文档
 
 ## 录制与回放
 
@@ -15,6 +15,6 @@ license: Apache-2.0
 
 ## 设计与维护
 
-* [工具设计](design.md) - 定义 Testify 的 CLI 与 Go 库职责、fixture 生命周期、材料所有权和录制验收条件。
+* [工具设计](design.md) - 定义 Replay 的 CLI 与 Go 库职责、fixture 生命周期、材料所有权和录制验收条件。
 * [SDK 共同验收](cases.md) - 定义 SDK 用户故事、可录制回放的 case、流程语义和验收边界。
-* [开发规范](development.md) - 规定 Testify 的模块依赖、代码布局、录制材料与测试边界，以及构建和发布要求。
+* [开发规范](development.md) - 规定 Replay 的模块依赖、代码布局、录制材料与测试边界，以及构建和发布要求。

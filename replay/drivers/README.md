@@ -4,7 +4,7 @@
 driver 通过官方 SDK 执行一个 case 并给出业务断言；Go 工具负责 case 选择、
 隔离环境、协议对端、进程管理和回执。
 
-`agent mock` 消费者只使用 `agent-sdk-testify` 二进制，不需要安装本目录的 driver、
+`agent mock` 消费者只使用 `agent-replay` 二进制，不需要安装本目录的 driver、
 官方 SDK、Python 或 Node.js。
 
 ## 布局
@@ -22,15 +22,15 @@ driver 通过官方 SDK 执行一个 case 并给出业务断言；Go 工具负�
 ```sh
 go mod download
 rustup toolchain install 1.99.1 --profile minimal
-drivers/codex/rust/install.sh /absolute/new-source-cache --fetch
+replay/drivers/codex/rust/install.sh /absolute/new-source-cache --fetch
 export CODEX_SOURCE_ARCHIVE=/absolute/new-source-cache/codex.tar.gz
 export CARGO_NET_OFFLINE=true
-npm ci --prefix drivers/claude/typescript --ignore-scripts --omit=optional --no-audit --no-fund
+npm ci --prefix replay/drivers/claude/typescript --ignore-scripts --omit=optional --no-audit --no-fund
 make bundle
 make check
 ```
 
-`make bundle` 在 `.artifacts/build/` 生成当前平台的 `agent-sdk-testify`、
+`make bundle` 在 `.artifacts/build/` 生成当前平台的 `agent-replay`、
 `agent-sdk-testify-codex` 和 Claude、Pi npm tarball。可用 `AGENT_SDK_TESTIFY_BUILD_DIR`
 指定绝对输出目录。构建使用一个临时 Cargo target，结束后清理。设置
 `CARGO_TARGET_DIR` 为平台专用的绝对路径可在多次本机构建间保留编译缓存。
@@ -39,7 +39,7 @@ make check
 
 ### 安装 Claude driver
 
-使用 Node.js 22 或更新版本。从同一 Testify Release 取得 Go CLI 和 Claude tarball，
+使用 Node.js 22 或更新版本。从同一 Replay Release 取得 Go CLI 和 Claude tarball，
 或使用 `make bundle` 的产物。tarball 已包含锁定的官方 SDK 和运行依赖。
 
 ```sh
@@ -53,19 +53,19 @@ command -v agent-sdk-testify-claude
 如果 PATH 上还有同名旧脚本，将上述安装目录放在它前面。
 
 `official record` 仍使用 `--cmd` 指定的 Claude Code CLI。
-`official verify` 使用 Testify 的公开 mock。
+`official verify` 使用 Replay 的公开 mock。
 业务报告记录当前安装的官方 SDK 版本。材料的原始录制来源由材料索引保存。
 
 ### 安装 Codex driver
 
-从同一 Release 下载当前系统和架构的 `agent-sdk-testify_<version>_<os>_<arch>.tar.gz`，
+从同一 Release 下载当前系统和架构的 `agent-replay_<version>_<os>_<arch>.tar.gz`，
 按 `SHA256SUMS` 核对归档哈希。将其中两个可执行文件安装到同一前缀。
 以下示例使用已下载的 macOS arm64 归档和新的私有目录。
 
 ```sh
 mkdir -p /absolute/testify/bin
-tar -xzf "agent-sdk-testify_<version>_darwin_arm64.tar.gz" -C /absolute/testify/bin \
-  agent-sdk-testify agent-sdk-testify-codex
+tar -xzf "agent-replay_<version>_darwin_arm64.tar.gz" -C /absolute/testify/bin \
+  agent-replay agent-sdk-testify-codex
 export PATH="/absolute/testify/bin:$PATH"
 command -v agent-sdk-testify-codex
 ```
@@ -91,13 +91,13 @@ command -v agent-sdk-testify-pi
 
 录制时用 `--cmd` 指定 Pi 1.6.0 CLI，在 `--` 后传入 `--mode rpc`。
 `prepare` 的 `--model` 接受 `provider/model`。模型切换用例需要另外指定不同的
-`--initial-model`。离线验证通过同一个 RpcClient 连接 Testify mock。
+`--initial-model`。离线验证通过同一个 RpcClient 连接 Replay mock。
 独立历史用例使用 Pi 的 `SessionManager` 读取本次录制保存的原生会话文件。
 [Pi 用例绑定](../data/scenarios/bindings/pi.json)
 
 扩展用例 `008–014`、`037` 和 `038` 使用原生 stdio 客户端。用目录中的 case
 准备 fixture，再用 `official record` 和 `official verify` 录放。driver 使用原生
-对话 ID 回答，使用命令 ID 匹配控制回执。录制时 Testify 加载固定的 Go SDK 扩展，
+对话 ID 回答，使用命令 ID 匹配控制回执。录制时 Replay 加载固定的 Go SDK 扩展，
 业务报告保留 Pi 版本、扩展修订和哈希。运行 `012` 时，在 `prepare` 中设置两个
 支持思考等级的不同模型，分别传给 `--initial-model` 和 `--model`。
 [扩展来源](pi/official/pi-extension/SOURCE.md)
@@ -109,11 +109,11 @@ command -v agent-sdk-testify-pi
 [官方 SDK 环境](#官方-sdk-环境)
 
 1. 选择 agent type 和 case，创建 fixture。`--model`、`--initial-model` 和 `--history-seed`
-   属于准备步骤。Testify 从该 agent type 的原生配置位置发现允许的配置和认证。
+   属于准备步骤。Replay 从该 agent type 的原生配置位置发现允许的配置和认证。
    [场景目录](../data/scenarios)、[环境与隔离](../docs/design.md#环境与隔离)
 
 	```sh
-	agent-sdk-testify prepare --agent codex --case SDK-CASE-001 \
+	agent-replay prepare --agent codex --case SDK-CASE-001 \
 		--fixture-dir /private/fixture
 	```
 
@@ -121,11 +121,11 @@ command -v agent-sdk-testify-pi
    将它放在 `--` 前。官方 driver 通过 SDK 启动录制代理。
 
 	```sh
-	agent-sdk-testify official record --fixture-dir /private/fixture \
+	agent-replay official record --fixture-dir /private/fixture \
 		--cmd /absolute/codex -- app-server --listen stdio://
 	```
 
-3. 检查 driver 业务报告和录制回执。录制成功后，Testify 更新 current recording。
+3. 检查 driver 业务报告和录制回执。录制成功后，Replay 更新 current recording。
    官方录制结果引用实际的协议 execution。失败和未触发的尝试保留诊断。
    [官方录制合同](../docs/design.md#official-record)
 4. 验证同一 fixture 中的 current recording。需要在另一个 fixture 使用时，先导出材料。
@@ -136,13 +136,13 @@ Codex 和 Claude driver 都从原始录制核对注入与后续查询的边界�
 [上下文注入验收](../docs/cases.md#中断关闭与独立查询)
 
 ```sh
-agent-sdk-testify prepare --agent claude --case SDK-CASE-037 \
+agent-replay prepare --agent claude --case SDK-CASE-037 \
 	--fixture-dir /absolute/new-context-fixture
-agent-sdk-testify official record --fixture-dir /absolute/new-context-fixture \
+agent-replay official record --fixture-dir /absolute/new-context-fixture \
 	--cmd /absolute/claude -- \
 	--input-format stream-json --output-format stream-json --verbose \
 	--include-partial-messages --permission-prompt-tool stdio
-agent-sdk-testify official verify --fixture-dir /absolute/new-context-fixture
+agent-replay official verify --fixture-dir /absolute/new-context-fixture
 ```
 
 ## 官方离线验证与采用
@@ -155,14 +155,14 @@ agent-sdk-testify official verify --fixture-dir /absolute/new-context-fixture
    先导入到新的 fixture。
 
 	```sh
-	agent-sdk-testify prepare --recording /private/new-capture \
+	agent-replay prepare --recording /private/new-capture \
 		--fixture-dir /private/imported-fixture
 	```
 
 2. 验证 current recording。示例使用导入的 fixture。
 
 	```sh
-	agent-sdk-testify official verify --fixture-dir /private/imported-fixture \
+	agent-replay official verify --fixture-dir /private/imported-fixture \
 		--timeout 2m
 	```
 
@@ -175,7 +175,7 @@ agent-sdk-testify official verify --fixture-dir /absolute/new-context-fixture
 [采用与发布合同](../docs/design.md#信任与入仓)
 
 ```sh
-agent-sdk-testify official verify --fixture-dir /private/imported-fixture \
+agent-replay official verify --fixture-dir /private/imported-fixture \
 	--index /absolute/data/index.json \
 	--scenarios /absolute/data/scenarios --archive /private/archives
 ```

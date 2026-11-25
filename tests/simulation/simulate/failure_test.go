@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestUnavailableAndCorruptMaterialFailExplicitly(t *testing.T) {

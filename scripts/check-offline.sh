@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ -f .git ]]; then
+  export SDK_SIMULATION_ARCHIVE_ROOT="${SDK_SIMULATION_ARCHIVE_ROOT:-$PWD/.artifacts/simulation/gates}"
   exec bash scripts/replay/with-build-checkout.sh bash scripts/check-offline.sh "$@"
 fi
 export GOFLAGS="${GOFLAGS:-} -buildvcs=true"

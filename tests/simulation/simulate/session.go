@@ -12,9 +12,8 @@ import (
 	"strings"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-go/replay"
-
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 const (

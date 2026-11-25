@@ -44,6 +44,8 @@ func TestToolIdentityValidatesExecutableAndEmbeddedUnions(t *testing.T) {
 		ModuleSum: "h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
 		GoVersion: "go1.26.10",
 	}
+	legacy := dependency
+	legacy.Module = "github.com/zoumo/agent-sdk-testify"
 	for _, test := range []struct {
 		name     string
 		identity ToolIdentity
@@ -52,6 +54,7 @@ func TestToolIdentityValidatesExecutableAndEmbeddedUnions(t *testing.T) {
 		{name: "executable", identity: executable},
 		{name: "embedded main module", identity: embedded},
 		{name: "embedded dependency", identity: dependency},
+		{name: "pre-migration Testify receipt", identity: legacy},
 		{
 			name: "executable module fields",
 			identity: ToolIdentity{

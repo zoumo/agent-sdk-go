@@ -7,7 +7,7 @@ tags: [go-library, replay, acceptance]
 
 # Go 库回放合同
 
-导入 `github.com/zoumo/agent-sdk-testify`，包名 `agenttestify`。进程内回放使用
+导入 `github.com/zoumo/agent-sdk-go/replay`，包名 `replay`。进程内回放使用
 `Fixture.StartMockAgent`。公开签名、类型和字段见[根包源码](../library.go)，进程入口与官方
 编排的职责见[工具设计](design.md#入口与职责)。
 
@@ -63,7 +63,7 @@ execution 已结算，通过还要求 `Status` 为 `ExecutionStatusPassed`。终
 
 ## 内嵌工具身份与持久化合同
 
-`Prepare` 优先从 Go build info 解析 Testify 的精确模块身份。调用方的非 main 测试二进制
+`Prepare` 优先从 Go build info 解析 Replay 的精确模块身份。调用方的非 main 测试二进制
 省略该模块时，可用 `PrepareOptions.EmbeddedIdentity` 提供固定依赖的身份，值取自固定版本的
 `go.mod`、`go.sum` 和对应提交。显式身份必须与已有 build info 一致。字段校验和用法见
 [身份解析源码](../internal/version/identity.go)与[公开库测试](../library_test.go)。

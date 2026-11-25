@@ -12,30 +12,30 @@ class IdentityError(ValueError):
 
 
 def identity(value=None, expected=None):
-    value = value or os.environ.get('AGENT_SDK_TESTIFY_BIN')
+    value = value or os.environ.get('AGENT_REPLAY_BIN')
     if not value or not Path(value).is_absolute():
-        raise IdentityError('set AGENT_SDK_TESTIFY_BIN to an absolute Go agent-sdk-testify executable')
+        raise IdentityError('set AGENT_REPLAY_BIN to an absolute Go agent-replay executable')
     try:
         path = Path(value).resolve(strict=True)
         if not path.is_file() or not os.access(path, os.X_OK):
-            raise IdentityError('Go agent-sdk-testify executable unavailable')
+            raise IdentityError('Go agent-replay executable unavailable')
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError as exc:
-        raise IdentityError('Go agent-sdk-testify executable unavailable') from exc
+        raise IdentityError('Go agent-replay executable unavailable') from exc
     # Reject changed bytes before executing even the version probe.
     if expected is not None and digest != expected.get('sha256'):
-        raise IdentityError('prepared Go agent-sdk-testify binary changed')
+        raise IdentityError('prepared Go agent-replay binary changed')
     try:
         result = subprocess.run([str(path), 'version'], capture_output=True, timeout=5,
                                 env={'PATH': os.defpath}, check=True)
         version = result.stdout.decode().strip()
     except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
-        raise IdentityError('Go agent-sdk-testify version probe failed') from exc
-    if not re.fullmatch(r'agent-sdk-testify (?:devel|v[0-9][^\s]*)', version) or result.stderr:
-        raise IdentityError('unsupported Go agent-sdk-testify version response')
+        raise IdentityError('Go agent-replay version probe failed') from exc
+    if not re.fullmatch(r'agent-replay (?:devel|v[0-9][^\s]*)', version) or result.stderr:
+        raise IdentityError('unsupported Go agent-replay version response')
     actual = {'path': str(path), 'sha256': digest, 'version': version}
     if expected is not None and actual['version'] != expected.get('version'):
-        raise IdentityError('prepared Go agent-sdk-testify version changed')
+        raise IdentityError('prepared Go agent-replay version changed')
     return actual
 
 

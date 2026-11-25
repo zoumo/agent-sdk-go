@@ -221,6 +221,10 @@ done
 # The SDK simulation must exercise the public replay package.
 for host in ./internal/mocktest ./tests/simulation/simulate; do
   imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "$host")
+  if grep -Eq '^github[.]com/zoumo/agent-sdk-(go/(replay/|internal/replay/)|testify)' <<< "$imports"; then
+    echo "$host imports private replay tooling or the retired external module" >&2
+    exit 1
+  fi
   grep -Fxq 'github.com/zoumo/agent-sdk-go/replay' <<< "$imports" || {
     echo "$host must import the public replay library" >&2
     exit 1

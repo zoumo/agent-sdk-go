@@ -1,4 +1,4 @@
-# agent-sdk-testify 术语
+# agent-replay 术语
 
 本表定义本工具、录制材料和 mock 消费者共用的核心术语。相同名称只表示同一概念。
 
@@ -117,7 +117,7 @@ execution 成功；完整消费到达前失败不触发，且不能替代 `Wait`
 
 **In-process mock（进程内 mock）**:
 通过 `StartMockAgent` 和调用方提供的 `StartMockAgentStreams` 在同一进程内执行
-严格回放，不启动 `agent-sdk-testify` 可执行文件。它仍创建正常 execution、receipt
+严格回放，不启动 `agent-replay` 可执行文件。它仍创建正常 execution、receipt
 和 report，但不具有进程、PID 或原生 CLI 退出码。
 
 **Execution report（执行报告）**:

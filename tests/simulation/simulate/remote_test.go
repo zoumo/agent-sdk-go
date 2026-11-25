@@ -11,9 +11,9 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
 )
 

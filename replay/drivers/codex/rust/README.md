@@ -10,7 +10,7 @@ client 增加子进程管道接入。上游 client 管理握手、请求关联�
 在仓库根运行以下命令，在独立前缀安装入口。构建目录必须是新目录。
 
 ```sh
-drivers/codex/rust/install.sh /tmp/testify-rust-build /tmp/testify-rust-install
+replay/drivers/codex/rust/install.sh /tmp/testify-rust-build /tmp/testify-rust-install
 ```
 
 首次构建下载固定源码和 Cargo 依赖。已有缓存时，通过 `CODEX_SOURCE_ARCHIVE`
@@ -26,9 +26,9 @@ Testify 在单次录制 overlay 安装 gate，Rust 从根 Turn 的成功终态�
 
 ```sh
 export PATH="/tmp/testify-rust-install/bin:$PATH"
-agent-sdk-testify prepare --agent codex --case SDK-CASE-012 \
+agent-replay prepare --agent codex --case SDK-CASE-012 \
 	--fixture-dir /tmp/testify-rust-012
-agent-sdk-testify official verify --fixture-dir /tmp/testify-rust-012 --timeout 45s
+agent-replay official verify --fixture-dir /tmp/testify-rust-012 --timeout 45s
 ```
 
 严格回放使用与录制匹配的 client。内置 Codex 材料使用 Rust client。

@@ -26,7 +26,11 @@ func runSimulationTest(t *testing.T, gateMode bool) string {
 	t.Helper()
 	ctx, stop := signal.NotifyContext(t.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	output, err := withSimulationOutput(*simulationOutput, filepath.Join("..", "..", "..", ".artifacts", "simulation", "gates"), func(output string) error {
+	archiveRoot := os.Getenv("SDK_SIMULATION_ARCHIVE_ROOT")
+	if archiveRoot == "" {
+		archiveRoot = filepath.Join("..", "..", "..", ".artifacts", "simulation", "gates")
+	}
+	output, err := withSimulationOutput(*simulationOutput, archiveRoot, func(output string) error {
 		err := execute(ctx, options{
 			Output: output, Driver: driverBinary, Gate: gateMode,
 			Provider: *simulationProvider, Case: *simulationCase, Recording: *simulationRecording,

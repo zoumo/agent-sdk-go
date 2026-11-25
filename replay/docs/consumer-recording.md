@@ -13,7 +13,7 @@ sources:
 
 # 录制并回放消费者的 SDK 交互
 
-用自己的 SDK 启动 `agent record`，采集与原生 Agent 的交互。采集成功后，用同一 fixture 的 current recording 回归测试。消费者负责 SDK 宿主、业务断言和 fixture 清理。Testify 负责隔离环境、协议采集和严格回放。
+用自己的 SDK 启动 `agent record`，采集与原生 Agent 的交互。采集成功后，用同一 fixture 的 current recording 回归测试。消费者负责 SDK 宿主、业务断言和 fixture 清理。Replay 负责隔离环境、协议采集和严格回放。
 
 <a id="边界"></a>
 <a id="生命周期"></a>
@@ -24,7 +24,7 @@ sources:
 
 前置条件如下。
 
-- `PATH` 包含 `agent-sdk-testify`。
+- `PATH` 包含 `agent-replay`。
 - fixture 路径是尚不存在的绝对目录，父目录已存在。
 - 本地录制使用可运行的 Codex 或 Claude CLI。远程录制使用已有的认证 WebSocket 服务。
 
@@ -43,7 +43,7 @@ sources:
 2. 创建 fixture。如果测试使用已有会话，向 `prepare` 传入 `--history-seed` 和完整历史种子目录。
 
 	```sh
-	agent-sdk-testify prepare --agent codex \
+	agent-replay prepare --agent codex \
 		--plan /absolute/consumer-plan.json \
 		--fixture-dir /absolute/fixture
 	```
@@ -62,23 +62,23 @@ sources:
 2. 核对 route 身份和运行目录。将 route 的 `env` 应用到 SDK 宿主，将宿主工作目录设为 `workspace`。录制配置与认证来自允许的原生配置和 `runtimeEnv` 列出的变量。[环境与隔离](design.md#环境与隔离)
 3. 将 SDK 启动 Agent 的命令设为对应的 `agent record` 调用。两个命令都使用 SDK 的原生 stdio 协议来传输客户端帧。
 
-   - **本地 CLI**。提供真实 Agent 的绝对可执行路径，并将原生 stdio 参数放在 `--` 后。使用 CLI route 时，`connection.args` 已含 `--cmd`，在其后追加可执行路径、`--` 与原生参数。Testify 原样转发这些参数，生成的证据字段省略它们。[原生启动参数](design.md#原生启动参数)
+   - **本地 CLI**。提供真实 Agent 的绝对可执行路径，并将原生 stdio 参数放在 `--` 后。使用 CLI route 时，`connection.args` 已含 `--cmd`，在其后追加可执行路径、`--` 与原生参数。Replay 原样转发这些参数，生成的证据字段省略它们。[原生启动参数](design.md#原生启动参数)
 
 	 ```sh
-	 agent-sdk-testify agent record --fixture-dir /absolute/fixture \
+	 agent-replay agent record --fixture-dir /absolute/fixture \
 		 --cmd /absolute/codex -- app-server --listen stdio://
 	 ```
 
-   - **已有 WebSocket 服务**。使用 `--url` 和 `--token-file`，省略本地 CLI 参数。token 文件使用私有普通文件的绝对路径，例如权限为 `0600` 的文件。将文件放在 fixture 外或 fixture 的 `runtime/` 内。Testify 按 stdio 和 WebSocket 双向传输，结束时关闭自身的连接。你负责服务的生命周期。[远程录制与命令边界](design.md#远程录制与命令边界)
+   - **已有 WebSocket 服务**。使用 `--url` 和 `--token-file`，省略本地 CLI 参数。token 文件使用私有普通文件的绝对路径，例如权限为 `0600` 的文件。将文件放在 fixture 外或 fixture 的 `runtime/` 内。Replay 按 stdio 和 WebSocket 双向传输，结束时关闭自身的连接。你负责服务的生命周期。[远程录制与命令边界](design.md#远程录制与命令边界)
 
 	 ```sh
-	 agent-sdk-testify agent record --fixture-dir /absolute/fixture \
+	 agent-replay agent record --fixture-dir /absolute/fixture \
 		 --url ws://127.0.0.1:8765/agent \
 		 --token-file /private/runtime/bearer-token --timeout 2m
 	 ```
 
 4. 执行 SDK 业务操作。完成后，关闭 SDK 写往 `agent record` 的协议流。继续读取录制代理的输出，直到 EOF。等待 SDK 宿主和录制进程退出。
-5. 检查业务断言和本次采集结果。采集通过后，Testify 封存不可变 material，并更新 current recording。若交付或清理失败，读回持久结果中的 `publicationCommitted`，确认 current 是否已更新。[发布提交点与失败分支](design.md#封存发布与恢复)
+5. 检查业务断言和本次采集结果。采集通过后，Replay 封存不可变 material，并更新 current recording。若交付或清理失败，读回持久结果中的 `publicationCommitted`，确认 current 是否已更新。[发布提交点与失败分支](design.md#封存发布与恢复)
 
 <a id="协议执行结果"></a>
 
@@ -87,7 +87,7 @@ sources:
 在启动录制进程时，可用可写管道或文件描述符接收 `--result-fd` 通知。描述符值至少为 `3`。例如，将录制进程的描述符 `3` 重定向到结果文件。
 
 ```sh
-agent-sdk-testify agent record --fixture-dir /absolute/fixture \
+agent-replay agent record --fixture-dir /absolute/fixture \
 	--result-fd 3 --cmd /absolute/codex -- app-server --listen stdio:// \
 	3>/absolute/record-result.jsonl
 ```

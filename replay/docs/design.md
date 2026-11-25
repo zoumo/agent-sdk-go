@@ -1,19 +1,19 @@
 ---
 type: Design
-title: agent-sdk-testify 工具设计
-description: "定义 Testify 的 CLI 与 Go 库职责、fixture 生命周期、材料所有权和录制验收条件。"
+title: agent-replay 工具设计
+description: "定义 Replay 的 CLI 与 Go 库职责、fixture 生命周期、材料所有权和录制验收条件。"
 tags: [architecture, fixture, recording, replay]
 ---
 
-# agent-sdk-testify 工具设计
+# agent-replay 工具设计
 
-`agent-sdk-testify` 是面向多语言 SDK 的独立录制与回放工具。它维护 case、
+`agent-replay` 是面向多语言 SDK 的独立录制与回放工具。它维护 case、
 官方 driver、录制材料、固定索引和内置快照；SDK 业务测试由消费者自己编排。
 
 公开 CLI 分为 fixture、协议对端和官方编排三组：
 
 ```text
-agent-sdk-testify
+agent-replay
   prepare
   agent
     record
@@ -32,8 +32,8 @@ agent-sdk-testify
 
 同一 module 提供 CLI 和 Go 库两种入口，二者是同一应用核心的薄适配器：
 
-- CLI 入口 `cmd/agent-sdk-testify` 拥有 argv、stdio、descriptor、stderr 和退出码。
-- 根包 `agenttestify` 提供类型化的 `Prepare`、`Open`、`Export` 以及 fixture 上的
+- CLI 入口 `cmd/agent-replay` 拥有 argv、stdio、descriptor、stderr 和退出码。
+- 根包 `replay` 提供类型化的 `Prepare`、`Open`、`Export` 以及 fixture 上的
   `RecordAgent`、`MockAgent`；`RecordAgent` 和 `MockAgent` 沿用调用方的
   `*os.File` 进程流，作为 CLI/录制薄适配。
 - 根包另提供 `StartMockAgent` 进程内入口：调用方提供 `StartMockAgentStreams`，
@@ -100,7 +100,7 @@ Material 是回放输入，不必先经过 verify。Verified 是精确 material 
 
 ## Fixture 生命周期
 
-`--fixture-dir` 指向 fixture 的绝对路径。`prepare` 创建目录，后续命令读取同一目录。Testify 管理内部 descriptor `fixture.json`。调用方通过 CLI 或公开 Go API 使用 fixture。
+`--fixture-dir` 指向 fixture 的绝对路径。`prepare` 创建目录，后续命令读取同一目录。Replay 管理内部 descriptor `fixture.json`。调用方通过 CLI 或公开 Go API 使用 fixture。
 
 已有材料的 SDK 测试使用 `prepare` 创建 fixture，随后启动 mock。消费者录制在 `prepare` 和 mock 之间执行 `agent record`。官方录制和验证使用官方 driver。`export` 导出 current recording 中的材料。[mock 指南](using-mock.md)、[消费者录制指南](consumer-recording.md)、[官方录制指南](../drivers/README.md#按-case-录制)
 
@@ -734,7 +734,7 @@ launcher 转发原生参数。需要通知时，调用方用 route 的 `command`
 领取 execution 后，命令先写 `running`，结算时写 `passed` 或 `failed`。
 领取前失败通过退出码和 stderr 报告。持久结果与通知使用同一 schema 3 数据对象。
 持久路径为 `packages/<materialId>/executions/<executionId>/receipts/<connectionId>.result.json`。
-无通知描述符时，Testify 仍写入持久结果。
+无通知描述符时，Replay 仍写入持久结果。
 
 结果用 `fixtureId`、`materialId`、`executionId`、`connectionId` 和 `command` 标识执行。
 `executionSHA256` 绑定不可变 descriptor。`execution`、`receipt`、`result` 及 mock 的
@@ -748,7 +748,7 @@ raw 哈希。调用方使用本次通知明确标识的 execution。多连接各
 是否已更新。[结算与发布](#封存发布与恢复)
 
 `agent mock --progress-fd` 使用另一个编号至少为 `3` 的描述符。到达完整消费点时，
-Testify 写入字节 `1`。SDK 此时可关闭写往 mock 的一端，继续读取回放输出。
+Replay 写入字节 `1`。SDK 此时可关闭写往 mock 的一端，继续读取回放输出。
 最终回执还校验客户端 EOF、额外字节和清理。[严格回放](#严格回放)
 
 ## schema 版本与兼容
@@ -873,12 +873,12 @@ execution 前失败。plan source 的消费者流程见[消费者录制](consume
 
 #### 原生启动参数
 
-消费者使用本地 CLI 录制时，`--cmd` 接收可执行文件的绝对路径。Testify 将 `--` 后的
+消费者使用本地 CLI 录制时，`--cmd` 接收可执行文件的绝对路径。Replay 将 `--` 后的
 参数原样交给该可执行文件。Go 库的 `RecordAgentOptions.NativeArgs` 使用相同规则。
-消费者负责选择 Agent 的 stdio 启动参数。Testify 生成的执行描述、清单和回执省略
+消费者负责选择 Agent 的 stdio 启动参数。Replay 生成的执行描述、清单和回执省略
 消费者启动参数，协议流与 Agent 的 stderr 仍按原字节采集。
 
-Mock 的 `connection.args` 和 launcher 在 Testify 选项后放置 `--`。分隔符后的 SDK
+Mock 的 `connection.args` 和 launcher 在 Replay 选项后放置 `--`。分隔符后的 SDK
 参数可以包含新增选项，且不会写入执行证据。Mock 拒绝 Agent 帮助、版本探测及显式
 声明与 stdio 不兼容的传输或格式。回放仍按当前材料匹配协议帧。
 
@@ -1180,7 +1180,7 @@ route template。Codex transport 的 `Dir` 使用 `ProtocolCwd`，它只是逻�
 认证只来自工具允许的原生配置和当前进程中的白名单变量。工具不复制个人 skills、
 插件、记忆、项目指令或无关 session；不把完整 Agent home 当作 fixture 数据。
 
-plan source 的消费者在启动 SDK 宿主前应用当前 route 的 `env`、`workspace`、历史和连接命令。父 SDK 宿主和协议子进程各自使用隔离环境。进程内 mock 使用 `StartMockAgent` 返回的 `ExecutionStart`。隔离路径与原生环境由 Testify 管理。
+plan source 的消费者在启动 SDK 宿主前应用当前 route 的 `env`、`workspace`、历史和连接命令。父 SDK 宿主和协议子进程各自使用隔离环境。进程内 mock 使用 `StartMockAgent` 返回的 `ExecutionStart`。隔离路径与原生环境由 Replay 管理。
 
 record 完成时把回放所需的原生 session/history 写入 material 的
 `history/runtime/`，把本次使用的冻结 seed 闭包写入 `history/seed/`，并由唯一
@@ -1261,7 +1261,7 @@ mock 不支持的分支或协议明确失败，不搜索其他 material、不猜
 - 没有 current 或适用 verifier 时，verify 在启动 driver 前失败。
 - 没有 current 或连接声明不可用时，mock 在领取 execution 前失败。
 - 库 mock 用 `io.Pipe` 或等价可关闭流完成 prepare → `StartMockAgent` → SDK
-  `CloseInput` → `Wait`，测试环境没有 `agent-sdk-testify` 可执行文件或 PATH 发现。
+  `CloseInput` → `Wait`，测试环境没有 `agent-replay` 可执行文件或 PATH 发现。
 - `MockRun.Start` 来自实际 execution overlay，包含当前 workspace、protocol cwd、
   env 和 connection；调用前后宿主 cwd 与全局环境不变。
 - `FullConsumption` 在 pending request/握手之后、额外字节/EOF 之前触发且不丢信号；

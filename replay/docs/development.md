@@ -1,7 +1,7 @@
 ---
 type: Development Standard
 title: 开发规范
-description: "规定 Testify 的模块依赖、代码布局、录制材料与测试边界，以及构建和发布要求。"
+description: "规定 Replay 的模块依赖、代码布局、录制材料与测试边界，以及构建和发布要求。"
 tags: [development, testing, release]
 ---
 
@@ -9,13 +9,13 @@ tags: [development, testing, release]
 
 ## Module 与依赖
 
-使用单一 module `github.com/zoumo/agent-sdk-testify` 和单一工具二进制，
+回放库与 CLI 共用 SDK 根 module `github.com/zoumo/agent-sdk-go` 和单一工具二进制，
 使用 Go 1.26.10 和 golangci-lint 2.12.2；不添加嵌套 module、replace 或 go.work。
-生产代码及默认测试不得导入 agent-sdk-go、Go driver 或 SDK fixture 容器。
+Replay 独立于 SDK 客户端、统一适配器和仿真 driver。
 官方 SDK 仅作为 official record/verify 的显式环境依赖，不在运行时自动安装。
 
 CLI 消费者通过 `prepare --plan` 和 record 采集、mock 进程、fixture/运行描述与独立
-回执接入。模块根包是可导入库包，入口职责以[工具设计](design.md#入口与职责)为准，
+回执接入。Replay 根包是可导入库包，入口职责以[工具设计](design.md#入口与职责)为准，
 公开 API 见[根包源码](../library.go)。进程内回放的调用顺序见[Go 库回放合同](library-entry-spec.md)。
 公开 CLI 结构和职责以[工具设计](design.md)为准。agent record/mock 不依赖官方
 SDK；official record/verify 通过官方 driver 调用同一套公开 agent 命令。
@@ -23,33 +23,10 @@ SDK；official record/verify 通过官方 driver 调用同一套公开 agent 命
 
 ## 代码布局
 
-```text
-agent-sdk-testify/
-  go.mod / go.sum / Makefile / .golangci.yaml
-  doc.go / library.go       # 可导入库包 agenttestify 的公开入口
-  library*_test.go          # agenttestify_test 外部黑盒测试
-  cmd/agent-sdk-testify/
-    main.go                 # CLI 入口
-  internal/
-    application/            # prepare/record/mock/export 的唯一应用用例层
-    lifecycle/              # prepare 与 fixture/execution 状态
-    record/ mock/           # agent 协议执行
-    catalog/ corpus/        # case/catalog 与材料资格、采用、索引
-    builtin/ official/      # 内置快照与官方录制/验证编排
-    native/                 # 原生 Agent 配置、环境、历史种子与服务准备
-    history/ tool/          # 历史派生与共享基础能力
-    protocol/               # 采集、严格回放、录制格式与传输；仅供仓库内部使用
-  data/
-    scenarios/              # 权威 case、binding、输入与预期
-    claude/ codex/          # 审核采用的 agentType/case/attempt 材料
-    index.json              # 固定索引
-    builtin/                # 生成的发布快照
-  tests/intergration/       # 多模块集成测试
-  tests/e2e/                # installed CLI 的完整流程测试
-  tests/build/              # 生成器、入口一致性与独立构建检查
-  drivers/                  # 官方 driver 和打包配置
-  docs/ / scripts/ / README.md / LICENSE
-```
+公开库位于 `replay`。根命令通过 `replay/cli` 调用私有命令树。回放实现位于
+`replay/internal`。共享文件与进程工具位于根 `internal/replay/tool`。
+材料与场景保存在 `replay/data`，官方 driver 保存在 `replay/drivers`。
+公开库与已安装命令的跨包验收位于 `tests/replay`。
 
 布局变更时同步 imports、embeds、脚本、测试及文档。不要添加无需求的 pkg、
 框架、转发层、动态插件或通用流程 DSL。
@@ -111,13 +88,12 @@ consumer material 保持在消费者私有目录，不登记固定索引、不�
 生成不要求 Git tag，普通工具发版不需要重新生成。工具版本由 Git tag 提供：
 
 ```sh
-go run -tags builtin_generate ./cmd/agent-sdk-testify --revision FULL_40_CHARACTER_SOURCE_COMMIT
-go run -tags builtin_generate ./cmd/agent-sdk-testify --check
+go run -tags builtin_generate ./cmd/agent-replay --revision FULL_40_CHARACTER_SOURCE_COMMIT
+go run -tags builtin_generate ./cmd/agent-replay --check
 ```
 
 生成器从固定索引选择 `admitted` 且 `verification=passed` 的材料，校验完整闭包并
-复制原始字节。缺文件、哈希漂移、空选择或生成物过期必须失败；`scripts/build.sh`
-和默认测试都会执行 freshness check。
+复制原始字节。缺文件、哈希漂移、空选择或生成物过期必须失败；SDK 离线 quality 门禁执行该校验。
 
 ## 编码约定
 
@@ -136,12 +112,12 @@ SDK 用户故事、case 和各 agent type 的能力要求由[场景目录](../da
 | 层级 | 位置 | 测什么 | 执行边界 |
 |---|---|---|---|
 | 单元测试 | 与被测代码放在一起的 `*_test.go` | 单个模块的规则，如协议匹配、哈希、字段校验、配置和历史派生 | 直接调用函数，不启动 CLI、SDK、Agent 或子进程，不访问网络 |
-| 集成测试 | `tests/intergration/` | 多个真实模块之间的协作，如材料加载与校验、采集与回放、状态与回执 | 可以使用临时文件、本地管道和回环连接，必要时 mock 外部依赖；不走完整 CLI 流程 |
-| 端到端测试 | `tests/e2e/` | 消费者实际使用的完整流程，如 prepare → record → mock | 使用实际构建的 CLI，通过 argv、stdio、退出码、descriptor、文件和哈希检查结果，不直接调用 lifecycle 函数 |
+| 集成测试 | `replay/internal/integration/` | 多个真实模块之间的协作，如材料加载与校验、采集与回放、状态与回执 | 可以使用临时文件、本地管道和回环连接，必要时 mock 外部依赖；不走完整 CLI 流程 |
+| 端到端测试 | `tests/replay/e2e/` | 消费者实际使用的完整流程，如 prepare → record → mock | 使用实际构建的 CLI，通过 argv、stdio、退出码、descriptor、文件和哈希检查结果，不直接调用 lifecycle 函数 |
 
-根目录 `library*_test.go` 是公开库能力的最高验收接缝：测试包固定为
-`agenttestify_test`，只导入模块公开路径，不调用 CLI；可以使用临时文件、受控子进程
-和本地回环连接。这些测试由 `make test` 和 `make test-race` 纳入默认门禁。
+`replay/library*_test.go` 是公开库能力的最高验收接缝：测试包固定为
+`replay_test`，只导入模块公开路径，不调用 CLI；可以使用临时文件、受控子进程
+和本地回环连接。这些测试由 `make test`  纳入默认门禁。
 embedded prepare 读取 Go build info 中的精确 VCS 身份。Go 1.26.10 在 `.git` 为文件的
 linked worktree 中不写入 VCS 信息，因此使用标准 `make` 测试/构建命令或
 `scripts/check-offline.sh`：入口从干净源码的精确 HEAD 创建本地独立 checkout，核对
@@ -151,13 +127,13 @@ HEAD/tree 后以 `-buildvcs=true` 执行测试。dirty 源码必须先提交，�
 wrapper 不修改构建身份或产品校验，也不获取网络依赖；失败保留临时 checkout 与命令日志
 并输出位置，成功清理临时目录。标准入口的构建产物和门禁日志仍输出到调用方仓库的
 `bin/`、`.artifacts/` 或显式输出目录；自行传给 wrapper 的输出路径须使用绝对路径。
-`tests/build/` 比较公开库 fixture 与 installed CLI fixture 的 layout、descriptor 形状、
+`tests/replay/build/` 比较公开库 fixture 与 installed CLI fixture 的 layout、descriptor 形状、
 material 字节和哈希，不复制 CLI 用例集。
 
 集成测试只有在验证 EOF、退出、取消或清理等进程行为时才启动必要的受控子进程。
 受控进程调用真实 capture/replay 内核，不复制产品实现，不增加测试专用产品入口。
 mock 只替代测试范围以外的依赖，不替代本次要验证的模块协作或严格协议回放。
-SDK 公共接口、消费者业务断言及 simulate 由消费者仓库负责。
+SDK 公共接口、消费者业务断言及 simulate 由SDK 仿真负责。
 
 ### 速度与覆盖
 
@@ -180,21 +156,20 @@ SDK 公共接口、消费者业务断言及 simulate 由消费者仓库负责。
 ### race 与真实执行
 
 race 是检查方式，不是第四层测试。单元和集成测试使用 `go test -race`；端到端测试
-实际启动的 CLI 必须由 `go build -race ./cmd/agent-sdk-testify` 构建，仅给测试进程加
+实际启动的 CLI 必须由 `go build -race ./cmd/agent-replay` 构建，仅给测试进程加
 `-race` 不算覆盖 CLI。
 复用二进制时须核验构建模式，受控 launcher 必须传递 race 配置；子进程报告数据竞争时，
 即使该 case 预期业务失败，测试也必须失败。
 完整门禁中的同一套 CLI 流程只需用 race CLI 跑一次；普通发布二进制另做少量启动和打包检查。
 
 默认三层测试均离线，不启动真实 Agent、不需要认证、不安装官方 SDK、不新增录制。
-端到端不等于真实 Agent 测试；需要真实 Agent 的场景仍放在 `tests/e2e/`，仅显式授权执行，
+端到端不等于真实 Agent 测试；需要真实 Agent 的场景仍放在 `tests/replay/e2e/`，仅显式授权执行，
 保留 opt-in 门禁和默认 skip。合同和材料存在不证明当前 SDK 通过，合成材料必须保持
 synthetic 身份。官方验证、SDK 仿真和真实 E2E 分别报告，不互相背书。
 
 ### 离线门禁
 
-使用 Go 1.26.10。完整门禁由 `make check` 执行，覆盖格式、lint、独立构建、公开库测试、
-默认测试、race、vet、依赖边界、源码目录外运行、driver 测试和安装产物检查。
+SDK 离线门禁校验内置材料、公开库、CLI、严格仿真和生产依赖边界。官方 driver 打包与 SDK 门禁分别执行。
 case/索引身份、全部录制字节、来源哈希和政策检查不得弱化。
 
 材料缺失、失败和未验证须保持可见；内置成功子集不能抵扣完整 required 覆盖。
@@ -223,57 +198,21 @@ case/索引身份、全部录制字节、来源哈希和政策检查不得弱化
 
 ## 从源码构建与验证
 
-在仓库根目录运行命令。使用 Go 1.26.10 和 golangci-lint 2.12.2。脚本测试和归档需要 Python 3.11+。Codex driver 使用 Rust 1.99.1 与固定上游源码。Claude driver 需要 Node.js 22+ 和 npm。先准备 Go module、Cargo 和 npm 依赖缓存。常规验证使用受控进程和内置录制。[构建依赖准备](../drivers/README.md#构建与测试)
+在 SDK 仓库根目录运行以下命令。linked worktree 的离线门禁使用本地临时 checkout 保留 Go VCS 构建身份。请在提交后运行该门禁。
 
-| 任务 | 命令 | 结果 |
-| --- | --- | --- |
-| 构建 CLI | `make build` | `bin/agent-sdk-testify` |
-| 测试 Go 库和内部包 | `make test` | 公开库和单元测试结果 |
-| 测试模块协作 | `make test-integration` | 集成测试结果 |
-| 检查数据竞争 | `make test-race` | 公开库、单元和集成测试结果 |
-| 测试 CLI 流程 | `make test-e2e` | 一次 race 构建和端到端测试结果 |
-| 验证构建和打包 | `make test-build` | 生成器、产物和发布冒烟检查 |
-| 执行完整离线门禁 | `make check` | 格式、lint、构建、测试和打包检查 |
-| 单独执行格式、lint 或 vet | `make fmt`、`make lint`、`make vet` | 对应命令的检查结果 |
-| 构建 CLI 和官方 driver | `make bundle` | `.artifacts/build/` 中的 CLI、原生 Codex driver 和 Claude、Pi tarball |
+```sh
+go build -o bin/agent-replay ./cmd/agent-replay
+bash scripts/check-offline.sh checks
+bash scripts/check-offline.sh race
+```
 
-聚焦测试要求源 checkout 干净。`scripts/with-build-checkout.sh` 为测试保留 Go 构建身份。
+用以下命令单独检查公开库和已安装命令。CLI 测试共用同一次构建，包装脚本校验实际包路径和 race 模式。
 
-1. 用 `-run` 选择公开库测试。
-
-	```sh
-	bash scripts/with-build-checkout.sh go test -buildvcs=true . \
-	  -run '^TestLibraryStartMockAgentFullConsumptionAndReport$'
-	```
-
-2. 如果需要聚焦 CLI 测试，用 `scripts/with-agent-sdk-testify.sh` 构建并复用 race CLI。
-
-	```sh
-	bash scripts/with-build-checkout.sh bash scripts/with-agent-sdk-testify.sh --race \
-	  go test -buildvcs=true -race ./tests/e2e \
-	  -run '^TestLegacyMaterialFormatsPreserveBytesAcrossImportMockExport$'
-	```
-
-若已有 CLI 产物，设 `AGENT_SDK_TESTIFY_BIN` 为可执行文件的绝对路径。产物的 race 构建模式必须与测试匹配。测试包使用包装脚本提供的 CLI。`agent-sdk-go` 的测试和仿真通过 `go.mod` 中的固定版本链接 Testify Go 库。[构建身份与测试分层](#测试)
+```sh
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true ./replay
+bash scripts/replay/with-build-checkout.sh bash scripts/replay/with-agent-replay.sh --race go test -buildvcs=true -race ./tests/replay/e2e/...
+```
 
 ### 构建发布产物
 
-1. 在已通过 `make check` 的 main 提交上创建精确 Git 版本 tag。下例使用 `v0.2.0` 说明格式。
-
-	```sh
-	git tag -a v0.2.0 -m 'v0.2.0'
-	```
-
-2. 如需在本地打包，指定尚不存在的输出目录。本地命令生成当前平台的 Go CLI 与 Codex Rust driver 联合归档、Claude 和 Pi npm tarball、`manifest.json` 和 `SHA256SUMS`。发布工作流在 Linux 和 macOS 的 amd64、arm64 runner 分别打包和验证，再汇总四份归档及通用 Claude 和 Pi tarball。
-
-	```sh
-	make release OUTPUT=/absolute/new-dist
-	```
-
-3. 推送发布 tag。匹配 `v*.*.*` 的 tag 触发 Release 工作流。离线门禁通过后，工作流发布同一组产物。带预发布后缀的 tag 创建 prerelease。
-
-	```sh
-	git push origin v0.2.0
-	```
-
-构建分别记录工具版本、工具源码 revision、内置材料 revision 与哈希，以及逐产物校验和。工具发版沿用现有内置快照。无精确 tag 时，普通构建显示 `devel`。[发布工作流](../.github/workflows/release.yml)
+发布版本跟随 SDK tag。产物记录 CLI 版本、SDK 构建修订、内置材料来源及哈希。官方 driver 的安装入口和运行环境见[官方 driver 指南](../drivers/README.md)。

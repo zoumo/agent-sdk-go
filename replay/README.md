@@ -1,6 +1,6 @@
-# agent-sdk-testify
+# agent-replay
 
-Testify 录制原生 Agent 协议，并用录制回放协议，供 SDK 测试使用。仓库支持 Codex、Claude 和 Pi 的录制与回放。Pi 的首个官方用例 SDK-CASE-001 在同一会话中验证两轮输入。各用例的内置材料状态见[固定索引](data/index.json)。消费者用自己的 SDK 执行业务操作和断言。
+Replay 录制原生 Agent 协议，并用录制回放协议，供 SDK 测试使用。仓库支持 Codex、Claude 和 Pi 的录制与回放。Pi 的首个官方用例 SDK-CASE-001 在同一会话中验证两轮输入。各用例的内置材料状态见[固定索引](data/index.json)。消费者用自己的 SDK 执行业务操作和断言。
 
 <a id="文档"></a>
 
@@ -17,7 +17,7 @@ Testify 录制原生 Agent 协议，并用录制回放协议，供 SDK 测试使
 
 ## Go 库入口
 
-导入 `github.com/zoumo/agent-sdk-testify`，用 `Fixture.StartMockAgent` 在 Go 测试中回放。
+导入 `github.com/zoumo/agent-sdk-go/replay`，用 `Fixture.StartMockAgent` 在 Go 测试中回放。
 准备 fixture、启动、半关闭与收尾顺序见[Go 库回放合同](docs/library-entry-spec.md#启动-handle)。
 公开类型和函数见[根包源码](library.go)。
 
@@ -26,7 +26,7 @@ Testify 录制原生 Agent 协议，并用录制回放协议，供 SDK 测试使
 
 ## 从源码构建
 
-在仓库根目录运行 `make build`。默认产物是 `bin/agent-sdk-testify`。开发规范列出依赖、linked worktree 的构建条件、离线命令与发布步骤。[构建与验证](docs/development.md#从源码构建与验证)
+在 SDK 仓库根目录运行 `go build -o bin/agent-replay ./cmd/agent-replay`。安装已发布版本时使用 `go install github.com/zoumo/agent-sdk-go/cmd/agent-replay@<SDK tag>`。开发规范列出依赖、linked worktree 的构建条件、离线命令与发布步骤。[构建与验证](docs/development.md#从源码构建与验证)
 
 <a id="按-case-录制"></a>
 <a id="官方离线验证与采用"></a>

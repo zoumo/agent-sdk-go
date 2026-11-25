@@ -260,8 +260,10 @@ func BuildIdentity() (ToolIdentity, error) {
 	if err != nil {
 		return ToolIdentity{}, err
 	}
-	return ToolIdentity{Source: ToolSourceEmbedded, Version: build.Version, Module: build.Module,
-		ModuleSum: build.Sum, ModuleRevision: build.Revision, ModuleTime: build.Time, GoVersion: build.GoVersion}, nil
+	return ToolIdentity{
+		Source: ToolSourceEmbedded, Version: build.Version, Module: build.Module,
+		ModuleSum: build.Sum, ModuleRevision: build.Revision, ModuleTime: build.Time, GoVersion: build.GoVersion,
+	}, nil
 }
 
 // Source identifies the initial case, plan or recording.

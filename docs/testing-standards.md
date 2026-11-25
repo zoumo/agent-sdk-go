@@ -106,7 +106,7 @@ Go SDK simulation implementations and their regression tests live under
 `tests/replay` packages retain synthetic adapters and SDK integration assertions,
 including original request handles, event delivery, cancellation and cleanup.
 Keep adapter-specific serialization/completion checks there; maintain pure ID
-matching, handshake, EOF and envelope-validation matrices in the pinned testify
+matching, handshake, EOF and envelope-validation matrices in the Replay
 library.
 Do not retain unused publication scanners or export helpers used only by tests.
 Moving an assertion does not change its evidence level: synthetic driver tests
@@ -116,11 +116,8 @@ Use Go 1.26 or newer and retain offline, race, vet, generation, inventory,
 simulation source/hash validation, dependency-boundary and independent-consumer gates in
 Linux CI. External consumer modules must fetch the new repository's precise
 pushed revision outside the checkout, without `replace` or `go.work`.
-The exact `agent-sdk-testify` module is a test-only dependency linked into test
-and simulation hosts. Its version, checksum, production-boundary rules and
-typed evidence contract are described in
-[Testify library integration](modules/agent-sdk-testify/library-mode.md). Protocol matching
-and official verification remain owned by that module and are not reimplemented
+The public Replay library is linked into test and simulation hosts. The SDK checks its build identity and production dependency boundaries. [Replay integration](modules/agent-sdk-testify/library-mode.md). Protocol matching
+and official verification remain owned by Replay and are not reimplemented
 in SDK adapters. Recording and mock correctness cannot be established only by
 this repository's Go SDK tests.
 

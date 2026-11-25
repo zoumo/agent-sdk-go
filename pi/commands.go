@@ -17,13 +17,20 @@ func (s *Session) State(ctx context.Context) (State, error) {
 	if err = json.Unmarshal(raw, &state); err != nil {
 		return State{}, &DispatchError{Sent: true, Err: err}
 	}
-	if state.SessionID == "" || (s.id != "" && s.id != state.SessionID) {
-		err := errors.New("pi: missing or changed native session ID")
-		s.fail(err)
-		return State{}, &DispatchError{Sent: true, Err: err}
+	if err := s.checkIdentity(state.SessionID); err != nil {
+		return State{}, err
 	}
 	state.Raw = raw
 	return state, nil
+}
+
+func (s *Session) checkIdentity(id string) error {
+	if id == "" || (s.id != "" && s.id != id) {
+		err := errors.New("pi: missing or changed native session ID")
+		s.fail(err)
+		return &DispatchError{Sent: true, Err: err}
+	}
+	return nil
 }
 
 // Prompt starts work when idle. While streaming Pi requires "steer" or "followUp" to queue it.
@@ -90,4 +97,26 @@ func (s *Session) SetThinkingLevel(ctx context.Context, level string) error {
 	}
 	_, err := s.request(ctx, "set_thinking_level", map[string]any{"level": level})
 	return err
+}
+
+// SetSteeringMode sets how Pi delivers queued steering input between turns.
+// Read State to observe the effective mode.
+func (s *Session) SetSteeringMode(ctx context.Context, mode QueueMode) error {
+	return s.setQueueMode(ctx, "set_steering_mode", mode)
+}
+
+// SetFollowUpMode sets how Pi delivers follow-up input after work completes.
+// Read State to observe the effective mode.
+func (s *Session) SetFollowUpMode(ctx context.Context, mode QueueMode) error {
+	return s.setQueueMode(ctx, "set_follow_up_mode", mode)
+}
+
+func (s *Session) setQueueMode(ctx context.Context, command string, mode QueueMode) error {
+	switch mode {
+	case QueueAll, QueueOneAtATime:
+		_, err := s.request(ctx, command, map[string]any{"mode": mode})
+		return err
+	default:
+		return fmt.Errorf("pi %s: invalid queue mode %q", command, mode)
+	}
 }

@@ -20,12 +20,13 @@ pass its path to `-simulation.recording`.
 Set `-simulation.output` to a new absolute archive directory whose parent exists.
 
 ```sh
-bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -timeout=600s -v ./tests/simulation -run '^TestSimulationGate$' -simulation.jobs=2 -simulation.output=/absolute/new-gate
-bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
-bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
+go test -count=1 -timeout=600s -v ./tests/simulation -run '^TestSimulationGate$' -simulation.jobs=2 -simulation.output=/absolute/new-gate
+go test -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
+go test -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```
 
-`TestMain` builds the SDK driver. The test coordinates the simulation and
+The test requires a clean checkout to verify build identity. If Go omits the
+VCS metadata, the test rebuilds once with VCS stamping. `TestMain` builds the SDK driver. The test coordinates the simulation and
 starts each driver in its own environment, workspace, and process group.
 
 The test uses a short private directory for the run and archives the evidence

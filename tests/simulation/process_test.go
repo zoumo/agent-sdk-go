@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"testing"
@@ -20,13 +22,23 @@ import (
 
 	fixturedata "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/testdata"
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
+
+const stampedTestEnv = "SDK_SIMULATION_STAMPED_TEST"
 
 var driverBinary, requestMutatorBinary string
 
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == "--simulation-test-process" {
 		os.Exit(runSimulationProcess(os.Args[2:]))
+	}
+	if _, err := replay.BuildIdentity(); err != nil {
+		if os.Getenv(stampedTestEnv) == "1" {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(runStampedTest())
 	}
 	buildRoot := os.Getenv("AGENT_SDK_TESTIFY_BUILD_DIR")
 	if buildRoot == "" {
@@ -58,6 +70,45 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+// Go tests do not record VCS metadata by default. Rebuild once from the
+// verified checkout so evidence still names the exact SDK build.
+func runStampedTest() int {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	args := []string{"scripts/replay/with-build-checkout.sh", "go", "test", "-buildvcs=true", "-count=1"}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Value == "true" && (setting.Key == "-race" || setting.Key == "-cover") {
+				args = append(args, setting.Key)
+			}
+		}
+	}
+	args = append(args, "./tests/simulation", "-args")
+	args = append(args, os.Args[1:]...)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cmd := exec.CommandContext(ctx, "bash", args...)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), stampedTestEnv+"=1")
+	if os.Getenv("SDK_SIMULATION_ARCHIVE_ROOT") == "" {
+		cmd.Env = append(cmd.Env, "SDK_SIMULATION_ARCHIVE_ROOT="+filepath.Join(root, ".artifacts", "simulation", "gates"))
+	}
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() > 0 {
+			return exit.ExitCode()
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }
 
 func simulationCommand(ctx context.Context, arguments ...string) *exec.Cmd {

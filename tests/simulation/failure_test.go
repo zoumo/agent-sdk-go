@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestUnavailableAndCorruptMaterialFailExplicitly(t *testing.T) {
@@ -96,9 +96,9 @@ func TestRemoteCancellationRetainsTypedEvidence(t *testing.T) {
 	require.True(t, evidence.Executions[0].Complete)
 	require.Len(t, evidence.Executions[0].Connections, 2)
 	for _, connection := range evidence.Executions[0].Connections {
-		require.Equal(t, agenttestify.ConnectionStatusFailed, agenttestify.ConnectionStatus(connection.Status))
+		require.Equal(t, replay.ConnectionStatusFailed, replay.ConnectionStatus(connection.Status))
 		requireEmbeddedConnectionFacts(t, connection)
-		require.Equal(t, string(agenttestify.FailureClassCanceled), connection.Failure)
+		require.Equal(t, string(replay.FailureClassCanceled), connection.Failure)
 	}
 	require.NoDirExists(t, filepath.Join(output, "preserve", "session"))
 }
@@ -173,10 +173,10 @@ func TestCanceledStdioExecutionRetainsTypedFailureBeforeRemoval(t *testing.T) {
 	require.NoError(t, run.CloseSDK())
 	report, err := session.Fixture.ExecutionReport(run.Start.ExecutionID)
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, report.Status)
+	require.Equal(t, replay.ExecutionStatusFailed, report.Status)
 	require.Len(t, report.Connections, 1)
 	connection := report.Connections[0]
-	require.Equal(t, agenttestify.FailureClassCanceled, connection.Failure)
+	require.Equal(t, replay.FailureClassCanceled, connection.Failure)
 	requireEmbeddedConnectionFacts(t, evidenceExecutionView(report).Connections[0])
 	outcome := finalizePreparedSession(ctx, session, nil, run.Start.ExecutionID, root, false)
 	require.NotNil(t, outcome.Evidence)

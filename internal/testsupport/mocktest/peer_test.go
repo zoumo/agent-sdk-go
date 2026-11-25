@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 const noticeScenario = `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"wire":{"method":"notice","type":"notice"}}]}`
@@ -73,13 +74,13 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	require.Equal(t, 7, descriptor.SchemaVersion)
 	require.Equal(t, session.SessionID, descriptor.FixtureID)
 	require.Equal(t, "embedded", descriptor.Tool.Source)
-	require.Equal(t, "github.com/zoumo/agent-sdk-testify", descriptor.Tool.Module)
+	require.Equal(t, "github.com/zoumo/agent-sdk-go", descriptor.Tool.Module)
 	require.NotEmpty(t, descriptor.Tool.ModuleRevision)
 	require.NotEmpty(t, descriptor.Tool.GoVersion)
 	require.Empty(t, descriptor.Tool.Command)
 	require.Empty(t, descriptor.Tool.Args)
 	require.Empty(t, descriptor.Tool.SHA256)
-	fixture, err := agenttestify.Open(session.Dir)
+	fixture, err := replay.Open(session.Dir)
 	require.NoError(t, err)
 	require.FileExists(t, fixture.Source.Path)
 	require.Equal(t, "recording", descriptor.Source.Kind)
@@ -111,22 +112,22 @@ func TestFromFixtureRejectsMismatchedEmbeddedIdentity(t *testing.T) {
 	prepared := prepareSession(t, "codex", noticeScenario, Options{})
 	for _, tc := range []struct {
 		name   string
-		mutate func(*agenttestify.ToolIdentity)
+		mutate func(*replay.ToolIdentity)
 	}{
-		{"source", func(v *agenttestify.ToolIdentity) { v.Source = "executable" }},
-		{"module", func(v *agenttestify.ToolIdentity) { v.Module = "other/module" }},
-		{"version", func(v *agenttestify.ToolIdentity) { v.Version = "v0.0.0-20261109000000-000000000000" }},
-		{"sum", func(v *agenttestify.ToolIdentity) { v.ModuleSum = "h1:wrong" }},
-		{"revision", func(v *agenttestify.ToolIdentity) { v.ModuleRevision = "wrong" }},
-		{"time", func(v *agenttestify.ToolIdentity) { v.ModuleTime = "wrong" }},
-		{"missing Go version", func(v *agenttestify.ToolIdentity) { v.GoVersion = "" }},
-		{"invalid Go version", func(v *agenttestify.ToolIdentity) { v.GoVersion = "not-go" }},
-		{"command", func(v *agenttestify.ToolIdentity) { v.Command = "fake" }},
-		{"args", func(v *agenttestify.ToolIdentity) { v.Args = []string{"fake"} }},
-		{"binary hash", func(v *agenttestify.ToolIdentity) { v.SHA256 = "fake" }},
+		{"source", func(v *replay.ToolIdentity) { v.Source = "executable" }},
+		{"module", func(v *replay.ToolIdentity) { v.Module = "other/module" }},
+		{"version", func(v *replay.ToolIdentity) { v.Version = "v0.0.0-20261109000000-000000000000" }},
+		{"sum", func(v *replay.ToolIdentity) { v.ModuleSum = "h1:wrong" }},
+		{"revision", func(v *replay.ToolIdentity) { v.ModuleRevision = "wrong" }},
+		{"time", func(v *replay.ToolIdentity) { v.ModuleTime = "wrong" }},
+		{"missing Go version", func(v *replay.ToolIdentity) { v.GoVersion = "" }},
+		{"invalid Go version", func(v *replay.ToolIdentity) { v.GoVersion = "not-go" }},
+		{"command", func(v *replay.ToolIdentity) { v.Command = "fake" }},
+		{"args", func(v *replay.ToolIdentity) { v.Args = []string{"fake"} }},
+		{"binary hash", func(v *replay.ToolIdentity) { v.SHA256 = "fake" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fixture, err := agenttestify.Open(prepared.Dir)
+			fixture, err := replay.Open(prepared.Dir)
 			require.NoError(t, err)
 			tc.mutate(&fixture.Tool)
 			session, err := FromFixture(fixture)
@@ -183,7 +184,7 @@ func TestInProcessRunPublishesEmbeddedEvidence(t *testing.T) {
 			defer cancel()
 			run, err := session.NewRun(ctx, RunOptions{})
 			require.NoError(t, err)
-			require.Equal(t, agenttestify.MockTransportInProcess, run.Start.Transport)
+			require.Equal(t, replay.MockTransportInProcess, run.Start.Transport)
 			require.NotEqual(t, session.Workspace, run.Start.Workspace)
 			require.DirExists(t, run.Start.Workspace)
 			require.DirExists(t, run.Start.ProtocolCwd)
@@ -206,12 +207,12 @@ func TestInProcessRunPublishesEmbeddedEvidence(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			require.NotNil(t, result.Execution)
-			require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+			require.Equal(t, replay.ExecutionStatusPassed, result.Execution.Status)
 			require.True(t, result.Execution.Complete)
 			require.Len(t, result.Execution.Connections, 1)
 			connection := result.Execution.Connections[0]
-			require.Equal(t, agenttestify.MockTransportInProcess, connection.Transport)
-			require.Equal(t, agenttestify.ConnectionStatusPassed, connection.Status)
+			require.Equal(t, replay.MockTransportInProcess, connection.Transport)
+			require.Equal(t, replay.ConnectionStatusPassed, connection.Status)
 			require.True(t, connection.FullConsumption)
 			require.True(t, connection.ClientEOF)
 			require.False(t, connection.NativeLaunched)
@@ -245,9 +246,9 @@ func TestInProcessRunReportsScriptedTimeout(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Equal(t, replay.ExecutionStatusFailed, result.Execution.Status)
 	require.Len(t, result.Execution.Connections, 1)
-	require.Equal(t, agenttestify.FailureClassTimeout, result.Execution.Connections[0].Failure)
+	require.Equal(t, replay.FailureClassTimeout, result.Execution.Connections[0].Failure)
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "failed", closeSession(t, session).Status)
 }
@@ -266,10 +267,10 @@ func TestInProcessRunReportsAbort(t *testing.T) {
 	require.ErrorContains(t, err, "aborted")
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.NotEqual(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.NotEqual(t, replay.ExecutionStatusPassed, result.Execution.Status)
 	require.Len(t, result.Execution.Connections, 1)
-	require.NotEqual(t, agenttestify.ConnectionStatusPassed, result.Execution.Connections[0].Status)
-	require.Equal(t, agenttestify.FailureClassAborted, result.Execution.Connections[0].Failure)
+	require.NotEqual(t, replay.ConnectionStatusPassed, result.Execution.Connections[0].Status)
+	require.Equal(t, replay.FailureClassAborted, result.Execution.Connections[0].Failure)
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "failed", closeSession(t, session).Status)
 }
@@ -288,9 +289,9 @@ func TestInProcessRunReportsWaitCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.NotEqual(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.NotEqual(t, replay.ExecutionStatusPassed, result.Execution.Status)
 	require.Len(t, result.Execution.Connections, 1)
-	require.Equal(t, agenttestify.FailureClassCanceled, result.Execution.Connections[0].Failure)
+	require.Equal(t, replay.FailureClassCanceled, result.Execution.Connections[0].Failure)
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "failed", closeSession(t, session).Status)
 }
@@ -346,9 +347,9 @@ func TestInProcessRunCancellationUnblocksWriter(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.NotEqual(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.NotEqual(t, replay.ExecutionStatusPassed, result.Execution.Status)
 	require.Len(t, result.Execution.Connections, 1)
-	require.Equal(t, agenttestify.FailureClassCanceled, result.Execution.Connections[0].Failure)
+	require.Equal(t, replay.FailureClassCanceled, result.Execution.Connections[0].Failure)
 	select {
 	case writeErr := <-writeDone:
 		require.Error(t, writeErr)
@@ -384,7 +385,7 @@ func TestInProcessRunHalfCloseIsIdempotent(t *testing.T) {
 	result, err := run.Wait(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.Equal(t, replay.ExecutionStatusPassed, result.Execution.Status)
 	select {
 	case outputErr := <-outputDone:
 		require.NoError(t, outputErr)
@@ -459,9 +460,9 @@ func TestInProcessRunReportsScriptedDisconnect(t *testing.T) {
 	require.Error(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Equal(t, replay.ExecutionStatusFailed, result.Execution.Status)
 	require.Len(t, result.Execution.Connections, 1)
-	require.Equal(t, agenttestify.FailureClassStrictReplay, result.Execution.Connections[0].Failure)
+	require.Equal(t, replay.FailureClassStrictReplay, result.Execution.Connections[0].Failure)
 	requireEmbeddedFailure(t, result.Execution.Connections[0])
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "failed", closeSession(t, session).Status)
@@ -483,7 +484,7 @@ func TestCloseInputWhenCompleteJoinsCallbackError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.Equal(t, agenttestify.ExecutionStatusPassed, result.Execution.Status)
+	require.Equal(t, replay.ExecutionStatusPassed, result.Execution.Status)
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "passed", closeSession(t, session).Status)
 }
@@ -494,7 +495,7 @@ func TestEmbeddedConnectionHasNoExecutableIdentity(t *testing.T) {
 	defer cancel()
 	run, err := session.NewRun(ctx, RunOptions{})
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.MockTransportInProcess, run.Start.Transport)
+	require.Equal(t, replay.MockTransportInProcess, run.Start.Transport)
 	require.Empty(t, run.Start.NativeArgs)
 	require.NoError(t, run.Writer.Close())
 	result, err := run.Wait(ctx)
@@ -508,9 +509,9 @@ func TestEmbeddedConnectionHasNoExecutableIdentity(t *testing.T) {
 	require.Equal(t, "passed", closeSession(t, session).Status)
 }
 
-func requireEmbeddedFailure(t *testing.T, connection agenttestify.ConnectionReport) {
+func requireEmbeddedFailure(t *testing.T, connection replay.ConnectionReport) {
 	t.Helper()
-	require.Equal(t, agenttestify.ConnectionStatusFailed, connection.Status)
+	require.Equal(t, replay.ConnectionStatusFailed, connection.Status)
 	require.NotEmpty(t, connection.Failure)
 	require.False(t, connection.NativeLaunched)
 	require.Nil(t, connection.ExitCode)
@@ -580,8 +581,8 @@ func TestInProcessRunWaitRetainsStrictFailure(t *testing.T) {
 	first, err := run.Wait(ctx)
 	require.Error(t, err)
 	require.NotNil(t, first.Execution)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, first.Execution.Status)
-	require.Equal(t, agenttestify.FailureClassStrictReplay, first.Execution.Connections[0].Failure)
+	require.Equal(t, replay.ExecutionStatusFailed, first.Execution.Status)
+	require.Equal(t, replay.FailureClassStrictReplay, first.Execution.Connections[0].Failure)
 	repeated, err := run.Wait(ctx)
 	require.Error(t, err)
 	require.Equal(t, first.Execution, repeated.Execution)
@@ -601,8 +602,8 @@ func TestInProcessRunReportsContextCancellation(t *testing.T) {
 	defer cancelWait()
 	result, err := run.Wait(waitCtx)
 	require.ErrorIs(t, err, context.Canceled)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
-	require.Equal(t, agenttestify.FailureClassCanceled, result.Execution.Connections[0].Failure)
+	require.Equal(t, replay.ExecutionStatusFailed, result.Execution.Status)
+	require.Equal(t, replay.FailureClassCanceled, result.Execution.Connections[0].Failure)
 	require.NoError(t, run.CloseSDK())
 	require.Equal(t, "failed", closeSession(t, session).Status)
 }

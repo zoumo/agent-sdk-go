@@ -11,10 +11,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	codexsim "github.com/zoumo/agent-sdk-go/client/codex/tests/simulation"
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestRemoteRequiresDeclaredMainAndProbe(t *testing.T) {
@@ -42,11 +42,11 @@ func TestRemoteAuthenticatesOnlyDeclaredConnectionPaths(t *testing.T) {
 	require.Equal(t, []string{service.executionID}, session.Runner.ExecutionIDs())
 	report, err := session.Fixture.ExecutionReport(service.executionID)
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.ExecutionStatusOpen, report.Status)
+	require.Equal(t, replay.ExecutionStatusOpen, report.Status)
 	require.Len(t, report.Connections, 2)
 	for _, connection := range report.Connections {
-		require.Equal(t, agenttestify.ConnectionStatusRunning, connection.Status)
-		require.Equal(t, agenttestify.MockTransportInProcess, connection.Transport)
+		require.Equal(t, replay.ConnectionStatusRunning, connection.Status)
+		require.Equal(t, replay.MockTransportInProcess, connection.Transport)
 		require.False(t, connection.NativeLaunched)
 		require.Nil(t, connection.ExitCode)
 	}
@@ -103,7 +103,7 @@ func TestRemoteStartRejectsPendingExecutionAndStartsFresh(t *testing.T) {
 	require.NoError(t, probe.CloseSDK())
 	previousReport, err := session.Fixture.ExecutionReport(previousID)
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, previousReport.Status)
+	require.Equal(t, replay.ExecutionStatusFailed, previousReport.Status)
 	require.True(t, previousReport.Complete)
 
 	service, err = startMockRemote(context.Background(), session.Runner, t.TempDir())
@@ -113,10 +113,10 @@ func TestRemoteStartRejectsPendingExecutionAndStartsFresh(t *testing.T) {
 	require.ElementsMatch(t, []string{previousID, service.executionID}, session.Runner.ExecutionIDs())
 	report, err := session.Fixture.ExecutionReport(service.executionID)
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.ExecutionStatusOpen, report.Status)
+	require.Equal(t, replay.ExecutionStatusOpen, report.Status)
 	require.Len(t, report.Connections, 2)
 	for _, connection := range report.Connections {
-		require.Equal(t, agenttestify.ConnectionStatusRunning, connection.Status)
+		require.Equal(t, replay.ConnectionStatusRunning, connection.Status)
 	}
 	require.ErrorContains(t, service.close(), "0/2 required connections")
 }
@@ -169,11 +169,11 @@ func TestRemoteBridgeDrainFailureRetainsTypedEvidence(t *testing.T) {
 	require.ErrorContains(t, service.close(), "did not drain before cleanup")
 	report, err := session.Fixture.ExecutionReport(service.executionID)
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, report.Status)
+	require.Equal(t, replay.ExecutionStatusFailed, report.Status)
 	require.True(t, report.Complete)
 	require.Len(t, report.Connections, 2)
 	for _, connection := range evidenceExecutionView(report).Connections {
-		require.Equal(t, string(agenttestify.ConnectionStatusFailed), connection.Status)
+		require.Equal(t, string(replay.ConnectionStatusFailed), connection.Status)
 		require.False(t, connection.FullConsumption)
 		require.False(t, connection.ClientEOF)
 		requireEmbeddedConnectionFacts(t, connection)
@@ -208,7 +208,7 @@ func TestRemotePassedEvidenceRequiresProbeResult(t *testing.T) {
 
 	report, err := session.Fixture.ExecutionReport(service.executionID)
 	require.NoError(t, err)
-	require.Equal(t, agenttestify.ExecutionStatusPassed, report.Status)
+	require.Equal(t, replay.ExecutionStatusPassed, report.Status)
 	var resultPath string
 	for _, connection := range report.Connections {
 		if connection.ID == "probe" {
@@ -246,7 +246,7 @@ func prepareRemoteSession(t *testing.T) *preparedSession {
 
 func requireEmbeddedConnectionFacts(t *testing.T, connection evidenceConnection) {
 	t.Helper()
-	require.Equal(t, string(agenttestify.MockTransportInProcess), connection.Transport)
+	require.Equal(t, string(replay.MockTransportInProcess), connection.Transport)
 	require.False(t, connection.NativeLaunched)
 	require.True(t, connection.CleanupComplete)
 	require.Nil(t, connection.ExitCode)

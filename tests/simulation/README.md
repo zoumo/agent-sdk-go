@@ -4,8 +4,8 @@
 
 Use this guide to run the Go SDK against fixed native recordings. The SDK's Go
 drivers call public SDK operations and check application behavior. The linked
-Testify library prepares fixtures, matches protocol traffic, and produces
-typed results. [Go library contract](../../docs/modules/agent-sdk-testify/library-mode.md)
+Replay library prepares fixtures, matches protocol traffic, and produces
+typed results. [Go library contract](docs/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
 <a id="stage-handoff"></a>
@@ -20,9 +20,9 @@ pass its path to `-simulation.recording`.
 Set `-simulation.output` to a new absolute archive directory whose parent exists.
 
 ```sh
-go test -count=1 -timeout=600s -v ./tests/simulation -run '^TestSimulationGate$' -simulation.jobs=2
-go test -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
-go test -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -timeout=600s -v ./tests/simulation -run '^TestSimulationGate$' -simulation.jobs=2 -simulation.output=/absolute/new-gate
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```
 
 `TestMain` builds the SDK driver. The test coordinates the simulation and
@@ -87,7 +87,7 @@ are independent evidence. No model or new recording runs by default.
 
 ### 代码集成测试输入
 
-Provider fixture packages under `internal/testsupport/` embed synthetic protocol inputs.
+Provider fixture packages under `internal/testsupport/` embed synthetic inputs.
 `internal/testsupport/mocktest`
 converts them into manifest-bound synthetic captures and drives the in-process
 library lifecycle with typed execution evidence.
@@ -97,17 +97,17 @@ notification signals when tests can half-close SDK input.
 
 ### Replay Pi extensions through the unified Go SDK
 
-The fixed recording gate replays official Pi cases through the native Go SDK.
+The fixed recording gate replays official Pi cases through the native Go SDK. [Shared cases](../../replay/docs/cases.md)
 Use this entry point for controlled captures made through the unified Client.
 On a Unix host with a writable `/tmp`, build the driver from the repository
-root with the pinned Testify module.
+root with the same-module Replay library.
 
 ```sh
 GOWORK=off go build \
   -o /absolute/go-simulation-driver ./tests/simulation/driver
 ```
 
-Supply the unchanged Testify consumer export directory for the selected case.
+Supply the unchanged Replay consumer export directory for the selected case.
 It contains `material.json`, `plan.json`, and `raw/raw.jsonl`. Use a capture
 of the unified flow from official Pi 1.6.0 with a controlled loopback model.
 The recorded requests include `get_commands` during session open and
@@ -129,7 +129,7 @@ already exists.
 
 Run each case from `008` through `014` and from `037` through `038` with its own
 export and output directory. The driver starts a local mock backed by the
-Testify Go library. It maps the recorded temporary extension path to the SDK
+Replay Go library. It maps the recorded temporary extension path to the SDK
 session's generated extension and configuration on disk. Run replays of the
 same export serially because they reserve the same temporary path.
 
@@ -144,7 +144,7 @@ runs on demand with explicit captures.
 ## 仿真测试流程目录
 
 The SDK uses the library's public prepare and export operations for every
-provider and case combination in its acceptance matrix. Testify supplies the
+provider and case combination in its acceptance matrix. Replay supplies the
 scenarios and bindings.
 [SDK acceptance matrix](coverage.go) · [共同验收](../../docs/sdk/validation-cases.md#stories-sdk-用户故事)
 

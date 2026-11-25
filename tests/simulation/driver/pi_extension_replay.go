@@ -12,9 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
-
 	pisim "github.com/zoumo/agent-sdk-go/agent/pi/tests/simulation"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 type piExtensionReplayRequest struct {
@@ -80,18 +79,18 @@ func (r piExtensionReplayRequest) replay(ctx context.Context) (err error) {
 			return err
 		}
 	}
-	fixture, err := agenttestify.Prepare(agenttestify.PrepareOptions{
+	fixture, err := replay.Prepare(replay.PrepareOptions{
 		FixtureDir: filepath.Join(runtimeDir, "fixture"), Agent: "pi", Recording: r.Material,
 	})
 	if err != nil {
 		return fmt.Errorf("prepare strict Pi fixture with the Testify library: %w", err)
 	}
-	if fixture.AgentType != "pi" || fixture.Tool.Source != agenttestify.ToolSourceEmbedded ||
+	if fixture.AgentType != "pi" || fixture.Tool.Source != replay.ToolSourceEmbedded ||
 		fixture.Source.Kind != "recording" || fixture.Source.ID != "pi-controlled-"+r.Case ||
 		fixture.Source.Provenance != "consumer" || fixture.Source.DriverProfile != "consumer" ||
 		fixture.Current == nil || !samePiRecording(*fixture.Current, material) ||
 		!slices.Equal(fixture.Current.Connections, []string{piMockConnection}) {
-		return errors.New("testify: prepared Pi fixture differs from the supplied recording or requested case")
+		return errors.New("replay: prepared Pi fixture differs from the supplied recording or requested case")
 	}
 	driver, err := os.Executable()
 	if err != nil {
@@ -165,19 +164,19 @@ func runPiExtensionMock(args []string) (err error) {
 		}
 		err = errors.Join(err, diagnostics.Close())
 	}()
-	fixture, err := agenttestify.Open(fixtureDir)
+	fixture, err := replay.Open(fixtureDir)
 	if err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	run, startErr := fixture.StartMockAgent(ctx, agenttestify.MockAgentOptions{
+	run, startErr := fixture.StartMockAgent(ctx, replay.MockAgentOptions{
 		Connection: piMockConnection, Timeout: 15 * time.Second, NativeArgs: []string{"--mode", "rpc"},
-	}, agenttestify.StartMockAgentStreams{
+	}, replay.StartMockAgentStreams{
 		Reader: os.Stdin, Writer: os.Stdout, Stderr: diagnostics,
 	})
 	if run == nil {
-		return errors.Join(errors.New("testify: Pi mock failed to start"), startErr)
+		return errors.Join(errors.New("replay: Pi mock failed to start"), startErr)
 	}
 	err = errors.Join(startErr, writePiMockStart(runtimeDir, run.Start))
 	if err == nil {

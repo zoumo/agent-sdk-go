@@ -119,7 +119,7 @@ documentation links when paths change.
 Test hosts prepare caller-owned fixtures and open SDK-side streams through
 `internal/testsupport/mocktest`. Check typed execution results before removing
 the fixture. The SDK runner projects assertion inputs from exported material
-and retains the source and projection hashes. The replay library owns protocol
+and retains the source and projection hashes. Replay owns protocol
 matching, fixture preparation, saved history materialization, and typed reports.
 [Simulation inputs and evidence](../tests/simulation/README.md)
 
@@ -128,12 +128,10 @@ matching, fixture preparation, saved history materialization, and typed reports.
 ### Simulation data and integration fixtures
 
 Simulation outputs are persistent SDK-owned evidence outside immutable recordings.
-The pinned testify library owns reviewed material/index maintenance and publishes
-the full material set through prepare/export. This repository retains no
-recording, scenario or official-driver snapshot and never reads a library
-material directory directly.
+Replay maintains reviewed materials and the fixed index. SDK simulation
+obtains materials through the public prepare and export operations.
 Source identity, observed versions, raw hashes, sanitization and publication
-review follow the [recording data contract](modules/agent-sdk-testify/design.md#story-数据格式与存储).
+review follow the [recording data contract](../tests/simulation/docs/design.md#story-数据格式与存储).
 Preserve original bytes and provenance when moving data; synthetic data must never
 be labeled real.
 
@@ -142,9 +140,9 @@ code integration tests, with semantic names rather than simulation case identiti
 Test-only peers and fault controls stay in test code, without a separate
 technical-check registry. Story/case scope follows the [case catalog](sdk/validation-cases.md).
 
-`agent-sdk-testify` 的库入口读取显式提供的录制或合成输入；内置场景入口从随版本
+Replay 的库入口读取显式提供的录制或合成输入；内置场景入口从随版本
 发布的合格材料中选择并准备资源。发布资格、环境和下游边界见
-[仿真设计](modules/agent-sdk-testify/design.md#内置材料与下游直接使用)。
+[仿真设计](../tests/simulation/docs/design.md#内置材料与下游直接使用)。
 合成输入或工具专项测试不构成真实录制仿真证据。
 
 ## 编码约定

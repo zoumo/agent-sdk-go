@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	"github.com/zoumo/agent-sdk-go/client/claude"
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 type mockCLISuite struct {
@@ -279,10 +279,10 @@ func requireStrictReplayFailure(t *testing.T, ctx context.Context, run *mocktest
 	require.Error(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Execution)
-	require.Equal(t, agenttestify.ExecutionStatusFailed, result.Execution.Status)
+	require.Equal(t, replay.ExecutionStatusFailed, result.Execution.Status)
 	require.Len(t, result.Execution.Connections, 1)
 	connection := result.Execution.Connections[0]
-	require.Equal(t, agenttestify.FailureClassStrictReplay, connection.Failure)
+	require.Equal(t, replay.FailureClassStrictReplay, connection.Failure)
 	require.False(t, connection.NativeLaunched)
 	require.Nil(t, connection.ExitCode)
 	require.Empty(t, connection.ProcessReceiptPath)

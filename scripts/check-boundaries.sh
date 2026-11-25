@@ -202,7 +202,7 @@ while IFS= read -r dependency; do
   case "$dependency" in
     "$module"/internal/testsupport|"$module"/internal/testsupport/*|\
       "$module"/tests|"$module"/tests/*|*/tests/simulation|*/tests/simulation/*|\
-      "$module"/replay|"$module"/replay/*|"$module"/cmd/*|"$module"/tools/*|\
+      "$module"/replay|"$module"/replay/*|"$module"/internal/replay/*|"$module"/cmd/*|"$module"/tools/*|\
       github.com/spf13/*|github.com/inconshreveable/mousetrap|\
       github.com/zoumo/agent-mock*|github.com/zoumo/agent-sdk-testify*|\
       github.com/stretchr/*|go.opentelemetry.io/otel/sdk*|go.opentelemetry.io/otel/exporters*)
@@ -232,6 +232,19 @@ for native in codex claude pi; do
   done
 done
 
+# Both the SDK runner and its test bridge must use Replay's public Go package.
+for host in ./internal/testsupport/mocktest ./tests/simulation; do
+  imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "$host")
+  if grep -Eq '^github[.]com/zoumo/(agent-sdk-[t]estify|agent-sdk-go/(replay/|internal/replay/))' <<< "$imports"; then
+    echo "$host imports private Replay tooling or the retired external module" >&2
+    exit 1
+  fi
+  if ! grep -Fxq "$module/replay" <<< "$imports"; then
+    echo "$host must import the public Replay library" >&2
+    exit 1
+  fi
+done
+
 python3 - <<'PYTHON'
 import json
 import os
@@ -246,7 +259,7 @@ rules = [
      'SDK production code must not import MASS'),
     (('agent', 'client'), True, r'MASS_[A-Z0-9_]+',
      'SDK production code must not depend on MASS environment conventions'),
-    (('internal', 'tests', 'client', 'agent'), False,
+    (('internal', 'tests/simulation', 'client', 'agent'), False,
      r'protocol mock|"protocol"\s*,\s*"mock"|--scenario|--sdk-test-handshakes',
      'legacy mock CLI dependency in SDK process adapter'),
 ]
@@ -294,6 +307,6 @@ while rows.strip():
                 for domain in ('agent', 'client'):
                     prefix = module + domain + '/' + other
                     assert dependency != prefix and not dependency.startswith(prefix + '/'), (path, dependency)
-        if dependency.startswith(module + 'replay/'):
+        if dependency.startswith((module + 'replay/', module + 'internal/replay/', 'github.com/zoumo/agent-sdk-testify')):
             sys.exit(f'{path} must use the public Replay entry point: {dependency}')
 PYTHON

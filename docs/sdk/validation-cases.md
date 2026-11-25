@@ -6,7 +6,7 @@ description: "说明 SDK 共同验收的用户目标、回放流程、原生适�
 tags: [acceptance, cases, simulation]
 sources:
   - id: simulation-design
-    resource: "../modules/agent-sdk-testify/design.md"
+    resource: "../../tests/simulation/docs/design.md"
     title: "仿真设计与证据合同"
 ---
 
@@ -18,8 +18,8 @@ sources:
 
 `SDK-US-NNN` 标识完整使用目标。`SDK-CASE-NNN` 标识可独立录制和回放的流程。同一流程可以包含多条断言。按场景的 `storyId` 和 `id` 查找，ID 数字不表示归属或驱动行为。
 
-SDK 使用 `go.mod` 固定的 Testify 版本提供的场景、provider binding 和官方录制。按该版本的场景目录查场景与绑定，按同一版本的共同验收查逐 case 的通过条件。更新依赖时同步这两个链接。
-[Testify 场景目录](https://github.com/zoumo/agent-sdk-testify/tree/ec0d525e6731e9d9d658d9e440a6843b1451e100/data/scenarios) · [Testify 共同验收](https://github.com/zoumo/agent-sdk-testify/blob/ec0d525e6731e9d9d658d9e440a6843b1451e100/docs/cases.md) · [依赖版本](../../go.mod) · [仿真配置](../modules/agent-sdk-testify/design.md#story-场景配置)
+SDK 通过 Replay 公开库准备同一版本的材料。逐案预期与资格条件见共同验收，SDK 的必需项由仿真矩阵定义。
+[场景与绑定](../../replay/data/scenarios) · [共同验收](../../replay/docs/cases.md) · [固定索引](../../replay/data/index.json) · [仿真配置](../../tests/simulation/docs/design.md#story-场景配置)
 
 <a id="stories-共同边界"></a>
 

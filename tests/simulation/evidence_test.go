@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestValidateExecutionEvidenceRequiresEmbeddedCompletionFacts(t *testing.T) {
@@ -20,7 +21,7 @@ func TestValidateExecutionEvidenceRequiresEmbeddedCompletionFacts(t *testing.T) 
 	})
 	t.Run("open execution", func(t *testing.T) {
 		fixture := executionEvidenceFixture(t)
-		fixture.report.Status = agenttestify.ExecutionStatusOpen
+		fixture.report.Status = replay.ExecutionStatusOpen
 		fixture.report.Complete = false
 		require.ErrorContains(t, validateExecutionEvidence(fixture.report, fixture.session, fixture.pkg), "remained open")
 	})
@@ -37,7 +38,7 @@ func TestValidateExecutionEvidenceRequiresEmbeddedCompletionFacts(t *testing.T) 
 	t.Run("process identity", func(t *testing.T) {
 		fixture := executionEvidenceFixture(t)
 		exitCode := 0
-		fixture.report.Connections[0].Transport = agenttestify.MockTransportProcess
+		fixture.report.Connections[0].Transport = replay.MockTransportProcess
 		fixture.report.Connections[0].NativeLaunched = true
 		fixture.report.Connections[0].ExitCode = &exitCode
 		fixture.report.Connections[0].ProcessReceiptPath = fixture.execution
@@ -55,8 +56,8 @@ func TestValidateExecutionEvidenceRequiresEmbeddedCompletionFacts(t *testing.T) 
 	})
 	t.Run("failed cleanup", func(t *testing.T) {
 		fixture := executionEvidenceFixture(t)
-		fixture.report.Status = agenttestify.ExecutionStatusFailed
-		fixture.report.Connections[0].Status = agenttestify.ConnectionStatusFailed
+		fixture.report.Status = replay.ExecutionStatusFailed
+		fixture.report.Connections[0].Status = replay.ConnectionStatusFailed
 		fixture.report.Connections[0].CleanupComplete = false
 		require.ErrorContains(t, validateExecutionEvidence(fixture.report, fixture.session, fixture.pkg), "cleanup is incomplete")
 	})
@@ -80,7 +81,7 @@ func TestReadExecutionEvidenceLeavesExecutionlessFixtureAbandoned(t *testing.T) 
 type executionEvidenceFixtureValues struct {
 	session   *preparedSession
 	pkg       *materialPackage
-	report    *agenttestify.ExecutionReport
+	report    *replay.ExecutionReport
 	execution string
 	receipt   string
 }
@@ -116,21 +117,21 @@ func executionEvidenceFixture(t *testing.T) *executionEvidenceFixtureValues {
 		Provenance: "external", PlanSHA256: "plan", ManifestSHA256: "manifest",
 		RecordingSHA256: "recording", Connections: []string{"main"},
 	}}
-	report := &agenttestify.ExecutionReport{
+	report := &replay.ExecutionReport{
 		FixtureID:       session.SessionID,
 		ExecutionID:     "execution-1",
-		Status:          agenttestify.ExecutionStatusPassed,
+		Status:          replay.ExecutionStatusPassed,
 		Complete:        true,
 		ExecutionSHA256: executionHash,
 		ExecutionPath:   executionPath,
-		Material: agenttestify.Material{
+		Material: replay.Material{
 			ID: "material-1", Kind: "material", Action: "mock", Path: materialDir,
 			Provenance: "external", PlanSHA256: "plan", ManifestSHA256: "manifest",
 			RecordingSHA256: "recording", Connections: []string{"main"},
 		},
-		Connections: []agenttestify.ConnectionReport{{
-			ID: "main", Status: agenttestify.ConnectionStatusPassed,
-			Transport:       agenttestify.MockTransportInProcess,
+		Connections: []replay.ConnectionReport{{
+			ID: "main", Status: replay.ConnectionStatusPassed,
+			Transport:       replay.MockTransportInProcess,
 			FullConsumption: true,
 			ClientEOF:       true,
 			CleanupComplete: true,

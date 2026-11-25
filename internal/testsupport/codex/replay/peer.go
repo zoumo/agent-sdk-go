@@ -11,9 +11,8 @@ import (
 	"strings"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
-
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 func syntheticScenario(frames []Frame) ([]byte, error) {
@@ -76,13 +75,13 @@ func mockPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, 
 		return err
 	}
 	defer session.Close()
-	fixture, err := agenttestify.Open(session.Dir)
+	fixture, err := replay.Open(session.Dir)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	run, err := fixture.StartMockAgent(ctx, agenttestify.MockAgentOptions{}, agenttestify.StartMockAgentStreams{Reader: reader, Writer: writer, Stderr: io.Discard})
+	run, err := fixture.StartMockAgent(ctx, replay.MockAgentOptions{}, replay.StartMockAgentStreams{Reader: reader, Writer: writer, Stderr: io.Discard})
 	if err != nil {
 		return err
 	}
@@ -93,7 +92,7 @@ func mockPeer(ctx context.Context, in io.Reader, out io.Writer, frames []Frame, 
 	if result == nil || result.Execution == nil {
 		return errors.New("execution report missing")
 	}
-	if result.Execution.Status != agenttestify.ExecutionStatusPassed {
+	if result.Execution.Status != replay.ExecutionStatusPassed {
 		return fmt.Errorf("execution status %s", result.Execution.Status)
 	}
 	return session.Close()

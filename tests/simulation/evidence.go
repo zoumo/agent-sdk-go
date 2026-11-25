@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"sort"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 type resultMaterial struct {
@@ -67,7 +67,7 @@ type evidenceOutcome struct {
 	Error         error
 }
 
-func readExecutionEvidence(session *preparedSession, executionID string) (*sessionEvidence, *agenttestify.ExecutionReport, error) {
+func readExecutionEvidence(session *preparedSession, executionID string) (*sessionEvidence, *replay.ExecutionReport, error) {
 	evidence := &sessionEvidence{
 		SchemaVersion: preparedSessionSchema,
 		SessionID:     session.SessionID,
@@ -93,7 +93,7 @@ func readExecutionEvidence(session *preparedSession, executionID string) (*sessi
 	return evidence, report, nil
 }
 
-func evidenceExecutionView(report *agenttestify.ExecutionReport) evidenceExecution {
+func evidenceExecutionView(report *replay.ExecutionReport) evidenceExecution {
 	execution := evidenceExecution{
 		ID:              report.ExecutionID,
 		FixtureID:       report.FixtureID,
@@ -129,7 +129,7 @@ func evidenceExecutionView(report *agenttestify.ExecutionReport) evidenceExecuti
 	return execution
 }
 
-func evidenceMaterial(material agenttestify.Material) resultMaterial {
+func evidenceMaterial(material replay.Material) resultMaterial {
 	return resultMaterial{
 		ID:              material.ID,
 		Kind:            material.Kind,
@@ -157,7 +157,7 @@ func finalizePreparedSession(parent context.Context, session *preparedSession, p
 		if err := validateExecutionEvidence(report, session, pkg); err != nil {
 			outcome.Error = errors.Join(outcome.Error, err)
 		}
-		if requireExecution && report.Status != agenttestify.ExecutionStatusPassed {
+		if requireExecution && report.Status != replay.ExecutionStatusPassed {
 			outcome.ProtocolError = errors.Join(outcome.ProtocolError,
 				fmt.Errorf("SDK business passed with mock execution status %s", report.Status))
 		}
@@ -192,7 +192,7 @@ func finalizePreparedSession(parent context.Context, session *preparedSession, p
 	return outcome
 }
 
-func validateExecutionEvidence(report *agenttestify.ExecutionReport, session *preparedSession, pkg *materialPackage) error {
+func validateExecutionEvidence(report *replay.ExecutionReport, session *preparedSession, pkg *materialPackage) error {
 	if report == nil {
 		return errors.New("execution report is unavailable")
 	}
@@ -201,9 +201,9 @@ func validateExecutionEvidence(report *agenttestify.ExecutionReport, session *pr
 		return errors.New("execution report identity differs from the prepared session")
 	}
 	switch report.Status {
-	case agenttestify.ExecutionStatusOpen, agenttestify.ExecutionStatusRunning:
+	case replay.ExecutionStatusOpen, replay.ExecutionStatusRunning:
 		return fmt.Errorf("mock execution %s remained %s after cleanup", report.ExecutionID, report.Status)
-	case agenttestify.ExecutionStatusPassed, agenttestify.ExecutionStatusFailed:
+	case replay.ExecutionStatusPassed, replay.ExecutionStatusFailed:
 	default:
 		return fmt.Errorf("unsupported execution status %q", report.Status)
 	}
@@ -234,9 +234,9 @@ func validateExecutionEvidence(report *agenttestify.ExecutionReport, session *pr
 	if !reflect.DeepEqual(got, expected) {
 		return errors.New("execution report connections differ from the prepared route")
 	}
-	if report.Status == agenttestify.ExecutionStatusPassed {
+	if report.Status == replay.ExecutionStatusPassed {
 		for _, connection := range report.Connections {
-			if connection.Status != agenttestify.ConnectionStatusPassed {
+			if connection.Status != replay.ConnectionStatusPassed {
 				return fmt.Errorf("execution report passes while connection %s is %s", connection.ID, connection.Status)
 			}
 		}
@@ -244,7 +244,7 @@ func validateExecutionEvidence(report *agenttestify.ExecutionReport, session *pr
 	return nil
 }
 
-func validateExecutionMaterial(material agenttestify.Material, pkg *materialPackage, session *preparedSession) error {
+func validateExecutionMaterial(material replay.Material, pkg *materialPackage, session *preparedSession) error {
 	want := pkg.Material
 	if material.ID != want.ID ||
 		material.Kind != want.Kind ||
@@ -280,18 +280,18 @@ func validateExecutionMaterial(material agenttestify.Material, pkg *materialPack
 	return nil
 }
 
-func validateEmbeddedConnection(connection agenttestify.ConnectionReport, session *preparedSession) error {
+func validateEmbeddedConnection(connection replay.ConnectionReport, session *preparedSession) error {
 	if _, ok := session.Connection(connection.ID); !ok {
 		return fmt.Errorf("execution report contains undeclared connection %s", connection.ID)
 	}
 	switch connection.Status {
-	case agenttestify.ConnectionStatusPending, agenttestify.ConnectionStatusRunning:
+	case replay.ConnectionStatusPending, replay.ConnectionStatusRunning:
 		return fmt.Errorf("connection %s remained %s after cleanup", connection.ID, connection.Status)
-	case agenttestify.ConnectionStatusPassed, agenttestify.ConnectionStatusFailed:
+	case replay.ConnectionStatusPassed, replay.ConnectionStatusFailed:
 	default:
 		return fmt.Errorf("connection %s has unsupported status %q", connection.ID, connection.Status)
 	}
-	if connection.Transport != agenttestify.MockTransportInProcess ||
+	if connection.Transport != replay.MockTransportInProcess ||
 		connection.NativeLaunched || connection.ExitCode != nil ||
 		connection.ProcessReceiptPath != "" {
 		return fmt.Errorf("connection %s carries process identity in an embedded execution", connection.ID)
@@ -305,7 +305,7 @@ func validateEmbeddedConnection(connection agenttestify.ConnectionReport, sessio
 	if !connection.CleanupComplete {
 		return fmt.Errorf("connection %s cleanup is incomplete", connection.ID)
 	}
-	if connection.Status == agenttestify.ConnectionStatusPassed {
+	if connection.Status == replay.ConnectionStatusPassed {
 		if !connection.FullConsumption || !connection.ClientEOF || !connection.CleanupComplete {
 			return fmt.Errorf("connection %s does not prove full consumption, client EOF and cleanup", connection.ID)
 		}

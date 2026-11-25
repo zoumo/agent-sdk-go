@@ -12,9 +12,8 @@ import (
 	"strings"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
-
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 const (
@@ -62,11 +61,11 @@ type preparedSession struct {
 	Env           map[string]string        `json:"env"`
 	Routes        map[string]preparedRoute `json:"routes"`
 
-	Dir     string                `json:"-"`
-	RawJSON []byte                `json:"-"`
-	Mock    preparedRoute         `json:"-"`
-	Fixture *agenttestify.Fixture `json:"-"`
-	Runner  *mocktest.Session     `json:"-"`
+	Dir     string            `json:"-"`
+	RawJSON []byte            `json:"-"`
+	Mock    preparedRoute     `json:"-"`
+	Fixture *replay.Fixture   `json:"-"`
+	Runner  *mocktest.Session `json:"-"`
 }
 
 type sourceSelection struct {
@@ -91,9 +90,8 @@ func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelecti
 		}
 		return nil, statErr
 	}
-	options := agenttestify.PrepareOptions{
-		FixtureDir:       dir,
-		EmbeddedIdentity: mocktest.EmbeddedIdentity(),
+	options := replay.PrepareOptions{
+		FixtureDir: dir,
 	}
 	switch {
 	case source.Recording != "":
@@ -107,7 +105,7 @@ func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelecti
 	default:
 		return nil, errors.New("prepare requires --case with --provider or --recording")
 	}
-	fixture, prepareErr := agenttestify.Prepare(options)
+	fixture, prepareErr := replay.Prepare(options)
 	if prepareErr != nil {
 		return nil, errors.Join(fmt.Errorf("prepare %s session: %w", policy, prepareErr), cleanupPreparedSession(dir))
 	}
@@ -130,7 +128,7 @@ func readPreparedSession(dir string) (*preparedSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	fixture, err := agenttestify.Open(canonicalDir)
+	fixture, err := replay.Open(canonicalDir)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +143,7 @@ func readPreparedSession(dir string) (*preparedSession, error) {
 	return session, nil
 }
 
-func viewPreparedSession(fixture *agenttestify.Fixture) (*preparedSession, error) {
+func viewPreparedSession(fixture *replay.Fixture) (*preparedSession, error) {
 	route := fixture.Routes["mock"]
 	connections := make([]preparedConnection, len(route.Connections))
 	for i, connection := range route.Connections {
@@ -219,15 +217,15 @@ func validatePreparedSession(session *preparedSession, tool toolIdentity, source
 	}
 	if session.SessionID == "" || session.AgentType == "" || session.Fixture == nil ||
 		session.Tool.Source != "embedded" ||
-		session.Tool.Module != "github.com/zoumo/agent-sdk-testify" ||
-		session.Tool.Version == "" || session.Tool.ModuleSum == "" {
+		session.Tool.Module != "github.com/zoumo/agent-sdk-go" ||
+		session.Tool.Version == "" || (session.Tool.ModuleSum == "" && session.Tool.ModuleRevision == "") {
 		return errors.New("prepared session identity is incomplete")
 	}
 	if tool.Source != session.Tool.Source || tool.Module != session.Tool.Module ||
 		tool.ModuleSum != session.Tool.ModuleSum || tool.Version != session.Tool.Version ||
-		(session.Tool.ModuleRevision != "" && tool.ModuleRevision != session.Tool.ModuleRevision) ||
-		(session.Tool.ModuleTime != "" && tool.ModuleTime != session.Tool.ModuleTime) ||
-		(session.Tool.GoVersion != "" && tool.GoVersion != session.Tool.GoVersion) {
+		tool.ModuleRevision != session.Tool.ModuleRevision ||
+		tool.ModuleTime != session.Tool.ModuleTime ||
+		tool.GoVersion != session.Tool.GoVersion {
 		return errors.New("prepared session tool differs from the linked library")
 	}
 	if source.Provider != "" && session.AgentType != source.Provider {
@@ -357,7 +355,7 @@ func validateRoute(session *preparedSession) error {
 			return fmt.Errorf("duplicate mock connection %q", connection.ID)
 		}
 		seen[connection.ID] = true
-		if connection.Transport != string(agenttestify.ConnectionTransportInProcess) {
+		if connection.Transport != string(replay.ConnectionTransportInProcess) {
 			return fmt.Errorf("mock connection %s is not an embedded in-process route", connection.ID)
 		}
 	}
@@ -412,7 +410,7 @@ func exportPreparedSession(ctx context.Context, session *preparedSession, output
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := agenttestify.Export(agenttestify.ExportOptions{FixtureDir: session.Dir, Output: output}); err != nil {
+	if err := replay.Export(replay.ExportOptions{FixtureDir: session.Dir, Output: output}); err != nil {
 		return fmt.Errorf("export prepared material: %w", err)
 	}
 	return nil

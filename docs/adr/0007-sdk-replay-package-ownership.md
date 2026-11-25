@@ -35,6 +35,6 @@ tags: [architecture, dependencies, replay]
 
 1. 固定原生协议及可重现的上游版本。在客户端目录记录来源、协议兼容边界和本地验证入口。[原生 SDK 合同](../../client/docs/architecture.md)
 2. 实现客户端，并验证原生事件、进程和会话的生命周期。为 `agent` 实现对应 adapter，只声明有原生依据的能力。[统一行为合同](../../agent/docs/session.md)
-3. 将官方 driver、上游来源和许可放在 Replay。定义可录制的用户流程，按 Replay 规则采集并审核材料。
+3. 将官方 driver、上游来源和许可放在 Replay。定义可录制的用户流程，按 Replay 规则采集并审核材料。[录制与回放](../../replay/README.md)
 4. 先验证官方 driver 严格回放。再用公开客户端或 adapter 执行 SDK 仿真。分别记录通过的业务断言、完整消费、EOF 和清理证据。[SDK 验收条件](../sdk/validation-cases.md)
 5. 运行离线门禁和独立消费者检查。需要验证实际 CLI 或模型时，使用所属包的显式 E2E 入口。[测试指南](../testing.md)

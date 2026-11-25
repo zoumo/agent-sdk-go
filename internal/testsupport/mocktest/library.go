@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 // Session is one prepared in-process testify fixture. Callers start a Run for
@@ -24,7 +24,7 @@ type Session struct {
 	Env         []string
 	SessionID   string
 
-	fixture *agenttestify.Fixture
+	fixture *replay.Fixture
 	owned   bool
 
 	mu         sync.Mutex
@@ -43,7 +43,7 @@ type RunOptions struct {
 }
 
 // ExecutionStart is the immutable library projection used before SDK I/O.
-type ExecutionStart = agenttestify.ExecutionStart
+type ExecutionStart = replay.ExecutionStart
 
 // Run exposes the SDK-side endpoints and the testify run handle for one
 // connection. Reader is peer-to-SDK and Writer is SDK-to-peer.
@@ -54,7 +54,7 @@ type Run struct {
 	Stderr io.ReadCloser
 
 	session   *Session
-	mock      *agenttestify.MockRun
+	mock      *replay.MockRun
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -125,11 +125,10 @@ func Prepare(dir, provider string, scenario []byte, options Options) (result *Se
 			err = errors.Join(err, removeFixtureDir(fixtureDir))
 		}
 	}()
-	fixture, err := agenttestify.Prepare(agenttestify.PrepareOptions{
-		FixtureDir:       fixtureDir,
-		Agent:            provider,
-		Recording:        captureRoot,
-		EmbeddedIdentity: embeddedTestifyIdentity(),
+	fixture, err := replay.Prepare(replay.PrepareOptions{
+		FixtureDir: fixtureDir,
+		Agent:      provider,
+		Recording:  captureRoot,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prepare in-process fixture: %w", err)
@@ -143,7 +142,7 @@ func Open(dir string) (*Session, error) {
 	if dir == "" || !filepath.IsAbs(dir) {
 		return nil, errors.New("open requires an absolute fixture directory")
 	}
-	fixture, err := agenttestify.Open(dir)
+	fixture, err := replay.Open(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -151,15 +150,15 @@ func Open(dir string) (*Session, error) {
 }
 
 // FromFixture attaches a run coordinator to an already opened fixture.
-func FromFixture(fixture *agenttestify.Fixture) (*Session, error) {
+func FromFixture(fixture *replay.Fixture) (*Session, error) {
 	return sessionFromFixture(fixture, false)
 }
 
-func sessionFromFixture(fixture *agenttestify.Fixture, owned bool) (*Session, error) {
+func sessionFromFixture(fixture *replay.Fixture, owned bool) (*Session, error) {
 	if fixture == nil {
 		return nil, errors.New("prepared fixture is unavailable")
 	}
-	if err := validateEmbeddedTestifyIdentity(fixture.Tool); err != nil {
+	if err := validateEmbeddedReplayIdentity(fixture.Tool); err != nil {
 		return nil, err
 	}
 	route, ok := fixture.Routes["mock"]
@@ -260,12 +259,12 @@ func (s *Session) NewRun(ctx context.Context, options RunOptions) (*Run, error) 
 	sdkOutputCloser := &idempotentPipeFile{File: sdkOutput}
 	fixtureOutputCloser := &idempotentPipeFile{File: fixtureOutput}
 	stderr := newDiagnosticStream()
-	mock, startErr := fixture.StartMockAgent(ctx, agenttestify.MockAgentOptions{
+	mock, startErr := fixture.StartMockAgent(ctx, replay.MockAgentOptions{
 		Connection:  options.Connection,
 		ExecutionID: options.ExecutionID,
 		Timeout:     options.Timeout,
 		NativeArgs:  slices.Clone(options.NativeArgs),
-	}, agenttestify.StartMockAgentStreams{
+	}, replay.StartMockAgentStreams{
 		Reader: fixtureInputCloser,
 		Writer: fixtureOutputCloser,
 		Stderr: stderr,
@@ -371,7 +370,7 @@ func (r *Run) CloseInputWhenComplete(closeInput func() error) <-chan error {
 }
 
 // Wait returns the authoritative typed result.
-func (r *Run) Wait(ctx context.Context) (*agenttestify.MockAgentResult, error) {
+func (r *Run) Wait(ctx context.Context) (*replay.MockAgentResult, error) {
 	if r == nil || r.mock == nil {
 		return nil, errors.New("mock run is unavailable")
 	}
@@ -432,11 +431,11 @@ func (s *Session) Report() (*SessionReport, error) {
 			return nil, fmt.Errorf("execution %s report: %w", id, err)
 		}
 		switch execution.Status {
-		case agenttestify.ExecutionStatusOpen, agenttestify.ExecutionStatusRunning:
+		case replay.ExecutionStatusOpen, replay.ExecutionStatusRunning:
 			active = true
-		case agenttestify.ExecutionStatusFailed:
+		case replay.ExecutionStatusFailed:
 			failed = true
-		case agenttestify.ExecutionStatusPassed:
+		case replay.ExecutionStatusPassed:
 		default:
 			return nil, fmt.Errorf("execution %s has unsupported status %q", id, execution.Status)
 		}

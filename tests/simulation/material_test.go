@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestPortableExportBindsManifestAndHistory(t *testing.T) {
@@ -22,7 +23,7 @@ func TestPortableExportBindsManifestAndHistory(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, cleanupPreparedSession(session.Dir)) })
 			exportRoot := filepath.Join(root, "export")
-			require.NoError(t, agenttestify.Export(agenttestify.ExportOptions{
+			require.NoError(t, replay.Export(replay.ExportOptions{
 				FixtureDir: session.Dir, Output: exportRoot,
 			}))
 			pkg, err := validateExport(exportRoot, session)

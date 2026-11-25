@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"regexp"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 var piExtensionAliasPattern = regexp.MustCompile(`^/tmp/agent-sdk-pi-replay-[0-9a-f]{32}/session\.ts$`)
@@ -105,7 +105,7 @@ type piMockStart struct {
 	ExecutionSHA256 string
 }
 
-func writePiMockStart(runtimeDir string, start agenttestify.ExecutionStart) error {
+func writePiMockStart(runtimeDir string, start replay.ExecutionStart) error {
 	return writePiReplayJSON(filepath.Join(runtimeDir, "mock-start.json"), piMockStart{
 		ExecutionID: start.ExecutionID, ExecutionSHA256: start.ExecutionSHA256,
 	})
@@ -130,16 +130,17 @@ type piReplayExecution struct {
 	CleanupComplete   bool   `json:"cleanupComplete"`
 	NativeLaunched    bool   `json:"nativeLaunched"`
 	TestifyVersion    string `json:"testifyVersion"`
+	ModuleRevision    string `json:"moduleRevision,omitempty"`
 	TestifyModuleSum  string `json:"testifyModuleSum"`
 	Failure           string `json:"failure,omitempty"`
 	Error             string `json:"error,omitempty"`
 }
 
-func samePiRecording(candidate agenttestify.Material, material piReplayMaterial) bool {
+func samePiRecording(candidate replay.Material, material piReplayMaterial) bool {
 	return candidate.ID != "" && candidate.Provenance == "consumer" && candidate.RecordingSHA256 == material.rawSHA256
 }
 
-func verifyPiReplayResult(fixture *agenttestify.Fixture, runtimeDir, output, code string, material piReplayMaterial) error {
+func verifyPiReplayResult(fixture *replay.Fixture, runtimeDir, output, code string, material piReplayMaterial) error {
 	var start piMockStart
 	if err := readPiExtensionJSON(filepath.Join(runtimeDir, "mock-start.json"), &start); err != nil {
 		return fmt.Errorf("read Testify Pi mock start identity: %w", err)
@@ -151,10 +152,10 @@ func verifyPiReplayResult(fixture *agenttestify.Fixture, runtimeDir, output, cod
 	if report == nil || report.FixtureID != fixture.FixtureID || report.ExecutionID != start.ExecutionID ||
 		start.ExecutionSHA256 == "" || report.ExecutionSHA256 != start.ExecutionSHA256 ||
 		!samePiRecording(report.Material, material) || !reflect.DeepEqual(report.Material, *fixture.Current) {
-		return errors.New("testify: Pi execution identity differs from the prepared fixture and mock start")
+		return errors.New("replay: Pi execution identity differs from the prepared fixture and mock start")
 	}
 	if len(report.Connections) != 1 || report.Connections[0].ID != piMockConnection {
-		return errors.New("testify: Pi execution did not report exactly the main connection")
+		return errors.New("replay: Pi execution did not report exactly the main connection")
 	}
 	connection := report.Connections[0]
 	summary := piReplayExecution{
@@ -163,20 +164,20 @@ func verifyPiReplayResult(fixture *agenttestify.Fixture, runtimeDir, output, cod
 		Transport: string(connection.Transport), MaterialID: report.Material.ID, Provenance: report.Material.Provenance,
 		RecordingSHA256: report.Material.RecordingSHA256, Frames: material.frames, ExecutionSHA256: report.ExecutionSHA256,
 		FullConsumption: connection.FullConsumption, ClientEOF: connection.ClientEOF, CleanupComplete: connection.CleanupComplete,
-		NativeLaunched: connection.NativeLaunched, TestifyVersion: fixture.Tool.Version, TestifyModuleSum: fixture.Tool.ModuleSum,
+		NativeLaunched: connection.NativeLaunched, TestifyVersion: fixture.Tool.Version, TestifyModuleSum: fixture.Tool.ModuleSum, ModuleRevision: fixture.Tool.ModuleRevision,
 		Failure: string(connection.Failure), Error: connection.Error,
 	}
 	return errors.Join(writePiReplayJSON(filepath.Join(output, "execution.json"), summary), validatePiReplayCompletion(report, connection))
 }
 
-func validatePiReplayCompletion(report *agenttestify.ExecutionReport, connection agenttestify.ConnectionReport) error {
-	if report.Status != agenttestify.ExecutionStatusPassed || !report.Complete || connection.Status != agenttestify.ConnectionStatusPassed {
+func validatePiReplayCompletion(report *replay.ExecutionReport, connection replay.ConnectionReport) error {
+	if report.Status != replay.ExecutionStatusPassed || !report.Complete || connection.Status != replay.ConnectionStatusPassed {
 		return fmt.Errorf("strict Testify mock execution %s (complete=%t), connection %s (%s): %s",
 			report.Status, report.Complete, connection.Status, connection.Failure, connection.Error)
 	}
-	if connection.Transport != agenttestify.MockTransportInProcess || !connection.FullConsumption || !connection.ClientEOF ||
+	if connection.Transport != replay.MockTransportInProcess || !connection.FullConsumption || !connection.ClientEOF ||
 		!connection.CleanupComplete || connection.NativeLaunched || connection.ExitCode != nil || connection.Failure != "" || connection.Error != "" {
-		return errors.New("testify: Pi execution did not establish full consumption, client EOF, and cleanup")
+		return errors.New("replay: Pi execution did not establish full consumption, client EOF, and cleanup")
 	}
 	return nil
 }

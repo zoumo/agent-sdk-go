@@ -8,6 +8,7 @@ Go clients for the Codex app-server, Claude Code CLI, and Pi RPC. The SDKs use t
 | Codex protocol types, turn operations, or saved thread queries | `github.com/zoumo/agent-sdk-go/client/codex` | [Codex SDK](client/codex/README.md) |
 | Claude protocol types, CLI options, or saved session queries | `github.com/zoumo/agent-sdk-go/client/claude` | [Claude SDK](client/claude/README.md) |
 | Pi native RPC commands, responses, and events | `github.com/zoumo/agent-sdk-go/client/pi` | [Pi SDK](client/pi/README.md) |
+| Replay a capture, record a fixture, or install the Replay CLI | `github.com/zoumo/agent-sdk-go/replay` | [Replay](replay/README.md) |
 | The same live session API for Codex, Claude, and Pi | `github.com/zoumo/agent-sdk-go/agent` and one adapter per Core | [Unified Agent and examples](agent/README.md) |
 
 The native SDKs have separate `client/codex/types` and `client/claude/types` packages. Use the

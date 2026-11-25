@@ -82,31 +82,31 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 		},
 		{
 			name: "documentation environment variable",
-			file: "docs/modules/agent-sdk-testify/adoption.md",
+			file: "tests/simulation/docs/adoption.md",
 			body: "Use AGENT_SDK_TESTIFY_BIN to select the executable.\n",
 			want: "external testify executable environment",
 		},
 		{
 			name: "documentation wrapper",
-			file: "docs/modules/agent-sdk-testify/adoption.md",
+			file: "tests/simulation/docs/adoption.md",
 			body: "Run scripts/with-agent-sdk-testify.sh before the test.\n",
 			want: "external testify wrapper",
 		},
 		{
 			name: "documentation executable launch",
-			file: "docs/modules/agent-sdk-testify/adoption.md",
+			file: "tests/simulation/docs/adoption.md",
 			body: "exec agent-sdk-testify mock fixture\n",
 			want: "external testify executable must not be launched",
 		},
 		{
 			name: "documented result descriptor",
-			file: "docs/modules/agent-sdk-testify/design.md",
+			file: "tests/simulation/docs/design.md",
 			body: "Read the result descriptor before validating the run.\n",
 			want: "retired testify process workflow terms",
 		},
 		{
 			name: "documented progress descriptor",
-			file: "docs/modules/agent-sdk-testify/library-mode.md",
+			file: "tests/simulation/docs/library-mode.md",
 			body: "The progress descriptor announces completion.\n",
 			want: "retired testify process workflow terms",
 		},
@@ -118,7 +118,7 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 		},
 		{
 			name: "documented launcher",
-			file: "docs/modules/agent-sdk-testify/design.md",
+			file: "tests/simulation/docs/design.md",
 			body: "Start the launcher before the test.\n",
 			want: "retired testify process workflow terms",
 		},
@@ -248,10 +248,10 @@ func TestRemovedTestifyCLISurfaceGatePreservesExclusions(t *testing.T) {
 	} {
 		writeGateFixture(t, root, name, "AGENT_SDK_TESTIFY_BIN=/tmp/tool\n")
 	}
-	for _, name := range []string{"codex/types/message.go", "claude/types/message.go", "agent/options.go"} {
+	for _, name := range []string{"client/codex/types/message.go", "client/claude/types/message.go", "agent/options.go"} {
 		writeGateFixture(t, root, name, "package types\n\ntype Message struct { PID int `json:\"pid\"` }\n")
 	}
-	writeGateFixture(t, root, "pi/session.go", "package pi\n\ntype response struct { Command string `json:\"command\"` }\n")
+	writeGateFixture(t, root, "client/pi/session.go", "package pi\n\ntype response struct { Command string `json:\"command\"` }\n")
 	writeGateFixture(t, root, "tests/fixture_test.go", "package tests\n\nvar receipt = \"receipt.json\"\n")
 	writeGateFixture(t, root, "docs/README.md", "A wrapper for unrelated tools.\n")
 	writeGateFixture(t, root, "scripts/binary", "\x00AGENT_SDK_TESTIFY_BIN\n")

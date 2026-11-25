@@ -1,9 +1,7 @@
 package simulate
 
 import (
-	"errors"
-
-	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 type toolIdentity struct {
@@ -17,17 +15,17 @@ type toolIdentity struct {
 }
 
 func discoverTool() (toolIdentity, error) {
-	identity := mocktest.EmbeddedIdentity()
-	if identity == nil || identity.Version == "" || identity.Sum == "" || identity.Revision == "" {
-		return toolIdentity{}, errors.New("embedded agent-sdk-testify identity is incomplete")
+	identity, err := replay.BuildIdentity()
+	if err != nil {
+		return toolIdentity{}, err
 	}
 	return toolIdentity{
 		Source:         "embedded",
 		Version:        identity.Version,
-		Module:         "github.com/zoumo/agent-sdk-testify",
-		ModuleSum:      identity.Sum,
-		ModuleRevision: identity.Revision,
-		ModuleTime:     identity.Time,
+		Module:         identity.Module,
+		ModuleSum:      identity.ModuleSum,
+		ModuleRevision: identity.ModuleRevision,
+		ModuleTime:     identity.ModuleTime,
 		GoVersion:      identity.GoVersion,
 	}, nil
 }

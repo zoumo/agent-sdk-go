@@ -8,12 +8,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	codex "github.com/zoumo/agent-sdk-go/client/codex"
 	"github.com/zoumo/agent-sdk-go/client/codex/types"
 	recording "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/replay"
 	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+	"github.com/zoumo/agent-sdk-go/replay"
 )
 
 type GoMockSuite struct{ suite.Suite }
@@ -149,10 +149,10 @@ func (s *GoMockSuite) TestSDKCancellationAndFault() {
 				s.Require().Error(waitErr)
 				s.Require().NotNil(result)
 				s.Require().NotNil(result.Execution)
-				s.Require().Equal(agenttestify.ExecutionStatusFailed, result.Execution.Status)
+				s.Require().Equal(replay.ExecutionStatusFailed, result.Execution.Status)
 				s.Require().Len(result.Execution.Connections, 1)
 				connection := result.Execution.Connections[0]
-				s.Require().Equal(agenttestify.FailureClassStrictReplay, connection.Failure)
+				s.Require().Equal(replay.FailureClassStrictReplay, connection.Failure)
 				s.Require().False(connection.NativeLaunched)
 				s.Require().Nil(connection.ExitCode)
 				s.Require().Empty(connection.ProcessReceiptPath)

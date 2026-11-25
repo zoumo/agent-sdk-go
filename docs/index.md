@@ -15,6 +15,8 @@ license: Apache-2.0
 * [开发规范](architecture.md) - Defines repository module and dependency boundaries, code layout, and coding conventions for the native and unified SDKs.
 * [测试规范](testing-standards.md) - Defines test layers, isolation requirements, and the evidence that Go tests must provide for SDK acceptance.
 
+* [Replay 文档](../replay/docs/index.md) - 录制、回放、共同 case 与材料采用。
+
 ## 架构与合同
 
 * [SDK 架构](../client/docs/architecture.md) - 定义原生 SDK 的共同行为、调用方职责、子 Agent 观察及取消、关闭和恢复边界。
@@ -22,8 +24,8 @@ license: Apache-2.0
 * [Session 合同](../client/docs/session.md) - 定义原生 Session 的调用方职责、资源与状态归属、权限、事件交付和子 Agent 关系。
 * [统一 Agent 设计](../agent/docs/session.md) - 在原生 Codex 和 Claude SDK 之上定义可选的统一会话与事件层， SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
 * [历史查询合同](../client/docs/history-query.md) - 定义 Codex 与 Claude 独立查询历史时的发现范围、metadata 及主会话与子会话内容。
-* [测试工具设计](modules/agent-sdk-testify/design.md) - Defines how the SDK and Testify share responsibility for fixed-recording simulation, strict replay, evidence, and regression gates.
-* [Testify 库接入](modules/agent-sdk-testify/library-mode.md) - Defines connection ownership, call order, and acceptance for Go SDK tests that use Testify for in-process replay.
+* [SDK 仿真设计](../tests/simulation/docs/design.md) - Defines how the SDK and Replay share responsibility for fixed-recording simulation, strict replay, evidence, and regression gates.
+* [SDK 测试连接 Replay](../tests/simulation/docs/library-mode.md) - Defines connection ownership, call order, and acceptance for Go SDK tests that use Replay for in-process replay.
 
 ## 架构决策
 

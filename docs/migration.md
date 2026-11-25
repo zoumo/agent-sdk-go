@@ -151,3 +151,10 @@ second consumer queues or impose approval expiration. Parent-depth limits do not
 Quarantine declares retained count/bytes/age and evicted/expired gaps; later
 membership never backfills old records. A failed Open returning no consumer aborts
 its unreachable queue.
+
+## 录制与回放
+
+Go 库导入路径从 `github.com/zoumo/agent-sdk-testify` 迁至 `github.com/zoumo/agent-sdk-go/replay`，包名为 `replay`。
+原 CLI 命令 `agent-sdk-testify` 更名为 `agent-replay`，子命令和参数沿用原合同。库和 CLI 选择同一 SDK tag。
+官方 driver 继续使用 `agent-sdk-testify-codex`、`agent-sdk-testify-claude`、`agent-sdk-testify-pi`。
+历史录制、回执和材料按原来源与哈希读取。[Replay 使用指南](../replay/README.md)

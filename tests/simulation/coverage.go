@@ -26,7 +26,7 @@ type acceptanceCase struct {
 	PiRequired     bool
 }
 
-// This is the SDK-owned acceptance policy. Testify owns the scenarios,
+// This is the SDK-owned acceptance policy. Replay owns the scenarios,
 // bindings and recordings. Pi requires the first admitted official cohort.
 // For pass criteria, see docs/sdk/validation-cases.md.
 var acceptanceCases = []acceptanceCase{

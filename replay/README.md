@@ -8,6 +8,7 @@ Replay 录制原生 Agent 协议，并用录制回放协议，供 SDK 测试使�
 
 | 任务 | 文档 |
 | --- | --- |
+| 安装 `agent-replay` | [安装 CLI](#安装-cli) |
 | 从内置 case 回放 | [准备内置材料](docs/using-mock.md#准备材料与-fixture) |
 | 回放已有 recording | [导入 recording](docs/using-mock.md#准备材料与-fixture) |
 | 录制自己的 SDK 交互 | [使用 consumer plan 录制并回放](docs/consumer-recording.md) |
@@ -24,9 +25,20 @@ Replay 录制原生 Agent 协议，并用录制回放协议，供 SDK 测试使�
 <a id="独立构建与离线测试"></a>
 <a id="构建交付与消费者"></a>
 
+## 安装 CLI
+
+将 `SDK_TAG` 设为项目使用的 SDK 发布 tag。将 Go 的安装目录加入 `PATH`。
+
+```sh
+go install "github.com/zoumo/agent-sdk-go/cmd/agent-replay@$SDK_TAG"
+agent-replay version
+```
+
+也可以从同一 SDK Release 下载目标平台归档，取出 `agent-replay`。使用 `official verify` 时安装对应的 driver。[官方 driver 安装](drivers/README.md#官方-sdk-环境)
+
 ## 从源码构建
 
-在 SDK 仓库根目录运行 `go build -o bin/agent-replay ./cmd/agent-replay`。安装已发布版本时使用 `go install github.com/zoumo/agent-sdk-go/cmd/agent-replay@<SDK tag>`。开发规范列出依赖、linked worktree 的构建条件、离线命令与发布步骤。[构建与验证](docs/development.md#从源码构建与验证)
+在 SDK 仓库根目录运行 `make replay-build`。产物为 `.artifacts/replay/bin/agent-replay`。[构建与验证](docs/development.md#从源码构建与验证)
 
 <a id="按-case-录制"></a>
 <a id="官方离线验证与采用"></a>

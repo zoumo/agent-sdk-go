@@ -26,11 +26,12 @@ replay/drivers/codex/rust/install.sh /absolute/new-source-cache --fetch
 export CODEX_SOURCE_ARCHIVE=/absolute/new-source-cache/codex.tar.gz
 export CARGO_NET_OFFLINE=true
 npm ci --prefix replay/drivers/claude/typescript --ignore-scripts --omit=optional --no-audit --no-fund
-bash scripts/check-offline.sh checks
+make replay-bundle
 ```
 
-Go 库、CLI 和严格仿真使用 SDK 离线门禁。Codex driver 的安装器使用独立的 Cargo target。
-Pi driver 的 `prepack` 从 SDK embed 所用的源码复制扩展。可在已有输出目录中检查本地包。
+`make replay-bundle` 把 `agent-replay` 和三个 driver 放入 `.artifacts/replay/bundle`。
+再次构建时，用 `REPLAY_BUNDLE` 指定新的输出目录。设置平台专用的 `CARGO_TARGET_DIR` 可复用 Rust 编译缓存。
+Pi driver 的 `prepack` 从 SDK embed 所用的源码复制扩展。用以下命令单独打包 Pi driver。
 
 ```sh
 npm pack ./replay/drivers/pi/official --offline --pack-destination /absolute/output
@@ -40,7 +41,7 @@ npm pack ./replay/drivers/pi/official --offline --pack-destination /absolute/out
 
 ### 安装 Claude driver
 
-使用 Node.js 22 或更新版本。从同一 Replay Release 取得 Go CLI 和 Claude tarball，
+使用 Node.js 22 或更新版本。从同一 SDK Release 取得 `agent-replay` 和 Claude tarball，
 或使用同一源码构建的产物。tarball 已包含锁定的官方 SDK 和运行依赖。
 
 ```sh
@@ -59,20 +60,21 @@ command -v agent-sdk-testify-claude
 
 ### 安装 Codex driver
 
-从同一 Release 下载当前系统和架构的 `agent-replay_<version>_<os>_<arch>.tar.gz`，
+从 SDK Release 下载当前系统和架构的 `agent-replay_<tag>_<os>_<arch>.tar.gz`，
 按 `SHA256SUMS` 核对归档哈希。将其中两个可执行文件安装到同一前缀。
 以下示例使用已下载的 macOS arm64 归档和新的私有目录。
+将 `SDK_TAG` 设为下载归档的 SDK tag。
 
 ```sh
-mkdir -p /absolute/testify/bin
-tar -xzf "agent-replay_<version>_darwin_arm64.tar.gz" -C /absolute/testify/bin \
+mkdir -p /absolute/agent-replay/bin
+tar -xzf "agent-replay_${SDK_TAG}_darwin_arm64.tar.gz" -C /absolute/agent-replay/bin \
   agent-replay agent-sdk-testify-codex
-export PATH="/absolute/testify/bin:$PATH"
+export PATH="/absolute/agent-replay/bin:$PATH"
+agent-replay version
 command -v agent-sdk-testify-codex
 ```
 
-将文件名中的 `<version>` 换成发布 tag。确认命令输出为
-`/absolute/testify/bin/agent-sdk-testify-codex`，以免使用旧 Python 环境的同名脚本。
+确认 `agent-replay version` 输出该 tag，并确认 driver 路径为 `/absolute/agent-replay/bin/agent-sdk-testify-codex`。
 本地 bundle 可直接复制这两个可执行文件。回滚时将上一版工具和配套 driver
 所在的前缀恢复到 PATH 首位。
 
@@ -82,10 +84,11 @@ MCP 夹具，042 的真实录制用 `node`。[SDK 版本与构建方法](codex/r
 
 ### 安装 Pi driver
 
-使用 Node.js 22 或更新版本。在同一安装前缀安装 Pi driver tarball 和 Pi 1.6.0 SDK，将 `node_modules/.bin` 加入 PATH。
+使用 Node.js 22 或更新版本。从 `agent-replay` 所在的 SDK Release 获取 Pi tarball。在同一前缀安装 Pi driver 和 Pi 1.6.0 SDK，将 `node_modules/.bin` 加入 `PATH`。
 
 ```sh
-npm install --prefix /absolute/pi-driver /absolute/agent-sdk-testify-pi-0.1.0.tgz   @earendil-works/pi-coding-agent@1.6.0
+npm install --prefix /absolute/pi-driver \
+  /absolute/agent-sdk-testify-pi-0.1.0.tgz @earendil-works/pi-coding-agent@1.6.0
 export PATH="/absolute/pi-driver/node_modules/.bin:$PATH"
 command -v agent-sdk-testify-pi
 ```

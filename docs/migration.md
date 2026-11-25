@@ -156,5 +156,11 @@ its unreachable queue.
 
 Go 库导入路径从 `github.com/zoumo/agent-sdk-testify` 迁至 `github.com/zoumo/agent-sdk-go/replay`，包名为 `replay`。
 原 CLI 命令 `agent-sdk-testify` 更名为 `agent-replay`，子命令和参数沿用原合同。库和 CLI 选择同一 SDK tag。
+把脚本中的 `agent-sdk-testify` 换成 `agent-replay`。将 `SDK_TAG` 设为项目使用的 SDK 发布 tag，再安装 CLI。
+
+```sh
+go install "github.com/zoumo/agent-sdk-go/cmd/agent-replay@$SDK_TAG"
+```
+
 官方 driver 继续使用 `agent-sdk-testify-codex`、`agent-sdk-testify-claude`、`agent-sdk-testify-pi`。
-历史录制、回执和材料按原来源与哈希读取。[Replay 使用指南](../replay/README.md)
+从同一 SDK Release 获取 driver 归档和 npm tarball。历史录制、回执和材料按原来源与哈希读取。[官方 driver 安装](../replay/drivers/README.md#官方-sdk-环境)

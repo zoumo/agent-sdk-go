@@ -37,7 +37,7 @@ func RepositoryRoot() (string, error) {
 func PrepareBinary() (func(int) int, error) {
 	binary := os.Getenv("AGENT_REPLAY_BIN")
 	if binary == "" {
-		return nil, errors.New("AGENT_REPLAY_BIN is required; run make test-e2e or scripts/with-agent-replay.sh")
+		return nil, errors.New("AGENT_REPLAY_BIN is required. Run bash scripts/check-offline.sh test from the repository root")
 	}
 	if err := ValidateBinary(binary, RaceEnabled); err != nil {
 		return nil, err

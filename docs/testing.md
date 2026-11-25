@@ -342,6 +342,8 @@ commit.
 
 Run `make replay-build` to build the CLI using only the Go toolchain and the
 prepared Go module cache. The output is `.artifacts/replay/bin/agent-replay`.
+Run `make replay-check` to validate the case catalog, documentation links,
+build checkout, and Replay dependency boundaries.
 
 Prepare the [official driver build dependencies](../replay/drivers/README.md#构建与测试)
 before building a native distribution. Set `SDK_TAG` to the local Git tag at
@@ -352,10 +354,13 @@ make replay-release SDK_TAG="$SDK_TAG" OUTPUT=/absolute/new-dist
 make replay-check-package OUTPUT=/absolute/new-dist
 ```
 
-A push of the SDK tag starts the [release workflow](../.github/workflows/release.yml).
+A push of the SDK tag starts the release workflow.
 The workflow verifies the installed CLI and drivers on Linux and macOS for amd64
 and arm64. It also imports `replay` and installs the CLI from the same tag in an
-independent Go module.
+independent Go module. [Release workflow](../.github/workflows/release.yml)
+
+Pull requests run the same package checks on Ubuntu in a separate workflow.
+SDK Go checks can run without the Rust and Node.js toolchains. [Package checks](../.github/workflows/replay-package.yml)
 
 The release includes `agent-replay_<tag>_<os>_<arch>.tar.gz` for each platform.
 Each archive contains `agent-replay`, `agent-sdk-testify-codex`, the builtin

@@ -43,7 +43,7 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn('test -s "$archive.sha256"', checks)
         self.assertIn('sha256sum -c "$archive.sha256"', checks)
         self.assertIn('./golangci-lint version', checks)
-        self.assertIn("python3 codex/scripts/check_whitespace.py", checks)
+        self.assertIn("python3 client/codex/scripts/check_whitespace.py", checks)
         self.assertIn("make fmt-check", checks)
         self.assertIn("make lint", checks)
         self.assertIn("bash scripts/check-offline.sh checks", checks)

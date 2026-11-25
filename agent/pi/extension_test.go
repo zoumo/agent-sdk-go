@@ -18,6 +18,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentpi "github.com/zoumo/agent-sdk-go/agent/pi"
+	"github.com/zoumo/agent-sdk-go/mcp"
 )
 
 func TestSessionExtensionCleanup(t *testing.T) {
@@ -26,7 +27,7 @@ func TestSessionExtensionCleanup(t *testing.T) {
 	}
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	for _, outcome := range []string{"close", "exit", "missing-extension", "process-start-failure"} {
+	for _, outcome := range []string{"close", "combined", "exit", "missing-extension", "process-start-failure"} {
 		t.Run(outcome, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("TMPDIR", root)
@@ -36,9 +37,10 @@ func TestSessionExtensionCleanup(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			config := agentpi.Config{
-				CLIPath: exe,
-				Args:    []string{"-test.run=^TestPiSessionExtensionPeer$", "--"},
-				Env:     []string{"SDK_PI_PROBE_OUTCOME=" + outcome, "SDK_PI_PROBE_PROCESS=core"},
+				CLIPath:      exe,
+				Args:         []string{"-test.run=^TestPiSessionExtensionPeer$", "--"},
+				Env:          []string{"SDK_PI_PROBE_OUTCOME=" + outcome, "SDK_PI_PROBE_PROCESS=core"},
+				EnableInject: outcome == "combined",
 			}
 			if outcome == "process-start-failure" {
 				config.CLIPath = filepath.Join(root, "missing-executable")
@@ -49,10 +51,17 @@ func TestSessionExtensionCleanup(t *testing.T) {
 			t.Cleanup(func() { _ = core.Stop(context.Background()) })
 			require.True(t, capabilities.Supports(agent.CapabilityProcessEnv))
 			require.True(t, capabilities.Supports(agent.CapabilityShellEnv))
-			s, err := core.Open(ctx, agent.OpenOptions{
+			options := agent.OpenOptions{
 				Cwd: root, ProcessEnv: map[string]string{"SDK_PI_PROBE_PROCESS": "session"},
 				ShellEnv: map[string]string{"SDK_PI_PROBE_SHELL": "only-shell"},
-			})
+			}
+			var specific agentpi.SessionOptions
+			if outcome == "combined" {
+				options.Features.AgentQuestions = new(true)
+				options.MCPServers = []mcp.Server{{Name: "local", Transport: mcp.TransportStdio, Command: "fixture-mcp"}}
+				specific = agentpi.SessionOptions{ToolApproval: true, InteractionTimeout: 2 * time.Second}
+			}
+			s, err := core.OpenWithOptions(ctx, options, specific)
 			switch outcome {
 			case "process-start-failure":
 				require.Error(t, err)
@@ -62,7 +71,11 @@ func TestSessionExtensionCleanup(t *testing.T) {
 				require.NoError(t, err)
 				t.Cleanup(func() { _ = s.Close(context.Background()) })
 				require.True(t, s.Capabilities().Supports(agent.CapabilityShellEnv))
-				if outcome == "close" {
+				if outcome == "combined" {
+					require.Implements(t, (*agent.Injector)(nil), s)
+					require.True(t, s.EffectiveFeatures().AgentQuestions)
+				}
+				if outcome == "close" || outcome == "combined" {
 					files, err := filepath.Glob(filepath.Join(root, "agent-sdk-pi-*", "session.ts"))
 					require.NoError(t, err)
 					require.Len(t, files, 1)
@@ -132,10 +145,21 @@ func runExtensionPeer(outcome string) error {
 		return err
 	}
 	var config struct {
-		ShellEnv map[string]string `json:"shellEnv"`
+		ShellEnv             map[string]string       `json:"shellEnv"`
+		MCPServers           []struct{ Name string } `json:"mcpServers"`
+		Inject               bool                    `json:"inject"`
+		ToolApproval         bool                    `json:"toolApproval"`
+		AgentQuestions       bool                    `json:"agentQuestions"`
+		InteractionTimeoutMS int64                   `json:"interactionTimeoutMs"`
 	}
 	if err := json.Unmarshal(data, &config); err != nil || config.ShellEnv["SDK_PI_PROBE_SHELL"] != "only-shell" {
 		return errors.New("the private config did not carry ShellEnv")
+	}
+	if outcome == "combined" &&
+		(len(config.MCPServers) != 1 || config.MCPServers[0].Name != "local" ||
+			!config.Inject || !config.ToolApproval || !config.AgentQuestions || config.InteractionTimeoutMS != 2000 ||
+			!slices.Contains(os.Args, "builtin:mcp")) {
+		return errors.New("the private config did not carry all requested extension settings")
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	writer := json.NewEncoder(os.Stdout)
@@ -156,6 +180,11 @@ func runExtensionPeer(outcome string) error {
 			if outcome != "missing-extension" {
 				commands = append(commands, map[string]any{
 					"name": "agent-sdk-session-ready", "source": "extension", "sourceInfo": map[string]string{"path": path},
+				})
+			}
+			if outcome == "combined" {
+				commands = append(commands, map[string]any{
+					"name": "agent-sdk-inject", "source": "extension", "sourceInfo": map[string]string{"path": path},
 				})
 			}
 			result = map[string]any{"commands": commands}

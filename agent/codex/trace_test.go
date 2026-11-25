@@ -14,7 +14,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 type traceRecorder struct {

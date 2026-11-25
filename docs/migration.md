@@ -1,37 +1,36 @@
 ---
 type: Guide
 title: Migration
-description: "Explains how to migrate standalone Codex and Claude SDK imports and Session calls to the shared Go module."
+description: "Explains how to migrate native imports and Session calls."
 tags: [codex, claude, migration, session]
 sources:
   - id: native-session
-    resource: "modules/native-session/design.md"
+    resource: "../client/docs/session.md"
     title: "Native Session contract"
 ---
 
 # Migration
 
-Move your application from the standalone SDK modules to the shared
-`github.com/zoumo/agent-sdk-go` module.
+## Native imports
 
-1. Replace the old import prefixes in your application. Include each `types`
-   import that uses the old prefix.
+Replace the native import prefix in your application. Include subpackages such
+as `types`. Go package names stay the same.
 
-   | Replace | With |
-   |---|---|
-   | `github.com/zoumo/codex-sdk-go` | `github.com/zoumo/agent-sdk-go/codex` |
-   | `github.com/zoumo/claude-agent-sdk-go` | `github.com/zoumo/agent-sdk-go/claude` |
+| Previous import prefix | Current import prefix |
+|---|---|
+| `github.com/zoumo/agent-sdk-go/codex` or `github.com/zoumo/codex-sdk-go` | `github.com/zoumo/agent-sdk-go/client/codex` |
+| `github.com/zoumo/agent-sdk-go/claude` or `github.com/zoumo/claude-agent-sdk-go` | `github.com/zoumo/agent-sdk-go/client/claude` |
+| `github.com/zoumo/agent-sdk-go/pi` | `github.com/zoumo/agent-sdk-go/client/pi` |
 
-2. Update your Go dependency to the version of `github.com/zoumo/agent-sdk-go`
-   that you intend to use. Run `go mod tidy`.
-3. Update your session calls using the [session migration](#session). Run your
-   application's tests to find any remaining old imports or API calls.
+The unified contract is `github.com/zoumo/agent-sdk-go/agent`. Import the
+corresponding `agent/<provider>` package to create a Core. A source file can
+import both layers using the package names `claude` and `agentclaude`, for
+example. Move consumers of former public SDK fixture packages to their own
+fixtures and use the Replay library for protocol playback.
 
-The native source roots moved under `codex/` and `claude/`. Package-local examples
-and scripts retain package-relative paths: run their documented commands from the
-corresponding package directory. The root `go.mod` declares the shared Go version;
-`mise.toml` is an optional developer convenience. Root checks and CI run from the
-repository root. There is one `go.mod` and `go.sum`.
+Update the `github.com/zoumo/agent-sdk-go` version, run `go mod tidy`, and
+run your application tests. Continue with the [session migration](#session)
+if you are upgrading from a standalone SDK.
 
 The migration merges these complete source histories as parents, preserving commit
 objects and original author information:
@@ -52,8 +51,8 @@ with each package, including upstream protocol and third-party attribution.
 The native SDK interface is `Open`, followed by the native
 `codex.Session.Submit` or `claude.Session.Submit` and the single
 `Session.Receive` FIFO. The native SDKs and `types` imports stay
-independent. [Session interfaces](modules/native-session/design.md#interface-原生-session-公开-interface)
-and [event delivery](modules/native-session/design.md#delivery-event-delivery) govern the behavior.
+independent. [Session interfaces](../client/docs/session.md#interface-原生-session-公开-interface)
+and [event delivery](../client/docs/session.md#delivery-event-delivery) govern the behavior.
 
 | Previous consumer coordination | Session path |
 |---|---|
@@ -82,7 +81,7 @@ scheduling from local Busy state or changes the input target. Replace separate
 Events/Requests/callback consumers with Receive values: Event, Request and
 Observation. Answer through the original IncomingRequest and distribute UI/log
 output in the application. Native parameters and result semantics are in the
-[Codex](../codex/README.md) and [Claude](../claude/README.md) guides.
+[Codex](../client/codex/README.md) and [Claude](../client/claude/README.md) guides.
 
 ### Default permission preset for unified sessions
 
@@ -152,3 +151,10 @@ second consumer queues or impose approval expiration. Parent-depth limits do not
 Quarantine declares retained count/bytes/age and evicted/expired gaps; later
 membership never backfills old records. A failed Open returning no consumer aborts
 its unreachable queue.
+
+## 录制与回放
+
+Go 库导入路径从 `github.com/zoumo/agent-sdk-testify` 迁至 `github.com/zoumo/agent-sdk-go/replay`，包名为 `replay`。
+原 CLI 命令 `agent-sdk-testify` 更名为 `agent-replay`，子命令和参数沿用原合同。库和 CLI 选择同一 SDK tag。
+官方 driver 继续使用 `agent-sdk-testify-codex`、`agent-sdk-testify-claude`、`agent-sdk-testify-pi`。
+历史录制、回执和材料按原来源与哈希读取。[Replay 使用指南](../replay/README.md)

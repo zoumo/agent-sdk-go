@@ -91,7 +91,7 @@ StartOrSteer(ctx context.Context, input Input) (InputReceipt, error)
 
 ## 相关合同
 
-- [统一 Agent 设计](../modules/unified-agent/design.md)
-- [原生 Session 设计](../modules/native-session/design.md)
+- [统一 Agent 设计](../../agent/docs/session.md)
+- [原生 Session 设计](../../client/docs/session.md)
 - Codex adapter 包文档：`agent/codex/doc.go`
 - Claude adapter 包文档：`agent/claude/doc.go`

@@ -1,0 +1,566 @@
+package claudesim
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
+)
+
+// AcceptFlow executes recorded operations with the public Go Session. Incoming
+// requests retain their original handles, including held approvals.
+func AcceptFlow(ctx context.Context, mock *mocktest.Session, root string, host Host, policy claude.ChildDetailPolicy, deliveries io.Writer) (err error) {
+	return acceptFlow(ctx, mock, root, host, policy, deliveries, nil)
+}
+
+func acceptFlow(
+	ctx context.Context,
+	mock *mocktest.Session,
+	root string,
+	host Host,
+	policy claude.ChildDetailPolicy,
+	deliveries io.Writer,
+	onStart func(mocktest.ExecutionStart),
+) (err error) {
+	var plan struct {
+		Project, Config, Model, DriverProfile string
+		FixtureProject                        string `json:"_fixtureProject"`
+		Args                                  []string
+	}
+	b, err := os.ReadFile(filepath.Join(root, "plan.json"))
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &plan); err != nil {
+		return err
+	}
+	type frame struct {
+		Ordinal   int
+		Direction string
+		Wire      json.RawMessage
+	}
+	type control struct {
+		Type, Subtype   string
+		RequestID       string `json:"request_id"`
+		SessionID       string `json:"session_id"`
+		ParentToolUseID string `json:"parent_tool_use_id"`
+		Request         json.RawMessage
+		Response        struct {
+			Subtype   string
+			RequestID string `json:"request_id"`
+			Response  json.RawMessage
+		}
+	}
+	host, err = resolveHost(root, plan.Project, plan.FixtureProject, plan.Config, host)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(filepath.Join(root, "raw", "raw.jsonl"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 4096), 16<<20)
+	var frames []frame
+	var init types.InitializeOptions
+	nativeRequests := map[string]json.RawMessage{}
+	var servers []string
+	var receiveElicitation bool
+	for scanner.Scan() {
+		var v frame
+		if err := json.Unmarshal(scanner.Bytes(), &v); err != nil {
+			return err
+		}
+		frames = append(frames, v)
+		var w control
+		if err := json.Unmarshal(v.Wire, &w); err != nil {
+			return err
+		}
+		if v.Direction == "c2s" && w.Type == "control_request" {
+			var r struct{ Subtype string }
+			_ = json.Unmarshal(w.Request, &r)
+			if r.Subtype == "initialize" {
+				init, err = decodeInitialize(w.Request)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if v.Direction == "s2c" && w.Type == "control_request" {
+			nativeRequests[w.RequestID] = v.Wire
+			var r struct{ Subtype string }
+			_ = json.Unmarshal(w.Request, &r)
+			if r.Subtype == "elicitation" {
+				receiveElicitation = true
+			}
+			if r.Subtype == "mcp_message" {
+				var metadata struct {
+					ServerName string `json:"server_name"`
+				}
+				_ = json.Unmarshal(w.Request, &metadata)
+				if !slices.Contains(servers, metadata.ServerName) {
+					servers = append(servers, metadata.ServerName)
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	var mu sync.Mutex
+	seen := map[string]int{}
+	consumed := map[string]int{}
+	requests := map[string]*claude.IncomingRequest{}
+	changed := make(chan struct{}, 1)
+	done := make(chan struct{})
+	var receiveErr error
+	key := func(raw json.RawMessage) (string, error) {
+		var v any
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&v); err != nil {
+			return "", err
+		}
+		b, err := json.Marshal(v)
+		return string(b), err
+	}
+	encoder := json.NewEncoder(deliveries)
+	observe := func(got claude.Received) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := encoder.Encode(struct {
+			Kind        claude.ReceivedKind     `json:"kind"`
+			Raw         string                  `json:"raw,omitempty"`
+			Source      claude.SubagentIdentity `json:"source"`
+			Origin      string                  `json:"origin"`
+			Observation *claude.Observation     `json:"observation,omitempty"`
+		}{got.Kind, string(got.Raw), got.Source, got.Origin, got.Observation}); err != nil {
+			return err
+		}
+		if len(got.Raw) > 0 {
+			k, err := key(got.Raw)
+			if err != nil {
+				return err
+			}
+			seen[k]++
+		}
+		if got.Request != nil {
+			requests[got.Request.ID()] = got.Request
+		}
+		select {
+		case changed <- struct{}{}:
+		default:
+		}
+		return nil
+	}
+	options := claude.SessionOptions{
+		ChildDetailPolicy:  policy,
+		WorkDir:            host.Workspace,
+		Model:              plan.Model,
+		Env:                host.Env,
+		Initialize:         &init,
+		SDKMCPServers:      servers,
+		ReceiveElicitation: receiveElicitation,
+	}
+	for i := 0; i < len(plan.Args); i++ {
+		name, value, inline := strings.Cut(plan.Args[i], "=")
+		if name != "--model" && name != "--effort" && name != "--max-thinking-tokens" {
+			continue
+		}
+		if !inline {
+			i++
+			if i == len(plan.Args) {
+				return errors.New("missing creation option value")
+			}
+			value = plan.Args[i]
+		}
+		switch name {
+		case "--model":
+			options.Model = value
+		case "--effort":
+			options.Effort = value
+		case "--max-thinking-tokens":
+			budget, e := strconv.Atoi(value)
+			if e != nil {
+				return e
+			}
+			options.Thinking = &types.ThinkingConfig{Type: "enabled", BudgetTokens: &budget}
+		}
+	}
+	var configure func(*claude.SessionOptions)
+	if len(servers) != 0 || len(init.SDKMCPServerManifests) != 0 {
+		if len(servers) != 0 && !slices.Equal(servers, []string{fixtureMCPName}) {
+			return errors.New("unsupported SDK MCP fixture server")
+		}
+		usesManifest := len(init.SDKMCPServerManifests) != 0
+		fixture := newFixtureMCP(usesManifest)
+		options.SDKMCPServers = []string{fixtureMCPName}
+		if usesManifest {
+			init.SDKMCPServerManifests = map[string]types.SDKMCPServerManifest{fixtureMCPName: fixture.manifest}
+		}
+		configure = func(o *claude.SessionOptions) {
+			workspace := o.WorkDir
+			o.HandleSDKMCP = func(ctx context.Context, r claude.IncomingRequest) error {
+				if !sameJSON(r.Raw(), nativeRequests[r.ID()]) {
+					return errors.New("MCP request differs from recording")
+				}
+				if err := observe(claude.Received{Kind: claude.ReceivedRequest, Request: &r, Raw: r.Raw(), Origin: "live"}); err != nil {
+					return err
+				}
+				return fixture.reply(ctx, workspace, r)
+			}
+		}
+	}
+	s, run, inputClosed, err := openStreamSession(ctx, mock, options, configure)
+	if err != nil {
+		return err
+	}
+	if onStart != nil {
+		onStart(run.Start)
+	}
+	defer func() {
+		err = errors.Join(err, finishStream(s, run, inputClosed))
+		<-done
+	}()
+
+	go func() {
+		defer close(done)
+		for {
+			got, e := s.Receive(ctx)
+			if e == nil {
+				e = observe(got)
+			}
+			if e != nil {
+				mu.Lock()
+				receiveErr = e
+				mu.Unlock()
+				return
+			}
+		}
+	}()
+	wait := func(raw json.RawMessage) error {
+		for {
+			mu.Lock()
+			k, e := key(raw)
+			if e != nil {
+				mu.Unlock()
+				return e
+			}
+			ok := seen[k] > consumed[k]
+			if ok {
+				consumed[k]++
+			}
+			e = receiveErr
+			mu.Unlock()
+			if ok {
+				return nil
+			}
+			if e != nil {
+				return e
+			}
+			select {
+			case <-changed:
+			case <-done:
+				return errors.New("session ended before expected native fact")
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	submitted, terminals := 0, 0
+	observedRoot := ""
+	skipOrdinal := map[int]bool{}
+	for _, v := range frames {
+		var w control
+		if err := json.Unmarshal(v.Wire, &w); err != nil {
+			return err
+		}
+		if skipOrdinal[v.Ordinal] {
+			continue
+		}
+		if v.Direction == "s2c" {
+			if w.Type == "control_response" {
+				continue
+			}
+			if w.Type == "control_request" {
+				if err := wait(v.Wire); err != nil {
+					return fmt.Errorf("ordinal %d request: %w", v.Ordinal, err)
+				}
+				continue
+			}
+			var native struct {
+				SessionID       string `json:"session_id"`
+				ParentToolUseID string `json:"parent_tool_use_id"`
+				Type, Subtype   string
+			}
+			_ = json.Unmarshal(v.Wire, &native)
+			if native.Type == "system" && native.Subtype == "init" {
+				observedRoot = native.SessionID
+			}
+			if policy == claude.ChildDetailSuppress && native.Type == "assistant" && native.ParentToolUseID != "" {
+				// The final independent preserve/suppress comparison requires
+				// every protected fact unchanged. Do not await optional child
+				// text here: the Session may intentionally omit its delivery.
+				continue
+			}
+			if observedRoot != "" && native.SessionID == observedRoot {
+				if err := wait(v.Wire); err != nil {
+					return fmt.Errorf("ordinal %d %s/%s: %w", v.Ordinal, native.Type, native.Subtype, err)
+				}
+				if w.Type == "result" {
+					terminals++
+				}
+			}
+			continue
+		}
+		switch w.Type {
+		case "user":
+			var input types.UserInput
+			if err := json.Unmarshal(v.Wire, &input); err != nil {
+				return err
+			}
+			sub, e := s.Submit(ctx, claude.Input{User: &input})
+			if e != nil {
+				return e
+			}
+			if !sub.Written {
+				return errors.New("input not written")
+			}
+			submitted++
+		case "control_request":
+			var request struct {
+				Subtype           string
+				Mode              claude.PermissionMode
+				Model             *string
+				MaxThinkingTokens *int    `json:"max_thinking_tokens"`
+				ThinkingDisplay   *string `json:"thinking_display"`
+			}
+			if err := json.Unmarshal(w.Request, &request); err != nil {
+				return err
+			}
+			operation := request.Subtype
+			responseID := w.RequestID
+			recordedRequest := w.Request
+			var e error
+			var receipt claude.ConfigurationReceipt
+			switch request.Subtype {
+			case "initialize":
+				continue
+			case "get_settings":
+				if !sameJSON(w.Request, []byte(`{"subtype":"get_settings"}`)) {
+					return errors.New("get_settings request differs")
+				}
+				var applyOrdinal int
+				var applyWire control
+				var applyRequest struct {
+					Subtype  string          `json:"subtype"`
+					Settings json.RawMessage `json:"settings"`
+				}
+				for _, candidate := range frames {
+					if candidate.Ordinal <= v.Ordinal || candidate.Direction != "c2s" {
+						continue
+					}
+					var wire control
+					if err := json.Unmarshal(candidate.Wire, &wire); err != nil {
+						return err
+					}
+					if wire.Type == "user" {
+						break
+					}
+					if wire.Type != "control_request" {
+						continue
+					}
+					if err := json.Unmarshal(wire.Request, &applyRequest); err != nil {
+						return err
+					}
+					if applyRequest.Subtype == "apply_flag_settings" {
+						applyOrdinal = candidate.Ordinal
+						applyWire = wire
+						break
+					}
+				}
+				if applyOrdinal == 0 {
+					var expected control
+					for _, candidate := range frames {
+						if candidate.Direction != "s2c" {
+							continue
+						}
+						var wire control
+						if err := json.Unmarshal(candidate.Wire, &wire); err != nil {
+							return err
+						}
+						if wire.Type == "control_response" && wire.Response.RequestID == w.RequestID {
+							expected = wire
+							break
+						}
+					}
+					settings, queryErr := s.GetSettings(ctx)
+					if expected.Response.Subtype == "error" {
+						var native *claude.ControlError
+						if queryErr == nil || !errors.As(queryErr, &native) {
+							return fmt.Errorf("get_settings did not reproduce native rejection: %w", queryErr)
+						}
+					} else {
+						if queryErr != nil {
+							return queryErr
+						}
+						if expected.Response.Subtype != "success" || !sameJSON(settings, expected.Response.Response) {
+							return errors.New("get_settings response differs from recording")
+						}
+					}
+					continue
+				}
+				var change struct {
+					EffortLevel *string `json:"effortLevel"`
+				}
+				if err := json.Unmarshal(applyRequest.Settings, &change); err != nil {
+					return err
+				}
+				receipt, e = s.SetEffort(ctx, claude.EffortChange{Level: change.EffortLevel})
+				operation = "apply_flag_settings"
+				responseID = applyWire.RequestID
+				recordedRequest = applyWire.Request
+				skipOrdinal[applyOrdinal] = true
+			case "set_model":
+				receipt, e = s.SetModel(ctx, claude.ModelChange{Model: request.Model})
+			case "set_max_thinking_tokens":
+				receipt, e = s.SetThinking(ctx, claude.ThinkingChange{MaxThinkingTokens: request.MaxThinkingTokens, ThinkingDisplay: request.ThinkingDisplay})
+			case "set_permission_mode":
+				receipt, e = s.SetPermissionMode(ctx, request.Mode)
+			case "interrupt":
+				e = s.Interrupt(ctx, claude.InterruptOptions{})
+			default:
+				return fmt.Errorf("unsupported control %s", request.Subtype)
+			}
+			// Expected native rejection is a result too; it must remain a rejection.
+			var expected control
+			for _, r := range frames {
+				if r.Direction == "s2c" {
+					var candidate control
+					_ = json.Unmarshal(r.Wire, &candidate)
+					if candidate.Type == "control_response" && candidate.Response.RequestID == responseID {
+						expected = candidate
+						break
+					}
+				}
+			}
+			if expected.Response.Subtype == "error" {
+				var native *claude.ControlError
+				if e == nil || !errors.As(e, &native) {
+					return fmt.Errorf("%s did not reproduce native rejection: %w", operation, e)
+				}
+				continue
+			}
+			if e != nil {
+				return e
+			}
+			if request.Subtype != "interrupt" && (!receipt.Accepted || !sameJSON(receipt.Requested, recordedRequest)) {
+				return errors.New("configuration request/acknowledgement differs")
+			}
+		case "control_response":
+			mu.Lock()
+			r := requests[w.Response.RequestID]
+			mu.Unlock()
+			if r == nil {
+				return errors.New("original request handle missing")
+			}
+			if r.Method() == "mcp_message" {
+				continue
+			}
+			if r.Method() == "elicitation" {
+				var answer struct {
+					Action  string
+					Content map[string]any
+				}
+				decoder := json.NewDecoder(bytes.NewReader(w.Response.Response))
+				decoder.UseNumber()
+				if err := decoder.Decode(&answer); err != nil {
+					return err
+				}
+				if err := r.ReplyElicitation(ctx, answer.Action, answer.Content); err != nil {
+					return fmt.Errorf("ordinal %d elicitation reply: %w", v.Ordinal, err)
+				}
+				continue
+			}
+			var answer struct {
+				Behavior, Message  string
+				UpdatedInput       json.RawMessage          `json:"updatedInput"`
+				UpdatedPermissions []types.PermissionUpdate `json:"updatedPermissions"`
+				ToolUseID          *string                  `json:"toolUseID"`
+				Interrupt          *bool
+			}
+			if err := json.Unmarshal(w.Response.Response, &answer); err != nil {
+				return err
+			}
+			var toolUseID string
+			if answer.ToolUseID != nil {
+				toolUseID = r.Handle().ToolUseID()
+				if toolUseID == "" || toolUseID != *answer.ToolUseID {
+					return fmt.Errorf("ordinal %d permission reply does not echo the request tool-use ID", v.Ordinal)
+				}
+			}
+			switch {
+			case answer.Behavior == "deny":
+				err = r.Deny(ctx, claude.DenialOptions{Message: answer.Message, Interrupt: answer.Interrupt, ToolUseID: toolUseID})
+			case answer.Behavior != "allow":
+				return fmt.Errorf("ordinal %d unsupported permission decision %q", v.Ordinal, answer.Behavior)
+			case r.Handle().ToolName() == "AskUserQuestion":
+				var input struct{ Answers map[string]string }
+				if err := json.Unmarshal(answer.UpdatedInput, &input); err != nil {
+					return err
+				}
+				err = r.AnswerWithToolUseID(ctx, claude.QuestionAnswers{Answers: input.Answers}, toolUseID)
+			default:
+				updatedInput := answer.UpdatedInput
+				if sameJSON(updatedInput, r.Handle().Input()) {
+					updatedInput = nil
+				}
+				err = r.Approve(ctx, claude.ApprovalOptions{UpdatedInput: updatedInput, UpdatedPermissions: answer.UpdatedPermissions, ToolUseID: toolUseID})
+			}
+			if err != nil {
+				return fmt.Errorf("ordinal %d permission reply: %w", v.Ordinal, err)
+			}
+		default:
+			return fmt.Errorf("unsupported client frame %s", w.Type)
+		}
+	}
+	if plan.DriverProfile == "continuation" && (submitted < 2 || terminals != submitted) {
+		return errors.New("continuation input/result count differs")
+	}
+	if submitted == 0 || terminals == 0 && plan.DriverProfile != "session-close" {
+		return errors.New("flow has no observed input/result")
+	}
+	if err := s.Close(); err != nil {
+		return err
+	}
+	<-done
+	if receiveErr != nil && !errors.Is(receiveErr, io.EOF) {
+		return receiveErr
+	}
+	if _, e := s.Submit(ctx, claude.Input{Text: "must not be sent"}); !errors.Is(e, claude.ErrClosed) {
+		return errors.New("closed Session accepted input")
+	}
+	return nil
+}
+
+// Runtime workspace is distinct from the frozen native source identity.
+func executionProject(original, fixture string) string {
+	if fixture != "" {
+		return fixture
+	}
+	return original
+}

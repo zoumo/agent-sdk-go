@@ -13,7 +13,7 @@ import re
 import stat
 import sys
 
-excluded_directories = {'.artifacts', '.git', '.scratch'}
+excluded_directories = {'.artifacts', '.git', '.scratch', 'replay'}
 excluded_files = {
     'scripts/check-removed-cli-surfaces.sh',
     'tests/gates/contraction_test.go',
@@ -22,7 +22,7 @@ excluded_files = {
 }
 documentation = {
     'docs/architecture.md', 'docs/testing-standards.md', 'docs/testing.md',
-    'tests/simulation/drivers/README.md', 'README.md',
+    'tests/simulation/README.md', 'README.md',
 }
 rules = [
     ('all', r'AGENT_SDK_TESTIFY_BIN|CLAUDE_GO_REPLAY_COMPLETE',
@@ -58,6 +58,10 @@ try:
     for directory, directories, names in os.walk('.', onerror=scan_error):
         if directory == '.':
             directories[:] = sorted(set(directories) - excluded_directories)
+        if directory in ('./tests', './internal', './scripts'):
+            directories[:] = [name for name in directories if name != 'replay']
+        if directory == './internal/testsupport':
+            directories[:] = [name for name in directories if name != 'replaytest']
         for name in sorted(names):
             path = Path(directory) / name
             relative = path.as_posix()
@@ -70,15 +74,15 @@ try:
                 continue
             text = content.decode('utf-8', errors='replace')
             scopes = {'all'}
-            if relative in documentation or relative.startswith('docs/modules/agent-sdk-testify/'):
+            if relative in documentation or relative.startswith('tests/simulation/docs/'):
                 scopes.add('documentation')
             if name.endswith('.go'):
                 scopes.add('go')
                 if not name.endswith('_test.go'):
                     scopes.add('production')
                     # Pi's native response envelope uses the protocol's "command" tag.
-                    if (relative != 'pi/session.go'
-                            and not relative.startswith(('codex/types/', 'claude/types/', 'agent/'))):
+                    if (relative != 'client/pi/session.go'
+                            and not relative.startswith(('client/codex/types/', 'client/claude/types/', 'agent/'))):
                         scopes.add('connection')
             for scope, expression, description in rules:
                 if scope not in scopes:
@@ -110,8 +114,8 @@ for name in ('scripts/with-agent-sdk-testify.sh', 'scripts/agent-sdk-testify-ver
 sys.exit(1 if failed else 0)
 PY
 
-if ! bridge_imports=$("$go_binary" list -f '{{range .Imports}}{{println .}}{{end}}' ./internal/mocktest); then
-  echo "unable to inspect internal/mocktest imports" >&2
+if ! bridge_imports=$("$go_binary" list -f '{{range .Imports}}{{println .}}{{end}}' ./internal/testsupport/mocktest); then
+  echo "unable to inspect internal/testsupport/mocktest imports" >&2
   exit 1
 elif printf '%s\n' "$bridge_imports" | grep -qx 'os/exec'; then
   echo "the in-process bridge must not launch an executable" >&2

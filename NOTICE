@@ -2,11 +2,11 @@ agent-sdk-go incorporates the following native SDKs with their original history.
 
 Codex: https://github.com/zoumo/codex-sdk-go
 Source main: 0719539580dce97726aba7ddb56c7c6ae0c24362
-See codex/LICENSE and codex/NOTICE for original attribution and upstream protocol provenance.
+See client/codex/LICENSE and client/codex/NOTICE for original attribution and upstream protocol provenance.
 
 Claude: https://github.com/zoumo/claude-agent-sdk-go
 Source main: 72041470958a0d9f2f8e6ff5c0086a66ef193745
-See claude/LICENSE and claude/NOTICE for original attribution and upstream protocol provenance.
+See client/claude/LICENSE and client/claude/NOTICE for original attribution and upstream protocol provenance.
 
 The Go Pi client implements the RPC protocol of @earendil-works/pi-coding-agent 1.6.0.
 Protocol source: https://github.com/earendil-works/pi/blob/v1.6.0/packages/coding-agent/docs/rpc.md
@@ -14,3 +14,10 @@ Upstream revision: faac585884ae2c013a6b1400f3e9e77f10b34bac
 
 Recorded fixtures retain their original manifests and sanitization provenance.
 Import paths were migrated; historical evidence records describe source-repository runs.
+
+Agent SDK Replay incorporates Agent SDK Testify under the Apache License 2.0.
+Source: https://github.com/zoumo/agent-sdk-testify
+Source commit: ec0d525e6731e9d9d658d9e440a6843b1451e100
+See replay/LICENSE for the imported license. Official driver source
+retains its original upstream references. The fixed index and embedded
+snapshot retain their original contents and recording provenance.

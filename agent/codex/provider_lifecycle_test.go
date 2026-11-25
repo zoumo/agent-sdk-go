@@ -12,9 +12,9 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
-	"github.com/zoumo/agent-sdk-go/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 var mockCodexInit = []string{

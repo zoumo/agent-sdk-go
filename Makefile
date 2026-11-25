@@ -19,7 +19,7 @@ lint:
 	$(GOLANGCI_LINT) run ./...
 
 test:
-	$(GO) test -race -p=1 -count=1 -timeout=600s ./...
+	GO="$(GO)" bash scripts/check-offline.sh race
 
 check: lint fmt-check test
 

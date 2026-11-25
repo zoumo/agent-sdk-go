@@ -11,7 +11,7 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 func TestEnvironmentShellEnvMapsOpenAndResume(t *testing.T) {

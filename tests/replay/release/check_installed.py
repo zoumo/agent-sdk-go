@@ -59,6 +59,8 @@ def check_cli(root, env, binary, manifest):
     for case in ("TestPackageLifecycleInstalledCLI", "TestBuiltinAndExternalStrictReplay"):
         assert f"--- PASS: {case} " in result.stdout, result.stdout
     print(result.stdout, end="", flush=True)
+    contracts = run(ROOT, go_env, sys.executable, "-m", "unittest", "discover", "-s", "tests/replay/driver_contracts", "-v")
+    print(contracts.stderr, end="", flush=True)
 
 
 def verify(root, env, binary, driver, row):

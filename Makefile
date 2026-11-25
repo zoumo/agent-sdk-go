@@ -7,7 +7,7 @@ REPLAY_BIN ?= .artifacts/replay/bin/agent-replay
 REPLAY_BUNDLE ?= .artifacts/replay/bundle
 
 .PHONY: fmt fmt-check lint test check
-.PHONY: replay-build replay-bundle replay-release replay-check-package replay-check-consumer
+.PHONY: replay-build replay-check replay-bundle replay-release replay-check-package replay-check-consumer
 
 fmt:
 	$(GOLANGCI_LINT) fmt
@@ -25,6 +25,9 @@ check: lint fmt-check test
 
 replay-build:
 	GO="$(GO)" bash scripts/replay/build.sh "$(REPLAY_BIN)"
+
+replay-check:
+	GO="$(GO)" $(PYTHON) -m unittest discover -s tests/replay/build -v
 
 replay-bundle:
 	GO="$(GO)" $(PYTHON) scripts/replay/release.py --bundle --allow-untagged --output "$(REPLAY_BUNDLE)"

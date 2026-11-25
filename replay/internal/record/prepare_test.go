@@ -11,9 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
 )
 
 type prepareOncePolicy struct {

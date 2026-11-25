@@ -3,7 +3,7 @@ package version
 
 import "runtime/debug"
 
-const Module = "github.com/zoumo/agent-sdk-testify"
+const Module = "github.com/zoumo/agent-sdk-go"
 
 // buildVersion is populated from the exact Git tag by release and build tools.
 // Module installations instead use the version recorded in Go build info.

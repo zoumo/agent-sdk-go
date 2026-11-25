@@ -245,7 +245,7 @@ func TestOfficialCoreSealsBeforeParentReport(t *testing.T) {
 	fixture := prepareFixture(t, env, "--agent", "codex", "--case", "SDK-CASE-001", "--model", "synthetic-model")
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), "official", "record", "--fixture-dir", fixture, "--cmd", agent, "--", "app-server", "--listen", "stdio://")
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), "official", "record", "--fixture-dir", fixture, "--cmd", agent, "--", "app-server", "--listen", "stdio://")
 	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

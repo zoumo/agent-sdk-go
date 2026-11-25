@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // Pi model routes may contain inline credentials. Only record executions receive

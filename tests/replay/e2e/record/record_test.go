@@ -16,10 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/official"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/tests/e2e/fixturetest"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	"github.com/zoumo/agent-sdk-go/tests/replay/e2e/fixturetest"
 )
 
 const recordExecutionTimeout = "30s"
@@ -35,7 +34,7 @@ func recordDriverSubstitute(args []string) int {
 	if status == "crash" {
 		return 9
 	}
-	var req official.Request
+	var req struct{ Materials, Runtime string }
 	if len(args) != 3 || args[1] != "--request" || tool.ReadJSON(args[2], &req) != nil {
 		return 2
 	}
@@ -175,7 +174,7 @@ func recordProcess(t *testing.T, provider, status, native string) *preparedRecor
 	}
 	env := []string{"PATH=" + bin, "HOME=" + home, configKey + "=" + config, "GORACE=" + os.Getenv("GORACE")}
 	fixtureDir := filepath.Join(t.TempDir(), "fixture")
-	prepare := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "prepare", "--agent", provider, "--case", "SDK-CASE-001", "--fixture-dir", fixtureDir)
+	prepare := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "prepare", "--agent", provider, "--case", "SDK-CASE-001", "--fixture-dir", fixtureDir)
 	prepare.Dir = t.TempDir()
 	prepare.Env = env
 	data, err := prepare.CombinedOutput()
@@ -193,7 +192,7 @@ func recordProcess(t *testing.T, provider, status, native string) *preparedRecor
 
 func recordVerifyDriverSubstitute(args []string) int {
 	status := args[0]
-	var req official.Request
+	var req struct{ Materials, Runtime string }
 	if len(args) != 3 || args[1] != "--request" || tool.ReadJSON(args[2], &req) != nil {
 		return 2
 	}
@@ -269,7 +268,7 @@ func (p *preparedRecord) command(t *testing.T, timeout string) *exec.Cmd {
 	}
 	args = append(args, "--")
 	args = append(args, native...)
-	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Dir = t.TempDir()
 	cmd.Env = p.env
 	cmd.WaitDelay = 15 * time.Second
@@ -396,7 +395,7 @@ func TestRecordVerifyMockRetainsBoundHistory(t *testing.T) {
 	require.NotEmpty(t, capture)
 
 	fixture.installVerifyDriver(t)
-	verify := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "official", "verify", "--fixture-dir", fixture.fixtureDir)
+	verify := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "official", "verify", "--fixture-dir", fixture.fixtureDir)
 	verify.Env = fixture.env
 	data, err = verify.CombinedOutput()
 	require.NoError(t, err, "%s", data)
@@ -417,7 +416,7 @@ func TestRecordVerifyMockRetainsBoundHistory(t *testing.T) {
 	require.Equal(t, tool.Str(capture["id"]), tool.Str(current["materialId"]))
 	require.Len(t, tool.Array(after["materials"]), len(tool.Array(before["materials"])))
 
-	mock := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "agent", "mock", "--fixture-dir", fixture.fixtureDir, "--", "app-server", "--listen", "stdio://")
+	mock := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "agent", "mock", "--fixture-dir", fixture.fixtureDir, "--", "app-server", "--listen", "stdio://")
 	mock.Env = fixture.env
 	mock.Stdin = strings.NewReader(`{"id":1,"method":"synthetic","unknown":9007199254740993}` + "\n")
 	data, err = mock.Output()
@@ -501,7 +500,7 @@ func TestRecordPreparationFailureKeepsDiagnostic(t *testing.T) {
 	config := filepath.Join(t.TempDir(), "invalid-config")
 	require.NoError(t, os.WriteFile(config, []byte("not a directory"), 0o600))
 	fixtureDir := filepath.Join(t.TempDir(), "fixture")
-	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "prepare", "--agent", "claude", "--case", "SDK-CASE-001", "--fixture-dir", fixtureDir)
+	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "prepare", "--agent", "claude", "--case", "SDK-CASE-001", "--fixture-dir", fixtureDir)
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"PATH=/missing", "HOME=" + t.TempDir(), "CLAUDE_CONFIG_DIR=" + config, "GORACE=" + os.Getenv("GORACE")}
 	data, err := cmd.CombinedOutput()
@@ -533,7 +532,7 @@ func TestRecordHelpAndSelectionErrors(t *testing.T) {
 		{"arbitrary-driver", []string{"--driver", "/never-execute"}, "unknown flag", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), append([]string{"official", "record"}, test.args...)...)
+			cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), append([]string{"official", "record"}, test.args...)...)
 			cmd.Dir = t.TempDir()
 			cmd.Env = []string{"PATH=/missing", "GORACE=" + os.Getenv("GORACE")}
 			data, err := cmd.CombinedOutput()
@@ -554,7 +553,7 @@ func TestRecordHelpAndSelectionErrors(t *testing.T) {
 		{"missing-case", []string{"prepare", "--agent", "codex", "--case", "SDK-CASE-999", "--fixture-dir", filepath.Join(t.TempDir(), "fixture")}, "absent from shared materials"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), test.args...)
+			cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), test.args...)
 			cmd.Dir = t.TempDir()
 			cmd.Env = []string{"PATH=/missing", "HOME=" + t.TempDir(), "GORACE=" + os.Getenv("GORACE")}
 			data, err := cmd.CombinedOutput()

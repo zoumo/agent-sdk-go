@@ -18,8 +18,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/tests/e2e/fixturetest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	"github.com/zoumo/agent-sdk-go/tests/replay/e2e/fixturetest"
 )
 
 type object = map[string]any
@@ -61,7 +61,7 @@ func runToolWithFiles(t *testing.T, env []string, dir, input string, extraFiles 
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	t.Cleanup(cancel)
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.WaitDelay = 5 * time.Second
@@ -489,7 +489,7 @@ func newSyntheticCorpus(t *testing.T) syntheticCorpus {
 	repository, err := testutil.RepositoryRoot()
 	require.NoError(t, err)
 	root := t.TempDir()
-	index := readJSON(t, filepath.Join(repository, "data", "index.json"))
+	index := readJSON(t, filepath.Join(repository, "replay", "data", "index.json"))
 	for _, value := range array(index["cases"]) {
 		row := obj(value)
 		delete(row, "materials")
@@ -503,7 +503,7 @@ func newSyntheticCorpus(t *testing.T) syntheticCorpus {
 	}
 	corpus := syntheticCorpus{
 		index:     filepath.Join(root, "corpus", "index.json"),
-		scenarios: filepath.Join(repository, "data", "scenarios"),
+		scenarios: filepath.Join(repository, "replay", "data", "scenarios"),
 		archive:   filepath.Join(root, "private-archive"),
 	}
 	writeJSON(t, corpus.index, index)
@@ -559,7 +559,7 @@ func cancelOfficialDuringProtocol(t *testing.T, env []string, fixture string, ar
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Env, cmd.Dir = env, t.TempDir()
 	cmd.WaitDelay = 5 * time.Second
 	var stdout, stderr bytes.Buffer

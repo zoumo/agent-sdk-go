@@ -15,8 +15,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol"
 )
 
 func PrepareNative(ctx context.Context, o *Options, plan tool.Object, root string) error {

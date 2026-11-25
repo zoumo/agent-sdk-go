@@ -8,12 +8,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/zoumo/agent-sdk-testify/internal/version"
 )
 
 func TestPublicCommands(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	out, stderr, code := runCLI(t, binary, nil, "--help")
 	require.Zero(t, code, stderr)
 	require.Empty(t, stderr)
@@ -39,11 +37,9 @@ func TestPublicCommands(t *testing.T) {
 		out, stderr, code = runCLI(t, binary, nil, args...)
 		require.Zero(t, code, stderr)
 		require.Empty(t, stderr)
-		expected := os.Getenv("AGENT_SDK_TESTIFY_VERSION")
-		if expected == "" {
-			expected = version.String()
-		}
-		require.Equal(t, "agent-sdk-testify "+expected+"\n", string(out))
+		expected := os.Getenv("AGENT_REPLAY_VERSION")
+		require.NotEmpty(t, expected)
+		require.Equal(t, "agent-replay "+expected+"\n", string(out))
 	}
 
 	out, stderr, code = runCLI(t, binary, nil, "--internal-peer", "--help")
@@ -53,7 +49,7 @@ func TestPublicCommands(t *testing.T) {
 }
 
 func TestPublicCommandExitContract(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	scenario := func(name, data string) string {
 		path := filepath.Join(t.TempDir(), name)
 		require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
@@ -98,7 +94,7 @@ func TestPublicCommandExitContract(t *testing.T) {
 }
 
 func TestSinglePreparedFixtureCLIContract(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	for _, command := range [][]string{{"prepare"}, {"agent", "record"}, {"official", "record"}, {"official", "verify"}, {"agent", "mock"}} {
 		out, stderr, code := runCLI(t, binary, nil, append(command, "--help")...)
 		require.Zero(t, code, stderr)
@@ -139,7 +135,7 @@ func TestSinglePreparedFixtureCLIContract(t *testing.T) {
 }
 
 func TestPublicCommandParseFailuresDoNotStartHandlers(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	marker := filepath.Join(t.TempDir(), "launched")
 	launcher := filepath.Join(t.TempDir(), "launcher")
 	require.NoError(t, os.WriteFile(launcher, []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0o700))
@@ -150,14 +146,14 @@ func TestPublicCommandParseFailuresDoNotStartHandlers(t *testing.T) {
 		require.Equal(t, 1, code)
 		require.Empty(t, out)
 		require.NotEmpty(t, stderr)
-		require.Contains(t, stderr, "agent-sdk-testify:")
+		require.Contains(t, stderr, "agent-replay:")
 		require.NotContains(t, stderr, "Usage:")
 		require.NoFileExists(t, marker)
 	}
 }
 
 func TestPublicCommandFixtureErrors(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	root := t.TempDir()
 	missing := filepath.Join(root, "missing-fixture")
 	occupied := filepath.Join(root, "occupied-fixture")
@@ -186,14 +182,14 @@ func TestPublicCommandFixtureErrors(t *testing.T) {
 			out, stderr, code := runCLI(t, binary, nil, tc.args...)
 			require.Equal(t, 1, code, stderr)
 			require.Empty(t, out)
-			require.Contains(t, stderr, "agent-sdk-testify:")
+			require.Contains(t, stderr, "agent-replay:")
 			require.NotContains(t, stderr, "Usage:")
 		})
 	}
 }
 
 func TestRetiredSessionDirFlagRejected(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	for _, test := range []struct {
 		name string
 		args []string
@@ -221,7 +217,7 @@ func TestRetiredSessionDirFlagRejected(t *testing.T) {
 }
 
 func TestRemovedProtocolNamespaceRejected(t *testing.T) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	cases := [][]string{
 		{"--internal-protocol", "unknown"},
 		{"--internal-protocol", "--typo"},
@@ -264,7 +260,7 @@ func TestRemovedProtocolNamespaceRejected(t *testing.T) {
 			out, stderr, code := runCLI(t, binary, nil, args...)
 			require.Equal(t, 1, code, stderr)
 			require.Empty(t, out)
-			require.Contains(t, stderr, "agent-sdk-testify:")
+			require.Contains(t, stderr, "agent-replay:")
 			require.NotContains(t, stderr, "Usage:")
 		})
 	}

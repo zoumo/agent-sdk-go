@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
 )
 
 // ValidateOfficialRecord is the downstream qualification seam. Capture ownership

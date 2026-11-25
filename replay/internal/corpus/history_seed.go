@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // SeedBusinessReport reads the explicitly selected official record. A sealed

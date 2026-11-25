@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 func codexHistorySeedReceipts(report tool.Object) (string, map[string]bool, []string, error) {

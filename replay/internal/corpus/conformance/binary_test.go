@@ -8,13 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 func TestBinaryUsesItselfOutsideCheckout(t *testing.T) {
 	cmd, _, fixtureDir := verifyFixture(t, "passed")
-	binary := filepath.Join(t.TempDir(), "agent-sdk-testify")
-	require.NoError(t, tool.CopyFile(os.Getenv("AGENT_SDK_TESTIFY_BIN"), binary))
+	binary := filepath.Join(t.TempDir(), "agent-replay")
+	require.NoError(t, tool.CopyFile(os.Getenv("AGENT_REPLAY_BIN"), binary))
 	require.NoError(t, os.Chmod(binary, 0o700))
 	cmd.Path = binary
 	cmd.Args[0] = binary

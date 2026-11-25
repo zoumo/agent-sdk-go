@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 func packageSelection(root, verificationID string, material Material) (PackageSelection, error) {

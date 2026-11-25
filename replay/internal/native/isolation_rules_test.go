@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 func TestCodexIsolationRejectsCredentialEnvironmentOverrides(t *testing.T) {
 	for _, field := range []string{"env_key", "env_http_headers"} {
-		for _, name := range []string{"CODEX_HOME", "HOME", "PATH", "TMPDIR", "XDG_CONFIG_HOME", "CODEX_SKILLS_DIR", "CLAUDE_CONFIG_DIR", "NODE_OPTIONS", "PYTHONPATH", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "AGENT_SDK_TESTIFY_BIN"} {
+		for _, name := range []string{"CODEX_HOME", "HOME", "PATH", "TMPDIR", "XDG_CONFIG_HOME", "CODEX_SKILLS_DIR", "CLAUDE_CONFIG_DIR", "NODE_OPTIONS", "PYTHONPATH", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "AGENT_REPLAY_BIN"} {
 			t.Run(field+"/"+name, func(t *testing.T) {
 				provider := tool.Object{}
 				if field == "env_key" {

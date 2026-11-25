@@ -1,6 +1,6 @@
 package replay
 
-import "github.com/zoumo/agent-sdk-testify/internal/protocol/rawjson"
+import "github.com/zoumo/agent-sdk-go/replay/internal/protocol/rawjson"
 
 type codexAdapter struct {
 	requests

@@ -10,7 +10,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // The scan describes this capture only. It never sanitizes or rewrites evidence.

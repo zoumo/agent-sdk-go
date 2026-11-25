@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/rawjson"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/rawjson"
 )
 
 // Pi commands have optional string IDs. A response echoes both the ID (if

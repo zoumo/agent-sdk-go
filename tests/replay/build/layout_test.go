@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 func TestRepositoryEntryLayout(t *testing.T) {
@@ -19,8 +19,8 @@ func TestRepositoryEntryLayout(t *testing.T) {
 		pkg     string
 		wantPkg string
 	}{
-		{name: "library", pkg: ".", wantPkg: "agenttestify"},
-		{name: "cli", pkg: "./cmd/agent-sdk-testify", wantPkg: "main"},
+		{name: "library", pkg: "./replay", wantPkg: "replay"},
+		{name: "cli", pkg: "./cmd/agent-replay", wantPkg: "main"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cmd := exec.CommandContext(t.Context(), "go", "list", "-f", "{{.Name}}", test.pkg)

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
 )
 
 // runRemote uses the same journal workers as local capture. The bridge owns

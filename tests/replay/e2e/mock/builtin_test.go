@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil/builtintest"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest/builtintest"
 )
 
 // Byte transcripts are transport probes, not official SDK/business verification.

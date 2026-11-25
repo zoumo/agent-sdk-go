@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
 )
 
 // Run owns streams for one invocation and reports capture failures without CLI

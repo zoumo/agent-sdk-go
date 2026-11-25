@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 // These synthetic peers use the real record, verify, qualification and adoption
@@ -114,7 +114,7 @@ out = pathlib.Path(runtime['output'])
 	require.NoError(t, err)
 	contents, err := os.ReadFile(driver)
 	require.NoError(t, err)
-	contents = []byte(strings.Replace(string(contents), "import json, pathlib, subprocess, sys", fmt.Sprintf("import json, pathlib, subprocess, sys\nsys.dont_write_bytecode = True\nsys.path.insert(0, %q)", filepath.Join(repository, "tests", "driver_contracts")), 1))
+	contents = []byte(strings.Replace(string(contents), "import json, pathlib, subprocess, sys", fmt.Sprintf("import json, pathlib, subprocess, sys\nsys.dont_write_bytecode = True\nsys.path.insert(0, %q)", filepath.Join(repository, "tests", "replay", "driver_contracts")), 1))
 	require.NoError(t, os.WriteFile(driver, contents, 0o700))
 	nativeArgs := []string{"app-server", "--listen", "stdio://"}
 	if provider == "claude" {

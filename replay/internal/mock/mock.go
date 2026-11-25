@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/replay"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/replay"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 // Prepared is the validated current-material contract for one replay policy.

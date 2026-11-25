@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 func mockTestAgent() int {
@@ -59,7 +59,7 @@ func fixtureTool(t *testing.T, env []string, args ...string) *exec.Cmd {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Dir = t.TempDir()
 	cmd.Env = env
 	cmd.WaitDelay = 5 * time.Second

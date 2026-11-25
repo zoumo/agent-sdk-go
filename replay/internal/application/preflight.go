@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/mock"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
-	"github.com/zoumo/agent-sdk-testify/internal/record"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/mock"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
+	"github.com/zoumo/agent-sdk-go/replay/internal/record"
 )
 
 func openPreparedFixture(fixtureDir string) (*lifecycle.Fixture, string, error) {

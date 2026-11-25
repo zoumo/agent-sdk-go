@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
 )
 
 // ResolveRoute is shared by public Go runtime objects and private CLI snapshots.

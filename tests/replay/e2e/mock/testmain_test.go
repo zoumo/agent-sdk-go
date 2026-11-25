@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 func TestMain(m *testing.M) {

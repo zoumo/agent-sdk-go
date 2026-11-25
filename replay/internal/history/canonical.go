@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // Binding maps one native target to immutable bytes. Source is material-relative;

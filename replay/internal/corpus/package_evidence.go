@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 func packageEnvelope(root, kind, id string, material Material) (tool.Object, error) {

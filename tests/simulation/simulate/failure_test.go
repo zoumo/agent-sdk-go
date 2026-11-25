@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )

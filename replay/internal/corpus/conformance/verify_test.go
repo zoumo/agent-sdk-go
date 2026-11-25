@@ -14,15 +14,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/tests/e2e/fixturetest"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/tests/replay/e2e/fixturetest"
 )
 
 func TestVerifyOfficialOnlySelection(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"--driver", "/never-execute"}, {"--driver-arg", "x"}, {"--peer", "/never-execute"}, {"--sdk-driver", "/never-execute"}} {
-		cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), append([]string{"official", "verify"}, args...)...)
+		cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), append([]string{"official", "verify"}, args...)...)
 		cmd.Dir = t.TempDir()
 		data, err := cmd.CombinedOutput()
 		if args[0] == "--help" {
@@ -189,7 +189,7 @@ func verifyFixtureWithMutation(t *testing.T, provider, mode string, mutate func(
 			}
 		}
 	})
-	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "official", "verify", "--fixture-dir", fixtureDir)
+	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "official", "verify", "--fixture-dir", fixtureDir)
 	cmd.Dir = t.TempDir()
 	cmd.Env = env
 	return cmd, s.source, fixtureDir
@@ -200,7 +200,7 @@ func prepareVerifyFixture(t *testing.T, source string, env []string) string {
 	fixtureDir := filepath.Join(t.TempDir(), "fixture")
 	var plan tool.Object
 	require.NoError(t, tool.ReadJSON(filepath.Join(source, "plan.json"), &plan))
-	prepare := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"),
+	prepare := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"),
 		"prepare", "--agent", tool.Str(plan["provider"]), "--case", tool.Str(plan["caseId"]), "--fixture-dir", fixtureDir)
 	prepare.Dir = t.TempDir()
 	prepare.Env = env
@@ -518,7 +518,7 @@ func TestVerifyRejectsAdoptedEvidenceDrift(t *testing.T) {
 	require.NoError(t, tool.WriteJSON(filepath.Join(source, "report.json"), report))
 	env := cmd.Env
 	fixtureDir := prepareVerifyFixture(t, source, env)
-	cmd = exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "official", "verify", "--fixture-dir", fixtureDir)
+	cmd = exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "official", "verify", "--fixture-dir", fixtureDir)
 	cmd.Dir = t.TempDir()
 	cmd.Env = env
 	before := fixtureFiles(t, fixtureDir)
@@ -578,7 +578,7 @@ func canonicalVerifyFixture(t *testing.T, source, caseID string) {
 	var previous tool.Object
 	require.NoError(t, tool.ReadJSON(filepath.Join(source, "plan.json"), &previous))
 	fixtureDir := filepath.Join(t.TempDir(), "canonical")
-	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_SDK_TESTIFY_BIN"), "prepare", "--agent", tool.Str(previous["provider"]), "--case", caseID, "--fixture-dir", fixtureDir)
+	cmd := exec.CommandContext(t.Context(), os.Getenv("AGENT_REPLAY_BIN"), "prepare", "--agent", tool.Str(previous["provider"]), "--case", caseID, "--fixture-dir", fixtureDir)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", output)
 	var descriptor, plan tool.Object

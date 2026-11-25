@@ -7,10 +7,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
 )
 
 func TestLegacyDescriptorlessImportMocksAndExportsWithoutSource(t *testing.T) {

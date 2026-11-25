@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
 )
 
 func admitVerified(materials string, summary tool.Object, err error, c corpus.Corpus) error {

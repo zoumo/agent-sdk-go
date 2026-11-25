@@ -40,6 +40,13 @@ func TestEmbeddedIdentityUsesExactBuildInformation(t *testing.T) {
 		}, identity)
 	})
 
+	t.Run("installed main module", func(t *testing.T) {
+		identity, err := embeddedIdentity(&debug.BuildInfo{GoVersion: "go1.26.10", Main: debug.Module{Path: Module, Version: "v1.2.3", Sum: testSum}})
+		require.NoError(t, err)
+		require.Equal(t, "v1.2.3", identity.Version)
+		require.Equal(t, testSum, identity.Sum)
+		require.Empty(t, identity.Revision)
+	})
 	t.Run("dependency module", func(t *testing.T) {
 		identity, err := embeddedIdentity(&debug.BuildInfo{
 			GoVersion: "go1.26.10",

@@ -1,4 +1,4 @@
-// Command agent-sdk-testify owns environments and process orchestration, never SDK assertions.
+// Command agent-replay owns environments and process orchestration, never SDK assertions.
 package main
 
 import (
@@ -7,12 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/zoumo/agent-sdk-testify/internal/command"
+	"github.com/zoumo/agent-sdk-go/replay/cli"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := command.Execute(ctx, os.Args[1:], command.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
+	code := cli.Execute(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }

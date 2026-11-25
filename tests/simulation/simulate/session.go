@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 )
@@ -92,8 +92,7 @@ func prepareSession(ctx context.Context, tool toolIdentity, source sourceSelecti
 		return nil, statErr
 	}
 	options := agenttestify.PrepareOptions{
-		FixtureDir:       dir,
-		EmbeddedIdentity: mocktest.EmbeddedIdentity(),
+		FixtureDir: dir,
 	}
 	switch {
 	case source.Recording != "":
@@ -219,15 +218,15 @@ func validatePreparedSession(session *preparedSession, tool toolIdentity, source
 	}
 	if session.SessionID == "" || session.AgentType == "" || session.Fixture == nil ||
 		session.Tool.Source != "embedded" ||
-		session.Tool.Module != "github.com/zoumo/agent-sdk-testify" ||
-		session.Tool.Version == "" || session.Tool.ModuleSum == "" {
+		session.Tool.Module != "github.com/zoumo/agent-sdk-go" ||
+		session.Tool.Version == "" || (session.Tool.ModuleSum == "" && session.Tool.ModuleRevision == "") {
 		return errors.New("prepared session identity is incomplete")
 	}
 	if tool.Source != session.Tool.Source || tool.Module != session.Tool.Module ||
 		tool.ModuleSum != session.Tool.ModuleSum || tool.Version != session.Tool.Version ||
-		(session.Tool.ModuleRevision != "" && tool.ModuleRevision != session.Tool.ModuleRevision) ||
-		(session.Tool.ModuleTime != "" && tool.ModuleTime != session.Tool.ModuleTime) ||
-		(session.Tool.GoVersion != "" && tool.GoVersion != session.Tool.GoVersion) {
+		tool.ModuleRevision != session.Tool.ModuleRevision ||
+		tool.ModuleTime != session.Tool.ModuleTime ||
+		tool.GoVersion != session.Tool.GoVersion {
 		return errors.New("prepared session tool differs from the linked library")
 	}
 	if source.Provider != "" && session.AgentType != source.Provider {

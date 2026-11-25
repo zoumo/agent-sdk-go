@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 func writePeerLauncher(root, phase string, peer tool.Command) (string, error) {

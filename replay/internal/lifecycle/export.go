@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
 )
 
 // Export copies the exact current package without creating an execution or

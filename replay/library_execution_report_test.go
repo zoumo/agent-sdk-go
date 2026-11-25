@@ -1,4 +1,4 @@
-package agenttestify_test
+package replay_test
 
 import (
 	"crypto/sha256"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestLibraryExecutionReportFailsClosedOnCorruptEvidence(t *testing.T) {

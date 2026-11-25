@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
 )
 
 // Synthetic peers exercise the real capture kernel in a controlled process.

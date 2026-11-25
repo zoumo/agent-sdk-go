@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 // Session is one prepared in-process testify fixture. Callers start a Run for
@@ -126,10 +126,9 @@ func Prepare(dir, provider string, scenario []byte, options Options) (result *Se
 		}
 	}()
 	fixture, err := agenttestify.Prepare(agenttestify.PrepareOptions{
-		FixtureDir:       fixtureDir,
-		Agent:            provider,
-		Recording:        captureRoot,
-		EmbeddedIdentity: embeddedTestifyIdentity(),
+		FixtureDir: fixtureDir,
+		Agent:      provider,
+		Recording:  captureRoot,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prepare in-process fixture: %w", err)

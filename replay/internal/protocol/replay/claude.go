@@ -3,7 +3,7 @@ package replay
 import (
 	"errors"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/rawjson"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/rawjson"
 )
 
 type claudeAdapter struct{ requests }

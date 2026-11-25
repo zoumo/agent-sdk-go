@@ -226,7 +226,7 @@ func TestAgentCancellationPersistsOwnedExecution(t *testing.T) {
 			if action == "record" {
 				args = append(args, "--cmd", agent, "--", "app-server", "--listen", "stdio://")
 			}
-			cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+			cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 			cmd.Env = env
 			cmd.ExtraFiles = []*os.File{w}
 			stdin, err := cmd.StdinPipe()

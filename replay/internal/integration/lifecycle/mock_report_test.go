@@ -9,10 +9,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/mock"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/mock"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
 )
 
 // The consumption notification holds replay before client EOF, so faults are

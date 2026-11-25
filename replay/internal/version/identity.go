@@ -231,6 +231,10 @@ func embeddedIdentity(info *debug.BuildInfo) (BuildIdentity, error) {
 		return BuildIdentity{}, errors.New("embedded tool identity has an invalid module sum")
 	}
 
+	// A versioned go install can supply the main module sum without a VCS checkout.
+	if main && ExactModuleVersion(identity.Version) && ValidModuleSum(identity.Sum) && !hasVCS(info) {
+		return identity, nil
+	}
 	if main {
 		settings := make(map[string]string, len(info.Settings))
 		for _, setting := range info.Settings {
@@ -263,6 +267,15 @@ func embeddedIdentity(info *debug.BuildInfo) (BuildIdentity, error) {
 		return BuildIdentity{}, errors.New("embedded tool identity omits its exact module sum")
 	}
 	return identity, nil
+}
+
+func hasVCS(info *debug.BuildInfo) bool {
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs" {
+			return true
+		}
+	}
+	return false
 }
 
 func embeddedModule(info *debug.BuildInfo) (*debug.Module, bool) {

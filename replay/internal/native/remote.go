@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // Only the explicit record path calls this. SDK drivers own client behavior;

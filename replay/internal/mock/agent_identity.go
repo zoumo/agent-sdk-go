@@ -3,7 +3,7 @@ package mock
 import (
 	"fmt"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 func planAgentIdentity(plan tool.Object) (string, error) {

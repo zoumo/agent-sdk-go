@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
 )
 
 // ValidateNativeArgs checks the reviewed stdio startup spellings for official

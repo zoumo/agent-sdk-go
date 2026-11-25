@@ -1,4 +1,4 @@
-package agenttestify_test
+package replay_test
 
 import (
 	"io"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 const piHistoryName = "2026-11-24T15-00-00-000Z_session-pi.jsonl"

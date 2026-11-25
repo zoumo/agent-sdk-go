@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 const SchemaVersion = 7
@@ -161,7 +161,7 @@ func (t ToolIdentity) Validate() error {
 		if t.Command != "" || len(t.Args) != 0 || t.SHA256 != "" {
 			return errors.New("embedded identity declares executable fields")
 		}
-		if t.Module != version.Module {
+		if t.Module != version.Module && t.Module != "github.com/zoumo/agent-sdk-testify" {
 			return fmt.Errorf("embedded identity module must be %s", version.Module)
 		}
 		if t.GoVersion == "" {

@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	nativeprep "github.com/zoumo/agent-sdk-testify/internal/native"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	nativeprep "github.com/zoumo/agent-sdk-go/replay/internal/native"
 )
 
 // These peers inspect startup inputs, not Codex's runtime skill loader. They

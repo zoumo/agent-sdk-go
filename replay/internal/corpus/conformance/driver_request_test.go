@@ -1,6 +1,6 @@
 package corpus
 
-import "github.com/zoumo/agent-sdk-testify/internal/tool"
+import "github.com/zoumo/agent-sdk-go/internal/replay/tool"
 
 type driverPeer struct {
 	tool.Command

@@ -11,9 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	nativeprep "github.com/zoumo/agent-sdk-testify/internal/native"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	nativeprep "github.com/zoumo/agent-sdk-go/replay/internal/native"
 )
 
 func TestSelectedCodexProviderAuth(t *testing.T) {

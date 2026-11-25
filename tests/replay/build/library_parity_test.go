@@ -14,10 +14,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
-const libraryModule = "github.com/zoumo/agent-sdk-testify"
+const libraryModule = "github.com/zoumo/agent-sdk-go"
 
 func TestInstalledCLIAndLibraryShareFixtureAndMaterialContract(t *testing.T) {
 	binary := buildCLI(t, false)

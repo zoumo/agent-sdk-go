@@ -10,9 +10,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
 )
 
 // CanonicalFixtureDir validates and resolves one prepared-fixture directory.

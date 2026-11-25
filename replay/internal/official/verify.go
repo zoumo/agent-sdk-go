@@ -10,12 +10,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/data"
-	"github.com/zoumo/agent-sdk-testify/internal/catalog"
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/data"
+	"github.com/zoumo/agent-sdk-go/replay/internal/catalog"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 type VerifyOptions struct {

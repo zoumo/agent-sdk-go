@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // Legacy material keeps its original evidence contract. New public recordings

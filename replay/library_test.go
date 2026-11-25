@@ -1,4 +1,4 @@
-package agenttestify_test
+package replay_test
 
 import (
 	"bytes"
@@ -16,11 +16,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 const (
-	libraryModule    = "github.com/zoumo/agent-sdk-testify"
+	libraryModule    = "github.com/zoumo/agent-sdk-go"
 	libraryModuleSum = "h1:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
 )
 
@@ -528,7 +528,7 @@ func isolateLibraryTest(t *testing.T, root string) {
 	t.Setenv("PATH", path)
 	t.Setenv("HOME", filepath.Join(root, "host-home"))
 	t.Setenv("CODEX_HOME", filepath.Join(root, "host-codex"))
-	_, err := exec.LookPath("agent-sdk-testify")
+	_, err := exec.LookPath("agent-replay")
 	require.Error(t, err, "library tests must not have the CLI on PATH")
 }
 

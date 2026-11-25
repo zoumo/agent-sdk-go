@@ -34,7 +34,7 @@ func admissionSummary(t *testing.T, fixture, root string) object {
 
 func setControlledOfficialDriver(t *testing.T, drivers, mode string) {
 	t.Helper()
-	writeExecutable(t, filepath.Join(drivers, "agent-sdk-testify-codex"), os.Executable, "conformance-official-driver", mode, os.Getenv("AGENT_SDK_TESTIFY_BIN"))
+	writeExecutable(t, filepath.Join(drivers, "agent-sdk-testify-codex"), os.Executable, "conformance-official-driver", mode, os.Getenv("AGENT_REPLAY_BIN"))
 }
 
 func recordControlledOfficial(t *testing.T, env []string, fixtureDir, agent string) {

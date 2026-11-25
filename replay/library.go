@@ -1,4 +1,4 @@
-package agenttestify
+package replay
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/application"
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/replay/internal/application"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 // ToolSource identifies how the library or CLI entered the prepared fixture.
@@ -116,7 +116,7 @@ type PrepareOptions struct {
 	EmbeddedIdentity *EmbeddedIdentity
 }
 
-// EmbeddedIdentity is the exact imported module identity of agent-sdk-testify.
+// EmbeddedIdentity is the exact imported module identity of agent-replay.
 type EmbeddedIdentity struct {
 	Version   string
 	Sum       string
@@ -252,6 +252,16 @@ type ToolIdentity struct {
 	ModuleRevision string
 	ModuleTime     string
 	GoVersion      string
+}
+
+// BuildIdentity returns the embedded SDK module identity recorded by the Go toolchain.
+func BuildIdentity() (ToolIdentity, error) {
+	build, err := version.ReadEmbeddedIdentity()
+	if err != nil {
+		return ToolIdentity{}, err
+	}
+	return ToolIdentity{Source: ToolSourceEmbedded, Version: build.Version, Module: build.Module,
+		ModuleSum: build.Sum, ModuleRevision: build.Revision, ModuleTime: build.Time, GoVersion: build.GoVersion}, nil
 }
 
 // Source identifies the initial case, plan or recording.

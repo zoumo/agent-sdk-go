@@ -122,7 +122,7 @@ func recordRemote(t *testing.T, env []string, fixtureDir string, remote *control
 	if mode == "deadline" {
 		args = append(args, "--timeout", "1s")
 	}
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Env, cmd.ExtraFiles = env, []*os.File{w}
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)
@@ -381,7 +381,7 @@ func TestAgentRemoteEarlyCloseBoundsBackpressuredDrain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	args := append([]string{"agent", "record", "--fixture-dir", fixtureDir, "--result-fd", "3"}, remote.args("/early")...)
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Env, cmd.ExtraFiles, cmd.Stdout = env, []*os.File{resultFile}, w
 	stdin, err := cmd.StdinPipe()
 	require.NoError(t, err)

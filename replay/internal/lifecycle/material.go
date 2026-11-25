@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/zoumo/agent-sdk-testify/data"
-	"github.com/zoumo/agent-sdk-testify/internal/builtin"
-	"github.com/zoumo/agent-sdk-testify/internal/catalog"
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/data"
+	"github.com/zoumo/agent-sdk-go/replay/internal/builtin"
+	"github.com/zoumo/agent-sdk-go/replay/internal/catalog"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
 )
 
 func inspectMaterial(fixture *Fixture, artifact corpus.Material) (*corpus.MaterialInspection, error) {

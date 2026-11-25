@@ -310,7 +310,7 @@ func TestOfficialRecordInstalledChain(t *testing.T) {
 			root := t.TempDir()
 			agent, drivers, env := isolatedCommands(t, root, "codex")
 			// The driver is explicitly synthetic. No official SDK is installed.
-			writeExecutable(t, filepath.Join(drivers, "agent-sdk-testify-codex"), os.Executable, "conformance-official-driver", mode, os.Getenv("AGENT_SDK_TESTIFY_BIN"))
+			writeExecutable(t, filepath.Join(drivers, "agent-sdk-testify-codex"), os.Executable, "conformance-official-driver", mode, os.Getenv("AGENT_REPLAY_BIN"))
 			if mode == "startup-failed" {
 				require.NoError(t, os.WriteFile(filepath.Join(drivers, "agent-sdk-testify-codex"), []byte("#!/missing/interpreter\n"), 0o700))
 			}
@@ -406,7 +406,7 @@ func TestOfficialRecordExistingRemote(t *testing.T) {
 		t.Run(target, func(t *testing.T) {
 			root := t.TempDir()
 			agent, drivers, env := isolatedCommands(t, root, "codex")
-			writeExecutable(t, filepath.Join(drivers, "agent-sdk-testify-codex"), os.Executable, "conformance-official-driver", "remote", os.Getenv("AGENT_SDK_TESTIFY_BIN"))
+			writeExecutable(t, filepath.Join(drivers, "agent-sdk-testify-codex"), os.Executable, "conformance-official-driver", "remote", os.Getenv("AGENT_REPLAY_BIN"))
 			fixtureDir := prepareFixture(t, env, "--agent", "codex", "--case", caseID, "--model", "synthetic-model")
 			previous := currentMaterialID(t, fixtureDir)
 			remote := newControlledRemote(t)

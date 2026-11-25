@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
 )
 
 // All evidence fabricated by this suite stays in temporary directories.
@@ -26,10 +26,10 @@ func (s *corpusSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.c = corpus.Corpus{
 		Index:     filepath.Join(s.root, "corpus", "index.json"),
-		Scenarios: filepath.Join(repository, "data", "scenarios"),
+		Scenarios: filepath.Join(repository, "replay", "data", "scenarios"),
 		Archive:   filepath.Join(s.root, "archive"),
 	}
-	index := s.read(repository, "data/index.json")
+	index := s.read(repository, "replay/data/index.json")
 	for _, value := range tool.Array(index["cases"]) {
 		e := tool.Obj(value)
 		for _, key := range []string{"materials", "adoptionSHA256", "materialSHA256", "officialSDK", "qualification"} {

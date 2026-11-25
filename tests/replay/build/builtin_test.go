@@ -9,17 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil/builtintest"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest/builtintest"
 )
 
 func TestBuiltinGeneratorArtifactContract(t *testing.T) {
 	repository, err := testutil.RepositoryRoot()
 	require.NoError(t, err)
 	generator := filepath.Join(t.TempDir(), "generator")
-	cmd := exec.CommandContext(t.Context(), "go", "build", "-tags", "builtin_generate", "-o", generator, "./cmd/agent-sdk-testify")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-tags", "builtin_generate", "-o", generator, "./cmd/agent-replay")
 	cmd.Dir = repository
 	data, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", data)
@@ -29,7 +28,7 @@ func TestBuiltinGeneratorArtifactContract(t *testing.T) {
 	data, err = cmd.CombinedOutput()
 	require.NoError(t, err, "%s", data)
 	root := t.TempDir()
-	require.NoError(t, tool.CopyTree(filepath.Join(repository, "data"), filepath.Join(root, "data")))
+	require.NoError(t, tool.CopyTree(filepath.Join(repository, "replay", "data"), filepath.Join(root, "data")))
 	var manifest tool.Object
 	require.NoError(t, tool.ReadJSON(filepath.Join(root, "data", "builtin", "manifest.json"), &manifest))
 	require.NotContains(t, manifest, "toolVersion")
@@ -38,15 +37,15 @@ func TestBuiltinGeneratorArtifactContract(t *testing.T) {
 	data, err = cmd.CombinedOutput()
 	require.NoError(t, err, "%s", data)
 	for _, name := range []string{"manifest.json", "materials.tar.gz"} {
-		expected, readErr := os.ReadFile(filepath.Join(repository, "data", "builtin", name))
+		expected, readErr := os.ReadFile(filepath.Join(repository, "replay", "data", "builtin", name))
 		require.NoError(t, readErr)
 		actual, readErr := os.ReadFile(filepath.Join(root, "data", "builtin", name))
 		require.NoError(t, readErr)
 		require.Equal(t, expected, actual, name)
 	}
 	taggedGenerator := filepath.Join(t.TempDir(), "tagged-generator")
-	ldflags := "-X=" + version.Module + "/internal/version.buildVersion=v99.0.0"
-	cmd = exec.CommandContext(t.Context(), "go", "build", "-tags", "builtin_generate", "-ldflags", ldflags, "-o", taggedGenerator, "./cmd/agent-sdk-testify")
+	ldflags := "-X=" + "github.com/zoumo/agent-sdk-go/replay/internal/version.buildVersion=v99.0.0"
+	cmd = exec.CommandContext(t.Context(), "go", "build", "-tags", "builtin_generate", "-ldflags", ldflags, "-o", taggedGenerator, "./cmd/agent-replay")
 	cmd.Dir = repository
 	data, err = cmd.CombinedOutput()
 	require.NoError(t, err, "%s", data)
@@ -61,7 +60,7 @@ func TestBuiltinGeneratorArtifactContract(t *testing.T) {
 	}
 	// A selected missing file must fail, even though the generated bundle exists.
 	_, source := builtintest.BuiltinTranscript(t, "codex", "SDK-CASE-001", "main")
-	relativeSource, err := filepath.Rel(repository, source)
+	relativeSource, err := filepath.Rel(filepath.Join(repository, "replay"), source)
 	require.NoError(t, err)
 	raw := filepath.Join(root, relativeSource, "raw", "raw.jsonl")
 	original, err := os.ReadFile(raw)

@@ -18,7 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
 )
 
 type ConnectOptions struct {

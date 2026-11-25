@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/zoumo/agent-sdk-testify/internal/application"
+	"github.com/zoumo/agent-sdk-go/replay/internal/application"
 )
 
 func newMockCommand(streams IO) *cobra.Command {

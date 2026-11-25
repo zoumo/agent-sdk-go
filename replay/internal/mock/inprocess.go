@@ -5,12 +5,12 @@ import (
 	"errors"
 	"io"
 
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/replay"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/replay"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 // InProcessStreams are the fixture-side endpoints transferred to one run.

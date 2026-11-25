@@ -12,7 +12,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // Empty project root markers confine native .agents/.codex discovery to cwd;

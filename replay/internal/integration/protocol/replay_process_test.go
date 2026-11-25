@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/replay"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/replay"
 )
 
 // Controlled processes exercise the actual replay kernel, independently of SDKs.

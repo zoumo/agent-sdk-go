@@ -239,7 +239,7 @@ func TestMockProgressReceiptWaitsForEOF(t *testing.T) {
 			defer notification.Close()
 			ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), "agent", "mock", "--fixture-dir", fixtureDir, "--timeout", "0.4", "--progress-fd", "3")
+			cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), "agent", "mock", "--fixture-dir", fixtureDir, "--timeout", "0.4", "--progress-fd", "3")
 			cmd.Env, cmd.Dir = env, root
 			cmd.ExtraFiles = []*os.File{notification}
 			input, err := cmd.StdinPipe()

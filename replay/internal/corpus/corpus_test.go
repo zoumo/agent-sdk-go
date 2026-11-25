@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 // All evidence fabricated by this suite stays in temporary directories.
@@ -31,10 +31,10 @@ func (s *corpusSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.c = Corpus{
 		Index:     filepath.Join(s.root, "corpus", "index.json"),
-		Scenarios: filepath.Join(repository, "data", "scenarios"),
+		Scenarios: filepath.Join(repository, "replay", "data", "scenarios"),
 		Archive:   filepath.Join(s.root, "archive"),
 	}
-	index := s.read(repository, "data/index.json")
+	index := s.read(repository, "replay/data/index.json")
 	for _, value := range tool.Array(index["cases"]) {
 		e := tool.Obj(value)
 		for _, key := range []string{"materials", "adoptionSHA256", "materialSHA256", "officialSDK", "qualification"} {
@@ -480,7 +480,7 @@ func (s *corpusSuite) TestLegacyReplacementClearsPublishedMaterialReceipt() {
 	repository, err := testutil.RepositoryRoot()
 	s.Require().NoError(err)
 	index := s.read(filepath.Dir(s.c.Index), "index.json")
-	for _, value := range tool.Array(s.read(repository, "data/index.json")["cases"]) {
+	for _, value := range tool.Array(s.read(repository, "replay/data/index.json")["cases"]) {
 		published := tool.Obj(value)
 		if published["provider"] != "claude" || published["caseId"] != "SDK-CASE-001" {
 			continue
@@ -489,7 +489,7 @@ func (s *corpusSuite) TestLegacyReplacementClearsPublishedMaterialReceipt() {
 			entry := tool.Obj(row)
 			if entry["provider"] == published["provider"] && entry["caseId"] == published["caseId"] {
 				maps.Copy(entry, published)
-				source := filepath.Join(repository, "data", tool.Str(published["materials"]))
+				source := filepath.Join(repository, "replay", "data", tool.Str(published["materials"]))
 				target := filepath.Join(filepath.Dir(s.c.Index), tool.Str(published["materials"]))
 				s.Require().NoError(tool.CopyTree(source, target))
 			}
@@ -542,13 +542,13 @@ func (s *corpusSuite) TestPublishedLegacyMaterialPreservesStoryAlias() {
 func (s *corpusSuite) TestPublishedMaterialRejectsLinkedOwnerDirectory() {
 	repository, err := testutil.RepositoryRoot()
 	s.Require().NoError(err)
-	for _, value := range tool.Array(s.read(repository, "data/index.json")["cases"]) {
+	for _, value := range tool.Array(s.read(repository, "replay/data/index.json")["cases"]) {
 		entry := tool.Obj(value)
 		if entry["provider"] != "codex" || entry["caseId"] != "SDK-CASE-001" {
 			continue
 		}
 		link := filepath.Join(filepath.Dir(s.c.Index), "codex")
-		s.Require().NoError(os.Symlink(filepath.Join(repository, "data", "codex"), link))
+		s.Require().NoError(os.Symlink(filepath.Join(repository, "replay", "data", "codex"), link))
 		_, err := s.c.VerifyAdopted(entry)
 		s.Require().ErrorContains(err, "material symlink is forbidden")
 		return

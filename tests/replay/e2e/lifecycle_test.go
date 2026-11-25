@@ -495,7 +495,7 @@ func TestCurrentRejectsUnknownMaterialIdentity(t *testing.T) {
 	for _, action := range []string{"mock", "verify"} {
 		result := runTool(t, env, t.TempDir(), "", append(publicAction(action), "--fixture-dir", fixtureDir)...)
 		require.NotZero(t, result.code)
-		require.Regexp(t, `^agent-sdk-testify: current (legacy inventory|recording sealed hash) differs
+		require.Regexp(t, `^agent-replay: current (legacy inventory|recording sealed hash) differs
 $`, result.stderr)
 		require.Equal(t, index, readFile(t, filepath.Join(fixtureDir, "executions", "index.json")))
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
 )
 
 func TestConnectPreservesJSONAndClosesOnlyConnection(t *testing.T) {

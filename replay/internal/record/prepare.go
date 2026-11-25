@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/native"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/native"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
 )
 
 func prepareOfficialCapture(ctx context.Context, run lifecycle.RecordContext, command string, args []string, remote *capture.ConnectOptions, trackProbe lifecycle.RecordProbeTracker) (tool.Object, error) {

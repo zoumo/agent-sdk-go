@@ -118,7 +118,7 @@ func exchangePiDialog(t *testing.T, root string, env, args []string, promptID, c
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), args...)
+	cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), args...)
 	cmd.Dir, cmd.Env = root, env
 	cmd.WaitDelay = 5 * time.Second
 	stdin, err := cmd.StdinPipe()

@@ -18,6 +18,6 @@ Import paths were migrated; historical evidence records describe source-reposito
 Agent SDK Replay incorporates Agent SDK Testify under the Apache License 2.0.
 Source: https://github.com/zoumo/agent-sdk-testify
 Source commit: ec0d525e6731e9d9d658d9e440a6843b1451e100
-See internal/replay/LICENSE for the imported license. Official driver source
+See replay/LICENSE for the imported license. Official driver source
 retains its original upstream references. The fixed index and embedded
 snapshot retain their original contents and recording provenance.

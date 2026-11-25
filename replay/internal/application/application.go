@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
-	"github.com/zoumo/agent-sdk-testify/internal/mock"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
-	"github.com/zoumo/agent-sdk-testify/internal/record"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/mock"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
+	"github.com/zoumo/agent-sdk-go/replay/internal/record"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 type (

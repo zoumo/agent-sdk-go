@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 const conformanceRequest = `{"id":1,"method":"conformance","unknown":9007199254740993}` + "\n"

@@ -8,14 +8,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 func buildCLI(t *testing.T, race bool) string {
 	t.Helper()
-	name := "AGENT_SDK_TESTIFY_NORMAL_BIN"
+	name := "AGENT_REPLAY_NORMAL_BIN"
 	if race {
-		name = "AGENT_SDK_TESTIFY_RACE_BIN"
+		name = "AGENT_REPLAY_RACE_BIN"
 	}
 	if binary := os.Getenv(name); binary != "" {
 		require.NoError(t, testutil.ValidateBinary(binary, race))
@@ -23,12 +23,12 @@ func buildCLI(t *testing.T, race bool) string {
 	}
 	root, err := testutil.RepositoryRoot()
 	require.NoError(t, err)
-	binary := filepath.Join(t.TempDir(), "agent-sdk-testify")
+	binary := filepath.Join(t.TempDir(), "agent-replay")
 	args := []string{"build", "-o", binary}
 	if race {
 		args = append(args, "-race")
 	}
-	cmd := exec.CommandContext(t.Context(), "go", append(args, "./cmd/agent-sdk-testify")...)
+	cmd := exec.CommandContext(t.Context(), "go", append(args, "./cmd/agent-replay")...)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", out)
@@ -44,8 +44,8 @@ func TestCLIArtifactModesAndReleaseSmoke(t *testing.T) {
 	root, err := testutil.RepositoryRoot()
 	require.NoError(t, err)
 	// The public wrapper rejects an ordinary override before running the caller.
-	cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "with-agent-sdk-testify.sh"), "--race", "false")
-	cmd.Env = append(os.Environ(), "AGENT_SDK_TESTIFY_BIN="+normal)
+	cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "replay", "with-agent-replay.sh"), "--race", "false")
+	cmd.Env = append(os.Environ(), "AGENT_REPLAY_BIN="+normal)
 	out, err := cmd.CombinedOutput()
 	require.Error(t, err)
 	require.Contains(t, string(out), "race mode mismatch")

@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/zoumo/agent-sdk-testify/internal/application"
-	"github.com/zoumo/agent-sdk-testify/internal/official"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
-	"github.com/zoumo/agent-sdk-testify/internal/version"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/application"
+	"github.com/zoumo/agent-sdk-go/replay/internal/official"
+	"github.com/zoumo/agent-sdk-go/replay/internal/version"
 )
 
 type IO struct{ In, Out, Err *os.File }
@@ -26,13 +26,13 @@ func Execute(ctx context.Context, args []string, streams IO) int {
 	if err == nil {
 		return 0
 	}
-	fmt.Fprintln(streams.Err, "agent-sdk-testify:", err)
+	fmt.Fprintln(streams.Err, "agent-replay:", err)
 	return 1
 }
 
 func New(streams IO) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "agent-sdk-testify",
+		Use:           "agent-replay",
 		Short:         "Prepare, record, verify, mock and export SDK protocol fixtures",
 		Version:       version.String(),
 		SilenceErrors: true,
@@ -48,7 +48,7 @@ func New(streams IO) *cobra.Command {
 	root.SetIn(streams.In)
 	root.SetOut(streams.Out)
 	root.SetErr(streams.Err)
-	root.SetVersionTemplate("agent-sdk-testify {{.Version}}\n")
+	root.SetVersionTemplate("agent-replay {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(
 		prepareCommand(),
@@ -72,7 +72,7 @@ func versionCommand() *cobra.Command {
 		Short: "Print the executable version",
 		Args:  cobra.NoArgs,
 		Run: func(c *cobra.Command, _ []string) {
-			c.Print("agent-sdk-testify " + version.String() + "\n")
+			c.Print("agent-replay " + version.String() + "\n")
 		},
 	}
 }

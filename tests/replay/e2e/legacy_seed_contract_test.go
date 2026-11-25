@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 // Explicit synthetic legacy inputs preserve rollout names and Claude's sidecar
@@ -84,7 +84,7 @@ out = pathlib.Path(runtime['output'])
 (out / 'validated-seed.json').write_text(json.dumps(seed))
 (out / ('replay-report.json' if runtime['replay'] else 'report.json')).write_text(json.dumps(report))
 (out / 'result.json').write_text(json.dumps({'status':'passed','sdk':report['officialSDK']}))
-`, filepath.Join(repository, "tests", "driver_contracts"))
+`, filepath.Join(repository, "tests", "replay", "driver_contracts"))
 	require.NoError(t, os.WriteFile(filepath.Join(drivers, "agent-sdk-testify-"+provider), []byte("#!"+python+"\n"+driverCode), 0o700))
 	fixture := prepareFixture(t, env, "--agent", provider, "--case", "SDK-CASE-035", "--history-seed", external)
 	require.Equal(t, inventory, officialInventory(t, filepath.Join(fixture, "source", "history-seed", "source")))

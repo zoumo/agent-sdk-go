@@ -3,7 +3,7 @@ package lifecycle
 import (
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 var piAgentProfile = agentProfile{

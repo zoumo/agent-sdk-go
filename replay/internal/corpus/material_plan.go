@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
 )
 
 // MaterialPlanFromRuntime keeps recording facts and removes only values that

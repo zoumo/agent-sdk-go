@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/rawjson"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/rawjson"
 )
 
 // Claude's public process/history APIs require an existing canonical WorkDir.

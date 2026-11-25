@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/lifecycle"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
 )
 
 // ValidateMaterial verifies every declared replay phase before an execution is

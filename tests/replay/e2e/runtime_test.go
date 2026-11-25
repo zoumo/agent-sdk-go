@@ -65,7 +65,7 @@ func TestMockRejectsHistoryDriftBeforePublishingActionSuccess(t *testing.T) {
 			fixtureDir := prepareFixture(t, env, "--recording", material)
 			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, os.Getenv("AGENT_SDK_TESTIFY_BIN"), "agent", "mock", "--fixture-dir", fixtureDir)
+			cmd := exec.CommandContext(ctx, os.Getenv("AGENT_REPLAY_BIN"), "agent", "mock", "--fixture-dir", fixtureDir)
 			cmd.Env = env
 			stdin, err := cmd.StdinPipe()
 			require.NoError(t, err)

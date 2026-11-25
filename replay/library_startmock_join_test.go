@@ -1,4 +1,4 @@
-package agenttestify_test
+package replay_test
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 func TestLibraryStartMockAgentExplicitJoinCoversAllConnections(t *testing.T) {

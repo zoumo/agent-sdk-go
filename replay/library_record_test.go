@@ -1,4 +1,4 @@
-package agenttestify_test
+package replay_test
 
 import (
 	"bufio"
@@ -16,7 +16,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 const libraryRemoteReply = `{ "id":1, "result":{"synthetic":true,"large":9007199254740993,"exponent":1e+09} }`

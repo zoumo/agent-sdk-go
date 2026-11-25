@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Go 1.26 does not stamp VCS identity when .git is a worktree file.
 set -euo pipefail
-source_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+source_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 if (( $# == 0 )); then
-  echo "usage: bash scripts/with-build-checkout.sh COMMAND [ARG ...]" >&2
+  echo "usage: bash scripts/replay/with-build-checkout.sh COMMAND [ARG ...]" >&2
   exit 2
 fi
 cd "$source_root"
@@ -32,7 +32,7 @@ if [[ -d .git ]]; then
 fi
 [[ -f .git ]] || { echo "build source has no Git checkout" >&2; exit 1; }
 
-build_root=$(mktemp -d "${TMPDIR:-/tmp}/agent-sdk-testify-build.XXXXXXXX")
+build_root=$(mktemp -d "${TMPDIR:-/tmp}/agent-replay-build.XXXXXXXX")
 checkout="$build_root/source"
 # shellcheck disable=SC2329 # Invoked by the EXIT trap.
 finish() {

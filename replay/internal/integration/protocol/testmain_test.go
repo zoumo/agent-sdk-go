@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/replay"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/replay"
 )
 
 func TestMain(m *testing.M) {

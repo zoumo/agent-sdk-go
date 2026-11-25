@@ -208,7 +208,7 @@ while IFS= read -r dependency; do
       } ;;
   esac
 done <<< "$sdk_dependencies"
-if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-testify* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tests/* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
+if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/replay* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/replay/* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/testsupport/* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-testify* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tests/* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
   echo "SDK production packages must not depend on agent-sdk-testify or its test bridge" >&2
   exit 1
 fi
@@ -217,6 +217,14 @@ for native in codex claude; do
     echo "SDK production packages must not import recording tools or fixtures" >&2
     exit 1
   fi
+done
+# The SDK simulation must exercise the public replay package.
+for host in ./internal/mocktest ./tests/simulation/simulate; do
+  imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "$host")
+  grep -Fxq 'github.com/zoumo/agent-sdk-go/replay' <<< "$imports" || {
+    echo "$host must import the public replay library" >&2
+    exit 1
+  }
 done
 python3 - <<'PY'
 import json
@@ -249,7 +257,9 @@ def scan_error(error):
 for roots, production_only, pattern, description in rules:
     expression = re.compile(pattern)
     for root in roots:
-        for directory, _, names in os.walk(root, onerror=scan_error):
+        for directory, directories, names in os.walk(root, onerror=scan_error):
+            if directory in ("tests", "internal") and "replay" in directories:
+                directories.remove("replay")
             for name in sorted(names):
                 path = Path(directory) / name
                 if not name.endswith('.go') or path.is_symlink():

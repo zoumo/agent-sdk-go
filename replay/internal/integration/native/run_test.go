@@ -17,17 +17,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	testdata "github.com/zoumo/agent-sdk-testify/data"
-	"github.com/zoumo/agent-sdk-testify/internal/catalog"
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	nativeprep "github.com/zoumo/agent-sdk-testify/internal/native"
-	"github.com/zoumo/agent-sdk-testify/internal/official"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/capture"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/recording"
-	"github.com/zoumo/agent-sdk-testify/internal/protocol/replay"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
+	testdata "github.com/zoumo/agent-sdk-go/replay/data"
+	"github.com/zoumo/agent-sdk-go/replay/internal/catalog"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
+	nativeprep "github.com/zoumo/agent-sdk-go/replay/internal/native"
+	"github.com/zoumo/agent-sdk-go/replay/internal/official"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/capture"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/recording"
+	"github.com/zoumo/agent-sdk-go/replay/internal/protocol/replay"
 )
 
 func TestMain(m *testing.M) {
@@ -151,7 +151,7 @@ func sample(t *testing.T, id string) preparationOptions {
 func TestSharedMaterialsContainNoExecutableSteps(t *testing.T) {
 	repository, err := testutil.RepositoryRoot()
 	require.NoError(t, err)
-	o := preparationOptions{Materials: filepath.Join(repository, "data", "scenarios"), Case: "SDK-CASE-008", Provider: "claude"}
+	o := preparationOptions{Materials: filepath.Join(repository, "replay", "data", "scenarios"), Case: "SDK-CASE-008", Provider: "claude"}
 	p, e := loadMaterials(o)
 	require.NoError(t, e)
 	require.NotContains(t, tool.Obj(p["scenario"]), "steps")

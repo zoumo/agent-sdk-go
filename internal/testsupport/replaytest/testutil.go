@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const cliPackage = "github.com/zoumo/agent-sdk-testify/cmd/agent-sdk-testify"
+const cliPackage = "github.com/zoumo/agent-sdk-go/cmd/agent-replay"
 
 func RepositoryRoot() (string, error) {
 	_, file, _, ok := runtime.Caller(0)
@@ -35,9 +35,9 @@ func RepositoryRoot() (string, error) {
 // PrepareBinary verifies the shared CLI and guards subprocess race reports.
 // Builds belong to the layer runner, never individual test packages.
 func PrepareBinary() (func(int) int, error) {
-	binary := os.Getenv("AGENT_SDK_TESTIFY_BIN")
+	binary := os.Getenv("AGENT_REPLAY_BIN")
 	if binary == "" {
-		return nil, errors.New("AGENT_SDK_TESTIFY_BIN is required; run make test-e2e or scripts/with-agent-sdk-testify.sh")
+		return nil, errors.New("AGENT_REPLAY_BIN is required; run make test-e2e or scripts/with-agent-replay.sh")
 	}
 	if err := ValidateBinary(binary, RaceEnabled); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func PrepareRaceGuard() (func(int) int, error) {
 // ValidateBinary checks the actual installed artifact, not its filename.
 func ValidateBinary(binary string, wantRace bool) error {
 	if !filepath.IsAbs(binary) {
-		return errors.New("AGENT_SDK_TESTIFY_BIN must be absolute")
+		return errors.New("AGENT_REPLAY_BIN must be absolute")
 	}
 	info, err := os.Stat(binary)
 	if err != nil {

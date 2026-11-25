@@ -11,9 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/testutil"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/replaytest"
 )
 
 // BuiltinTranscript reads immutable recorded inputs for transport and build checks.
@@ -22,15 +21,16 @@ func BuiltinTranscript(t *testing.T, provider, id, connection string) (string, s
 	repository, err := testutil.RepositoryRoot()
 	require.NoError(t, err)
 	var index tool.Object
-	require.NoError(t, tool.ReadJSON(filepath.Join(repository, "data", "index.json"), &index))
+	require.NoError(t, tool.ReadJSON(filepath.Join(repository, "replay", "data", "index.json"), &index))
 	for _, value := range tool.Array(index["cases"]) {
 		row := tool.Obj(value)
 		if row["provider"] != provider || row["caseId"] != id {
 			continue
 		}
-		root := filepath.Join(repository, "data", tool.Str(row["materials"]))
-		root, _, err = corpus.RecordingRoot(root)
-		require.NoError(t, err)
+		root := filepath.Join(repository, "replay", "data", tool.Str(row["materials"]))
+		if _, err := os.Stat(filepath.Join(root, "material", "material.json")); err == nil {
+			root = filepath.Join(root, "material")
+		}
 		rawRoot := filepath.Join(root, "raw")
 		if connection == "probe" {
 			rawRoot = filepath.Join(root, "remote-probe", "raw")

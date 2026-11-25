@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zoumo/agent-sdk-testify/internal/corpus"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/corpus"
 )
 
 // ConnectionStatus is the durable result of one connection in an action

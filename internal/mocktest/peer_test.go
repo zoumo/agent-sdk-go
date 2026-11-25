@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 const noticeScenario = `{"version":1,"provenance":"synthetic","frames":[{"ordinal":1,"direction":"s2c","channel":"protocol","epoch":1,"wire":{"method":"notice","type":"notice"}}]}`
@@ -73,7 +73,7 @@ func TestPreparedSyntheticProvenanceAndIdentity(t *testing.T) {
 	require.Equal(t, 7, descriptor.SchemaVersion)
 	require.Equal(t, session.SessionID, descriptor.FixtureID)
 	require.Equal(t, "embedded", descriptor.Tool.Source)
-	require.Equal(t, "github.com/zoumo/agent-sdk-testify", descriptor.Tool.Module)
+	require.Equal(t, "github.com/zoumo/agent-sdk-go", descriptor.Tool.Module)
 	require.NotEmpty(t, descriptor.Tool.ModuleRevision)
 	require.NotEmpty(t, descriptor.Tool.GoVersion)
 	require.Empty(t, descriptor.Tool.Command)

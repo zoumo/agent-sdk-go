@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"

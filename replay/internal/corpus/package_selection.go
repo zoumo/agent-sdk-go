@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-testify/internal/history"
-	"github.com/zoumo/agent-sdk-testify/internal/tool"
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/history"
 )
 
 // PackageSelectionReference selects one sealed domain envelope. References are

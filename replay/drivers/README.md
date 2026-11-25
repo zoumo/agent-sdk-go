@@ -13,7 +13,7 @@ driver 通过官方 SDK 执行一个 case 并给出业务断言；Go 工具负�
 | --- | --- |
 | `codex/rust/` | Codex 官方 Rust SDK driver、上游源码 pin 和安装器 |
 | `claude/typescript/` | Claude 官方 TypeScript SDK driver |
-| `pi/official/` | Pi 官方 TypeScript RpcClient 与原生 stdio 扩展 driver |
+| `pi/javascript/` | Pi 官方 TypeScript RpcClient 与原生 stdio 扩展 driver |
 
 ## 构建与测试
 
@@ -34,7 +34,7 @@ make replay-bundle
 Pi driver 的 `prepack` 从 SDK embed 所用的源码复制扩展。用以下命令单独打包 Pi driver。
 
 ```sh
-npm pack ./replay/drivers/pi/official --offline --pack-destination /absolute/output
+npm pack ./replay/drivers/pi/javascript --offline --pack-destination /absolute/output
 ```
 
 ## 官方 SDK 环境
@@ -104,7 +104,7 @@ command -v agent-sdk-testify-pi
 对话 ID 回答，使用命令 ID 匹配控制回执。录制时 Replay 加载固定的 Go SDK 扩展，
 业务报告保留 Pi 版本、扩展修订和哈希。运行 `012` 时，在 `prepare` 中设置两个
 支持思考等级的不同模型，分别传给 `--initial-model` 和 `--model`。
-[扩展来源](pi/official/pi-extension/SOURCE.md)
+[扩展来源](pi/javascript/NOTICE)
 
 ## 按 case 录制
 

@@ -4,3 +4,15 @@ coverage.out
 __pycache__/
 /.artifacts/
 /bin/agent-replay
+
+/client/claude/**/.scratch/
+/client/codex/**/.scratch/
+
+/replay/drivers/**/.venv/
+/replay/drivers/**/build/
+/replay/drivers/**/dist/
+/replay/drivers/**/*.egg-info/
+/replay/drivers/claude/typescript/**/node_modules/
+/replay/drivers/pi/javascript/node_modules/
+/replay/drivers/pi/javascript/LICENSE
+/replay/drivers/pi/javascript/pi-extension/session.ts

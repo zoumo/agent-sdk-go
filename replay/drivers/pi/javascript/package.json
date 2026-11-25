@@ -6,9 +6,9 @@
   "private": true,
   "type": "module",
   "bin": {"agent-sdk-testify-pi": "cli.mjs"},
-  "files": ["*.mjs", "LICENSE", "pi-extension/NOTICE", "pi-extension/SOURCE.md", "pi-extension/session.ts"],
+  "files": ["*.mjs", "LICENSE", "NOTICE", "pi-extension/session.ts"],
   "engines": {"node": ">=22"},
   "scripts": {
-    "prepack": "cp ../../../LICENSE LICENSE && cp ../../../../agent/pi/extensions/session.ts pi-extension/session.ts"
+    "prepack": "mkdir -p pi-extension && cp ../../../../LICENSE LICENSE && cp ../../../../agent/pi/extensions/session.ts pi-extension/session.ts"
   }
 }

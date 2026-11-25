@@ -9,6 +9,7 @@ if [[ -f .git ]]; then
   exec bash scripts/replay/with-build-checkout.sh bash scripts/replay/build.sh "$binary" "$version"
 fi
 go=${GO:-go}
+export GOWORK=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOENV=off
 "$go" run -tags builtin_generate ./cmd/agent-replay --check
 mkdir -p "$(dirname "$binary")"
 "$go" build -trimpath -buildvcs=true -ldflags="-X=github.com/zoumo/agent-sdk-go/replay/internal/version.buildVersion=$version" \

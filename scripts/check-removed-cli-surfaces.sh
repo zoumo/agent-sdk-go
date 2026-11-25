@@ -13,7 +13,7 @@ import re
 import stat
 import sys
 
-excluded_directories = {'.artifacts', '.git', '.scratch'}
+excluded_directories = {'.artifacts', '.git', '.scratch', 'replay'}
 excluded_files = {
     'scripts/check-removed-cli-surfaces.sh',
     'tests/gates/contraction_test.go',
@@ -58,6 +58,10 @@ try:
     for directory, directories, names in os.walk('.', onerror=scan_error):
         if directory == '.':
             directories[:] = sorted(set(directories) - excluded_directories)
+        if directory in ('./tests', './internal', './scripts'):
+            directories[:] = [name for name in directories if name != 'replay']
+        if directory == './internal/testsupport':
+            directories[:] = [name for name in directories if name != 'replaytest']
         for name in sorted(names):
             path = Path(directory) / name
             relative = path.as_posix()

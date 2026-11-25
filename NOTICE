@@ -14,3 +14,10 @@ Upstream revision: faac585884ae2c013a6b1400f3e9e77f10b34bac
 
 Recorded fixtures retain their original manifests and sanitization provenance.
 Import paths were migrated; historical evidence records describe source-repository runs.
+
+Agent SDK Replay incorporates Agent SDK Testify under the Apache License 2.0.
+Source: https://github.com/zoumo/agent-sdk-testify
+Source commit: ec0d525e6731e9d9d658d9e440a6843b1451e100
+See replay/LICENSE for the imported license. Official driver source
+retains its original upstream references. The fixed index and embedded
+snapshot retain their original contents and recording provenance.

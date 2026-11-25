@@ -1,0 +1,58 @@
+package official
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/zoumo/agent-sdk-go/internal/replay/tool"
+	"github.com/zoumo/agent-sdk-go/replay/internal/lifecycle"
+)
+
+func waitRecordStart(ctx context.Context, fixtureDir string, fixture *lifecycle.Fixture, path string) (*lifecycle.Execution, error) {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		f, err := os.Open(path)
+		if err == nil {
+			var started tool.Object
+			err = json.NewDecoder(f).Decode(&started)
+			_ = f.Close()
+			if err == nil {
+				id := tool.Str(started["executionId"])
+				if id == "" || filepath.Base(id) != id || !filepath.IsLocal(id) || started["status"] != "running" || started["fixtureId"] != fixture.FixtureID || started["command"] != "record" || started["connectionId"] != "main" {
+					return nil, errors.New("owned service received an invalid execution start")
+				}
+				execution, err := lifecycle.ReadExecution(fixtureDir, fixture, filepath.Join(lifecycle.PackageExecutionRoot(fixtureDir, tool.Str(started["materialId"]), id), "execution.json"))
+				if err != nil {
+					return nil, err
+				}
+				return execution, nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitRecordPlan(ctx context.Context, path string) (tool.Object, error) {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var plan tool.Object
+		if err := tool.ReadJSON(path, &plan); err == nil {
+			return plan, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}

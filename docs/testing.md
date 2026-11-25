@@ -56,12 +56,12 @@ The script takes one optional task argument.
 ## Run the fixed recording gate
 
 ```sh
-go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$'
+bash scripts/check-offline.sh e2e
 ```
 
 The test runs the gate in process. `TestMain` builds the SDK driver, which runs
 in a separate process with its own environment and workspace. Both link the
-fixed Testify Go module. The test reads the typed execution report before
+Replay package. The test reads the typed execution report before
 removing its fixture. [Testify library contract](modules/agent-sdk-testify/library-mode.md)
 
 Inspect `coverage.json` for each provider and case's requirement, material,
@@ -183,7 +183,7 @@ Both jobs include the strict fixed-recording gate through `go test ./...`;
 there is no separate simulation-gate job. Failures and logs remain isolated while
 the jobs run concurrently.
 The offline tasks build the tests and SDK-owned driver; the
-in-process testify module is fetched by the normal Go module graph.
+in-process Replay library is built from the SDK checkout.
 External consumer CI runs for pushed `main` commits, manual workflow runs and
 same-repository PRs.
 Push/manual consumers target `github.sha`; PR consumers check out and fetch the
@@ -262,7 +262,7 @@ They cover exact context-only envelopes, idle/active input routing, unchanged
 interrupt targets, version/native rejection, local admission, cancellation,
 close and unknown Codex outcomes. These synthetic checks do not establish
 real-provider consumption. Official recordings and their strict replay remain
-owned by `agent-sdk-testify`; a new recording must be adopted and exercised
+owned by Replay; a new recording must be adopted and exercised
 through the public Go SDK before it constitutes SDK simulation evidence.
 
 `NativeIntegrationSuite.TestIndependentHistoryBrowser` uses a strict synthetic Codex
@@ -274,7 +274,7 @@ establishes real recording or model execution.
 ## Simulation coverage
 
 The [SDK acceptance matrix](../tests/simulation/simulate/coverage.go) defines
-which provider and case combinations are required. The Testify module supplies
+which provider and case combinations are required. Replay supplies
 the fixed recording corpus. The gate reports missing required material as a
 failure. For business evidence and pass criteria, see the
 [SDK acceptance guide](sdk/validation-cases.md). Check the matrix independently
@@ -286,7 +286,7 @@ go test -count=1 ./tests/simulation/simulate -run '^TestAcceptanceMatrixMatchesS
 
 SDK simulation evidence combines reviewed native recordings, public SDK
 assertions, strict replay, full consumption, and cleanup. Official verification
-belongs to the [Testify library](https://github.com/zoumo/agent-sdk-testify).
+belongs to the [Replay library](../replay/README.md).
 Go simulation flows live under `tests/simulation/drivers/`; synthetic native
 replay fixtures support the [code integration tests](#code-integration-tests).
 

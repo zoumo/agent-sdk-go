@@ -13,11 +13,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	agenttestify "github.com/zoumo/agent-sdk-testify"
 
 	codex "github.com/zoumo/agent-sdk-go/codex"
 	"github.com/zoumo/agent-sdk-go/codex/types"
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 // ManagedRecordingSuite exercises synthetic fixtures through in-process streams.

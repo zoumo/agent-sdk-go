@@ -15,6 +15,8 @@ license: Apache-2.0
 * [开发规范](architecture.md) - Defines repository module and dependency boundaries, code layout, and coding conventions for the native and unified SDKs.
 * [测试规范](testing-standards.md) - Defines test layers, isolation requirements, and the evidence that Go tests must provide for SDK acceptance.
 
+* [Replay 文档](../replay/docs/index.md) - 录制、回放、共同 case 与材料采用。
+
 ## 架构与合同
 
 * [SDK 架构](sdk/architecture.md) - 定义原生 SDK 的共同行为、调用方职责、子 Agent 观察及取消、关闭和恢复边界。

@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"regexp"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 var piExtensionAliasPattern = regexp.MustCompile(`^/tmp/agent-sdk-pi-replay-[0-9a-f]{32}/session\.ts$`)
@@ -130,6 +130,7 @@ type piReplayExecution struct {
 	CleanupComplete   bool   `json:"cleanupComplete"`
 	NativeLaunched    bool   `json:"nativeLaunched"`
 	TestifyVersion    string `json:"testifyVersion"`
+	ModuleRevision    string `json:"moduleRevision,omitempty"`
 	TestifyModuleSum  string `json:"testifyModuleSum"`
 	Failure           string `json:"failure,omitempty"`
 	Error             string `json:"error,omitempty"`
@@ -163,7 +164,7 @@ func verifyPiReplayResult(fixture *agenttestify.Fixture, runtimeDir, output, cod
 		Transport: string(connection.Transport), MaterialID: report.Material.ID, Provenance: report.Material.Provenance,
 		RecordingSHA256: report.Material.RecordingSHA256, Frames: material.frames, ExecutionSHA256: report.ExecutionSHA256,
 		FullConsumption: connection.FullConsumption, ClientEOF: connection.ClientEOF, CleanupComplete: connection.CleanupComplete,
-		NativeLaunched: connection.NativeLaunched, TestifyVersion: fixture.Tool.Version, TestifyModuleSum: fixture.Tool.ModuleSum,
+		NativeLaunched: connection.NativeLaunched, TestifyVersion: fixture.Tool.Version, TestifyModuleSum: fixture.Tool.ModuleSum, ModuleRevision: fixture.Tool.ModuleRevision,
 		Failure: string(connection.Failure), Error: connection.Error,
 	}
 	return errors.Join(writePiReplayJSON(filepath.Join(output, "execution.json"), summary), validatePiReplayCompletion(report, connection))

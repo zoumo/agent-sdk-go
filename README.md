@@ -117,3 +117,5 @@ precedence before adding credentials or resuming a session.
 [Claude MCP options](claude/README.md#external-mcp-servers) ·
 [Unified MCP contract](docs/modules/unified-agent/design.md#mcp-configuration) ·
 [Example source](agent/mcp_example_test.go)
+
+[Replay](replay/README.md) 提供 Go 回放库、`agent-replay` 命令、官方 driver 和录制材料。

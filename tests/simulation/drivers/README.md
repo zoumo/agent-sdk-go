@@ -4,7 +4,7 @@
 
 Use this guide to run the Go SDK against fixed native recordings. The SDK's Go
 drivers call public SDK operations and check application behavior. The linked
-Testify library prepares fixtures, matches protocol traffic, and produces
+Replay library prepares fixtures, matches protocol traffic, and produces
 typed results. [Go library contract](../../../docs/modules/agent-sdk-testify/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
@@ -20,9 +20,9 @@ pass its path to `-simulation.recording`.
 Set `-simulation.output` to a new absolute archive directory whose parent exists.
 
 ```sh
-go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2
-go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
-go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2 -simulation.output=/absolute/new-gate
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```
 
 `TestMain` builds the SDK driver. The test coordinates the simulation and
@@ -99,7 +99,7 @@ notification signals when tests can half-close SDK input.
 The fixed recording gate replays official Pi cases through the native Go SDK.
 Use this entry point for controlled captures made through the unified Client.
 On a Unix host with a writable `/tmp`, build the driver from the repository
-root with the pinned Testify module.
+root with the same-module Replay library.
 
 ```sh
 GOWORK=off go build \
@@ -128,7 +128,7 @@ already exists.
 
 Run each case from `008` through `014` and from `037` through `038` with its own
 export and output directory. The driver starts a local mock backed by the
-Testify Go library. It maps the recorded temporary extension path to the SDK
+Replay Go library. It maps the recorded temporary extension path to the SDK
 session's generated extension and configuration on disk. Run replays of the
 same export serially because they reserve the same temporary path.
 

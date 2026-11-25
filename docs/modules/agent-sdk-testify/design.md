@@ -14,7 +14,7 @@ sources:
 
 The SDK owns simulation, its Go driver, business assertions, policy comparison,
 parallelism, cancellation, coverage and the authenticated loopback bridge used
-for remote close. The exact pinned `agent-sdk-testify` Go module owns case and
+for remote close. The same-module Replay library owns case and
 binding contracts, official drivers, recording/verification, material
 qualification, strict replay, history materialization, preparation, export and
 typed execution evidence.
@@ -37,7 +37,7 @@ new absolute output directory and never mutates a recording or prepared source.
 The preparation result must be schema 7 with an embedded module identity,
 material source identity, enabled mock route, execution environment, workspace,
 protocol cwd and declared connection set. Validate all of those values and the
-exact module pin before protocol I/O. A missing or mismatched value fails
+linked SDK build identity before protocol I/O. A missing or mismatched value fails
 closed.
 
 For each declared connection, follow the [library call order](library-mode.md#connection-ownership-and-order).
@@ -149,7 +149,7 @@ index unchanged.
 
 ## Tests and dependencies
 
-`internal/mocktest` is the shared test-only bridge. It imports the pinned
+`internal/mocktest` is the shared test-only bridge. It imports the public Replay
 library, prepares and opens fixtures, creates directional streams and exposes
 typed evidence. It contains no protocol matcher, imports neither native SDK and
 does not depend on `os/exec`.
@@ -160,8 +160,7 @@ protocol peers remain valid for non-replay contract tests but are not
 simulation evidence.
 
 The module-graph gate proves that production packages do not import testify.
-The identity test proves the embedded version, checksum and revision match
-`go.mod`/`go.sum`. The removed-surface gate scans code and SDK documentation
+The bridge checks embedded fixture identity against the current SDK build. The removed-surface gate scans code and SDK documentation
 for retired process contracts.
 
 Real Agent/model execution and new recording remain explicit opt-in work outside

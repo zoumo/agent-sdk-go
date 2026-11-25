@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"sort"
 
-	agenttestify "github.com/zoumo/agent-sdk-testify"
+	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
 
 type resultMaterial struct {

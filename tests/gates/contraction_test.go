@@ -213,6 +213,12 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 			want: "process-oriented simulation connection contract",
 		},
 		{
+			name: "simulation command field",
+			file: "tests/simulation/simulate/session.go",
+			body: "package main\n\ntype badConnection struct {\n\tCommand string `json:\"command\"`\n}\n",
+			want: "process-oriented simulation connection contract",
+		},
+		{
 			name: "executable launch import",
 			file: "internal/mocktest/imports.go",
 			body: "package mocktest\n\nimport _ \"os/exec\"\n",
@@ -245,6 +251,7 @@ func TestRemovedTestifyCLISurfaceGatePreservesExclusions(t *testing.T) {
 	for _, name := range []string{"codex/types/message.go", "claude/types/message.go", "agent/options.go"} {
 		writeGateFixture(t, root, name, "package types\n\ntype Message struct { PID int `json:\"pid\"` }\n")
 	}
+	writeGateFixture(t, root, "pi/session.go", "package pi\n\ntype response struct { Command string `json:\"command\"` }\n")
 	writeGateFixture(t, root, "tests/fixture_test.go", "package tests\n\nvar receipt = \"receipt.json\"\n")
 	writeGateFixture(t, root, "docs/README.md", "A wrapper for unrelated tools.\n")
 	writeGateFixture(t, root, "scripts/binary", "\x00AGENT_SDK_TESTIFY_BIN\n")

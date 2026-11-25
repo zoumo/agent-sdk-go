@@ -14,9 +14,28 @@ import (
 	"github.com/zoumo/agent-sdk-go/internal/mocktest"
 	claudesim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
 	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
+	pisim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/pi/go"
 )
 
 func main() {
+	if len(os.Args) >= 3 {
+		var run func([]string) error
+		switch os.Args[1] {
+		case "--pi-extension-flow":
+			run = runPiExtensionFlow
+		case "--pi-extension-replay":
+			run = runPiExtensionReplay
+		case "--pi-extension-mock":
+			run = runPiExtensionMock
+		}
+		if run != nil {
+			if err := run(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
 	if len(os.Args) >= 3 && os.Args[1] == "--filter-mcp" {
 		if err := claudesim.RunMCPFilter(os.Args[2], os.Args[3:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -76,6 +95,12 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, mo
 			err = claudesim.AcceptSavedHistory(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		default:
 			err = claudesim.AcceptFlow(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
+		}
+	case "pi":
+		if plan.DriverProfile == "continuation" {
+			err = pisim.AcceptContinuation(ctx, mock, root, out)
+		} else {
+			err = pisim.AcceptBase(ctx, mock, root, out)
 		}
 	default:
 		err = errors.New("unsupported provider")

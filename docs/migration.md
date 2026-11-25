@@ -84,6 +84,14 @@ Observation. Answer through the original IncomingRequest and distribute UI/log
 output in the application. Native parameters and result semantics are in the
 [Codex](../codex/README.md) and [Claude](../claude/README.md) guides.
 
+### Default permission preset for unified sessions
+
+Unified Codex and Claude sessions now use `fullAccess` when
+`PermissionPreset` is empty. To keep automatic review after upgrading,
+set `OpenOptions.PermissionPreset` to `agent.PermissionPresetAutoReview`
+on each call to `Core.Open` and `Core.Resume`. See the
+[native settings for each preset](adr/0005-session-permission-presets.md).
+
 ### Permission modes and approval policies
 
 Claude `SetPermissionMode` now takes `PermissionMode`; use the

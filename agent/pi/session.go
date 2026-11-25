@@ -1,0 +1,322 @@
+package agentpi
+
+import (
+	"context"
+	"errors"
+	"io"
+	"sync"
+
+	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
+	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
+	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
+	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
+	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
+	"github.com/zoumo/agent-sdk-go/pi"
+)
+
+var (
+	_ agent.Session          = (*session)(nil)
+	_ agent.ConfigController = (*session)(nil)
+)
+
+type session struct {
+	core           *Core
+	native         *pi.Session
+	stream         *eventstream.Stream
+	features       agent.EffectiveFeatures
+	shellEnv       bool
+	toolApproval   bool
+	interactionIDs *interactionledger.Ledger
+	interactions   map[agent.InteractionRef]*piInteraction
+	mu             sync.Mutex
+	closed         bool
+	submitting     bool
+	interrupting   bool
+	state          agent.SessionState
+	submitUnknown  bool
+	injecting      bool
+	// Monotonically changing generations prevent a late command reply from
+	// reactivating work that agent_settled has already ended.
+	settled uint64
+	active  string
+	pending string
+	// Only the single native event reader accesses messageID and messageCount.
+	messageID    string
+	messageCount uint64
+	stopReason   string
+	runError     *agent.ObservedError
+}
+
+func newSession(core *Core, native *pi.Session, restricted bool, extension *sessionExtension) *session {
+	s := &session{
+		core: core, native: native, features: agent.EffectiveFeatures{RestrictLocalTools: restricted},
+		shellEnv:     extension != nil && extension.shellEnv,
+		toolApproval: extension != nil && extension.toolApproval,
+	}
+	s.features.AgentQuestions = extension != nil && extension.agentQuestions
+	if s.toolApproval || s.features.AgentQuestions {
+		s.interactionIDs = interactionledger.New("pi-")
+		s.interactions = make(map[agent.InteractionRef]*piInteraction)
+	}
+	s.stream = eventstream.New(eventstream.Hooks{
+		BeginClose:  func(eventstream.End) { s.mu.Lock(); s.closed = true; s.mu.Unlock() },
+		CloseEvents: s.closeInteractionEvents,
+		CloseNative: func() error { return operationError("close", errors.Join(native.Close(), extension.remove())) },
+		Release:     func() { core.release(s.ID()); core.leases.SessionClosed(s) },
+		Published:   core.telemetry.RecordPublished,
+	})
+	return s
+}
+
+func (s *session) ID() string { return s.native.ID() }
+func (s *session) Capabilities() agent.Capabilities {
+	return capabilities(s.shellEnv, s.toolApproval, s.features.AgentQuestions)
+}
+func (s *session) EffectiveFeatures() agent.EffectiveFeatures { return s.features }
+func (s *session) Events() (agent.EventStream, error)         { return s.stream.Claim() }
+func (s *session) Done() <-chan struct{}                      { return s.stream.Done() }
+func (s *session) Err() error                                 { return s.stream.Err() }
+
+func (s *session) Close(ctx context.Context) error {
+	ctx, observation := s.core.telemetry.Begin(ctx, telemetry.Close)
+	reused, err := s.stream.Close(ctx)
+	observation.EndLifecycle(reused, err)
+	return err
+}
+
+func (s *session) observe() {
+	for {
+		event, err := s.native.Receive(context.Background())
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = nil
+			}
+			s.stream.ObservationEnded(operationError("receive", err))
+			return
+		}
+		events, err := s.project(event)
+		if err == nil {
+			err = s.stream.Publish(events)
+		}
+		if err != nil {
+			s.stream.ObservationEnded(operationError("event_delivery", err))
+			return
+		}
+	}
+}
+
+func closedError() error {
+	return &agent.Error{Code: agent.ErrorClosed, Reason: agent.ErrorReasonSessionClosed, Message: "Pi session is closed"}
+}
+
+func (s *session) StartOrSteer(ctx context.Context, input agent.Input) (receipt agent.InputReceipt, err error) {
+	ctx, observation := s.core.telemetry.BeginSubmission(ctx, s.core.config.Tracer != nil)
+	defer func() { observation.End(string(receipt.Result), err) }()
+	message, images, err := promptContent(input)
+	if err != nil {
+		return receipt, err
+	}
+	id, err := uuidv4.New()
+	if err != nil {
+		return receipt, operationError("submission_id", err)
+	}
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return receipt, closedError()
+	}
+	if s.submitting || s.injecting || s.submitUnknown || s.interrupting {
+		s.mu.Unlock()
+		return agent.InputReceipt{Result: agent.InputNotApplied, Acceptance: agent.Acceptance{Sent: new(false)}}, nil
+	}
+	s.submitting = true
+	s.pending = id
+	generation := s.settled
+	s.mu.Unlock()
+
+	if s.core.config.Tracer != nil {
+		span := submissiontrace.Start(ctx, s.core.config.Tracer)
+		defer func() { span.End(err) }()
+	}
+	// Pi decides atomically whether to start or steer during prompt admission.
+	// A separate get_state probe here could race Pi's own scheduler.
+	result, sendErr := s.native.Prompt(ctx, message, images, "steer")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.submitting = false
+	s.pending = ""
+	if sendErr != nil {
+		receipt.Acceptance = commandAcceptance(sendErr)
+		var rejected *pi.CommandError
+		if errors.As(sendErr, &rejected) {
+			receipt.Result = agent.InputNotApplied
+		}
+		err = operationError("start_or_steer", sendErr)
+		if agent.CodeOf(err) == agent.ErrorOutcomeUnknown && s.settled == generation {
+			s.submitUnknown = true
+		}
+		return receipt, err
+	}
+	receipt = agent.InputReceipt{Submission: id, Result: agent.InputAppliedBestEffort, Acceptance: agent.Acceptance{Sent: new(true), NativeAccepted: new(true)}}
+	switch result.Disposition {
+	case "started":
+		receipt.Result = agent.InputAppliedNewWork
+		if s.settled == generation && s.active == "" {
+			s.active = id
+		}
+	case "queued", "handled":
+		// Neither receipt proves which native work consumes the input.
+	default:
+		if s.settled == generation {
+			s.submitUnknown = true
+		}
+		receipt.Result = ""
+		return receipt, &agent.Error{Code: agent.ErrorOutcomeUnknown, Reason: "prompt_disposition_unknown", Message: "Pi returned an unknown prompt disposition"}
+	}
+	return receipt, nil
+}
+
+func (s *session) Interrupt(ctx context.Context, _ agent.InterruptOptions) (receipt agent.InterruptReceipt, err error) {
+	ctx, observation := s.core.telemetry.Begin(ctx, telemetry.Interrupt)
+	defer func() { observation.End(string(receipt.Result), err) }()
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return receipt, closedError()
+	}
+	target := s.active
+	if target == "" {
+		s.mu.Unlock()
+		return agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, nil
+	}
+	if s.interrupting {
+		s.mu.Unlock()
+		return receipt, &agent.Error{Code: agent.ErrorFailedPrecondition, Reason: "interrupt_in_progress", Message: "Pi interrupt is already in progress"}
+	}
+	s.interrupting = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.interrupting = false
+		s.mu.Unlock()
+	}()
+	if err := s.native.Abort(ctx); err != nil {
+		return receipt, operationError("interrupt", err)
+	}
+	return agent.InterruptReceipt{Result: agent.InterruptAcknowledged, Target: target}, nil
+}
+
+func (s *session) SetConfig(ctx context.Context, change agent.ConfigChange) (agent.ConfigReceipt, error) {
+	receipt := agent.ConfigReceipt{Change: change, Acceptance: agent.Acceptance{Sent: new(false)}}
+	if err := change.Validate(); err != nil {
+		return receipt, err
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return receipt, closedError()
+	}
+	var err error
+	switch change.ID {
+	case agent.ConfigEffort:
+		if err := validateThinkingLevel(change.Value); err != nil {
+			return receipt, err
+		}
+		err = s.native.SetThinkingLevel(ctx, change.Value)
+	case agent.ConfigModel:
+		if s.core.config.Provider == "" {
+			return receipt, unsupported("model_provider_required", "Pi model changes require a configured provider")
+		}
+		err = s.native.SetModel(ctx, s.core.config.Provider, change.Value)
+	}
+	if err != nil {
+		receipt.Acceptance = commandAcceptance(err)
+		return receipt, operationError("set_config", err)
+	}
+	receipt.Acceptance = agent.Acceptance{Sent: new(true), NativeAccepted: new(true)}
+	if change.ID == agent.ConfigEffort {
+		err = checkThinkingLevel(ctx, s.native, change.Value)
+		return receipt, operationError("set_config", err)
+	}
+	return receipt, nil
+}
+
+func checkThinkingLevel(ctx context.Context, native *pi.Session, requested string) error {
+	state, err := native.State(ctx)
+	if err != nil {
+		return err
+	}
+	if state.ThinkingLevel != requested {
+		return unsupported("thinking_level_unsupported", "Pi selected thinking level "+state.ThinkingLevel+" instead of "+requested)
+	}
+	return nil
+}
+
+func validateThinkingLevel(level string) error {
+	switch level {
+	case "", "off", "minimal", "low", "medium", "high", "xhigh", "max":
+		return nil
+	default:
+		return &agent.Error{Code: agent.ErrorInvalidArgument, Reason: "thinking_level_invalid", Message: "Unknown Pi thinking level"}
+	}
+}
+
+func commandAcceptance(err error) agent.Acceptance {
+	var rejected *pi.CommandError
+	var dispatched *pi.DispatchError
+	switch {
+	case errors.As(err, &rejected):
+		return agent.Acceptance{Sent: new(true), NativeAccepted: new(false)}
+	case errors.As(err, &dispatched):
+		if dispatched.Sent {
+			return agent.Acceptance{Sent: new(true)}
+		}
+		return agent.Acceptance{}
+	default:
+		return agent.Acceptance{Sent: new(false)}
+	}
+}
+
+func promptContent(input agent.Input) (string, []pi.Image, error) {
+	if err := input.Validate(); err != nil {
+		return "", nil, err
+	}
+	var text string
+	var seenText bool
+	var images []pi.Image
+	for _, b := range input.Content {
+		switch {
+		case b.Text != nil:
+			if seenText || b.Text.Annotations != nil || len(images) != 0 {
+				return "", nil, unsupported(agent.ErrorReasonContentBlockUnsupported, "Pi supports one unannotated text block before images")
+			}
+			text = b.Text.Text
+			seenText = true
+		case b.Image != nil && b.Image.Annotations == nil && b.Image.URI == nil:
+			images = append(images, pi.Image{Type: "image", Data: b.Image.Data, MIMEType: b.Image.MIMEType})
+		default:
+			return "", nil, unsupported(agent.ErrorReasonContentBlockUnsupported, "Pi accepts text followed by image blocks")
+		}
+	}
+	return text, images, nil
+}
+
+func operationError(op string, err error) error {
+	if err == nil || agent.CodeOf(err) != "" {
+		return err
+	}
+	code := agent.ErrorUnavailable
+	var rejection *pi.CommandError
+	var dispatched *pi.DispatchError
+	switch {
+	case errors.As(err, &rejection):
+		code = agent.ErrorNativeRejected
+	case errors.As(err, &dispatched):
+		code = agent.ErrorOutcomeUnknown
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return err
+	}
+	return &agent.Error{Code: code, Reason: agent.ErrorReasonForCode(op, code), Message: "Pi " + op + " failed", Cause: err}
+}

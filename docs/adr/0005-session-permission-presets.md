@@ -22,7 +22,7 @@ tags: [session, permissions, approvals, sandbox]
 | `autoReview` | `approvalPolicy=on-request`，`approvalsReviewer=auto_review`，`sandbox=workspace-write` | `--permission-mode=auto`，启用同一 Bash 沙箱配置 |
 | `fullAccess` | `approvalPolicy=never`，`sandbox=danger-full-access` | `--permission-mode=bypassPermissions`，关闭 Bash 沙箱 |
 
-统一 `Core.Open` 和 `Core.Resume` 在预设为空时选择 `autoReview`，每次传入对应的原生配置。在 `Resume` 中继续请求 `manualReview` 或 `fullAccess` 时，调用方须显式重传。SDK 对 `manualReview` 和 `autoReview` 使用相同沙箱基线。Claude 默认传 `sandbox.enabled=true`、`sandbox.failIfUnavailable=true` 和 `sandbox.allowUnsandboxedCommands=false`。沙箱不可用时由 CLI 按 `failIfUnavailable` 拒绝启动。
+统一 `Core.Open` 和 `Core.Resume` 在预设为空时使用 [默认权限预设](../../agent/permissions.go)，每次传入对应的原生配置。在 `Resume` 中继续请求 `manualReview` 或 `autoReview` 时，调用方须显式重传。SDK 对 `manualReview` 和 `autoReview` 使用相同沙箱基线。选择这两个审批预设时，Claude 传 `sandbox.enabled=true`、`sandbox.failIfUnavailable=true` 和 `sandbox.allowUnsandboxedCommands=false`。沙箱不可用时由 CLI 按 `failIfUnavailable` 拒绝启动。
 
 预设选择默认审批路径。`autoReview` 保留原生端要求人工确认的交互，调用方继续用 `Session.Answer` 回答。`fullAccess` 放开预设控制的内置限制，执行范围仍受宿主隔离、管理策略和原生工具规则约束。
 

@@ -94,6 +94,50 @@ Simulation hosts separately consume typed reports bound to the
 exported material; the adapter contains no matching engine. Full-consumption
 notification signals when tests can half-close SDK input.
 
+### Replay Pi extensions through the unified Go SDK
+
+The fixed recording gate replays official Pi cases through the native Go SDK.
+Use this entry point for controlled captures made through the unified Client.
+On a Unix host with a writable `/tmp`, build the driver from the repository
+root with the pinned Testify module.
+
+```sh
+GOWORK=off go build \
+  -o /absolute/go-simulation-driver ./tests/simulation/drivers
+```
+
+Supply the unchanged Testify consumer export directory for the selected case.
+It contains `material.json`, `plan.json`, and `raw/raw.jsonl`. Use a capture
+of the unified flow from official Pi 1.6.0 with a controlled loopback model.
+The recorded requests include `get_commands` during session open and
+`streamingBehavior: steer` on explicit prompts. Write `/absolute/request.json`
+with an absolute path to the export and a new output directory whose parent
+already exists.
+
+```json
+{
+  "case": "012",
+  "material": "/absolute/pi-extension-captures/012/export",
+  "output": "/absolute/new-replay-012"
+}
+```
+
+```sh
+/absolute/go-simulation-driver --pi-extension-replay /absolute/request.json
+```
+
+Run each case from `008` through `014` and from `037` through `038` with its own
+export and output directory. The driver starts a local mock backed by the
+Testify Go library. It maps the recorded temporary extension path to the SDK
+session's generated extension and configuration on disk. Run replays of the
+same export serially because they reserve the same temporary path.
+
+Read `observations.jsonl` for SDK events, acknowledgments, and session close.
+The execution report binds the source hash and matched frame count to the
+strict replay result, full consumption, and client EOF. Use the source capture
+report to verify native Pi cleanup and the loopback model requests. This entry
+runs on demand with explicit captures.
+
 <a id="catalog-仿真测试流程目录"></a>
 
 ## 仿真测试流程目录

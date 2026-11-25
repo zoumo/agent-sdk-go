@@ -109,7 +109,7 @@ done <<< "$interactionledger_deps"
 # Each adapter may use standard library packages, its own native SDK, the
 # adapter-neutral core, and reviewed SDK-internal mechanics. It must not reach
 # the other adapter or the other native SDK.
-for adapter in codex claude; do
+for adapter in codex claude pi; do
   adapter_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' "./agent/$adapter")
   while IFS= read -r dependency; do
     case "$dependency" in
@@ -182,7 +182,7 @@ while IFS= read -r dependency; do
   esac
 done <<< "$queue_dependencies"
 # Test libraries must not leak into any native SDK's production dependency tree.
-production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/... ./agent/...)
+production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/... ./pi/... ./agent/...)
 if [[ "$production_deps" == *github.com/stretchr/* ]]; then
   echo "testify dependencies must remain test-only" >&2
   exit 1
@@ -191,14 +191,14 @@ if [[ "$production_deps" == *go.opentelemetry.io/otel/sdk* || "$production_deps"
   echo "OpenTelemetry SDK and exporter dependencies must remain test-only" >&2
   exit 1
 fi
-native_deps=$(go list -deps -f '{{.ImportPath}}' ./codex ./codex/types ./claude ./claude/types)
+native_deps=$(go list -deps -f '{{.ImportPath}}' ./codex ./codex/types ./claude ./claude/types ./pi)
 if [[ "$native_deps" == *go.opentelemetry.io/* ]]; then
   echo "native SDKs must not depend on OpenTelemetry" >&2
   exit 1
 fi
 # Recording/replay utilities and embedded fixtures are tooling, never SDK
-# runtime dependencies. Inspect only the four supported SDK/data entry points.
-sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' ./agent ./agent/codex ./agent/claude ./codex ./codex/types ./claude ./claude/types)
+# runtime dependencies. Inspect the supported SDK entry points.
+sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' ./agent/... ./codex ./codex/types ./claude ./claude/types ./pi)
 while IFS= read -r dependency; do
   case "$dependency" in
     github.com/zoumo/golib/*)
@@ -232,7 +232,7 @@ rules = [
      'agent/codex must not import agent/claude'),
     (('agent/claude',), False, r'github\.com/zoumo/agent-sdk-go/agent/codex',
      'agent/claude must not import agent/codex'),
-    (('codex', 'claude'), True, r'github\.com/zoumo/agent-sdk-go/agent',
+    (('codex', 'claude', 'pi'), True, r'github\.com/zoumo/agent-sdk-go/agent',
      'native SDK production code must not import the agent layer'),
     (('agent', 'codex', 'claude'), True, r'github\.com/[^"]*/(mass|mass-go)(/|")',
      'SDK production code must not import MASS'),

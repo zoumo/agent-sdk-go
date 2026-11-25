@@ -76,7 +76,9 @@ try:
                 scopes.add('go')
                 if not name.endswith('_test.go'):
                     scopes.add('production')
-                    if not relative.startswith(('codex/types/', 'claude/types/', 'agent/')):
+                    # Pi's native response envelope uses the protocol's "command" tag.
+                    if (relative != 'pi/session.go'
+                            and not relative.startswith(('codex/types/', 'claude/types/', 'agent/'))):
                         scopes.add('connection')
             for scope, expression, description in rules:
                 if scope not in scopes:

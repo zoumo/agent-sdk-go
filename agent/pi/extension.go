@@ -79,7 +79,7 @@ func (e *sessionExtension) check(ctx context.Context, native *pi.Session) error 
 		if err := json.Unmarshal(command.SourceInfo, &info); err != nil {
 			return err
 		}
-		if info.Path != e.path {
+		if !sameExtensionFile(info.Path, e.path) {
 			continue
 		}
 		switch command.Name {
@@ -93,6 +93,32 @@ func (e *sessionExtension) check(ctx context.Context, native *pi.Session) error 
 		return unsupported("pi_session_extension_unavailable", "Pi 1.6.0 SDK session extension did not initialize")
 	}
 	return nil
+}
+
+// The CLI can report the lexical path supplied by its launcher. Accept an
+// alias only when it identifies the exact file materialized for this session.
+func sameExtensionFile(reported, materialized string) bool {
+	if reported == materialized {
+		return true
+	}
+	if !filepath.IsAbs(reported) {
+		return false
+	}
+	actual, err := os.Stat(reported)
+	if err != nil {
+		return false
+	}
+	expected, err := os.Stat(materialized)
+	if err != nil || !os.SameFile(actual, expected) {
+		return false
+	}
+	// The extension reads its launch settings relative to its source path.
+	actualConfig, err := os.Stat(filepath.Join(filepath.Dir(reported), "session.json"))
+	if err != nil {
+		return false
+	}
+	expectedConfig, err := os.Stat(filepath.Join(filepath.Dir(materialized), "session.json"))
+	return err == nil && os.SameFile(actualConfig, expectedConfig)
 }
 
 func (e *sessionExtension) remove() error {

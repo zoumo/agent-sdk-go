@@ -1,7 +1,7 @@
 {
   "name": "agent-sdk-testify-claude",
   "version": "0.1.0",
-  "description": "Claude official SDK driver for agent-sdk-testify",
+  "description": "Claude official SDK driver for agent-replay",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.mjs",
-    "prepack": "npm run build && cp ../../../LICENSE dist/LICENSE"
+    "prepack": "npm run build && cp ../../../../LICENSE dist/LICENSE"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.293",

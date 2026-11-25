@@ -25,7 +25,7 @@ TOOL = "agent-replay"
 CODEX = "agent-sdk-testify-codex"
 NPM_DRIVERS = {
     "claude": DRIVERS / "claude/typescript",
-    "pi": DRIVERS / "pi/official",
+    "pi": DRIVERS / "pi/javascript",
 }
 TARGETS = {
     "linux-amd64": "x86_64-unknown-linux-gnu",
@@ -34,7 +34,7 @@ TARGETS = {
     "darwin-arm64": "aarch64-apple-darwin",
 }
 ARCHIVE_DOCS = {
-    "LICENSE": REPLAY / "LICENSE",
+    "LICENSE": ROOT / "LICENSE",
     "NOTICE": ROOT / "NOTICE",
     "README.md": REPLAY / "README.md",
     "docs/using-mock.md": REPLAY / "docs/using-mock.md",

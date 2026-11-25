@@ -104,22 +104,11 @@ func AcceptRemoteClose(ctx context.Context, root, mainEndpoint, mainToken, probe
 	if err := check(started, mainResponses[string(mainRequests[2].ID)]); err != nil {
 		return err
 	}
-	var turn types.TurnStartParams
-	if err := json.Unmarshal(mainRequests[3].Params, &turn); err != nil {
-		return err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(mainRequests[3].Params, &fields); err != nil {
-		return err
-	}
-	if len(fields) != 2 || turn.ThreadID != session.ThreadID() {
-		return errors.New("unsupported remote setup input options")
-	}
-	submitted, err := session.Submit(ctx, codex.Input{Input: turn.Input})
+	submitted, err := submitRecordedTurn(ctx, first, session, mainRequests[3].Params)
 	if err != nil {
 		return err
 	}
-	if err := check(submitted.Response, mainResponses[string(mainRequests[3].ID)]); err != nil {
+	if err := check(submitted, mainResponses[string(mainRequests[3].ID)]); err != nil {
 		return err
 	}
 	for {
@@ -143,7 +132,7 @@ func AcceptRemoteClose(ctx context.Context, root, mainEndpoint, mainToken, probe
 		if err := json.Unmarshal(received.Event.Params, &result); err != nil {
 			return err
 		}
-		if result.ThreadID != session.ThreadID() || result.Turn.ID != submitted.Response.Turn.ID || result.Turn.Status != types.TurnStatusCompleted {
+		if result.ThreadID != session.ThreadID() || result.Turn.ID != submitted.Turn.ID || result.Turn.Status != types.TurnStatusCompleted {
 			return errors.New("remote setup terminal is unsuccessful or has crossed identity")
 		}
 		break
@@ -151,7 +140,11 @@ func AcceptRemoteClose(ctx context.Context, root, mainEndpoint, mainToken, probe
 	if err := first.Close(); err != nil {
 		return err
 	}
-	if _, err := session.Submit(ctx, codex.Input{Input: turn.Input}); err == nil ||
+	var input codex.Input
+	if err := json.Unmarshal(mainRequests[3].Params, &input); err != nil {
+		return err
+	}
+	if _, err := session.Submit(ctx, input); err == nil ||
 		(!errors.Is(err, codex.ErrClosed) && !errors.Is(err, codex.ErrRemoteTransport)) {
 		return errors.New("closed remote Session did not reject input")
 	}

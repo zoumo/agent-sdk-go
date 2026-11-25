@@ -87,7 +87,16 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 	var mu sync.Mutex
 	seen := map[string]int{}
 	consumed := map[string]int{}
-	requests := map[string]*codex.IncomingRequest{}
+	type receivedRequest struct {
+		request *codex.IncomingRequest
+		source  types.EventIdentity
+	}
+	requests := map[codex.ID]receivedRequest{}
+	findRequest := func(id codex.ID) receivedRequest {
+		mu.Lock()
+		defer mu.Unlock()
+		return requests[id]
+	}
 	changed := make(chan struct{}, 1)
 	done := make(chan struct{})
 	var receiveErr error
@@ -129,7 +138,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 				seen[k]++
 			}
 			if got.Request != nil {
-				requests[got.Request.ID().String()] = got.Request
+				requests[got.Request.ID()] = receivedRequest{request: got.Request, source: got.Source}
 			}
 			mu.Unlock()
 			select {
@@ -173,7 +182,9 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 		frame, m := frames[i], messages[i]
 		if frame.Direction == "s2c" {
 			var p struct {
-				ThreadID string `json:"threadId"`
+				ThreadID  string          `json:"threadId"`
+				TurnID    string          `json:"turnId"`
+				RequestID json.RawMessage `json:"requestId"`
 			}
 			_ = json.Unmarshal(m.Params, &p)
 			// Completed approval-fixture tool calls remain visible in both
@@ -188,9 +199,27 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 				_ = json.Unmarshal(m.Params, &result)
 			}
 			mcpResult := result.Item.Type == "mcpToolCall" && result.Item.Server == "approval_fixture"
-			if m.Method != "" && (p.ThreadID == s.ThreadID() || len(m.ID) > 0 || mcpResult) {
+			resolvedRequest := false
+			if m.Method == "serverRequest/resolved" && p.ThreadID != s.ThreadID() {
+				if id, e := codex.ParseID(p.RequestID); e == nil {
+					r := findRequest(id)
+					resolvedRequest = r.request != nil && r.request.Method() == "mcpServer/elicitation/request" &&
+						r.source.ThreadID == p.ThreadID
+				}
+			}
+			if m.Method != "" && (p.ThreadID == s.ThreadID() || len(m.ID) > 0 || mcpResult || resolvedRequest) {
 				if e := wait(frame.Wire); e != nil {
 					return fmt.Errorf("ordinal %d %s: %w", frame.Ordinal, m.Method, e)
+				}
+				if m.Method == "mcpServer/elicitation/request" {
+					id, e := codex.ParseID(m.ID)
+					if e != nil {
+						return e
+					}
+					r := findRequest(id)
+					if r.request == nil || r.source.ThreadID != p.ThreadID || r.source.TurnID != p.TurnID {
+						return fmt.Errorf("ordinal %d: MCP request source differs from recording", frame.Ordinal)
+					}
 				}
 				if m.Method == "turn/completed" {
 					terminals++
@@ -203,9 +232,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 			if e != nil {
 				return e
 			}
-			mu.Lock()
-			r := requests[id.String()]
-			mu.Unlock()
+			r := findRequest(id).request
 			if r == nil {
 				return fmt.Errorf("ordinal %d: original answer handle missing", frame.Ordinal)
 			}
@@ -239,15 +266,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 				case "item/permissions/requestApproval":
 					e = answerSandboxPermissions(ctx, r, m.Result)
 				case "mcpServer/elicitation/request":
-					var answer struct {
-						Action string `json:"action"`
-					}
-					if e = json.Unmarshal(m.Result, &answer); e == nil {
-						if answer.Action != "accept" {
-							return errors.New("MCP tool approval fixture requires accept")
-						}
-						e = r.Handle().Answer(ctx, answer)
-					}
+					e = answerMCPElicitation(ctx, r, m.Result)
 				case "item/tool/requestUserInput":
 					var answer types.ToolRequestUserInputResponse
 					if e = json.Unmarshal(m.Result, &answer); e == nil {
@@ -258,7 +277,7 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 				}
 			}
 			if answerErr := recordedAnswerError(e); answerErr != nil {
-				return answerErr
+				return fmt.Errorf("ordinal %d %s answer: %w", frame.Ordinal, r.Method(), answerErr)
 			}
 			continue
 		}
@@ -279,20 +298,22 @@ func AcceptFlow(ctx context.Context, mock *mocktest.Session, path string, policy
 			var response json.RawMessage
 			callErr = c.Call(ctx, m.Method, m.Params, &response)
 			result = response
+		case "thread/name/set":
+			var params struct {
+				ThreadID string `json:"threadId"`
+				Name     string `json:"name"`
+			}
+			if e := json.Unmarshal(m.Params, &params); e != nil {
+				return e
+			}
+			if params.ThreadID != s.ThreadID() || params.Name == "" {
+				return errors.New("recorded rename must name the session thread")
+			}
+			var response json.RawMessage
+			callErr = c.Call(ctx, m.Method, params, &response)
+			result = response
 		case "turn/start":
-			var p types.TurnStartParams
-			if e := json.Unmarshal(m.Params, &p); e != nil {
-				return e
-			}
-			var input codex.Input
-			if e := json.Unmarshal(m.Params, &input); e != nil {
-				return e
-			}
-			if p.ThreadID != s.ThreadID() {
-				return errors.New("foreign input thread")
-			}
-			sub, e := s.Submit(ctx, input)
-			result, callErr = sub.Response, e
+			result, callErr = submitRecordedTurn(ctx, c, s, m.Params)
 		case "thread/settings/update":
 			var p types.ThreadSettingsUpdateParams
 			if e := json.Unmarshal(m.Params, &p); e != nil {
@@ -392,21 +413,57 @@ func answerSandboxPermissions(ctx context.Context, request *codex.IncomingReques
 	if err := json.Unmarshal(recorded, &response); err != nil {
 		return err
 	}
-	if !response.Permissions.FileSystem.IsSet() && !response.Permissions.Network.IsSet() {
+	grant := response.Permissions
+	if !grant.FileSystem.IsSet() && !grant.Network.IsSet() && len(grant.UnknownFields) == 0 {
 		return request.Deny(ctx, codex.ApprovalOptions{Permissions: &response})
 	}
 	var params types.PermissionsRequestApprovalParams
 	if err := json.Unmarshal(request.Params(), &params); err != nil {
 		return err
 	}
-	grant := types.GrantedPermissionProfile{
-		FileSystem: params.Permissions.FileSystem,
-		Network:    params.Permissions.Network,
+	// Match granted members to the live request and retain the recorded field
+	// presence, including the legacy grant's explicit network null.
+	if (grant.FileSystem.IsSet() && !equal(grant.FileSystem, params.Permissions.FileSystem)) ||
+		(grant.Network.IsSet() && !equal(grant.Network, params.Permissions.Network)) ||
+		(len(grant.UnknownFields) > 0 && !equal(grant.UnknownFields, params.Permissions.UnknownFields)) {
+		return errors.New("recorded permission grant differs from the live request")
 	}
-	return request.Approve(ctx, codex.ApprovalOptions{Permissions: &types.PermissionsRequestApprovalResponse{
-		Permissions: grant,
-		Scope:       response.Scope,
-	}})
+	return request.Approve(ctx, codex.ApprovalOptions{Permissions: &response})
+}
+
+func answerMCPElicitation(ctx context.Context, request *codex.IncomingRequest, recorded json.RawMessage) error {
+	var params struct {
+		Mode string `json:"mode"`
+		Meta struct {
+			ApprovalKind string `json:"codex_approval_kind"`
+		} `json:"_meta"`
+	}
+	if err := json.Unmarshal(request.Params(), &params); err != nil {
+		return err
+	}
+	var answer struct {
+		Action  string          `json:"action"`
+		Content json.RawMessage `json:"content,omitempty"`
+		Meta    json.RawMessage `json:"_meta,omitempty"`
+	}
+	if err := json.Unmarshal(recorded, &answer); err != nil {
+		return err
+	}
+	if params.Meta.ApprovalKind == "mcp_tool_call" {
+		if answer.Action != "accept" || canonical(answer.Content) != nil {
+			return errors.New("MCP tool approval fixture requires accept without form content")
+		}
+	} else {
+		switch answer.Action {
+		case "accept", "decline", "cancel":
+		default:
+			return fmt.Errorf("unsupported MCP elicitation action %q", answer.Action)
+		}
+		if params.Mode != "form" && params.Mode != "url" {
+			return fmt.Errorf("unsupported MCP elicitation mode %q", params.Mode)
+		}
+	}
+	return request.Handle().Answer(ctx, answer)
 }
 
 func openStreamSession(ctx context.Context, mock *mocktest.Session, initialize types.InitializeParams) (*codex.Client, *mocktest.Run, <-chan error, error) {

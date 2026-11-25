@@ -127,7 +127,9 @@ func TestGateExplicitOutputRemainsCallerOwned(t *testing.T) {
 			requireGateEvidence(t, output)
 			recorded, err := os.ReadFile(entrypoint.outputRecord)
 			require.NoError(t, err)
-			require.Equal(t, output+"\n", string(recorded))
+			executionOutput := strings.TrimSpace(string(recorded))
+			require.NotEqual(t, output, executionOutput)
+			require.NoDirExists(t, filepath.Dir(executionOutput))
 			require.NoDirExists(t, filepath.Join(entrypoint.root, ".artifacts", "simulation", "gates"))
 		})
 	}
@@ -145,6 +147,19 @@ func TestDefaultGateArchiveFailureRetainsRuntime(t *testing.T) {
 	requireGateEvidence(t, executionOutput)
 	require.Equal(t, executionOutput, artifacts)
 	require.ErrorContains(t, runErr, executionOutput)
+}
+
+func TestGateExistingArchiveRetainsRuntimeAndCallerEvidence(t *testing.T) {
+	entrypoint := prepareGateEntrypoint(t)
+	output := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(output, "coverage.json"), []byte("existing evidence\n"), 0o600))
+	artifacts, err := withSimulationOutput(output, entrypoint.archiveRoot(), entrypoint.writeEvidence)
+	require.ErrorIs(t, err, os.ErrExist)
+	require.ErrorContains(t, err, artifacts)
+	requireGateEvidence(t, artifacts)
+	original, err := os.ReadFile(filepath.Join(output, "coverage.json"))
+	require.NoError(t, err)
+	require.Equal(t, "existing evidence\n", string(original))
 }
 
 func TestDefaultGateCancellationWaitsAndArchivesEvidence(t *testing.T) {

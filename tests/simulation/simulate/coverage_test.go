@@ -25,7 +25,7 @@ func TestAcceptanceMatrixMatchesSharedPolicy(t *testing.T) {
 			optional[slot.Provider+"/"+slot.CaseID] = true
 		}
 	}
-	require.Equal(t, map[string]int{"required": 69, "optional": 15}, counts)
+	require.Equal(t, map[string]int{"required": 70, "optional": 14}, counts)
 
 	var got []string
 	for key := range optional {
@@ -43,7 +43,6 @@ func TestAcceptanceMatrixMatchesSharedPolicy(t *testing.T) {
 		"claude/SDK-CASE-040",
 		"claude/SDK-CASE-041",
 		"codex/SDK-CASE-003",
-		"codex/SDK-CASE-012",
 		"codex/SDK-CASE-025",
 		"codex/SDK-CASE-026",
 		"codex/SDK-CASE-038",
@@ -233,7 +232,7 @@ func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 		require.NoError(t, err, string(b))
 	}
 	require.Equal(t, coverageSchemaVersion, report.SchemaVersion)
-	require.Equal(t, coverageMatrix{Cases: 42, Slots: 84, Required: 69, Optional: 15}, report.Matrix)
+	require.Equal(t, coverageMatrix{Cases: 42, Slots: 84, Required: 70, Optional: 14}, report.Matrix)
 	require.Len(t, report.Cases, 84)
 	for _, row := range report.Cases {
 		require.Empty(t, row.CleanupError, "%s/%s", row.Provider, row.CaseID)
@@ -249,8 +248,8 @@ func TestGatePreparedSessionsAreConcurrentAndAlwaysCleaned(t *testing.T) {
 	require.Zero(t, report.MaterialFailed)
 	require.Equal(t, 84, report.Counts["passed"]+report.Counts["failed"]+report.Counts["unverified"])
 	for _, key := range []string{
-		"codex/SDK-CASE-037", "codex/SDK-CASE-038",
-		"codex/SDK-CASE-039", "codex/SDK-CASE-040", "codex/SDK-CASE-041",
+		"codex/SDK-CASE-012", "codex/SDK-CASE-037", "codex/SDK-CASE-038",
+		"codex/SDK-CASE-039", "codex/SDK-CASE-040", "codex/SDK-CASE-041", "codex/SDK-CASE-042",
 		"claude/SDK-CASE-037", "claude/SDK-CASE-038", "claude/SDK-CASE-042",
 	} {
 		row := coverageRowByKey(t, report, key)
@@ -275,7 +274,7 @@ func TestGateSyntheticRecordingLeavesCoverageUnverified(t *testing.T) {
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
 	require.Len(t, report.Cases, 84)
 	require.Equal(t, map[string]int{"passed": 1, "unverified": 83}, report.Counts)
-	require.Equal(t, 69, report.RequiredBlocking)
+	require.Equal(t, 70, report.RequiredBlocking)
 	require.NotNil(t, report.Selection)
 	require.Equal(t, "synthetic", report.Selection.Provenance)
 

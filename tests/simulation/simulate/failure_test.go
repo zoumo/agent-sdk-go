@@ -16,7 +16,7 @@ import (
 func TestUnavailableAndCorruptMaterialFailExplicitly(t *testing.T) {
 	t.Run("unavailable builtin", func(t *testing.T) {
 		output := filepath.Join(t.TempDir(), "run")
-		cmd := simulationCommand(t.Context(), "--provider", "codex", "--case", "SDK-CASE-012", "--output", output, "--driver", driverBinary)
+		cmd := simulationCommand(t.Context(), "--provider", "codex", "--case", "SDK-CASE-003", "--output", output, "--driver", driverBinary)
 		b, err := cmd.CombinedOutput()
 		require.Error(t, err, string(b))
 		var result summary

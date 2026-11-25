@@ -17,7 +17,7 @@ strict gate, run `TestSimulationGate`. For a single built-in case, select the
 provider and case ID with `TestSimulationCase`. To replay an external capture,
 pass its path to `-simulation.recording`.
 
-Use a new output directory for each run that sets `-simulation.output`.
+Set `-simulation.output` to a new absolute archive directory whose parent exists.
 
 ```sh
 go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2
@@ -28,12 +28,9 @@ go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -sim
 `TestMain` builds the SDK driver. The test coordinates the simulation and
 starts each driver in its own environment, workspace, and process group.
 
-The default gate runs in a short private directory and archives its unchanged
-output under `.artifacts/simulation/gates/`, including failures and handled
-cancellation. This avoids deep-checkout project keys without changing Claude's
-native 200-character limit. An explicit `-simulation.output` remains caller-owned.
-See [offline validation](../../../docs/testing.md) for evidence locations,
-temporary-directory cleanup and archive failure handling.
+The test uses a short private directory for the run and archives the evidence
+afterward. See [offline validation](../../../docs/testing.md) for the default
+archive location, cleanup, and failure handling.
 
 ### 审核采用和日常门禁
 

@@ -38,7 +38,7 @@ var acceptanceCases = []acceptanceCase{
 	{ID: "SDK-CASE-009"},
 	{ID: "SDK-CASE-010"},
 	{ID: "SDK-CASE-011"},
-	{ID: "SDK-CASE-012", CodexOptional: true},
+	{ID: "SDK-CASE-012"},
 	{ID: "SDK-CASE-013"},
 	{ID: "SDK-CASE-014"},
 	{ID: "SDK-CASE-015"},
@@ -125,8 +125,8 @@ func acceptanceSlots() ([]coverageSlot, error) {
 			return nil, fmt.Errorf("acceptance matrix has invalid requirement %q", slot.Requirement)
 		}
 	}
-	if len(slots) != 84 || required != 69 || optional != 15 {
-		return nil, fmt.Errorf("acceptance matrix has %d slots (%d required, %d optional); want 84 (69, 15)",
+	if len(slots) != 84 || required != 70 || optional != 14 {
+		return nil, fmt.Errorf("acceptance matrix has %d slots (%d required, %d optional); want 84 (70, 14)",
 			len(slots), required, optional)
 	}
 	return slots, nil

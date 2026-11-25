@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	simulationOutput    = flag.String("simulation.output", "", "Caller-owned absolute evidence output; default archives a short private run")
+	simulationOutput    = flag.String("simulation.output", "", "New absolute directory for archived simulation evidence")
 	simulationRecording = flag.String("simulation.recording", "", "Absolute external capture; cannot fill builtin gate coverage")
 	simulationProvider  = flag.String("simulation.provider", "codex", "Provider for TestSimulationCase")
 	simulationCase      = flag.String("simulation.case", "SDK-CASE-001", "Builtin case for TestSimulationCase")
@@ -43,7 +43,7 @@ func TestSimulationGate(t *testing.T) {
 	output := runSimulationTest(t, true)
 	var report coverage
 	require.NoError(t, readJSON(filepath.Join(output, "coverage.json"), &report))
-	require.Equal(t, coverageMatrix{Cases: 42, Slots: 84, Required: 69, Optional: 15}, report.Matrix)
+	require.Equal(t, coverageMatrix{Cases: 42, Slots: 84, Required: 70, Optional: 14}, report.Matrix)
 	require.Len(t, report.Cases, 84)
 	require.Zero(t, report.RequiredBlocking)
 	require.Zero(t, report.OptionalBlocking)

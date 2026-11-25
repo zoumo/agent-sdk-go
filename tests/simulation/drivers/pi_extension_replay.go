@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -13,12 +12,19 @@ import (
 	"syscall"
 	"time"
 
+	agenttestify "github.com/zoumo/agent-sdk-testify"
+
 	pisim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/pi/go"
 )
 
 type piExtensionReplayRequest struct {
-	Case, Material, Testify, Output string
+	Case, Material, Output string
 }
+
+const (
+	piMockConnection           = "main"
+	piMockConsumptionDirectory = "mock-consumed"
+)
 
 func runPiExtensionReplay(args []string) error {
 	if len(args) != 1 {
@@ -28,8 +34,8 @@ func runPiExtensionReplay(args []string) error {
 	if err := readPiExtensionJSON(args[0], &request); err != nil {
 		return err
 	}
-	if !filepath.IsAbs(request.Material) || !filepath.IsAbs(request.Testify) || !filepath.IsAbs(request.Output) {
-		return errors.New("pi: extension replay requires absolute material, Testify executable, and new output paths")
+	if !filepath.IsAbs(request.Material) || !filepath.IsAbs(request.Output) {
+		return errors.New("pi: extension replay requires absolute material and new output paths")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -39,7 +45,7 @@ func runPiExtensionReplay(args []string) error {
 }
 
 func (r piExtensionReplayRequest) replay(ctx context.Context) (err error) {
-	material, err := readPiReplayMaterial(r.Material, r.Case)
+	material, err := readPiReplayMaterial(r.Material)
 	if err != nil {
 		return err
 	}
@@ -65,11 +71,27 @@ func (r piExtensionReplayRequest) replay(ctx context.Context) (err error) {
 		}
 	}
 	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "TMPDIR=" + runtimeDir, "PI_CODING_AGENT_DIR=" + filepath.Join(home, "pi")}
-	fixture := filepath.Join(runtimeDir, "fixture")
-	prepare := exec.CommandContext(ctx, r.Testify, "prepare", "--agent", "pi", "--recording", r.Material, "--fixture-dir", fixture)
-	prepare.Env = env
-	if diagnostics, err := prepare.CombinedOutput(); err != nil {
-		return fmt.Errorf("prepare strict Pi fixture: %w: %s", err, diagnostics)
+	// This driver invocation runs one replay. Isolate library preparation and
+	// the SDK-owned peer from inherited credentials and Pi configuration.
+	os.Clearenv()
+	for _, entry := range env {
+		key, value, _ := strings.Cut(entry, "=")
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+	fixture, err := agenttestify.Prepare(agenttestify.PrepareOptions{
+		FixtureDir: filepath.Join(runtimeDir, "fixture"), Agent: "pi", Recording: r.Material,
+	})
+	if err != nil {
+		return fmt.Errorf("prepare strict Pi fixture with the Testify library: %w", err)
+	}
+	if fixture.AgentType != "pi" || fixture.Tool.Source != agenttestify.ToolSourceEmbedded ||
+		fixture.Source.Kind != "recording" || fixture.Source.ID != "pi-controlled-"+r.Case ||
+		fixture.Source.Provenance != "consumer" || fixture.Source.DriverProfile != "consumer" ||
+		fixture.Current == nil || !samePiRecording(*fixture.Current, material) ||
+		!slices.Equal(fixture.Current.Connections, []string{piMockConnection}) {
+		return errors.New("testify: prepared Pi fixture differs from the supplied recording or requested case")
 	}
 	driver, err := os.Executable()
 	if err != nil {
@@ -82,28 +104,24 @@ func (r piExtensionReplayRequest) replay(ctx context.Context) (err error) {
 	defer func() { err = errors.Join(err, observations.Close()) }()
 	options := pisim.ExtensionFlow{
 		Case: r.Case, Workspace: workspace, Command: driver, Env: env,
-		Args: []string{"--pi-extension-mock", r.Testify, fixture, material.alias, r.Output},
+		Args: []string{"--pi-extension-mock", fixture.FixtureDir, material.alias, runtimeDir, r.Output},
 	}
-	flowErr := pisim.RunExtensionFlow(ctx, options, observations, waitForPiReplayProgress(filepath.Join(r.Output, "progress")))
-	return errors.Join(flowErr, verifyPiReplayResult(fixture, r.Output, material))
+	flowErr := pisim.RunExtensionFlow(ctx, options, observations, waitForPiMockConsumption(runtimeDir))
+	return errors.Join(flowErr, verifyPiReplayResult(fixture, runtimeDir, r.Output, r.Case, material))
 }
 
-// Wait for the public full-consumption signal before the Session sends EOF.
-// Testify's final outcome independently confirms the matching and cleanup.
-func waitForPiReplayProgress(path string) func(context.Context, <-chan struct{}) error {
+// Wait for the SDK-owned peer to observe Testify's full-consumption channel
+// before the Session sends EOF.
+func waitForPiMockConsumption(runtimeDir string) func(context.Context, <-chan struct{}) error {
+	path := filepath.Join(runtimeDir, piMockConsumptionDirectory)
 	return func(ctx context.Context, done <-chan struct{}) error {
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 		for {
-			progress, err := os.ReadFile(path)
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-			if string(progress) == "1" {
+			if _, err := os.Stat(path); err == nil {
 				return nil
-			}
-			if len(progress) != 0 {
-				return errors.New("invalid Testify full-consumption notification")
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
 			}
 			select {
 			case <-ctx.Done():
@@ -116,13 +134,13 @@ func waitForPiReplayProgress(path string) func(context.Context, <-chan struct{})
 	}
 }
 
-// The SDK launches this peer as its Pi process. It forwards stdin and stdout
-// directly and confines aliasing to the filesystem used by the handshake.
+// The SDK launches this peer as its Pi process. The Testify library owns the
+// peer ends of those streams. Aliasing only affects the handshake filesystem.
 func runPiExtensionMock(args []string) (err error) {
-	if len(args) < 6 || !validPiExtensionAlias(args[2]) {
+	if len(args) < 6 || !validPiExtensionAlias(args[1]) {
 		return errors.New("invalid Pi extension mock launch")
 	}
-	testify, fixture, alias, output, native := args[0], args[1], args[2], args[3], args[4:]
+	fixtureDir, alias, runtimeDir, output, native := args[0], args[1], args[2], args[3], args[4:]
 	index := slices.Index(native, "-e")
 	if index < 0 || index+1 >= len(native) || !filepath.IsAbs(native[index+1]) || filepath.Base(native[index+1]) != "session.ts" {
 		return errors.New("SDK did not launch the Pi session extension")
@@ -136,33 +154,46 @@ func runPiExtensionMock(args []string) (err error) {
 		return fmt.Errorf("bind recorded extension configuration alias: %w", err)
 	}
 	defer func() { err = errors.Join(err, os.Remove(configAlias)) }()
-	paths := []string{"result.jsonl", "progress", "mock.stderr.log"}
-	files := make([]*os.File, 0, len(paths))
+	diagnostics, err := os.OpenFile(filepath.Join(output, "mock.stderr.log"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
 	defer func() {
-		for _, file := range files {
-			err = errors.Join(err, file.Close())
-		}
-	}()
-	for _, name := range paths {
-		file, err := os.OpenFile(filepath.Join(output, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil {
-			return err
+			_, writeErr := fmt.Fprintln(diagnostics, err)
+			err = errors.Join(err, writeErr)
 		}
-		files = append(files, file)
+		err = errors.Join(err, diagnostics.Close())
+	}()
+	fixture, err := agenttestify.Open(fixtureDir)
+	if err != nil {
+		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	command := exec.CommandContext(ctx, testify, "agent", "mock", "--fixture-dir", fixture,
-		"--result-fd", "3", "--progress-fd", "4", "--timeout", "15", "--", "--mode", "rpc")
-	command.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
-		for _, name := range []string{"PATH=", "HOME=", "TMPDIR=", "PI_CODING_AGENT_DIR="} {
-			if strings.HasPrefix(entry, name) {
-				return false
-			}
-		}
-		return true
+	run, startErr := fixture.StartMockAgent(ctx, agenttestify.MockAgentOptions{
+		Connection: piMockConnection, Timeout: 15 * time.Second, NativeArgs: []string{"--mode", "rpc"},
+	}, agenttestify.StartMockAgentStreams{
+		Reader: os.Stdin, Writer: os.Stdout, Stderr: diagnostics,
 	})
-	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, files[2]
-	command.ExtraFiles = files[:2]
-	return command.Run()
+	if run == nil {
+		return errors.Join(errors.New("testify: Pi mock failed to start"), startErr)
+	}
+	err = errors.Join(startErr, writePiMockStart(runtimeDir, run.Start))
+	if err == nil {
+		select {
+		case <-run.FullConsumption():
+			err = os.Mkdir(filepath.Join(runtimeDir, piMockConsumptionDirectory), 0o700)
+		case <-run.Done():
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+	}
+	if err != nil {
+		err = errors.Join(err, run.Abort())
+	}
+	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+	defer cancel()
+	_, waitErr := run.Wait(settle)
+	return errors.Join(err, waitErr)
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,7 +10,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+
+	agenttestify "github.com/zoumo/agent-sdk-testify"
 )
 
 var piExtensionAliasPattern = regexp.MustCompile(`^/tmp/agent-sdk-pi-replay-[0-9a-f]{32}/session\.ts$`)
@@ -23,21 +25,9 @@ type piReplayMaterial struct {
 	frames           int
 }
 
-func readPiReplayMaterial(root, code string) (piReplayMaterial, error) {
-	var plan struct{ AgentType, CaseID, DriverProfile string }
-	if err := readPiExtensionJSON(filepath.Join(root, "plan.json"), &plan); err != nil {
-		return piReplayMaterial{}, fmt.Errorf("read Pi extension recording plan: %w", err)
-	}
-	if plan.AgentType != "pi" || plan.CaseID != "pi-controlled-"+code || plan.DriverProfile != "consumer" {
-		return piReplayMaterial{}, errors.New("pi: extension recording does not match the requested case")
-	}
-	var metadata struct{ Provenance, RecordingSHA256 string }
-	if err := readPiExtensionJSON(filepath.Join(root, "material.json"), &metadata); err != nil {
-		return piReplayMaterial{}, fmt.Errorf("read Pi extension material identity: %w", err)
-	}
-	if metadata.Provenance != "consumer" {
-		return piReplayMaterial{}, errors.New("pi: extension replay requires a consumer recording")
-	}
+// Only the native recording carries the handshake alias. The importer and
+// execution report supply the material identity that binds this byte stream.
+func readPiReplayMaterial(root string) (piReplayMaterial, error) {
 	file, err := os.Open(filepath.Join(root, "raw", "raw.jsonl"))
 	if err != nil {
 		return piReplayMaterial{}, fmt.Errorf("read native Pi recording: %w", err)
@@ -49,8 +39,9 @@ func readPiReplayMaterial(root, code string) (piReplayMaterial, error) {
 	material := piReplayMaterial{}
 	for lines.Scan() {
 		var frame struct {
-			Ordinal int
-			Wire    struct {
+			Ordinal   int
+			Direction string
+			Wire      struct {
 				Type, Command string
 				Success       bool
 				Data          json.RawMessage
@@ -63,7 +54,7 @@ func readPiReplayMaterial(root, code string) (piReplayMaterial, error) {
 		if frame.Ordinal != material.frames {
 			return piReplayMaterial{}, errors.New("pi: recording frame ordinals are incomplete")
 		}
-		if frame.Wire.Type == "response" && frame.Wire.Command == "get_commands" && frame.Wire.Success {
+		if frame.Direction == "s2c" && frame.Wire.Type == "response" && frame.Wire.Command == "get_commands" && frame.Wire.Success {
 			alias, err := extensionAliasFromCommands(frame.Wire.Data)
 			if err != nil {
 				return piReplayMaterial{}, err
@@ -78,9 +69,6 @@ func readPiReplayMaterial(root, code string) (piReplayMaterial, error) {
 		return piReplayMaterial{}, err
 	}
 	material.rawSHA256 = hex.EncodeToString(hash.Sum(nil))
-	if material.rawSHA256 != metadata.RecordingSHA256 {
-		return piReplayMaterial{}, errors.New("pi: recording bytes do not match the material hash")
-	}
 	if material.alias == "" {
 		return piReplayMaterial{}, errors.New("pi: recording has no unified SDK extension handshake")
 	}
@@ -112,123 +100,92 @@ func extensionAliasFromCommands(raw json.RawMessage) (string, error) {
 	return alias, nil
 }
 
-type piReplayNotice struct {
-	SchemaVersion                       int
-	Command, Status, ConnectionStatus   string
-	ExecutionStatus                     string
-	ExecutionComplete                   bool
-	ExecutionID, FixtureID, MaterialID  string
-	ConnectionID, ExecutionSHA256       string
-	Execution, Result, Receipt          string
-	ProcessReceipt, Error, FailureClass string
-	Material                            struct{ ID, Provenance, RecordingSHA256 string }
+type piMockStart struct {
+	ExecutionID     string
+	ExecutionSHA256 string
 }
 
-type piReplayReceipt struct {
-	SchemaVersion, Frames                         int
-	Status, Provider, Provenance, RecordingSHA256 string
-	ExecutionID, ConnectionID, MaterialID         string
-	FullConsumption, ClientEOF, CleanupComplete   bool
-	NativeLaunched                                bool
-	ExitCode                                      *int
+func writePiMockStart(runtimeDir string, start agenttestify.ExecutionStart) error {
+	return writePiReplayJSON(filepath.Join(runtimeDir, "mock-start.json"), piMockStart{
+		ExecutionID: start.ExecutionID, ExecutionSHA256: start.ExecutionSHA256,
+	})
 }
 
-func verifyPiReplayResult(fixture, output string, material piReplayMaterial) error {
-	start, final, err := readPiReplayNotices(filepath.Join(output, "result.jsonl"))
+type piReplayExecution struct {
+	Case              string `json:"case"`
+	FixtureID         string `json:"fixtureId"`
+	ExecutionID       string `json:"executionId"`
+	ConnectionID      string `json:"connectionId"`
+	ExecutionStatus   string `json:"executionStatus"`
+	ExecutionComplete bool   `json:"executionComplete"`
+	Status            string `json:"status"`
+	Transport         string `json:"transport"`
+	MaterialID        string `json:"materialId"`
+	Provenance        string `json:"provenance"`
+	RecordingSHA256   string `json:"recordingSHA256"`
+	Frames            int    `json:"frames"`
+	ExecutionSHA256   string `json:"executionSHA256"`
+	FullConsumption   bool   `json:"fullConsumption"`
+	ClientEOF         bool   `json:"clientEOF"`
+	CleanupComplete   bool   `json:"cleanupComplete"`
+	NativeLaunched    bool   `json:"nativeLaunched"`
+	TestifyVersion    string `json:"testifyVersion"`
+	TestifyModuleSum  string `json:"testifyModuleSum"`
+	Failure           string `json:"failure,omitempty"`
+	Error             string `json:"error,omitempty"`
+}
+
+func samePiRecording(candidate agenttestify.Material, material piReplayMaterial) bool {
+	return candidate.ID != "" && candidate.Provenance == "consumer" && candidate.RecordingSHA256 == material.rawSHA256
+}
+
+func verifyPiReplayResult(fixture *agenttestify.Fixture, runtimeDir, output, code string, material piReplayMaterial) error {
+	var start piMockStart
+	if err := readPiExtensionJSON(filepath.Join(runtimeDir, "mock-start.json"), &start); err != nil {
+		return fmt.Errorf("read Testify Pi mock start identity: %w", err)
+	}
+	report, err := fixture.ExecutionReport(start.ExecutionID)
+	if err != nil {
+		return fmt.Errorf("read Testify Pi execution report: %w", err)
+	}
+	if report == nil || report.FixtureID != fixture.FixtureID || report.ExecutionID != start.ExecutionID ||
+		start.ExecutionSHA256 == "" || report.ExecutionSHA256 != start.ExecutionSHA256 ||
+		!samePiRecording(report.Material, material) || !reflect.DeepEqual(report.Material, *fixture.Current) {
+		return errors.New("testify: Pi execution identity differs from the prepared fixture and mock start")
+	}
+	if len(report.Connections) != 1 || report.Connections[0].ID != piMockConnection {
+		return errors.New("testify: Pi execution did not report exactly the main connection")
+	}
+	connection := report.Connections[0]
+	summary := piReplayExecution{
+		Case: code, FixtureID: report.FixtureID, ExecutionID: report.ExecutionID, ConnectionID: connection.ID,
+		ExecutionStatus: string(report.Status), ExecutionComplete: report.Complete, Status: string(connection.Status),
+		Transport: string(connection.Transport), MaterialID: report.Material.ID, Provenance: report.Material.Provenance,
+		RecordingSHA256: report.Material.RecordingSHA256, Frames: material.frames, ExecutionSHA256: report.ExecutionSHA256,
+		FullConsumption: connection.FullConsumption, ClientEOF: connection.ClientEOF, CleanupComplete: connection.CleanupComplete,
+		NativeLaunched: connection.NativeLaunched, TestifyVersion: fixture.Tool.Version, TestifyModuleSum: fixture.Tool.ModuleSum,
+		Failure: string(connection.Failure), Error: connection.Error,
+	}
+	return errors.Join(writePiReplayJSON(filepath.Join(output, "execution.json"), summary), validatePiReplayCompletion(report, connection))
+}
+
+func validatePiReplayCompletion(report *agenttestify.ExecutionReport, connection agenttestify.ConnectionReport) error {
+	if report.Status != agenttestify.ExecutionStatusPassed || !report.Complete || connection.Status != agenttestify.ConnectionStatusPassed {
+		return fmt.Errorf("strict Testify mock execution %s (complete=%t), connection %s (%s): %s",
+			report.Status, report.Complete, connection.Status, connection.Failure, connection.Error)
+	}
+	if connection.Transport != agenttestify.MockTransportInProcess || !connection.FullConsumption || !connection.ClientEOF ||
+		!connection.CleanupComplete || connection.NativeLaunched || connection.ExitCode != nil || connection.Failure != "" || connection.Error != "" {
+		return errors.New("testify: Pi execution did not establish full consumption, client EOF, and cleanup")
+	}
+	return nil
+}
+
+func writePiReplayJSON(path string, value any) (err error) {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
-	if start.SchemaVersion != 3 || final.SchemaVersion != 3 || start.Command != "mock" || final.Command != "mock" ||
-		start.Status != "running" || start.FixtureID == "" || start.FixtureID != final.FixtureID ||
-		!validPiReplayID(start.ExecutionID) || start.ExecutionID != final.ExecutionID ||
-		!validPiReplayID(start.MaterialID) || start.MaterialID != final.MaterialID ||
-		start.ConnectionID != "main" || final.ConnectionID != "main" || start.ExecutionSHA256 != final.ExecutionSHA256 ||
-		final.Material.ID != final.MaterialID || final.Material.Provenance != "consumer" || final.Material.RecordingSHA256 != material.rawSHA256 {
-		return errors.New("testify: mock notifications disagree with the requested Pi recording")
-	}
-	if final.Status != "passed" || final.ConnectionStatus != "passed" || final.ExecutionStatus != "passed" || !final.ExecutionComplete {
-		return fmt.Errorf("strict Testify mock failed (%s): %s", final.FailureClass, final.Error)
-	}
-	pkg := filepath.Join(fixture, "packages", final.MaterialID)
-	execution := filepath.Join("executions", final.ExecutionID)
-	if final.Execution != filepath.Join(execution, "execution.json") || final.Result != filepath.Join(execution, "receipts", "main.result.json") ||
-		final.Receipt != filepath.Join(execution, "receipts", "main.json") || final.ProcessReceipt != filepath.Join(execution, "receipts", "main.process.json") {
-		return errors.New("testify: mock reported unexpected durable evidence paths")
-	}
-	descriptor, err := os.ReadFile(filepath.Join(pkg, final.Execution))
-	if err != nil {
-		return err
-	}
-	digest := sha256.Sum256(descriptor)
-	if hex.EncodeToString(digest[:]) != final.ExecutionSHA256 {
-		return errors.New("testify: mock execution descriptor hash mismatch")
-	}
-	var result piReplayNotice
-	if err := readPiExtensionJSON(filepath.Join(pkg, final.Result), &result); err != nil {
-		return err
-	}
-	if result != final {
-		return errors.New("testify: mock durable result differs from the final notification")
-	}
-	return copyPiReplayReceipts(pkg, output, final, material)
-}
-
-func readPiReplayNotices(path string) (start, final piReplayNotice, err error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return start, final, fmt.Errorf("read Testify mock notifications: %w", err)
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&start); err != nil {
-		return start, final, fmt.Errorf("read Testify mock start notification: %w", err)
-	}
-	if err := dec.Decode(&final); err != nil {
-		return start, final, fmt.Errorf("read Testify mock final notification: %w", err)
-	}
-	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
-		return start, final, errors.New("testify: mock emitted extra or invalid notifications")
-	}
-	return start, final, nil
-}
-
-func validPiReplayID(id string) bool {
-	_, err := hex.DecodeString(id)
-	return len(id) == 32 && err == nil
-}
-
-func copyPiReplayReceipts(pkg, output string, final piReplayNotice, material piReplayMaterial) error {
-	data, err := os.ReadFile(filepath.Join(pkg, final.Receipt))
-	if err != nil {
-		return err
-	}
-	var protocol piReplayReceipt
-	if err := json.Unmarshal(data, &protocol); err != nil {
-		return err
-	}
-	if protocol.SchemaVersion != 2 || protocol.Status != "passed" || protocol.Provider != "pi" || protocol.Provenance != "consumer" ||
-		protocol.RecordingSHA256 != material.rawSHA256 || protocol.Frames != material.frames || protocol.MaterialID != final.MaterialID ||
-		protocol.ExecutionID != final.ExecutionID || protocol.ConnectionID != "main" || !protocol.FullConsumption || !protocol.ClientEOF ||
-		!protocol.CleanupComplete || protocol.NativeLaunched || protocol.ExitCode == nil || *protocol.ExitCode != 0 {
-		return errors.New("testify: mock receipt did not establish strict Pi recording consumption and cleanup")
-	}
-	processData, err := os.ReadFile(filepath.Join(pkg, final.ProcessReceipt))
-	if err != nil {
-		return err
-	}
-	var process struct {
-		SchemaVersion                                int
-		Status, FixtureID, ExecutionID, ConnectionID string
-		ExitCode                                     *int
-	}
-	if err := json.Unmarshal(processData, &process); err != nil {
-		return err
-	}
-	if process.SchemaVersion != 1 || process.Status != "passed" || process.FixtureID != final.FixtureID ||
-		process.ExecutionID != final.ExecutionID || process.ConnectionID != "main" || process.ExitCode == nil || *process.ExitCode != 0 {
-		return errors.New("testify: mock process receipt did not establish a clean exit")
-	}
-	return errors.Join(
-		os.WriteFile(filepath.Join(output, "protocol-receipt.json"), data, 0o600),
-		os.WriteFile(filepath.Join(output, "process-receipt.json"), processData, 0o600),
-	)
+	defer func() { err = errors.Join(err, file.Close()) }()
+	return json.NewEncoder(file).Encode(value)
 }

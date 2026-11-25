@@ -170,7 +170,7 @@ dependency provides WebSocket mechanics, not Codex models or a competing SDK.
 
 ## Rechecking this record
 
-Run the offline consistency check from the native `codex/` directory:
+Run the offline consistency check from `client/codex/`:
 
 ```sh
 python3 docs/protocol/verify_inventory.py

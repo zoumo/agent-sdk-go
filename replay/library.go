@@ -136,7 +136,7 @@ type RecordAgentOptions struct {
 	Connection string
 	Command    string
 	// NativeArgs are passed verbatim to Command for local consumer capture.
-	// Testify omits them from generated metadata.
+	// Replay omits them from generated metadata.
 	NativeArgs     []string
 	URL            string
 	TokenFile      string

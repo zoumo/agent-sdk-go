@@ -34,7 +34,7 @@ type basePlan struct {
 	}
 }
 
-// AcceptBase drives Pi's public native APIs from a Testify case plan.
+// AcceptBase drives Pi's public native APIs from a Replay case plan.
 func AcceptBase(ctx context.Context, mock *mocktest.Session, root string, observations io.Writer) (err error) {
 	data, err := os.ReadFile(filepath.Join(root, "plan.json"))
 	if err != nil {

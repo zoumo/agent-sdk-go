@@ -36,9 +36,6 @@ TARGETS = {
 ARCHIVE_DOCS = {
     "LICENSE": REPLAY / "LICENSE",
     "NOTICE": ROOT / "NOTICE",
-    "README.md": REPLAY / "README.md",
-    "docs/using-mock.md": REPLAY / "docs/using-mock.md",
-    "drivers/README.md": DRIVERS / "README.md",
     "builtin-manifest.json": BUILTIN_MANIFEST,
 }
 
@@ -102,12 +99,16 @@ def build_bundle(output, version):
     return target
 
 
-def native_distribution(output, version):
+def native_distribution(output, version, revision):
     with tempfile.TemporaryDirectory(prefix="agent-replay-bundle-") as temporary:
         bundle = Path(temporary).resolve()
         target = build_bundle(bundle, version)
         archive = output / archive_name(version, target)
         members = {TOOL: (bundle / TOOL, 0o755), CODEX: (bundle / CODEX, 0o755)}
+        readme = bundle / "README.md"
+        template = (ROOT / "scripts/replay/distribution.md.in").read_text()
+        readme.write_text(template.replace("@SDK_REVISION@", revision))
+        members["README.md"] = (readme, 0o644)
         members.update({name: (path, 0o644) for name, path in ARCHIVE_DOCS.items()})
         with archive.open("wb") as stream, gzip.GzipFile(filename="", fileobj=stream, mode="wb", mtime=0) as gz:
             with tarfile.open(fileobj=gz, mode="w") as tar:
@@ -187,7 +188,7 @@ def main():
                     coverage=len(builtin["coverage"]), goVersion=capture(GO, "env", "GOVERSION"),
                     codexRevision=(RUST_DRIVER / "upstream-revision").read_text().strip(),
                     publication="agent-sdk-go Git tag release")
-    files = collect(output, args.collect.resolve(), metadata) if args.collect else native_distribution(output, version)
+    files = collect(output, args.collect.resolve(), metadata) if args.collect else native_distribution(output, version, revision)
     if capture("git", "status", "--porcelain") or capture("git", "rev-parse", "HEAD") != revision:
         raise SystemExit("SDK checkout changed while packaging")
     manifest = output / "manifest.json"

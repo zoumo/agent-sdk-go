@@ -25,7 +25,12 @@ def install_native(root, dist, manifest):
     archive = dist / archive_name(manifest["toolVersion"], target)
     paths = {name: root / name for name in (TOOL, CODEX)}
     with tarfile.open(archive) as tar:
-        assert sorted(tar.getnames()) == sorted([*paths, *ARCHIVE_DOCS]), tar.getnames()
+        assert sorted(tar.getnames()) == sorted([*paths, *ARCHIVE_DOCS, "README.md"]), tar.getnames()
+        readme = tar.getmember("README.md")
+        assert readme.isfile() and readme.mode == 0o644
+        guide = tar.extractfile(readme).read().decode()
+        assert "@SDK_REVISION@" not in guide
+        assert f"/{manifest['sourceRevision']}/replay/README.md" in guide
         for name, path in paths.items():
             entry = tar.getmember(name)
             assert entry.isfile() and entry.mode == 0o755, entry

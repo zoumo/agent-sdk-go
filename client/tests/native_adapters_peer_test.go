@@ -12,9 +12,7 @@ import (
 
 func TestMain(m *testing.M) { nativepeer.TestMain(m, peer) }
 
-// This SDK-owned synthetic native peer exercises the public process APIs. It
-// does not embed testify replay or act as a testify launcher. It never opens an
-// external connection, loads account configuration, or starts a native agent.
+// This synthetic native peer exercises the public process APIs over stdio.
 // Fault companions use only a loopback application synchronization channel.
 func peer(provider, scenario string) error {
 	scanner := bufio.NewScanner(os.Stdin)

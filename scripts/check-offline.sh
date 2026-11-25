@@ -31,14 +31,14 @@ quality_checks() {
 
 test_checks() {
   # ./... includes both native tests/e2e packages; real CLI/agent tests skip.
-  bash scripts/replay/with-agent-replay.sh go test -p=1 -count=1 -timeout 180s ./...
+  bash scripts/replay/with-agent-replay.sh "${GO:-go}" test -p=1 -count=1 -timeout=15m ./...
   for example in codex/examples/history-query-offline codex/examples/observe-subagents-offline claude/examples/subagents-offline claude/examples/session-messages-offline claude/examples/session-metadata-offline; do
     go run "./$example"
   done
 }
 
 race_checks() {
-  bash scripts/replay/with-agent-replay.sh --race go test -race -p=1 -count=1 -timeout 600s ./...
+  bash scripts/replay/with-agent-replay.sh --race "${GO:-go}" test -race -p=1 -count=1 -timeout=15m ./...
 }
 
 e2e_checks() {

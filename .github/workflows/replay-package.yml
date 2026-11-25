@@ -52,11 +52,17 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: replay/drivers/claude/typescript/package-lock.json
-      - name: Prepare pinned build inputs
+      - name: Prepare Go dependencies
+        run: go mod download
+      - name: Validate Replay source contracts
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+        run: make replay-check
+      - name: Prepare pinned driver inputs
         run: |
           set -euo pipefail
           test "$(go env GOHOSTOS)-$(go env GOHOSTARCH)" = '${{ inputs.target || 'linux-amd64' }}'
-          go mod download
           npm ci --prefix replay/drivers/claude/typescript --ignore-scripts --omit=optional --no-audit --no-fund
           if [[ "$RUNNER_OS" == Linux ]]; then
             sudo apt-get update -qq

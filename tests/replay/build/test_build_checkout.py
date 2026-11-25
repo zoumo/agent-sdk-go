@@ -154,7 +154,7 @@ func TestIdentity(t *testing.T) {
                                 cwd=self.root, text=True, capture_output=True, env=environment, timeout=120)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertEqual(1, result.stderr.count('Build checkout:'))
-        self.assertEqual(self.source.resolve() / '.artifacts/simulation/gates', Path(result.stdout.strip()))
+        self.assertEqual(self.source.resolve() / '.artifacts/simulation/gates', Path(result.stdout.strip()).resolve())
         self.assertEqual([], list(self.root.glob('agent-replay-build.*')))
 
 

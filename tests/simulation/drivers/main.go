@@ -79,7 +79,11 @@ func accept(ctx context.Context, provider, root, raw string, peer driverPeer, mo
 			err = claudesim.AcceptFlow(ctx, mock, root, claudesim.Host{}, claude.ChildDetailPolicy(policy), out)
 		}
 	case "pi":
-		err = pisim.AcceptContinuation(ctx, mock, root, out)
+		if plan.DriverProfile == "continuation" {
+			err = pisim.AcceptContinuation(ctx, mock, root, out)
+		} else {
+			err = pisim.AcceptBase(ctx, mock, root, out)
+		}
 	default:
 		err = errors.New("unsupported provider")
 	}

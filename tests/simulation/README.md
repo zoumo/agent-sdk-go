@@ -104,7 +104,7 @@ root with the pinned Testify module.
 
 ```sh
 GOWORK=off go build \
-  -o /absolute/go-simulation-driver ./tests/simulation/drivers
+  -o /absolute/go-simulation-driver ./tests/simulation/driver
 ```
 
 Supply the unchanged Testify consumer export directory for the selected case.

@@ -946,7 +946,7 @@ adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造�
 - 统一层只有单 Session 流。多个 Session 的公平汇聚由 MASS Runtime 完成，
   SDK 不提供广播。
 
-![Agent SDK 会话时序图，涵盖首次取流、早到事件、复用现有句柄和终止后重新附着](../../docs/modules/unified-agent/assets/session-events-sequence.svg)
+![Agent SDK 会话时序图，涵盖首次取流、早到事件、复用现有句柄和终止后重新附着](assets/session-events-sequence.svg)
 
 如果同一 Core 连接上的 thread 已有所有者，Codex 会在发出原生请求前拒绝重复恢复。
 Claude 为 `Resume` 启动新进程，恢复结果由原生 Claude CLI 决定。

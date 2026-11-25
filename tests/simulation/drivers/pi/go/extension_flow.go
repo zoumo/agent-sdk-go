@@ -26,11 +26,13 @@ func RunExtensionFlow(ctx context.Context, options ExtensionFlow, output io.Writ
 		return errors.New("pi extension flow requires absolute workspace and command paths")
 	}
 	interaction, ok := extensionInteractions[options.Case]
-	if !ok {
+	injecting := options.Case == "037" || options.Case == "038"
+	if !ok && !injecting {
 		return fmt.Errorf("unsupported Pi extension case %q", options.Case)
 	}
 	piCore := agentpi.New(agentpi.Config{
 		CLIPath: options.Command, Args: options.Args, Env: options.Env, Provider: "controlled",
+		EnableInject: injecting,
 	})
 	var core agent.Core = piCore
 	if _, err := core.Start(ctx); err != nil {
@@ -46,7 +48,7 @@ func RunExtensionFlow(ctx context.Context, options ExtensionFlow, output io.Writ
 		open.Features.AgentQuestions = new(true)
 	}
 	session, err := piCore.OpenWithOptions(ctx, open, agentpi.SessionOptions{
-		ToolApproval: interaction.question == "", InteractionTimeout: 15 * time.Second,
+		ToolApproval: ok && interaction.question == "", InteractionTimeout: 15 * time.Second,
 	})
 	if err != nil {
 		return fmt.Errorf("open unified Pi session: %w", err)
@@ -61,7 +63,12 @@ func RunExtensionFlow(ctx context.Context, options ExtensionFlow, output io.Writ
 		return err
 	}
 	flow := extensionFlow{ctx: ctx, session: session, stream: stream, output: json.NewEncoder(output)}
-	if err := flow.runInteraction(options.Case, interaction); err != nil {
+	if injecting {
+		err = flow.runInjection(options.Case)
+	} else {
+		err = flow.runInteraction(options.Case, interaction)
+	}
+	if err != nil {
 		return err
 	}
 	if beforeClose != nil {
@@ -78,12 +85,15 @@ func RunExtensionFlow(ctx context.Context, options ExtensionFlow, output io.Writ
 		return errors.New("unified Pi session did not terminate on close")
 	}
 	for {
-		_, err := flow.next()
+		event, err := flow.next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return err
+		}
+		if injecting {
+			return fmt.Errorf("pi: unexpected event %q after the final Inject query settled", nativeEventType(event))
 		}
 	}
 	return flow.output.Encode(map[string]any{"type": "session.closed", "sessionId": session.ID()})

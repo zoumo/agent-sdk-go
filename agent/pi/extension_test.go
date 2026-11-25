@@ -27,7 +27,7 @@ func TestSessionExtensionCleanup(t *testing.T) {
 	}
 	exe, err := os.Executable()
 	require.NoError(t, err)
-	for _, outcome := range []string{"close", "combined", "exit", "missing-extension", "process-start-failure"} {
+	for _, outcome := range []string{"close", "combined", "exit", "alias", "alias-wrong-config", "missing-extension", "process-start-failure"} {
 		t.Run(outcome, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("TMPDIR", root)
@@ -65,7 +65,7 @@ func TestSessionExtensionCleanup(t *testing.T) {
 			switch outcome {
 			case "process-start-failure":
 				require.Error(t, err)
-			case "missing-extension":
+			case "missing-extension", "alias-wrong-config":
 				require.Equal(t, agent.ErrorUnsupported, agent.CodeOf(err))
 			default:
 				require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestSessionExtensionCleanup(t *testing.T) {
 					require.Implements(t, (*agent.Injector)(nil), s)
 					require.True(t, s.EffectiveFeatures().AgentQuestions)
 				}
-				if outcome == "close" || outcome == "combined" {
+				if outcome == "close" || outcome == "combined" || outcome == "alias" {
 					files, err := filepath.Glob(filepath.Join(root, "agent-sdk-pi-*", "session.ts"))
 					require.NoError(t, err)
 					require.Len(t, files, 1)
@@ -160,6 +160,27 @@ func runExtensionPeer(outcome string) error {
 			!config.Inject || !config.ToolApproval || !config.AgentQuestions || config.InteractionTimeoutMS != 2000 ||
 			!slices.Contains(os.Args, "builtin:mcp")) {
 		return errors.New("the private config did not carry all requested extension settings")
+	}
+	if outcome == "alias" || outcome == "alias-wrong-config" {
+		aliasDir, err := os.MkdirTemp(filepath.Dir(filepath.Dir(path)), "source-alias-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(aliasDir)
+		alias := filepath.Join(aliasDir, filepath.Base(path))
+		if err := os.Symlink(path, alias); err != nil {
+			return err
+		}
+		configAlias := filepath.Join(aliasDir, "session.json")
+		if outcome == "alias-wrong-config" {
+			// Identical contents are insufficient to establish file identity.
+			if err := os.WriteFile(configAlias, data, 0o600); err != nil {
+				return err
+			}
+		} else if err := os.Symlink(configPath, configAlias); err != nil {
+			return err
+		}
+		path = alias
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	writer := json.NewEncoder(os.Stdout)

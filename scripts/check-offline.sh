@@ -29,16 +29,25 @@ quality_checks() {
   go vet ./...
 }
 
+# Only process-boundary suites receive a CLI binary. SDK simulations link Replay.
+go_suites() {
+  local timeout=$1 packages
+  shift
+  packages=$("${GO:-go}" list ./... | grep -Ev '/(tests/replay/e2e|replay/internal/corpus/conformance)(/|$)')
+  printf '%s\n' "$packages" | xargs "${GO:-go}" test -p=1 -count=1 -timeout="$timeout" "$@"
+}
+
 test_checks() {
-  # ./... includes both native tests/e2e packages; real CLI/agent tests skip.
-  bash scripts/replay/with-agent-replay.sh "${GO:-go}" test -p=1 -count=1 -timeout=15m ./...
+  go_suites 180s
+  bash scripts/replay/with-agent-replay.sh "${GO:-go}" test -count=1 -timeout=15m ./tests/replay/e2e/... ./replay/internal/corpus/conformance
   for example in codex/examples/history-query-offline codex/examples/observe-subagents-offline claude/examples/subagents-offline claude/examples/session-messages-offline claude/examples/session-metadata-offline; do
     go run "./$example"
   done
 }
 
 race_checks() {
-  bash scripts/replay/with-agent-replay.sh --race "${GO:-go}" test -race -p=1 -count=1 -timeout=15m ./...
+  go_suites 600s -race
+  bash scripts/replay/with-agent-replay.sh --race "${GO:-go}" test -race -count=1 -timeout=15m ./tests/replay/e2e/... ./replay/internal/corpus/conformance
 }
 
 e2e_checks() {

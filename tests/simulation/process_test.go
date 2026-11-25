@@ -80,7 +80,7 @@ func runStampedTest() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	args := []string{"scripts/replay/with-build-checkout.sh", "go", "test", "-buildvcs=true", "-count=1"}
+	args := []string{"scripts/replay/with-build-checkout.sh", "go", "test", "-buildvcs=true", "-count=1", "-v"}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			if setting.Value == "true" && (setting.Key == "-race" || setting.Key == "-cover") {

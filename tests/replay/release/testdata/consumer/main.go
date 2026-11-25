@@ -37,11 +37,10 @@ func checkReplay(tag, sum string) error {
 	if fixture.Tool.Version != tag || fixture.Tool.ModuleSum != sum || fixture.Tool.Source != replay.ToolSourceEmbedded {
 		return fmt.Errorf("unexpected embedded tool identity: %+v", fixture.Tool)
 	}
-	material := filepath.Join(root, "material")
-	if err := replay.Export(replay.ExportOptions{FixtureDir: fixture.FixtureDir, Output: material}); err != nil {
-		return err
+	if fixture.Current == nil {
+		return fmt.Errorf("the installed module has no builtin Codex material")
 	}
-	recording, err := os.Open(filepath.Join(material, "raw", "raw.jsonl"))
+	recording, err := os.Open(filepath.Join(fixture.Current.Path, "raw", "raw.jsonl"))
 	if err != nil {
 		return err
 	}
@@ -74,8 +73,15 @@ func checkReplay(tag, sum string) error {
 		return err
 	}
 	defer output.Close()
-	result, err := fixture.MockAgent(context.Background(), replay.MockAgentOptions{Timeout: 15 * time.Second},
-		replay.Streams{In: input, Out: output, Err: os.Stderr})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	run, err := fixture.StartMockAgent(ctx, replay.MockAgentOptions{},
+		replay.StartMockAgentStreams{Reader: input, Writer: output, Stderr: os.Stderr})
+	if err != nil {
+		return err
+	}
+	defer run.Abort()
+	result, err := run.Wait(ctx)
 	if err != nil {
 		return err
 	}

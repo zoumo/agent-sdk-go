@@ -76,6 +76,11 @@ def package_filename(source):
     return f"{package['name']}-{package['version']}.tgz"
 
 
+def pack(source, output, env):
+    subprocess.run(["npm", "pack", "--offline", "--loglevel=error", "--pack-destination", output],
+                   cwd=source, env=env, check=True)
+
+
 def build_bundle(output, version):
     system, arch, goos, goarch = capture(GO, "env", "GOHOSTOS", "GOHOSTARCH", "GOOS", "GOARCH").splitlines()
     target = f"{system}-{arch}"
@@ -96,9 +101,14 @@ def build_bundle(output, version):
     subprocess.run(["npm", "ci", "--offline", "--ignore-scripts", "--omit=optional", "--no-audit", "--no-fund"],
                    cwd=claude, env=env, check=True)
     subprocess.run(["npm", "test", "--offline"], cwd=claude, env=env, check=True)
-    for source in NPM_DRIVERS.values():
-        subprocess.run(["npm", "pack", "--offline", "--loglevel=error", "--pack-destination", output],
-                       cwd=source, env=env, check=True)
+    pack(claude, output, env)
+    # npm excludes symlinks. Stage a regular copy of the extension shared with the Go SDK.
+    with tempfile.TemporaryDirectory(prefix="agent-replay-pi-") as temporary:
+        work = Path(temporary)
+        package = work / "drivers/pi/official"
+        shutil.copytree(NPM_DRIVERS["pi"], package, ignore=shutil.ignore_patterns("node_modules", "LICENSE"))
+        shutil.copyfile(REPLAY / "LICENSE", work / "LICENSE")
+        pack(package, output, env)
     return target
 
 

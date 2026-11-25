@@ -15,7 +15,7 @@ trap cleanup EXIT
 
 export GOWORK=off GOTOOLCHAIN=local GOENV=off GOFLAGS=
 export GOPATH="$work/gopath" GOMODCACHE="$work/module-cache" GOBIN="$work/bin"
-mkdir "$work/consumer"
+mkdir "$work/consumer" "$work/home"
 cp "$root/tests/replay/release/testdata/consumer/main.go" "$work/consumer/"
 cd "$work/consumer"
 "$go" mod init consumer.invalid/agent-replay-check
@@ -34,7 +34,8 @@ PY
 "$go" mod verify
 
 # Run the consumer outside the checkout, with only its downloaded module and dependencies.
-env GOPROXY=off GOSUMDB=off "$go" run . "$tag" "$sum"
+env GOPROXY=off GOSUMDB=off "$go" build -o "$work/library-check" .
+env HOME="$work/home" "$work/library-check" "$tag" "$sum"
 cd "$work"
 "$go" install "$module/cmd/agent-replay@$tag"
 [[ "$("$GOBIN/agent-replay" version)" == "agent-replay $tag" ]]
@@ -43,5 +44,7 @@ cd "$work"
   $1 == "mod" && $2 == path && $3 == tag && $4 == sum { module = 1 }
   END { exit !(command && module) }
 '
-"$GOBIN/agent-replay" prepare --agent codex --case SDK-CASE-001 --fixture-dir "$work/installed-fixture"
+env HOME="$work/home" "$GOBIN/agent-replay" prepare --agent codex --case SDK-CASE-001 --fixture-dir "$work/installed-fixture"
+"${PYTHON:-python3}" -c 'import json, sys; assert json.load(open(sys.argv[1]))["materialId"]' \
+  "$work/installed-fixture/current.json"
 printf 'External Replay library and go install verified %s at %s (%s)\n' "$tag" "$revision" "$sum"

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 // The Go SDK adapter is a native driver too: it owns the case's public SDK

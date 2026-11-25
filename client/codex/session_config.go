@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 var ErrUnsupportedConfiguration = errors.New("codex: thread settings require experimentalApi initialization")

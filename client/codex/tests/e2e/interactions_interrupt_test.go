@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // This independent opt-in spends at most five attempts, with no write replay.

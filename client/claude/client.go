@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )

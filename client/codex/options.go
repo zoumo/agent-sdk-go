@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Limits are per connection. Zero values select DefaultLimits. Negative values

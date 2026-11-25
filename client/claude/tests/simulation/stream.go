@@ -6,8 +6,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func openStreamSession(ctx context.Context, mock *mocktest.Session, options claude.SessionOptions, configure func(*claude.SessionOptions)) (*claude.Session, *mocktest.Run, <-chan error, error) {

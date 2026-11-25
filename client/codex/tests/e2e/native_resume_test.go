@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // The live caller's explicit opt-in/budget still owns execution. Native resume

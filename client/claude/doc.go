@@ -37,5 +37,5 @@
 // without replacing them. A nonempty value becomes one literal
 // --append-system-prompt=<text> argument; empty omits the option. The complete
 // contract is defined in
-// docs/modules/unified-agent/design.md#additional-system-prompt.
+// agent/docs/session.md#additional-system-prompt.
 package claude

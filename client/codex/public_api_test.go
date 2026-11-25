@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func TestPublicAPIConfiguration(t *testing.T) {
@@ -33,7 +33,7 @@ func TestPublicAPIConfiguration(t *testing.T) {
 	_ = (*codex.Client).ListThreadItems
 
 	_ = types.Event{}
-	assert.Equal(t, "github.com/zoumo/agent-sdk-go/codex/types", reflect.TypeOf(params).PkgPath())
+	assert.Equal(t, "github.com/zoumo/agent-sdk-go/client/codex/types", reflect.TypeOf(params).PkgPath())
 	_, err := json.Marshal(params)
 	require.NoError(t, err)
 	assert.Equal(t, "publicconsumer", opts.Initialize.ClientInfo.Name)

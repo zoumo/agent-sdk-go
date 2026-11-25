@@ -13,8 +13,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func TestHistorySetupConsumesBackgroundResultsBeforeNextInput(t *testing.T) {

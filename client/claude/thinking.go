@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 func validateThinkingConfig(t *types.ThinkingConfig) error {

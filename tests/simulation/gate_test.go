@@ -26,7 +26,7 @@ func runSimulationTest(t *testing.T, gateMode bool) string {
 	t.Helper()
 	ctx, stop := signal.NotifyContext(t.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	output, err := withSimulationOutput(*simulationOutput, filepath.Join("..", "..", "..", ".artifacts", "simulation", "gates"), func(output string) error {
+	output, err := withSimulationOutput(*simulationOutput, filepath.Join("..", "..", ".artifacts", "simulation", "gates"), func(output string) error {
 		err := execute(ctx, options{
 			Output: output, Driver: driverBinary, Gate: gateMode,
 			Provider: *simulationProvider, Case: *simulationCase, Recording: *simulationRecording,

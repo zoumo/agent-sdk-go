@@ -16,8 +16,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 var mockClaudeInit = []string{

@@ -5,8 +5,8 @@ import (
 
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
-	"github.com/zoumo/agent-sdk-go/claude"
-	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.InjectReceipt, err error) {

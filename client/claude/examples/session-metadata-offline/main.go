@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 func main() {

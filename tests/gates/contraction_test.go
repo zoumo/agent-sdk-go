@@ -160,67 +160,67 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 		},
 		{
 			name: "completion callback",
-			file: "internal/mocktest/library.go",
+			file: "internal/testsupport/mocktest/library.go",
 			body: "package mocktest\n\ntype Options struct{}\n\ntype Session struct{ options Options }\n\nfunc badCompletion(s *Session) { _ = s.options.Complete }\n",
 			want: "bridge byte-copy",
 		},
 		{
 			name: "completion callback field",
-			file: "internal/mocktest/peer.go",
+			file: "internal/testsupport/mocktest/peer.go",
 			body: "package mocktest\n\ntype Options struct {\n\tComplete func() error\n}\n",
 			want: "bridge byte-copy",
 		},
 		{
 			name: "bridge run",
-			file: "internal/mocktest/library.go",
+			file: "internal/testsupport/mocktest/library.go",
 			body: "package mocktest\n\ntype Session struct{}\n\nfunc (s *Session) Run() {}\n",
 			want: "bridge byte-copy",
 		},
 		{
 			name: "schema comparison",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\nfunc badSchema() bool { return schemaVersion == 3 }\n",
 			want: "schema-3 and schema-4 comparison",
 		},
 		{
 			name: "schema switch",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\nfunc badSchema(v int) {\n\tswitch schemaVersion {\n\tcase 3, 4:\n\t\t_ = v\n\t}\n}\n",
 			want: "schema-3 and schema-4 switch",
 		},
 		{
 			name: "schema four comparison",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\nfunc badSchema() bool { return SchemaVersion != 4 }\n",
 			want: "schema-3 and schema-4 comparison",
 		},
 		{
 			name: "case insensitive multiline schema switch",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\nfunc badSchema() {\n\tswitch SCHEMAVERSION {\n\tcase\n\t\t4:\n\t}\n}\n",
 			want: "schema-3 and schema-4 switch",
 		},
 		{
 			name: "receipt parser",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\nvar badReceipt = \"executions/receipt.json\"\n",
 			want: "result notice, progress descriptor, and process receipt",
 		},
 		{
 			name: "launcher field",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\ntype badConnection struct {\n\tLauncher string `json:\"launcher\"`\n}\n",
 			want: "process-oriented simulation connection contract",
 		},
 		{
 			name: "simulation command field",
-			file: "tests/simulation/simulate/session.go",
+			file: "tests/simulation/session.go",
 			body: "package main\n\ntype badConnection struct {\n\tCommand string `json:\"command\"`\n}\n",
 			want: "process-oriented simulation connection contract",
 		},
 		{
 			name: "executable launch import",
-			file: "internal/mocktest/imports.go",
+			file: "internal/testsupport/mocktest/imports.go",
 			body: "package mocktest\n\nimport _ \"os/exec\"\n",
 			want: "must not launch an executable",
 		},
@@ -228,7 +228,7 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
-			writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+			writeGateFixture(t, root, "internal/testsupport/mocktest/doc.go", "package mocktest\n")
 			writeGateFixture(t, root, tc.file, tc.body)
 
 			output, err := gate(t, root)
@@ -241,7 +241,7 @@ func TestRemovedTestifyCLISurfaceGateCatchesRegressions(t *testing.T) {
 func TestRemovedTestifyCLISurfaceGatePreservesExclusions(t *testing.T) {
 	root := t.TempDir()
 	writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
-	writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+	writeGateFixture(t, root, "internal/testsupport/mocktest/doc.go", "package mocktest\n")
 	for _, name := range []string{
 		".artifacts/run.sh", ".git/run.sh", ".scratch/run.sh",
 		"scripts/check-removed-cli-surfaces.sh", "tests/gates/contraction_test.go", "go.sum",
@@ -264,7 +264,7 @@ func TestRemovedTestifyCLISurfaceGatePreservesExclusions(t *testing.T) {
 func TestRemovedTestifyCLISurfaceGateDoesNotUseRipgrep(t *testing.T) {
 	root := t.TempDir()
 	writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
-	writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+	writeGateFixture(t, root, "internal/testsupport/mocktest/doc.go", "package mocktest\n")
 	tools := t.TempDir()
 	poison := filepath.Join(tools, "rg")
 	require.NoError(t, os.WriteFile(poison, []byte("#!/bin/sh\necho unexpected-ripgrep >&2\nexit 99\n"), 0o755))
@@ -278,7 +278,7 @@ func TestRemovedTestifyCLISurfaceGateDoesNotUseRipgrep(t *testing.T) {
 func TestRemovedTestifyCLISurfaceGateRejectsUnreadableFiles(t *testing.T) {
 	root := t.TempDir()
 	writeGateFixture(t, root, "go.mod", "module example.com/gatefixture\n\ngo 1.26\n")
-	writeGateFixture(t, root, "internal/mocktest/doc.go", "package mocktest\n")
+	writeGateFixture(t, root, "internal/testsupport/mocktest/doc.go", "package mocktest\n")
 	writeGateFixture(t, root, "scripts/unreadable", "AGENT_SDK_TESTIFY_BIN=/tmp/tool\n")
 	path := filepath.Join(root, "scripts", "unreadable")
 	require.NoError(t, os.Chmod(path, 0))

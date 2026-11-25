@@ -10,12 +10,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
+	claudetest "github.com/zoumo/agent-sdk-go/internal/testsupport/claude"
 )
 
 func TestNativeSubagentRelationship293(t *testing.T) {
-	cliPath, model, env := assignedSessionLiveEnvironment(t)
+	cliPath, model, env := claudetest.AssignedSessionLiveEnvironment(t)
 	env = slices.DeleteFunc(env, func(value string) bool { return value == "CLAUDE_CODE_SIMPLE=1" })
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()

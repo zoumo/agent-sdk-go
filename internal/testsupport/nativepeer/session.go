@@ -1,4 +1,4 @@
-package integration_test
+package nativepeer
 
 import (
 	"bufio"
@@ -10,13 +10,26 @@ import (
 	"net"
 	"os"
 	"strings"
+	"testing"
 	"time"
 )
 
-// Synthetic native envelopes, source pins: codex/docs/protocol/README.md and claude/docs/type-sources.md.
-// The executable is this test binary, never a real CLI. The trace is peer input,
-// not a private SDK queue or graph. Each native protocol keeps its own envelopes.
-func sessionTargetPeer(provider, scenario string) error {
+func TestMain(m *testing.M, peer func(provider, scenario string) error) {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		_, _ = fmt.Fprintln(os.Stdout, "2.1.293 (Claude Code)")
+		os.Exit(0)
+	}
+	if provider := os.Getenv("SDK_INTEGRATION_PEER"); provider != "" {
+		if err := peer(provider, os.Getenv("SDK_INTEGRATION")); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func Session(provider, scenario string) error {
 	trace, err := os.OpenFile(os.Getenv("SDK_INTEGRATION_TRACE"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -29,19 +42,19 @@ func sessionTargetPeer(provider, scenario string) error {
 	emit := func(v any) {
 		b := mustMarshalJSON(v)
 		if provider == "claude" {
-			b = completeClaudeFixture(b)
+			b = CompleteClaudeFrame(b)
 		}
 		fmt.Fprintln(os.Stdout, string(b))
 	}
 	raw := func(s string) {
 		if provider == "claude" {
-			s = string(completeClaudeFixture(json.RawMessage(s)))
+			s = string(CompleteClaudeFrame(json.RawMessage(s)))
 		}
 		fmt.Fprintln(os.Stdout, s)
 	}
 	root := "root"
 	if provider == "claude" {
-		root = claudeScenarioID
+		root = ClaudeSessionID
 	}
 	marker := func(kind string, extra map[string]any) {
 		if extra == nil {
@@ -282,7 +295,7 @@ func sessionTargetPeer(provider, scenario string) error {
 					raw(`{"method":"future/early","params":{"threadId":"unknown"}}`)
 					for _, pair := range [][2]string{{"child", "root"}, {"grand", "child"}, {"sibling", "root"}} {
 						var thread map[string]json.RawMessage
-						_ = json.Unmarshal(nativeScenarioThread(pair[0]), &thread)
+						_ = json.Unmarshal(Thread(pair[0]), &thread)
 						thread["parentThreadId"] = mustMarshalJSON(pair[1])
 						emit(map[string]any{"method": "thread/started", "params": map[string]any{"thread": thread}})
 					}
@@ -339,7 +352,7 @@ func sessionTargetPeer(provider, scenario string) error {
 	return scanner.Err()
 }
 
-func nativeScenarioThread(id string) json.RawMessage {
+func Thread(id string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"id":%q,"sessionId":"native-session","cliVersion":"0.162.1","createdAt":1,"updatedAt":2,"cwd":"/synthetic","ephemeral":false,"modelProvider":"synthetic","preview":"","projectId":null,"source":"appServer","status":{"type":"idle"},"turns":[]}`, id))
 }
 
@@ -348,7 +361,7 @@ func nativeScenarioThread(id string) json.RawMessage {
 // Values below are original fixture data, not copied upstream implementation.
 var claudeFixtureSequence uint64
 
-func completeClaudeFixture(raw json.RawMessage) json.RawMessage {
+func CompleteClaudeFrame(raw json.RawMessage) json.RawMessage {
 	claudeFixtureSequence++
 	var f map[string]json.RawMessage
 	if json.Unmarshal(raw, &f) != nil {
@@ -413,6 +426,16 @@ func completeClaudeFixture(raw json.RawMessage) json.RawMessage {
 	b, err := json.Marshal(f)
 	if err != nil {
 		return raw
+	}
+	return b
+}
+
+const ClaudeSessionID = "11111111-1111-4111-8111-111111111111"
+
+func mustMarshalJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
 	}
 	return b
 }

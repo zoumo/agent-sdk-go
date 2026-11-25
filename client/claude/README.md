@@ -1,10 +1,10 @@
 # Claude Agent SDK for Go
 
-Use `github.com/zoumo/agent-sdk-go/claude` to start a local Claude Code CLI or
-query saved sessions. Import `github.com/zoumo/agent-sdk-go/claude/types` for
+Use `github.com/zoumo/agent-sdk-go/client/claude` to start a local Claude Code CLI or
+query saved sessions. Import `github.com/zoumo/agent-sdk-go/client/claude/types` for
 native protocol values. Go 1.26 or newer is required.
 
-Use the [unified Claude adapter](../agent/claude/doc.go) for the shared live
+Use the [unified Claude adapter](../../agent/claude/doc.go) for the shared live
 session API. Saved history remains available through native package-level queries.
 
 ## Session usage
@@ -12,7 +12,7 @@ session API. Saved history remains available through native package-level querie
 Run the offline child observation example from the repository root.
 
 ```sh
-go run ./claude/examples/subagents-offline
+go run ./client/claude/examples/subagents-offline
 ```
 
 The example prints separate runs for the preserve and suppress child detail policies.
@@ -39,7 +39,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 func main() {
@@ -130,7 +130,7 @@ provide full official configuration/control parity, hook callbacks, agent-defini
 registration, remote CLI transports, administration, user-dialog APIs or
 durable recovery. Unknown frame preservation does not implement those operations.
 There is no public generic raw-write escape hatch. Inherited CLI configuration may
-still affect execution. See [offline checks](../docs/testing.md).
+still affect execution. See [offline checks](../../docs/testing.md).
 
 ## Actual permission and question requests
 
@@ -176,13 +176,13 @@ acknowledgment does not prove the active model, effort or children changed.
 
 `Session.GetSettings(ctx)` exposes the native read-only query when callers need
 its raw response body. Its limits are defined in the
-[native input and configuration contract](../docs/modules/native-session/design.md#interface-原生输入与配置).
+[native input and configuration contract](../docs/session.md#interface-原生输入与配置).
 
 `AppendSystemPrompt` adds caller text after the CLI's own system instructions
 without replacing them. A nonempty value becomes one literal
 `--append-system-prompt=<text>` argv element; empty omits the option. The
 complete validation, transport-disclosure and resume contract is in the
-[authoritative unified-agent design](../docs/modules/unified-agent/design.md#additional-system-prompt).
+[authoritative unified-agent design](../../agent/docs/session.md#additional-system-prompt).
 
 `PermissionMode` and the corresponding `PermissionMode*` constants enumerate
 `default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk` and `auto`.
@@ -256,9 +256,9 @@ production dependencies. Unknown JSON fields/blocks are retained; handwritten
 types do not imply full official SDK parity. Original code uses Apache-2.0; see
 [NOTICE](NOTICE), [LICENSE](LICENSE) and [type provenance](docs/type-sources.md).
 
-Validation commands and evidence limits are maintained in [testing](../docs/testing.md)
-and [recording provenance](../tests/simulation/drivers/README.md#fixtures-仿真录制与测试输入).
-Breaking changes are in the [migration guide](../docs/migration.md#session).
+Validation commands and evidence limits are maintained in [testing](../../docs/testing.md)
+and [recording provenance](../../tests/simulation/README.md#fixtures-仿真录制与测试输入).
+Breaking changes are in the [migration guide](../../docs/migration.md#session).
 
 ## Child observation
 
@@ -287,11 +287,11 @@ unknown, tool, permission and terminal frames remain intact. The 2.1.293 pure
 assistant shape permits agent_id only after member identity is confirmed and
 agrees with any known tool alias. This is neither
 redaction nor token-cost control; see the
-[closed filtering contract](../docs/modules/native-session/design.md#child-detail-可选子详细事件交付).
+[closed filtering contract](../docs/session.md#child-detail-可选子详细事件交付).
 
 ```sh
 # From the repository root; executes only a synthetic peer:
-go run ./claude/examples/subagents-offline
+go run ./client/claude/examples/subagents-offline
 ```
 
 ## Saved history
@@ -318,13 +318,13 @@ Queries return detached data and never create live membership or answer authorit
 
 Main defaults: metadata page 100, message page 1000; source and inventory limits,
 strict parsing differences, errors and mutation checks are specified in the
-[history contract](../docs/contracts/history-query.md). Atomic is always false;
+[history contract](../docs/history-query.md). Atomic is always false;
 there is no shared snapshot across pages. Inspect errors and Coverage together.
 
 For child content, call package-level `ListSubagents(ctx, parentSessionID, options)`
 and `GetSubagentMessages(ctx, parentSessionID, agentID, options)` with the same
 explicit scope. All child branches are checked for duplicate IDs, cycles and
-missing parents; the [child-history contract](../docs/contracts/history-query.md#children-claude-独立本地子历史)
+missing parents; the [child-history contract](../docs/history-query.md#children-claude-独立本地子历史)
 defines limits, containment and mutation checks. Raw data and sidecars can be private.
 
 Session.ListSubagents instead uses Open's captured environment/cwd and observed
@@ -335,8 +335,8 @@ main chain nor replaces independent package-level ListSubagents/GetSubagentMessa
 
 ```sh
 # From the repository root; uses temporary synthetic storage:
-go run ./claude/examples/session-metadata-offline
-go run ./claude/examples/session-messages-offline
+go run ./client/claude/examples/session-metadata-offline
+go run ./client/claude/examples/session-messages-offline
 ```
 
 ## Message JSON
@@ -454,11 +454,11 @@ The offline example uses a synthetic launcher and `example.invalid`; it asserts
 the final argv without contacting the URL or running Claude:
 
 ```sh
-go run ./claude/examples/remote-execution-offline
+go run ./client/claude/examples/remote-execution-offline
 ```
 
 ## Application SDK MCP servers
 
 Set `SessionOptions.SDKMCPServers` to explicit application server names. Native `mcp_message` controls for those names arrive through `Receive` as original `IncomingRequest` handles. `MCPRequest()` returns the server name and exact JSON-RPC message; implement native initialize, notifications, tools/list and tools/call in the application. `ReplyMCP(ctx, response)` wraps the unchanged JSON-RPC object in native `mcp_response`, validates its original ID, and consumes only that handle. A notification has no inner ID but its outer control still requires acknowledgment. `Approve`, `Deny` and permission `Answer` are separate and reject this request kind. Invalid answers retain authority; canceled/closed/used handles cannot answer again. Unknown delivery outcomes are not retried.
 
-The SDK forwards a native `--mcp-config` declaration with `type:sdk` for each name, without starting an external server, adding a callback, or implementing tool dispatch. Names are frozen at Open. Other server names and unsupported controls retain the existing explicit rejection behavior. See [test input and simulation boundaries](../tests/simulation/drivers/README.md#fixtures-仿真录制与测试输入) for the evidence distinction.
+The SDK forwards a native `--mcp-config` declaration with `type:sdk` for each name, without starting an external server, adding a callback, or implementing tool dispatch. Names are frozen at Open. Other server names and unsupported controls retain the existing explicit rejection behavior. See [test input and simulation boundaries](../../tests/simulation/README.md#fixtures-仿真录制与测试输入) for the evidence distinction.

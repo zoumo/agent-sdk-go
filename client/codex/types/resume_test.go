@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func TestResumeOptionalNativeSemantics(t *testing.T) {

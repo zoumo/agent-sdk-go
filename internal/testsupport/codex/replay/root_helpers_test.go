@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // ExactRequest is one reviewed native request/answer pair. Params includes the

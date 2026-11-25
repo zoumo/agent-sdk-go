@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/internal/lineage"
+	"github.com/zoumo/agent-sdk-go/client/internal/lineage"
 )
 
 // These tests route native frames through the real request lifecycle. Unlike

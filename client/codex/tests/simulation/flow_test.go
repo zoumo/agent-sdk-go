@@ -14,10 +14,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/codex"
-	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
-	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	recording "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/replay"
+	fixturedata "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/testdata"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func TestJoinInputCloseError(t *testing.T) {

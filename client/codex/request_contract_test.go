@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // The independent fake peer accepts literal wire frames as strings so it can

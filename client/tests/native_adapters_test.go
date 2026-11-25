@@ -1,4 +1,4 @@
-package integration_test
+package client_test
 
 import (
 	"context"
@@ -6,44 +6,38 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	claude "github.com/zoumo/agent-sdk-go/claude"
-	clt "github.com/zoumo/agent-sdk-go/claude/types"
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	ct "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	clt "github.com/zoumo/agent-sdk-go/client/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	ct "github.com/zoumo/agent-sdk-go/client/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport"
+	claudetest "github.com/zoumo/agent-sdk-go/internal/testsupport/claude"
+	codextest "github.com/zoumo/agent-sdk-go/internal/testsupport/codex"
 )
 
-// NativeIntegrationSuite runs the same acceptance table through isolated native
+// NativeAdaptersSuite runs the same acceptance table through isolated native
 // lifecycle adapters. The adapters keep each original answer handle local.
 type nativeAdapter struct {
 	name string
 	run  func(*testing.T, string) nativeTrace
 }
-type NativeIntegrationSuite struct {
+type NativeAdaptersSuite struct {
 	suite.Suite
 	adapters []nativeAdapter
 }
 
-func (s *NativeIntegrationSuite) SetupSuite() {
+func (s *NativeAdaptersSuite) SetupSuite() {
 	s.adapters = []nativeAdapter{{"codex", codexScenario}, {"claude", claudeScenario}}
 }
 
-func TestNativeIntegration(t *testing.T) { suite.Run(t, new(NativeIntegrationSuite)) }
-func (s *NativeIntegrationSuite) TestSessionTargets() {
-	for _, id := range []string{"session-persistent-inputs", "session-native-input-fields", "session-submit-rejection", "session-tool-completion", "session-unknown-events", "session-child-association", "session-child-depth", "session-subagent-query", "session-approval", "session-canceled-approval", "session-question", "session-model-change", "session-thinking-change", "session-interrupt", "session-slow-consumer", "session-resume", "session-error-result", "session-close"} {
-		s.Run(id, func() {
-			s.Run("codex", func() { codexSessionTarget(s.T(), id) })
-			s.Run("claude", func() { claudeSessionTarget(s.T(), id) })
-		})
-	}
-}
+func TestNativeAdapterMatrix(t *testing.T) { suite.Run(t, new(NativeAdaptersSuite)) }
 
-func (s *NativeIntegrationSuite) TestNativeAdapters() {
+func (s *NativeAdaptersSuite) TestNativeAdapters() {
 	for _, scenario := range nativeScenarios {
 		s.Run(scenario, func() {
 			modes := []string{""}
@@ -65,46 +59,137 @@ func (s *NativeIntegrationSuite) TestNativeAdapters() {
 	}
 }
 
-func deadline(t *testing.T) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	t.Cleanup(cancel)
-	return ctx
-}
+// nativeObservation is a detached test fact extracted by a native adapter. Raw keeps
+// the observed wire payload; it is never used to construct response authority.
+type (
+	nativeObservation struct{ Kind, ID, Parent, Raw string }
+	nativeTrace       struct {
+		Events                                                                                       []nativeObservation
+		SendError, AnswerError, RetryError, CanceledError, OverflowError, InterruptError, CloseError error
+		AnswerID, AnswerText, AnswerDecision                                                         string
+		AnswerCount, InputCount                                                                      int
+	}
+)
 
-func must(t *testing.T, err error) {
-	t.Helper()
-	require.NoError(t, err)
-}
+var nativeScenarios = []string{"submission-barrier", "tool-boundary", "child-authority", "nested-parentage", "child-after-result", "permission", "question", "canceled-answer", "backpressure", "unknown-fields", "history-observation", "interrupt-boundary"}
 
-func wait(t *testing.T, ctx context.Context, ch <-chan struct{}) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		require.NoError(t, ctx.Err())
+// checkScenario applies common user-visible acceptance rules, without requiring native
+// events to share a schema, an ordering beyond causal boundaries, or dedup rules.
+func (s *NativeAdaptersSuite) checkScenario(scenario string, got nativeTrace) {
+	s.T().Helper()
+	check := s.Assert()
+	find := func(kind, id string) int {
+		for i, e := range got.Events {
+			if e.Kind == kind && (id == "" || e.ID == id) {
+				return i
+			}
+		}
+		return -1
+	}
+	switch scenario {
+	case "submission-barrier":
+		check.NoError(got.SendError, "input submission failed")
+		check.GreaterOrEqual(find("barrier", ""), 0, "input barrier missing")
+		check.Greater(find("complete", "root"), find("barrier", ""), "send acknowledgement confused with task completion")
+	case "tool-boundary":
+		check.GreaterOrEqual(find("tool", ""), 0, "tool completion missing")
+		check.Greater(find("complete", "root"), find("tool", ""), "tool completion require.NoError remain separate from task completion")
+	case "child-authority":
+		found := false
+		for _, e := range got.Events {
+			if e.Kind == "associated" && e.ID == "child" && e.Parent == "root" {
+				found = true
+			}
+		}
+		check.True(found, "confirmed child parent lost")
+		check.GreaterOrEqual(find("native", "child"), 0, "child native source lost")
+	case "nested-parentage":
+		for _, pair := range [][2]string{{"child", "root"}, {"sibling", "root"}, {"grand", "child"}} {
+			found := false
+			for _, e := range got.Events {
+				if e.Kind == "associated" && e.ID == pair[0] && e.Parent == pair[1] {
+					found = true
+				}
+			}
+			check.True(found, "nested/parallel relation lost: "+pair[0])
+		}
+		check.GreaterOrEqual(find("gap", ""), 0, "unknown source require.NoError produce visible uncertainty")
+		check.Negative(find("associated", "unknown"), "unknown parent guessed")
+	case "child-after-result":
+		check.GreaterOrEqual(find("complete", "root"), 0, "root completion missing")
+		check.Greater(find("native", "child"), find("complete", "root"), "child observation ended at root completion")
+	case "permission", "permission-allow", "question":
+		check.NoError(got.AnswerError, "original handle first answer")
+		check.Error(got.RetryError, "original handle require.NoError be single use")
+		check.Equal(1, got.AnswerCount, "answer uniqueness lost")
+		check.Equal("original", got.AnswerID, "answer correlation lost")
+		if scenario == "permission" {
+			check.Equal("deny", got.AnswerDecision, "native permission refusal changed")
+		}
+		if scenario == "permission-allow" {
+			check.Equal("allow", got.AnswerDecision, "native permission approval changed")
+		}
+		if scenario == "question" {
+			check.Equal("free text / 自由文本", got.AnswerText, "answer not mapped to original question")
+		}
+	case "canceled-answer":
+		check.ErrorIs(got.CanceledError, context.Canceled, "canceled answer require.NoError retain native context cancellation")
+		check.NoError(got.AnswerError, "pre-canceled answer require.NoError leave original handle available under native contract")
+		check.Equal(1, got.AnswerCount, "pre-canceled answer require.NoError not consume handle")
+	case "canceled-answer-close":
+		check.NoError(got.CloseError, "close failed")
+		check.Error(got.AnswerError, "closing while waiting for an answer require.NoError invalidate the original handle")
+		check.Error(got.RetryError, "closed original handle require.NoError stay invalid")
+	case "backpressure":
+		check.NoError(got.OverflowError, "slow consumer terminated observation")
+		bursts := 0
+		for _, event := range got.Events {
+			if event.Kind == "burst" {
+				bursts++
+			}
+		}
+		check.Equal(32, bursts, "accepted burst require.NoError drain completely")
+		check.Equal("barrier", got.Events[len(got.Events)-1].Kind, "burst barrier require.NoError remain last")
+	case "unknown-fields":
+		unknown := 0
+		for _, e := range got.Events {
+			if e.Kind == "unknown" {
+				unknown++
+				check.Contains(e.Raw, `"future":{"big":9007199254740993,"nullable":null}`, "unknown payload changed")
+			}
+		}
+		check.Equal(2, unknown, "unknown no-ID arrivals require.NoError survive independently")
+	case "history-observation":
+		check.GreaterOrEqual(find("gap", ""), 0, "history recovery gap lost")
+		check.GreaterOrEqual(find("associated", "child"), 0, "history association missing")
+		check.Negative(find("created", "child"), "history association invented creation")
+		check.Zero(got.InputCount, "recovery replayed input")
+		check.Zero(got.AnswerCount, "recovery replayed answer")
+	case "interrupt-boundary":
+		check.NoError(got.InterruptError, "interrupt failed")
+		check.NoError(got.CloseError, "close failed")
+		check.GreaterOrEqual(find("barrier", ""), 0, "interrupt barrier missing")
+		check.Greater(find("complete", "root"), find("barrier", ""), "interrupt acknowledgement fabricated completion")
 	}
 }
 
-// Adapters deliberately retain native clients, native types and original answer
-// handles locally. Only detached facts reach the suite acceptance assertions.
 func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	mode := scenario
 	scenario = strings.TrimSuffix(strings.TrimSuffix(scenario, "-allow"), "-close")
-	ctx := deadline(t)
+	ctx := testsupport.Deadline(t)
 	exe, err := os.Executable()
-	must(t, err)
+	require.NoError(t, err)
 	c, err := codex.NewStdio(ctx, codex.StdioOptions{Executable: exe, Args: []string{}, Env: []string{"SDK_INTEGRATION_PEER=codex", "SDK_INTEGRATION=" + scenario, "GORACE=atexit_sleep_ms=0"}, Initialize: ct.InitializeParams{ClientInfo: ct.ClientInfo{Name: "integration", Version: "synthetic"}, Capabilities: ct.Some(ct.InitializeCapabilities{ExperimentalAPI: ct.Some(true)})}})
-	must(t, err)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
 
 	s, err := codex.Open(ctx, codex.SessionOptions{Client: c})
-	must(t, err)
+	require.NoError(t, err)
 	defer s.Abort()
 	readUntil := func(target string) {
 		for {
 			r, e := s.Receive(ctx)
-			must(t, e)
+			require.NoError(t, e)
 			if scenario == "child-authority" {
 				require.Nil(t, r.Request, "relationship minted answer authority")
 			}
@@ -128,7 +213,7 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 
 	if scenario == "history-observation" {
 		page, e := s.ListSubagents(ctx, codex.SubagentQuery{})
-		must(t, e)
+		require.NoError(t, e)
 		require.Len(t, page.Pages, 1)
 		for _, r := range page.Pages[0].Data {
 			trace.Events = append(trace.Events, nativeObservation{Kind: "associated", ID: r.ID, Parent: "root"})
@@ -139,16 +224,16 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	}
 	_, trace.SendError = s.Submit(ctx, codex.Input{})
 	if scenario == "backpressure" {
-		must(t, trace.SendError) // reply follows the complete burst while Events is unread
+		require.NoError(t, trace.SendError) // reply follows the complete burst while Events is unread
 		readUntil("barrier")
 		trace.OverflowError = s.Err()
 		return trace
 	}
 	if scenario == "permission" || scenario == "question" || scenario == "canceled-answer" {
-		r := codexRequests(t, s, 1)[0]
+		r := codextest.Requests(t, s, 1)[0]
 		require.NotEmpty(t, r.ID().String(), "missing native request identity")
 		_, err := r.Data()
-		must(t, err)
+		require.NoError(t, err)
 		if strings.HasSuffix(mode, "-close") {
 			trace.CloseError = s.Close()
 			trace.AnswerError = r.Handle().Answer(ctx, nil)
@@ -161,7 +246,7 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		}
 		if scenario != "permission" {
 			var questions ct.ToolRequestUserInputParams
-			must(t, json.Unmarshal(r.Params(), &questions))
+			require.NoError(t, json.Unmarshal(r.Params(), &questions))
 			require.Len(t, questions.Questions, 1, "question identity lost")
 			assert.Equal(t, "q", questions.Questions[0].ID, "question identity lost")
 			answer = json.RawMessage(`{"answers":{"q":{"answers":["free text / 自由文本"]}}}`)
@@ -186,12 +271,12 @@ func codexScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		trace.InterruptError = s.Interrupt(ctx, codex.InterruptOptions{TurnID: "turn"})
 	}
 	if scenario == "submission-barrier" || scenario == "tool-boundary" || scenario == "interrupt-boundary" {
-		must(t, c.Call(ctx, "fixture/release", nil, nil))
+		require.NoError(t, c.Call(ctx, "fixture/release", nil, nil))
 		readUntil("end")
 	}
 	if scenario == "interrupt-boundary" {
 		trace.CloseError = s.Close()
-		must(t, c.Call(ctx, "fixture/snapshot", nil, nil))
+		require.NoError(t, c.Call(ctx, "fixture/snapshot", nil, nil))
 	}
 	return trace
 }
@@ -246,9 +331,9 @@ func codexFact(trace *nativeTrace, e ct.Event) {
 func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	mode := scenario
 	scenario = strings.TrimSuffix(strings.TrimSuffix(scenario, "-allow"), "-close")
-	ctx := deadline(t)
+	ctx := testsupport.Deadline(t)
 	exe, err := os.Executable()
-	must(t, err)
+	require.NoError(t, err)
 	dir := t.TempDir()
 
 	opts := claude.SessionOptions{CLIPath: exe, WorkDir: dir, Env: []string{"HOME=" + dir, "SDK_INTEGRATION_PEER=claude", "SDK_INTEGRATION=" + scenario, "GORACE=atexit_sleep_ms=0"}, Subagents: claude.SubagentOptions{MaxUnresolvedBytes: 1}}
@@ -256,19 +341,19 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		opts.Subagents.History = []claude.SubagentHistory{{SessionID: "s", TaskID: "child"}}
 	}
 	c, err := claude.Open(ctx, opts)
-	must(t, err)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Abort() })
 	readUntil := func(target string) {
 		for {
 			r, err := c.Receive(ctx)
-			must(t, err)
+			require.NoError(t, err)
 			if scenario == "child-authority" {
 				require.Nil(t, r.Request, "relationship minted answer authority")
 			}
 			if r.Event != nil {
 				n := *r.Event
 				claudeFact(&trace, n)
-				if fixtureKind(n.Raw) == "fixture_"+target {
+				if claudetest.FixtureKind(n.Raw) == "fixture_"+target {
 					return
 				}
 			}
@@ -303,13 +388,13 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	}
 	_, trace.SendError = c.Submit(ctx, claude.Input{Text: "start"})
 	if scenario == "backpressure" {
-		must(t, c.Interrupt(ctx, claude.InterruptOptions{})) // control reply follows the complete unread burst
+		require.NoError(t, c.Interrupt(ctx, claude.InterruptOptions{})) // control reply follows the complete unread burst
 		readUntil("barrier")
 		trace.OverflowError = c.Err()
 		return trace
 	}
 	if scenario == "permission" || scenario == "question" || scenario == "canceled-answer" {
-		incoming := claudeRequests(t, c, 1)[0]
+		incoming := claudetest.Requests(t, c, 1)[0]
 		r := incoming.Handle()
 		require.NotNil(t, r)
 		assert.Equal(t, "original", r.RequestID(), "request ID changed")
@@ -320,7 +405,7 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 			return trace
 		}
 		metadata, err := r.Metadata()
-		must(t, err)
+		require.NoError(t, err)
 		metadata.ToolUseID = "tampered"
 		answer := claude.PermissionAnswer{Behavior: claude.PermissionDeny, Message: "declined"}
 		if strings.HasSuffix(mode, "-allow") {
@@ -328,11 +413,11 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 		}
 		if scenario != "permission" {
 			var questions clt.AskUserQuestionInput
-			must(t, json.Unmarshal(r.Input(), &questions))
+			require.NoError(t, json.Unmarshal(r.Input(), &questions))
 			require.Len(t, questions.Questions, 1, "question lost")
 			text := "free text / 自由文本"
 			updated, err := questions.WithAnswers(map[string]clt.QuestionAnswer{questions.Questions[0].Question: {Text: &text}})
-			must(t, err)
+			require.NoError(t, err)
 			answer = claude.PermissionAnswer{Behavior: claude.PermissionAllow, UpdatedInput: updated}
 		}
 		if scenario == "canceled-answer" {
@@ -355,7 +440,7 @@ func claudeScenario(t *testing.T, scenario string) (trace nativeTrace) {
 	}
 	if scenario == "submission-barrier" || scenario == "tool-boundary" || scenario == "interrupt-boundary" {
 		_, err = c.Submit(ctx, claude.Input{Text: "release"})
-		must(t, err)
+		require.NoError(t, err)
 		readUntil("end")
 	}
 	if scenario == "interrupt-boundary" {
@@ -369,8 +454,8 @@ func claudeFact(trace *nativeTrace, v claude.Event) {
 		trace.Events = append(trace.Events, nativeObservation{Kind: kind, ID: id, Parent: parent, Raw: raw})
 	}
 	kind := v.Type
-	if fixtureKind(v.Raw) != "" {
-		kind = fixtureKind(v.Raw)
+	if claudetest.FixtureKind(v.Raw) != "" {
+		kind = claudetest.FixtureKind(v.Raw)
 	}
 	switch kind {
 	case "result":
@@ -411,6 +496,3 @@ func claudeFact(trace *nativeTrace, v claude.Event) {
 
 // Retain the focused Codex history-query entrypoint. The combined native browser and
 // Claude local-query acceptance live in history_query_test.go.
-func (s *NativeIntegrationSuite) TestIndependentHistoryCodex() {
-	s.Run("history-query/codex", func() { codexIndependentHistory(s.T()) })
-}

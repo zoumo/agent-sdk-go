@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Archive requests native archival of the Session's fixed main thread.

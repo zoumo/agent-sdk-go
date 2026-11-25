@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Feature selects a native thread feature under features.<key>.

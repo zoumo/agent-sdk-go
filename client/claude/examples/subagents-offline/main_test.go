@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	claude "github.com/zoumo/agent-sdk-go/claude"
+	claude "github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 func TestMain(m *testing.M) {

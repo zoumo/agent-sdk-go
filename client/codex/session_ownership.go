@@ -8,7 +8,7 @@ import (
 	"iter"
 	"maps"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // sessionOwnership coordinates all uses of native thread identities on one

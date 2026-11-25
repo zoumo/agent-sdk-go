@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
-	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
+	codexsim "github.com/zoumo/agent-sdk-go/client/codex/tests/simulation"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func TestRemoteRequiresDeclaredMainAndProbe(t *testing.T) {

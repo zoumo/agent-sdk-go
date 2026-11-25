@@ -12,7 +12,7 @@ tags: [codex, claude, session, events]
 
 应用需要打开一个长期主会话，持续消费原生事实，随时提交输入、回答请求及控制执行，最后释放自己拥有的资源。Session Module 隐藏连接初始化、身份固定、事件分流、请求关联与清理的协调。调用方无需拼装订阅、独立审批回调。
 
-行为目标来自[通用架构](../../sdk/architecture.md)和[共同故事](../../sdk/validation-cases.md#stories-sdk-用户故事)。本页规定项目内的逻辑 Module 与 Interface，不要求每一项成为一个包或公开接口。两个原生 SDK 独立实现；一致的操作概念不建立根通用客户端或跨原生协议的回答状态机。
+行为目标来自[通用架构](architecture.md)和[共同故事](../../docs/sdk/validation-cases.md#stories-sdk-用户故事)。本页规定项目内的逻辑 Module 与 Interface，不要求每一项成为一个包或公开接口。两个原生 SDK 独立实现；一致的操作概念不建立根通用客户端或跨原生协议的回答状态机。
 
 ## 内部 Module 与状态所有权
 
@@ -22,16 +22,16 @@ tags: [codex, claude, session, events]
 | 原生交互 | 读写、请求关联、已发送或结果未知、连接故障、自有进程或 socket 回收 | 原生 I/O 的私有 seam；生产传输和离线对端是实际 Adapter。控制处理不依赖 Receive。 |
 | Session | 主身份、唯一 FIFO、会话范围注册、事件与请求交付、交互终止 | 外部 seam 是公开 Interface；内部组合原生交互和记录读取。 |
 | 请求权限 | 原 request ID、交互身份、有效性、取消与单次回答 | 由原生交互持有权威 registry；Session 交付同一句柄，关闭按所属 Session 失效；观察范围重叠不产生第二份回答权。 |
-| 观察证据 | 成员集合、可选父级、已验证别名、覆盖缺口 | 原生 Adapter 解释证据；纯父级校验可用 internal/lineage，不能决定全部成员资格。 |
+| 观察证据 | 成员集合、可选父级、已验证别名、覆盖缺口 | 原生 Adapter 解释证据；纯父级校验可用 client/internal/lineage，不能决定全部成员资格。 |
 | 原生记录读取 | 主链选择、分页、快照校验、子记录发现、访问和资源限制 | 本地文件和原生查询分别使用必要的私有 seam；不拥有恢复或回答权限。 |
 
 这些职责可在同一个原生 SDK 内组合，不为单个函数建立通用插件框架。共享机械 Module 不认识原生协议、Session 身份或权限。连接拥有 Session 注册及未归属隔离材料；Session 拥有自己的交付状态。外部显式共享连接时，关闭一个 Session 不关闭其他 Session 或整个连接。自有进程的 Session 则承担进程回收。
 
 ## 验收与测试 seam
 
-真实使用流程见[共同验收](../../sdk/validation-cases.md#流程语义)。
+真实使用流程见[共同验收](../../docs/sdk/validation-cases.md#流程语义)。
 
-采用公开 Interface 验证上述行为；必要的私有 seam 只控制原生对端、存储、时钟和故障。原生进程与外部运行时属于真实外部依赖，离线 Adapter 必须依据固定原生协议；不能用测试自创语义证明兼容。原生编解码、写入歧义、并发权限及快照完整性回归仍单独保留。替换只断言旧组织方式的测试，不叠加另一套长期故事框架，遵循[测试规则](../../testing.md)。
+采用公开 Interface 验证上述行为；必要的私有 seam 只控制原生对端、存储、时钟和故障。原生进程与外部运行时属于真实外部依赖，离线 Adapter 必须依据固定原生协议；不能用测试自创语义证明兼容。原生编解码、写入歧义、并发权限及快照完整性回归仍单独保留。替换只断言旧组织方式的测试，不叠加另一套长期故事框架，遵循[测试规则](../../docs/testing.md)。
 
 <a id="interface-原生-session-公开-interface"></a>
 
@@ -110,7 +110,7 @@ Codex 的 `StartResponse() (types.ThreadStartResponse, bool)` 返回 Open 实际
 
 ### 独立历史查询
 
-历史查询不属于 Session 生命周期，不要求 Open 或同身份空闲。Codex Client 的四个原生查询及 Claude package-level 本地发现、metadata、主/子消息查询相互独立；结果所有权、后端与分页边界见[独立历史查询合同](../../contracts/history-query.md)。完整查询签名与值归各查询合同维护；Claude package-level ListSubagents 不替代 Session.ListSubagents。
+历史查询不属于 Session 生命周期，不要求 Open 或同身份空闲。Codex Client 的四个原生查询及 Claude package-level 本地发现、metadata、主/子消息查询相互独立；结果所有权、后端与分页边界见[独立历史查询合同](history-query.md)。完整查询签名与值归各查询合同维护；Claude package-level ListSubagents 不替代 Session.ListSubagents。
 
 <a id="interface-原生输入与配置"></a>
 
@@ -160,7 +160,7 @@ func TraceContextFromContext(ctx context.Context) (TraceContext, bool)
 ```
 
 `Session.Submit` 在原生写入前读取并复制 carrier，按
-[prompt trace 合同](../unified-agent/design.md#prompt-trace)尽力校验 W3C 值。
+[prompt trace 合同](../../agent/docs/session.md#prompt-trace)尽力校验 W3C 值。
 无效 carrier 视为没有 prompt trace，不返回错误，也不阻止 user frame。存在
 有效 prompt trace，或此前 prompt 留下未恢复的 trace override 时，它先取得与
 `SetEffort` 共用的 settings/input 串行 gate；目标值已确定且与当前状态相同时
@@ -290,7 +290,7 @@ CLI 传递 `--strict-mcp-config`，但其企业策略兼容性、同名优先级
 
 这些是原生 Claude 能力。统一 Agent 层只采用 stdio 与 Streamable HTTP，不暴露
 旧式 SSE 或 `StrictMCPConfig`；其 Runtime/Session 合成规则见
-[统一 Agent MCP 配置](../unified-agent/design.md#mcp-configuration)。
+[统一 Agent MCP 配置](../../agent/docs/session.md#mcp-configuration)。
 
 <a id="interface-进程环境与-prompt-trace"></a>
 
@@ -325,7 +325,7 @@ Codex app-server 是一个共享进程，其 `Env` 对所有 Session 相同；Se
 合成完整 `[]string` 后写入现有 `SessionOptions.Env`。统一层仍把 Claude
 `ShellEnv` 视为 unsupported，不能因为 Session 恰好自有进程就把更宽作用域改名
 为 shell-only。详细 overlay 规则见
-[统一 Agent 环境配置](../unified-agent/design.md#environment-configuration)。
+[统一 Agent 环境配置](../../agent/docs/session.md#environment-configuration)。
 
 Codex 原生包新增手写的 `types.W3cTraceContext`，保留 pinned `rpc.rs` 的 W3C
 原文和 native optional 语义。该 envelope 类型不属于当前生成 schema 闭包：
@@ -372,7 +372,7 @@ turn-level retarget；需要相同 trace 的多次输入必须由调用方复用
 合同。
 
 `types.W3cTraceContext` 的 W3C 语法规则以
-[prompt trace 合同](../unified-agent/design.md#prompt-trace)为准。native 层在
+[prompt trace 合同](../../agent/docs/session.md#prompt-trace)为准。native 层在
 提交前提取并复制有效 carrier；低层 `StartThread`、`ResumeThread` 和
 `Client.Call` 等通用 request 不新增公开 trace 参数，也不能隐式传播 prompt
 trace。只有 `Session.Submit` 通过私有的 trace-aware call path 写 request
@@ -422,7 +422,7 @@ FIFO；已接纳的通知不会被跳过。返回错误表示结果无法交付�
 Receive 投影，不为非身份行增加缓存或日志。探针先核对原生已知/请求的主身份及
 启动 cwd；冲突时失败，未知主身份时据此固定观察根。成功后主身份不可漂移，
 已有关系和交付状态不重置。该投影不伪造 init、callback 或原生成员事件；调用方
-还须依据目标及[统一恢复合同](../unified-agent/design.md#claude-resume-identity)
+还须依据目标及[统一恢复合同](../../agent/claude/docs/session.md#claude-resume-identity)
 核对身份和目录，并复核保存文件。
 
 <a id="claude-sessionstart-probe"></a>
@@ -472,7 +472,7 @@ callback ID 仍按现有 unsupported 控制规则处理。探针输入必须同�
 的事件、source、目标 Session ID、cwd 和 transcript 文件身份；仅通用
 lifecycle frame、错误 session/cwd/transcript、重复 callback 或未知 callback
 ID 都不构成成功身份证据。恢复身份的顺序、超时和创建后漂移由统一 Agent 的
-[Claude 恢复身份合同](../unified-agent/design.md#claude-resume-identity)维护；
+[Claude 恢复身份合同](../../agent/claude/docs/session.md#claude-resume-identity)维护；
 本包只提供原生注册、应答和输入值。
 
 统一 `Core.Resume` 不注册此可选 hook 探针，而是使用只读 `get_status`。原生调用方
@@ -509,7 +509,7 @@ Claude SubagentQuery 使用本 Session 固定的 ConfigDir/cwd/main ID 与记录
 
 ## Event delivery
 
-所有权取舍见[通用架构](../../sdk/architecture.md#设计取舍)。
+所有权取舍见[通用架构](architecture.md#设计取舍)。
 
 <a id="delivery-接收范围与顺序"></a>
 
@@ -559,7 +559,7 @@ internal/queue 只共享 FIFO 机械逻辑，直接使用根模块固定的 Chan
 
 ## Shared relationship rules
 
-`internal/lineage` validates confirmed optional parent relationships. Each Session owns its parent graph separately from its membership evidence. The package imports only the standard library and has no event, protocol, creation, permission, transport or SDK type dependencies. Graph reachability proves only a known parent path, not the full extent of Session observation membership.
+`client/internal/lineage` validates confirmed optional parent relationships. Each Session owns its parent graph separately from its membership evidence. The package imports only the standard library and has no event, protocol, creation, permission, transport or SDK type dependencies. Graph reachability proves only a known parent path, not the full extent of Session observation membership.
 
 Native adapters establish membership, identities, aliases and parent edges using version-supported evidence. An identity can be a confirmed member while its parent is unknown. Communication targets alone do not establish parentage; only evidence for the particular native operation may do so. No missing root edge or creation fact is invented. A conflict preserves the accepted parent; self-links and cycles are rejected even in components that have not reached a root. Ancestor queries include confirmed parents, nearest first.
 
@@ -587,9 +587,9 @@ Answers require the original live native request handle. Relationship records ca
 
 ## 可选子详细事件交付
 
-本页规定 [子输出边界](../../sdk/architecture.md#子-agent-输出边界) 的确定性扩展合同，
+本页规定 [子输出边界](architecture.md#子-agent-输出边界) 的确定性扩展合同，
 是实现目标，不声明 API 已提供。两原生包各自实现，不能新增根 Client/config wrapper。
-详细验收见下文，历史另见[子历史](../../contracts/history-query.md#children-claude-独立本地子历史)。
+详细验收见下文，历史另见[子历史](history-query.md#children-claude-独立本地子历史)。
 
 <a id="child-detail-原生公开选项"></a>
 
@@ -715,7 +715,7 @@ assistant、系统通知和未知帧仍可能含文字/思考/工具内容。调
 
 ### 真实拓扑与取证
 
-以下拓扑规定需要观察的证据；执行与发布规则统一遵循[录制模块设计](../agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
+以下拓扑规定需要观察的证据；执行与发布规则统一遵循[录制模块设计](../../docs/modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
 
 - direct：root 请求 A 返回固定标记 ALPHA；记录创建证据、子文本、父工具结果和 terminal。
 - nested/parallel：root 请求 A、B，A 请求 C，分别只返回 ALPHA/BRAVO/CHARLIE；

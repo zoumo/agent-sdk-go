@@ -15,8 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Synthetic protocol peers exercise the public Session seam without a real agent.

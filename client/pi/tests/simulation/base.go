@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
-	"github.com/zoumo/agent-sdk-go/pi"
+	"github.com/zoumo/agent-sdk-go/client/pi"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 // Equal to the 64-by-64 RGB image produced by Testify's deterministic stimulus.

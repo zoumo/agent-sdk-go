@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class WorkflowCoverage(unittest.TestCase):
     def workflow_jobs(self, workflow=None):
         if workflow is None:
-            workflow = (ROOT.parent / ".github/workflows/ci.yml").read_text()
+            workflow = (ROOT.parent.parent / ".github/workflows/ci.yml").read_text()
         workflow = workflow.split("\njobs:\n", 1)[1]
         return dict(re.findall(
             r"(?ms)^  ([a-z0-9_]+):\n(.*?)(?=^  [a-z0-9_]+:\n|\Z)", workflow))
@@ -73,7 +73,7 @@ class WorkflowCoverage(unittest.TestCase):
                 )
 
     def test_offline_script_exposes_each_ci_task(self):
-        script = (ROOT.parent / "scripts/check-offline.sh").read_text()
+        script = (ROOT.parent.parent / "scripts/check-offline.sh").read_text()
         self.assertIn("task=${1:-all}", script)
         for task in ("parallel", "checks", "quality", "test", "race", "e2e", "build"):
             with self.subTest(task=task):
@@ -112,10 +112,10 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("      SDK_CONSUMER_SHA: " + revision, consumer)
         self.assertIn("          ref: " + revision, consumer)
         self.assertIn('bash scripts/check-consumers.sh "$SDK_CONSUMER_SHA"', consumer)
-        self.assertIn('bash claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"', consumer)
+        self.assertIn('bash client/claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"', consumer)
 
     def test_external_consumer_retrieves_exact_commit_through_configured_proxy(self):
-        script = (ROOT.parent / "scripts/check-consumers.sh").read_text()
+        script = (ROOT.parent.parent / "scripts/check-consumers.sh").read_text()
         self.assertIn(
             'export GOPROXY="${SDK_CONSUMER_GOPROXY:-https://proxy.golang.org,direct}"',
             script,
@@ -134,8 +134,8 @@ class OfflineScheduling(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name)
         (self.repo / "scripts").mkdir()
-        (self.repo / "codex").mkdir()
-        shutil.copyfile(ROOT.parent / "scripts/check-offline.sh",
+        (self.repo / "client/codex").mkdir(parents=True)
+        shutil.copyfile(ROOT.parent.parent / "scripts/check-offline.sh",
                         self.repo / "scripts/check-offline.sh")
         self.bin = self.repo / "bin"
         self.bin.mkdir()
@@ -196,7 +196,7 @@ class OfflineScheduling(unittest.TestCase):
             ("test", ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."]),
             ("race", ["test", "-race", "-p=1", "-count=1", "-timeout", "600s", "./..."]),
             ("e2e", ["test", "-count=1", "-timeout=600s", "-v",
-                     "./tests/simulation/simulate", "-run", "^TestSimulationGate$"]),
+                     "./tests/simulation", "-run", "^TestSimulationGate$"]),
         ):
             with self.subTest(lane=lane):
                 result, tests = self.run_lane(lane)

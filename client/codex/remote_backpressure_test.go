@@ -21,8 +21,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 type blockedRemotePeer struct {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 func TestSessionInjectValidatesBeforeDispatch(t *testing.T) {

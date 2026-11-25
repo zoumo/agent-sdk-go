@@ -3,7 +3,7 @@ package codex
 import (
 	"encoding/json"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // publishLocked routes native notifications to the owning Sessions.

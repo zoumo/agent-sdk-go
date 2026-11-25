@@ -224,7 +224,7 @@ IDs and missing replacement targets. These mappings preserve traceability; they
 do not transfer historical passes to new code. Current Session checks preserve
 native arrival order, original request authority and drain semantics. Former tree
 consumers, ancestry-first ordering, UUID suppression and inferred run/creation
-state are superseded by the [Session contract](../../../docs/modules/native-session/design.md).
+state are superseded by the [Session contract](../../../docs/session.md).
 Historical per-test narrative audits remain in Git history.
 
 ## Inspected test sources

@@ -20,7 +20,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 var remoteConnectionIDs = [...]string{"main", "probe"}

@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"io"
 
-	fixturedata "github.com/zoumo/agent-sdk-go/claude/tests/testdata"
+	fixturedata "github.com/zoumo/agent-sdk-go/internal/testsupport/claude/testdata"
 )
 
 const PeerEnvironment = "CLAUDE_GO_SYNTHETIC_PEER"

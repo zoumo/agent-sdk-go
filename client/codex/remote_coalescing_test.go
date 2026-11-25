@@ -15,7 +15,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 // A malformed later frame must not erase a complete response or notification

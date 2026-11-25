@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // QueryEvidence is saved-content/metadata evidence, never a raw event log,

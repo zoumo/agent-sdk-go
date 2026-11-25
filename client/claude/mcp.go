@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
 

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
-	"github.com/zoumo/agent-sdk-go/pi"
+	"github.com/zoumo/agent-sdk-go/client/pi"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func (f *baseFlow) readSavedHistory(run *mocktest.Run, sessionFile string) error {

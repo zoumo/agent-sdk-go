@@ -2,11 +2,11 @@
 
 <a id="codex-sdk-go"></a>
 
-Use `github.com/zoumo/agent-sdk-go/codex` to start or connect to a Codex
-app-server. Import `github.com/zoumo/agent-sdk-go/codex/types` for native
+Use `github.com/zoumo/agent-sdk-go/client/codex` to start or connect to a Codex
+app-server. Import `github.com/zoumo/agent-sdk-go/client/codex/types` for native
 protocol values. Go 1.26 or newer is required.
 
-Use the [unified Codex adapter](../agent/codex/doc.go) for the shared live
+Use the [unified Codex adapter](../../agent/codex/doc.go) for the shared live
 session API. For same-connection read-only native queries from a unified Core,
 use `agentcodex.Core.NativeClient()`.
 
@@ -15,7 +15,7 @@ use `agentcodex.Core.NativeClient()`.
 Run the offline child observation example from the repository root.
 
 ```sh
-go run ./codex/examples/observe-subagents-offline
+go run ./client/codex/examples/observe-subagents-offline
 ```
 
 The example prints synthetic root and child events with their native IDs. To use
@@ -43,8 +43,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func main() {
@@ -247,7 +247,7 @@ package is the single configuration type used here, by Claude, and by the
 unified `agent` layer. It does not write the user `config.toml`, and low-level
 `Client.StartThread` / `Client.ResumeThread` remain native-only. The fixed merge
 and limitation contract is in the
-[native Session design](../docs/modules/native-session/design.md#interface-codex-会话配置).
+[native Session design](../docs/session.md#interface-codex-会话配置).
 
 | SDK field | Native field |
 |---|---|
@@ -319,7 +319,7 @@ asserts the complete final `thread/start` params without contacting the URL or
 running Codex:
 
 ```sh
-go run ./codex/examples/remote-execution-offline
+go run ./client/codex/examples/remote-execution-offline
 ```
 
 ## Optional child detail delivery
@@ -336,7 +336,7 @@ approvals and lifecycle facts intact. Complete items and mixed/unknown frames
 remain visible, with their original bytes. It is not content redaction or a
 token-cost control. The policy also applies to `Open` with explicit `Resume`
 parameters. Low-level `Client.ResumeThread` is unchanged. See the exact
-[method and shape contract](../docs/modules/native-session/design.md#child-detail-可选子详细事件交付).
+[method and shape contract](../docs/session.md#child-detail-可选子详细事件交付).
 `NativeIntegrationSuite/TestOptionalChildDetail/codex/F1`–`F5` validates synthetic
 public API delivery and original peer bytes; real child interoperability remains
 unverified.
@@ -582,19 +582,19 @@ item-view selection and omitted/null/value fields. Query availability depends on
 the server version/backend and stored history format. Metadata and saved items
 are not original notification/delta/approval logs or atomic snapshots. Remote
 queries use server storage and paths; local list may repair metadata unless
-`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../docs/contracts/history-query.md#codex-原生接口)
+`UseStateDbOnly` selects the native DB-only path. See [query boundaries](../docs/history-query.md#codex-原生接口)
 and the [offline example](examples/history-query-offline).
 
 ## Offline examples and validation
 
 Run the root offline gate with Go 1.26 or newer. The offline
 examples use explicit synthetic peers and code-owned protocol inputs, never an
-installed agent. [Migration details](../docs/migration.md#session) distinguish
+installed agent. [Migration details](../../docs/migration.md#session) distinguish
 native limitations, resource options and breaking lifecycle changes.
 
 Run from the repository root:
 
 ```sh
-go run ./codex/examples/history-query-offline
-go run ./codex/examples/observe-subagents-offline
+go run ./client/codex/examples/history-query-offline
+go run ./client/codex/examples/observe-subagents-offline
 ```

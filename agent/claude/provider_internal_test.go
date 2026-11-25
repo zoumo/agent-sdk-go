@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/claude"
-	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
 

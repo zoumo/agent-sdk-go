@@ -14,7 +14,7 @@ func TestSimulationRunsWithoutStandaloneRunner(t *testing.T) {
 	output, err := exec.CommandContext(t.Context(), "go", "list", "-f", "{{.Name}}", ".").CombinedOutput()
 	require.NoError(t, err, string(output))
 	require.NotEqual(t, "main", strings.TrimSpace(string(output)))
-	_, err = os.Stat("../../../scripts/simulation.sh")
+	_, err = os.Stat("../../scripts/simulation.sh")
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 

@@ -9,12 +9,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
-	claudesim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
-	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
-	pisim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/pi/go"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	claudesim "github.com/zoumo/agent-sdk-go/client/claude/tests/simulation"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codexsim "github.com/zoumo/agent-sdk-go/client/codex/tests/simulation"
+	pisim "github.com/zoumo/agent-sdk-go/client/pi/tests/simulation"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func main() {

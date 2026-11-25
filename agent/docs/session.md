@@ -13,9 +13,9 @@ tags: [unified-agent, session, events]
 `agent` 为单个 Codex 或 Claude Session 提供统一的操作和实时事件。具体 adapter
 管理原生资源、工作归属和回答权限。原生 SDK 提供各自的协议与历史查询。MASS 负责
 应用侧的 Session 身份、多 Session 汇聚、历史导入和持久化。
-[原生 Session 合同](../native-session/design.md) · [独立历史查询](../../contracts/history-query.md)
+[原生 Session 合同](../../client/docs/session.md) · [独立历史查询](../../client/docs/history-query.md)
 
-从 [SDK 接入示例](../../../README.md) 开始使用统一接口。依赖边界见[开发规范](../../architecture.md)。
+从 [SDK 接入示例](../../README.md) 开始使用统一接口。依赖边界见[开发规范](../../docs/architecture.md)。
 
 ## 分层与依赖
 
@@ -43,7 +43,7 @@ agent          -> internal/tracecontext
 internal/queue -> github.com/zoumo/golib/channx
 ```
 
-目录、import 方向和依赖门禁由[开发规范](../../architecture.md)维护。上图展示
+目录、import 方向和依赖门禁由[开发规范](../../docs/architecture.md)维护。上图展示
 公开合同、实现关系与生产依赖；原生 SDK 不反向依赖统一 `agent`。
 两个 adapter 只适配各自原生 SDK，共同使用 `corelease` 管理 Core 准入、共享资源
 和 Session lease，使用 `eventstream` 管理每个 Session 的事件队列、取流与清理
@@ -58,12 +58,12 @@ MASS Runtime adapter 可以消费统一层，而 MASS Service、Store 和 transp
 调用方通过具体 adapter 构造 Core，并显式提供原生配置。上层应用负责解析环境继承策略、
 MCP 文件访问范围及最终的 MCP 列表。Core 在构造时固定 `Tracer`。实现须支持并发调用并及时返回。
 SDK 隔离回调 panic，也不会配置 exporter 或等待导出。
-[Codex Core 源码](../../../agent/codex/core.go) · [Claude Core 源码](../../../agent/claude/core.go)
+[Codex Core 源码](../codex/core.go) · [Claude Core 源码](../claude/core.go)
 
 ### Core 接口
 
 `Open` 完成初始化并确认原生身份后返回。`Resume` 要求恢复到原有的原生身份。
-[Core 接口](../../../agent/core.go)
+[Core 接口](../core.go)
 
 Core 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
 （Claude）；后者由每个 Session 拥有并在 `Close` 中释放自己的原生进程。
@@ -74,23 +74,23 @@ Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具
 `core_start_failed`。
 
 `Open` 与 `Resume` 共用配置字段。Adapter 在原生副作用前校验 provider 对这些字段的支持范围。
-[创建和恢复选项](../../../agent/options.go) · [会话配置](../../../agent/session_config.go)
+[创建和恢复选项](../options.go) · [会话配置](../session_config.go)
 
 - `Cwd` 必须由调用方明确给出且为绝对路径；provider 不接受隐式工作目录。
 - `PermissionPreset` 每次打开和恢复独立解析。默认值、原生覆盖方式和返回前的配置检查见
-  [权限预设 ADR](../../adr/0005-session-permission-presets.md)。
+  [权限预设 ADR](../../docs/adr/0005-session-permission-presets.md)。
 - Claude `Open` 默认通过 `--await-claim` 启动，initialize 后发送
   `claim_session` 绑定工作目录，并从响应取得 CLI 分配的原生 session ID；
   SDK 不生成 session ID。claim 和权限配置检查成功后返回，不等待 `system/init`，
   不发送用户输入。
   原生 claim 与显式 `SessionID` 的互斥和身份确认见
-  [原生创建合同](../native-session/design.md#interface-session-与交付值)。
+  [原生创建合同](../../client/docs/session.md#interface-session-与交付值)。
   每次收到符合原生创建合同的 init，adapter 都交付其中的可用命令列表。
   回放的 init、身份冲突或目录冲突以 `native_rejected` 终止 Session。
   该流程不依赖本地身份文件或刷新 API。
 - `Resume` 必须定向并确认原原生身份；Claude 还必须在启动前预检保存材料，
   以只读 `get_status` 控制探针确认身份，并在返回前复核
-  同一文件身份（见 [Claude 恢复身份](#claude-resume-identity)）。恢复响应中的
+  同一文件身份（见 [Claude 恢复身份](../claude/docs/session.md#claude-resume-identity)）。恢复响应中的
   保存历史不转换为实时事件，也不重建旧交互权限。普通恢复只交付恢复后的新观察。
 - 原生 resume 支持排除历史时，adapter 必须显式关闭保存内容的回放；如果原生
   连接仍收到保存记录，adapter 只能把它当作恢复/查询材料，不能生成统一 live
@@ -327,7 +327,7 @@ capability 说明 adapter 接受该 Session 的进程环境 overlay，不说明 
   并覆盖或清理保留变量。SDK 不读取或改写这些 policy 字段，因此 `ShellEnv`
   不是“最终环境必含”保证。Codex 身份/控制变量不得由该字段设置；SDK 拒绝的
   保留名称是固定版本与已知后续版本的并集，精确列表和 native merge 规则见
-  [Codex 会话配置](../native-session/design.md#interface-codex-会话配置)。
+  [Codex 会话配置](../../client/docs/session.md#interface-codex-会话配置)。
 - Codex 的该策略只影响它启动的 shell / unified-exec 类子进程，不修改
   app-server 自身环境，也不保证 MCP server、hook 或其他任意子进程继承。
 - `ShellEnv` 只在 `Open`/`Resume` 时生效。Codex 已加载或运行中的 thread 可能
@@ -342,63 +342,6 @@ capability 说明 adapter 接受该 Session 的进程环境 overlay，不说明 
 capability 只说明输入被按 shell-only 语义解释，不说明某个变量最终可见于每条
 命令。
 
-<a id="claude-resume-identity"></a>
-
-### Claude 恢复身份
-
-Claude 的进程启动要求稳定 CLI >= 2.1.293。Core 使用与 Session
-相同的 `CLIPath` 和由 `Config.Env` 与本次 `ProcessEnv` 合成的有效进程环境，
-执行无会话副作用的版本查询；版本不能确认时，`Resume` 在启动 Session 进程前
-失败关闭。原生 Session 启动同样执行版本门禁，因此新建 `Open` 也在启动前拒绝
-旧版本、预发布版本和无法确认的版本。不能从 `SessionStart` lifecycle frame
-或 init 是否出现推断 CLI 版本。新建 `Open` 不使用恢复探针，按
-[创建规则](#core-接口)通过 claim 协议确认新身份。
-
-Claude Core 的 `Resume` 要求构造配置显式提供绝对 `ConfigDir`；恢复预检和
-复核使用该值，不从 `HOME`、环境变量或当前目录推断。原生只读探针及接收投影由
-[Claude 只读身份探针](../native-session/design.md#claude-status-identity-probe)维护。
-
-`Resume` 在启动原生进程前完成 metadata 预检：
-
-1. 用显式绝对 `ConfigDir` 和请求的绝对 `Cwd` 调用
-   `claude.GetSessionInfo`。错误、`Info == nil`、coverage 非 `complete`、
-   Session ID 不符、stored cwd 与请求目录不是同一目录，或 transcript 不是
-   `ConfigDir` 下的普通文件时，返回确定的本地拒绝，原生 Session 进程不得启动。
-2. 保存 transcript 的绝对 `Path` 和平台文件身份（与 Go `os.SameFile` 等价）。
-   metadata 查询只证明保存材料，不证明 Session 存活、未被占用或可恢复。
-3. 原样保留调用方 `Initialize.Hooks`；恢复流程不追加 SDK 私有 hook。
-
-initialize 成功后，Core 在同一个原生连接上调用 `Session.ProbeIdentity(ctx)`：
-
-- 探针通过现有控制请求相关机制发送唯一 `request_id` 的 `get_status`，只接受该
-  请求的正常关联响应；不发送 user frame、上下文注入或模型请求，不重试恢复。
-- 原生层从 `sections[].rows[]` 投影身份：全响应必须恰有一个非空 `Session ID`
-  行和一个绝对路径 `cwd` 行。重复 JSON 成员、缺失/重复/类型错误的身份行或
-  无效路径均失败关闭；不猜测标签、不截取 UUID、不把初始化 ACK 当作身份。
-- 投影结果通过同一个 Receive FIFO 交付，先前已接纳的通知不会被跳过。Core
-  要求 Session ID 精确等于预检目标，cwd 与请求目录为同一目录。
-- status 的账户、provider、配置及其他行不进入投影、统一 Event、Meta 或日志。
-  探针失败只保留错误类别，不回显响应正文。
-- 已到达的 non-replay live `system/init` 必须匹配目标 ID 和 cwd；它不代替
-  `get_status`。重复、回放或矛盾 init 在返回前拒绝，返回后通过 `Done`/`Err`
-  终止 Session。status 先到时允许迟到的第一个匹配 init，并刷新原生元数据；
-  不重置交付、关系或权限权威。
-- `SessionStart` callback 及通用 `hook_started`、`hook_progress`、`hook_response`
-  都不构成统一恢复的身份证据；统一层不注册或应答私有恢复 callback。
-
-身份确认后、返回 Session 前，Core 必须再次用相同显式 `ConfigDir` 和请求 cwd
-调用 `GetSessionInfo`，核对同一 Session ID、同一 transcript `Path` 和平台文件
-身份、同一 cwd 与完整 coverage。比较文件身份，不要求文件大小、mtime 或 bytes
-不变；正常恢复可以追加 transcript。metadata 缺失、coverage 不完整、文件身份
-漂移或 cwd 不符时，关闭进程且不返回 Session。
-
-错误分类固定为：预检无法建立目标或目录/文件前置条件时为
-`failed_precondition`；版本查询无法执行时为 `unavailable`，版本不受支持时为
-`unsupported`；探针超时、请求失败或断线时为 `unavailable`；已收到但形状无效、
-歧义或身份矛盾的 status、init 或 metadata 为 `native_rejected`。关闭失败是附加
-cause 与清理诊断，不覆盖主错误类别。任何失败均不新建替代 Session，也不自动
-重试恢复或重发业务输入。
-
 ### MCP 配置
 
 <a id="mcp-configuration"></a>
@@ -409,7 +352,7 @@ MCP 的 JSON-RPC 回答。后者的原始 `mcp_message` 控制仍由原生 Claud
 和应用处理，不进入统一 MCP 配置。
 
 Codex、Claude 和统一层都使用 `[]mcp.Server`。调用方必须显式设置 `Transport`。
-[共享 MCP 配置](../../../mcp/server.go)
+[共享 MCP 配置](../../mcp/server.go)
 
 `mcp` 包定义 `TransportStdio`、`TransportHTTP` 和 `TransportSSE`。
 `TransportHTTP` 是 MCP Streamable HTTP；`TransportSSE` 是 Claude 原生包仍可
@@ -443,7 +386,7 @@ Runtime 默认 MCP 属于构造 Core 之前的 Runtime 配置解释，不进入 
   还是 Session，也不再次覆盖、去重或继承。
 
 该规则只合成调用方拥有的 Runtime 配置。Codex 或 Claude 自己从用户、项目、
-企业设置发现的 [native ambient MCP](../../../GLOSSARY.md)仍由原生 CLI 管理。
+企业设置发现的 [native ambient MCP](../../GLOSSARY.md)仍由原生 CLI 管理。
 集中声明的最终列表不能保证整体替换或删除 ambient 同名项：Codex 会按字段递归
 merge，Claude 的同名优先级属于目标 CLI 的实现行为且可能受企业策略拒绝。
 需要确定性 server 集合时，调用方必须隔离原生配置来源或外层执行环境。
@@ -486,7 +429,7 @@ adapter 必须拒绝无法表达的字段，不能静默丢弃或改写成其他
   和多行值。SDK 按字面量解析引号内的内容，原生 CLI 仍可按自己的配置规则处理变量。
 - 文件错误和配置错误不包含值。解析后的值会进入原生配置，包括 Claude 的 `--mcp-config`
   argv、进程环境或 Codex 的 thread config。Claude 的传递规则见
-  [原生 MCP 配置](../../../claude/README.md#external-mcp-servers)。
+  [原生 MCP 配置](../../client/claude/README.md#external-mcp-servers)。
   调用方负责保护原生进程及诊断记录。
 - `Open`/`Resume` 成功不等于 MCP server 已连接、认证成功或暴露了工具，也不
   新增统一 Capability 或 tool discovery 结果。
@@ -521,7 +464,7 @@ provider 原生字面值，不在统一层定义模型别名、模型目录或 e
 #### 运行时更新
 
 支持运行时更新的 Session 实现 `ConfigController`。调用 `SetConfig` 时每次使用一个
-配置 ID 和一个值。支持的 ID 为 `model` 和 `effort`。[配置接口和回执](../../../agent/session_config.go)
+配置 ID 和一个值。支持的 ID 为 `model` 和 `effort`。[配置接口和回执](../session_config.go)
 
 该接口沿用以一个配置 ID 和一个值更新 Session 的请求形状，但不复制任意配置
 目录、布尔选项或 provider 自定义配置项。常量值是统一层 ID，不是任一
@@ -586,11 +529,11 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 
 `SessionConfig` 和 `ConfigID` 仅承载模型与 effort。创建和恢复的权限由
 `OpenOptions.PermissionPreset` 设置，原生权限字段由具体 adapter 接收。见
-[权限预设 ADR](../../adr/0005-session-permission-presets.md)。
+[权限预设 ADR](../../docs/adr/0005-session-permission-presets.md)。
 
 ### 能力与功能
 
-能力常量及 `Capabilities.Supports` 的识别范围见[能力声明源码](../../../agent/capabilities.go)。
+能力常量及 `Capabilities.Supports` 的识别范围见[能力声明源码](../capabilities.go)。
 
 - `Start` 返回 Core 的基础支持面；`Session.Capabilities()` 返回该 Session
   实际可用的支持面，可以等于或窄于 Core。
@@ -615,13 +558,13 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
   和后续工具；这些 provider 差异以 [Prompt trace](#prompt-trace) 为准。
 - Codex 与 Claude 都支持权限、表单、URL 和 `promptTrace`。`AgentQuestions`
   只控制原生模型提问工具。独立 MCP 表单与 URL 请求有各自的交互入口。
-  [Codex 包合同](../../../agent/codex/doc.go) · [Claude 包合同](../../../agent/claude/doc.go)
+  [Codex 包合同](../codex/doc.go) · [Claude 包合同](../claude/doc.go)
 - Codex 支持 `shellEnv`，Claude 支持 `processEnv`。调用方依据当前 Session 的能力判断
   输入类型及其余可选操作的可用性。
 
 ## Session
 
-`Session` 和回执类型由[公开接口源码](../../../agent/session.go)定义。
+`Session` 和回执类型由[公开接口源码](../session.go)定义。
 
 ### 生命周期与状态
 
@@ -688,13 +631,13 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
   观察、消息 delta 和工作完成仍是输入回执之外的独立事实。
 
 输入操作的取舍和未采用方案见
-[ADR 0003](../../adr/0003-unified-start-or-steer.md)。
+[ADR 0003](../../docs/adr/0003-unified-start-or-steer.md)。
 
 <a id="context-inject"></a>
 
 ### 仅注入上下文
 
-[上下文注入接口和回执](../../../agent/inject.go)
+[上下文注入接口和回执](../inject.go)
 
 - `Injector` 是 Session 的可选接口。它把用户上下文追加到本 Session，不请求
   新的模型响应；不调用启动、steer 或 interrupt，不建立平台输入队列，不等待
@@ -722,7 +665,7 @@ Claude 的运行时 effort 必须通过原生 `claude` 包提供的
 
 ## 输入与内容块
 
-[输入与内容块源码](../../../agent/input.go) · [内容块 JSON 编码](../../../agent/content.go)
+[输入与内容块源码](../input.go) · [内容块 JSON 编码](../content.go)
 
 内容块采用源自 MCP `ContentBlock` 的五种类型，与 MASS 共享类型集合。
 `ContentBlock` 的五个指针分支必须且只能有一个非 nil；JSON 继续使用原有 `type`
@@ -735,12 +678,12 @@ Go 的 `ContentBlock.EmbeddedResource` 分支对应 JSON 的 `type: "resource"`�
 `Input.Content` 不能为空。`StartOrSteer` 在写入前校验所有块，并按原顺序编码。
 任一块缺少原生映射时，整个输入返回 `unsupported`。两端均拒绝带 annotations 的块。
 
-各类型的原生输入映射和链接默认行为见 [ADR 0006](../../adr/0006-structured-prompt-content.md)。
+各类型的原生输入映射和链接默认行为见 [ADR 0006](../../docs/adr/0006-structured-prompt-content.md)。
 能力位表示适配器可以编码该类内容。原生端及其模型决定是否接受和读取内容。
 
 Claude 观察到同时含文本和 `tool_result` 的原生 user frame 时，整帧报告
 `user_message_mixed_content_unsupported`。纯文本数组作为一个 `UserMessage.Content`
-交付，纯工具结果数组按工具结果交付。[Claude 混合内容 ADR](../../adr/0001-claude-mixed-user-content.md)
+交付，纯工具结果数组按工具结果交付。[Claude 混合内容 ADR](../../docs/adr/0001-claude-mixed-user-content.md)
 
 ## Prompt trace
 
@@ -756,7 +699,7 @@ steer 是否复用原 turn trace、settings env 是否被后续工具或排队 p
 都由 Codex/Core 或 Claude CLI 决定；这些差异被接受，但不是 SDK 新增或保证的
 语义。
 
-[TraceContext、Tracer 和 Span 源码](../../../agent/trace.go)
+[TraceContext、Tracer 和 Span 源码](../trace.go)
 
 `OpenOptions` 不增加 tracer。具体 adapter 的 `Config` 增加可选
 `Tracer agent.Tracer`；Core 构造时固定，调用方可实现按租户路由的 tracer，
@@ -891,7 +834,7 @@ SDK 不模拟这套状态机，也不承诺“新 carrier 会替换或延续 act
 
 统一 Claude adapter 把 `agent.TraceContext` 转换为原生 `claude.TraceContext`，
 再通过 `claude.WithTraceContext` 放入传给 `claude.Session.Submit` 的 context。
-原生 helper 使用私有 context key。[Claude trace 源码](../../../claude/trace.go)
+原生 helper 使用私有 context key。[Claude trace 源码](../../client/claude/trace.go)
 
 `Session.Submit` 在原生写入前提取并复制 carrier，按
 [prompt trace](#prompt-trace) 的 W3C 规则尝试校验。它复用 Claude CLI 已经
@@ -953,12 +896,12 @@ settings 更新，不证明目标 CLI 版本导出正确关联的 provider span�
 
 ## 交互与回答权限
 
-[交互请求、回答和校验源码](../../../agent/interaction.go) · [交互请求 JSON 编码](../../../agent/interaction_json.go)
+[交互请求、回答和校验源码](../interaction.go) · [交互请求 JSON 编码](../interaction_json.go)
 
 - `permission` 必须提供至少一个原生选项。`ToolCallID` 是可选的工具调用关联字段。
   Codex 将带 MCP 工具审批标记的 elicitation 映射为 `permission`，此时 `ToolCallID` 为空。
   回答使用 `InteractionRef`，并从原始请求实际提供的 `optionId` 中选择。
-  [Codex MCP elicitation 映射](../../../agent/codex/mcp_elicitation.go)
+  [Codex MCP elicitation 映射](../codex/mcp_elicitation.go)
 - `form` 提供 `Message` 和 `RequestedSchema`。adapter 只校验自己确能表达的 schema 子集。
   多选问题可接受字符串或字符串数组；
   adapter 将字符串数组以 `", "` 连接成字符串后再写回原生。原生数组答案仍拒绝，
@@ -970,7 +913,7 @@ settings 更新，不证明目标 CLI 版本导出正确关联的 provider span�
 
 `MatchAnswer` 和 `ValidateAnswer` 只作本地校验。Adapter 在取得回答权限前继续核对
 原生选项及表单 schema。校验失败保留原回答权限和具体错误原因。
-[回答校验源码](../../../agent/interaction.go)
+[回答校验源码](../interaction.go)
 
 原生 `IncomingRequest`、`AnswerHandle` 和 permission handle 只存在于 adapter
 私有 registry。统一事件只交付 `InteractionRef`。该引用绑定 Session、adapter
@@ -990,7 +933,7 @@ adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造�
 
 ## 事件流与统一事件
 
-`EventStream.Next` 由唯一消费者串行调用。[事件流接口](../../../agent/event.go)
+`EventStream.Next` 由唯一消费者串行调用。[事件流接口](../event.go)
 
 - 每个 Session 只有一条事件流和一个消费者。重复调用 `Events()` 返回错误，
   不创建第二条队列、第二个原生订阅或第二个回答权。
@@ -1003,7 +946,7 @@ adapter 的私有 registry 仍是唯一能从引用取得原生句柄并构造�
 - 统一层只有单 Session 流。多个 Session 的公平汇聚由 MASS Runtime 完成，
   SDK 不提供广播。
 
-![Agent SDK 会话时序图，涵盖首次取流、早到事件、复用现有句柄和终止后重新附着](assets/session-events-sequence.svg)
+![Agent SDK 会话时序图，涵盖首次取流、早到事件、复用现有句柄和终止后重新附着](../../docs/modules/unified-agent/assets/session-events-sequence.svg)
 
 如果同一 Core 连接上的 thread 已有所有者，Codex 会在发出原生请求前拒绝重复恢复。
 Claude 为 `Resume` 启动新进程，恢复结果由原生 Claude CLI 决定。
@@ -1047,7 +990,7 @@ lease release 和 Done 都只执行一次。
 
 ### 事件信封
 
-[事件信封与校验](../../../agent/event.go)
+[事件信封与校验](../event.go)
 
 规则：
 
@@ -1068,7 +1011,7 @@ lease release 和 Done 都只执行一次。
 
 ### 事件与 payload
 
-[事件类型](../../../agent/event.go) · [Payload 源码](../../../agent/payloads.go) · [工具分类源码](../../../agent/tool.go)
+[事件类型](../event.go) · [Payload 源码](../payloads.go) · [工具分类源码](../tool.go)
 
 `agent.Event` 使用 SDK 自己的信封。MASS 消费统一 payload 时为其补充应用侧字段。
 
@@ -1189,51 +1132,10 @@ status。
 也不提供 schema version 或兼容 shim。统一 Agent 面仍是未发布的候选接口，
 因此不保留双读或自动重写。
 
-#### Codex 映射
+#### Provider 映射
 
-| Codex item / 条件 | `ToolName` | `Kind` | `Provider` |
-|---|---|---|---|
-| `commandExecution`，`source=unifiedExecStartup` | `exec_command` | `execute` | `agent` |
-| `commandExecution`，`source=unifiedExecInteraction` | `write_stdin` | `execute` | `agent` |
-| `commandExecution`，`source=agent`、`userShell`、缺失或未知 | `commandExecution`（fallback；没有唯一模型工具名） | `execute` | `agent` |
-| `imageView` | `view_image` | `read` | `agent` |
-| `fileChange` | `fileChange`（fallback） | `edit` | `agent` |
-| `webSearch` | `webSearch`（fallback） | `search` | `agent` |
-| `sleep` | `sleep`（fallback） | `other` | `agent` |
-| `imageGeneration` | `imageGeneration`（fallback） | `other` | `agent` |
-| `mcpToolCall` | `item.Tool` | `other` | `mcp:<server>`；server 为空时为 `mcp` |
-| `dynamicToolCall` | `namespace + tool` | `other` | `dynamic` |
-| `functionCallOutput` | `namespace + name` | `other` | `dynamic` |
-| `collabAgentToolCall` | `string(item.Tool)` | `other` | `agent` |
-
-`dynamicToolCall` 和 `functionCallOutput` 的 namespace 与名称直接拼接，不插入
-`.`；namespace 为空时分别使用 `tool` 或 `name`。这是 ACP 的 Codex flatten
-规则，不是 SDK 自造格式。`commandExecution` 的 `source` 是 Codex 原生字段；
-只有 `unifiedExecStartup` 和 `unifiedExecInteraction` 能确定模型工具名。
-
-#### Claude 映射
-
-Claude 的 `ToolName` 直接使用 `tool_use.name` 原文，不剥离 `mcp__`，不重新
-拼接 server 或 leaf。
-
-| Claude 工具 | `Kind` | `Provider` |
-|---|---|---|
-| `Read` | `read` | `agent` |
-| `Edit`、`Write`、`MultiEdit`、`NotebookEdit` | `edit` | `agent` |
-| `Bash` | `execute` | `agent` |
-| `Glob`、`Grep`、`WebSearch` | `search` | `agent` |
-| `WebFetch` | `fetch` | `agent` |
-| `TodoWrite`、`TaskCreate`、`TaskUpdate` | `think` | `agent` |
-| `ExitPlanMode` | `switch_mode` | `agent` |
-| `Agent`、`Task` | `other` | `agent` |
-| MCP `mcp__...` | `other` | 能可靠确定 server 时为 `mcp:<server>`，否则为 `mcp` |
-| 其他未知非 MCP 工具 | `other` | `agent` |
-
-Claude MCP 名称只有去掉 `mcp__` 后恰好存在一个 `__` 分隔符、两侧都非空时，
-才能据名称确定 server；多个 `__`、空 segment 或畸形前缀一律保留完整
-`ToolName` 并使用 `mcp`。如果有权威 server 列表能够确认边界，可以使用
-`mcp:<server>`，但仍不得改写 `ToolName`。plugin/connector server alias 按原生
-token 原样处理。
+见 [Codex 工具事件映射](../codex/docs/tool-events.md)及
+[Claude 工具事件映射](../claude/docs/session.md#工具事件映射)。
 
 #### 与 ACP adapter 的差异
 
@@ -1275,7 +1177,7 @@ Codex shell 示例（`source=unifiedExecStartup`）：
 tool call，不额外生成计划事件或计划缺口。Codex 的独立 plan item、
 `item/plan/delta` 和 `turn/plan/updated` 暂不转换为统一事件，也不作为
 映射缺口输出。两类原生 Plan 类型和通知继续由各自原生 SDK 保留。依据与后果见
-[ADR 0002](../../adr/0002-no-provider-neutral-plan.md)。
+[ADR 0002](../../docs/adr/0002-no-provider-neutral-plan.md)。
 
 会话状态只报告 `idle`、`running`、`requires_action` 或未知（nil pointer），
 不报告 MASS Service 的 opening、closing、archived。只有原生工作开始/结束证据
@@ -1287,7 +1189,7 @@ tool call，不额外生成计划事件或计划缺口。Codex 的独立 plan it
 
 ## 错误模型
 
-`CodeOf` 使用稳定的分类值。分类取自原生证据和 SDK 状态。[错误类型和分类](../../../agent/errors.go)
+`CodeOf` 使用稳定的分类值。分类取自原生证据和 SDK 状态。[错误类型和分类](../errors.go)
 
 已知不支持或参数非法必须在原生写入前返回确定错误。`outcome_unknown` 表示可能
 已经产生原生副作用，不是确定失败；自动重试会破坏回答、输入或资源释放语义。
@@ -1295,7 +1197,7 @@ tool call，不额外生成计划事件或计划缺口。Codex 的独立 plan it
 
 ## 能力接口
 
-归档通过可选的 `Archiver` 接口提供。[归档接口](../../../agent/capabilities.go)
+归档通过可选的 `Archiver` 接口提供。[归档接口](../capabilities.go)
 
 不支持的能力不实现接口，或返回 `unsupported`。不得用静默 no-op、空成功或伪造
 默认值掩盖差异。归档、模型、思考和子 Agent 查询的 provider 专属语义不进入
@@ -1331,7 +1233,7 @@ Session 的权限和关闭规则。
 
 Codex 的 `NativeClient()` 暴露 Core 自有的同一条已初始化连接。它只在 `Start`
 成功后、`Stop` 前可用。调用方借用此连接进行只读查询，关闭与替换由 Core 负责。
-调用方可以将其绑定到只查询接口。[Codex Core 源码](../../../agent/codex/core.go)
+调用方可以将其绑定到只查询接口。[Codex Core 源码](../codex/core.go)
 
 Claude 没有对应 client，MASS 直接调用 package-level
 `claude.ListSessions`、`GetSessionInfo`、`GetSessionMessages` 和子历史查询，
@@ -1389,7 +1291,7 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
    `GetSessionInfo` 与 `GetSessionMessages`。发现接口只提供候选。
 2. 调用 `Core.Resume` 恢复原会话，再用原生查询复核身份、范围、覆盖、记录顺序和内容。
    Claude 还核对原生只读 status、同一目录和同一个 transcript 文件身份。
-   [原生查询边界](../../contracts/history-query.md)
+   [原生查询边界](../../client/docs/history-query.md)
 3. MASS 将原生保存记录转成带 replay 标记的 `SessionEvent` 并写入 Driver EventPipe。
    `Session.Events()` 交付恢复后的实时事实。历史记录不会建立当前工作或回答权。
 4. MASS 在读完历史时记录 `native_completed`，待 EventStore 追加和发布都结算后才
@@ -1402,7 +1304,7 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
 
 ## 验收
 
-- 统一核心遵循[生产依赖规则](../../architecture.md)，不导入 `codex`、`claude` 或 MASS。
+- 统一核心遵循[生产依赖规则](../../docs/architecture.md)，不导入 `codex`、`claude` 或 MASS。
 - 统一核心没有 OpenTelemetry 或其他 telemetry 生产依赖；`Tracer` 的第三方
   adapter 可在仓库外部实现，不能进入 SDK 生产依赖树。
 - 两个 adapter 互不导入，原生包不导入统一层。
@@ -1517,7 +1419,7 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
 - 真实原生交互句柄的测试覆盖跨 Session、旧运行、已回答、过期及伪造引用拒绝，
   并验证事件与历史无法重建句柄。Codex MCP 工具审批测试覆盖缺省 `ToolCallID` 时
   仍通过原引用和选项回答。Codex 与 Claude 测试分别覆盖独立表单与 URL 的回答结算。
-  [Codex 测试](../../../agent/codex/mcp_elicitation_test.go) · [Claude 测试](../../../agent/claude/elicitation_test.go)
+  [Codex 测试](../codex/mcp_elicitation_test.go) · [Claude 测试](../claude/elicitation_test.go)
 - MASS 的 wire JSON、历史、SSE、恢复、acceptance 和回答行为保持兼容。
 - MASS 普通历史查询只调用 EventStore；原生 load 通过 Codex `NativeClient()`
   的只读查询或 Claude package-level 查询读取保存内容，由 MASS 转换并标记
@@ -1545,20 +1447,3 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
 - 权限预设验收覆盖新建和恢复的原生参数、恢复时拒绝沿用旧的完全访问配置，
   以及失败后释放本次取得的资源。
 - 默认验证离线运行。分别记录公开接口与合成协议、固定录制仿真及真实 Agent 的验证结论。
-
-### Claude 恢复身份验收
-
-以下使用 fake peer、合成 metadata 和 wire 断言，不把合成通过计为真实 Agent
-验证。
-
-| 场景 | 公开操作与独立预期 |
-|---|---|
-| 预检拒绝 | missing、partial、ambiguous、cwd 不符和非普通 transcript 分别在启动前返回 `failed_precondition`；fake peer 未收到原生 Session 启动或 RPC。 |
-| 匹配 status | 关联的 `get_status` 响应含唯一精确 ID 和同目录 cwd；无需 init/callback/user frame，metadata 复核后返回同一 Session。 |
-| 仅 init 或 lifecycle | status 没有有效响应时，单独 init、callback 或 hook lifecycle 都不能完成身份；超时以 `unavailable` 关闭。 |
-| 错误 status | ID/cwd 错误、缺失或重复身份行、重复 JSON 成员、相对 cwd 均以 `native_rejected` 拒绝；无关 request_id 不能完成探针。 |
-| init 交错 | 早到和迟到 init 均核对 ID/cwd；回放、重复或矛盾均失败。status 先确认后，第一个匹配 init 可以刷新能力元数据。 |
-| 私有数据 | 账户/配置等非身份 status 行不得出现在统一事件、Meta、错误或日志。 |
-| 恢复后漂移 | 身份确认后 transcript 被替换、Path 或文件身份变化、coverage 不完整或 cwd 变化时，以 `native_rejected` 关闭进程且不返回 Session。 |
-| 版本门禁 | 版本查询无法执行时返回 `unavailable`，结果不是稳定 CLI >= 2.1.293 时返回 `unsupported`；新建和恢复均在启动 Session 进程前失败。 |
-| 调用方 Hooks | 原样保留调用方 hooks JSON，不追加 SDK 私有 matcher；原生可选 SessionStartProbe 的独立合同不变。 |

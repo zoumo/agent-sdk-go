@@ -85,6 +85,6 @@ segment 的原生身份，而不是把同一个 message ID 重复用于多个 it
 
 ## 相关合同
 
-- [统一 Agent 设计](../modules/unified-agent/design.md)
+- [统一 Agent 设计](../../agent/docs/session.md)
 - Claude adapter 包文档：`agent/claude/doc.go`
 - Claude 类型来源：`claude/docs/type-sources.md`

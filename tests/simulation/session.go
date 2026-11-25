@@ -14,7 +14,7 @@ import (
 
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 const (

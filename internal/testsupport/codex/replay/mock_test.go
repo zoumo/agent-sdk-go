@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
-	"github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
+	recording "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/replay"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 type GoMockSuite struct{ suite.Suite }

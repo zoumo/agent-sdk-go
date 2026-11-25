@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
-	"github.com/zoumo/agent-sdk-go/pi"
+	"github.com/zoumo/agent-sdk-go/client/pi"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 // AcceptContinuation verifies that two inputs complete in the same native session.

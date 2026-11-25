@@ -2,7 +2,7 @@
 
 package claude
 
-import "github.com/zoumo/agent-sdk-go/claude/types"
+import "github.com/zoumo/agent-sdk-go/client/claude/types"
 
 // Event and its views retain their canonical definitions and JSON codecs in types.
 // SDK-derived records live separately in derived_events.go; Event.Origin remains

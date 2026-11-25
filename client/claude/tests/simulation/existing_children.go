@@ -16,9 +16,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/claude/types"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 type existingChildSeedFile struct {

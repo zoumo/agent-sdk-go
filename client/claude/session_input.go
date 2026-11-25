@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 )
 

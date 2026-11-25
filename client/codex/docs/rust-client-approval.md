@@ -73,7 +73,7 @@ remote 公开 endpoint 是 WebSocket 或 Unix socket 上的 WebSocket，没有 s
 
 ## 适配录制流程的评估
 
-012 的业务验收目标是：原审批保持未答时，同一会话仍能取得控制回执和观察事件，最后沿原请求回答并完成原执行。它验证本仓库 Go SDK 的独立接收和回答能力，不要求复制某个官方 SDK 的同步回调 API。[验收目标](../../docs/sdk/validation-cases.md)、[Session 合同](../../docs/modules/native-session/design.md)
+012 的业务验收目标是：原审批保持未答时，同一会话仍能取得控制回执和观察事件，最后沿原请求回答并完成原执行。它验证本仓库 Go SDK 的独立接收和回答能力，不要求复制某个官方 SDK 的同步回调 API。[验收目标](../../../docs/sdk/validation-cases.md)、[Session 合同](../../docs/session.md)
 
 这与 001 的修正不同：001 的 idle 必须晚于 completed 是附加的错误顺序假设；012 的“审批未答期间”是需要验证的行为本身。
 

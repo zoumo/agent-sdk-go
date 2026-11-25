@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 // PermissionBehavior is native decision data in types.

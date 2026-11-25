@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
-	"github.com/zoumo/agent-sdk-go/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 type mockCLISuite struct {

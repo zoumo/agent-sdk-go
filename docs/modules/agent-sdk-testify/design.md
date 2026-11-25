@@ -121,7 +121,7 @@ fixture, including after export/projection failure, business failure and
 cancellation. Missing, corrupt or mismatched evidence fails closed.
 
 The gate evaluates every provider and case combination in the SDK's
-[acceptance matrix](../../../tests/simulation/simulate/coverage.go). Each row records its
+[acceptance matrix](../../../tests/simulation/coverage.go). Each row records its
 requirement, source verification, and SDK simulation status. Missing required
 coverage or corrupt source data fails the gate. The report retains optional
 business gaps.
@@ -149,7 +149,7 @@ index unchanged.
 
 ## Tests and dependencies
 
-`internal/mocktest` is the shared test-only bridge. It imports the pinned
+`internal/testsupport/mocktest` is the shared test-only bridge. It imports the pinned
 library, prepares and opens fixtures, creates directional streams and exposes
 typed evidence. It contains no protocol matcher, imports neither native SDK and
 does not depend on `os/exec`.

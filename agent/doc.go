@@ -14,7 +14,7 @@
 // or retries.
 // Sessions may implement Injector to append context without requesting a model
 // response. InjectReceipt reports acceptance only; native timing and version
-// limits are defined in docs/modules/unified-agent/design.md#context-inject.
+// limits are defined in agent/docs/session.md#context-inject.
 // OpenOptions.Config groups main-session Model and Effort values. An
 // empty field omits that value; a nonempty value is passed literally, without
 // trimming, aliasing or cross-provider conversion. Sessions may optionally
@@ -47,7 +47,7 @@
 // legacy name member and old arbitrary kind strings, with no compatibility
 // alias. The accepted provider forms, kind boundaries, provider mappings and
 // exact validation rules are defined by ToolProvider, ToolKind and the
-// unified-agent design under docs/modules/unified-agent.
+// unified-agent design under agent/docs/session.md.
 //
 // This package intentionally has no unified history, LoadSession, replay, root
 // client, or multi-session aggregation. Codex and Claude keep their native
@@ -65,12 +65,12 @@
 // OpenOptions.AdditionalSystemPrompt adds optional caller text for that Open or
 // Resume call only; empty requests no addition. It is per-operation
 // configuration, not Session state. The complete field contract is defined in
-// docs/modules/unified-agent/design.md#additional-system-prompt.
+// agent/docs/session.md#additional-system-prompt.
 //
 // Features.RestrictLocalTools applies available native restrictions to built-in
 // local file and command tools on Open or Resume. EffectiveFeatures reports
 // whether restrictions were configured, without guaranteeing all local tools
-// are disabled. See docs/modules/unified-agent/design.md#restrict-local-tools
+// are disabled. See agent/docs/session.md#restrict-local-tools
 // for scope and provider gaps.
 //
 // The unified contract accepts only explicit mcp.TransportStdio and

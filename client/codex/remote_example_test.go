@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // This example is compiled, not executed; the endpoint and token are placeholders.

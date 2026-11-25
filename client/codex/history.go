@@ -3,7 +3,7 @@ package codex
 import (
 	"context"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // ListThreadTurns returns one native page without resuming or projecting events.

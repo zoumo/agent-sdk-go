@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 func savedHistoryExpectations(root, sessionID string) ([]map[string]json.RawMessage, error) {

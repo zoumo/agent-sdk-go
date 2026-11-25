@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 // observationSuite owns clients created by each scenario. Transport table

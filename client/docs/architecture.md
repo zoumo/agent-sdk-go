@@ -6,7 +6,7 @@ description: "定义原生 SDK 的共同行为、调用方职责、子 Agent 观
 tags: [architecture, session, native-sdk]
 sources:
   - id: native-session
-    resource: "../modules/native-session/design.md"
+    resource: "session.md"
     title: "原生 Session 设计"
 ---
 
@@ -14,13 +14,13 @@ sources:
 
 ## 目标与范围
 
-SDK 为应用提供长期 Session 控制和原生事件透传。所有接入方以同一套[共同用户故事](validation-cases.md#stories-sdk-用户故事)验收，不以复制官方 SDK 的全部接口为目标。
+SDK 为应用提供长期 Session 控制和原生事件透传。所有接入方以同一套[共同用户故事](../../docs/sdk/validation-cases.md#stories-sdk-用户故事)验收，不以复制官方 SDK 的全部接口为目标。
 
 共同能力不要求原生协议、参数类型、事件结构或调度结果相同。统一常用控制操作，保留原生表达及证据；不能准确映射的差异须明确暴露。原生限制是能力缺口，不能通过删去共同故事或静默降级掩盖。
 
 原生 SDK 仍是默认接口。可选的 `agent`、`agent/codex` 与 `agent/claude` 只提供
 单个 live Session 的统一上层，合同和已知差异见
-[统一 Agent 设计](../modules/unified-agent/design.md)；它不替换原生协议，也不提供
+[统一 Agent 设计](../../agent/docs/session.md)；它不替换原生协议，也不提供
 统一历史查询。
 
 ## 职责与合同
@@ -31,10 +31,10 @@ SDK 为应用提供长期 Session 控制和原生事件透传。所有接入方�
 
 | 范围 | 详细合同 |
 |---|---|
-| 操作、输入、配置与原始请求权限 | [Session 接口](../modules/native-session/design.md#interface-原生-session-公开-interface) |
-| 接收顺序、隔离、资源、关闭与排空 | [事件交付](../modules/native-session/design.md#delivery-event-delivery) |
-| 成员、可选父级与关系限制 | [关系规则](../modules/native-session/design.md#lineage-shared-relationship-rules) |
-| 独立 metadata、主／子保存内容 | [历史查询](../contracts/history-query.md) |
+| 操作、输入、配置与原始请求权限 | [Session 接口](session.md#interface-原生-session-公开-interface) |
+| 接收顺序、隔离、资源、关闭与排空 | [事件交付](session.md#delivery-event-delivery) |
+| 成员、可选父级与关系限制 | [关系规则](session.md#lineage-shared-relationship-rules) |
+| 独立 metadata、主／子保存内容 | [历史查询](history-query.md) |
 
 统一常用操作概念，参数保留原生类型；不建立通用 Turn、Busy/Idle 总状态、
 跨 Agent 思考档位或预算映射。创建配置与运行中修改分开；运行时回执只区分

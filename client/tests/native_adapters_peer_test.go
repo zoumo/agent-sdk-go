@@ -1,56 +1,29 @@
-package integration_test
+package client_test
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/nativepeer"
 )
 
-func TestMain(m *testing.M) {
-	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		_, _ = fmt.Fprintln(os.Stdout, "2.1.293 (Claude Code)")
-		os.Exit(0)
-	}
-	if provider := os.Getenv("SDK_INTEGRATION_PEER"); provider != "" {
-		if err := peer(provider, os.Getenv("SDK_INTEGRATION")); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
-		}
-		os.Exit(0)
-	}
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { nativepeer.TestMain(m, peer) }
 
 // This SDK-owned synthetic native peer exercises the public process APIs. It
 // does not embed testify replay or act as a testify launcher. It never opens an
 // external connection, loads account configuration, or starts a native agent.
 // Fault companions use only a loopback application synchronization channel.
 func peer(provider, scenario string) error {
-	if strings.HasPrefix(scenario, "agent-session-config-") {
-		return agentExecutionPeer(provider, scenario)
-	}
-	if provider == "claude" && scenario == "child-detail" {
-		return claudeChildDetailPeer()
-	}
-	if provider == "codex" && scenario == "child-detail" {
-		return childDetailPeer()
-	}
-	if scenario == "history-query" && provider == "codex" {
-		return historyQueryScenarioPeer()
-	}
-	if strings.HasPrefix(scenario, "session-") {
-		return sessionTargetPeer(provider, scenario)
-	}
 	scanner := bufio.NewScanner(os.Stdin)
 	inputs, answers := 0, 0
 	emit := func(method, params string) {
 		if provider == "codex" {
 			fmt.Fprintf(os.Stdout, `{"method":%q,"params":%s}`+"\n", method, params)
 		} else {
-			fmt.Fprintln(os.Stdout, string(completeClaudeFixture(json.RawMessage(params))))
+			fmt.Fprintln(os.Stdout, string(nativepeer.CompleteClaudeFrame(json.RawMessage(params))))
 		}
 	}
 	marker := func(kind string) {
@@ -190,7 +163,7 @@ func peer(provider, scenario string) error {
 		}
 
 		if frame.Method == "thread/start" {
-			reply(`{"thread":` + string(nativeScenarioThread("root")) + `,"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}`)
+			reply(`{"thread":` + string(nativepeer.Thread("root")) + `,"approvalPolicy":"never","approvalsReviewer":"user","cwd":"/synthetic","model":"synthetic","modelProvider":"synthetic","sandbox":{"type":"readOnly"}}`)
 			continue
 		}
 		if frame.Method == "thread/unsubscribe" {
@@ -199,7 +172,7 @@ func peer(provider, scenario string) error {
 		}
 		if frame.Method == "thread/list" {
 			var r map[string]json.RawMessage
-			_ = json.Unmarshal(nativeScenarioThread("child"), &r)
+			_ = json.Unmarshal(nativepeer.Thread("child"), &r)
 			r["parentThreadId"] = json.RawMessage(`"root"`)
 			raw := mustMarshalJSON(r)
 			reply(`{"data":[` + string(raw) + `],"nextCursor":null}`)
@@ -248,7 +221,7 @@ func peer(provider, scenario string) error {
 
 func nativeParentFixture(child, parent string) string {
 	var t map[string]json.RawMessage
-	_ = json.Unmarshal(nativeScenarioThread(child), &t)
+	_ = json.Unmarshal(nativepeer.Thread(child), &t)
 	t["parentThreadId"] = mustMarshalJSON(parent)
 	b := mustMarshalJSON(map[string]any{"thread": t})
 	return string(b)
@@ -261,5 +234,3 @@ func mustMarshalJSON(v any) []byte {
 	}
 	return b
 }
-
-// This channel is application-driver metadata, never a native replay frame.

@@ -1,11 +1,11 @@
-# SDK simulation drivers
+# SDK simulation
 
 <a id="repository-recording"></a>
 
 Use this guide to run the Go SDK against fixed native recordings. The SDK's Go
 drivers call public SDK operations and check application behavior. The linked
 Testify library prepares fixtures, matches protocol traffic, and produces
-typed results. [Go library contract](../../../docs/modules/agent-sdk-testify/library-mode.md)
+typed results. [Go library contract](../../docs/modules/agent-sdk-testify/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
 <a id="stage-handoff"></a>
@@ -20,16 +20,16 @@ pass its path to `-simulation.recording`.
 Set `-simulation.output` to a new absolute archive directory whose parent exists.
 
 ```sh
-go test -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2
-go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
-go test -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
+go test -count=1 -timeout=600s -v ./tests/simulation -run '^TestSimulationGate$' -simulation.jobs=2
+go test -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
+go test -count=1 -v ./tests/simulation -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```
 
 `TestMain` builds the SDK driver. The test coordinates the simulation and
 starts each driver in its own environment, workspace, and process group.
 
 The test uses a short private directory for the run and archives the evidence
-afterward. See [offline validation](../../../docs/testing.md) for the default
+afterward. See [offline validation](../../docs/testing.md) for the default
 archive location, cleanup, and failure handling.
 
 ### 审核采用和日常门禁
@@ -87,7 +87,8 @@ are independent evidence. No model or new recording runs by default.
 
 ### 代码集成测试输入
 
-Native tests/testdata integration inputs are explicitly synthetic. internal/mocktest
+Provider fixture packages under `internal/testsupport/` embed synthetic protocol inputs.
+`internal/testsupport/mocktest`
 converts them into manifest-bound synthetic captures and drives the in-process
 library lifecycle with typed execution evidence.
 Simulation hosts separately consume typed reports bound to the
@@ -145,7 +146,7 @@ runs on demand with explicit captures.
 The SDK uses the library's public prepare and export operations for every
 provider and case combination in its acceptance matrix. Testify supplies the
 scenarios and bindings.
-[SDK acceptance matrix](../simulate/coverage.go) · [共同验收](../../../docs/sdk/validation-cases.md#stories-sdk-用户故事)
+[SDK acceptance matrix](coverage.go) · [共同验收](../../docs/sdk/validation-cases.md#stories-sdk-用户故事)
 
 The Go driver implements the public SDK route for available cases. `passed`,
 `failed` and `unverified` status is recorded per execution; catalog availability

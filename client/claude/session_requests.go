@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 // IncomingRequest retains the native envelope and original permission handle.

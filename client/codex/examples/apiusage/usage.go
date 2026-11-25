@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func Configure(ctx context.Context, executable string) (*codex.Client, error) {

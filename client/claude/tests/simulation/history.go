@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/claude/types"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 // AcceptSavedHistory uses a real captured mock process for Session execution,

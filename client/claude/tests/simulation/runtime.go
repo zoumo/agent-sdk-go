@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zoumo/agent-sdk-go/claude/types"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 // Host is the prepared SDK host identity. Empty fields retain the legacy

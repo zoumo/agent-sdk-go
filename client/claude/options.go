@@ -2,7 +2,7 @@
 
 package claude
 
-import "github.com/zoumo/agent-sdk-go/claude/types"
+import "github.com/zoumo/agent-sdk-go/client/claude/types"
 
 // OptionsFromTypes adapts callback-free configuration to runtime options.
 // SessionID and ResumeID are mutually exclusive.

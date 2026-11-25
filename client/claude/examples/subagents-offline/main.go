@@ -15,7 +15,7 @@ import (
 
 	_ "embed"
 
-	claude "github.com/zoumo/agent-sdk-go/claude"
+	claude "github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 const peerEnvironment = "CLAUDE_GO_OFFLINE_TREE_PEER"

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func submitRecordedTurn(ctx context.Context, client *codex.Client, session *codex.Session, raw json.RawMessage) (types.TurnStartResponse, error) {

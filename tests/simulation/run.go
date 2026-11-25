@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	claudesim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/claude/go"
-	codexsim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/codex/go"
+	claudesim "github.com/zoumo/agent-sdk-go/client/claude/tests/simulation"
+	codexsim "github.com/zoumo/agent-sdk-go/client/codex/tests/simulation"
 )
 
 type runResult struct {

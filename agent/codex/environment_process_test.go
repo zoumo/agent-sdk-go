@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 func TestEnvironmentProviderProcessReplacementSemantics(t *testing.T) {

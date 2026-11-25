@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	replay "github.com/zoumo/agent-sdk-go/claude/tests/replay"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	replay "github.com/zoumo/agent-sdk-go/internal/testsupport/claude/replay"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 type mockScenarioDefinition struct {

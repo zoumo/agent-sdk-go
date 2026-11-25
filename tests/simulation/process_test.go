@@ -18,8 +18,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	fixturedata "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/testdata"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 var driverBinary, requestMutatorBinary string
@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 	driverBinary = filepath.Join(dir, "driver")
 	requestMutatorBinary = filepath.Join(dir, "mutate-request")
 	for _, entry := range [][2]string{
-		{driverBinary, "../drivers"},
+		{driverBinary, "./driver"},
 		{requestMutatorBinary, "./testdata/mutate-request"},
 	} {
 		cmd := exec.CommandContext(context.Background(), "go", "build", "-o", entry[0], entry[1])

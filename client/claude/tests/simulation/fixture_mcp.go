@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/zoumo/agent-sdk-go/claude"
-	"github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 const fixtureMCPName = "fixture"

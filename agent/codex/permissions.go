@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Permissions carries native permission fields for one Codex thread start

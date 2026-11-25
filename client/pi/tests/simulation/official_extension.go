@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/zoumo/agent-sdk-go/pi"
+	"github.com/zoumo/agent-sdk-go/client/pi"
 )
 
 func (f *baseFlow) runOfficialExtension() error {

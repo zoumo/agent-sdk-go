@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	agenttestify "github.com/zoumo/agent-sdk-testify"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func TestUnavailableAndCorruptMaterialFailExplicitly(t *testing.T) {

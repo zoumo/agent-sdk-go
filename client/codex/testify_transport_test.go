@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 // Each suite test receives a fresh peer and its native client. startFake owns

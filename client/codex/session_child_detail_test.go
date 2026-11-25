@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 func (obs *observationSuite) TestChildDetailInvalidBeforeStartupOrRPC() {

@@ -3,7 +3,7 @@ package codex
 import (
 	"encoding/json"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Input preserves native turn/start execution options, without a target ThreadID.

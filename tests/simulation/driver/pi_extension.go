@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	pisim "github.com/zoumo/agent-sdk-go/tests/simulation/drivers/pi/go"
+	pisim "github.com/zoumo/agent-sdk-go/agent/pi/tests/simulation"
 )
 
 func runPiExtensionFlow(args []string) (err error) {

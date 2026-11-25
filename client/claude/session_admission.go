@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/internal/lineage"
+	"github.com/zoumo/agent-sdk-go/client/internal/lineage"
 )
 
 // liveAdmission owns Claude observation knowledge and diagnostic retention. It

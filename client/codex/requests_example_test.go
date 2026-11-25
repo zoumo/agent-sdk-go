@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	codex "github.com/zoumo/agent-sdk-go/codex"
+	codex "github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 // answerFromTerminal is application code, never called on an SDK reader. It

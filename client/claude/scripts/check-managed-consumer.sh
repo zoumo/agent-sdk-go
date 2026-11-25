@@ -23,8 +23,8 @@ package consumer
 
 import (
     "context"
-    claude "github.com/zoumo/agent-sdk-go/claude"
-    "github.com/zoumo/agent-sdk-go/claude/types"
+    claude "github.com/zoumo/agent-sdk-go/client/claude"
+    "github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 var _ func(context.Context) (claude.Received, error) = (*claude.Session)(nil).Receive
@@ -53,6 +53,6 @@ import pathlib, sys
 text = pathlib.Path(sys.argv[1]).read_text()
 section = text.split("## Go: configuration,", 1)[1]
 code = section.split("```go\n", 1)[1].split("```", 1)[0]
-pathlib.Path(sys.argv[2]).write_text('package consumer\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/agent-sdk-go/claude")\n'+code)
+pathlib.Path(sys.argv[2]).write_text('package consumer\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/agent-sdk-go/client/claude")\n'+code)
 PYDOC
 (cd "$consumer_dir" && go get "github.com/zoumo/agent-sdk-go@$version" && go mod tidy && go mod verify && GOPROXY=off GOSUMDB=off go test ./...)

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Request holds an immutable received snapshot separately from registry authority.

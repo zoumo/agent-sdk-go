@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/lineage"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/internal/lineage"
 )
 
 func (s *Session) member(id string) bool { _, ok := s.members[id]; return ok }

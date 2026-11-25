@@ -4,23 +4,29 @@ cd "$(dirname "$0")/.."
 test "$(find . -name go.mod -not -path './.git/*' | wc -l | tr -d ' ')" = 1
 test -z "$(find . \( -name go.work -o -name go.work.sum \) -not -path './.git/*' -print)"
 test -z "$(find . -maxdepth 1 -name '*.go' -print)"
-for shared in lineage queue mocktest; do
-  imports=$(go list -deps -f '{{.ImportPath}}' "./internal/$shared")
-  if [[ "$imports" == *github.com/zoumo/agent-sdk-go/codex* || "$imports" == *github.com/zoumo/agent-sdk-go/claude* ]]; then
-    echo "internal/$shared must not import native SDK packages" >&2
-    exit 1
-  fi
+module=github.com/zoumo/agent-sdk-go
+for shared in client/internal/lineage internal/queue internal/testsupport/mocktest; do
+  imports=$(go list -deps -f '{{.ImportPath}}' "./$shared")
+  while IFS= read -r dependency; do
+    case "$dependency" in
+      "$module"/client/codex|"$module"/client/codex/*|\
+      "$module"/client/claude|"$module"/client/claude/*|\
+      "$module"/client/pi|"$module"/client/pi/*)
+        echo "$shared must not import native SDK packages: $dependency" >&2
+        exit 1 ;;
+    esac
+  done <<< "$imports"
 done
 for native in codex claude; do
   # Deliberately omit -test: native data packages have standard-library-only
   # production implementation plus the shared mcp contract; assertion/suite
   # libraries belong to tests.
-  deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./$native/types" | sed '/^$/d')
+  deps=$(GOPROXY=off GOSUMDB=off go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' "./client/$native/types" | sed '/^$/d')
   case "$native" in
     codex)
-      test "$deps" = "github.com/zoumo/agent-sdk-go/codex/types" ;;
+      test "$deps" = "github.com/zoumo/agent-sdk-go/client/codex/types" ;;
     claude)
-      test "$deps" = $'github.com/zoumo/agent-sdk-go/mcp\ngithub.com/zoumo/agent-sdk-go/claude/types' ;;
+      test "$deps" = $'github.com/zoumo/agent-sdk-go/mcp\ngithub.com/zoumo/agent-sdk-go/client/claude/types' ;;
   esac
 done
 # The shared MCP value and validation package uses only the standard library.
@@ -123,8 +129,9 @@ for adapter in codex claude pi; do
           github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace|\
           github.com/zoumo/agent-sdk-go/agent/internal/telemetry|\
           github.com/zoumo/agent-sdk-go/agent/internal/interactionledger|\
-          github.com/zoumo/agent-sdk-go/"$adapter"|\
-          github.com/zoumo/agent-sdk-go/"$adapter"/types|\
+          github.com/zoumo/agent-sdk-go/client/"$adapter"|\
+          github.com/zoumo/agent-sdk-go/client/"$adapter"/types|\
+          github.com/zoumo/agent-sdk-go/agent/"$adapter"/internal/*|\
           github.com/zoumo/agent-sdk-go/internal/queue|\
           github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope|\
           github.com/zoumo/agent-sdk-go/internal/uuidv4|\
@@ -181,44 +188,51 @@ while IFS= read -r dependency; do
     *) echo "unexpected shared queue dependency: $dependency" >&2; exit 1 ;;
   esac
 done <<< "$queue_dependencies"
-# Test libraries must not leak into any native SDK's production dependency tree.
-production_deps=$(go list -deps -f '{{.ImportPath}}' ./codex/... ./claude/... ./pi/... ./agent/...)
-if [[ "$production_deps" == *github.com/stretchr/* ]]; then
-  echo "testify dependencies must remain test-only" >&2
-  exit 1
-fi
-if [[ "$production_deps" == *go.opentelemetry.io/otel/sdk* || "$production_deps" == *go.opentelemetry.io/otel/exporters* ]]; then
-  echo "OpenTelemetry SDK and exporter dependencies must remain test-only" >&2
-  exit 1
-fi
-native_deps=$(go list -deps -f '{{.ImportPath}}' ./codex ./codex/types ./claude ./claude/types ./pi)
-if [[ "$native_deps" == *go.opentelemetry.io/* ]]; then
-  echo "native SDKs must not depend on OpenTelemetry" >&2
-  exit 1
-fi
-# Recording/replay utilities and embedded fixtures are tooling, never SDK
-# runtime dependencies. Inspect the supported SDK entry points.
-sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' ./agent/... ./codex ./codex/types ./claude ./claude/types ./pi)
+# Select SDK production packages. Scenario, example and E2E packages are tooling.
+sdk_packages=()
+sdk_paths=$(go list -f '{{.ImportPath}}' ./agent/... ./client/... ./mcp)
+while IFS= read -r package; do
+  case "$package" in
+    */tests|*/tests/*|*/examples|*/examples/*) ;;
+    *) sdk_packages+=("$package") ;;
+  esac
+done <<< "$sdk_paths"
+sdk_dependencies=$(go list -deps -f '{{.ImportPath}}' "${sdk_packages[@]}")
 while IFS= read -r dependency; do
   case "$dependency" in
+    "$module"/internal/testsupport|"$module"/internal/testsupport/*|\
+      "$module"/tests|"$module"/tests/*|*/tests/simulation|*/tests/simulation/*|\
+      "$module"/replay|"$module"/replay/*|"$module"/cmd/*|"$module"/tools/*|\
+      github.com/spf13/*|github.com/inconshreveable/mousetrap|\
+      github.com/zoumo/agent-mock*|github.com/zoumo/agent-sdk-testify*|\
+      github.com/stretchr/*|go.opentelemetry.io/otel/sdk*|go.opentelemetry.io/otel/exporters*)
+      echo "SDK production packages must not depend on test or replay tooling: $dependency" >&2
+      exit 1 ;;
+    github.com/zoumo/golib/channx) ;;
     github.com/zoumo/golib/*)
-      test "$dependency" = github.com/zoumo/golib/channx || {
-        echo "SDK runtime may use only reviewed golib/channx: $dependency" >&2
-        exit 1
-      } ;;
+      echo "SDK runtime may use only reviewed golib/channx: $dependency" >&2
+      exit 1 ;;
   esac
 done <<< "$sdk_dependencies"
-if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tools/* || "$sdk_dependencies" == *github.com/spf13/* || "$sdk_dependencies" == *github.com/inconshreveable/mousetrap* || "$sdk_dependencies" == *github.com/zoumo/agent-mock* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-testify* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/tests/* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/internal/mocktest* ]]; then
-  echo "SDK production packages must not depend on agent-sdk-testify or its test bridge" >&2
-  exit 1
-fi
-for native in codex claude; do
-  if [[ "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tools* || "$sdk_dependencies" == *github.com/zoumo/agent-sdk-go/$native/tests/* ]]; then
-    echo "SDK production packages must not import recording tools or fixtures" >&2
-    exit 1
-  fi
+
+for native in codex claude pi; do
+  for package in "${sdk_packages[@]}"; do
+    case "$package" in
+      "$module"/client/"$native"|"$module"/client/"$native"/*)
+        dependencies=$(go list -deps -f '{{.ImportPath}}' "$package")
+        while IFS= read -r dependency; do
+          case "$dependency" in
+            "$module"/client/"$native"|"$module"/client/"$native"/*|"$module"/client/internal/*) ;;
+            "$module"/client/*|"$module"/agent|"$module"/agent/*|go.opentelemetry.io/*)
+              echo "$package must stay independent of $dependency" >&2
+              exit 1 ;;
+          esac
+        done <<< "$dependencies" ;;
+    esac
+  done
 done
-python3 - <<'PY'
+
+python3 - <<'PYTHON'
 import json
 import os
 from pathlib import Path
@@ -228,17 +242,11 @@ import subprocess
 import sys
 
 rules = [
-    (('agent/codex',), False, r'github\.com/zoumo/agent-sdk-go/agent/claude',
-     'agent/codex must not import agent/claude'),
-    (('agent/claude',), False, r'github\.com/zoumo/agent-sdk-go/agent/codex',
-     'agent/claude must not import agent/codex'),
-    (('codex', 'claude', 'pi'), True, r'github\.com/zoumo/agent-sdk-go/agent',
-     'native SDK production code must not import the agent layer'),
-    (('agent', 'codex', 'claude'), True, r'github\.com/[^"]*/(mass|mass-go)(/|")',
+    (('agent', 'client'), True, r'github\.com/[^"]*/(mass|mass-go)(/|")',
      'SDK production code must not import MASS'),
-    (('agent', 'codex', 'claude'), True, r'MASS_[A-Z0-9_]+',
+    (('agent', 'client'), True, r'MASS_[A-Z0-9_]+',
      'SDK production code must not depend on MASS environment conventions'),
-    (('internal', 'tests', 'codex', 'claude'), False,
+    (('internal', 'tests', 'client', 'agent'), False,
      r'protocol mock|"protocol"\s*,\s*"mock"|--scenario|--sdk-test-handshakes',
      'legacy mock CLI dependency in SDK process adapter'),
 ]
@@ -250,6 +258,8 @@ for roots, production_only, pattern, description in rules:
     expression = re.compile(pattern)
     for root in roots:
         for directory, _, names in os.walk(root, onerror=scan_error):
+            if production_only and {'tests', 'examples'}.intersection(Path(directory).parts):
+                continue
             for name in sorted(names):
                 path = Path(directory) / name
                 if not name.endswith('.go') or path.is_symlink():
@@ -263,16 +273,27 @@ for roots, production_only, pattern, description in rules:
                         print(f'{path}:{number}:{line}', file=sys.stderr)
                         sys.exit(description)
 
-rows = subprocess.check_output(['go', 'list', '-json', './codex/...', './claude/...', './tests/simulation/drivers/codex/go/...', './tests/simulation/drivers/claude/go/...'], text=True)
+module = 'github.com/zoumo/agent-sdk-go/'
+rows = subprocess.check_output(
+    ['go', 'list', '-json', './agent/...', './client/...', './tests/simulation/...', './internal/testsupport/mocktest'],
+    text=True,
+)
 decoder = json.JSONDecoder()
 while rows.strip():
     item, end = decoder.raw_decode(rows.lstrip())
     rows = rows.lstrip()[end:]
     path = item['ImportPath']
-    own = 'codex' if '/codex' in path else 'claude'
-    other = 'claude' if own == 'codex' else 'codex'
-    for dep in item.get('Imports', []) + item.get('TestImports', []) + item.get('XTestImports', []):
-        assert not dep.startswith('github.com/zoumo/agent-sdk-go/' + other), (path, dep)
-        assert not dep.startswith('github.com/zoumo/agent-sdk-go/tests/simulation/drivers/' + other), (path, dep)
-        assert not dep.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dep)
-PY
+    relative_path = path.removeprefix(module)
+    parts = relative_path.split('/')
+    provider = parts[1] if len(parts) > 1 and parts[1] in {'codex', 'claude', 'pi'} else None
+    dependencies = item.get('Imports', []) + item.get('TestImports', []) + item.get('XTestImports', [])
+    for dependency in dependencies:
+        assert not dependency.startswith(('github.com/zoumo/codex-sdk-go', 'github.com/zoumo/claude-agent-sdk-go')), (path, dependency)
+        if provider:
+            for other in {'codex', 'claude', 'pi'} - {provider}:
+                for domain in ('agent', 'client'):
+                    prefix = module + domain + '/' + other
+                    assert dependency != prefix and not dependency.startswith(prefix + '/'), (path, dependency)
+        if dependency.startswith(module + 'replay/'):
+            sys.exit(f'{path} must use the public Replay entry point: {dependency}')
+PYTHON

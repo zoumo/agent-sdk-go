@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 type streamPeer struct {

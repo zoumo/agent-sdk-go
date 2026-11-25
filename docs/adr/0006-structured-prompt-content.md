@@ -32,4 +32,4 @@ SDK 的 `ContentBlock` 取自 MCP 的五分支内容模型。`EmbeddedResource` 
 
 `resource_link.icons` 保留在内容块中供客户端展示。每个图标包含 `src` URI，可选 `mimeType`、`sizes` 和 `theme`，其中 `theme` 取值为 `light` 或 `dark`。其余链接元数据由调用方保留。
 
-[Go 类型](../../agent/input.go) · [Codex 编码](../../agent/codex/input.go) · [Claude 编码](../../agent/claude/input.go) · [输入合同](../modules/unified-agent/design.md#输入与内容块)
+[Go 类型](../../agent/input.go) · [Codex 编码](../../agent/codex/input.go) · [Claude 编码](../../agent/claude/input.go) · [输入合同](../../agent/docs/session.md#输入与内容块)

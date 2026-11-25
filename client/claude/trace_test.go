@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/zoumo/agent-sdk-go/claude"
+	"github.com/zoumo/agent-sdk-go/client/claude"
 )
 
 const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"

@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 type Frame struct {

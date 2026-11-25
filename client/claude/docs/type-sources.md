@@ -224,7 +224,7 @@ contains recursive layout resolution (1367–1476), the independent last-leaf ch
 chain (1474–1511), list/get (1514–1640), and sidecar/message projection (1643–1740).
 The main-chain compaction and parallel-tool recovery at 933–1261 do not apply to
 child chains. Go adds explicit scope, resource and integrity checks described in
-the [child-history contract](../../docs/contracts/history-query.md#children-claude-独立本地子历史);
+the [child-history contract](../../docs/history-query.md#children-claude-独立本地子历史);
 this query-source pin does not upgrade the live CLI baseline or prove real child files.
 
 ## Standalone MCP elicitation

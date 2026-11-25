@@ -9,8 +9,8 @@ import (
 	"errors"
 	"io"
 
-	fixturedata "github.com/zoumo/agent-sdk-go/codex/tests/testdata"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
+	fixturedata "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/testdata"
 )
 
 // fixtures is the shared embedded fixture source used by offline tooling.

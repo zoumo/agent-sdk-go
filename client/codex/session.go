@@ -8,8 +8,8 @@ import (
 	"io/fs"
 	"sync"
 
-	"github.com/zoumo/agent-sdk-go/codex/types"
-	"github.com/zoumo/agent-sdk-go/internal/lineage"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/internal/lineage"
 	"github.com/zoumo/agent-sdk-go/internal/queue"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )

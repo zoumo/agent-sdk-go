@@ -3,7 +3,7 @@ package simulate
 import (
 	"errors"
 
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 type toolIdentity struct {

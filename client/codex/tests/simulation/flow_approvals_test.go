@@ -13,9 +13,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/zoumo/agent-sdk-go/codex"
-	recording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	recording "github.com/zoumo/agent-sdk-go/internal/testsupport/codex/replay"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func TestFlowRenamesThreadBeforeAnsweringOriginalApproval(t *testing.T) {

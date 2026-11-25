@@ -379,7 +379,7 @@ package types_test
 
 import (
     "testing"
-    "github.com/zoumo/agent-sdk-go/codex/types"
+    "github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func TestGeneratedSchemaRoundTrips(t *testing.T) {

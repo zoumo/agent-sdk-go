@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	transcript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
-	"github.com/zoumo/agent-sdk-go/internal/mocktest"
+	transcript "github.com/zoumo/agent-sdk-go/internal/testsupport/claude/replay"
+	"github.com/zoumo/agent-sdk-go/internal/testsupport/mocktest"
 )
 
 func (s *syntheticObservationSuite) TestSyntheticTaskFailureReplay() {

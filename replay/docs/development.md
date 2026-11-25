@@ -201,7 +201,8 @@ case/索引身份、全部录制字节、来源哈希和政策检查不得弱化
 在 SDK 仓库根目录运行以下命令。linked worktree 的离线门禁使用本地临时 checkout 保留 Go VCS 构建身份。请在提交后运行该门禁。
 
 ```sh
-go build -o bin/agent-replay ./cmd/agent-replay
+make replay-build
+make replay-check
 bash scripts/check-offline.sh checks
 bash scripts/check-offline.sh race
 ```
@@ -215,4 +216,4 @@ bash scripts/replay/with-build-checkout.sh bash scripts/replay/with-agent-replay
 
 ### 构建发布产物
 
-发布版本跟随 SDK tag。产物记录 CLI 版本、SDK 构建修订、内置材料来源及哈希。官方 driver 的安装入口和运行环境见[官方 driver 指南](../drivers/README.md)。
+在 SDK 仓库根目录构建和验证发布归档。[发布准备](../../docs/testing.md#build-and-validate-the-replay-release)

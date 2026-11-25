@@ -321,7 +321,8 @@ No Windows runtime support is claimed.
 
 ## Release preparation
 
-One version covers all four native imports. Before an authorized publication:
+One SDK tag versions the native clients, unified adapters, Replay library, and
+`agent-replay` CLI. Before an authorized publication, complete these checks.
 
 1. Confirm the intended main SHA and both imported source histories.
 2. Require the exact SHA's `checks` and `race` CI jobs and the External
@@ -337,4 +338,36 @@ check records success on the exact commit only when all three jobs succeed on
 a push to `main`. Open the check's details to see the run that verified the
 commit.
 
-Real agent checks remain opt-in. These commands do not publish anything.
+### Build and validate the Replay release
+
+Run `make replay-build` to build the CLI using only the Go toolchain and the
+prepared Go module cache. The output is `.artifacts/replay/bin/agent-replay`.
+Run `make replay-check` to validate the case catalog, documentation links,
+build checkout, and Replay dependency boundaries.
+
+Prepare the [official driver build dependencies](../replay/drivers/README.md#构建与测试)
+before building a native distribution. Set `SDK_TAG` to the local Git tag at
+`HEAD`. Use a new output directory.
+
+```sh
+make replay-release SDK_TAG="$SDK_TAG" OUTPUT=/absolute/new-dist
+make replay-check-package OUTPUT=/absolute/new-dist
+```
+
+A push of the SDK tag starts the release workflow.
+The workflow verifies the installed CLI and drivers on Linux and macOS for amd64
+and arm64. It also imports `replay` and installs the CLI from the same tag in an
+independent Go module. [Release workflow](../.github/workflows/release.yml)
+
+Pull requests run the same package checks on Ubuntu in a separate workflow.
+SDK Go checks can run without the Rust and Node.js toolchains. [Package checks](../.github/workflows/replay-package.yml)
+
+The release includes `agent-replay_<tag>_<os>_<arch>.tar.gz` for each platform.
+Each archive contains `agent-replay`, `agent-sdk-testify-codex`, the builtin
+material manifest, and usage and license files. The Claude and Pi driver
+tarballs keep their npm package names and versions. Verify the downloaded files
+with `SHA256SUMS`. `manifest.json` records the SDK tag and commit, the builtin
+material identity, and the artifact hashes.
+
+Installed package checks use sealed recordings and controlled peers. Real Agent
+checks remain opt-in.

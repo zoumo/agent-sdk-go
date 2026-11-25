@@ -55,7 +55,7 @@ agent-replay version
 | --- | --- |
 | CLI 职责、fixture、execution 和材料 | [工具设计](docs/design.md#命令与数据边界) |
 | Go 进程内回放与执行报告 | [Go 库回放合同](docs/library-entry-spec.md) |
-| SDK case 与验收标准 | [场景目录](data/scenarios)、[共同验收](docs/cases.md) |
+| SDK case 与验收标准 | [场景目录](data/scenarios)、[共同验收](../docs/sdk/validation-cases.md) |
 | 录制材料的身份、来源和可用状态 | [固定索引](data/index.json)、[内置快照](data/builtin/manifest.json) |
 | 模块、测试层级和编码规则 | [开发规范](docs/development.md) |
-| 文档术语 | [术语表](GLOSSARY.md) |
+| 文档术语 | [术语表](../GLOSSARY.md) |

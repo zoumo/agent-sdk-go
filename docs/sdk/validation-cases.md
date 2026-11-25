@@ -16,59 +16,208 @@ sources:
 
 ## SDK 用户故事
 
-`SDK-US-NNN` 标识完整使用目标。`SDK-CASE-NNN` 标识可独立录制和回放的流程。同一流程可以包含多条断言。按场景的 `storyId` 和 `id` 查找，ID 数字不表示归属或驱动行为。
+本文档定义 8 个真实用户目标及对应的验收条件。录制、回放和仿真用语见[共享词汇表](../../GLOSSARY.md)。
 
-SDK 通过 Replay 公开库准备同一版本的材料。逐案预期与资格条件见共同验收，SDK 的必需项由仿真矩阵定义。
-[场景与绑定](../../replay/data/scenarios) · [共同验收](../../replay/docs/cases.md) · [固定索引](../../replay/data/index.json) · [仿真配置](../../tests/simulation/docs/design.md#story-场景配置)
+User story 表达完整使用目标，使用 `SDK-US-NNN`；验证 case 表达其中一条完整、可独立录制和回放的使用流程，使用独立的 `SDK-CASE-NNN`。不同输入类型、操作序列或原生行为可以形成不同 case；同一流程中的多条断言共同归属该 case。不能从 ID 的数字推断归属或驱动行为。
+
+一个 story 的全部必需 case 在指定 agent type 和证据层完成后，才能声明故事验收。planned、unsupported、未触发、失败与缺证据分别报告；驱动已注册或其他 case 通过不能替代它们。目录不提供其他 ID 或录制兼容层。
+
+| Story ID | 完整用户目标 | 必需 case |
+|---|---|---|
+| SDK-US-001 | 在长期会话中提交输入、追加输入并观察结果 | SDK-CASE-001、002、004、005、037 |
+| SDK-US-002 | 观察工具执行并处理应用工具调用 | SDK-CASE-006～SDK-CASE-007 |
+| SDK-US-003 | 接收、等待并批准或拒绝权限请求 | SDK-CASE-008～SDK-CASE-012、039～041 |
+| SDK-US-004 | 回答 Agent 提出的选择题或文本题 | SDK-CASE-013～SDK-CASE-015、042 |
+| SDK-US-005 | 观察直接、嵌套、并行和后台子 Agent | SDK-CASE-016～SDK-CASE-020 |
+| SDK-US-006 | 设置模型与思考配置并观察生效情况 | SDK-CASE-021～024、027～029 |
+| SDK-US-007 | 中断执行并关闭会话或连接 | SDK-CASE-030～SDK-CASE-032 |
+| SDK-US-008 | 独立发现并读取已有会话及子 Agent 保存内容 | SDK-CASE-033～SDK-CASE-036 |
+
+逐案输入与 Codex、Claude、Pi 的录制路径见[场景与绑定](../../replay/data/scenarios)。材料的采用及验证状态见[固定索引](../../replay/data/index.json)。
 
 <a id="stories-共同边界"></a>
 
 ### 共同边界
 
-分别报告真实录制、官方 SDK 回放和 Go SDK 仿真。仿真验收使用原生交互材料。工具、审批、问答或子 Agent 未触发时，保留原始结果并记录未触发。协议容错、无效句柄、未知字段、背压、取消竞态和存储异常由合成对端与代码集成测试验证。[测试规范](../testing-standards.md)
+仿真测试必须使用原生真实交互证据。未触发的工具、审批、问答或子 Agent 行为保持未触发，不用伪造事件或循环重试凑齐通过。审批拒绝和主动中断是实际用户操作，可以成为仿真流程。
+
+原生 Session、事件交付和历史查询的实现合同由各 SDK 自己维护。原生差异见
+[适配说明](#用户故事的原生适配说明)，SDK 专项测试不因此成为新的 story 或 case。
+
+真实录制、官方 SDK 验证和消费方仿真分别报告，不能跨证据层抵扣。默认质量检查离线运行；测试工具所用的合成进程不是仿真录制证据。
 
 ## 验证 case
 
-SDK 的门禁代码定义每个 provider 和 case 的必需性。指定 provider 和证据层的全部必需 case 通过后，才能声明故事通过。必需 case 需要合格的录制、通过的当前 Go 业务断言、完整的严格回放与清理证据。可选 case 的业务缺口仍须报告，材料损坏或清理失败仍阻断门禁。[SDK 验收矩阵](../../tests/simulation/coverage.go) · [固定录制门禁](../testing.md#run-the-fixed-recording-gate)
+以下 42 条完整流程分为 38 条必需能力与 4 条可选能力（003、025、026、038）。表中的能力要求来自共享 case 的 `required` 字段及各 provider 在 binding 中的覆盖值。
 
-分别报告 `planned`、`unsupported`、`blocked`、未触发、失败与缺证据。已注册的录制路径只表明驱动能尝试该流程。Codex 持有审批的录制限制属于官方驱动。Go SDK 的独立接收与回答能力仍可用合成测试验证。[官方驱动限制](../../client/codex/docs/rust-client-approval.md)
+Go SDK 的[仿真矩阵](../../tests/simulation/coverage.go)定义 SDK 门禁中每个 provider 的必需 case。必需 case 须使用合格录制，并通过 Go 公共接口业务断言、严格回放、完整消费和清理检查。可选 case 的业务缺口仍须报告，材料损坏或清理失败会阻断门禁。[固定录制门禁](../testing.md#run-the-fixed-recording-gate)
+
+必需能力须有通过的业务证据；`planned`、`unsupported`、未触发或缺材料均不豁免。
+Codex 使用独立安装的 Rust driver 录制和验证，对等待审批的原 Thread 接收原生通知并核对控制回执。
+042 的 Codex 路径使用 Rust driver 回应 `mcpServer/elicitation/request`。Codex 与 Claude 均核对原请求 ID 和 MCP 工具结果。
+可选能力不阻断必需能力验收，但必须如实报告失败、未知和不支持；已有材料的来源与完整性校验不能省略。
+
+录制目录中的“可执行”只表示驱动提供该路径，不表示已经录制、通过或每次必然触发。原生能力还受实际 CLI/SDK 版本影响。录制冻结版本、配置、原生数据及流程结果；回放只能断言捕获材料实际支持的行为。
+
+| Case ID | Story ID | 能力要求 | 完整流程 |
+|---|---|---|---|
+| SDK-CASE-001 | SDK-US-001 | required | 连续提交文本输入并在结果后继续观察 |
+| SDK-CASE-002 | SDK-US-001 | required | 提交图片并读取结果 |
+| SDK-CASE-003 | SDK-US-001 | optional | 提交文档并读取结果 |
+| SDK-CASE-004 | SDK-US-001 | required | 提交混合结构化内容并读取结果 |
+| SDK-CASE-005 | SDK-US-001 | required | 执行中追加输入并保留原生调度结果 |
+| SDK-CASE-006 | SDK-US-002 | required | 观察文件工具的执行与任务完成 |
+| SDK-CASE-007 | SDK-US-002 | required | 处理应用工具请求并等待任务完成 |
+| SDK-CASE-008 | SDK-US-003 | required | 拒绝文件写入审批并观察后续结果 |
+| SDK-CASE-009 | SDK-US-003 | required | 批准文件写入审批并观察后续结果 |
+| SDK-CASE-010 | SDK-US-003 | required | 批准命令审批并观察后续结果 |
+| SDK-CASE-011 | SDK-US-003 | required | 拒绝命令审批并观察后续结果 |
+| SDK-CASE-012 | SDK-US-003 | required | 持有审批期间观察事件与控制回执 |
+| SDK-CASE-013 | SDK-US-004 | required | 回答选择题并继续任务 |
+| SDK-CASE-014 | SDK-US-004 | required | 提供自由文本答案并继续任务 |
+| SDK-CASE-015 | SDK-US-004 | required | 回答一个请求中的多道问题 |
+| SDK-CASE-016 | SDK-US-005 | required | 观察直接子 Agent 的身份、输出与结果 |
+| SDK-CASE-017 | SDK-US-005 | required (claude optional) | 观察嵌套子 Agent 的实际父子关系 |
+| SDK-CASE-018 | SDK-US-005 | required | 观察并行子 Agent 的独立输出 |
+| SDK-CASE-019 | SDK-US-005 | required | 根任务结束后继续观察后台子 Agent |
+| SDK-CASE-020 | SDK-US-005 | required | 选择子详细交付策略并观察实际输出 |
+| SDK-CASE-021 | SDK-US-006 | required | 创建会话时选择模型并执行任务 |
+| SDK-CASE-022 | SDK-US-006 | required | 首次输入前修改模型并核对确认、生效顺序与可观察配置 |
+| SDK-CASE-023 | SDK-US-006 | required | 两次执行之间修改模型并继续输入 |
+| SDK-CASE-024 | SDK-US-006 | required | 执行期间请求修改模型并观察结果 |
+| SDK-CASE-025 | SDK-US-006 | optional | 创建会话时选择思考模式 |
+| SDK-CASE-026 | SDK-US-006 | optional | 修改原生思考预算并执行任务 |
+| SDK-CASE-027 | SDK-US-006 | required | 选择并运行时修改原生 effort 后执行任务 |
+| SDK-CASE-028 | SDK-US-006 | required | 验证思考展示配置透传和原生响应处理 |
+| SDK-CASE-029 | SDK-US-006 | required | 配置根会话并观察子 Agent 的实际继承情况 |
+| SDK-CASE-030 | SDK-US-007 | required | 在执行进度后中断并读取确认及终态 |
+| SDK-CASE-031 | SDK-US-007 | required | 关闭拥有的会话并确认交互与进程结束 |
+| SDK-CASE-032 | SDK-US-007 | required (claude optional) | 关闭远端连接并保持远端服务可用 |
+| SDK-CASE-033 | SDK-US-008 | required | 独立发现会话、读取元数据和主会话内容 |
+| SDK-CASE-034 | SDK-US-008 | required | 独立发现并读取保存的子 Agent 内容 |
+| SDK-CASE-035 | SDK-US-008 | required | 发现当前 Session 观察前已有的子 Agent |
+| SDK-CASE-036 | SDK-US-008 | required | 按原生分页或切片浏览保存的记录与内容 |
+| SDK-CASE-037 | SDK-US-001 | required | 空闲时注入上下文，不启动执行，并在下次查询中使用 |
+| SDK-CASE-038 | SDK-US-001 | optional | 执行中注入上下文，记录实际消费边界，并在后续查询中读取 |
+| SDK-CASE-039 | SDK-US-003 | required (claude optional) | 批准根 Thread 的默认 MCP 工具调用并读取结果 |
+| SDK-CASE-040 | SDK-US-003 | required (claude optional) | 批准已确认的子 Thread 的默认 MCP 工具调用并读取结果 |
+| SDK-CASE-041 | SDK-US-003 | required (claude optional) | 回应本轮、本会话及拒绝三种额外沙箱权限决定 |
+| SDK-CASE-042 | SDK-US-004 | required (codex optional) | 回应独立 form 和 URL elicitation 的六种决定 |
 
 ## 流程语义
 
 ### 证据与通过条件
 
-分别取证提交、原生接受、实际执行和业务目标。严格回放证明 SDK 的协议交互与录制匹配。原生拒绝只有在目标允许拒绝时才可构成通过。验收要求收紧后，用原录制重新核对所需证据，并单独记录复核结论。
+每个 case 的通过只覆盖下表声明的目标。提交成功、原生接受、实际执行和业务目标达成分别取证；
+最终文本正常或协议回放成功不能代替目标断言。原生拒绝只有在目标明确允许观察拒绝时才可构成
+通过；不能以“保留了拒绝”证明已实现图片理解、模型切换或思考配置。
 
-配置取证区分请求值、原生确认、原生观察值与生效范围。只有确认回执时可报告已接受。需要实际生效证据的目标在缺少原生观察值时记为 `unverified`。任务文本、耗时、token 数量和模型自述无法证明配置生效。
+配置证据区分请求值、原生接受回执、实际观察值及生效范围。配置接口正确传递原生参数与配置
+实际影响任务是两个结论：没有观察值时可报告已接受，但不能声称已生效。原生接口没有读取能力
+时如实记录该限制，不从任务文本、耗时、token 数量或模型自述反推配置。
+下表要求实际生效证据的目标缺少证据时为 unverified；驱动无法执行时为 blocked，
+已知原生没有该能力时为 unsupported。必需目标的这些状态均不豁免门禁。
+
+以下是验收目标，不是对现有样本的通过声明。合同澄清后，旧报告不能自动证明新增或收紧的断言；
+原始报告与录制保持不变，证据复核结果单独写入验证状态。
 
 ### 输入、工具、审批与问答
 
-- 连续输入在第一次结果后复用同一 Session，第二次输入须有对应事件和结果。两次输入之间可能没有事件，`idle` 与结果的顺序取原生观察值。执行中追加输入须先观察实际进度，再分别记录原生接受、拒绝和调度结果。
-- 图片、文档和混合输入须通过原生内容类型发送。校验的答案须依赖读取所发的非文本内容。混合输入须验证声明的各内容部分。工具调用、工具结果和任务结果分别取证。应用工具须沿原生请求返回结果，再观察任务继续并完成。
-- 文件与命令审批使用原始有效句柄。用户拒绝后，任务可以以无法完成结束。持有审批时，须在回答前收到独立原生事件和关联的控制回执，随后回答并观察执行终态。MCP 工具审批的子 Thread 路径还须证明请求归属到已确认的子 Thread。额外沙箱权限分别核对本轮、本会话与拒绝三个决定。[原生请求合同](../../client/docs/session.md#interface-真实-incomingrequest) · [统一回答权限](../../agent/docs/session.md#交互与回答权限)
-- 按原生题目标识完整回答单选、自由文本或同一次请求中的多题。独立 MCP 表单和 URL 请求各自覆盖接受、拒绝与取消。
+| Case | 验证目标与通过边界 | 不包含的承诺 |
+|---|---|---|
+| 001 | 同一会话完成两次文本输入；第一次结果后观察入口仍可用，第二次有对应事件与结果。 | 不要求两次输入之间有新事件，不要求 idle 晚于结果。提交回执不算执行结果。 |
+| 002～004 | 分别发送原生图片、文档、混合内容；结果须回答只有读取相应非文本内容才能回答的校验问题。004 须验证所声明的各内容部分。 | 仅发送内容块、正常终态或回答提示词中的已知信息不算内容读取成功。不通过文件路径或提示词文本替换不支持的内容类型。 |
+| 005 | 观察实际执行进度后追加一次输入；保留该操作的原生接受、拒绝及调度结果。接受时关联后续处理，拒绝时保留错误与原执行终态。 | 不保证抢占当前执行、steer、排队或自动重发，不创建统一 Turn 语义。它验证执行期提交及结果处理，不保证每种调度模式均可用。 |
+| 006 | 观察实际文件工具调用、工具结果及整个任务的执行结果。 | 工具调用出现或工具结束不等于任务完成。 |
+| 007 | 应用收到实际原生工具请求，按原请求返回结果，任务继续并完成。 | 普通内置工具事件不替代应用工具请求；历史记录不授予回答权。 |
+| 008～011 | 分别实际收到文件／命令审批，通过原始有效句柄批准或拒绝；观察决策对应的后续行为及执行结果。拒绝后任务可报告无法完成。 | 自动批准、模型自行放弃和协议 Reject 不代替用户决策；拒绝不要求整个任务仍业务成功。 |
+| 012 | 审批保持未回答时，既能收到独立的原生事件，又能发出控制操作并收到关联回执；随后回答审批并观察结束。 | 仅本地读取循环可运行、仅有一项证据、回答后才收到回执都不够。无审批或原生没有产生所需事件时不能算通过。 |
+| 013～015 | 分别收到原生单选、自由文本、多题请求；按原生题目标识完整回答，观察任务继续及结果。 | 提示词中的问句或模型直接输出的问题文本不替代原生请求；多题不是多次独立单题。 |
+| 039～040 | 使用原始请求批准 MCP 工具调用，核对相应工具结果。子 Thread 场景还须确认请求属于该子 Thread。 | 仅有根 Thread 的审批不能证明子 Thread 的回答权限。 |
+| 041 | 分别作出本轮授予、本会话授予和拒绝三种额外沙箱权限决定，核对原请求和权限范围。 | 单次批准不能代替其余决定。 |
+| 042 | 独立 form 和 URL elicitation 各自验证接受、拒绝和取消。 | 工具调用内部的问答不能代替独立请求。 |
 
 ### 子 Agent 与详细交付
 
-- 子 Agent 输出与完成结果须关联原生子身份。嵌套须证明根到子、子到孙两条父边。并行须证明原生活动区间重叠。后台须在根执行结束后观察到已确认的子 Agent 的活动及最终结果。
-- 在打开 Session 前选择交付策略，用同一材料比较 `preserve` 和 `suppress`。`suppress` 须在确认子归属后至少省略一条允许过滤的纯详情，其余事件的内容和顺序保持一致。过滤范围与保护规则以原生合同为准。[子详细交付](../../client/docs/session.md#child-detail-可选子详细事件交付)
+| Case | 验证目标与通过边界 | 不包含的承诺 |
+|---|---|---|
+| 016 | 实际创建直接子 Agent，观察原生身份、已确认父子关系、输出与完成。 | 工具调用 ID、路径或模型文本提及的名字不自动成为子 Agent 身份。 |
+| 017 | 实际产生至少两级委派，证实根 → 子 → 孙的两条父边，并保留相应输出与结果。 | 扁平子列表或根据显示路径推测层级不算嵌套关系证据。 |
+| 018 | 至少两个子 Agent 的原生活动区间重叠，输出及完成分别归属到正确子身份。 | 依次运行两个子任务不算并行；无原生顺序／时间证据时不能推断重叠。 |
+| 019 | 根执行结果之后仍观察到已确认后台子 Agent 的活动，并观察其最终结果。 | 根结果不表示 Session 已关闭或全部子任务已停止；不要求子任务脱离 Session／进程无限存活。 |
+| 020 | 在 Open 前选择 preserve 或 suppress，分别用同一材料验证交付差异；suppress 至少隐藏一条白名单允许的子详情，保留其余事件的顺序与内容。 | 不是动态开关、原生输出关闭、历史删除或成本控制。不保证省略所有文本／思考；过滤范围只由 SDK 的子详细事件合同决定。 |
+
+020 的过滤必须在子归属确认后进行。身份及关系事实、生命周期、终态、父工具结果、工具请求、
+审批／问答权限、未知字段和混合内容遵循子详细合同中的保护规则，不能因“来自子 Agent”
+就整体丢弃。历史读取和原始录制不受该策略影响。默认 preserve；策略在当前 Session 创建时
+固定，不递归修改原生子配置。异常形状、错误策略、隔离与竞态由专项集成测试覆盖。
 
 ### 模型与思考配置
 
-- 区分创建时选择、首次输入前切换、两次执行之间切换和执行中更新。切换使用不同的模型值，并用原生观察证据核对生效范围。执行中更新被拒绝时保留原生原因和当前执行终态。
-- 思考模式、预算、effort 与展示分别取证。创建和运行时修改 effort 分阶段核对请求、回执及原生观察值。更新前的状态只作为预检。展示配置须正确透传、关联原生成功响应并完成后续执行，展示效果只作补充观察。验证子 Agent 的配置时只比较模型，未暴露子模型时保持未知。[原生输入与配置](../../client/docs/session.md#interface-原生输入与配置)
+| Case | 验证目标与通过边界 | 不包含的承诺 |
+|---|---|---|
+| 021 | 创建时明确选择模型，核对实际请求及原生返回／观察的模型身份，随后执行任务。 | 使用默认值或模型在文本中自报身份不代替显式选择证据。 |
+| 022 | 首次输入前从已知模型 A 请求切换到不同模型 B；记录确认、输入顺序和可观察的生效范围。要声明切换生效，须有 B 的原生观察证据。 | 重设为同一模型只证明配置请求；空 ack 不证明切换生效。 |
+| 023 | 第一次执行结束后从模型 A 改为不同模型 B，再提交第二次输入；核对第二次执行可观察的配置。 | 不要求重写第一次结果，也不把主会话配置自动推广到子 Agent。 |
+| 024 | 当前执行仍活动时发送不同模型的配置请求；接受时记录可观察的生效范围，拒绝时记录原生原因；保留当前执行终态。 | 不保证正在执行的请求立即换模型，不自动中断、等待空闲、重建或重试。该 case 验证执行期配置处理；成功切换及后续输入使用新模型须由 022／023 证明。 |
+| 025 | 可选：创建时选择独立的原生思考模式，例如 Claude 的 enabled／adaptive／disabled；核对启动参数与对应原生配置证据。Claude enabled 携带预算时使用原生 --max-thinking-tokens 编码，须记录该映射。 | effort 或展示设置不替代模式；预算仅在原生明确将其作为模式编码时可作选择证据，不证明预算生效。没有独立模式的 agent type 报 unsupported；不要求会话创建后动态切换模式。 |
+| 026 | 可选：请求修改原生思考 token 预算，记录数值、回执及实际可观察的作用范围。只有范围得到证实时才能声明预算目标通过。 | 不将 effort 转换为 token 数，不把 ack、输出长度或耗时当作硬预算生效证明。原生已废弃预算不构成硬上限承诺。 |
+| 027 | 必需：创建时显式选择原生 effort A 并执行任务，首次结果后请求修改为不同 effort B，再提交第二次输入并观察结果；分阶段核对确切原生请求、接受与观察证据及生效范围。Claude 创建时使用 `--effort`；运行时先以 `get_settings` 核对 `applied.effort` 与 `applied.ultracode`，再发送同时携带 `effortLevel` 和按 SDK 规则计算的 `ultracode` 的 `apply_flag_settings`，随后提交第二次输入。Codex 创建时使用 `thread/start` 的原生配置字段，运行时使用 `thread/settings/update`，并以后续 `thread/settings/updated` 作为观察证据。 | 不统一各 agent type 的档位，不映射为模式或预算，不保证增加思考 token、提高质量或固定耗时。Claude 的第二次 `get_settings` 不属于当前 SDK 顺序，更新回执不冒充更新后的观察值；不保证当前执行立即切换，也不把后续文本自报或任务输出当作 effort 生效证明。 |
+| 028 | 验证 Codex summary／Claude thinking_display 的原生字段和值透传、请求关联成功响应处理及后续执行完成；原生拒绝须按错误返回，不得伪装成接受。实际展示效果可作补充观察，不作为门禁条件。 | 隐藏展示不表示关闭推理，不保证节省推理成本；Codex summary 与 Claude display 不强行统一为相同内容。 |
+| 029 | 当前流程仅验证模型：根会话明确设置模型后委派子任务，比较根请求、根观察值及子创建／运行时的原生模型事实，并记录来源与作用范围。 | 不证明思考模式、effort、预算或展示继承，不预设父子模型必须相同。原生明确给出默认或覆盖值可作为观察结论；子配置未暴露时保持未知，不能从主结果或 ack 推断已继承。 |
+
+025 的独立模式与 027 的 effort 是不同目标。Codex 025 只有
+model_reasoning_effort 证据，不能作为独立模式通过；保留材料并更正验证状态。
+027 的创建时 effort 与运行时 effort 分阶段取证。Claude 的运行时更新沿用当前 SDK
+的预检顺序：先读取完整状态，再发送带 `effortLevel` 与 `ultracode` 的更新；预检值
+属于更新前状态，更新回执属于接受证据，二者都不能冒充更新后的目标值。更新后没有
+原生观察值时保持 unverified，不把创建参数当成动态能力，也不把
+`set_max_thinking_tokens` 当作 effort。
 
 ### 中断、关闭与独立查询
 
-- 中断须在观察到实际进度后发出，并取得原生确认及执行终态。执行先正常结束时，按竞争结果记录。关闭自有进程须确认进程回收和交互终止。远端断连须另用连接或健康检查证明同一服务仍可用。公开 WSS 部署单独取证。
-- 独立查询在显式存储范围内分别验证发现、元数据和完整主内容。保存的子历史须保留父子关联和原生顺序。发现已有子 Agent 时，先结束创建与保存阶段，再打开独立观察连接。正式观察阶段零输入，通过发现接口取得已有子身份及关系。分页或切片至少读取两个原生窗口，核对顺序、边界和终点。[历史查询合同](../../client/docs/history-query.md)
+| Case | 验证目标与通过边界 | 不包含的承诺 |
+|---|---|---|
+| 030 | 实际执行进度后发送中断，保留原生确认及执行终态，并区分正常完成先于中断的竞争结果。 | 仅请求写入成功不证明中断发生；已正常结束的执行不能充当成功中断证据。精确竞态由专项测试覆盖。 |
+| 031 | 显式关闭本地拥有的 Session／进程，核对进程回收、交互结束和后续交互拒绝。 | 普通任务结果、仅本地对象标记关闭或关闭借用连接不证明自有进程已结束。 |
+| 032 | 关闭远端连接，确认本连接结束，并通过独立连接或健康检查证实同一远端服务仍可用。 | 本地 stdio 进程退出不替代远端断连；不自动重连或恢复旧请求句柄。 |
+| 033 | 产生保存记录并结束交互后，通过独立查询完成发现 → 元数据 → 主内容读取；显式指定存储范围。 | 已知 ID 单次读取不算发现；元数据采样不算完整内容；不通过隐式 resume／缓存替代查询。 |
+| 034 | 产生并保存真实子 Agent；独立列举其身份并读取子内容，保留父子关联及原生顺序。 | 主会话中的子输出摘要不等于子历史；查询不授予 live 输入或回答权限。 |
+| 035 | 在本 case 的一次 official record 中，通过官方 SDK 和真实 Agent 创建一个父会话及一个子 Agent；确认子完成、父子历史保存且 setup 观察结束后，在同一父会话上建立新的正式观察入口，通过发现接口列出已有子身份及已证实关系。setup 与正式观察使用同一 execution 的独立连接，正式观察零输入。自身材料保存 setup 原字节、身份、哈希与阶段因果证据；prepare 离线，verify/mock 只消费本 case 的材料。 | 不依赖 034 或外部种子，不在正式观察连接创建子 Agent，不把 setup 创建事件当作发现结果；不回补未观察过的实时事件，不从缓存猜测成员，不替代 034 的保存内容读取。 |
+| 036 | 使用原生 cursor 或 offset/limit 等切片连续读取至少两个窗口，按原生顺序与边界核对内容；保留结束标志或原生可判定的结束条件。 | 不伪造 cursor、total 或原子快照，不要求每个 agent type 同时具备分页与切片；本地把一次全量结果分段不算原生分页。 |
+| 037 | 完成一次查询后，通过原生 context-only 接口注入随机事实；经过无模型调用的控制屏障，再显式查询并核对精确事实。原始帧须证明注入未启动额外执行或 assistant 输出。 | Codex 使用 `thread/inject_items`、`threadId/items` 和 Responses API message/input_text，要求空对象回执；Claude 使用 `user.shouldQuery=false`，后续查询显式为 true。完整写入不是模型消费回执。 |
+| 038 | 在实际执行进度后注入随机事实，保留原生接受、拒绝和消费顺序；结束当前执行后独立查询事实。 | 不保证当前执行消费；当前输出未包含事实与后续查询可读取分别报告，不替换为普通 prompt、steer 或重试。 |
 
-### 上下文注入
+## 待实现与不支持
 
-- 后续查询须核对仅通过原生 context-only 接口注入的随机事实。空闲注入后先经过无模型调用的控制屏障，再发起查询。原始协议须证明注入期间没有额外执行或 assistant 输出。执行中注入须发生在实际执行进度之后，分别记录原生接受或拒绝、当前执行是否消费、后续查询能否读取。[统一注入合同](../../agent/docs/session.md#context-inject)
+配置中的 `planned` 表示真实目标尚无完整录制路径；`unsupported` 表示已知原生能力不支持。
+两者仅描述执行路径，不改变能力要求；必需 case 仍阻断门禁。两者都不发送替代提示词，
+不调用代码专项测试，不生成成功录制或回放证据。
+
+每个 agent type 的适用能力和当前驱动状态由录制目录显式声明。查询、配置和子 Agent 能力必须依据原生接口及实际执行证据，不从普通任务结果推断。
+
+协议容错、审批句柄失效、未知字段、背压、取消竞态、安全与存储损坏等专项行为仍遵循 SDK 合同，由代码集成测试覆盖；它们不增加仿真 case 或填补实录证据缺口。
 
 <a id="native-用户故事的原生适配说明"></a>
 
 ## 用户故事的原生适配说明
 
-调用及适配规则查各自的合同。原生参数拒绝、功能未触发和缺少观察证据各自报告。[原生 Session](../../client/docs/session.md) · [统一 Agent](../../agent/docs/session.md) · [历史查询](../../client/docs/history-query.md)
+下表补充 Codex 与 Claude 的原生差异，SDK-US 列省略共同前缀。Pi 的 RPC 能力、扩展使用和限制见 [Pi 客户端](../../client/pi/README.md) 和 [Pi 场景绑定](../../replay/data/scenarios/bindings/pi.json)。
+
+原生不支持、条件未触发、尚未实现和缺证据分别报告。共同目录中存在目标不代表每个
+原生版本支持它；原生参数或接入范围的拒绝须明确记录。调用和适配边界见[原生 Session](../../client/docs/session.md)、[统一 Agent](../../agent/docs/session.md) 和[历史查询](../../client/docs/history-query.md)。
+
+| 原生适配主题 | 对应 SDK-US | 原生协议与参数说明 |
+|---|---|---|
+| Codex 请求与审批 | 002、003、004 | item/tool/call 的工具结果不算 command/file/permissions 审批；审批保留 decision 及 scope/policy/network 扩展；requestUserInput 按 question ID 回答。只有原始有效请求有回答权；协议 Reject 不冒充用户 Deny。 |
+| Codex 输入与配置 | 001、006 | turn/start 与 steer/排队操作分开；执行期 start 的接受或拒绝保留，不自行 steer/重试。创建 model/config 与动态 thread settings 分开；experimental 拒绝、空 ack 与后续 observed settings 分开，不推断当前 turn 或子任务生效。 |
+| Codex 查询与恢复 | 008 | list/read/turns/items 保留 typed optional、unknown、opaque cursor、summary/full、有效空和原生不支持；local app-server 与 remote server storage 范围不同。元数据查询不恢复或订阅，显式 resume 不能伪装成纯查询；保存 items 不是完整事件日志。 |
+| Codex 连接与资源 | 007 | stdio 只终止自有进程；WS/WSS Close 不停止远端服务。保留 TLS、Origin、认证及错误隐私边界，不自动重连或恢复旧句柄。慢消费、失联、排空与清理分别可观察，公开 WSS 的部署验证须单独提供证据。 |
+| Codex 子详细交付 | 005 | SessionOptions.ChildDetailPolicy 默认 preserve，suppress 仅封闭方法白名单；低层 ResumeThread 不接受该策略。保留 Raw、父工具结果、审批原权限、关系及 terminal，unknown/mixed 整帧保留。 |
+| Claude 输入与回执 | 001、002 | stream-json 完整本地写入不表示模型接受/执行；priority/shouldQuery 保留原生含义，不添加 scheduler、steer 或通用 Turn。control_response 按原 request_id 关联；取消写入的 NotSent/OutcomeUnknown 不互换或重发。 |
+| Claude 权限与问答 | 003、004 | 仅实际 can_use_tool 创建权限；AskUserQuestion 使用完整题文键，通过 UpdatedInput 保留 questions 和 unknown；普通 tool_use、tool_result、输入与历史均不授予回答权。多选统一 form 可接受字符串数组，adapter 写回原生前以 `", "` 连接为字符串；原生数组答案未验证并在本地拒绝。自动批准路径不保证发请求，延迟时可继续 Receive，撤销/终止/已答后不再授予权限。 |
+| Claude 结果与后台状态 | 002、005 | 检查 result.is_error 和原生错误字段，不能只看 subtype:success；后续 idle、initialize 接受和请求转发选项均不证明模型或工具成功；root result 不证明子任务已停止。 |
+| Claude 思考配置 | 006 | 创建 thinking enabled/adaptive/disabled 与动态 max_thinking_tokens/display 分开；省略、null-clear 和 0 分开。创建 `--effort` 与运行时 `apply_flag_settings.effortLevel` 分开；effort 不映射成 budget，ack 不作 observed 或子继承证明，`get_settings` 有效值只证明配置观察，不证明单次执行使用；原生 deprecated budget 不保证硬 token 上限。 |
+| Claude 主历史与发现 | 008 | 独立查询要求 ConfigDir，不隐式读取 HOME；metadata 的 head/tail 采样与完整可见消息链分开，保留压缩及并行 tool-result 恢复规则与 unknown。offset/limit 是内容切片，不伪造 cursor、total、原子快照或 running；Session.ListSubagents 的本地子记录发现不等于独立子历史。 |
+| Claude 子详细交付 | 005 | Options/SessionOptions.ChildDetailPolicy 包括显式 ResumeID，initialize 仍 forwardSubagentText:true；仅已确认 task/tool alias 的纯详细形状可过滤，mixed/unknown/system/结果/权限保留。 |
+| Claude 独立子历史 | 008 | 显式 ConfigDir、父 UUID 与安全非 UUID agentID，独立 list/get；nested 布局、sidecar unknown、子 parentUuid 链、可见切片、资源/一致性/错误及 stricter-than-upstream 边界均明确。不用主链恢复，不建立 live 权限。 |

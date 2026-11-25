@@ -26,21 +26,22 @@ replay/drivers/codex/rust/install.sh /absolute/new-source-cache --fetch
 export CODEX_SOURCE_ARCHIVE=/absolute/new-source-cache/codex.tar.gz
 export CARGO_NET_OFFLINE=true
 npm ci --prefix replay/drivers/claude/typescript --ignore-scripts --omit=optional --no-audit --no-fund
-make bundle
-make check
+bash scripts/check-offline.sh checks
 ```
 
-`make bundle` 在 `.artifacts/build/` 生成当前平台的 `agent-replay`、
-`agent-sdk-testify-codex` 和 Claude、Pi npm tarball。可用 `AGENT_SDK_TESTIFY_BUILD_DIR`
-指定绝对输出目录。构建使用一个临时 Cargo target，结束后清理。设置
-`CARGO_TARGET_DIR` 为平台专用的绝对路径可在多次本机构建间保留编译缓存。
+Go 库、CLI 和严格仿真使用 SDK 离线门禁。Codex driver 的安装器使用独立的 Cargo target。
+Pi driver 的 `prepack` 从 SDK embed 所用的源码复制扩展。可在已有输出目录中检查本地包。
+
+```sh
+npm pack ./replay/drivers/pi/official --offline --pack-destination /absolute/output
+```
 
 ## 官方 SDK 环境
 
 ### 安装 Claude driver
 
 使用 Node.js 22 或更新版本。从同一 Replay Release 取得 Go CLI 和 Claude tarball，
-或使用 `make bundle` 的产物。tarball 已包含锁定的官方 SDK 和运行依赖。
+或使用同一源码构建的产物。tarball 已包含锁定的官方 SDK 和运行依赖。
 
 ```sh
 npm install --offline --ignore-scripts --omit=optional \

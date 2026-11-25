@@ -20,7 +20,7 @@ pass its path to `-simulation.recording`.
 Set `-simulation.output` to a new absolute archive directory whose parent exists.
 
 ```sh
-bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2
+bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -timeout=600s -v ./tests/simulation/simulate -run '^TestSimulationGate$' -simulation.jobs=2 -simulation.output=/absolute/new-gate
 bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.provider=claude -simulation.case=SDK-CASE-001 -simulation.output=/absolute/new-run
 bash scripts/replay/with-build-checkout.sh go test -buildvcs=true -count=1 -v ./tests/simulation/simulate -run '^TestSimulationCase$' -simulation.recording=/absolute/external-capture -simulation.output=/absolute/new-run
 ```

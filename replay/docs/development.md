@@ -117,9 +117,9 @@ SDK 用户故事、case 和各 agent type 的能力要求由[场景目录](../da
 
 `replay/library*_test.go` 是公开库能力的最高验收接缝：测试包固定为
 `replay_test`，只导入模块公开路径，不调用 CLI；可以使用临时文件、受控子进程
-和本地回环连接。这些测试由 `make test`  纳入默认门禁。
+和本地回环连接。这些测试由 `make test` 纳入默认门禁。
 embedded prepare 读取 Go build info 中的精确 VCS 身份。Go 1.26.10 在 `.git` 为文件的
-linked worktree 中不写入 VCS 信息，因此使用标准 `make` 测试/构建命令或
+linked worktree 中不写入 VCS 信息，因此使用标准 `make test` 或
 `scripts/check-offline.sh`：入口从干净源码的精确 HEAD 创建本地独立 checkout，核对
 HEAD/tree 后以 `-buildvcs=true` 执行测试。dirty 源码必须先提交，不能测试旧 HEAD
 代替未提交内容。已有 `.git` 目录的 checkout 原地运行，不重复复制。

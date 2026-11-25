@@ -147,6 +147,12 @@ class OfflineScheduling(unittest.TestCase):
             "arguments = sys.argv[1:]\n"
             "if tool == 'bash' and pathlib.Path(arguments[0]).name == 'check-offline.sh':\n"
             "    os.execv('/bin/bash', ['/bin/bash', *arguments])\n"
+            "if tool == 'bash' and pathlib.Path(arguments[0]).name == 'with-agent-replay.sh':\n"
+            "    cmd = arguments[2:] if arguments[1] == '--race' else arguments[1:]\n"
+            "    os.execvp(cmd[0], cmd)\n"
+            "if tool == 'go' and arguments == ['list', './...']:\n"
+            "    print('example/sdk/tests/simulation/simulate', 'example/sdk/replay',\n"
+            "          'example/sdk/tests/replay/e2e/mock', 'example/sdk/replay/internal/corpus/conformance', sep='\\n')\n"
             "row = {'tool': tool, 'arguments': arguments}\n"
             "with open(os.environ['SDK_CI_TEST_JOURNAL'], 'a') as journal:\n"
             "    journal.write(json.dumps(row) + '\\n')\n"
@@ -154,6 +160,8 @@ class OfflineScheduling(unittest.TestCase):
             "if tool == 'go' and arguments:\n"
             "    lane = ('race' if '-race' in arguments else\n"
             "            'e2e' if '-run' in arguments else arguments[0])\n"
+            "    if 'replay/internal/corpus/conformance' in ' '.join(arguments):\n"
+            "        lane = 'cli-' + lane\n"
             "    if failure == lane:\n"
             "        print('injected failure: ' + lane, file=sys.stderr)\n"
             "        sys.exit(23)\n"
@@ -179,11 +187,19 @@ class OfflineScheduling(unittest.TestCase):
                  if row["tool"] == "go" and row["arguments"][0] == "test"]
         return result, tests
 
+    sdk_packages = ["example/sdk/tests/simulation/simulate", "example/sdk/replay"]
+    cli_packages = ["./tests/replay/e2e/...", "./replay/internal/corpus/conformance"]
+    ordinary = [
+        ["test", "-p=1", "-count=1", "-timeout=180s", *sdk_packages],
+        ["test", "-count=1", "-timeout=15m", *cli_packages],
+    ]
+    race = [
+        ["test", "-p=1", "-count=1", "-timeout=600s", "-race", *sdk_packages],
+        ["test", "-race", "-count=1", "-timeout=15m", *cli_packages],
+    ]
+
     def test_aggregate_entries_run_each_package_suite_once(self):
-        expected = [
-            ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."],
-            ["test", "-race", "-p=1", "-count=1", "-timeout", "600s", "./..."],
-        ]
+        expected = self.ordinary + self.race
         for lane in (None, "all", "parallel"):
             with self.subTest(lane=lane):
                 result, tests = self.run_lane(lane)
@@ -192,24 +208,24 @@ class OfflineScheduling(unittest.TestCase):
 
     def test_ci_lanes_and_manual_gate_keep_complete_selection(self):
         for lane, expected in (
-            ("checks", ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."]),
-            ("test", ["test", "-p=1", "-count=1", "-timeout", "180s", "./..."]),
-            ("race", ["test", "-race", "-p=1", "-count=1", "-timeout", "600s", "./..."]),
-            ("e2e", ["test", "-count=1", "-timeout=600s", "-v",
-                     "./tests/simulation/simulate", "-run", "^TestSimulationGate$"]),
+            ("checks", self.ordinary),
+            ("test", self.ordinary),
+            ("race", self.race),
+            ("e2e", [["test", "-count=1", "-timeout=600s", "-v",
+                      "./tests/simulation/simulate", "-run", "^TestSimulationGate$"]]),
         ):
             with self.subTest(lane=lane):
                 result, tests = self.run_lane(lane)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(tests, [expected])
+                self.assertEqual(tests, expected)
 
     def test_required_test_failures_reach_every_entry(self):
         for lane, failures in (
             ("all", ("test", "race")),
             ("parallel", ("test", "race")),
-            ("checks", ("test",)),
+            ("checks", ("test", "cli-test")),
             ("test", ("test",)),
-            ("race", ("race",)),
+            ("race", ("race", "cli-race")),
             ("e2e", ("e2e",)),
         ):
             for failure in failures:

@@ -132,7 +132,7 @@ func TestFromFixtureRejectsMismatchedEmbeddedIdentity(t *testing.T) {
 			tc.mutate(&fixture.Tool)
 			session, err := FromFixture(fixture)
 			require.Nil(t, session)
-			require.ErrorContains(t, err, "embedded testify identity")
+			require.EqualError(t, err, "embedded Replay identity differs from the linked SDK build")
 		})
 	}
 	require.Equal(t, "abandoned", closeSession(t, prepared).Status)

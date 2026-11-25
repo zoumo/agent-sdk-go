@@ -82,22 +82,11 @@ func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, recordingPa
 			if queryPhase {
 				return errors.New("history query resumed live execution")
 			}
-			var p types.TurnStartParams
-			if err := json.Unmarshal(r.Params, &p); err != nil {
-				return err
-			}
-			// These recipes intentionally submit only native text inputs. Reject
-			// options rather than silently losing them in the Session translation.
-			var fields map[string]json.RawMessage
-			_ = json.Unmarshal(r.Params, &fields)
-			if len(fields) != 2 || p.ThreadID != s.ThreadID() {
-				return errors.New("unsupported history input options or identity")
-			}
-			sub, e := s.Submit(ctx, codex.Input{Input: p.Input})
+			sub, e := submitRecordedTurn(ctx, c, s, r.Params)
 			if e != nil {
 				return e
 			}
-			result = sub.Response
+			result = sub
 			for {
 				got, e := s.Receive(ctx)
 				if e != nil {
@@ -128,7 +117,7 @@ func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, recordingPa
 				if e := json.Unmarshal(got.Event.Params, &terminal); e != nil {
 					return e
 				}
-				if terminal.ThreadID != s.ThreadID() || terminal.Turn.ID != sub.Response.Turn.ID {
+				if terminal.ThreadID != s.ThreadID() || terminal.Turn.ID != sub.Turn.ID {
 					continue
 				}
 				if terminal.Turn.Status != types.TurnStatusCompleted {
@@ -140,6 +129,13 @@ func AcceptSavedHistory(ctx context.Context, mock *mocktest.Session, recordingPa
 		case "thread/unsubscribe":
 			if completed == 0 || queryPhase {
 				return errors.New("invalid setup/query boundary")
+			}
+			var p types.ThreadUnsubscribeParams
+			if err := json.Unmarshal(r.Params, &p); err != nil {
+				return err
+			}
+			if p.ThreadID != s.ThreadID() {
+				return errors.New("foreign history detach thread")
 			}
 			queryPhase = true
 			if err := s.Close(); err != nil {

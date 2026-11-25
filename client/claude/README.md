@@ -114,15 +114,10 @@ See [child observation](#child-observation).
 
 ## Compatibility
 
-Experimental; no CLI version is fully live-validated. Local process startup requires
-a stable CLI **>= 2.1.293**. The SDK queries `--version` before starting the Session
-process; old, prerelease, malformed, ambiguous or oversized output is rejected.
-Version parsing and comparison use `github.com/Masterminds/semver/v3`.
-Child relationship semantics use CLI **2.1.293** / official TypeScript
-**0.3.293** as their source baseline and apply across the supported CLI version
-range. Broader Python source references are separate baselines;
-exact hashes and licenses remain in
-[type sources](docs/type-sources.md). Synthetic tests do not certify live behavior.
+This experimental client supports local process startup with a stable Claude Code CLI **>= 2.1.293**.
+The SDK checks `--version` before opening a Session and rejects prerelease,
+malformed, ambiguous and oversized version output. Child relationship semantics
+use the official TypeScript SDK **0.3.293** declarations. [Protocol sources](docs/type-sources.md)
 
 This implements a local stdio client with narrow input, permission/question,
 MCP elicitation, model/thinking, external/application-owned MCP and local-history APIs. It does not
@@ -251,9 +246,9 @@ bound. See [compatibility](#compatibility) for native and evidence limits.
 
 ## Types, licensing and offline checks
 
-Native pure data and codecs live in `client/claude/types` with standard-library-only
-production dependencies. Unknown JSON fields/blocks are retained; handwritten
-types do not imply full official SDK parity. Original code uses Apache-2.0; see
+Native data types and codecs in `client/claude/types` depend on the standard
+library and the shared MCP configuration package. The codecs retain unknown JSON
+fields and blocks. Original code uses Apache-2.0. See
 [NOTICE](NOTICE), [LICENSE](LICENSE) and [type provenance](docs/type-sources.md).
 
 Validation commands and evidence limits are maintained in [testing](../../docs/testing.md)

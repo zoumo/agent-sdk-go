@@ -164,12 +164,12 @@ func openClaudeConfigConcurrencyPeer(t *testing.T, ctx context.Context, hold boo
 			var err error
 			switch frame.Request.Subtype {
 			case "initialize":
-				err = send(frame.ID, `{"current_permission_mode":"auto"}`, false)
+				err = send(frame.ID, `{"current_permission_mode":"bypassPermissions"}`, false)
 				if err == nil {
 					_, err = fmt.Fprintf(output, "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"config-concurrency\",\"cwd\":%q,\"claude_code_version\":\"2.1.293\"}\n", cwd)
 				}
 			case "get_settings":
-				err = send(frame.ID, `{"applied":{"ultracode":false},"effective":{"sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false}}}`, false)
+				err = send(frame.ID, `{"applied":{"ultracode":false},"effective":{"sandbox":{"enabled":false}}}`, false)
 			case "set_model":
 				requests <- agent.ConfigChange{ID: agent.ConfigModel, Value: frame.Request.Model}
 				if hold {

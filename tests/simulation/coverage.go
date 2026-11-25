@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -22,16 +23,18 @@ type acceptanceCase struct {
 	Optional       bool
 	CodexOptional  bool
 	ClaudeOptional bool
+	PiRequired     bool
 }
 
 // This is the SDK-owned acceptance policy. Testify owns the scenarios,
-// bindings and recordings. For pass criteria, see docs/sdk/validation-cases.md.
+// bindings and recordings. Pi requires the first admitted official cohort.
+// For pass criteria, see docs/sdk/validation-cases.md.
 var acceptanceCases = []acceptanceCase{
-	{ID: "SDK-CASE-001"},
-	{ID: "SDK-CASE-002"},
+	{ID: "SDK-CASE-001", PiRequired: true},
+	{ID: "SDK-CASE-002", PiRequired: true},
 	{ID: "SDK-CASE-003", Optional: true},
 	{ID: "SDK-CASE-004"},
-	{ID: "SDK-CASE-005"},
+	{ID: "SDK-CASE-005", PiRequired: true},
 	{ID: "SDK-CASE-006"},
 	{ID: "SDK-CASE-007"},
 	{ID: "SDK-CASE-008"},
@@ -39,32 +42,32 @@ var acceptanceCases = []acceptanceCase{
 	{ID: "SDK-CASE-010"},
 	{ID: "SDK-CASE-011"},
 	{ID: "SDK-CASE-012"},
-	{ID: "SDK-CASE-013"},
-	{ID: "SDK-CASE-014"},
+	{ID: "SDK-CASE-013", PiRequired: true},
+	{ID: "SDK-CASE-014", PiRequired: true},
 	{ID: "SDK-CASE-015"},
 	{ID: "SDK-CASE-016"},
 	{ID: "SDK-CASE-017", ClaudeOptional: true},
 	{ID: "SDK-CASE-018"},
 	{ID: "SDK-CASE-019"},
 	{ID: "SDK-CASE-020"},
-	{ID: "SDK-CASE-021"},
-	{ID: "SDK-CASE-022"},
-	{ID: "SDK-CASE-023"},
-	{ID: "SDK-CASE-024"},
+	{ID: "SDK-CASE-021", PiRequired: true},
+	{ID: "SDK-CASE-022", PiRequired: true},
+	{ID: "SDK-CASE-023", PiRequired: true},
+	{ID: "SDK-CASE-024", PiRequired: true},
 	{ID: "SDK-CASE-025", Optional: true},
 	{ID: "SDK-CASE-026", Optional: true},
-	{ID: "SDK-CASE-027"},
+	{ID: "SDK-CASE-027", PiRequired: true},
 	{ID: "SDK-CASE-028"},
 	{ID: "SDK-CASE-029"},
-	{ID: "SDK-CASE-030"},
-	{ID: "SDK-CASE-031"},
+	{ID: "SDK-CASE-030", PiRequired: true},
+	{ID: "SDK-CASE-031", PiRequired: true},
 	{ID: "SDK-CASE-032", ClaudeOptional: true},
-	{ID: "SDK-CASE-033"},
+	{ID: "SDK-CASE-033", PiRequired: true},
 	{ID: "SDK-CASE-034"},
 	{ID: "SDK-CASE-035"},
-	{ID: "SDK-CASE-036"},
-	{ID: "SDK-CASE-037"},
-	{ID: "SDK-CASE-038", Optional: true},
+	{ID: "SDK-CASE-036", PiRequired: true},
+	{ID: "SDK-CASE-037", PiRequired: true},
+	{ID: "SDK-CASE-038", Optional: true, PiRequired: true},
 	{ID: "SDK-CASE-039", ClaudeOptional: true},
 	{ID: "SDK-CASE-040", ClaudeOptional: true},
 	{ID: "SDK-CASE-041", ClaudeOptional: true},
@@ -77,7 +80,15 @@ type coverageSlot struct {
 	Requirement string
 }
 
+var acceptanceProviders = [...]string{"codex", "claude", "pi"}
+
 func (c acceptanceCase) requirement(provider string) string {
+	if provider == "pi" {
+		if c.PiRequired {
+			return "required"
+		}
+		return "optional"
+	}
 	optional := c.Optional ||
 		(provider == "codex" && c.CodexOptional) ||
 		(provider == "claude" && c.ClaudeOptional)
@@ -98,8 +109,8 @@ func acceptanceSlots() ([]coverageSlot, error) {
 		}
 		seen[c.ID] = true
 	}
-	slots := make([]coverageSlot, 0, 84)
-	for _, provider := range []string{"codex", "claude"} {
+	slots := make([]coverageSlot, 0, 126)
+	for _, provider := range acceptanceProviders {
 		for _, c := range acceptanceCases {
 			slots = append(slots, coverageSlot{
 				Provider:    provider,
@@ -125,8 +136,8 @@ func acceptanceSlots() ([]coverageSlot, error) {
 			return nil, fmt.Errorf("acceptance matrix has invalid requirement %q", slot.Requirement)
 		}
 	}
-	if len(slots) != 84 || required != 70 || optional != 14 {
-		return nil, fmt.Errorf("acceptance matrix has %d slots (%d required, %d optional); want 84 (70, 14)",
+	if len(slots) != 126 || required != 86 || optional != 40 {
+		return nil, fmt.Errorf("acceptance matrix has %d slots (%d required, %d optional); want 126 (86, 40)",
 			len(slots), required, optional)
 	}
 	return slots, nil
@@ -310,7 +321,7 @@ func selectExternalRecording(path string, slots []coverageSlot) (*externalSelect
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, fmt.Errorf("external recording plan: %w", err)
 	}
-	if plan.Provider != "codex" && plan.Provider != "claude" {
+	if !slices.Contains(acceptanceProviders[:], plan.Provider) {
 		return nil, fmt.Errorf("external recording has unsupported provider %q", plan.Provider)
 	}
 	if plan.CaseID == "" {
@@ -325,7 +336,7 @@ func selectExternalRecording(path string, slots []coverageSlot) (*externalSelect
 			}, nil
 		}
 	}
-	return nil, fmt.Errorf("external recording %s/%s is absent from the 84-slot matrix", plan.Provider, plan.CaseID)
+	return nil, fmt.Errorf("external recording %s/%s is absent from the acceptance matrix", plan.Provider, plan.CaseID)
 }
 
 func evaluateSlot(ctx context.Context, tool toolIdentity, o options, slot coverageSlot, external *externalSelection) coverageRow {

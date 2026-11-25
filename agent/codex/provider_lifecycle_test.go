@@ -176,7 +176,7 @@ func TestNaturalTerminationReleasesProviderLeaseAndKeepsEventsDrainable(t *testi
 }
 
 func codexThreadStartResult(threadID string) string {
-	return codexPermissionResult(threadID, "on-request", "auto_review", "workspaceWrite")
+	return codexPermissionResult(threadID, "never", "user", "dangerFullAccess")
 }
 
 func codexPermissionResult(threadID, approvalPolicy, reviewer, sandbox string) string {
@@ -362,9 +362,8 @@ func withDefaultCodexPermissionParams(t *testing.T, data json.RawMessage) json.R
 	var params map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(data, &params))
 	for field, value := range map[string]json.RawMessage{
-		"approvalPolicy":    json.RawMessage(`"on-request"`),
-		"approvalsReviewer": json.RawMessage(`"auto_review"`),
-		"sandbox":           json.RawMessage(`"workspace-write"`),
+		"approvalPolicy": json.RawMessage(`"never"`),
+		"sandbox":        json.RawMessage(`"danger-full-access"`),
 	} {
 		require.NotContains(t, params, field)
 		params[field] = value

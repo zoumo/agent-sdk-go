@@ -21,7 +21,7 @@ license: Apache-2.0
 * [SDK 架构](../client/docs/architecture.md) - 定义原生 SDK 的共同行为、调用方职责、子 Agent 观察及取消、关闭和恢复边界。
 * [共同验收](sdk/validation-cases.md) - 说明 SDK 共同验收的用户目标、回放流程、原生适配边界及其与可执行验收矩阵的关系。
 * [Session 合同](../client/docs/session.md) - 定义原生 Session 的调用方职责、资源与状态归属、权限、事件交付和子 Agent 关系。
-* [统一 Agent 设计](../agent/docs/session.md) - 在原生 Codex 和 Claude SDK 之上定义可选的统一会话与事件层， SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
+* [统一 Agent 设计](../agent/docs/session.md) - 在原生 Codex、Claude 和 Pi SDK 之上定义可选的统一会话与事件层， SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
 * [历史查询合同](../client/docs/history-query.md) - 定义 Codex 与 Claude 独立查询历史时的发现范围、metadata 及主会话与子会话内容。
 * [SDK 仿真设计](../tests/simulation/docs/design.md) - Defines how the SDK and Replay share responsibility for fixed-recording simulation, strict replay, evidence, and regression gates.
 * [SDK 测试连接 Replay](../tests/simulation/docs/library-mode.md) - Defines connection ownership, call order, and acceptance for Go SDK tests that use Replay for in-process replay.

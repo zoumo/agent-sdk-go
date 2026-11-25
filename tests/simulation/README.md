@@ -8,7 +8,6 @@ Replay library prepares fixtures, matches protocol traffic, and produces
 typed results. [Go library contract](docs/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
-<a id="stage-handoff"></a>
 
 ## 仿真录制与测试输入
 

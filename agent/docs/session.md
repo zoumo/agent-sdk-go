@@ -2,7 +2,7 @@
 type: Module Design
 title: 统一 Agent Core、Session 与事件流
 description: >-
-  在原生 Codex 和 Claude SDK 之上定义可选的统一会话与事件层，
+  在原生 Codex、Claude 和 Pi SDK 之上定义可选的统一会话与事件层，
   SDK 保留原生历史查询但不提供历史抽象，MASS 保有历史导入和持久化语义。
 status: stable
 tags: [unified-agent, session, events]
@@ -34,7 +34,7 @@ MASS Runtime adapter 可以消费统一层，而 MASS Service、Store 和 transp
 调用方通过具体 adapter 构造 Core，并显式提供原生配置。上层应用负责解析环境继承策略、
 MCP 文件访问范围及最终的 MCP 列表。Core 在构造时固定 `Tracer`。实现须支持并发调用并及时返回。
 SDK 隔离回调 panic，也不会配置 exporter 或等待导出。
-[Codex Core 源码](../codex/core.go) · [Claude Core 源码](../claude/core.go)
+[Codex Core 源码](../codex/core.go) · [Claude Core 源码](../claude/core.go) · [Pi Core 源码](../pi/core.go)
 
 ### Core 接口
 
@@ -42,7 +42,7 @@ SDK 隔离回调 panic，也不会配置 exporter 或等待导出。
 [Core 接口](../core.go)
 
 Core 可以跨 Session 共享原生连接（Codex），也可以只管理 Session 生命周期
-（Claude）；后者由每个 Session 拥有并在 `Close` 中释放自己的原生进程。
+（Claude 和 Pi）。Claude 和 Pi 的每个 Session 拥有自己的原生进程，在 `Close` 中释放。
 
 Agent Core 是 Agent 级 adapter owner，与工具来源 `ToolProvider`、工具 payload
 的 `provider` 字段和 MCP provider 不同。Core 错误使用 `core_stopped`、
@@ -1176,27 +1176,23 @@ Session 的权限和关闭规则。
 `SetModel`、`SetThinking`、`SetEffort` 及其原生 `ConfigurationReceipt` 保持
 各自合同。
 
-第一版不定义统一的 `SubagentQuery` 或 `SubagentPage`。需要原生子 Agent 查询、
-关系证据或分页覆盖的使用方直接使用对应的原生 SDK；统一层不在两个不同查询
-模型之间猜测等价。
+需要子 Agent 查询、关系证据或分页覆盖时，使用对应的原生 SDK。
 
 ### 历史查询不进入统一能力面
 
 统一层不定义 `NativeHistory`、`HistoryReader`、`HistoryEvent`、
 `HistoryQuery` 或任何等价的跨 provider 历史抽象。原生历史查询继续由
-`codex`、`claude` 的既有公开 API 拥有，调用方必须理解各自的 metadata、
+`client/codex`、`client/claude` 和 `client/pi` 的公开 API 拥有，调用方必须理解各自的 metadata、
 分页、覆盖、错误和身份语义。
 
 不统一的理由是：
 
 - Codex 暴露 thread/turn/item 原生分页，Claude 暴露 transcript message、
-  parent 链、项目 scope 和 coverage；强行共用一套值会丢失来源、覆盖或错误语义。
+  parent 链、项目 scope 和 coverage，Pi 按保存文件顺序读取记录并保留分支关系。[Pi 历史查询](../../client/pi/README.md#read-saved-sessions)
 - 历史查询返回保存内容，不是 live 通知。把它映射成统一 `Event` 会诱导调用方
   把历史当成当前执行、当前状态或回答权限。
 - MASS 需要 replay 来源、加载状态、提交顺序、取消和失败释放；这些是 MASS
   `LoadSession` 的业务语义，不属于通用 Agent 会话。
-- 统一层可以把两个 provider 的实时常用操作做得很好，但无法在不损失语义的
-  前提下把两套原生历史查询变成同一个 API。
 
 Codex 的 `NativeClient()` 暴露 Core 自有的同一条已初始化连接。它只在 `Start`
 成功后、`Stop` 前可用。调用方借用此连接进行只读查询，关闭与替换由 Core 负责。
@@ -1274,7 +1270,7 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
 - 统一核心遵循[生产依赖规则](../../docs/architecture.md)，不导入 `codex`、`claude` 或 MASS。
 - 统一核心没有 OpenTelemetry 或其他 telemetry 生产依赖；`Tracer` 的第三方
   adapter 可在仓库外部实现，不能进入 SDK 生产依赖树。
-- 两个 adapter 互不导入，原生包不导入统一层。
+- 每个 adapter 只导入对应的原生 SDK，原生包不导入统一层。
 - `agent/internal/corelease` 的依赖门禁只允许标准库和公开 `agent` 合同；两个
   adapter 都通过该模块覆盖 Start 单次获取、in-flight Open/Resume 拒绝 Stop、
   失败 Open 自动结算、终止性 Stop 与 release 错误缓存，且不保留重复生命周期
@@ -1395,8 +1391,6 @@ MASS 映射 `Capabilities` 和 `EffectiveFeatures` 时保留 SDK 提供的范围
   等价历史抽象，也没有 `LoadSession` 或 replay 方法。
 - `agent.Event` 包装为 `SessionEvent` 时 EventID、Time、ItemID、payload 和
   Meta 不被改写。
-- SDK 内部 history replay 投影已删除；原生历史查询、`Event.IsReplay`、
-  `ThreadResumeParams.History`、录制回放和 simulation replay 仍可用。
 - 除 Claude 原生 `AppendSystemPrompt`、trace context/settings 映射和 Codex
   原生 `ShellEnv`、prompt trace envelope 的增量字段外，原生 `codex`、
   `claude` 及其 `types` 的公开接口和默认测试不因统一层变化；Claude

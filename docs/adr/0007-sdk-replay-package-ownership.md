@@ -25,6 +25,10 @@ tags: [architecture, dependencies, replay]
 
 在包内用未导出声明隐藏实现。多包共享的领域实现放在该领域的 `internal/`。例如，`agent/internal/` 的共享实现服务于统一接口和 adapter，`client/internal/` 的关系维护服务于原生客户端。跨顶层目录的共享实现放在根 `internal/`。SDK 生产包独立于 Replay、测试辅助包和其他 provider 的实现。
 
+## Driver 与共享扩展
+
+Replay 按 provider 和实现语言存放官方 driver。Pi adapter 拥有 [Session 扩展源码](../../agent/pi/extensions/session.ts)，Go SDK 在构建时嵌入它，Replay 在打包 JavaScript driver 时复制同一文件。这样安装后的 driver 可以独立运行，录制器也可以按材料中的哈希核对实际加载的扩展。
+
 ## 测试归属
 
 包内测试可以直接使用私有测试辅助代码。各 provider 的仿真和显式 E2E 随被测入口维护。跨 provider 的原生矩阵归 `client/tests/`。跨 adapter 的统一合同验收归 `agent/tests/`。合成 fixture 和 SDK 侧 mock 连接由 `internal/testsupport/` 共享。

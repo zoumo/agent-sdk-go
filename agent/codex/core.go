@@ -9,8 +9,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
-	"github.com/zoumo/agent-sdk-go/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
 

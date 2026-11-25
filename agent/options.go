@@ -28,7 +28,7 @@ type OpenOptions struct {
 	ShellEnv map[string]string
 	// AdditionalSystemPrompt appends caller text after provider defaults for
 	// this Open or Resume operation. Empty omits provider-native prompt
-	// configuration. See docs/modules/unified-agent/design.md#additional-system-prompt
+	// configuration. See agent/docs/session.md#additional-system-prompt
 	// for the complete contract.
 	AdditionalSystemPrompt string
 	AdditionalDirs         []string

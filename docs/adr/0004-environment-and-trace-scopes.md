@@ -216,7 +216,7 @@ transport 上的输入结果；实际 transport 写入失败或挂起遵循正�
 
 ## 相关合同
 
-- [统一 Agent 设计](../modules/unified-agent/design.md#environment-configuration)
-- [Prompt trace](../modules/unified-agent/design.md#prompt-trace)
-- [原生 Session 设计](../modules/native-session/design.md#interface-进程环境与-prompt-trace)
+- [统一 Agent 设计](../../agent/docs/session.md#environment-configuration)
+- [Prompt trace](../../agent/docs/session.md#prompt-trace)
+- [原生 Session 设计](../../client/docs/session.md#interface-进程环境与-prompt-trace)
 - [共享术语](../../GLOSSARY.md)

@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/codex"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 type unifiedToolItem struct {

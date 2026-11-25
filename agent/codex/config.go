@@ -8,8 +8,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/codex"
-	"github.com/zoumo/agent-sdk-go/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 // Config fixes the explicitly selected Codex app-server process and its native

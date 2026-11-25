@@ -71,7 +71,7 @@ jobs:
           git merge-base --is-ancestor 72041470958a0d9f2f8e6ff5c0086a66ef193745 HEAD
           git diff --exit-code -- go.mod go.sum
       - name: Check committed whitespace
-        run: python3 codex/scripts/check_whitespace.py
+        run: python3 client/codex/scripts/check_whitespace.py
       - name: Validate offline
         env:
           GOPROXY: 'off'
@@ -148,7 +148,7 @@ jobs:
       - name: Retrieve exact remote commit into independent consumers
         run: |
           bash scripts/check-consumers.sh "$SDK_CONSUMER_SHA"
-          bash claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"
+          bash client/claude/scripts/check-managed-consumer.sh "$SDK_CONSUMER_SHA"
       - name: Report external validation boundary
         if: always()
         run: |
@@ -156,7 +156,7 @@ jobs:
           ## External consumers
           Consumers retrieve the pushed repository commit and dependencies over
           the network into temporary modules with no replace or go.work.
-          Four public imports, public examples and documentation snippets compile.
+          Native and unified imports, public examples and documentation snippets compile.
           Runtime checks use only synthetic data; no real CLI or model is invoked.
           Same-repository PRs fetch their published head SHA; synthetic PR merge
           commits and fork-only heads are outside this remote retrieval gate.

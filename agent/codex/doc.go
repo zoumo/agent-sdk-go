@@ -18,7 +18,7 @@
 //
 // Tool calls and results use the Codex-specific ToolName, Provider and Kind
 // mappings, result-copy rule and native status projection defined in
-// docs/modules/unified-agent/design.md. Tool chunks remain {id, content}.
+// agent/docs/session.md. Tool chunks remain {id, content}.
 //
 // Command, file-change and MCP tool approvals stay bound to their native request
 // and may select only an option offered by that request. Additional sandbox
@@ -39,7 +39,7 @@
 // AdditionalSystemPrompt maps to developerInstructions on thread/start and
 // thread/resume; an empty value omits that field, and baseInstructions is never
 // set. The complete field contract is defined in
-// docs/modules/unified-agent/design.md#additional-system-prompt. Additional
+// agent/docs/session.md#additional-system-prompt. Additional
 // directories are rejected before opening a session. Image, audio, resource,
 // and resource-link inputs are not advertised.
 // Open and Resume use SessionConfig. Empty model and reasoning-effort values are

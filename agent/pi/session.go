@@ -11,8 +11,8 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
 	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
+	"github.com/zoumo/agent-sdk-go/client/pi"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
-	"github.com/zoumo/agent-sdk-go/pi"
 )
 
 var (

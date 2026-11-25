@@ -45,7 +45,7 @@ CI 可下载工具链和依赖；测试执行不依赖真实 Agent、模型服�
 录制完整消费和 fixture 清理。单独将录制中的客户端帧送入 mock，只证明协议自回放，
 不能替代 SDK 仿真验收。录制缺失或目标行为未触发须报告未验证；
 必需仿真覆盖缺失时不能用跳过或自动连接真实 Agent 使门禁通过。固定索引及采用规则见
-[审核采用与门禁合同](modules/agent-sdk-testify/design.md#审核采用与固定回归门禁)。
+[审核采用与门禁合同](../tests/simulation/docs/design.md#审核采用与固定回归门禁)。
 固定门禁由 Go 测试进程直接执行，测试构建当前 driver 并保留其进程隔离；
 统一离线入口必须运行该严格测试。缺材料也保留独立 UT、专项集成、race、
 vet、生成、依赖与打包检查，CI 保存覆盖及失败诊断。成功、失败和可处理取消后原样
@@ -82,52 +82,24 @@ vet、生成、依赖与打包检查，CI 保存覆盖及失败诊断。成功�
   or synchronization need; suite does not implement a fake agent or replay peer.
 - Change the generator for generated tests, then regenerate and verify. Preserve
   every schema case and its native type/data; do not hand-edit only the output.
-- Keep explicitly enabled real CLI/agent checks under each native `tests/e2e`.
+- Keep explicitly enabled real CLI/agent checks under the tested client or adapter
+  in its `tests/e2e` directory.
   Retain opt-in gates and default skips. Document initialization/transport-only
   probes accurately; the directory name does not prove full model/task coverage.
 - Keep capability, source inspection, offline/synthetic tests and real recording
   evidence separate. A skipped live check is not a live pass. Default tests and
   CI do not run real agents or collect recordings.
 
-Shared code integration scenarios run directly in `NativeIntegrationSuite`; private observations
-and assertions live in `tests/integration/acceptance_test.go`. Checks using
-synthetic peers are targeted integration tests, not simulation evidence for user
-stories. Protocol peers remain in test files, and reusable recording/replay helpers follow the
-[in-process mock boundary](architecture.md#layout-code-layout-standards). There is no separate `internal/testkit` framework.
+Cross-provider native assertions live in `client/tests/`. Cross-adapter assertions
+for the unified contract live in `agent/tests/`. Keep provider-specific tests
+with the tested client or adapter. Shared synthetic peers and fixture helpers
+live in `internal/testsupport/`.
 
-The current driver tests use the single-request interface and supplied peers.
-Native business and provenance assertions remain on the current driver or the
-authoritative SDK host and typed execution report. Child delivery comparisons use
-provider-owned assertions independent of production suppression code, and each
-preserve/suppress or remote main/probe run must have its own complete report.
+The SDK simulation process accepts a single request with supplied peers. Native
+and adapter scenarios own their business assertions. The runner validates
+provenance and checks typed reports. Each child-delivery policy and each remote
+main or probe run needs its own complete report.
 
-Go SDK simulation implementations and their regression tests live under
-`tests/simulation/drivers/codex/go` and `tests/simulation/drivers/claude/go`. Native
-`tests/replay` packages retain synthetic adapters and SDK integration assertions,
-including original request handles, event delivery, cancellation and cleanup.
-Keep adapter-specific serialization/completion checks there; maintain pure ID
-matching, handshake, EOF and envelope-validation matrices in the Replay
-library.
-Do not retain unused publication scanners or export helpers used only by tests.
-Moving an assertion does not change its evidence level: synthetic driver tests
-are not successful real-recording simulation evidence.
-
-Use Go 1.26 or newer and retain offline, race, vet, generation, inventory,
-simulation source/hash validation, dependency-boundary and independent-consumer gates in
-Linux CI. External consumer modules must fetch the new repository's precise
-pushed revision outside the checkout, without `replace` or `go.work`.
-The public Replay library is linked into test and simulation hosts. The SDK checks its build identity and production dependency boundaries. [Replay integration](modules/agent-sdk-testify/library-mode.md). Protocol matching
-and official verification remain owned by Replay and are not reimplemented
-in SDK adapters. Recording and mock correctness cannot be established only by
-this repository's Go SDK tests.
-
-新样本入库前须完成官方 SDK 回放与来源／内容审核；已有材料的 Go 仿真独立执行，
-Go SDK 通过不是入库条件，入库后仿真失败须保留样本并阻断 SDK 门禁；
-流程选择、来源冻结与回放校验见[story 录制设计](modules/agent-sdk-testify/design.md#story-官方-sdk-仿真测试)。
-
-## 环境与结果
-
-测试使用自有临时资源，保留个人及其他任务的数据；失败时也释放己方资源并核对结果。
-认证来自外部配置，日志和证据移除秘密。前置条件缺失或场景为空时报告未执行。
-结果绑定实际源码、产物、环境和执行范围，保留失败证据；执行期间源码变化须说明。
-通过、失败、未验证分别报告，筛选或局部通过不能代表全部通过，命令启动不代表完成。
+Keep pure protocol matching tests with Replay. Keep SDK integration checks for
+original request handles, event delivery, cancellation, and transport cleanup
+with the SDK code. Synthetic inputs establish code integration evidence.

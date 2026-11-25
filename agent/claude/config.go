@@ -9,8 +9,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	"github.com/zoumo/agent-sdk-go/claude"
-	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	"github.com/zoumo/agent-sdk-go/client/claude"
+	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 // Config fixes the local Claude CLI process and its initialization. Session

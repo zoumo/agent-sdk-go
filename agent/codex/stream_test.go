@@ -3,7 +3,7 @@ package agentcodex
 import (
 	"context"
 
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 // NewWithStream constructs a provider backed by caller-supplied in-process

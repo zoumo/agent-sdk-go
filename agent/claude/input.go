@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
+	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 )
 
 func promptContent(input agent.Input) (claudetypes.Content, error) {

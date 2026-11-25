@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	claude "github.com/zoumo/agent-sdk-go/client/claude"
+)
+
+func TestMain(m *testing.M) {
+	if os.Getenv(peerEnvironment) == "1" {
+		if err := peer(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func TestOfflineExample(t *testing.T) {
+	var output bytes.Buffer
+	{
+		err := run(&output)
+		require.NoError(t, err)
+	}
+	expected := strings.Split(strings.TrimSpace(frames), "\n")
+	members := make(map[string]bool)
+	nativeCount, rootResult, childAfter, unconfirmedParent, terminal := 0, false, false, false, false
+	for line := range strings.SplitSeq(strings.TrimSpace(output.String()), "\n") {
+		var header struct {
+			Type string `json:"type"`
+			claude.Observation
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &header))
+		switch header.Type {
+		case "":
+			if header.Reason == "member-confirmed" {
+				members[header.Source.TaskID] = true
+			}
+			if header.Reason == "tool-owner-unconfirmed" {
+				unconfirmedParent = true
+				require.Nil(t, header.Parent)
+			}
+
+		default:
+			require.Lessf(t, nativeCount, len(expected), "native changed: %s", line)
+			require.Equalf(t, expected[nativeCount], line, "native changed: %s", line)
+			nativeCount++
+			e, err := claude.ParseEvent([]byte(line))
+			require.NoError(t, err)
+			if e.Result != nil {
+				rootResult = true
+			}
+			if e.Assistant != nil && e.ParentToolUseID != nil && rootResult {
+				childAfter = true
+			}
+			if e.Subtype == "task_updated" && e.System != nil && strings.Contains(string(e.System.Patch), "killed") {
+				terminal = true
+			}
+		}
+	}
+	require.Equal(t, len(expected), nativeCount, "native frame count")
+	for _, tc := range []struct {
+		name     string
+		observed bool
+	}{
+		{"root result", rootResult},
+		{"child after root result", childAfter},
+		{"unconfirmed nested tool owner", unconfirmedParent},
+		{"terminal patch", terminal},
+	} {
+		t.Run(tc.name, func(t *testing.T) { require.True(t, tc.observed) })
+	}
+	require.Equal(t, map[string]bool{"child": true, "grandchild": true}, members, "native task membership")
+}
+
+func TestOfflineSuppressedExample(t *testing.T) {
+	var output bytes.Buffer
+	require.NoError(t, runWithPolicy(&output, claude.ChildDetailSuppress))
+	expected := strings.Split(strings.TrimSpace(frames), "\n")
+	// Literal fixture ordinals: pure confirmed-grandchild snapshot (5) and pure
+	// confirmed-child after root result (10). The earlier mixed tool frame stays.
+	expected = append(append(append([]string{}, expected[:4]...), expected[5:9]...), expected[10:]...)
+	var got []string
+	for line := range strings.SplitSeq(strings.TrimSpace(output.String()), "\n") {
+		var header struct {
+			Type string `json:"type"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &header))
+		if header.Type != "" {
+			got = append(got, line)
+		}
+	}
+	require.Equal(t, expected, got)
+	require.Contains(t, output.String(), "child thinking") // mixed envelope, not privacy removal
+	require.Contains(t, output.String(), `"status":"killed"`)
+}

@@ -1,0 +1,270 @@
+package codex
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"sync"
+
+	"github.com/zoumo/agent-sdk-go/client/codex/types"
+	"github.com/zoumo/agent-sdk-go/client/internal/lineage"
+	"github.com/zoumo/agent-sdk-go/internal/queue"
+	"github.com/zoumo/agent-sdk-go/mcp"
+)
+
+var (
+	ErrOwnershipConflict = errors.New("codex: session ownership conflict")
+	ErrInvalidInput      = errors.New("codex: invalid or unsupported input")
+)
+
+// SessionOptions selects an existing connection or an explicitly owned process.
+// Exactly one of Client or Stdio must be supplied. Thread uses native start options.
+// Resume selects an existing thread instead; Thread must then be empty.
+type SessionOptions struct {
+	Client *Client
+	Stdio  *StdioOptions
+	Thread types.ThreadStartParams
+	Resume *types.ThreadResumeParams
+	// Features and Tools add explicit native thread configuration switches.
+	// Absent map keys do not override existing configuration.
+	Features map[Feature]bool
+	Tools    map[Tool]bool
+	// MCPServers adds shared mcp.Server values to this Session's native thread
+	// config.
+	MCPServers []mcp.Server
+	// MCPFiles provides relative files for MCP value sources during this operation.
+	MCPFiles fs.FS
+	// ShellEnv adds set-only variables to shell/unified-exec child environments.
+	// Empty values set empty strings. It does not change the app-server environment.
+	ShellEnv map[string]string
+	// ChildDetailPolicy fixes optional confirmed-child progress delivery for this Session.
+	ChildDetailPolicy ChildDetailPolicy
+	// MaxMembers bounds observation identities independently of parent knowledge.
+	MaxMembers int
+	// MaxParentDepth bounds parent knowledge, never membership eligibility.
+	MaxParentDepth int
+}
+
+type ReceivedKind string
+
+const (
+	ReceivedEvent       ReceivedKind = "event"
+	ReceivedRequest     ReceivedKind = "request"
+	ReceivedObservation ReceivedKind = "observation"
+)
+
+// Observation describes SDK knowledge, never a native notification.
+type Observation struct{ ThreadID, ParentThreadID, Method, Reason string }
+
+// Received retains one native or SDK fact with an explicit origin. Kind selects
+// exactly one of Event, Request or Observation.
+type Received struct {
+	Observation *Observation
+	Request     *IncomingRequest
+	Kind        ReceivedKind
+	Event       *types.Event
+	Raw         json.RawMessage
+	Params      json.RawMessage
+	Source      types.EventIdentity
+	Origin      string
+}
+
+type (
+	Submission       struct{ Response types.TurnStartResponse }
+	InterruptOptions struct{ TurnID string }
+)
+
+// Session owns main identity, admission and a single FIFO. All mutable state
+// except cleanupOnce/cleanupErr is protected by the connection mutex.
+type Session struct {
+	startRaw          json.RawMessage
+	resumeRaw         json.RawMessage
+	client            *Client
+	root              string
+	owned             bool
+	queue             queue.Queue[Received]
+	done              <-chan struct{}
+	closed            bool
+	cause             error
+	cleanupOnce       sync.Once
+	cleanupErr        error
+	cancel            context.CancelFunc
+	members           map[string]struct{}
+	parents           *lineage.Graph[string]
+	maxMembers        int
+	childDetailPolicy ChildDetailPolicy
+}
+
+func Open(ctx context.Context, options SessionOptions) (*Session, error) {
+	if options.ChildDetailPolicy != "" && options.ChildDetailPolicy != ChildDetailPreserve && options.ChildDetailPolicy != ChildDetailSuppress {
+		return nil, fmt.Errorf("%w: unknown child detail policy", ErrInvalidInput)
+	}
+	if ctx == nil {
+		return nil, errors.New("codex: nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if options.Resume != nil {
+		raw, err := json.Marshal(options.Thread)
+		if err != nil || string(raw) != "{}" || options.Resume.ThreadID == "" {
+			return nil, fmt.Errorf("%w: resume requires a thread ID and no start options", ErrInvalidInput)
+		}
+	}
+	if (options.Client == nil) == (options.Stdio == nil) {
+		return nil, errors.New("codex: select Client or Stdio")
+	}
+	if options.MaxMembers < 0 || options.MaxParentDepth < 0 {
+		return nil, errors.New("codex: negative observation limit")
+	}
+	if options.MaxMembers == 0 {
+		options.MaxMembers = 4096
+	}
+	if options.MaxParentDepth == 0 {
+		options.MaxParentDepth = 4096
+	}
+	if err := applySessionPolicyConfig(&options); err != nil {
+		return nil, err
+	}
+	graph, err := lineage.New[string](lineage.Limits{MaxNodes: options.MaxMembers, MaxRelations: options.MaxMembers, MaxDepth: options.MaxParentDepth})
+	if err != nil {
+		return nil, err
+	}
+	c := options.Client
+	owned := c == nil
+	if owned {
+		var err error
+		c, err = NewStdio(ctx, *options.Stdio)
+		if err != nil {
+			return nil, err
+		}
+	}
+	lifetime, cancel := context.WithCancel(context.Background())
+	s := &Session{client: c, owned: owned, done: lifetime.Done(), cancel: cancel, parents: graph, members: make(map[string]struct{}), maxMembers: options.MaxMembers, childDetailPolicy: options.ChildDetailPolicy}
+	if err := c.ownership.open(ctx, s, options); err != nil {
+		return nil, err
+	}
+	go func() { <-s.done; _ = s.Close() }()
+	return s, nil
+}
+
+// StartResponse returns an independent copy of the actual native thread/start
+// response, including model, sandbox and unknown fields.
+func (s *Session) StartResponse() (types.ThreadStartResponse, bool) {
+	s.client.mu.Lock()
+	defer s.client.mu.Unlock()
+	if len(s.startRaw) == 0 {
+		return types.ThreadStartResponse{}, false
+	}
+	var response types.ThreadStartResponse
+	_ = json.Unmarshal(s.startRaw, &response) // immutable bytes validated before Open returned
+	return response, true
+}
+
+// ResumeResponse returns an independent copy of the native thread/resume
+// response, including saved turns and unknown fields. It is absent for starts.
+func (s *Session) ResumeResponse() (types.ThreadResumeResponse, bool) {
+	s.client.mu.Lock()
+	defer s.client.mu.Unlock()
+	if len(s.resumeRaw) == 0 {
+		return types.ThreadResumeResponse{}, false
+	}
+	var response types.ThreadResumeResponse
+	_ = json.Unmarshal(s.resumeRaw, &response)
+	return response, true
+}
+
+func (s *Session) ThreadID() string                              { return s.root }
+func (s *Session) Receive(ctx context.Context) (Received, error) { return s.queue.Pop(ctx) }
+func (s *Session) Done() <-chan struct{}                         { return s.done }
+func (s *Session) Err() error                                    { s.client.mu.Lock(); defer s.client.mu.Unlock(); return s.cause }
+
+func (s *Session) Submit(ctx context.Context, input Input) (Submission, error) {
+	for _, part := range input.Input {
+		if len(part.Unknown) > 0 {
+			return Submission{}, ErrInvalidInput
+		}
+	}
+	p := input.native(s.root)
+	var response types.TurnStartResponse
+	err := s.client.callOwnedWithTrace(ctx, "turn/start", p, &response, false, nil, s, submissionTrace(ctx))
+	return Submission{Response: response}, err
+}
+
+func (s *Session) Interrupt(ctx context.Context, options InterruptOptions) error {
+	if options.TurnID == "" {
+		return errors.New("codex: explicit turn ID required")
+	}
+	var response types.TurnInterruptResponse
+	err := s.client.callOwned(ctx, "turn/interrupt", types.TurnInterruptParams{ThreadID: s.root, TurnID: options.TurnID}, &response, false, nil, s)
+	return err
+}
+
+func (s *Session) finishLocked(cause error) {
+	if s.closed {
+		return
+	}
+	s.closed = true
+	s.cause = cause
+	// End this owner's wait without canceling an already-dispatched write.
+	// The connection writer retains its own deadline and genuine fault handling.
+	for _, p := range s.client.pending {
+		if p.owner != s {
+			continue
+		}
+		dispatch := NotSent
+		if p.started {
+			dispatch = OutcomeUnknown
+		}
+		reason := cause
+		if reason == nil {
+			reason = ErrClosed
+		}
+		s.client.finishLocked(p, nil, &CallError{Method: p.method, ID: p.id, Dispatch: dispatch, Cause: reason})
+	}
+	for _, r := range s.client.reverse {
+		if r.owner == s {
+			reason := cause
+			if reason == nil {
+				reason = ErrClosed
+			}
+			r.invalidateLocked(reason)
+		}
+	}
+	// Terminal identity protection needs no reference to a closed owner/FIFO.
+	for _, r := range s.client.requestHistory {
+		if r.owner == s {
+			r.owner = nil
+		}
+	}
+	s.cancel()
+	_ = s.queue.Close(cause)
+	s.members = nil
+	s.parents = nil
+}
+
+// Close stops admission before cleanup, preserves accepted facts, and never
+// waits for a consumer. Shared physical attachments detach only after their
+// last Session observer releases them.
+func (s *Session) Close() error {
+	s.cleanupOnce.Do(func() { s.cleanupErr = s.client.ownership.close(s) })
+	return s.cleanupErr
+}
+
+// Abort explicitly abandons consumption, releases the unread FIFO and performs
+// the same cleanup as Close. A Receive already completed may still return a fact.
+func (s *Session) Abort() error {
+	c := s.client
+	c.mu.Lock()
+	s.finishLocked(nil)
+	cause := s.cause
+	c.mu.Unlock()
+	_ = s.queue.Abort(cause)
+	return s.Close()
+}
+
+// Unattributed returns the shared connection's bounded diagnostic snapshot,
+// including when Open owns and hides the underlying process connection.
+func (s *Session) Unattributed() UnattributedSnapshot { return s.client.Unattributed() }

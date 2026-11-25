@@ -49,16 +49,16 @@ import (
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 
-    codex "github.com/zoumo/agent-sdk-go/codex"
-    codextypes "github.com/zoumo/agent-sdk-go/codex/types"
-    claude "github.com/zoumo/agent-sdk-go/claude"
-    claudetypes "github.com/zoumo/agent-sdk-go/claude/types"
-    codexrecording "github.com/zoumo/agent-sdk-go/codex/tests/replay"
-    claudetranscript "github.com/zoumo/agent-sdk-go/claude/tests/replay"
+    codex "github.com/zoumo/agent-sdk-go/client/codex"
+    codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
+    claude "github.com/zoumo/agent-sdk-go/client/claude"
+    claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
+    "github.com/zoumo/agent-sdk-go/client/pi"
 )
 
 var _ func(context.Context, codex.SessionOptions) (*codex.Session, error) = codex.Open
 var _ func(*claude.Session, context.Context) (claude.Received, error) = (*claude.Session).Receive
+var _ func(context.Context, pi.Options) (*pi.Session, error) = pi.Open
 
 // This executes only pure value/configuration operations; no client is opened.
 func TestNativeConfiguration(t *testing.T) {
@@ -81,28 +81,56 @@ func TestNativeConfiguration(t *testing.T) {
             assert.Equal(t, config.ResumeID, options.ResumeID, "configuration adaptation changed native resume ID")
         }},
         {"codex package identity", func(t *testing.T) {
-            assert.Equal(t, "github.com/zoumo/agent-sdk-go/codex/types", reflect.TypeOf(params).PkgPath())
+            assert.Equal(t, "github.com/zoumo/agent-sdk-go/client/codex/types", reflect.TypeOf(params).PkgPath())
         }},
         {"claude package identity", func(t *testing.T) {
-            assert.Equal(t, "github.com/zoumo/agent-sdk-go/claude/types", reflect.TypeOf(config).PkgPath())
+            assert.Equal(t, "github.com/zoumo/agent-sdk-go/client/claude/types", reflect.TypeOf(config).PkgPath())
         }},
     } {
         t.Run(tc.name, tc.check)
     }
 }
 
-// Tooling smoke check: the downloaded module must embed its relocated fixtures.
-// This is independent of the consumer's cwd and never opens a CLI or client.
-func TestEmbeddedIntegrationFixtures(t *testing.T) {
-    for _, load := range []func() ([]codexrecording.Frame, error){codexrecording.QuestionFrames} {
-        frames, err := load()
-        require.NoError(t, err)
-        require.NotEmpty(t, frames)
-    }
-    require.NotEmpty(t, claudetranscript.TaskFailurePrompt)
-    require.NotEmpty(t, claudetranscript.TaskFailureWire)
-}
+GO
+cat > unified_test.go <<'GO'
+package consumer
 
+import (
+    "github.com/zoumo/agent-sdk-go/agent"
+    agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
+    agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
+    agentpi "github.com/zoumo/agent-sdk-go/agent/pi"
+)
+
+var (
+    _ agent.Core = (*agentclaude.Core)(nil)
+    _ agent.Core = (*agentcodex.Core)(nil)
+    _ agent.Core = (*agentpi.Core)(nil)
+)
+GO
+cat > native_and_unified_test.go <<'GO'
+package consumer
+
+import (
+    "github.com/zoumo/agent-sdk-go/agent"
+    agentclaude "github.com/zoumo/agent-sdk-go/agent/claude"
+    agentcodex "github.com/zoumo/agent-sdk-go/agent/codex"
+    agentpi "github.com/zoumo/agent-sdk-go/agent/pi"
+    "github.com/zoumo/agent-sdk-go/client/claude"
+    "github.com/zoumo/agent-sdk-go/client/codex"
+    "github.com/zoumo/agent-sdk-go/client/pi"
+)
+
+func adaptersAndNativeOptions() ([]agent.Core, claude.SessionOptions, codex.SessionOptions, pi.Options) {
+    codexStdio := codex.StdioOptions{Executable: "/unused/codex"}
+    claudeOptions := claude.SessionOptions{CLIPath: "/unused/claude"}
+    piOptions := pi.Options{Command: "/unused/pi"}
+    return []agent.Core{
+        agentcodex.New(agentcodex.Config{Stdio: codexStdio}),
+        agentclaude.New(agentclaude.Config{CLIPath: claudeOptions.CLIPath}),
+        agentpi.New(agentpi.Config{CLIPath: piOptions.Command}),
+    }, claudeOptions, codex.SessionOptions{Stdio: &codexStdio}, piOptions
+}
 GO
 python3 - "$module_dir" <<'PY'
 import pathlib, shutil, sys
@@ -110,13 +138,13 @@ source = pathlib.Path(sys.argv[1])
 # Compile consumer copies of the fetched module's public examples, excluding
 # example tests and all examples that import implementation-only packages.
 for name, relative in (
-    ('codex-api', 'codex/examples/apiusage/usage.go'),
-    ('codex-observe', 'codex/examples/observe-turn/main.go'),
-    ('codex-resume', 'codex/examples/resume-thread/main.go'),
-    ('codex-history', 'codex/examples/history-query-offline/main.go'),
-    ('claude-subagents', 'claude/examples/subagents-offline/main.go'),
-    ('claude-metadata', 'claude/examples/session-metadata-offline/main.go'),
-    ('claude-messages', 'claude/examples/session-messages-offline/main.go'),
+    ('codex-api', 'client/codex/examples/apiusage/usage.go'),
+    ('codex-observe', 'client/codex/examples/observe-turn/main.go'),
+    ('codex-resume', 'client/codex/examples/resume-thread/main.go'),
+    ('codex-history', 'client/codex/examples/history-query-offline/main.go'),
+    ('claude-subagents', 'client/claude/examples/subagents-offline/main.go'),
+    ('claude-metadata', 'client/claude/examples/session-metadata-offline/main.go'),
+    ('claude-messages', 'client/claude/examples/session-messages-offline/main.go'),
 ):
     target = pathlib.Path('examples') / name
     target.mkdir(parents=True)
@@ -125,16 +153,16 @@ for name, relative in (
     if testdata.is_dir():
         shutil.copytree(testdata, target / 'testdata')
 for native in ('codex', 'claude'):
-    code = (source / native / 'README.md').read_text().split('```go\n', 1)[1].split('```', 1)[0]
+    code = (source / 'client' / native / 'README.md').read_text().split('```go\n', 1)[1].split('```', 1)[0]
     target = pathlib.Path('docs') / native
     target.mkdir(parents=True)
     (target / 'main.go').write_text(code)
-comparison = (source / 'claude/README.md').read_text()
+comparison = (source / 'client/claude/README.md').read_text()
 section = comparison.split('## Go: configuration,', 1)[1]
 code = section.split('```go\n', 1)[1].split('```', 1)[0]
 target = pathlib.Path('docs/claude-configuration')
 target.mkdir(parents=True)
-(target / 'configuration.go').write_text('package configuration\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/agent-sdk-go/claude")\n' + code)
+(target / 'configuration.go').write_text('package configuration\nimport ("context"; "fmt"; "encoding/json"; claude "github.com/zoumo/agent-sdk-go/client/claude")\n' + code)
 PY
 go mod tidy
 go mod verify

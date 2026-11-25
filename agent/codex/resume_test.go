@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/agent"
-	codextypes "github.com/zoumo/agent-sdk-go/codex/types"
+	codextypes "github.com/zoumo/agent-sdk-go/client/codex/types"
 )
 
 func TestResumeDoesNotReplaySavedHistoryAndNativeClientUsesSameConnection(t *testing.T) {

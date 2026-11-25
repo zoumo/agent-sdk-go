@@ -42,7 +42,7 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
-	"github.com/zoumo/agent-sdk-go/pi"
+	"github.com/zoumo/agent-sdk-go/client/pi"
 )
 
 // Config selects the Pi executable and persistent session scope.

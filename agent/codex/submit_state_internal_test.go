@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/zoumo/agent-sdk-go/codex"
+	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
 func TestUnknownWriteKeepsWorkUnsettled(t *testing.T) {

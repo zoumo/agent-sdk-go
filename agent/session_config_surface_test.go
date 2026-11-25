@@ -71,7 +71,15 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if entry.IsDir() {
+			switch entry.Name() {
+			case "tests", "examples":
+				return filepath.SkipDir
+			default:
+				return nil
+			}
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
@@ -88,7 +96,7 @@ func TestSessionConfigProductionSurfaceRecursivelyExcludesUnsupportedSettings(t 
 		return nil
 	})
 	require.NoError(t, err)
-	for _, subdir := range []string{".", "codex", "claude"} {
+	for _, subdir := range []string{".", "codex", "claude", "pi"} {
 		assert.Positive(t, packages[filepath.Join(root, subdir)], "production package %s was not scanned", subdir)
 	}
 

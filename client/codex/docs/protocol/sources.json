@@ -8,7 +8,7 @@
   "notes": [
     "Git blob SHA-1 and SHA-256 were calculated over exact UTF-8 bytes, without newline or formatting normalization.",
     "Source inspection only; official test files were not executed.",
-    "Current target is the installed CLI 0.162.1 release tag rust-v0.162.1, peeled commit 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d. Earlier 0.160.1 provenance is historical in git; no old-version compatibility layer is maintained."
+    "The schema target is release tag rust-v0.162.1 at commit 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d."
   ],
   "sources": [
     {
@@ -35,14 +35,12 @@
     {
       "path": "codex-rs/app-server/README.md",
       "git_blob_sha": "a40c0c9d2581c517010fefbd11a9ae6c3a5f70f0",
-      "source_url": "https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/README.md",
       "bytes": 34494,
       "sha256": "6094059ddab2f001faf23c0f2d5d9c76dc3b219daff06de7b864244ffdf39690"
     },
     {
       "path": "codex-rs/app-server-client/README.md",
       "git_blob_sha": "c5c0d827ba32f0fde164eb619086461acd975b1e",
-      "source_url": "https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server-client/README.md",
       "bytes": 2378,
       "sha256": "8ced7c68ae2f21a9d650b3c71250bf9d7c710b3172c524016dd03c5fe8630491"
     },

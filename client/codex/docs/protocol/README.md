@@ -45,7 +45,7 @@ The selected closure also includes `ThreadInjectItemsParams` and
 `ThreadInjectItemsResponse` from that same pinned archive. `Session.Inject` sends
 `thread/inject_items` on its owned main thread, preserving raw Responses API item
 values and native rejection/dispatch evidence. The method is already declared in
-the 0.162.1 schema; no version upgrade is implied by adding its wrapper.
+the 0.162.1 schema; the wrapper uses those bindings.
 Runtime source inspection at Codex 0.166.0
 (`6ff1e1ca3b30fc8b914720681fcf5fe62e95f856`, core session injection and app-server
 `thread_inject_items` tests) establishes the history-only idle path and the native
@@ -183,12 +183,10 @@ at the exact revision, pass its checkout directory:
 python3 docs/protocol/verify_inventory.py path/to/official-codex-checkout
 ```
 
-The script performs no network calls and launches no Codex process. It checks
-source SHA-256 and Git blob IDs, matrix completeness against the Rust registries,
-source-line locations, schema memberships, and evidence references. It is an
-inventory check, not a live protocol test. Public evidence records must name a
-committed SDK revision when available; a pre-commit working-tree result must say
-so instead of claiming the base commit contains the tested changes.
+The offline check validates the inventory counts, local test paths and generated
+schema digest. With the pinned upstream checkout it also checks source SHA-256
+and Git blob IDs, registry membership, source lines and schema memberships.
+Run the [SDK checks](../../../../docs/testing.md) to obtain results for the revision under test.
 
 ## Session source evidence
 
@@ -215,18 +213,6 @@ reattaches and can resend pending native requests; it is not a notification-log
 replay and does not restore an old Go answer handle's authority. The SDK reports
 connection loss without automatic reconnect or resend.
 
-## Test migration audit
-
-[test-migrations.json](test-migrations.json) retains the historical base, each
-retired test path, exact historical evidence IDs and current replacement files.
-The inventory verifier rejects unknown missing paths, unmapped/duplicate evidence
-IDs and missing replacement targets. These mappings preserve traceability; they
-do not transfer historical passes to new code. Current Session checks preserve
-native arrival order, original request authority and drain semantics. Former tree
-consumers, ancestry-first ordering, UUID suppression and inferred run/creation
-state are superseded by the [Session contract](../../../docs/session.md).
-Historical per-test narrative audits remain in Git history.
-
 ## Inspected test sources
 
 Official Rust app-server, TypeScript exec and Python SDK tests informed the choice
@@ -236,8 +222,9 @@ SDK surfaces and inspected tests are not additional Go runtime coverage.
 
 ## Descendant evidence
 
-Current descendant observation has source/synthetic evidence only; no E3 actual
-provider/mock-backend or E4 real-model pass is claimed. Auto-attach is best-effort.
+Auto-attach is best-effort. The [Session regression tests](../../session_native_regression_test.go)
+exercise descendant identity and delivery with a local peer. The [Replay index](../../../../replay/data/index.json)
+identifies the recorded cases available for SDK simulation.
 Thread/item identity is native; SDK membership/coverage uses a separate Received
 kind. thread/started, thread/status/changed, reasoning deltas and token usage stay
 raw-only notifications; native Thread/item values use generated types. Raw support

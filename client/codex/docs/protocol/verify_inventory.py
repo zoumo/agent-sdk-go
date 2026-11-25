@@ -13,7 +13,6 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 inventory = json.loads((HERE / 'capabilities.json').read_text())
 provenance = json.loads((HERE / 'sources.json').read_text())
-evidence = json.loads((HERE / 'evidence.json').read_text())
 source_records = {row['path']: row for row in provenance['sources']}
 assert len(source_records) == len(provenance['sources']), 'duplicate source record'
 assert inventory['protocol_commit'] == provenance['commit']
@@ -26,46 +25,18 @@ for kind, count in inventory['counts'].items():
 for derived in provenance['derived_material']:
     snapshot_path = ROOT / derived['path']
     assert hashlib.sha256(snapshot_path.read_bytes()).hexdigest() == derived['snapshot_sha256'], 'derived snapshot mismatch'
-known_evidence = {r['id'] for r in evidence['records']}
 for row in records:
     assert row['support'] in inventory['status_definitions']
     assert row['source_path'] in source_records, row
     assert row['source_line'] > 0
-    assert set(row['evidence']) == {'unit', 'mock', 'race', 'live'}
-    for refs in row['evidence'].values():
-        assert set(refs) <= known_evidence, refs
-# Historical records retain their original paths and outcomes. Explicit migrations
-# validate the current check locations without relabeling those old outcomes.
-migration = json.loads((HERE / 'test-migrations.json').read_text())
-assert re.fullmatch(r'[0-9a-f]{40}', migration['historical_base']), 'invalid migration base'
-assert (ROOT / migration['audit']).is_file(), 'missing guarantee audit'
-retirements = {row['retired_path']: row for row in migration['retirements']}
-assert len(retirements) == len(migration['retirements']), 'duplicate retired path'
-used_retirements = {}
-
-def current_test_path(historical_path):
-    # The original native root was beside agent/. Keep the historical evidence
-    # path as recorded and resolve the current file from the repository root.
-    if historical_path.startswith('../agent/'):
-        return ROOT.parent.parent / historical_path.removeprefix('../')
-    return ROOT / historical_path
-
-for row in evidence['records']:
-    for test_file in row.get('test_files', []):
-        if current_test_path(test_file).is_file():
-            assert test_file not in retirements, 'migration for an existing path: ' + test_file
-            continue
-        assert test_file in retirements, 'unmapped missing historical path: ' + test_file
-        retired = retirements[test_file]
-        assert row['id'] in retired['evidence_ids'], 'unmapped historical evidence: ' + row['id']
-        used_retirements.setdefault(test_file, set()).add(row['id'])
-for path, retired in retirements.items():
-    assert set(retired['evidence_ids']) == used_retirements.get(path), 'stale or incomplete migration: ' + path
-    assert len(retired['evidence_ids']) == len(set(retired['evidence_ids'])), 'duplicate migration evidence'
-    assert retired['replacements'], 'migration without current checks: ' + path
-    assert len(retired['replacements']) == len(set(retired['replacements'])), 'duplicate replacement path'
-    for replacement in retired['replacements']:
-        assert replacement != path and current_test_path(replacement).is_file(), 'missing replacement: ' + replacement
+    checks = row.get('checks', [])
+    if row['support'] == 'supported':
+        assert checks, 'supported capability has no check file: ' + str(row.get('method') or row['name'])
+    assert len(checks) == len(set(checks)), 'duplicate check file'
+    for check in checks:
+        path = pathlib.Path(check)
+        assert not path.is_absolute() and '..' not in path.parts, check
+        assert path.name.endswith('_test.go') and (ROOT.parent.parent / path).is_file(), check
 
 if len(sys.argv) > 1:
     source_root = pathlib.Path(sys.argv[1])

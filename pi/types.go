@@ -14,12 +14,15 @@ type Event struct {
 
 // State is a snapshot returned by get_state. Raw preserves the entire native data value.
 type State struct {
-	SessionID     string          `json:"sessionId"`
-	SessionFile   string          `json:"sessionFile"`
-	ThinkingLevel string          `json:"thinkingLevel"`
-	IsStreaming   bool            `json:"isStreaming"`
-	Model         json.RawMessage `json:"model"`
-	Raw           json.RawMessage `json:"-"`
+	SessionID           string          `json:"sessionId"`
+	SessionFile         string          `json:"sessionFile"`
+	ThinkingLevel       string          `json:"thinkingLevel"`
+	IsStreaming         bool            `json:"isStreaming"`
+	SteeringMode        QueueMode       `json:"steeringMode"`
+	FollowUpMode        QueueMode       `json:"followUpMode"`
+	PendingMessageCount int             `json:"pendingMessageCount"`
+	Model               json.RawMessage `json:"model"`
+	Raw                 json.RawMessage `json:"-"`
 }
 
 // Image holds the native base64 data and MIME type. Type must be "image".

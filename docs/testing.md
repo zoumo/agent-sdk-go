@@ -70,17 +70,18 @@ protocol, evidence, and cleanup outcomes. Use the
 [simulation guide](../tests/simulation/drivers/README.md) to select a single case
 or an external recording.
 
-Without an explicit `-simulation.output`, the test runs in a private
-short directory under `/tmp`, resolved to its physical path. This keeps the
-execution workspace within Claude's existing 200-character project-key limit
-even when the checkout or `TMPDIR` is deep. Success, failure and handled
-INT/TERM cancellation archive the output unchanged under
-`.artifacts/simulation/gates/gate.*`; the test logs this location,
-and every CI validation job collects it. After a successful archive, the temporary run
-directory is removed. Recorded paths retain the original execution identity.
-An archive failure returns an error and retains the temporary output at the
-reported location. An explicit `-simulation.output` uses the caller's directory directly,
-without automatic archiving; that path must satisfy native limits.
+The test runs in a short private directory under `/tmp` and resolves its
+physical path before starting the simulation. This keeps the execution workspace
+within the SDK's 200-byte Claude project-key limit even when the checkout,
+`TMPDIR`, or archive path is deep.
+
+The test archives the output after success, failure, or handled INT/TERM
+cancellation. Set `-simulation.output` to a new absolute archive directory
+whose parent exists. The default archive is under
+`.artifacts/simulation/gates/gate.*`, which CI collects. The test logs the
+archive location and removes the temporary run after it copies the evidence.
+Recorded paths retain the original execution identity. If archiving fails,
+the test returns an error and reports the retained temporary output location.
 
 ## Opt-in real CLI checks
 

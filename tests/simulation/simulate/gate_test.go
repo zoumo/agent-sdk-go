@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	simulationOutput    = flag.String("simulation.output", "", "Caller-owned absolute evidence output; default archives a short private run")
+	simulationOutput    = flag.String("simulation.output", "", "New absolute directory for archived simulation evidence")
 	simulationRecording = flag.String("simulation.recording", "", "Absolute external capture; cannot fill builtin gate coverage")
 	simulationProvider  = flag.String("simulation.provider", "codex", "Provider for TestSimulationCase")
 	simulationCase      = flag.String("simulation.case", "SDK-CASE-001", "Builtin case for TestSimulationCase")

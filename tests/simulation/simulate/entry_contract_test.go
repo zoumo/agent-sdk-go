@@ -37,6 +37,43 @@ func TestGoTestOutputFlagsPreserveCallerOwnedEvidence(t *testing.T) {
 	}
 }
 
+func TestGoTestLongOutputArchivesClaudeHistory(t *testing.T) {
+	entrypoint := prepareGateEntrypoint(t)
+	output := filepath.Join(entrypoint.root, "claude evidence")
+	require.Greater(t, len(output), 200)
+	command := exec.CommandContext(t.Context(), os.Args[0],
+		"-test.run=^TestSimulationCase$", "-test.v",
+		"-simulation.provider=claude", "-simulation.case=SDK-CASE-029", "-simulation.output="+output)
+	log, err := command.CombinedOutput()
+	require.NoError(t, err, string(log))
+	require.Contains(t, string(log), "Simulation artifacts: "+output)
+
+	var result summary
+	require.NoError(t, readJSON(filepath.Join(output, "summary.json"), &result))
+	require.Equal(t, "passed", result.Status)
+	require.Len(t, result.Runs, 1)
+	run := result.Runs[0]
+	require.Equal(t, "passed", run.Status)
+	physicalTemp, err := filepath.EvalSymlinks("/tmp")
+	require.NoError(t, err)
+	runtime := filepath.Dir(filepath.Dir(run.Output))
+	require.Equal(t, physicalTemp, filepath.Dir(runtime))
+	require.NoDirExists(t, runtime)
+
+	var evidence sessionEvidence
+	require.NoError(t, readJSON(filepath.Join(output, run.Policy, "evidence.json"), &evidence))
+	require.Equal(t, "passed", evidence.Status)
+	require.Len(t, evidence.Executions, 1)
+	require.True(t, evidence.Executions[0].Complete)
+	require.Len(t, evidence.Executions[0].Connections, 1)
+	connection := evidence.Executions[0].Connections[0]
+	require.Equal(t, "passed", connection.Status)
+	require.True(t, connection.FullConsumption)
+	require.True(t, connection.ClientEOF)
+	require.True(t, connection.CleanupComplete)
+	require.False(t, connection.NativeLaunched)
+}
+
 func TestGoTestGateRejectsIncompleteCoverageAndRetainsEvidence(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "gate")
 	command := exec.CommandContext(t.Context(), os.Args[0],

@@ -42,9 +42,17 @@ assert (ROOT / migration['audit']).is_file(), 'missing guarantee audit'
 retirements = {row['retired_path']: row for row in migration['retirements']}
 assert len(retirements) == len(migration['retirements']), 'duplicate retired path'
 used_retirements = {}
+
+def current_test_path(historical_path):
+    # The original native root was beside agent/. Keep the historical evidence
+    # path as recorded and resolve the current file from the repository root.
+    if historical_path.startswith('../agent/'):
+        return ROOT.parent.parent / historical_path.removeprefix('../')
+    return ROOT / historical_path
+
 for row in evidence['records']:
     for test_file in row.get('test_files', []):
-        if (ROOT / test_file).is_file():
+        if current_test_path(test_file).is_file():
             assert test_file not in retirements, 'migration for an existing path: ' + test_file
             continue
         assert test_file in retirements, 'unmapped missing historical path: ' + test_file
@@ -57,7 +65,7 @@ for path, retired in retirements.items():
     assert retired['replacements'], 'migration without current checks: ' + path
     assert len(retired['replacements']) == len(set(retired['replacements'])), 'duplicate replacement path'
     for replacement in retired['replacements']:
-        assert replacement != path and (ROOT / replacement).is_file(), 'missing replacement: ' + replacement
+        assert replacement != path and current_test_path(replacement).is_file(), 'missing replacement: ' + replacement
 
 if len(sys.argv) > 1:
     source_root = pathlib.Path(sys.argv[1])

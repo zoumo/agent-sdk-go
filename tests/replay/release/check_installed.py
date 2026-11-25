@@ -120,8 +120,10 @@ def check_drivers(root, dist, binary, codex):
 
     pi, package, env = install_npm(root, dist, "pi", "cli.mjs", isolated_node, npm)
     for name in ("base.mjs", "continuation.mjs", "extension.mjs", "peer.mjs", "wire.mjs", "evidence.mjs", "LICENSE",
-                 "pi-extension/SOURCE.md", "pi-extension/NOTICE"):
+                 "NOTICE"):
         assert (package / name).is_file(), name
+    assert (package / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes()
+    assert (package / "NOTICE").read_bytes() == (NPM_DRIVERS["pi"] / "NOTICE").read_bytes()
     extension = package / "pi-extension/session.ts"
     assert extension.read_bytes() == (ROOT / "agent/pi/extensions/session.ts").read_bytes()
     launched = subprocess.run([pi], cwd=root, env=env, capture_output=True, timeout=10, text=True)

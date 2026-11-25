@@ -6,7 +6,8 @@ import json
 import re
 import sys
 
-ROOT = Path(__file__).resolve().parents[2] / 'replay'
+ROOT = Path(__file__).resolve().parents[2]
+CATALOG = Path('docs/sdk/validation-cases.md')
 
 
 def inventory_errors(text, prefix, expected):
@@ -18,8 +19,8 @@ def inventory_errors(text, prefix, expected):
     return errors
 
 
-def stable_stories(root):
-    return re.findall(r'^\| (SDK-US-\d{3}) \|', (root / 'docs/cases.md').read_text(), re.M)
+def stable_stories(catalog):
+    return re.findall(r'^\| (SDK-US-\d{3}) \|', catalog, re.M)
 
 
 def case_mapping_errors(stories, cases):
@@ -36,7 +37,7 @@ def case_mapping_errors(stories, cases):
 
 
 def recording_mapping(root):
-    directory = root / 'data/scenarios'
+    directory = root / 'replay/data/scenarios'
     index = json.loads((directory / 'index.json').read_text())
     stories = [json.loads((directory / (name + '.json')).read_text()) for name in index['stories']]
     providers = {p: json.loads((directory / 'bindings' / (p + '.json')).read_text()) for p in ('codex', 'claude', 'pi')}
@@ -51,7 +52,7 @@ def recording_mapping(root):
                     continue
                 binding = bindings['cases'][case['id']]
                 routes.append(dict(case['execution'], **binding.get('execution', {}))['mode'])
-            target = f"[配置](../data/scenarios/{story['id']}.json)"
+            target = f"[配置](../../replay/data/scenarios/{story['id']}.json)"
             requirement = 'required' if case['required'] else 'optional'
             overrides = [provider + ' ' + ('required' if bindings['cases'][case['id']]['required'] else 'optional')
                          for provider, bindings in providers.items()
@@ -93,12 +94,12 @@ def link_errors(path, text):
 
 def check_catalog(root):
     common = {f"SDK-US-{n:03}" for n in range(1, 9)}
-    stories = stable_stories(root)
-    errors = inventory_errors((root / 'docs/cases.md').read_text(), 'SDK-US', common)
+    normative = (root / CATALOG).read_text()
+    stories = stable_stories(normative)
+    errors = inventory_errors(normative, 'SDK-US', common)
     cases, rows = recording_mapping(root)
     errors += case_mapping_errors(stories, cases)
     case_ids = {case['id'] for case in cases}
-    normative = (root / 'docs/cases.md').read_text()
     errors += inventory_errors(normative, 'SDK-CASE', case_ids)
     owners = dict(re.findall(r'^\| (SDK-CASE-\d{3}) \| (SDK-US-\d{3}) \|', normative, re.M))
     requirements = dict(re.findall(r'^\| (SDK-CASE-\d{3}) \| SDK-US-\d{3} \| (required|optional)(?: \([^)]*\))? \|', normative, re.M))
@@ -114,7 +115,7 @@ def check_catalog(root):
             errors.append(case['id'] + ': simulation case must be implemented or planned')
         if not isinstance(case.get('required'), bool) or requirements.get(case['id']) != ('required' if case['required'] else 'optional'):
             errors.append(case['id'] + ': normative and configured requirement differ')
-    directory = root / 'data/scenarios'
+    directory = root / 'replay/data/scenarios'
     index = json.loads((directory / 'index.json').read_text())
     if set(index['stories']) != common or len(index['stories']) != len(common):
         errors.append('Simulation catalog must contain exactly the eight user stories')
@@ -137,8 +138,8 @@ def check_catalog(root):
 
 def check_documents(root):
     errors = []
-    documents = [root / name for name in ('README.md', 'GLOSSARY.md', 'drivers/README.md')]
-    documents += sorted((root / 'docs').rglob('*.md'))
+    documents = [root / name for name in (CATALOG, 'GLOSSARY.md', 'replay/README.md', 'replay/drivers/README.md')]
+    documents += sorted((root / 'replay/docs').rglob('*.md'))
     for path in documents:
         errors += link_errors(path, path.read_text())
     return errors
@@ -150,4 +151,7 @@ if __name__ == "__main__":
         print(failure, file=sys.stderr)
     if failures:
         sys.exit(1)
-    print(f"Simulation evidence: {len(stable_stories(ROOT))} stories, {len(recording_mapping(ROOT)[0])} cases; identities, availability and documentation valid (offline, no recording claim).")
+    count = len(stable_stories((ROOT / CATALOG).read_text()))
+    cases, _ = recording_mapping(ROOT)
+    print(f"Simulation evidence: {count} stories, {len(cases)} cases; "
+          "identities, availability and documentation valid (offline, no recording claim).")

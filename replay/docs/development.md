@@ -36,9 +36,9 @@ SDK；official record/verify 通过官方 driver 调用同一套公开 agent 命
 不维护退出码分类。agent type 的配置、启动参数和历史解释留在对应 agent 文件。
 端到端测试使用与消费者相同的进程接口，不导入被测 SDK 来间接证明工具正确性。
 
-协议代码统一位于 `internal/protocol/`，保留 capture、recording、replay、rawjson 的
+协议代码统一位于 `replay/internal/protocol/`，保留 capture、recording、replay、rawjson 的
 职责边界，作为仓库内部实现供 `application`、`record`、`mock`、`official` 和
-`lifecycle` 使用，不公开协议帧、严格匹配器或材料 wire 类型。`internal/command` 只解析
+`lifecycle` 使用，不公开协议帧、严格匹配器或材料 wire 类型。`replay/internal/command` 只解析
 CLI 参数并调用 `application` 或 CLI 专属的 `official`，不增加重复的选项转发层。
 official 编排、driver 和公开 agent 命令的职责以
 [工具设计](design.md#记录验证与回放)为准。
@@ -46,7 +46,7 @@ official 编排、driver 和公开 agent 命令的职责以
 ### 内部职责与依赖
 
 - `application` 是 prepare、record、mock、export 的唯一应用用例层，统一拥有参数校验、
-  fixture 操作编排和结果交付。`internal/command` 只解析 argv、注入 stdio/descriptor，
+  fixture 操作编排和结果交付。`replay/internal/command` 只解析 argv、注入 stdio/descriptor，
   并把返回错误映射为退出码和 stderr；根库入口只转换公开类型和调用方流。两个适配层
   都不得绕过 `application` 直接编排 `lifecycle`、`record`、`mock` 或 `corpus`。
 - `record`、`mock` 是公开 agent 命令的策略适配器：`record` 只提供录制准备、采集和
@@ -107,7 +107,7 @@ go run -tags builtin_generate ./cmd/agent-replay --check
 测试分为三层，按测试范围和目录归类。单元测试和集成测试应快速完成，适合开发时频繁运行；
 完整流程只在端到端测试中验证。
 SDK 用户故事、case 和各 agent type 的能力要求由[场景目录](../data/scenarios)与 binding 定义。
-业务证据和通过标准见[共同验收](cases.md)。
+业务证据和通过标准见[共同验收](../../docs/sdk/validation-cases.md)。
 
 | 层级 | 位置 | 测什么 | 执行边界 |
 |---|---|---|---|
@@ -126,7 +126,7 @@ HEAD/tree 后以 `-buildvcs=true` 执行测试。dirty 源码必须先提交，�
 聚焦命令见[从源码构建与验证](#从源码构建与验证)。
 wrapper 不修改构建身份或产品校验，也不获取网络依赖；失败保留临时 checkout 与命令日志
 并输出位置，成功清理临时目录。标准入口的构建产物和门禁日志仍输出到调用方仓库的
-`bin/`、`.artifacts/` 或显式输出目录；自行传给 wrapper 的输出路径须使用绝对路径。
+`.artifacts/` 或显式输出目录；自行传给 wrapper 的输出路径须使用绝对路径。
 `tests/replay/build/` 比较公开库 fixture 与 installed CLI fixture 的 layout、descriptor 形状、
 material 字节和哈希，不复制 CLI 用例集。
 

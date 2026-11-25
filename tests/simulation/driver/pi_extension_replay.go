@@ -83,7 +83,7 @@ func (r piExtensionReplayRequest) replay(ctx context.Context) (err error) {
 		FixtureDir: filepath.Join(runtimeDir, "fixture"), Agent: "pi", Recording: r.Material,
 	})
 	if err != nil {
-		return fmt.Errorf("prepare strict Pi fixture with the Testify library: %w", err)
+		return fmt.Errorf("prepare strict Pi fixture with the Replay library: %w", err)
 	}
 	if fixture.AgentType != "pi" || fixture.Tool.Source != replay.ToolSourceEmbedded ||
 		fixture.Source.Kind != "recording" || fixture.Source.ID != "pi-controlled-"+r.Case ||
@@ -109,7 +109,7 @@ func (r piExtensionReplayRequest) replay(ctx context.Context) (err error) {
 	return errors.Join(flowErr, verifyPiReplayResult(fixture, runtimeDir, r.Output, r.Case, material))
 }
 
-// Wait for the SDK-owned peer to observe Testify's full-consumption channel
+// Wait for the SDK-owned peer to observe Replay's full-consumption channel
 // before the Session sends EOF.
 func waitForPiMockConsumption(runtimeDir string) func(context.Context, <-chan struct{}) error {
 	path := filepath.Join(runtimeDir, piMockConsumptionDirectory)
@@ -124,16 +124,16 @@ func waitForPiMockConsumption(runtimeDir string) func(context.Context, <-chan st
 			}
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("wait for Testify full consumption: %w", ctx.Err())
+				return fmt.Errorf("wait for Replay full consumption: %w", ctx.Err())
 			case <-done:
-				return errors.New("pi: session ended before Testify confirmed full consumption")
+				return errors.New("pi: session ended before Replay confirmed full consumption")
 			case <-ticker.C:
 			}
 		}
 	}
 }
 
-// The SDK launches this peer as its Pi process. The Testify library owns the
+// The SDK launches this peer as its Pi process. The Replay library owns the
 // peer ends of those streams. Aliasing only affects the handshake filesystem.
 func runPiExtensionMock(args []string) (err error) {
 	if len(args) < 6 || !validPiExtensionAlias(args[1]) {

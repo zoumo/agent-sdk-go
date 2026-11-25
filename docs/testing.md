@@ -328,8 +328,7 @@ One SDK tag versions the native clients, unified adapters, Replay library, and
 2. Require the exact SHA's `checks` and `race` CI jobs and the External
    consumer job, and inspect their logs; rerun on the resulting main commit after
    merge. Fork PR consumer skips do not satisfy this gate.
-3. Review CHANGELOG, migration, licenses, native attribution and actual simulation
-   coverage. Resolve the missing coverage described under [Simulation coverage](#simulation-coverage).
+3. Review the licenses, source attribution and actual simulation coverage. Check each required case under [Simulation coverage](#simulation-coverage).
 4. Record the exact commit, CI URLs and remaining limits in the release review.
    Resolve failed/skipped required gates before creating a tag/release.
 

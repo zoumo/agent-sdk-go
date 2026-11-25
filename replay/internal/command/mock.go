@@ -55,7 +55,7 @@ func newMockCommand(streams IO) *cobra.Command {
 	return c
 }
 
-// parseInterleavedFlags handles Testify flags and legacy native arguments
+// parseInterleavedFlags handles Replay flags and legacy native arguments
 // before the delimiter.
 func parseInterleavedFlags(flags *pflag.FlagSet, args []string) ([]string, bool, error) {
 	var parsed, native []string

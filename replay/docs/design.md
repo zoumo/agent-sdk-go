@@ -1202,7 +1202,7 @@ recording 从 manifest 推断，case 只有在只有一个可用 binding 时才�
 的 plan 和 manifest 绑定，但不参与官方 case、资格或内置材料选择。
 
 新增 case 时更新场景、agent binding、测试和固定索引要求，保留已有 case 的能力要求。
-若新增判定边界，在[共同验收](cases.md)记录所需证据。
+若新增判定边界，在[共同验收](../../docs/sdk/validation-cases.md)记录所需证据。
 
 ## 严格回放
 

@@ -149,13 +149,17 @@ the stable terminal error, or explicitly `Abort` to discard abandoned backlog.
 
 The source/schema target is Codex **0.162.1** at
 `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`; no supported-version range is claimed.
-Current bindings and descendants have source/offline evidence only. Historical
-CLI 0.162.1 stdio/loopback WS and user-input checks used older SDK/schema bases;
-approvals and interrupt were untriggered, public WSS/JWT and current descendants
-remain unverified. Exact scopes stay in [evidence.json](docs/protocol/evidence.json).
+The [capability inventory](docs/protocol/capabilities.json) describes the supported
+scope of each method. Its optional `checks` entries name test files relative to
+the repository root. For the source revision and schema hashes, see
+[protocol provenance](docs/protocol/README.md).
 
-Use [capabilities.json](docs/protocol/capabilities.json) for the method inventory
-and [protocol provenance](docs/protocol/README.md) for source hashes and licensing.
+Run the [offline checks](../../docs/testing.md#run-the-offline-checks) against
+the SDK revision you use. For recorded flows, the [fixed index](../../replay/data/index.json)
+identifies the provider, material and verification status. Live CLI and remote
+deployment results depend on the CLI version, transport and scenario exercised.
+See the [opt-in CLI checks](../../docs/testing.md#opt-in-real-cli-checks).
+
 Raw Call/types support is not workflow support. Dedicated steering/work queues,
 thread deletion/rename/compact and other administration, hooks/plugins, MCP
 server management/discovery, realtime, credential management and durable
@@ -589,8 +593,7 @@ and the [offline example](examples/history-query-offline).
 
 Run the root offline gate with Go 1.26 or newer. The offline
 examples use explicit synthetic peers and code-owned protocol inputs, never an
-installed agent. [Migration details](../../docs/migration.md#session) distinguish
-native limitations, resource options and breaking lifecycle changes.
+installed agent. See the [Session contract](../docs/session.md) for lifecycle and resource limits.
 
 Run from the repository root:
 

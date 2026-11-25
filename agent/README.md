@@ -1,8 +1,8 @@
 # Unified Agent
 
-Unified `Core.Open` and `Core.Resume` default to `fullAccess`. If your Codex or
-Claude application relied on automatic review, set `PermissionPreset` to
-`autoReview` on both calls. Pi accepts only `fullAccess`.
+Unified `Core.Open` and `Core.Resume` default to `fullAccess`. For manual or
+automatic review with Codex or Claude, set `PermissionPreset` to `manualReview`
+or `autoReview` on each call. Pi accepts only the `fullAccess` preset.
 
 Run the example from the repository root. The example uses synthetic providers.
 

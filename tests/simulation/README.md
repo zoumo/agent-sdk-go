@@ -8,7 +8,6 @@ Replay library prepares fixtures, matches protocol traffic, and produces
 typed results. [Go library contract](docs/library-mode.md)
 
 <a id="fixtures-仿真录制与测试输入"></a>
-<a id="stage-handoff"></a>
 
 ## 仿真录制与测试输入
 
@@ -98,7 +97,7 @@ notification signals when tests can half-close SDK input.
 
 ### Replay Pi extensions through the unified Go SDK
 
-The fixed recording gate replays official Pi cases through the native Go SDK. [Shared cases](../../replay/docs/cases.md)
+The fixed recording gate replays official Pi cases through the native Go SDK. [Shared cases](../../docs/sdk/validation-cases.md)
 Use this entry point for controlled captures made through the unified Client.
 On a Unix host with a writable `/tmp`, build the driver from the repository
 root with the same-module Replay library.

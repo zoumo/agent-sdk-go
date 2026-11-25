@@ -99,7 +99,7 @@ func (m *mockTransaction) finalize(ctx context.Context, stream *os.File, replayE
 }
 
 func (m *mockTransaction) finalizeOutcome(ctx context.Context, stream *os.File, replayErr error) error {
-	replayErr = errors.Join(replayErr, contextFailure(ctx))
+	replayErr = errors.Join(replayErr, ContextFailure(ctx))
 	processErr := m.writeProcessReceipt(replayErr)
 	err := errors.Join(replayErr, processErr)
 	status := "passed"
@@ -116,7 +116,7 @@ func (m *mockTransaction) finalizeOutcome(ctx context.Context, stream *os.File, 
 	if !allPassed {
 		return finishTransactionFailure(ctx, &m.transactionContext, stream, m.fail, err, errors.New("mock execution has failed connections"))
 	}
-	if contextErr := contextFailure(ctx); contextErr != nil {
+	if contextErr := ContextFailure(ctx); contextErr != nil {
 		if _, _, settleErr := m.settleConnection("failed"); settleErr != nil {
 			return finishTransactionFailure(ctx, &m.transactionContext, stream, m.fail, contextErr, settleErr)
 		}
@@ -259,7 +259,7 @@ func RunMock(ctx context.Context, request MockRequest, policy MockPolicy) (resul
 	if err := policy.Replay(ctx, run.context()); err != nil {
 		return result, err
 	}
-	runErr = contextFailure(ctx)
+	runErr = ContextFailure(ctx)
 	completed = runErr == nil
 	return result, runErr
 }

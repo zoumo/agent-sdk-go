@@ -13,7 +13,7 @@ driver 通过官方 SDK 执行一个 case 并给出业务断言；Go 工具负�
 | --- | --- |
 | `codex/rust/` | Codex 官方 Rust SDK driver、上游源码 pin 和安装器 |
 | `claude/typescript/` | Claude 官方 TypeScript SDK driver |
-| `pi/official/` | Pi 官方 TypeScript RpcClient 与原生 stdio 扩展 driver |
+| `pi/javascript/` | Pi 官方 TypeScript RpcClient 与原生 stdio 扩展 driver |
 
 ## 构建与测试
 
@@ -34,7 +34,7 @@ make replay-bundle
 Pi driver 的 `prepack` 从 SDK embed 所用的源码复制扩展。用以下命令单独打包 Pi driver。
 
 ```sh
-npm pack ./replay/drivers/pi/official --offline --pack-destination /absolute/output
+npm pack ./replay/drivers/pi/javascript --offline --pack-destination /absolute/output
 ```
 
 ## 官方 SDK 环境
@@ -104,7 +104,7 @@ command -v agent-sdk-testify-pi
 对话 ID 回答，使用命令 ID 匹配控制回执。录制时 Replay 加载固定的 Go SDK 扩展，
 业务报告保留 Pi 版本、扩展修订和哈希。运行 `012` 时，在 `prepare` 中设置两个
 支持思考等级的不同模型，分别传给 `--initial-model` 和 `--model`。
-[扩展来源](pi/official/pi-extension/SOURCE.md)
+[扩展来源](pi/javascript/NOTICE)
 
 ## 按 case 录制
 
@@ -137,7 +137,7 @@ command -v agent-sdk-testify-pi
 
 上下文注入使用 `SDK-CASE-037` 检查空闲状态，使用 `SDK-CASE-038` 检查执行中状态。
 Codex 和 Claude driver 都从原始录制核对注入与后续查询的边界。下面的命令录制 Claude 的空闲场景。
-[上下文注入验收](../docs/cases.md#中断关闭与独立查询)
+[上下文注入验收](../../docs/sdk/validation-cases.md#中断关闭与独立查询)
 
 ```sh
 agent-replay prepare --agent claude --case SDK-CASE-037 \
@@ -238,7 +238,7 @@ record run 失败，不回写 material 或回滚 current。未领取 execution �
 
 driver 只执行一个请求，不实现 registry、双向命令、步骤 DSL 或 SDK 覆盖门禁。
 case 输入、agent 参数和断言边界来自 [场景目录](../data/scenarios) 与
-[共同验收](../docs/cases.md)。
+[共同验收](../../docs/sdk/validation-cases.md)。
 
 <a id="fixtures-仿真录制与测试输入"></a>
 

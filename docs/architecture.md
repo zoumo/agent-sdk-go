@@ -22,7 +22,7 @@ The [architecture decision](adr/0007-sdk-replay-package-ownership.md) defines pa
   preserving original native answer handles and native-specific options.
 - The `agent` core production code must use only the standard library and the
   SDK-internal carrier validator and shared `mcp` contract described below. It must not
-  import either native SDK, MASS or recording/replay code. Adapters may
+  import a native SDK, MASS or recording/replay code. Adapters may
   import the corresponding native SDK, `agent`, and reviewed SDK-internal
   mechanics (`agent/internal/corelease`, `agent/internal/eventstream`,
   `agent/internal/eventenvelope`, `agent/internal/interactionledger`,

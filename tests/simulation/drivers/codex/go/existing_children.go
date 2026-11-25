@@ -95,10 +95,16 @@ func AcceptExistingChildren(ctx context.Context, root string, mock *mocktest.Ses
 		requests[2].Method != "thread/resume" || requests[len(requests)-1].Method != "thread/unsubscribe" {
 		return errors.New("existing-child recording lacks resume/query/detach flow")
 	}
+	queries := make([]types.ThreadListParams, 0, len(requests)-4)
 	for _, request := range requests[3 : len(requests)-1] {
 		if request.Method != "thread/list" {
 			return errors.New("existing-child observation submitted or queried unrelated work")
 		}
+		var query types.ThreadListParams
+		if err := json.Unmarshal(request.Params, &query); err != nil {
+			return err
+		}
+		queries = append(queries, query)
 	}
 	var init types.InitializeParams
 	if err := json.Unmarshal(requests[0].Params, &init); err != nil {
@@ -135,18 +141,15 @@ func AcceptExistingChildren(ctx context.Context, root string, mock *mocktest.Ses
 	if _, ok := s.StartResponse(); ok {
 		return errors.New("resume masquerades as a start")
 	}
-	page, err := s.ListSubagents(ctx, codex.SubagentQuery{
-		Limit:       types.Some(uint32(10)),
-		SourceKinds: types.Some([]types.ThreadSourceKind{types.ThreadSourceKindSubAgentThreadSpawn}),
-	})
+	pages, err := listExistingChildren(ctx, c, s, queries)
 	if err != nil {
 		return err
 	}
-	if !page.Coverage.EnumerationComplete || !page.Coverage.EndReached || len(page.Pages) != len(requests)-4 {
+	if len(pages) != len(queries) {
 		return errors.New("go descendant coverage differs")
 	}
 	var agents []string
-	for i, p := range page.Pages {
+	for i, p := range pages {
 		r := requests[i+3]
 		encoded, err = json.Marshal(p)
 		if err != nil {
@@ -206,6 +209,57 @@ func AcceptExistingChildren(ctx context.Context, root string, mock *mocktest.Ses
 		}
 	}
 	return nil
+}
+
+func listExistingChildren(ctx context.Context, client *codex.Client, session *codex.Session, queries []types.ThreadListParams) ([]types.ThreadListResponse, error) {
+	sources := []types.ThreadSourceKind{types.ThreadSourceKindSubAgentThreadSpawn}
+	if len(queries[0].UnknownFields) == 0 {
+		page, err := session.ListSubagents(ctx, codex.SubagentQuery{
+			Limit:       types.Some(uint32(10)),
+			SourceKinds: types.Some(sources),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !page.Coverage.EnumerationComplete || !page.Coverage.EndReached {
+			return nil, errors.New("go descendant coverage differs")
+		}
+		return page.Pages, nil
+	}
+
+	// This native query has fields outside SubagentQuery. Use the typed client
+	// and check that the recorded requests walk the same descendant filter to EOF.
+	pages := make([]types.ThreadListResponse, 0, len(queries))
+	seen := make(map[string]bool)
+	var cursor string
+	for i, query := range queries {
+		if query.AncestorThreadID.ValueOr("") != session.ThreadID() ||
+			(query.ParentThreadID.IsSet() && !query.ParentThreadID.IsNull()) ||
+			!slices.Equal(query.SourceKinds.ValueOr(nil), sources) || query.Limit.ValueOr(0) != 10 {
+			return nil, errors.New("existing-child query differs from recorded setup selection")
+		}
+		requestCursor, hasCursor := query.Cursor.Get()
+		if requestCursor != cursor || hasCursor != (i > 0) {
+			return nil, errors.New("existing-child query cursor differs from previous page")
+		}
+		page, err := client.ListThreads(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, page)
+		if i == len(queries)-1 {
+			if !page.NextCursor.IsNull() {
+				return nil, errors.New("existing-child enumeration did not reach the native end cursor")
+			}
+			break
+		}
+		cursor = page.NextCursor.ValueOr("")
+		if cursor == "" || seen[cursor] {
+			return nil, errors.New("existing-child enumeration cursor is missing or repeated")
+		}
+		seen[cursor] = true
+	}
+	return pages, nil
 }
 
 func canonicalJSON(raw json.RawMessage) (string, error) {

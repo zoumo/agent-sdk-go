@@ -35,15 +35,29 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 		IsError    bool            `json:"isError"`
 		DurationMs *float64        `json:"durationMs"`
 	}
-	meta := map[string]any{"pi": map[string]any{"nativeType": native.Type}}
+	piMeta := map[string]any{"nativeType": native.Type}
+	meta := map[string]any{"pi": piMeta}
 	envelope := eventenvelope.Envelope{SessionID: s.ID()}
 	var occurred time.Time
 	var item string
 	var payloads []agent.Payload
 	fallback := agent.UnsupportedNativeEventPayload{AgentType: "pi", Raw: native.Raw}
-	if json.Unmarshal(native.Raw, &f) == nil {
+	if native.Type == "extension_ui_request" || json.Unmarshal(native.Raw, &f) == nil {
 		switch native.Type {
+		case "extension_ui_request":
+			var nativeID string
+			var err error
+			payloads, item, nativeID, err = s.registerUI(native)
+			if err != nil {
+				return nil, err
+			}
+			if nativeID != "" {
+				piMeta["nativeRequestId"] = nativeID
+			}
 		case "agent_start", "agent_settled":
+			if native.Type == "agent_settled" {
+				payloads = append(payloads, s.settleInteractions("", agent.ErrorReasonNativeRequestEnded, false, false)...)
+			}
 			payload, err := s.changeState(native.Type == "agent_start", f.Aborted)
 			if err != nil {
 				return nil, err
@@ -93,6 +107,9 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 				}
 			}
 		case "tool_execution_start", "tool_execution_end":
+			if native.Type == "tool_execution_end" {
+				payloads = append(payloads, s.toolInteractionClosure(f.ToolCallID, f.ToolName, f.Result, f.IsError, f.DurationMs)...)
+			}
 			kind, known := toolKind(f.ToolName)
 			if !known || f.ToolCallID == "" {
 				break
@@ -235,6 +252,8 @@ func toolKind(name string) (agent.ToolKind, bool) {
 		return agent.ToolKindEdit, true
 	case "find", "grep":
 		return agent.ToolKindSearch, true
+	case sdkQuestionTool:
+		return agent.ToolKindOther, true
 	default:
 		return "", false
 	}

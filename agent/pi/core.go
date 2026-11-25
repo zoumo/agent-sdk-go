@@ -6,6 +6,12 @@
 // child process overlay. On macOS and Linux, ShellEnv loads a Pi 1.6.0
 // extension that applies its overlay to the model-facing bash tool.
 //
+// Use OpenWithOptions or ResumeWithOptions to require approval before local
+// write, edit, bash, and PowerShell tools. Set agent.Features.AgentQuestions
+// explicitly to true to expose the single-question tool. Each dialog uses a live
+// InteractionRef, expires independently and accepts one answer. Pi's response
+// channel confirms a local frame write. The tool result reports its outcome.
+//
 // StartOrSteer accepts one optional text block followed by inline images.
 // A queued receipt confirms native admission. Watch for an idle state update
 // after Interrupt before submitting new work that must run independently.
@@ -20,10 +26,12 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"math"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -69,15 +77,16 @@ func New(config Config) *Core {
 	return &Core{
 		config:    config,
 		telemetry: telemetry.New("pi", config.TracerProvider, config.MeterProvider),
-		leases:    corelease.New[struct{}, *session](capabilities(shellEnvSupported()), nil, nil),
+		leases:    corelease.New[struct{}, *session](capabilities(shellEnvSupported(), true, true), nil, nil),
 		owners:    make(map[string]bool),
 	}
 }
 
-func capabilities(shellEnv bool) agent.Capabilities {
+func capabilities(shellEnv, approval, questions bool) agent.Capabilities {
 	return agent.Capabilities{
 		agent.CapabilityTextInput: true, agent.CapabilityImageInput: true,
 		agent.CapabilityProcessEnv: true, agent.CapabilityShellEnv: shellEnv,
+		agent.CapabilityPermission: approval, agent.CapabilityForm: questions,
 	}
 }
 
@@ -99,24 +108,47 @@ func (p *Core) Stop(ctx context.Context) error {
 	return err
 }
 
+// SessionOptions contains the Pi-specific settings for one Open or Resume.
+type SessionOptions struct {
+	// ToolApproval asks for confirmation before Pi's local write, edit,
+	// bash, and PowerShell tools execute. It provides no sandbox.
+	ToolApproval bool
+	// InteractionTimeout bounds each SDK dialog. Zero selects one minute.
+	InteractionTimeout time.Duration
+}
+
 func (p *Core) Open(ctx context.Context, options agent.OpenOptions) (agent.Session, error) {
-	return p.attach(ctx, options, "", telemetry.Open)
+	return p.OpenWithOptions(ctx, options, SessionOptions{})
+}
+
+// OpenWithOptions starts a Pi session with additional per-session settings.
+func (p *Core) OpenWithOptions(ctx context.Context, options agent.OpenOptions, piOptions SessionOptions) (agent.Session, error) {
+	return p.attach(ctx, options, piOptions, "", telemetry.Open)
 }
 
 func (p *Core) Resume(ctx context.Context, options agent.ResumeOptions) (agent.Session, error) {
+	return p.ResumeWithOptions(ctx, options, SessionOptions{})
+}
+
+// ResumeWithOptions starts Pi for an exact persisted session with new settings.
+func (p *Core) ResumeWithOptions(ctx context.Context, options agent.ResumeOptions, piOptions SessionOptions) (agent.Session, error) {
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
-	return p.attach(ctx, options.OpenOptions, options.SessionID, telemetry.Resume)
+	return p.attach(ctx, options.OpenOptions, piOptions, options.SessionID, telemetry.Resume)
 }
 
-func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID string, op telemetry.Operation) (_ agent.Session, err error) {
+func (p *Core) attach(ctx context.Context, options agent.OpenOptions, piOptions SessionOptions, resumeID string, op telemetry.Operation) (_ agent.Session, err error) {
 	ctx, observation := p.telemetry.Begin(ctx, op)
 	defer func() { observation.End("", err) }()
 	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 	if err := validateOptions(options); err != nil {
+		return nil, err
+	}
+	extensionConfig, err := makeSessionExtensionConfig(options, piOptions)
+	if err != nil {
 		return nil, err
 	}
 	if p.config.SessionDir != "" && !filepath.IsAbs(p.config.SessionDir) {
@@ -142,7 +174,7 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 			Model: options.Config.Model, ThinkingLevel: options.Config.Effort,
 			NoExtensions: true, NoTools: options.Features.RestrictLocalTools, AdditionalSystemPrompt: options.AdditionalSystemPrompt,
 		}
-		extension, err := materializeSessionExtension(sessionExtensionConfig{ShellEnv: options.ShellEnv})
+		extension, err := materializeSessionExtension(extensionConfig)
 		if err != nil {
 			return nil, operationError(string(op), err)
 		}
@@ -218,10 +250,30 @@ func validateOptions(o agent.OpenOptions) error {
 		return unsupported(agent.ErrorReasonShellEnvUnsupported, "Pi ShellEnv requires the local bash tool on macOS or Linux")
 	case len(o.MCPServers) > 0 || o.MCPFiles != nil:
 		return unsupported("mcp_servers_unsupported", "Pi per-session MCP configuration is unsupported")
-	case o.Features.AgentQuestions != nil && *o.Features.AgentQuestions:
-		return unsupported("agent_questions_unsupported", "Pi extension questions are unsupported")
 	}
 	return validateThinkingLevel(o.Config.Effort)
+}
+
+func makeSessionExtensionConfig(options agent.OpenOptions, piOptions SessionOptions) (sessionExtensionConfig, error) {
+	timeout := piOptions.InteractionTimeout
+	if timeout < 0 || timeout > time.Duration(math.MaxInt32)*time.Millisecond || timeout%time.Millisecond != 0 {
+		return sessionExtensionConfig{}, &agent.Error{
+			Code: agent.ErrorInvalidArgument, Reason: "pi_interaction_timeout_invalid",
+			Message: "Pi interaction timeout must be a nonnegative whole millisecond within the native timer range",
+		}
+	}
+	if piOptions.ToolApproval && options.Features.RestrictLocalTools {
+		return sessionExtensionConfig{}, unsupported("pi_tool_approval_unavailable", "Pi tool approval requires local tools")
+	}
+	questions := options.Features.AgentQuestions != nil && *options.Features.AgentQuestions
+	config := sessionExtensionConfig{ShellEnv: options.ShellEnv, ToolApproval: piOptions.ToolApproval, AgentQuestions: questions}
+	if config.ToolApproval || config.AgentQuestions {
+		if timeout == 0 {
+			timeout = time.Minute
+		}
+		config.InteractionTimeoutMS = timeout.Milliseconds()
+	}
+	return config, nil
 }
 
 func unsupported(reason, msg string) error {

@@ -18,16 +18,21 @@ const sessionExtensionReady = "agent-sdk-session-ready"
 var sessionExtensionSource []byte
 
 type sessionExtensionConfig struct {
-	ShellEnv map[string]string `json:"shellEnv,omitempty"`
+	ShellEnv             map[string]string `json:"shellEnv,omitempty"`
+	ToolApproval         bool              `json:"toolApproval,omitempty"`
+	AgentQuestions       bool              `json:"agentQuestions,omitempty"`
+	InteractionTimeoutMS int64             `json:"interactionTimeoutMs,omitempty"`
 }
 
 type sessionExtension struct {
-	path     string
-	shellEnv bool
+	path           string
+	shellEnv       bool
+	toolApproval   bool
+	agentQuestions bool
 }
 
 func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtension, error) {
-	if len(config.ShellEnv) == 0 {
+	if len(config.ShellEnv) == 0 && !config.ToolApproval && !config.AgentQuestions {
 		return nil, nil
 	}
 	input, err := json.Marshal(config)
@@ -38,7 +43,10 @@ func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtensi
 	if err != nil {
 		return nil, err
 	}
-	extension := &sessionExtension{path: filepath.Join(dir, "session.ts"), shellEnv: len(config.ShellEnv) != 0}
+	extension := &sessionExtension{
+		path: filepath.Join(dir, "session.ts"), shellEnv: len(config.ShellEnv) != 0,
+		toolApproval: config.ToolApproval, agentQuestions: config.AgentQuestions,
+	}
 	if err := os.WriteFile(extension.path, sessionExtensionSource, 0o600); err != nil {
 		return nil, errors.Join(err, extension.remove())
 	}

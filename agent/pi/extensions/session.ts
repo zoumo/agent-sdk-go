@@ -6,10 +6,12 @@ import {
 	createBashToolDefinition,
 	VERSION,
 	type ExtensionAPI,
+	type McpServerConfig,
 } from "@earendil-works/pi-coding-agent";
 
 interface SessionConfig {
 	shellEnv?: Record<string, string>;
+	mcpServers?: { name: string; config: McpServerConfig }[];
 }
 
 function resolveShellPath(path?: string): string | undefined {
@@ -26,6 +28,9 @@ export default function sessionExtension(pi: ExtensionAPI) {
 	const config: SessionConfig = JSON.parse(
 		readFileSync(new URL("./session.json", import.meta.url), "utf8"),
 	);
+	for (const server of config.mcpServers ?? []) {
+		pi.registerMcpServer(server.name, server.config);
+	}
 	if (config.shellEnv) {
 		const shellEnv = config.shellEnv;
 		const bash = createBashToolDefinition(process.cwd());

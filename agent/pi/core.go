@@ -119,6 +119,10 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 	if err := validateOptions(options); err != nil {
 		return nil, err
 	}
+	mcpServers, err := sessionMCPServers(options)
+	if err != nil {
+		return nil, err
+	}
 	if p.config.SessionDir != "" && !filepath.IsAbs(p.config.SessionDir) {
 		return nil, &agent.Error{Code: agent.ErrorInvalidArgument, Reason: "session_dir_not_absolute", Message: "Pi session directory must be absolute"}
 	}
@@ -142,12 +146,15 @@ func (p *Core) attach(ctx context.Context, options agent.OpenOptions, resumeID s
 			Model: options.Config.Model, ThinkingLevel: options.Config.Effort,
 			NoExtensions: true, NoTools: options.Features.RestrictLocalTools, AdditionalSystemPrompt: options.AdditionalSystemPrompt,
 		}
-		extension, err := materializeSessionExtension(sessionExtensionConfig{ShellEnv: options.ShellEnv})
+		extension, err := materializeSessionExtension(sessionExtensionConfig{ShellEnv: options.ShellEnv, MCPServers: mcpServers})
 		if err != nil {
 			return nil, operationError(string(op), err)
 		}
 		if extension != nil {
 			launch.ExtensionPaths = []string{extension.path}
+		}
+		if len(mcpServers) != 0 {
+			launch.ExtensionPaths = append(launch.ExtensionPaths, "builtin:mcp", "builtin:codemode", "builtin:tool-search")
 		}
 		native, err := pi.Open(ctx, launch)
 		if err != nil {
@@ -216,8 +223,6 @@ func validateOptions(o agent.OpenOptions) error {
 		return unsupported(agent.ErrorReasonAdditionalDirsUnsupported, "Pi additional directories are unsupported")
 	case len(o.ShellEnv) > 0 && (!shellEnvSupported() || o.Features.RestrictLocalTools):
 		return unsupported(agent.ErrorReasonShellEnvUnsupported, "Pi ShellEnv requires the local bash tool on macOS or Linux")
-	case len(o.MCPServers) > 0 || o.MCPFiles != nil:
-		return unsupported("mcp_servers_unsupported", "Pi per-session MCP configuration is unsupported")
 	case o.Features.AgentQuestions != nil && *o.Features.AgentQuestions:
 		return unsupported("agent_questions_unsupported", "Pi extension questions are unsupported")
 	}

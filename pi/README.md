@@ -19,6 +19,23 @@ Set `Options.ExtensionPaths` to load extensions explicitly with `-e`.
 `Session.Commands` reports the commands, prompt templates, and skills Pi
 currently exposes.
 
+## MCP servers in the unified adapter
+
+Pass the complete list of application-managed MCP servers in
+`agent.OpenOptions.MCPServers`. Repeat the list on Resume. Pi 1.6.0 connects
+to stdio and Streamable HTTP servers and exposes their tools directly to the
+model. HTTP authentication can use literal headers, file-backed values, or
+environment variables available to the Pi process.
+
+Pi also reads its user MCP file and trusted project MCP file. A server from
+either file takes precedence over a registration with the same name. Pi
+treats hyphens and underscores as equivalent in server names. The adapter
+rejects duplicate registrations under this rule.
+
+Open and Resume confirm extension initialization. Pi connects MCP servers in
+the background. Use Pi's MCP connection status or a successful tool result
+to verify that a server is ready. [Pi MCP configuration](https://github.com/earendil-works/pi/blob/v1.6.0/packages/coding-agent/docs/mcp.md)
+
 ## Protocol source
 
 The bindings use the MIT-licensed Pi v1.6.0 protocol at Git commit `faac585884ae2c013a6b1400f3e9e77f10b34bac`. [Pi release](https://github.com/earendil-works/pi/releases/tag/v1.6.0), [MIT license](https://github.com/earendil-works/pi/blob/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE)

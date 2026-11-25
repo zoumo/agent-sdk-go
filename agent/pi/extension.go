@@ -18,7 +18,8 @@ const sessionExtensionReady = "agent-sdk-session-ready"
 var sessionExtensionSource []byte
 
 type sessionExtensionConfig struct {
-	ShellEnv map[string]string `json:"shellEnv,omitempty"`
+	ShellEnv   map[string]string  `json:"shellEnv,omitempty"`
+	MCPServers []sessionMCPServer `json:"mcpServers,omitempty"`
 }
 
 type sessionExtension struct {
@@ -27,7 +28,7 @@ type sessionExtension struct {
 }
 
 func materializeSessionExtension(config sessionExtensionConfig) (*sessionExtension, error) {
-	if len(config.ShellEnv) == 0 {
+	if len(config.ShellEnv) == 0 && len(config.MCPServers) == 0 {
 		return nil, nil
 	}
 	input, err := json.Marshal(config)

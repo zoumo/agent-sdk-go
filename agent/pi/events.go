@@ -3,6 +3,7 @@ package agentpi
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zoumo/agent-sdk-go/agent"
@@ -94,19 +95,24 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 			}
 		case "tool_execution_start", "tool_execution_end":
 			kind, known := toolKind(f.ToolName)
+			provider := agent.ToolProviderAgent
+			if isMCPTool(f.ToolName) {
+				kind, known = agent.ToolKindOther, true
+				provider = agent.ToolProviderMCP
+			}
 			if !known || f.ToolCallID == "" {
 				break
 			}
 			item = f.ToolCallID
 			if native.Type == "tool_execution_start" && f.Args != nil {
-				payloads = append(payloads, agent.ToolCallPayload{ID: item, Kind: kind, ToolName: f.ToolName, Provider: agent.ToolProviderAgent, RawInput: f.Args, Status: "in_progress"})
+				payloads = append(payloads, agent.ToolCallPayload{ID: item, Kind: kind, ToolName: f.ToolName, Provider: provider, RawInput: f.Args, Status: "in_progress"})
 			} else if native.Type == "tool_execution_end" && f.Result != nil {
 				var raw any = f.Result
 				status := "completed"
 				if f.IsError {
 					status = "failed"
 				}
-				payloads = append(payloads, agent.ToolResultPayload{ID: item, Kind: kind, ToolName: f.ToolName, Provider: agent.ToolProviderAgent, RawOutput: &raw, DurationMs: f.DurationMs, Status: status})
+				payloads = append(payloads, agent.ToolResultPayload{ID: item, Kind: kind, ToolName: f.ToolName, Provider: provider, RawOutput: &raw, DurationMs: f.DurationMs, Status: status})
 			}
 		}
 	}
@@ -129,6 +135,12 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 		events = append(events, event)
 	}
 	return events, nil
+}
+
+// Pi uses these names to classify MCP tools when filtering its tool set.
+func isMCPTool(name string) bool {
+	return strings.HasPrefix(name, "mcp__") || name == "list_mcp_resources" ||
+		name == "list_mcp_resource_templates" || name == "read_mcp_resource"
 }
 
 func (s *session) changeState(running, aborted bool) (agent.StateUpdatePayload, error) {

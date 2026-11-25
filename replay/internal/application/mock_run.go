@@ -65,7 +65,6 @@ type MockRun struct {
 	mu          sync.RWMutex
 	claimed     bool
 	finished    bool
-	stopReason  error
 	stopErr     error
 	terminal    *lifecycle.MockResult
 	terminalErr error
@@ -123,7 +122,7 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 		case <-ctx.Done():
 			select {
 			case <-run.claimDone:
-				_ = run.stop(lifecycle.ContextFailureClass(ctx.Err()), ctx.Err())
+				_ = run.stop(lifecycle.ContextFailure(ctx))
 			case <-run.done:
 			}
 		case <-run.done:
@@ -149,7 +148,6 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 			},
 			FullConsumption: run.markFullConsumption,
 			CloseStreams:    run.streams.Close,
-			StopCause:       run.stopCause,
 		})
 		run.finish(result, runErr)
 	}()
@@ -185,7 +183,7 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 	}
 	if !haveStart {
 		if run.wasClaimed() {
-			_ = run.stop(lifecycle.ContextFailureClass(ctx.Err()), ctx.Err())
+			_ = run.stop(lifecycle.ContextFailure(ctx))
 			<-run.done
 			err := run.terminalError()
 			return run, err
@@ -200,7 +198,7 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 		return nil, err
 	}
 	if ctx.Err() != nil {
-		_ = run.stop(lifecycle.ContextFailureClass(ctx.Err()), ctx.Err())
+		_ = run.stop(lifecycle.ContextFailure(ctx))
 		<-run.done
 		err := run.terminalError()
 		return run, err
@@ -245,7 +243,7 @@ func (r *MockRun) Wait(ctx context.Context) (*lifecycle.MockResult, error) {
 		select {
 		case <-r.done:
 		default:
-			_ = r.stop(lifecycle.ContextFailureClass(ctx.Err()), ctx.Err())
+			_ = r.stop(lifecycle.ContextFailure(ctx))
 		}
 		<-r.done
 	}
@@ -259,7 +257,7 @@ func (r *MockRun) Abort() error {
 	if r == nil {
 		return errors.New("mock run is nil")
 	}
-	return r.stop(lifecycle.FailureClassAborted, errors.New("mock run aborted"))
+	return r.stop(lifecycle.ClassifyFailure(lifecycle.FailureClassAborted, errors.New("mock run aborted")))
 }
 
 func (r *MockRun) markFullConsumption() {
@@ -269,7 +267,7 @@ func (r *MockRun) markFullConsumption() {
 	})
 }
 
-func (r *MockRun) stop(class lifecycle.FailureClass, cause error) error {
+func (r *MockRun) stop(cause error) error {
 	r.mu.RLock()
 	finished := r.finished
 	r.mu.RUnlock()
@@ -277,12 +275,8 @@ func (r *MockRun) stop(class lifecycle.FailureClass, cause error) error {
 		return nil
 	}
 	r.stopOnce.Do(func() {
-		classified := lifecycle.ClassifyFailure(class, cause)
-		r.mu.Lock()
-		r.stopReason = classified
-		r.mu.Unlock()
-		r.cancel(classified)
-		closeErr := r.streams.Close(classified)
+		r.cancel(cause)
+		closeErr := r.streams.Close(lifecycle.ContextFailure(r.runCtx))
 		r.mu.Lock()
 		r.stopErr = closeErr
 		r.mu.Unlock()
@@ -290,12 +284,6 @@ func (r *MockRun) stop(class lifecycle.FailureClass, cause error) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.stopErr
-}
-
-func (r *MockRun) stopCause() error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.stopReason
 }
 
 func (r *MockRun) finish(result *lifecycle.MockResult, runErr error) {

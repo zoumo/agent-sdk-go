@@ -62,25 +62,21 @@ func FailureClassOf(err error) FailureClass {
 	return ""
 }
 
-// ContextFailureClass maps caller-context termination to the terminal class
-// used by mock evidence.
-func ContextFailureClass(err error) FailureClass {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return FailureClassTimeout
-	}
-	return FailureClassCanceled
-}
-
-func contextFailure(ctx context.Context) error {
+// ContextFailure returns the first cancellation cause with its terminal class.
+func ContextFailure(ctx context.Context) error {
 	if ctx == nil || ctx.Err() == nil {
 		return nil
 	}
 	cause := context.Cause(ctx)
-	if cause == nil {
-		cause = ctx.Err()
-	}
 	if FailureClassOf(cause) != "" {
 		return cause
 	}
-	return ClassifyFailure(ContextFailureClass(ctx.Err()), cause)
+	err := ctx.Err()
+	if !errors.Is(cause, err) {
+		cause = errors.Join(err, cause)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ClassifyFailure(FailureClassTimeout, cause)
+	}
+	return ClassifyFailure(FailureClassCanceled, cause)
 }

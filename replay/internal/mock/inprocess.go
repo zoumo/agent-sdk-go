@@ -26,7 +26,6 @@ type InProcessCallbacks struct {
 	Started         func(lifecycle.MockContext) error
 	FullConsumption func()
 	CloseStreams    func(error) error
-	StopCause       func() error
 }
 
 type inProcessReplayPolicy struct {
@@ -95,11 +94,7 @@ func replayInProcessConnection(ctx context.Context, policy inProcessReplayPolicy
 		return lifecycle.ClassifyFailure(lifecycle.FailureClassCleanup, errors.Join(openErr, closeErr))
 	}
 	defer func() {
-		stopCause := policy.callbacks.StopCause()
-		if stopCause == nil && ctx.Err() != nil {
-			stopCause = lifecycle.ClassifyFailure(lifecycle.ContextFailureClass(ctx.Err()), ctx.Err())
-		}
-		err = errors.Join(err, outcome.finish(stopCause, policy.callbacks.CloseStreams))
+		err = errors.Join(err, outcome.finish(lifecycle.ContextFailure(ctx), policy.callbacks.CloseStreams))
 	}()
 
 	manifest, document, loadErr := loadMockPhase(run.Artifact().Path, policy.prepared.Agent, run.Connection())
@@ -113,7 +108,7 @@ func replayInProcessConnection(ctx context.Context, policy inProcessReplayPolicy
 	defer cancel()
 	closed := make(chan struct{})
 	stop := context.AfterFunc(replayCtx, func() {
-		_ = policy.callbacks.CloseStreams(replayCtx.Err())
+		_ = policy.callbacks.CloseStreams(lifecycle.ContextFailure(replayCtx))
 		close(closed)
 	})
 	defer func() {

@@ -611,6 +611,25 @@ func TestLibraryStartMockAgentAbortAndCancellation(t *testing.T) {
 		requireFailureClass(t, result, agenttestify.FailureClassCanceled)
 	})
 
+	t.Run("abort after start context canceled", func(t *testing.T) {
+		prepared := prepareStartMockFixture(t, "SDK-CASE-001")
+		ctx, cancel := context.WithCancelCause(t.Context())
+		defer cancel(nil)
+		run, err := prepared.StartMockAgent(ctx, agenttestify.MockAgentOptions{}, agenttestify.StartMockAgentStreams{
+			Reader: &blockingInput{},
+			Writer: &testWriteCloser{},
+			Stderr: &bytes.Buffer{},
+		})
+		require.NoError(t, err)
+		cause := errors.New("simulation interrupted")
+		cancel(cause)
+		require.NoError(t, run.Abort())
+		result, err := run.Wait(t.Context())
+		require.ErrorIs(t, err, context.Canceled)
+		require.ErrorIs(t, err, cause)
+		requireFailureClass(t, result, agenttestify.FailureClassCanceled)
+	})
+
 	t.Run("wait context", func(t *testing.T) {
 		prepared := prepareStartMockFixture(t, "SDK-CASE-001")
 		run, err := prepared.StartMockAgent(t.Context(), agenttestify.MockAgentOptions{}, agenttestify.StartMockAgentStreams{

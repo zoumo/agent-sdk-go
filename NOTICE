@@ -1,11 +1,11 @@
 agent-sdk-go incorporates the following native SDKs with their original history.
 
-Codex: https://github.com/zoumo/codex-sdk-go
-Source main: 0719539580dce97726aba7ddb56c7c6ae0c24362
+Codex: zoumo/codex-sdk-go
+Imported source: https://github.com/zoumo/agent-sdk-go/tree/0719539580dce97726aba7ddb56c7c6ae0c24362
 See client/codex/LICENSE and client/codex/NOTICE for original attribution and upstream protocol provenance.
 
-Claude: https://github.com/zoumo/claude-agent-sdk-go
-Source main: 72041470958a0d9f2f8e6ff5c0086a66ef193745
+Claude: zoumo/claude-agent-sdk-go
+Imported source: https://github.com/zoumo/agent-sdk-go/tree/72041470958a0d9f2f8e6ff5c0086a66ef193745
 See client/claude/LICENSE and client/claude/NOTICE for original attribution and upstream protocol provenance.
 
 The Go Pi client implements the RPC protocol of @earendil-works/pi-coding-agent 1.6.0.

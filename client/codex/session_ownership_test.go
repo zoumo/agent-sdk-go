@@ -40,6 +40,38 @@ func TestSessionCapacityReservedUntilStartCompletes(t *testing.T) {
 	require.NoError(t, second.Close())
 }
 
+func TestSessionStartRejectsInvalidResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mode string
+	}{
+		{name: "empty thread ID", mode: "session-start-empty-id"},
+		{name: "invalid model type", mode: "session-start-invalid-model"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := startFake(t, tc.mode, codex.Limits{Subscriptions: 1})
+			options := codex.SessionOptions{Client: f.c}
+			s, err := codex.Open(t.Context(), options)
+			require.Nil(t, s)
+			var call *codex.CallError
+			require.ErrorAs(t, err, &call)
+			require.Equal(t, "thread/start", call.Method)
+			require.Equal(t, codex.Responded, call.Dispatch)
+			if tc.mode == "session-start-empty-id" {
+				require.ErrorIs(t, err, codex.ErrProtocol)
+			} else {
+				var decode *json.UnmarshalTypeError
+				require.ErrorAs(t, err, &decode)
+			}
+
+			s, err = codex.Open(t.Context(), options)
+			require.NoError(t, err)
+			defer s.Close()
+			require.Equal(t, "main-2", s.ThreadID())
+		})
+	}
+}
+
 func TestConcurrentNativeOperationsFenceAdmissionUntilLastCompletion(t *testing.T) {
 	f := startFake(t, "session-operations", codex.Limits{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

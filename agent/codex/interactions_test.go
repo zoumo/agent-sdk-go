@@ -175,7 +175,8 @@ func TestPermissionProfileApprovalRoundTrip(t *testing.T) {
 				`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"permissions"}}`,
 			)
 			frames = append(frames, codexCloseFrames(94, "root-a")...)
-			session, stream := openInteractionSession(t, ctx, frames, agent.Features{})
+			// This case observes a completed answer write before native resolution.
+			session, stream, releaseResolution := openSessionWithGatedFrame(t, ctx, frames, "serverRequest/resolved")
 			submitInteractionTurn(t, ctx, session)
 			require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
 			require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
@@ -227,6 +228,7 @@ func TestPermissionProfileApprovalRoundTrip(t *testing.T) {
 			receipt, err := session.Answer(ctx, event.Interaction, agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: selected})
 			require.NoError(t, err)
 			assert.Equal(t, new(true), receipt.Acceptance.Sent)
+			releaseResolution()
 			closed := nextInteractionClosed(t, ctx, stream)
 			assert.Equal(t, event.Interaction, closed.Interaction)
 			assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
@@ -839,7 +841,7 @@ func TestApprovalClaimsUnknownSubmission(t *testing.T) {
 		`<{"id":94,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
 	)
 	frames = append(frames, codexCloseFrames(95, "root-a")...)
-	session, stream, release := openSessionBeforeApproval(t, ctx, frames)
+	session, stream, release := openSessionWithGatedFrame(t, ctx, frames, "item/commandExecution/requestApproval")
 
 	_, err := session.StartOrSteer(ctx, textInput("run"))
 	require.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(err))
@@ -870,7 +872,7 @@ func TestApprovalWithoutSubmissionIsRejected(t *testing.T) {
 		`>{"id":"approval-1","error":{"code":-32602,"message":"Unsupported by the unified agent adapter"}}`,
 	)
 	frames = append(frames, codexCloseFrames(93, "root-a")...)
-	session, stream, release := openSessionBeforeApproval(t, ctx, frames)
+	session, stream, release := openSessionWithGatedFrame(t, ctx, frames, "item/commandExecution/requestApproval")
 	release()
 	gap := nextEvent(t, ctx, stream)
 	require.Equal(t, agent.EventSessionError, gap.Type())
@@ -884,16 +886,17 @@ func TestApprovalWithoutSubmissionIsRejected(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
-func openSessionBeforeApproval(
+func openSessionWithGatedFrame(
 	t *testing.T,
 	ctx context.Context,
 	frames []string,
+	marker string,
 ) (testSession, agent.EventStream, func()) {
 	t.Helper()
 	var gate *gatedFrameReader
 	session, stream := openControlledInteractionSession(t, ctx, frames, testStreamWrappers{
 		reader: func(reader io.ReadCloser) io.ReadCloser {
-			gate = newGatedFrameReader(reader, []byte("item/commandExecution/requestApproval"))
+			gate = newGatedFrameReader(reader, []byte(marker))
 			return gate
 		},
 	})

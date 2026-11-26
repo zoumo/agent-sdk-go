@@ -17,10 +17,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
+
+func TestLibraryStartMockAgentMissingExecutionPreservesStreams(t *testing.T) {
+	prepared := prepareStartMockFixture(t, "SDK-CASE-001")
+	input := newControlledInput(mainClientFrames(t, prepared))
+	output := &testWriteCloser{}
+	streams := agenttestify.StartMockAgentStreams{Reader: input, Writer: output, Stderr: io.Discard}
+
+	run, err := prepared.StartMockAgent(t.Context(), agenttestify.MockAgentOptions{
+		ExecutionID: "missing",
+	}, streams)
+	require.Nil(t, run)
+	require.ErrorContains(t, err, "absent from index")
+	readerOpen := assert.False(t, input.Closed(), "reader closed before claim")
+	writerOpen := assert.False(t, output.Closed(), "writer closed before claim")
+	if !readerOpen || !writerOpen {
+		return
+	}
+
+	run, err = prepared.StartMockAgent(t.Context(), agenttestify.MockAgentOptions{}, streams)
+	require.NoError(t, err)
+	cleanupMockRun(t, run)
+	awaitFullConsumption(t, run)
+	require.NoError(t, input.CloseEOF())
+	_, err = run.Wait(testContext(t))
+	require.NoError(t, err)
+	assert.True(t, input.Closed(), "reader remained open after replay")
+	assert.True(t, output.Closed(), "writer remained open after replay")
+}
 
 func TestLibraryStartMockAgentFullConsumptionAndReport(t *testing.T) {
 	root := t.TempDir()

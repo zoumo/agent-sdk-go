@@ -93,6 +93,13 @@ func TestPiInjectorReceipts(t *testing.T) {
 				busy, err := injector.Inject(ctx, input)
 				require.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
 				assert.Equal(t, new(false), busy.Acceptance.Sent)
+				prompt, err := session.StartOrSteer(ctx, input)
+				require.NoError(t, err)
+				assert.Equal(t, agent.InputNotApplied, prompt.Result)
+				assert.Equal(t, new(false), prompt.Acceptance.Sent)
+				stopped, err := session.Interrupt(ctx, agent.InterruptOptions{})
+				require.NoError(t, err)
+				assert.Equal(t, agent.InterruptNoActiveWork, stopped.Result)
 				require.NoError(t, session.Close(ctx))
 				got := <-results
 				require.Equal(t, tc.code, agent.CodeOf(got.err))

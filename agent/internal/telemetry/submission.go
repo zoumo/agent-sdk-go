@@ -8,41 +8,66 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zoumo/agent-sdk-go/agent"
+	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 )
 
-// BeginSubmission adds the standard span unless the caller configured a legacy
-// tracer. The legacy tracer remains responsible for the span and carrier after
-// local admission.
-func (t Telemetry) BeginSubmission(ctx context.Context, legacy bool) (context.Context, Observation) {
-	observation := t.observe(ctx, StartOrSteer)
-	if legacy {
-		return ctx, observation
-	}
-	if parent, ok := agent.TraceContextFromContext(ctx); ok && parent.Validate() == nil {
-		observation.parentCarrier = &parent
-		observation.ctx = trace.ContextWithRemoteSpanContext(observation.ctx, spanContext(parent))
-	}
-	return observation.startSpan(ctx)
+// Submission observes one StartOrSteer call from entry through return.
+type Submission struct {
+	observation   Observation
+	parentCarrier *agent.TraceContext
+	legacy        *submissiontrace.Submission
 }
 
-// SubmissionCarrier converts the SDK span context to the wire carrier. A no-op
-// provider preserves the valid explicit parent, including its original format.
-func (o Observation) SubmissionCarrier() *agent.TraceContext {
-	span := trace.SpanContextFromContext(o.ctx)
-	if !span.IsValid() {
-		return o.parentCarrier
+// BeginSubmission starts timing every call and starts the standard span unless
+// a legacy tracer is configured. Defer End with the returned receipt and error.
+func (t Telemetry) BeginSubmission(ctx context.Context) (context.Context, *Submission) {
+	observation := t.observe(ctx, StartOrSteer)
+	if t.legacyTracer != nil {
+		return ctx, &Submission{observation: observation}
 	}
-	if parent := o.parentCarrier; parent != nil &&
+	parent := submissiontrace.ContextCarrier(ctx)
+	if parent != nil {
+		observation.ctx = trace.ContextWithRemoteSpanContext(ctx, spanContext(*parent))
+	}
+	ctx, observation = observation.startSpan(ctx)
+	return ctx, &Submission{observation: observation, parentCarrier: parent}
+}
+
+// AfterAdmission starts the legacy span before native submission.
+func (s *Submission) AfterAdmission(ctx context.Context) {
+	if tracer := s.observation.telemetry.legacyTracer; tracer != nil {
+		s.legacy = submissiontrace.Start(ctx, tracer)
+	}
+}
+
+// Carrier returns the selected carrier after admission.
+// A no-op provider preserves the valid explicit parent in its original format.
+func (s *Submission) Carrier() *agent.TraceContext {
+	if s.legacy != nil {
+		return s.legacy.Carrier
+	}
+	span := trace.SpanContextFromContext(s.observation.ctx)
+	if !span.IsValid() {
+		return s.parentCarrier
+	}
+	if parent := s.parentCarrier; parent != nil &&
 		span.TraceID().String() == parent.Traceparent[3:35] &&
 		span.SpanID().String() == parent.Traceparent[36:52] {
 		return parent
 	}
 	carrier := propagation.MapCarrier{}
-	propagation.TraceContext{}.Inject(o.ctx, carrier)
+	propagation.TraceContext{}.Inject(s.observation.ctx, carrier)
 	return &agent.TraceContext{
 		Traceparent: carrier.Get("traceparent"),
 		Tracestate:  carrier.Get("tracestate"),
 	}
+}
+
+func (s *Submission) End(receipt agent.InputReceipt, err error) {
+	if s.legacy != nil {
+		s.legacy.End(err)
+	}
+	s.observation.End(string(receipt.Result), err)
 }
 
 // The agent carrier has already validated the field layout. Reading its fields

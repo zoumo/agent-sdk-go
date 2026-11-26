@@ -32,13 +32,14 @@ const (
 )
 
 type Telemetry struct {
-	provider  attribute.KeyValue
-	tracer    trace.Tracer
-	duration  metric.Float64Histogram
-	published metric.Int64Counter
+	provider     attribute.KeyValue
+	tracer       trace.Tracer
+	legacyTracer agent.Tracer
+	duration     metric.Float64Histogram
+	published    metric.Int64Counter
 }
 
-func New(provider string, traces trace.TracerProvider, meters metric.MeterProvider) Telemetry {
+func New(provider string, traces trace.TracerProvider, meters metric.MeterProvider, legacyTracer agent.Tracer) Telemetry {
 	if traces == nil {
 		traces = otel.GetTracerProvider()
 	}
@@ -57,10 +58,11 @@ func New(provider string, traces trace.TracerProvider, meters metric.MeterProvid
 		metric.WithDescription("Unified events accepted by the Agent SDK event stream"),
 	)
 	return Telemetry{
-		provider:  attribute.String("provider", provider),
-		tracer:    traces.Tracer(scope),
-		duration:  duration,
-		published: published,
+		provider:     attribute.String("provider", provider),
+		tracer:       traces.Tracer(scope),
+		legacyTracer: legacyTracer,
+		duration:     duration,
+		published:    published,
 	}
 }
 
@@ -114,12 +116,11 @@ func (t Telemetry) unsupportedEventAttributes(event agent.Event, agentType strin
 }
 
 type Observation struct {
-	telemetry     Telemetry
-	operation     attribute.KeyValue
-	started       time.Time
-	ctx           context.Context
-	span          trace.Span
-	parentCarrier *agent.TraceContext
+	telemetry Telemetry
+	operation attribute.KeyValue
+	started   time.Time
+	ctx       context.Context
+	span      trace.Span
 }
 
 func (t Telemetry) Begin(ctx context.Context, operation Operation) (context.Context, Observation) {

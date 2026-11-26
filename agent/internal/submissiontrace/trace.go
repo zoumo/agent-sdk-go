@@ -17,13 +17,18 @@ type Submission struct {
 	endOnce sync.Once
 }
 
+// ContextCarrier returns a validated snapshot of the explicit parent.
+func ContextCarrier(ctx context.Context) *agent.TraceContext {
+	if carrier, ok := agent.TraceContextFromContext(ctx); ok && carrier.Validate() == nil {
+		return &carrier
+	}
+	return nil
+}
+
 // Start snapshots the context carrier and starts at most one local span. Call
 // this after local admission, before native submission, and defer End.
 func Start(ctx context.Context, tracer agent.Tracer) *Submission {
-	submission := &Submission{}
-	if carrier, ok := agent.TraceContextFromContext(ctx); ok && carrier.Validate() == nil {
-		submission.Carrier = &carrier
-	}
+	submission := &Submission{Carrier: ContextCarrier(ctx)}
 	if tracer == nil {
 		return submission
 	}

@@ -82,7 +82,7 @@ func New(config Config) *Core {
 	config.Env = slices.Clone(config.Env)
 	return &Core{
 		config:    config,
-		telemetry: telemetry.New("pi", config.TracerProvider, config.MeterProvider),
+		telemetry: telemetry.New("pi", config.TracerProvider, config.MeterProvider, config.Tracer),
 		leases:    corelease.New[struct{}, *session](capabilities(shellEnvSupported(), true, true), nil, nil),
 		owners:    make(map[string]bool),
 	}

@@ -11,7 +11,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
-	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/client/claude"
 	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
@@ -138,8 +137,8 @@ func (s *session) StartOrSteer(
 	ctx context.Context,
 	input agent.Input,
 ) (receipt agent.InputReceipt, err error) {
-	ctx, observation := s.provider.telemetry.BeginSubmission(ctx, s.provider.config.Tracer != nil)
-	defer func() { observation.End(string(receipt.Result), err) }()
+	ctx, observation := s.provider.telemetry.BeginSubmission(ctx)
+	defer func() { observation.End(receipt, err) }()
 	content, err := promptContent(input)
 	if err != nil {
 		return agent.InputReceipt{}, err
@@ -166,14 +165,8 @@ func (s *session) StartOrSteer(
 	s.submitting = true
 	s.mu.Unlock()
 
-	var traceCarrier *agent.TraceContext
-	if s.provider.config.Tracer != nil {
-		submission := submissiontrace.Start(ctx, s.provider.config.Tracer)
-		defer func() { submission.End(err) }()
-		traceCarrier = submission.Carrier
-	} else {
-		traceCarrier = observation.SubmissionCarrier()
-	}
+	observation.AfterAdmission(ctx)
+	traceCarrier := observation.Carrier()
 
 	submissionID, err := s.newSubmissionID(stateVersion)
 	if err != nil {

@@ -26,7 +26,6 @@ const (
 // Core owns one Codex app-server connection shared by all of its sessions.
 type Core struct {
 	config             codex.StdioOptions
-	tracer             agent.Tracer
 	telemetry          telemetry.Telemetry
 	streams            streamFactory
 	questionsSupported bool
@@ -47,8 +46,7 @@ func New(config Config) *Core {
 	stdio.Initialize = withDefaultCapabilities(stdio.Initialize)
 	core := &Core{
 		config:             stdio,
-		tracer:             config.Tracer,
-		telemetry:          telemetry.New("codex", config.TracerProvider, config.MeterProvider),
+		telemetry:          telemetry.New("codex", config.TracerProvider, config.MeterProvider, config.Tracer),
 		questionsSupported: supportsAgentQuestions(stdio.Initialize),
 	}
 	core.leases = corelease.New[*codex.Client, *session](

@@ -16,21 +16,21 @@ import (
 func TestStartOrSteerRefusesLocalConcurrentOrUnknownWrite(t *testing.T) {
 	tests := []struct {
 		name  string
-		setup func(*session)
+		setup func(*testing.T, *mainTurnOwnership)
 	}{
 		{
 			name:  "concurrent write",
-			setup: func(s *session) { s.submitting = true },
+			setup: func(t *testing.T, work *mainTurnOwnership) { beginTestSubmit(t, work) },
 		},
 		{
 			name:  "unknown write",
-			setup: func(s *session) { s.submitUnknown = true },
+			setup: setUnknownTestSubmit,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			s := &session{provider: New(Config{})}
-			test.setup(s)
+			test.setup(t, &s.mainTurn)
 
 			receipt, err := s.StartOrSteer(context.Background(), agent.Input{
 				Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "retained"}}},

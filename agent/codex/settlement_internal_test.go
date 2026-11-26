@@ -101,7 +101,10 @@ func TestSettledStateEventDoesNotAliasSession(t *testing.T) {
 	for _, activeTurn := range []string{"", "turn-a"} {
 		t.Run("active_turn="+activeTurn, func(t *testing.T) {
 			previous := agent.StateRequiresAction
-			s := &session{state: &previous, activeTurn: activeTurn}
+			s := &session{state: &previous}
+			if activeTurn != "" {
+				require.True(t, s.mainTurn.observeStarted(activeTurn))
+			}
 			payload := s.interactionsSettledLocked()
 			require.NotNil(t, payload)
 			want := agent.StateIdle

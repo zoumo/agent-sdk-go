@@ -60,6 +60,9 @@ func TestResumeDoesNotReplaySavedHistoryAndNativeClientUsesSameConnection(t *tes
 		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "live"}}},
 	}, event.Payload)
 
+	interrupt, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, interrupt)
 	require.NoError(t, session.Close(ctx))
 	_, err = stream.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)

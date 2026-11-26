@@ -66,7 +66,7 @@ func (s *session) convertEvent(received codex.Received) ([]agent.Event, error) {
 		}
 	}
 	if mainTurnScopedNotification(event.Method) &&
-		!s.ownsMainTurn(received.Source.TurnID) {
+		!s.acceptsMainTurnContent(received.Source.TurnID) {
 		return s.notificationGap(
 			received,
 			"stale_native_turn",
@@ -184,24 +184,10 @@ func (s *session) parentThread(threadID string) string {
 	return s.parents[threadID]
 }
 
-func (s *session) ownsMainTurn(turnID string) bool {
-	if turnID == "" {
-		return false
-	}
+func (s *session) acceptsMainTurnContent(turnID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// A pristine session may receive a live turn-scoped delta after Resume or
-	// before the local StartOrSteer response. Keep that native fact without treating
-	// the delta as work start; once a turn has been observed, unrelated turns
-	// are stale.
-	return s.activeTurn == turnID ||
-		s.idleTurn == turnID ||
-		(s.activeTurn == "" &&
-			(s.submitting || s.submitUnknown) &&
-			s.lastFinished != turnID) ||
-		(s.activeTurn == "" &&
-			s.idleTurn == "" &&
-			s.lastFinished == "")
+	return s.mainTurn.acceptsContent(turnID)
 }
 
 func (s *session) turnStarted(received codex.Received) ([]agent.Event, error) {
@@ -215,17 +201,7 @@ func (s *session) turnStarted(received codex.Received) ([]agent.Event, error) {
 		s.mu.Unlock()
 		return nil, nil
 	}
-	owned := s.activeTurn == data.Turn.ID ||
-		(s.activeTurn == "" &&
-			(s.submitting || s.submitUnknown) &&
-			s.lastFinished != data.Turn.ID) ||
-		(s.activeTurn == "" &&
-			s.idleTurn == "" &&
-			s.lastFinished == "")
-	if !owned ||
-		s.lastFinished == data.Turn.ID ||
-		s.startedTurn == data.Turn.ID ||
-		s.idleTurn == data.Turn.ID {
+	if !s.mainTurn.observeStarted(data.Turn.ID) {
 		s.mu.Unlock()
 		return s.notificationGap(
 			received,
@@ -234,10 +210,6 @@ func (s *session) turnStarted(received codex.Received) ([]agent.Event, error) {
 		)
 	}
 	previous := cloneState(s.state)
-	s.activeTurn = data.Turn.ID
-	s.startedTurn = data.Turn.ID
-	s.idleTurn = ""
-	s.noteWorkEvidenceLocked()
 	running := agent.StateRunning
 	if s.blockingInteractionsLocked() != 0 {
 		running = agent.StateRequiresAction
@@ -271,47 +243,22 @@ func (s *session) turnCompleted(received codex.Received) ([]agent.Event, error) 
 	at := optionalSeconds(data.Turn.CompletedAt)
 
 	s.mu.Lock()
-	owned := s.activeTurn == data.Turn.ID ||
-		s.idleTurn == data.Turn.ID ||
-		(s.activeTurn == "" &&
-			(s.submitting || s.submitUnknown) &&
-			s.lastFinished != data.Turn.ID)
-	stale := !owned
-	previous := cloneState(s.state)
-	var interactions []*pendingInteraction
-	var nextState agent.SessionState
-	if owned {
-		if s.activeTurn == data.Turn.ID {
-			s.activeTurn = ""
-		}
-		if s.startedTurn == data.Turn.ID {
-			s.startedTurn = ""
-		}
-		if s.idleTurn == data.Turn.ID {
-			s.idleTurn = ""
-		}
-		s.noteWorkEvidenceLocked()
-		s.lastFinished = data.Turn.ID
-		interactions = s.takeTurnInteractionsLocked(data.Turn.ID)
-		nextState = agent.StateIdle
-		if s.blockingInteractionsLocked() != 0 {
-			nextState = agent.StateRequiresAction
-		}
-		s.state = new(nextState)
-	}
-	s.mu.Unlock()
-
-	if stale {
-		gap, err := s.notificationGap(
+	if !s.mainTurn.observeCompleted(data.Turn.ID) {
+		s.mu.Unlock()
+		return s.notificationGap(
 			received,
 			"stale_native_turn",
 			"Codex turn completion does not belong to the current session work",
 		)
-		if err != nil {
-			return nil, err
-		}
-		return gap, nil
 	}
+	previous := cloneState(s.state)
+	interactions := s.takeTurnInteractionsLocked(data.Turn.ID)
+	nextState := agent.StateIdle
+	if s.blockingInteractionsLocked() != 0 {
+		nextState = agent.StateRequiresAction
+	}
+	s.state = new(nextState)
+	s.mu.Unlock()
 
 	events := s.closedInteractionEvents(
 		interactions,
@@ -383,14 +330,7 @@ func (s *session) threadStatusChanged(received codex.Received) ([]agent.Event, e
 	var interactions []*pendingInteraction
 	idleObserved := state != nil && *state == agent.StateIdle
 	if idleObserved {
-		if s.activeTurn != "" {
-			s.idleTurn = s.activeTurn
-		}
-		s.activeTurn = ""
-		s.startedTurn = ""
-		if !s.submitting {
-			s.noteWorkEvidenceLocked()
-		}
+		s.mainTurn.observeIdle()
 		interactions = s.takeIdleTurnInteractionsLocked(rootThreadID)
 		if s.blockingInteractionsLocked() != 0 {
 			requiresAction := agent.StateRequiresAction

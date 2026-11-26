@@ -175,7 +175,8 @@ func TestPermissionProfileApprovalRoundTrip(t *testing.T) {
 				`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"permissions"}}`,
 			)
 			frames = append(frames, codexCloseFrames(94, "root-a")...)
-			session, stream := openInteractionSession(t, ctx, frames, agent.Features{})
+			// This case observes a completed answer write before native resolution.
+			session, stream, releaseResolution := openSessionWithGatedFrame(t, ctx, frames, "serverRequest/resolved")
 			submitInteractionTurn(t, ctx, session)
 			require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
 			require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
@@ -227,6 +228,7 @@ func TestPermissionProfileApprovalRoundTrip(t *testing.T) {
 			receipt, err := session.Answer(ctx, event.Interaction, agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: selected})
 			require.NoError(t, err)
 			assert.Equal(t, new(true), receipt.Acceptance.Sent)
+			releaseResolution()
 			closed := nextInteractionClosed(t, ctx, stream)
 			assert.Equal(t, event.Interaction, closed.Interaction)
 			assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
@@ -768,6 +770,140 @@ func TestNativeResolutionCancelsPendingInteraction(t *testing.T) {
 	assert.Equal(t, agent.StateRunning, *state.State)
 }
 
+func TestApprovalBeforeStartResponseClaimsTurn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	// The peer withholds the start response until the approval is answered and
+	// an interrupt targets the turn. No turn/started notification is sent.
+	frames := interactionThreadFrames(
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"run","type":"text"}],"threadId":"root-a"}}`,
+		commandApprovalRequest("approval-1"),
+		`>{"id":"approval-1","result":{"decision":"accept"}}`,
+		`>{"id":94,"method":"turn/interrupt","params":{"threadId":"root-a","turnId":"turn-a"}}`,
+		`<{"id":94,"result":{}}`,
+		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`<{"method":"serverRequest/resolved","params":{"threadId":"root-a","requestId":"approval-1"}}`,
+	)
+	frames = append(frames, codexCloseFrames(95, "root-a")...)
+	session, stream := openInteractionSession(t, ctx, frames, agent.Features{})
+
+	type submission struct {
+		receipt agent.InputReceipt
+		err     error
+	}
+	done := make(chan submission, 1)
+	go func() {
+		receipt, err := session.StartOrSteer(ctx, textInput("run"))
+		done <- submission{receipt, err}
+	}()
+
+	require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
+	request := nextInteractionRequested(t, ctx, stream)
+	answer := agent.PermissionAnswer{Outcome: agent.PermissionSelected, OptionID: "allow-once"}
+	answered, err := session.Answer(ctx, request.Interaction, answer)
+	require.NoError(t, err)
+	assert.Equal(t, request.Interaction, answered.Interaction)
+	assert.Equal(t, agent.Acceptance{Sent: new(true)}, answered.Acceptance)
+	interrupted, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptAcknowledged, interrupted.Result)
+	assert.Equal(t, "turn-a", interrupted.Target)
+
+	started := <-done
+	require.NoError(t, started.err)
+	assert.Equal(t, agent.InputAppliedNewWork, started.receipt.Result)
+	assert.Equal(t, "turn-a", started.receipt.Submission)
+	assertAccepted(t, started.receipt.Acceptance)
+	closed := nextInteractionClosed(t, ctx, stream)
+	assert.Equal(t, request.Interaction, closed.Interaction)
+	assert.Equal(t, agent.InteractionAnswered, closed.Outcome)
+	assert.Equal(t, "native_resolved", closed.Reason)
+	state := nextStatePayload(t, ctx, stream)
+	assert.Equal(t, new(agent.StateRequiresAction), state.PreviousState)
+	assert.Equal(t, new(agent.StateRunning), state.State)
+
+	_, err = session.Answer(ctx, request.Interaction, answer)
+	require.Equal(t, agent.ErrorReasonInvalidInteractionRef, errorReason(t, err))
+	require.NoError(t, session.Close(ctx))
+	_, err = stream.Next(ctx)
+	require.ErrorIs(t, err, io.EOF)
+}
+
+func TestApprovalClaimsUnknownSubmission(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	frames := interactionThreadFrames(
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"run","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":93,"result":{"turn":{"id":"","items":[],"status":"inProgress"}}}`,
+		commandApprovalRequest("approval-1"),
+		`>{"id":"approval-1","result":{"decision":"accept"}}`,
+		`>{"id":94,"method":"turn/start","params":{"input":[{"text":"adjust","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+	)
+	frames = append(frames, codexCloseFrames(95, "root-a")...)
+	session, stream, release := openSessionWithGatedFrame(t, ctx, frames, "item/commandExecution/requestApproval")
+
+	_, err := session.StartOrSteer(ctx, textInput("run"))
+	require.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(err))
+	blocked, err := session.StartOrSteer(ctx, textInput("before approval"))
+	require.NoError(t, err)
+	require.Equal(t, agent.InputNotApplied, blocked.Result)
+	assert.Equal(t, agent.Acceptance{Sent: new(false)}, blocked.Acceptance)
+
+	release()
+	require.Equal(t, agent.StateRequiresAction, nextState(t, ctx, stream))
+	request := nextInteractionRequested(t, ctx, stream)
+	_, err = session.Answer(ctx, request.Interaction, agent.PermissionAnswer{
+		Outcome: agent.PermissionSelected, OptionID: "allow-once",
+	})
+	require.NoError(t, err)
+	adjusted, err := session.StartOrSteer(ctx, textInput("adjust"))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedCurrentWork, adjusted.Result)
+	assert.Equal(t, "turn-a", adjusted.Submission)
+	assertAccepted(t, adjusted.Acceptance)
+}
+
+func TestApprovalWithoutSubmissionIsRejected(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	frames := interactionThreadFrames(
+		commandApprovalRequest("approval-1"),
+		`>{"id":"approval-1","error":{"code":-32602,"message":"Unsupported by the unified agent adapter"}}`,
+	)
+	frames = append(frames, codexCloseFrames(93, "root-a")...)
+	session, stream, release := openSessionWithGatedFrame(t, ctx, frames, "item/commandExecution/requestApproval")
+	release()
+	gap := nextEvent(t, ctx, stream)
+	require.Equal(t, agent.EventSessionError, gap.Type())
+	assert.Equal(t, "stale_native_request", sessionErrorReason(t, gap))
+	assert.Equal(t, true, eventCodexMeta(t, gap)["requestRejected"])
+	interrupted, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, interrupted)
+	require.NoError(t, session.Close(ctx))
+	_, err = stream.Next(ctx)
+	require.ErrorIs(t, err, io.EOF)
+}
+
+func openSessionWithGatedFrame(
+	t *testing.T,
+	ctx context.Context,
+	frames []string,
+	marker string,
+) (testSession, agent.EventStream, func()) {
+	t.Helper()
+	var gate *gatedFrameReader
+	session, stream := openControlledInteractionSession(t, ctx, frames, testStreamWrappers{
+		reader: func(reader io.ReadCloser) io.ReadCloser {
+			gate = newGatedFrameReader(reader, []byte(marker))
+			return gate
+		},
+	})
+	t.Cleanup(gate.releaseOnce)
+	return session, stream, gate.releaseOnce
+}
+
 func TestStaleInteractionRequestIsRejected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -949,11 +1085,17 @@ func TestControlOperationsReturnNativeAcceptance(t *testing.T) {
 
 const codexTurnStartedFrame = `<{"method":"turn/started","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"inProgress","startedAt":1700000200}}}`
 
-func interactionSessionFrames(after ...string) []string {
+func interactionThreadFrames(after ...string) []string {
 	frames := append([]string(nil), mockCodexInit...)
 	frames = append(frames,
 		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+	)
+	return append(frames, after...)
+}
+
+func interactionSessionFrames(after ...string) []string {
+	frames := interactionThreadFrames(
 		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"run","type":"text"}],"threadId":"root-a"}}`,
 		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
 		codexTurnStartedFrame,

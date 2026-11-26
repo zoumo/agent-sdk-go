@@ -44,8 +44,6 @@ type process struct {
 
 func (p *process) kill() { _ = p.cmd.Process.Kill() }
 func (p *process) wait() error {
-	timer := time.AfterFunc(shutdownGrace, p.kill)
-	defer timer.Stop()
 	err := p.cmd.Wait()
 	if p.promptFile != "" {
 		err = errors.Join(err, os.Remove(p.promptFile))
@@ -103,14 +101,18 @@ func Open(ctx context.Context, options Options) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	output, err := cmd.StdoutPipe()
+	// The session owns the read end so Wait can reap Pi without cutting off
+	// buffered records. Descendants may still hold the write end after Pi exits.
+	output, childOutput, err := os.Pipe()
 	if err != nil {
 		_ = input.Close()
 		return nil, err
 	}
+	cmd.Stdout = childOutput
 	if err = ctx.Err(); err == nil {
 		err = cmd.Start()
 	}
+	_ = childOutput.Close()
 	if err != nil {
 		_ = input.Close()
 		_ = output.Close()

@@ -235,7 +235,10 @@ func ListSessions(ctx context.Context, options ListSessionsOptions) (page Sessio
 	})
 	start := min(o.Offset, len(page.Sessions))
 	end := start + min(o.Limit, len(page.Sessions)-start)
-	page.Sessions = page.Sessions[start:end]
+	// A cached page must not keep metadata outside the page alive.
+	sessions := make([]SessionInfo, end-start)
+	copy(sessions, page.Sessions[start:end])
+	page.Sessions = sessions
 	err = errors.Join(problems...)
 	if err == nil {
 		page.Coverage.Status = "complete"
